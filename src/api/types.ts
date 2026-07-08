@@ -142,3 +142,18 @@ export interface LaunchRunBody {
   humanConfirm?: string;
   repoRef?: string;
 }
+
+/** The open-terminal request body (`POST /terminals`, DES-TERMINAL-001 §6). */
+export interface OpenTerminalBody {
+  /** Working directory the PTY opens in. */
+  cwd: string;
+  /** Command to run; omit for the user's login shell. */
+  cmd?: string[];
+  cols: number;
+  rows: number;
+  /**
+   * Omit for the safe governed default; `false` is the loud, opt-in UNGOVERNED
+   * operator shell (surfaced as ungoverned in the UI, DES-TERMINAL-001 §7).
+   */
+  governed?: boolean;
+}

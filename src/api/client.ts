@@ -1,6 +1,7 @@
 import type {
   GateInfo,
   LaunchRunBody,
+  OpenTerminalBody,
   RepoEntry,
   RosterSeat,
   SessionView,
@@ -8,7 +9,16 @@ import type {
 
 export type * from './types.js';
 
-const BASE = 'http://127.0.0.1:7701/api/v1';
+const HOST = '127.0.0.1:7701';
+const BASE = `http://${HOST}/api/v1`;
+
+/**
+ * The dedicated per-terminal WS channel (DES-TERMINAL-001 §6): raw PTY bytes flow
+ * both ways over it — xterm keystrokes in, PTY output out. Distinct from the
+ * daemon's `/ws` CoreEvent fan-out.
+ */
+export const terminalWsUrl = (id: string): string =>
+  `ws://${HOST}/ws/terminals/${encodeURIComponent(id)}`;
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // Only advertise a JSON body when we actually send one — Fastify v5 rejects
@@ -87,4 +97,23 @@ export const api = {
 
   /** Liveness (also proves the actor + event pump are up). */
   getHealth: () => apiFetch<{ status: string; version: string; ping: string }>('/health'),
+
+  /**
+   * Open a PTY terminal session → its id. Drive it over the terminal WS
+   * (`terminalWsUrl(id)`); raw output arrives there. `governed` omitted = the safe
+   * governed default (DES-TERMINAL-001 §7).
+   */
+  openTerminal: (body: OpenTerminalBody) =>
+    apiFetch<{ id: string }>('/terminals', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Resize a live terminal's PTY to `cols`x`rows`. */
+  resizeTerminal: (id: string, cols: number, rows: number) =>
+    apiFetch<{ status: string }>(`/terminals/${encodeURIComponent(id)}/resize`, {
+      method: 'POST',
+      body: JSON.stringify({ cols, rows }),
+    }),
+
+  /** Close a live terminal (kill child, join reader). */
+  closeTerminal: (id: string) =>
+    apiFetch<{ status: string }>(`/terminals/${encodeURIComponent(id)}/close`, { method: 'POST' }),
 };

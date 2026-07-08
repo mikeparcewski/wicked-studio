@@ -9,7 +9,7 @@ import { UnitList } from './UnitList.js';
 import { LiveOutput } from './LiveOutput.js';
 import { FailureBanner } from './FailureBanner.js';
 import { CampaignDagStub } from './CampaignDagStub.js';
-import { TerminalStub } from './TerminalStub.js';
+import { Terminal } from './Terminal.js';
 
 interface Props {
   view: SessionView;
@@ -30,6 +30,9 @@ export function RunDetail({ view, onRefresh }: Props): React.ReactElement {
   const gate = useGateStore((s) => s.gates[session.id]);
   const log = useRuntimeStore((s) => s.logs[session.id]) ?? [];
   const [resuming, setResuming] = useState(false);
+  const [termOpen, setTermOpen] = useState(false);
+  // Loud, explicit, off-by-default opt-in for the ungoverned operator shell (§7).
+  const [ungoverned, setUngoverned] = useState(false);
 
   const style = STATUS_STYLE[session.status] ?? { label: session.status, className: 'text-gray-500' };
   const isTerminal = TERMINAL.has(session.status);
@@ -97,11 +100,56 @@ export function RunDetail({ view, onRefresh }: Props): React.ReactElement {
 
       <LiveOutput runId={session.id} />
 
+      <section data-testid="terminal-section">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
+          Terminal
+        </p>
+        {termOpen ? (
+          <div className="flex flex-col gap-2">
+            <Terminal
+              // Remount (fresh PTY) if the governance mode toggles.
+              key={`${session.id}:${ungoverned ? 'ungoverned' : 'governed'}`}
+              cwd={session.workdir ?? '.'}
+              governed={!ungoverned}
+            />
+            <button
+              type="button"
+              data-testid="terminal-close"
+              onClick={() => setTermOpen(false)}
+              className="self-start rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+            >
+              Close terminal
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              data-testid="terminal-open"
+              onClick={() => setTermOpen(true)}
+              className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+            >
+              Open terminal
+            </button>
+            <label className="flex items-center gap-1.5 text-[11px] text-gray-500">
+              <input
+                type="checkbox"
+                data-testid="terminal-ungoverned"
+                checked={ungoverned}
+                onChange={(e) => setUngoverned(e.target.checked)}
+              />
+              <span className={ungoverned ? 'font-semibold text-amber-600' : ''}>
+                ungoverned operator shell (bypasses the gate-hook)
+              </span>
+            </label>
+          </div>
+        )}
+      </section>
+
       <details className="text-xs">
         <summary className="cursor-pointer text-gray-400">Deferred surfaces</summary>
         <div className="mt-2 flex flex-col gap-2">
           <CampaignDagStub />
-          <TerminalStub />
         </div>
       </details>
     </div>
