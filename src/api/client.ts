@@ -9,8 +9,34 @@ import type {
 
 export type * from './types.js';
 
-const HOST = '127.0.0.1:7701';
-const BASE = `http://${HOST}/api/v1`;
+/**
+ * Origin-aware API base resolution (DES-STUDIO-SERVING-001 §4.2).
+ *
+ * - Prod / daemon-served (same-origin): derive from `window.location`, so the
+ *   SPA calls whatever origin/port the daemon actually bound (`--port`/`CREW_PORT`
+ *   "just work"; no hardcoded `7701` literal ships in the bundle).
+ * - Dev (:4200 split): `VITE_API_HOST` (Vite env, set in `.env.development`)
+ *   overrides both REST and WS so the dev server points at `127.0.0.1:7701`.
+ */
+function devApiHost(): string | undefined {
+  const host = import.meta.env?.VITE_API_HOST;
+  return typeof host === 'string' && host.length > 0 ? host : undefined;
+}
+
+/** REST base, e.g. `http://127.0.0.1:7701/api/v1`. */
+export function apiBase(): string {
+  const dev = devApiHost();
+  if (dev) return `http://${dev}/api/v1`;
+  return `${window.location.origin}/api/v1`;
+}
+
+/** WS origin, e.g. `ws://127.0.0.1:7701`. */
+export function wsBase(): string {
+  const dev = devApiHost();
+  if (dev) return `ws://${dev}`;
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${window.location.host}`;
+}
 
 /**
  * The dedicated per-terminal WS channel (DES-TERMINAL-001 §6): raw PTY bytes flow
@@ -18,7 +44,7 @@ const BASE = `http://${HOST}/api/v1`;
  * daemon's `/ws` CoreEvent fan-out.
  */
 export const terminalWsUrl = (id: string): string =>
-  `ws://${HOST}/ws/terminals/${encodeURIComponent(id)}`;
+  `${wsBase()}/ws/terminals/${encodeURIComponent(id)}`;
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // Only advertise a JSON body when we actually send one — Fastify v5 rejects
@@ -28,7 +54,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     init?.body !== undefined && init?.body !== null
       ? { 'Content-Type': 'application/json', ...init?.headers }
       : { ...init?.headers };
-  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+  const res = await fetch(`${apiBase()}${path}`, { ...init, headers });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
 }

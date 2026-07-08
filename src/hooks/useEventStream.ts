@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useConnectionStore } from '../store/connection.js';
+import { wsBase } from '../api/client.js';
 import type { CoreEvent } from '../api/types.js';
 
 /**
@@ -21,7 +22,7 @@ export function useEventStream(onEvent: EventHandler): void {
   onEventRef.current = onEvent;
 
   const connect = useCallback(() => {
-    const ws = new WebSocket('ws://127.0.0.1:7701/ws');
+    const ws = new WebSocket(`${wsBase()}/ws`);
 
     ws.onopen = () => setStatus('connected');
 
