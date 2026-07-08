@@ -1,13 +1,19 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useConnectionStore } from '../store/connection.js';
+import type { CoreEvent } from '../api/types.js';
 
-export type CrewEvent = {
-  type: string;
-  payload: Record<string, unknown>;
-  ts: string;
-};
-
-type EventHandler = (event: CrewEvent) => void;
+/**
+ * The daemon fans the Rust core's `CoreEvent` stream out to `/ws` verbatim: each
+ * frame is a tagged-JSON object `{ type, ...fields }` (DES-STUDIO-001 §2.1). This
+ * hook parses each frame and hands it to `onEvent`, which switches on `type`.
+ * Unknown / future variants (campaign*, terminal*) are simply passed through —
+ * the consumer's switch ignores them, so the stream is additive-safe (§5.1).
+ *
+ * Late-join gets no replay; the studio reconciles run state with a one-shot
+ * `GET /runs` on (re)connect (owned by the runs hook), merged with the daemon
+ * gate cache (§3.3).
+ */
+type EventHandler = (event: CoreEvent) => void;
 
 export function useEventStream(onEvent: EventHandler): void {
   const setStatus = useConnectionStore((s) => s.setStatus);
@@ -21,14 +27,23 @@ export function useEventStream(onEvent: EventHandler): void {
 
     ws.onmessage = (msg) => {
       try {
-        const event = JSON.parse(String(msg.data)) as CrewEvent;
-        onEventRef.current(event);
-      } catch { /* malformed message — skip */ }
+        const parsed: unknown = JSON.parse(String(msg.data));
+        // A CoreEvent frame is always a tagged object with a string `type`.
+        if (
+          parsed !== null &&
+          typeof parsed === 'object' &&
+          typeof (parsed as { type?: unknown }).type === 'string'
+        ) {
+          onEventRef.current(parsed as CoreEvent);
+        }
+      } catch {
+        /* malformed frame — skip (additive-safe) */
+      }
     };
 
     ws.onclose = () => {
       setStatus('disconnected');
-      // Reconnect after 3s
+      // Reconnect after 3s; the runs hook re-reconciles on the next 'connected'.
       setTimeout(connect, 3000);
     };
 
@@ -40,6 +55,6 @@ export function useEventStream(onEvent: EventHandler): void {
 
   useEffect(() => {
     connect();
-    // No cleanup needed — WebSocket reconnects on close
+    // No cleanup — the socket reconnects itself on close.
   }, [connect]);
 }
