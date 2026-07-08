@@ -1,5 +1,5 @@
 {
-  "name": "@wicked/studio",
+  "name": "wicked-studio",
   "version": "0.1.0",
   "description": "wicked-studio — HITL React app for wicked-crew sessions",
   "type": "module",
@@ -32,5 +32,6 @@
     "typescript": "^5.5.4",
     "vite": "^5.4.4",
     "vitest": "^2.1.1"
-  }
+  },
+  "license": "MIT"
 }
