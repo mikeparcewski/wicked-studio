@@ -127,7 +127,6 @@ export function Terminal({ cwd, cmd, governed = true }: Props): React.ReactEleme
       term.dispose();
     };
     // Open once for the component's lifetime (props snapshotted via propsRef).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
