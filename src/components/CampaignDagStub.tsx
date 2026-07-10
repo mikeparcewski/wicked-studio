@@ -13,7 +13,7 @@ export function CampaignDagStub(): React.ReactElement {
       data-testid="campaign-dag-stub"
       className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-xs text-gray-400"
     >
-      <p className="font-semibold text-gray-500">Campaign DAG — not wired</p>
+      <p className="font-semibold text-gray-500">Campaign DAG — engine-real, not wired</p>
       <p className="mt-1">
         Pending core&apos;s <code>Campaign</code> primitive + <code>RunFinished</code> /{' '}
         <code>Campaign*</code> events (§4.3). Attaches to this same event stream when they land.

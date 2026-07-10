@@ -8,6 +8,7 @@ import { useEventStream } from './hooks/useEventStream.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useGateStore } from './store/gates.js';
 import { useRuntimeStore } from './store/runtime.js';
+import { useRunEventStore } from './store/events.js';
 import type { CoreEvent } from './api/types.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
@@ -30,19 +31,22 @@ export function App(): React.ReactElement {
   const { runs, refresh } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestRuntime = useRuntimeStore((s) => s.ingest);
+  const ingestRunEvent = useRunEventStore((s) => s.ingest);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [showLaunch, setShowLaunch] = useState(false);
 
   const handleEvent = useCallback(
     (event: CoreEvent) => {
-      // Fold each frame into the gate cache + the live-output/event-log store,
-      // then reconcile the run list on any lifecycle transition. Unknown types
-      // are folded harmlessly and never trigger a refresh (additive-safe).
+      // Fold each frame into the gate cache + the live-output/event-log store + the
+      // per-run structured append log (the useRunModel merge source), then reconcile
+      // the run list on any lifecycle transition. Unknown types are folded harmlessly
+      // and never trigger a refresh (additive-safe).
       ingestGate(event);
       ingestRuntime(event);
+      ingestRunEvent(event);
       if (LIFECYCLE_EVENTS.has(event.type)) refresh();
     },
-    [ingestGate, ingestRuntime, refresh],
+    [ingestGate, ingestRuntime, ingestRunEvent, refresh],
   );
 
   useEventStream(handleEvent);
@@ -93,7 +97,7 @@ export function App(): React.ReactElement {
           {showLaunch ? (
             <LaunchForm onLaunched={onLaunched} onCancel={() => setShowLaunch(false)} />
           ) : selected ? (
-            <RunDetail view={selected} onRefresh={refresh} />
+            <RunDetail key={selected.session.id} view={selected} onRefresh={refresh} />
           ) : (
             <p className="text-sm text-gray-400">Select a run, or launch a new one.</p>
           )}

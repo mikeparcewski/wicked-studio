@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, type GateDecision } from '../api/client.js';
 import { useGateStore } from '../store/gates.js';
+import { useSteeringStore, type SteeringAction } from '../store/steering.js';
 
 interface Props {
   /** The run this gate belongs to. ALL actions bind to this id, never a list index (§11.2). */
@@ -23,15 +24,27 @@ interface Props {
  */
 export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
+  const recordSteering = useSteeringStore((s) => s.record);
   const [amend, setAmend] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function run(action: () => Promise<unknown>): Promise<void> {
+  async function run(
+    action: () => Promise<unknown>,
+    intervention: { kind: SteeringAction; amend?: string },
+  ): Promise<void> {
     setLoading(true);
     setError(null);
     try {
       await action();
+      // Record the operator's intervention for the steering timeline (FR-8b) — thin,
+      // forward-only, "as recorded": the action the human took, not an engine outcome.
+      recordSteering({
+        runId,
+        action: intervention.kind,
+        ...(typeof ord === 'number' ? { ord } : {}),
+        ...(intervention.amend !== undefined ? { amend: intervention.amend } : {}),
+      });
       clearGate(runId);
       onResolved?.();
     } catch (err) {
@@ -41,17 +54,19 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
     }
   }
 
-  const approve = (): Promise<void> => run(() => api.confirmGate(runId, { approve: true }));
+  const approve = (): Promise<void> =>
+    run(() => api.confirmGate(runId, { approve: true }), { kind: 'approve' });
 
   const approveWithSteer = (): Promise<void> => {
     const text = amend.trim();
     if (!text) return Promise.resolve();
     const decision: GateDecision = { approve: true, amend: text };
-    return run(() => api.confirmGate(runId, decision));
+    return run(() => api.confirmGate(runId, decision), { kind: 'approve-with-steer', amend: text });
   };
 
-  const reject = (): Promise<void> => run(() => api.confirmGate(runId, { approve: false }));
-  const cancel = (): Promise<void> => run(() => api.cancelRun(runId));
+  const reject = (): Promise<void> =>
+    run(() => api.confirmGate(runId, { approve: false }), { kind: 'reject' });
+  const cancel = (): Promise<void> => run(() => api.cancelRun(runId), { kind: 'cancel' });
 
   return (
     <div

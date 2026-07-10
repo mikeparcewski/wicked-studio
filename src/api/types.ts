@@ -72,6 +72,12 @@ export interface WorkUnit {
   phase_status: string | null;
   collection_scope: string | null;
   status: UnitStatus;
+  /**
+   * The skill that drives this unit's work (DES-STUDIO-COCKPIT-001 A7 / DES-EXEC-001 §4.1) —
+   * `null` for the authored-prompt path. Serialized from wicked-core `WorkUnit.skill_ref`
+   * (snake_case, `#[serde(default)]`). `RoutingProvenance` surfaces it (Wave 3).
+   */
+  skill_ref?: string | null;
 }
 
 /** A run plus its ordered units (`SessionView`) — the shape `GET /runs` returns. */
@@ -130,7 +136,88 @@ export interface CoreEvent {
   description?: string;
   problem?: string;
   message?: string;
+  // ── DES-STUDIO-COCKPIT-001 §3 B-events (Phase B insight wires) ──
+  /** `unitDispatched`/`cliUsage`: 0-based dispatch attempt (`>0` = a re-dispatch / rework). */
+  attempt?: number;
+  /** `cliUsage`: prompt/input tokens for the unit run. */
+  inputTokens?: number;
+  /** `cliUsage`: completion/output tokens for the unit run. */
+  outputTokens?: number;
+  /** `cliUsage`: dollar cost when the CLI reports it (claude) or a price table resolves it; else `null`. */
+  costUsd?: number | null;
+  /** `dataUsed`: the data files the unit's CLI touched (`tool_use` file paths). */
+  files?: string[];
+  /** `gateEvaluated`: the gated criterion — `null` when the phase was UNGATED (no deterministic floor). */
+  criterion?: string | null;
+  /** `gateEvaluated`: `true` iff a pinned validator gated this unit (else the phase is ungated). */
+  hasDeterministicFloor?: boolean;
+  /** `gateEvaluated`: whether the deterministic (layer-1) floor passed (vacuous when no floor). */
+  deterministicPass?: boolean;
+  /** `gateEvaluated`: the agent (layer-2) judge's verdict when one ran, else `null`. */
+  agentVerdict?: string | null;
+  /** `gateEvaluated`: the agent judge's reasoning when one ran, else `null`. */
+  agentReasoning?: string | null;
+  /** `gateEvaluated`: the evaluator≠creator second-pass result — `null` when that layer did not run. */
+  evaluatorPass?: boolean | null;
+  /** `gateEvaluated`: the WINNING denial's reason when `combined === false`, else `null`. */
+  denialReason?: string | null;
+  /** `gateEvaluated`: the final deny-dominant decision over all layers (mirrors `gateDecided.allow`). */
+  combined?: boolean;
   [k: string]: unknown;
+}
+
+/**
+ * DES-STUDIO-COCKPIT-001 §3 B-events — the 4 new tagged-JSON insight frames, as a discriminated
+ * union for consumers that narrow on `type`. Each mirrors a wicked-core `CoreEvent` variant
+ * (`event_to_json`, camelCase). They also flow through the permissive {@link CoreEvent} above; the
+ * union just gives Phase-B panels exact field types.
+ */
+export type InsightEvent =
+  | UnitDispatchedEvent
+  | CliUsageEvent
+  | DataUsedEvent
+  | GateEvaluatedEvent;
+
+/** §3 B2 — a unit was dispatched (initial + each re-dispatch); `attempt>0` = rework. */
+export interface UnitDispatchedEvent {
+  type: 'unitDispatched';
+  session: string;
+  ord: number;
+  attempt: number;
+}
+
+/** §3 B3 — token/cost burn for one unit run. `costUsd` is `null` when no cost is known. */
+export interface CliUsageEvent {
+  type: 'cliUsage';
+  session: string;
+  ord: number;
+  attempt: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number | null;
+}
+
+/** §3 B4 — the data files a unit's CLI touched. */
+export interface DataUsedEvent {
+  type: 'dataUsed';
+  session: string;
+  ord: number;
+  files: string[];
+}
+
+/** §3 B1 — the gate's decision depth, emitted alongside `gateDecided`. */
+export interface GateEvaluatedEvent {
+  type: 'gateEvaluated';
+  session: string;
+  ord: number;
+  criterion: string | null;
+  hasDeterministicFloor: boolean;
+  deterministicPass: boolean;
+  agentVerdict: string | null;
+  agentReasoning: string | null;
+  evaluatorPass: boolean | null;
+  denialReason: string | null;
+  combined: boolean;
 }
 
 /** The launch-run request body (`POST /runs`). */
