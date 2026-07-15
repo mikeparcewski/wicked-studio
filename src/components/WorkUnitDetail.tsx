@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../api/client.js';
 import type { StageKind, UnitStatus, WorkUnit } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
+import { useRuntimeStore, outputKey } from '../store/runtime.js';
 import { RoutingProvenance } from './RoutingProvenance.js';
 
 const STAGE_STYLE: Record<StageKind, string> = {
@@ -34,6 +35,8 @@ interface Props {
  */
 export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
+  // Buffered live output for this unit (populated from cliOutputDelta while connected).
+  const liveOutput = useRuntimeStore((s) => s.outputs[outputKey(runId, unit.ord)]);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
   const [loadingTranscript, setLoadingTranscript] = useState(false);
@@ -48,10 +51,15 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
     if (transcript === null) {
       setLoadingTranscript(true);
       try {
-        const { output } = await api.getUnitOutput(runId, unit.ord);
-        setTranscript(output ?? '(no transcript captured)');
+        // unit.id is `<session>:<phase_id>` for workflow runs, `<session>:u<ord>` for free-text.
+        // unitKey is the REST path suffix (e.g. "survey" or "u1") used in GET /units/:unitKey/output.
+        const unitKey = unit.id.startsWith(`${runId}:`) ? unit.id.slice(runId.length + 1) : `u${unit.ord}`;
+        const { output } = await api.getUnitOutput(runId, unitKey);
+        // If REST returns null (e.g. unit still executing or id mismatch), use the buffered
+        // live output that arrived via cliOutputDelta events while connected.
+        setTranscript(output ?? liveOutput ?? '(no transcript captured)');
       } catch (err) {
-        setTranscript(`(failed to load transcript: ${err instanceof Error ? err.message : String(err)})`);
+        setTranscript(liveOutput ?? `(failed to load transcript: ${err instanceof Error ? err.message : String(err)})`);
       } finally {
         setLoadingTranscript(false);
       }
@@ -76,7 +84,23 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
         <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${STAGE_STYLE[unit.stage] ?? 'bg-gray-100 text-gray-600'}`}>
           {unit.stage}
         </span>
-        <span className="flex-1 truncate text-xs text-gray-700">{unit.description}</span>
+        {/* For workflow runs, description is "<phase> — <problem>". Show the phase label
+            prominently; the problem suffix is identical across all units and adds no signal. */}
+        {(() => {
+          const sep = unit.description.indexOf(' — ');
+          return sep === -1 ? (
+            <span className="flex-1 truncate text-xs text-gray-700">{unit.description}</span>
+          ) : (
+            <span className="flex-1 min-w-0 flex items-baseline gap-1">
+              <span className="text-xs font-medium text-gray-800 shrink-0">
+                {unit.description.slice(0, sep)}
+              </span>
+              <span className="truncate text-[10px] text-gray-400">
+                {unit.description.slice(sep + 3)}
+              </span>
+            </span>
+          );
+        })()}
         <span className={`text-[11px] font-medium ${UNIT_STATUS_STYLE[unit.status] ?? 'text-gray-500'}`}>
           {unit.status}
         </span>

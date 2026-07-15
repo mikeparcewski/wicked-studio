@@ -99,10 +99,10 @@ export const api = {
   resumeRun: (id: string) =>
     apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
 
-  /** A unit's captured transcript (string, or `null`). Unit id convention `<run>:u<ord>`. */
-  getUnitOutput: (id: string, ord: number) =>
+  /** A unit's captured transcript (string, or `null`). Pass the unit key (the suffix after `<run>:`). */
+  getUnitOutput: (id: string, unitKey: string) =>
     apiFetch<{ output: string | null }>(
-      `/runs/${encodeURIComponent(id)}/units/${ord}/output`,
+      `/runs/${encodeURIComponent(id)}/units/${encodeURIComponent(unitKey)}/output`,
     ),
 
   /** The daemon-cached gate prompt for a paused run (late-join reconcile, §3.3). */

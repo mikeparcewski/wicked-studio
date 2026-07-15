@@ -37,11 +37,20 @@ describe('UnitList (§11.9 work-unit detail)', () => {
 
   it('lazily loads a unit transcript on demand', async () => {
     const user = userEvent.setup();
+    // id='u1' does not start with 'run-1:' so unitKey falls back to `u${ord}` = 'u1'.
     render(<UnitList runId="run-1" units={[makeUnit({ id: 'u1', ord: 1 })]} />);
     expect(client.api.getUnitOutput).not.toHaveBeenCalled();
     await user.click(screen.getByTestId('unit-transcript-toggle'));
-    expect(client.api.getUnitOutput).toHaveBeenCalledWith('run-1', 1);
+    expect(client.api.getUnitOutput).toHaveBeenCalledWith('run-1', 'u1');
     expect(await screen.findByTestId('unit-transcript')).toHaveTextContent('transcript body');
+  });
+
+  it('uses the phase-id suffix for workflow unit transcripts', async () => {
+    const user = userEvent.setup();
+    // Workflow units use `<session>:<phase_id>` as id, e.g. 'run-1:survey'.
+    render(<UnitList runId="run-1" units={[makeUnit({ id: 'run-1:survey', ord: 1 })]} />);
+    await user.click(screen.getByTestId('unit-transcript-toggle'));
+    expect(client.api.getUnitOutput).toHaveBeenCalledWith('run-1', 'survey');
   });
 
   it('renders an empty state with no units', () => {

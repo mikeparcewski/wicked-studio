@@ -76,7 +76,7 @@ export function PhaseLadder({ model }: Props): React.ReactElement {
             );
           }
           const dot = STATUS_DOT[u.status];
-          const isCurrent = u.ord === session.unit_ix;
+          const isCurrent = u.ord === session.unit_ix + 1;
           const gate = u.gateEvals.length > 0;
           const gateDenied = u.gateEvals.some((g) => !g.combined) || u.status === 'rejected';
           const human = humanGateAt(u.ord);

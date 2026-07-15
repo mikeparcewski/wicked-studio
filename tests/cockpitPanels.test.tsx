@@ -168,10 +168,12 @@ describe('WhatWhere (FR-8)', () => {
 });
 
 describe('AssumptionsPanel (FR-6 proto)', () => {
-  it('is labeled proto and derives from council dissent', () => {
+  it('is labeled proto and shows routing provenance for all resolved units', () => {
     const el = render(<AssumptionsPanel model={modelWith()} />).getByTestId('assumptions');
     expect(el).toHaveTextContent('proto');
-    expect(el).toHaveTextContent('dissenting');
+    // The model has a resolved unit with council routing (2 dissent, 80% agreement).
+    expect(el).toHaveTextContent('dissent');
+    expect(el).toHaveTextContent('claude');
   });
 });
 
