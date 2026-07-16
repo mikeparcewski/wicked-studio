@@ -38,7 +38,7 @@ function ClaimRow({ claim }: { claim: GovernanceClaim }): React.ReactElement {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-gray-400">{ts}</span>
-          {(claim.obligations.length > 0 || claim.policy_ids.length > 0) && (
+          {(claim.criteria || claim.obligations.length > 0 || claim.policy_ids.length > 0) && (
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
@@ -119,7 +119,20 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
   useEffect(() => { void load(); }, [load]);
 
   if (loading) return <p className="text-xs text-gray-400">Loading governance claims…</p>;
-  if (error) return <p className="rounded bg-red-50 px-2 py-1 text-xs text-red-700">{error}</p>;
+  if (error) {
+    return (
+      <div className="flex flex-col gap-1">
+        <p className="rounded bg-red-50 px-2 py-1 text-xs text-red-700">{error}</p>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="self-start text-[10px] text-gray-400 hover:text-gray-700 underline"
+        >
+          Refresh
+        </button>
+      </div>
+    );
+  }
 
   if (claims.length === 0) {
     return (
