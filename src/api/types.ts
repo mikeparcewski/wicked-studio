@@ -230,6 +230,45 @@ export interface LaunchRunBody {
   repoRef?: string;
 }
 
+// ── Governance types (crew#40/41) ──────────────────────────────────────────────
+
+/** Per-app breakdown within a `CoverageReport`. */
+export interface CoveragePerApp {
+  app: string;
+  behavior_bearing: number;
+  resolved: number;
+  risk_flagged: number;
+  unaccounted: number;
+  coverage: number;
+}
+
+/** A behavior-bearing node without a coverage annotation (a coverage hole). */
+export interface UnaccountedNode {
+  symbol_id: string;
+  name?: string;
+  kind?: string;
+  file?: string;
+  app?: string;
+}
+
+/**
+ * Front-half coverage gate report (`wicked-governance::CoverageReport`).
+ * `null` when the graph store has no nodes.
+ */
+export interface CoverageReport {
+  total: number;
+  behavior_bearing: number;
+  resolved: number;
+  risk_flagged: number;
+  unaccounted: number;
+  coverage: number;
+  resolved_rate: number;
+  mean_confidence: number;
+  resolve_threshold: number;
+  per_app: CoveragePerApp[];
+  unaccounted_nodes: UnaccountedNode[];
+}
+
 /** The open-terminal request body (`POST /terminals`, DES-TERMINAL-001 §6). */
 export interface OpenTerminalBody {
   /** Working directory the PTY opens in. */

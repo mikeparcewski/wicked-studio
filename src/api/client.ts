@@ -142,4 +142,9 @@ export const api = {
   /** Close a live terminal (kill child, join reader). */
   closeTerminal: (id: string) =>
     apiFetch<{ status: string }>(`/terminals/${encodeURIComponent(id)}/close`, { method: 'POST' }),
+
+  // ── Governance reads (crew#40/41) ────────────────────────────────────────────
+
+  /** Front-half coverage gate report; `report` is `null` on an empty store. */
+  getCoverageReport: () => apiFetch<{ report: import('./types.js').CoverageReport | null }>('/governance/coverage'),
 };
