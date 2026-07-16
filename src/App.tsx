@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { CoverageView } from './components/CoverageView.js';
+import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { RunList } from './components/RunList.js';
 import { RunDetail } from './components/RunDetail.js';
 import { LaunchForm } from './components/LaunchForm.js';
+import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useGateStore } from './store/gates.js';
@@ -12,7 +14,7 @@ import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import type { CoreEvent } from './api/types.js';
 
-type Panel = 'runs' | 'coverage';
+type Panel = 'runs' | 'coverage' | 'workflows' | 'domain';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -77,7 +79,7 @@ export function App(): React.ReactElement {
         <div className="flex items-center gap-3">
           <span className="font-bold text-sm tracking-tight">wicked-studio</span>
           <nav className="flex gap-1">
-            {(['runs', 'coverage'] as Panel[]).map((p) => (
+            {(['runs', 'coverage', 'workflows', 'domain'] as Panel[]).map((p) => (
               <button
                 key={p}
                 type="button"
@@ -100,6 +102,18 @@ export function App(): React.ReactElement {
         <div className="flex flex-1 overflow-hidden">
           <main className="flex-1 overflow-y-auto p-6">
             <CoverageView />
+          </main>
+        </div>
+      ) : panel === 'workflows' ? (
+        <div className="flex flex-1 overflow-hidden">
+          <main className="flex-1 overflow-y-auto p-6">
+            <WorkflowViewer />
+          </main>
+        </div>
+      ) : panel === 'domain' ? (
+        <div className="flex flex-1 overflow-hidden">
+          <main className="flex-1 overflow-y-auto p-6">
+            <DomainModelBrowser />
           </main>
         </div>
       ) : (

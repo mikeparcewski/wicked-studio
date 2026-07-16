@@ -289,6 +289,67 @@ export interface CoverageReport {
   unaccounted_nodes: UnaccountedNode[];
 }
 
+// ── Workflow viewer + domain-model browser types (crew#44) ──────────────────
+
+/** Gate position in the value→strategy→execution ladder. */
+export type GateType = 'value' | 'strategy' | 'execution';
+
+/** Human-confirm spec for a phase gate (serde flattened from Rust enum). */
+export type GateSpec =
+  | 'auto'
+  | { human_confirm: { unconditional: boolean } }
+  | { human_confirm_if: 'verdict_not_pass' };
+
+/** Evaluator≠creator role for a phase. */
+export type PhaseRole = 'neutral' | 'creator' | 'evaluator';
+
+/** One ordered phase of a workflow. */
+export interface PhaseDef {
+  id: string;
+  kind: 'recon' | 'build' | 'review' | 'test';
+  gate_type: GateType | null;
+  gate: GateSpec;
+  executes_code: boolean;
+  verified_evidence: boolean;
+  required_deliverables: string[];
+  depends_on: string[];
+  role: PhaseRole;
+  skill_ref: string | null;
+  allowed_skills: string[];
+  validator_pin: string | null;
+}
+
+/** A workflow — id + ordered phases. */
+export interface WorkflowDef {
+  id: string;
+  phases: PhaseDef[];
+}
+
+/** Top-level requirements_graph.json artifact (schema 1.0.0). */
+export interface DomainGraph {
+  metadata: { schema_version: string; migration_mode: string; source?: string };
+  domains: Record<string, DomainGraphDomain>;
+}
+
+/** A capability domain in the requirements graph. */
+export interface DomainGraphDomain {
+  description?: string;
+  cluster_id?: number;
+  requirements: Record<string, DomainGraphRequirement>;
+  entities: Record<string, { description?: string }>;
+}
+
+/** A requirement in a domain. */
+export interface DomainGraphRequirement {
+  title: string;
+  description: string;
+  status?: string;
+  disposition?: string;
+  business_rules: Array<{ id: string; statement: string; confidence: number; provenance: { source: string } }>;
+  validations: Array<{ id: string; statement: string; confidence?: number }>;
+  error_paths: Array<{ id: string; statement: string }>;
+}
+
 /** The open-terminal request body (`POST /terminals`, DES-TERMINAL-001 §6). */
 export interface OpenTerminalBody {
   /** Working directory the PTY opens in. */

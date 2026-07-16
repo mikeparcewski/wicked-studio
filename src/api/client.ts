@@ -143,6 +143,17 @@ export const api = {
   closeTerminal: (id: string) =>
     apiFetch<{ status: string }>(`/terminals/${encodeURIComponent(id)}/close`, { method: 'POST' }),
 
+  // ── Workflow viewer + domain-model browser (crew#44) ─────────────────────────
+
+  /** All registered workflow definitions (built-ins + any loaded drop-ins). */
+  listWorkflows: () => apiFetch<{ workflows: import('./types.js').WorkflowDef[] }>('/workflows'),
+
+  /** One workflow definition by id; 404 if unknown. */
+  getWorkflow: (id: string) => apiFetch<{ workflow: import('./types.js').WorkflowDef }>(`/workflows/${encodeURIComponent(id)}`),
+
+  /** The requirements_graph.json domain model; `graph` is null when not generated yet. */
+  getDomainGraph: () => apiFetch<{ graph: import('./types.js').DomainGraph | null }>('/domain-graph'),
+
   // ── Governance reads (crew#40/41/43) ────────────────────────────────────────
 
   /** Front-half coverage gate report; `report` is `null` on an empty store. */
