@@ -143,8 +143,11 @@ export const api = {
   closeTerminal: (id: string) =>
     apiFetch<{ status: string }>(`/terminals/${encodeURIComponent(id)}/close`, { method: 'POST' }),
 
-  // ── Governance reads (crew#40/41) ────────────────────────────────────────────
+  // ── Governance reads (crew#40/41/43) ────────────────────────────────────────
 
   /** Front-half coverage gate report; `report` is `null` on an empty store. */
   getCoverageReport: () => apiFetch<{ report: import('./types.js').CoverageReport | null }>('/governance/coverage'),
+
+  /** All recorded governance claims (decisions) from the conformance store. */
+  listClaims: () => apiFetch<{ claims: import('./types.js').GovernanceClaim[] }>('/governance/claims'),
 };

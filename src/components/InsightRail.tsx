@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { RunModel } from '../hooks/useRunModel.js';
 import { DecisionsLedger } from './DecisionsLedger.js';
+import { GovernanceAudit } from './GovernanceAudit.js';
 import { SteeringTimeline } from './SteeringTimeline.js';
 import { Burn } from './Burn.js';
 import { DataUsed } from './DataUsed.js';
@@ -12,10 +13,11 @@ interface Props {
   model: RunModel;
 }
 
-type TabId = 'decisions' | 'burn' | 'data' | 'steering' | 'what' | 'assumptions' | 'unwired';
+type TabId = 'decisions' | 'governance' | 'burn' | 'data' | 'steering' | 'what' | 'assumptions' | 'unwired';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'decisions', label: 'Decisions' },
+  { id: 'governance', label: 'Governance' },
   { id: 'burn', label: 'Burn' },
   { id: 'data', label: 'Data' },
   { id: 'steering', label: 'Steering' },
@@ -54,6 +56,7 @@ export function InsightRail({ model }: Props): React.ReactElement {
 
       <div>
         {tab === 'decisions' && <DecisionsLedger model={model} />}
+        {tab === 'governance' && <GovernanceAudit model={model} />}
         {tab === 'burn' && <Burn model={model} />}
         {tab === 'data' && <DataUsed model={model} />}
         {tab === 'steering' && <SteeringTimeline runId={model.session.id} />}

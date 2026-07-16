@@ -220,6 +220,26 @@ export interface GateEvaluatedEvent {
   combined: boolean;
 }
 
+// ── Governance types (crew#40/43) ──────────────────────────────────────────────
+
+/**
+ * A recorded governance decision from the conformance store (`wicked-apps-core::ConformanceClaim`).
+ * `decision` values: `allow` | `deny` | `allow_with_conditions`.
+ */
+export interface GovernanceClaim {
+  claim_id: string;
+  scope: string;
+  phase: string;
+  policy_ids: string[];
+  decision: 'allow' | 'deny' | 'allow_with_conditions';
+  obligations: string[];
+  evaluated_context_ref: string;
+  criteria: string;
+  evaluator_identity: string;
+  /** Unix-seconds timestamp. */
+  evaluated_at: number;
+}
+
 /** The launch-run request body (`POST /runs`). */
 export interface LaunchRunBody {
   problem: string;
