@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
@@ -12,6 +12,12 @@ import { useGateStore } from '../store/gates.js';
  * backfill any missing prompt from the daemon cache (`GET /runs/:id/gate`). If a
  * prompt is unavailable (daemon restarted, §3.3 known limit), the SteeringGate
  * still works id-only.
+ *
+ * `refresh()` is debounced at 400 ms so a burst of WS lifecycle events (e.g.
+ * sessionStarted → unitPlanned → unitDistributed → unitExecuting) only issues
+ * ONE `GET /runs` call instead of one per event. This prevents the libuv thread
+ * pool from being saturated by stacked actor-bound requests, which would starve
+ * concurrent read-only operations (getCoverageReport, listConformanceRules, etc.).
  */
 export function useRuns(): { runs: SessionView[]; refresh: () => void } {
   const status = useConnectionStore((s) => s.status);
@@ -19,8 +25,23 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void } {
   const reconcileGates = useGateStore((s) => s.reconcile);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [tick, setTick] = useState(0);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const refresh = useCallback(() => setTick((t) => t + 1), []);
+  const refresh = useCallback(() => {
+    if (debounceRef.current !== null) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      setTick((t) => t + 1);
+    }, 400);
+  }, []);
+
+  // Clear any pending debounce timeout on unmount so setTick is never called
+  // on an unmounted component.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current !== null) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (status !== 'connected') return;
