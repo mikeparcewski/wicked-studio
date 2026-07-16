@@ -97,9 +97,11 @@ export function App(): React.ReactElement {
       </header>
 
       {panel === 'coverage' ? (
-        <main className="flex-1 overflow-y-auto p-6">
-          <CoverageView />
-        </main>
+        <div className="flex flex-1 overflow-hidden">
+          <main className="flex-1 overflow-y-auto p-6">
+            <CoverageView />
+          </main>
+        </div>
       ) : (
         <div className="flex flex-1 overflow-hidden">
           <aside className="w-80 border-r bg-white overflow-y-auto flex flex-col">

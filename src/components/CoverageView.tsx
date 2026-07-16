@@ -131,8 +131,8 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
     if (kindFilter) result = result.filter((n) => n.kind === kindFilter);
     if (appFilter) result = result.filter((n) => n.app === appFilter);
     return [...result].sort((a, b) => {
-      const av = (a[sortKey] ?? '') as string;
-      const bv = (b[sortKey] ?? '') as string;
+      const av = (sortKey === 'name' ? (a.name ?? a.symbol_id) : (a[sortKey] ?? '')) as string;
+      const bv = (sortKey === 'name' ? (b.name ?? b.symbol_id) : (b[sortKey] ?? '')) as string;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
   }, [nodes, query, kindFilter, appFilter, sortKey, sortDir]);
@@ -146,12 +146,14 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
       <div className="flex flex-wrap gap-2">
         <input
           type="text"
+          aria-label="Search by name, file, or symbol id"
           placeholder="Search name / file / id…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="rounded border border-gray-200 px-2 py-1 text-[11px] w-48"
         />
         <select
+          aria-label="Filter by kind"
           value={kindFilter}
           onChange={(e) => setKindFilter(e.target.value)}
           className="rounded border border-gray-200 px-2 py-1 text-[11px]"
@@ -160,6 +162,7 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
           {kinds.map((k) => <option key={k} value={k}>{k}</option>)}
         </select>
         <select
+          aria-label="Filter by app"
           value={appFilter}
           onChange={(e) => setAppFilter(e.target.value)}
           className="rounded border border-gray-200 px-2 py-1 text-[11px]"
@@ -195,7 +198,9 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
               <td className="py-1 pr-3 font-mono text-gray-700">{n.name ?? n.symbol_id}</td>
               <td className="py-1 pr-3 text-gray-500">{n.kind ?? '—'}</td>
               <td className="py-1 pr-3 text-gray-500">{n.app ?? '—'}</td>
-              <td className="py-1 text-gray-400 truncate max-w-xs" title={n.file}>{n.file ?? '—'}</td>
+              <td className="py-1 text-gray-400" title={n.file}>
+                <div className="truncate max-w-xs">{n.file ?? '—'}</div>
+              </td>
             </tr>
           ))}
         </tbody>
