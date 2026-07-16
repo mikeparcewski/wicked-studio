@@ -3,9 +3,11 @@ import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { CoverageView } from './components/CoverageView.js';
 import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
+import { PolicyManager } from './components/PolicyManager.js';
 import { RunList } from './components/RunList.js';
 import { RunDetail } from './components/RunDetail.js';
 import { LaunchForm } from './components/LaunchForm.js';
+import { RuleManager } from './components/RuleManager.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { useRuns } from './hooks/useRuns.js';
@@ -14,7 +16,7 @@ import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import type { CoreEvent } from './api/types.js';
 
-type Panel = 'runs' | 'coverage' | 'workflows' | 'domain';
+type Panel = 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -79,7 +81,7 @@ export function App(): React.ReactElement {
         <div className="flex items-center gap-3">
           <span className="font-bold text-sm tracking-tight">wicked-studio</span>
           <nav className="flex gap-1">
-            {(['runs', 'coverage', 'workflows', 'domain'] as Panel[]).map((p) => (
+            {(['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules'] as Panel[]).map((p) => (
               <button
                 key={p}
                 type="button"
@@ -114,6 +116,18 @@ export function App(): React.ReactElement {
         <div className="flex flex-1 overflow-hidden">
           <main className="flex-1 overflow-y-auto p-6">
             <DomainModelBrowser />
+          </main>
+        </div>
+      ) : panel === 'policies' ? (
+        <div className="flex flex-1 overflow-hidden">
+          <main className="flex-1 overflow-y-auto p-6">
+            <PolicyManager />
+          </main>
+        </div>
+      ) : panel === 'rules' ? (
+        <div className="flex flex-1 overflow-hidden">
+          <main className="flex-1 overflow-y-auto p-6">
+            <RuleManager />
           </main>
         </div>
       ) : (

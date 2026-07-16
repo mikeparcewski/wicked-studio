@@ -156,9 +156,39 @@ export const api = {
 
   // ── Governance reads (crew#40/41/43) ────────────────────────────────────────
 
+  /** All registered governance policies. */
+  listPolicies: () => apiFetch<{ policies: import('./types.js').GovernancePolicy[] }>('/governance/policies'),
+
+  /** All registered conformance rules. */
+  listConformanceRules: () => apiFetch<{ rules: import('./types.js').ConformanceRule[] }>('/governance/rules'),
+
   /** Front-half coverage gate report; `report` is `null` on an empty store. */
   getCoverageReport: () => apiFetch<{ report: import('./types.js').CoverageReport | null }>('/governance/coverage'),
 
   /** All recorded governance claims (decisions) from the conformance store. */
   listClaims: () => apiFetch<{ claims: import('./types.js').GovernanceClaim[] }>('/governance/claims'),
+
+  // ── Governance writes (crew#42) ─────────────────────────────────────────────
+
+  /** Upsert (create or update) a governance policy. */
+  upsertPolicy: (policy: import('./types.js').GovernancePolicy) =>
+    apiFetch<{ status: string }>('/governance/policies', { method: 'POST', body: JSON.stringify(policy) }),
+
+  /** Upsert (create or update) a conformance rule. */
+  upsertConformanceRule: (rule: import('./types.js').ConformanceRule) =>
+    apiFetch<{ status: string }>('/governance/rules', { method: 'POST', body: JSON.stringify(rule) }),
+
+  /**
+   * Preview which conformance rules match a facet query (read-only, no actor impact).
+   * Any omitted facet matches all values for that dimension.
+   */
+  recallRulesPreview: (query: import('./types.js').RulePreviewQuery) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(query)) {
+      if (v) params.set(k, v);
+    }
+    const queryString = params.toString();
+    const qs = queryString ? `?${queryString}` : '';
+    return apiFetch<{ rules: import('./types.js').ConformanceRule[] }>(`/governance/rules/preview${qs}`);
+  },
 };

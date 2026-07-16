@@ -220,7 +220,51 @@ export interface GateEvaluatedEvent {
   combined: boolean;
 }
 
-// ── Governance types (crew#40/43) ──────────────────────────────────────────────
+// ── Governance types (crew#40/42/43) ───────────────────────────────────────────
+
+/**
+ * A registered governance policy (`wicked-governance::Policy`).
+ * `effect`: `deny` | `allow_with_conditions` | `allow`.
+ * `severity`: `high` | `medium` | `low`.
+ */
+export interface GovernancePolicy {
+  id: string;
+  kind: string;
+  applies_to: string[];
+  effect: 'deny' | 'allow_with_conditions' | 'allow';
+  trigger: { contains?: string };
+  obligations: string[];
+  criteria: string;
+  severity: 'high' | 'medium' | 'low';
+  rule: string;
+}
+
+/**
+ * A prescriptive conformance rule (`wicked-governance::ConformanceRule`).
+ * `rule_type`: `pattern` | `policy`. `severity`: `info` | `warn` | `error` | `critical`.
+ */
+export interface ConformanceRule {
+  id: string;
+  rule_type: 'pattern' | 'policy';
+  statement: string;
+  severity: 'info' | 'warn' | 'error' | 'critical';
+  confidence: number;
+  targets: { language?: string; layer?: string; framework?: string };
+  symbol_ref?: string;
+  compliance?: { framework: string; control_id: string };
+  provenance: { source: string; ref?: string; source_kinds: string[] };
+}
+
+/** Facet query for `GET /governance/rules/preview`. All fields are optional. */
+export interface RulePreviewQuery {
+  language?: string;
+  layer?: string;
+  framework?: string;
+  severity?: string;
+  rule_type?: string;
+}
+
+// ── Governance claims (crew#40/43) ─────────────────────────────────────────────
 
 /**
  * A recorded governance decision from the conformance store (`wicked-apps-core::ConformanceClaim`).
