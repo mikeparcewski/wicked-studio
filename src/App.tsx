@@ -1,13 +1,13 @@
-import { useCallback } from 'react';
-import { ConnectionStatus } from './components/ConnectionStatus.js';
+import { useCallback, useEffect } from 'react';
 import { CoverageView } from './components/CoverageView.js';
 import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
+import { LeftSidebar } from './components/LeftSidebar.js';
 import { PolicyManager } from './components/PolicyManager.js';
-import { RunList } from './components/RunList.js';
-import { RunDetail } from './components/RunDetail.js';
-import { LaunchForm } from './components/LaunchForm.js';
+import { RepositoriesPanel } from './components/RepositoriesPanel.js';
+import { RightPanel } from './components/RightPanel.js';
 import { RuleManager } from './components/RuleManager.js';
+import { ChatPanel } from './components/ChatPanel.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { useRoute } from './hooks/useRoute.js';
@@ -16,7 +16,7 @@ import { useGateStore } from './store/gates.js';
 import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import type { CoreEvent } from './api/types.js';
-import type { Panel } from './hooks/useRoute.js';
+import { api } from './api/client.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -34,8 +34,35 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
   'sessionCompleted',
 ]);
 
+/**
+ * Ctrl+K keyboard shortcut — kill the selected run when it is not in a terminal state.
+ * Wired here (global handler) so it works regardless of which panel has focus.
+ */
+function useKillShortcut(
+  runId: string | null,
+  runs: { session: { id: string; status: string } }[],
+  onKill: (id: string) => Promise<void>,
+): void {
+  useEffect(() => {
+    if (!runId) return;
+    function handler(e: KeyboardEvent): void {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k' && runId) {
+        const run = runs.find((r) => r.session.id === runId);
+        if (!run) return;
+        const terminal = ['completed', 'cancelled', 'failed'].includes(run.session.status);
+        if (!terminal) {
+          e.preventDefault();
+          onKill(runId);
+        }
+      }
+    }
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [runId, runs, onKill]);
+}
+
 export function App(): React.ReactElement {
-  const { panel, runId, showLaunch, navigate, panelPath } = useRoute();
+  const { panel, runId, navigate } = useRoute();
   const { runs, refresh } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestRuntime = useRuntimeStore((s) => s.ingest);
@@ -53,119 +80,116 @@ export function App(): React.ReactElement {
 
   useEventStream(handleEvent);
 
-  const selectRun = useCallback((id: string) => {
-    navigate(`/runs/${encodeURIComponent(id)}`);
-  }, [navigate]);
+  const selectRun = useCallback(
+    (id: string) => navigate(`/runs/${encodeURIComponent(id)}`),
+    [navigate],
+  );
 
-  const onLaunched = useCallback((id: string) => {
-    refresh();
-    navigate(`/runs/${encodeURIComponent(id)}`);
-  }, [navigate, refresh]);
+  const onLaunched = useCallback(
+    (id: string) => {
+      refresh();
+      navigate(`/runs/${encodeURIComponent(id)}`);
+    },
+    [navigate, refresh],
+  );
+
+  const onNavigateBack = useCallback(() => navigate('/'), [navigate]);
+
+  const onKill = useCallback(
+    async (id: string) => {
+      try {
+        await api.cancelRun(id);
+        refresh();
+      } catch {
+        // surface kill errors only in RightPanel; fail silently from the shortcut
+      }
+    },
+    [refresh],
+  );
+
+  useKillShortcut(runId, runs, onKill);
 
   const selected = runs.find((v) => v.session.id === runId) ?? null;
 
-  const NAV_PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules'];
+  // Center panel content based on route
+  function renderCenter(): React.ReactElement {
+    if (panel === 'coverage') {
+      return (
+        <div className="flex-1 overflow-y-auto p-6 bg-white">
+          <CoverageView />
+        </div>
+      );
+    }
+    if (panel === 'workflows') {
+      return (
+        <div className="flex-1 overflow-y-auto p-6 bg-white">
+          <WorkflowViewer />
+        </div>
+      );
+    }
+    if (panel === 'domain') {
+      return (
+        <div className="flex-1 overflow-y-auto p-6 bg-white">
+          <DomainModelBrowser />
+        </div>
+      );
+    }
+    if (panel === 'policies') {
+      return (
+        <div className="flex-1 overflow-y-auto p-6 bg-white">
+          <PolicyManager />
+        </div>
+      );
+    }
+    if (panel === 'rules') {
+      return (
+        <div className="flex-1 overflow-y-auto p-6 bg-white">
+          <RuleManager />
+        </div>
+      );
+    }
+    if (panel === 'repos') {
+      return (
+        <div className="flex-1 overflow-hidden bg-white">
+          <RepositoriesPanel />
+        </div>
+      );
+    }
+    // Default: runs / chat panel
+    return (
+      <div className="flex-1 overflow-hidden bg-white">
+        <ChatPanel
+          view={selected}
+          onLaunched={onLaunched}
+          onNavigateBack={onNavigateBack}
+          onRefresh={refresh}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="h-12 flex items-center justify-between px-4 bg-white border-b shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="font-bold text-sm tracking-tight">wicked-studio</span>
-          <nav className="flex gap-1">
-            {NAV_PANELS.map((p) => (
-              <a
-                key={p}
-                href={panelPath(p)}
-                onClick={(e) => { e.preventDefault(); navigate(panelPath(p)); }}
-                className={`rounded px-2 py-0.5 text-[11px] font-medium capitalize ${
-                  panel === p
-                    ? 'bg-gray-100 text-gray-900'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {p}
-              </a>
-            ))}
-          </nav>
-        </div>
-        <ConnectionStatus />
-      </header>
+    <div className="flex h-screen overflow-hidden bg-zinc-900">
+      <LeftSidebar
+        runs={runs}
+        selectedRunId={runId}
+        onSelectRun={selectRun}
+        navigate={navigate}
+      />
 
-      {panel === 'coverage' ? (
-        <div className="flex flex-1 overflow-hidden">
-          <main className="flex-1 overflow-y-auto p-6">
-            <CoverageView />
-          </main>
-        </div>
-      ) : panel === 'workflows' ? (
-        <div className="flex flex-1 overflow-hidden">
-          <main className="flex-1 overflow-y-auto p-6">
-            <WorkflowViewer />
-          </main>
-        </div>
-      ) : panel === 'domain' ? (
-        <div className="flex flex-1 overflow-hidden">
-          <main className="flex-1 overflow-y-auto p-6">
-            <DomainModelBrowser />
-          </main>
-        </div>
-      ) : panel === 'policies' ? (
-        <div className="flex flex-1 overflow-hidden">
-          <main className="flex-1 overflow-y-auto p-6">
-            <PolicyManager />
-          </main>
-        </div>
-      ) : panel === 'rules' ? (
-        <div className="flex flex-1 overflow-hidden">
-          <main className="flex-1 overflow-y-auto p-6">
-            <RuleManager />
-          </main>
-        </div>
-      ) : showLaunch ? (
-        <div className="flex flex-1 overflow-y-auto p-6">
-          <div className="mx-auto w-full max-w-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-gray-800">New run</h2>
-              <button
-                type="button"
-                onClick={() => navigate('/')}
-                className="text-xs text-gray-400 hover:text-gray-600"
-              >
-                ← Back to runs
-              </button>
-            </div>
-            <LaunchForm onLaunched={onLaunched} onCancel={() => navigate('/')} />
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-1 overflow-hidden">
-          <aside className="w-80 border-r bg-white flex flex-col">
-            <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Runs</p>
-              <button
-                type="button"
-                data-testid="new-run"
-                onClick={() => navigate('/runs/new')}
-                className="rounded bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-blue-700"
-              >
-                New run
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <RunList runs={runs} selectedRunId={runId} onSelect={selectRun} />
-            </div>
-          </aside>
+      <div className="flex flex-1 overflow-hidden">
+        {renderCenter()}
+      </div>
 
-          <main className="flex-1 overflow-y-auto p-6">
-            {selected ? (
-              <RunDetail key={selected.session.id} view={selected} onRefresh={refresh} />
-            ) : (
-              <p className="text-sm text-gray-400">Select a run, or launch a new one.</p>
-            )}
-          </main>
-        </div>
+      {/* Right panel only when a run is selected */}
+      {selected !== null && (
+        <RightPanel
+          view={selected}
+          onRefresh={refresh}
+        />
       )}
 
+      {/* Gate toasts — always mounted, renders above everything */}
       <GateNotifications onSelect={selectRun} />
     </div>
   );
