@@ -45,7 +45,10 @@ export function LiveOutput({ runId }: Props): React.ReactElement {
           className="max-h-64 overflow-auto rounded bg-gray-900 p-2 text-[10px] leading-tight text-gray-100"
         >
           {unitOutputs.length === 0 ? (
-            <span className="text-gray-500">No output yet.</span>
+            <span className="text-gray-500">
+              No streaming output — the engine emits output via transcript after each unit completes.
+              View transcripts below.
+            </span>
           ) : (
             unitOutputs.map(({ ord, text }) => (
               <div key={ord} className="mb-2">

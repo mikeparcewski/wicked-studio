@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { StageKind, UnitStatus, WorkUnit } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
@@ -31,16 +31,34 @@ interface Props {
 /**
  * A work-unit row (DES-STUDIO-001 §11.9): ord, stage badge, assigned CLI,
  * status, routing provenance + denial reason, a per-unit approve on the gated
- * unit, and a lazy transcript link.
+ * unit, and a lazy transcript. Auto-loads when the unit reaches `done`.
  */
 export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
-  // Buffered live output for this unit (populated from cliOutputDelta while connected).
   const liveOutput = useRuntimeStore((s) => s.outputs[outputKey(runId, unit.ord)]);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [approving, setApproving] = useState(false);
+  const autoLoadedRef = useRef(false);
+
+  // Auto-load and expand transcript when the unit finishes — no button required.
+  useEffect(() => {
+    if (unit.status !== 'done' || autoLoadedRef.current) return;
+    autoLoadedRef.current = true;
+    setShowTranscript(true);
+    setLoadingTranscript(true);
+    const unitKey = unit.id.startsWith(`${runId}:`) ? unit.id.slice(runId.length + 1) : `u${unit.ord}`;
+    void api
+      .getUnitOutput(runId, unitKey)
+      .then(({ output }) => {
+        setTranscript(output ?? liveOutput ?? '(no transcript captured)');
+      })
+      .catch((err) => {
+        setTranscript(liveOutput ?? `(failed to load: ${err instanceof Error ? err.message : String(err)})`);
+      })
+      .finally(() => setLoadingTranscript(false));
+  }, [unit.status, runId, unit.id, unit.ord, liveOutput]);
 
   async function toggleTranscript(): Promise<void> {
     if (showTranscript) {
@@ -51,12 +69,8 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
     if (transcript === null) {
       setLoadingTranscript(true);
       try {
-        // unit.id is `<session>:<phase_id>` for workflow runs, `<session>:u<ord>` for free-text.
-        // unitKey is the REST path suffix (e.g. "survey" or "u1") used in GET /units/:unitKey/output.
         const unitKey = unit.id.startsWith(`${runId}:`) ? unit.id.slice(runId.length + 1) : `u${unit.ord}`;
         const { output } = await api.getUnitOutput(runId, unitKey);
-        // If REST returns null (e.g. unit still executing or id mismatch), use the buffered
-        // live output that arrived via cliOutputDelta events while connected.
         setTranscript(output ?? liveOutput ?? '(no transcript captured)');
       } catch (err) {
         setTranscript(liveOutput ?? `(failed to load transcript: ${err instanceof Error ? err.message : String(err)})`);
@@ -84,8 +98,6 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
         <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${STAGE_STYLE[unit.stage] ?? 'bg-gray-100 text-gray-600'}`}>
           {unit.stage}
         </span>
-        {/* For workflow runs, description is "<phase> — <problem>". Show the phase label
-            prominently; the problem suffix is identical across all units and adds no signal. */}
         {(() => {
           const sep = unit.description.indexOf(' — ');
           return sep === -1 ? (
@@ -144,7 +156,7 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
         {showTranscript && (
           <pre
             data-testid="unit-transcript"
-            className="mt-1 max-h-48 overflow-auto rounded bg-gray-900 p-2 text-[10px] leading-tight text-gray-100 whitespace-pre-wrap"
+            className="mt-1 max-h-96 overflow-auto rounded bg-gray-900 p-2 text-[10px] leading-tight text-gray-100 whitespace-pre-wrap"
           >
             {loadingTranscript ? 'Loading…' : transcript}
           </pre>

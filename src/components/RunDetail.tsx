@@ -119,10 +119,10 @@ export function RunDetail({ view, onRefresh }: Props): React.ReactElement {
 
           <LiveOutput runId={session.id} />
 
-          {/* Terminal drawer. */}
+          {/* Terminal drawer — opens a new PTY in the run's workdir, not the agent's session. */}
           <section data-testid="terminal-section">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
-              Terminal
+              Operator shell
             </p>
             {termOpen ? (
               <div className="flex flex-col gap-2">

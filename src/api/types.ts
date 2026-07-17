@@ -292,6 +292,8 @@ export interface LaunchRunBody {
   entityMode?: EntityMode;
   humanConfirm?: string;
   repoRef?: string;
+  /** Built-in workflow id (`feature` | `bug` | `migration`); omit for free-text single-unit mode. */
+  workflow?: string;
 }
 
 // ── Governance types (crew#40/41) ──────────────────────────────────────────────

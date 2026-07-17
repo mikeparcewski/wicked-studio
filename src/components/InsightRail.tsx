@@ -65,9 +65,10 @@ export function InsightRail({ model }: Props): React.ReactElement {
         {tab === 'unwired' && (
           <div className="flex flex-col gap-2 text-[11px]">
             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-2 text-gray-500">
-              <p className="font-semibold">Workflow selector — not wired</p>
+              <p className="font-semibold">Live output streaming — engine-pending</p>
               <p className="mt-1 text-gray-400">
-                Runs launch from free-text today; a workflow-def selector is a separate task.
+                The engine does not yet emit <code>cliOutputDelta</code> events. Output is
+                available as a transcript after each unit completes (auto-shown below).
               </p>
             </div>
             <CampaignDagStub />

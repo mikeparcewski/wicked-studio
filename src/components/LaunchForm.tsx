@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { EntityMode, LaunchRunBody, RepoEntry, RosterSeat } from '../api/types.js';
+import type { EntityMode, LaunchRunBody, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 
 interface Props {
   onLaunched: (runId: string) => void;
@@ -9,15 +9,28 @@ interface Props {
 
 type ConfirmMode = 'none' | 'all' | 'before';
 
+const WORKFLOW_LABELS: Record<string, string> = {
+  feature: 'Feature (6 phases: clarify → design → build → review → test → merge)',
+  bug: 'Bug (4 phases: triage → reproduce → fix → verify)',
+  migration: 'Migration (5 phases: plan → execute → cutover → verify → cleanup)',
+};
+
 /**
- * The launch surface (DES-STUDIO-001 §11.7): brief + council roster multiselect +
- * target repo (with register-new) + human-confirm policy + entity mode. Live
- * memory/knowledge recall on the brief is rendered disabled — its core-ts binding
- * is pending (§4.4); we don't fake it.
+ * The launch surface (DES-STUDIO-001 §11.7): brief + workflow selector + council
+ * roster multiselect + target repo + human-confirm policy + entity mode.
+ *
+ * Workflow note: free-text mode creates ONE unit; the council votes on which CLI
+ * executes it. Multi-phase (feature/bug/migration) workflows create one unit per
+ * phase, each assigned to the winning CLI for that phase.
+ *
+ * Planning latency note: `launchRun` blocks the Rust actor for the entire planning
+ * phase (~30-60 s). The elapsed timer is informational only; the run IS being created.
  */
 export function LaunchForm({ onLaunched, onCancel }: Props): React.ReactElement {
   const [problem, setProblem] = useState('');
+  const [workflow, setWorkflow] = useState('');
   const [roster, setRoster] = useState<RosterSeat[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [repoRef, setRepoRef] = useState('');
@@ -31,7 +44,10 @@ export function LaunchForm({ onLaunched, onCancel }: Props): React.ReactElement 
   const [registerError, setRegisterError] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
+  const [elapsedSecs, setElapsedSecs] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     api
@@ -45,7 +61,31 @@ export function LaunchForm({ onLaunched, onCancel }: Props): React.ReactElement 
       .listRepos()
       .then(({ repos: rs }) => setRepos(rs))
       .catch(() => { /* repo-less launch is valid */ });
+    api
+      .listWorkflows()
+      .then(({ workflows: wfs }) => setWorkflows(wfs))
+      .catch(() => { /* fall back to hardcoded labels */ });
   }, []);
+
+  // Elapsed-time ticker — starts when submitting, clears on done/error.
+  useEffect(() => {
+    if (submitting) {
+      setElapsedSecs(0);
+      timerRef.current = setInterval(() => setElapsedSecs((s) => s + 1), 1000);
+    } else {
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      setElapsedSecs(0);
+    }
+    return () => {
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [submitting]);
 
   function toggleSeat(key: string): void {
     setSelected((prev) => {
@@ -82,6 +122,7 @@ export function LaunchForm({ onLaunched, onCancel }: Props): React.ReactElement 
     if (confirmMode === 'all') body.humanConfirm = 'all';
     else if (confirmMode === 'before') body.humanConfirm = `before:${beforeOrd}`;
     if (repoRef) body.repoRef = repoRef;
+    if (workflow) body.workflow = workflow;
     try {
       const { runId } = await api.launchRun(body);
       onLaunched(runId);
@@ -93,6 +134,14 @@ export function LaunchForm({ onLaunched, onCancel }: Props): React.ReactElement 
   }
 
   const canSubmit = problem.trim().length > 0 && selected.size > 0 && !submitting;
+
+  const workflowLabel = (id: string): string => {
+    const wf = workflows.find((w) => w.id === id);
+    if (wf) {
+      return `${id.charAt(0).toUpperCase() + id.slice(1)} (${wf.phases.length} phases: ${wf.phases.map((p) => p.id).join(' → ')})`;
+    }
+    return WORKFLOW_LABELS[id] ?? id;
+  };
 
   return (
     <div className="rounded-lg border bg-white p-4 shadow-sm" data-testid="launch-form">
@@ -130,7 +179,38 @@ export function LaunchForm({ onLaunched, onCancel }: Props): React.ReactElement 
         </p>
       </div>
 
-      <label className="block text-xs font-medium text-gray-600 mb-1">Council roster</label>
+      <label className="block text-xs font-medium text-gray-600 mb-1">Workflow</label>
+      <select
+        data-testid="launch-workflow"
+        className="w-full rounded border p-2 text-xs mb-1"
+        value={workflow}
+        onChange={(e) => setWorkflow(e.target.value)}
+      >
+        <option value="">(free-text — single unit, council picks CLI)</option>
+        {(workflows.length > 0 ? workflows : Object.keys(WORKFLOW_LABELS)).map((w) => {
+          const id = typeof w === 'string' ? w : (w as WorkflowDef).id;
+          return (
+            <option key={id} value={id}>
+              {workflowLabel(id)}
+            </option>
+          );
+        })}
+      </select>
+      {!workflow && (
+        <p className="text-[10px] text-gray-400 mb-3">
+          Free-text creates 1 unit. Choose a workflow for governed multi-phase execution.
+        </p>
+      )}
+      {workflow && (
+        <p className="text-[10px] text-blue-600 mb-3">
+          Each phase becomes a unit, assigned to the council-elected CLI for that phase.
+        </p>
+      )}
+
+      <label className="block text-xs font-medium text-gray-600 mb-0.5">Routing council</label>
+      <p className="text-[10px] text-gray-400 mb-1">
+        These CLIs vote on which one executes each unit — they don't all run in parallel.
+      </p>
       <div className="mb-3 flex flex-col gap-1 max-h-40 overflow-auto rounded border p-2" data-testid="launch-roster">
         {roster.length === 0 ? (
           <span className="text-xs text-gray-400">No roster loaded.</span>
@@ -251,8 +331,14 @@ export function LaunchForm({ onLaunched, onCancel }: Props): React.ReactElement 
         disabled={!canSubmit}
         className="w-full rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
       >
-        {submitting ? 'Launching…' : 'Launch run'}
+        {submitting ? `Launching… ${elapsedSecs}s` : 'Launch run'}
       </button>
+
+      {submitting && elapsedSecs >= 5 && (
+        <p className="text-[10px] text-gray-400 mt-1.5 text-center">
+          Planning in progress — council routing + plan decomposition takes 30–60 s. Don't re-submit.
+        </p>
+      )}
     </div>
   );
 }
