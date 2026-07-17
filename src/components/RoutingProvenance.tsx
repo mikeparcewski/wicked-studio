@@ -29,8 +29,15 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
     );
   }
 
-  // evaluator_distinct — the reviewer/tester was reassigned off the council pick
-  // to enforce evaluator != creator.
+  if (routing.method === 'tool') {
+    return (
+      <p className="text-[11px] text-zinc-500" data-testid="routing-provenance">
+        <span className="font-medium">Tool:</span> direct command — no council
+      </p>
+    );
+  }
+
+  // evaluator_distinct
   return (
     <p className="text-[11px] text-indigo-600" data-testid="routing-provenance">
       <span className="font-medium">Evaluator-distinct:</span> {routing.winner} (was {routing.was})

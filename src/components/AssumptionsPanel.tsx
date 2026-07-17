@@ -11,6 +11,7 @@ function routingSummary(r: NonNullable<UnitModel['routing']>): string {
       : `council: ${r.winner} (unanimous)`;
   }
   if (r.method === 'evaluator_distinct') return `evaluator≠creator: ${r.winner} (was ${r.was})`;
+  if (r.method === 'tool') return 'tool: direct command (no council)';
   return `degraded: ${r.reason}`;
 }
 

@@ -1,6 +1,7 @@
 import type {
   GateInfo,
   LaunchRunBody,
+  OnboardRef,
   OpenTerminalBody,
   RepoEntry,
   RosterSeat,
@@ -114,12 +115,23 @@ export const api = {
   /** Registered repos → the target-repo picker. */
   listRepos: () => apiFetch<{ repos: RepoEntry[] }>('/repos'),
 
-  /** Register a git repo (validated: real git repo, >=1 commit). */
+  /** Register a local git repo and launch an onboarding run. Returns the repo and run id. */
   registerRepo: (name: string, rootPath: string) =>
-    apiFetch<{ repo: RepoEntry }>('/repos', {
+    apiFetch<{ repo: RepoEntry; onboardRunId: string }>('/repos', {
       method: 'POST',
       body: JSON.stringify({ name, rootPath }),
     }),
+
+  /** Clone a remote git URL, register it, and launch an onboarding run. */
+  cloneAndRegisterRepo: (name: string, gitUrl: string) =>
+    apiFetch<{ repo: RepoEntry; onboardRunId: string }>('/repos', {
+      method: 'POST',
+      body: JSON.stringify({ name, gitUrl }),
+    }),
+
+  /** Get the onboarding run id for a repo (null if not launched this daemon session). */
+  getOnboardRun: (repoId: string) =>
+    apiFetch<OnboardRef>(`/repos/${encodeURIComponent(repoId)}/onboard`),
 
   /** Liveness (also proves the actor + event pump are up). */
   getHealth: () => apiFetch<{ status: string; version: string; ping: string }>('/health'),
@@ -150,6 +162,23 @@ export const api = {
 
   /** One workflow definition by id; 404 if unknown. */
   getWorkflow: (id: string) => apiFetch<{ workflow: import('./types.js').WorkflowDef }>(`/workflows/${encodeURIComponent(id)}`),
+
+  /** Register (or replace) a workflow definition. Returns the registered id. */
+  createWorkflow: (def: import('./types.js').WorkflowDef) =>
+    apiFetch<{ id: string; status: string }>('/workflows', {
+      method: 'POST',
+      body: JSON.stringify(def),
+    }),
+
+  /**
+   * Save an inline script to `~/.wicked/scripts/` and return its absolute path.
+   * The path can then be used as the command in a Tool-executor phase.
+   */
+  saveScript: (name: string, content: string, lang: 'bash' | 'python' | 'sh') =>
+    apiFetch<{ path: string }>('/scripts', {
+      method: 'POST',
+      body: JSON.stringify({ name, content, lang }),
+    }),
 
   /** The requirements_graph.json domain model; `graph` is null when not generated yet. */
   getDomainGraph: () => apiFetch<{ graph: import('./types.js').DomainGraph | null }>('/domain-graph'),

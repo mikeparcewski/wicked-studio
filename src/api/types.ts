@@ -37,7 +37,8 @@ export type HumanConfirm = 'none' | 'all' | { before: number };
 export type RoutingInfo =
   | { method: 'council'; winner: string; agreement_pct: number; returned: number; dissent: number }
   | { method: 'degraded'; reason: string }
-  | { method: 'evaluator_distinct'; winner: string; was: string };
+  | { method: 'evaluator_distinct'; winner: string; was: string }
+  | { method: 'tool' };
 
 /** A run (`AgentSession`). */
 export interface AgentSession {
@@ -72,12 +73,9 @@ export interface WorkUnit {
   phase_status: string | null;
   collection_scope: string | null;
   status: UnitStatus;
-  /**
-   * The skill that drives this unit's work (DES-STUDIO-COCKPIT-001 A7 / DES-EXEC-001 §4.1) —
-   * `null` for the authored-prompt path. Serialized from wicked-core `WorkUnit.skill_ref`
-   * (snake_case, `#[serde(default)]`). `RoutingProvenance` surfaces it (Wave 3).
-   */
   skill_ref?: string | null;
+  /** The command this unit runs directly (Tool-executor phases). Absent for Agent units. */
+  tool_cmd?: string[] | null;
 }
 
 /** A run plus its ordered units (`SessionView`) — the shape `GET /runs` returns. */
@@ -93,6 +91,12 @@ export interface RepoEntry {
   root_path: string;
   default_branch: string;
   registered_at: number;
+  git_url?: string;
+}
+
+/** The run id of the onboarding run launched when a repo was registered. */
+export interface OnboardRef {
+  runId: string | null;
 }
 
 /**
@@ -349,6 +353,11 @@ export type GateSpec =
 /** Evaluator≠creator role for a phase. */
 export type PhaseRole = 'neutral' | 'creator' | 'evaluator';
 
+/** How a phase executes — agent (council-routed CLI) or tool (direct command). */
+export type PhaseExecutor =
+  | { type: 'agent' }
+  | { type: 'tool'; cmd: string[] };
+
 /** One ordered phase of a workflow. */
 export interface PhaseDef {
   id: string;
@@ -363,6 +372,8 @@ export interface PhaseDef {
   skill_ref: string | null;
   allowed_skills: string[];
   validator_pin: string | null;
+  /** How the phase executes. Omitted = Agent (default). */
+  executor?: PhaseExecutor;
 }
 
 /** A workflow — id + ordered phases. */
