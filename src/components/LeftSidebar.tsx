@@ -81,12 +81,13 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
         ) : (
           runs.map((v) =>
             collapsed ? (
-              // Collapsed: status dot only
+              // Collapsed: status dot only — title gives the run name on hover
               <button
                 key={v.session.id}
                 type="button"
                 onClick={() => onSelectRun(v.session.id)}
                 aria-label={v.session.problem}
+                title={v.session.problem}
                 className={`w-9 h-9 mx-auto flex items-center justify-center rounded-md ${
                   selectedRunId === v.session.id ? 'bg-zinc-800' : 'hover:bg-zinc-800/50'
                 }`}

@@ -122,16 +122,21 @@ export const api = {
       body: JSON.stringify({ name, rootPath }),
     }),
 
-  /** Clone a remote git URL, register it, and launch an onboarding run. */
-  cloneAndRegisterRepo: (name: string, gitUrl: string) =>
+  /** Clone a remote git URL, register it, and launch an onboarding run.
+   *  `checkoutPath` (absolute) overrides the default ~/.wicked/repos/<name>. */
+  cloneAndRegisterRepo: (name: string, gitUrl: string, checkoutPath?: string) =>
     apiFetch<{ repo: RepoEntry; onboardRunId: string }>('/repos', {
       method: 'POST',
-      body: JSON.stringify({ name, gitUrl }),
+      body: JSON.stringify({ name, gitUrl, ...(checkoutPath ? { rootPath: checkoutPath } : {}) }),
     }),
 
   /** Get the onboarding run id for a repo (null if not launched this daemon session). */
   getOnboardRun: (repoId: string) =>
     apiFetch<OnboardRef>(`/repos/${encodeURIComponent(repoId)}/onboard`),
+
+  /** (Re-)launch the onboarding workflow for an already-registered repo. */
+  rerunOnboarding: (repoId: string) =>
+    apiFetch<{ runId: string }>(`/repos/${encodeURIComponent(repoId)}/onboard`, { method: 'POST' }),
 
   /** Liveness (also proves the actor + event pump are up). */
   getHealth: () => apiFetch<{ status: string; version: string; ping: string }>('/health'),
@@ -182,6 +187,15 @@ export const api = {
 
   /** The requirements_graph.json domain model; `graph` is null when not generated yet. */
   getDomainGraph: () => apiFetch<{ graph: import('./types.js').DomainGraph | null }>('/domain-graph'),
+
+  /** Symbol-level code graph for a repo via wicked-estate graph-view; `graph` is null when not yet built. */
+  getRepoGraph: (repoId: string) =>
+    apiFetch<{ graph: import('./types.js').CodeGraphData | null }>(`/repos/${encodeURIComponent(repoId)}/graph`),
+
+  /** Per-repo domain graph from <repo>/.wicked-estate/requirements/requirements_graph.json.
+   *  Also returns coverage stats (if available) so the UI can show annotation progress. */
+  getRepoDomainGraph: (repoId: string) =>
+    apiFetch<{ graph: import('./types.js').DomainGraph | null; coverage: import('./types.js').DomainCoverage | null }>(`/repos/${encodeURIComponent(repoId)}/domain-graph`),
 
   // ── Governance reads (crew#40/41/43) ────────────────────────────────────────
 

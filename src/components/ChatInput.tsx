@@ -129,9 +129,9 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
   // Run-selected mode: just a disabled placeholder
   if (runId) {
     return (
-      <div className="px-4 py-3 border-t bg-white">
-        <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-          <p className="text-xs text-gray-400 italic">Send a message to all agents…</p>
+      <div className="px-5 py-4 border-t border-gray-100 bg-white">
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 px-5 py-4">
+          <p className="text-sm text-gray-400 italic">Run in progress — responses stream above.</p>
         </div>
       </div>
     );
@@ -141,21 +141,21 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
   const showDetection = detectedWorkflow !== null && !workflowDismissed && !workflow;
 
   return (
-    <div className="px-4 py-3 border-t bg-white flex flex-col gap-2">
+    <div className="px-5 py-4 border-t border-gray-100 bg-white flex flex-col gap-3">
       {showDetection && (
-        <div className="flex items-center gap-2 text-[11px] text-zinc-600 bg-zinc-100 rounded-lg px-3 py-1.5">
+        <div className="flex items-center gap-2 text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2">
           <span>Detected: <strong>{detectedWorkflow}</strong> workflow</span>
           <button
             type="button"
             onClick={() => { setWorkflow(detectedWorkflow!); setWorkflowDismissed(true); }}
-            className="rounded bg-emerald-600 text-white px-2 py-0.5 hover:bg-emerald-700 font-medium"
+            className="rounded-lg bg-emerald-600 text-white px-3 py-1 hover:bg-emerald-700 font-semibold text-xs"
           >
             Apply
           </button>
           <button
             type="button"
             onClick={() => setWorkflowDismissed(true)}
-            className="text-zinc-400 hover:text-zinc-600"
+            className="text-zinc-400 hover:text-zinc-600 ml-auto"
           >
             ✕
           </button>
@@ -163,12 +163,12 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
       )}
 
       {/* Main input row */}
-      <div className="flex items-end gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm focus-within:border-gray-400">
+      <div className="flex items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm focus-within:border-emerald-400 focus-within:ring-1 focus-within:ring-emerald-200 transition-all">
         <textarea
           ref={textareaRef}
           data-testid="launch-problem"
-          className="flex-1 resize-none text-sm outline-none border-0 bg-transparent leading-5 placeholder:text-gray-400"
-          style={{ minHeight: '20px' }}
+          className="flex-1 resize-none text-base outline-none border-0 bg-transparent leading-6 placeholder:text-gray-400 text-gray-900"
+          style={{ minHeight: '28px' }}
           placeholder="What do you need built?"
           value={problem}
           onChange={(e) => { setProblem(e.target.value); setWorkflowDismissed(false); }}
@@ -187,17 +187,17 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
           onClick={() => void submit()}
           disabled={!canSubmit}
           aria-label="Send"
-          className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="shrink-0 rounded-xl bg-emerald-600 px-5 py-2.5 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          {submitting ? `${elapsedSecs}s` : '→'}
+          {submitting ? `${elapsedSecs}s` : 'Send'}
         </button>
       </div>
 
       {/* Agent checkboxes + options row */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
         {/* CLI checkboxes */}
         {roster.map((seat) => (
-          <label key={seat.key} className="flex items-center gap-1 cursor-pointer text-gray-600">
+          <label key={seat.key} className="flex items-center gap-1.5 cursor-pointer hover:text-gray-700">
             <input
               type="checkbox"
               className="rounded"
@@ -209,14 +209,14 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
           </label>
         ))}
 
-        <span className="text-gray-300">|</span>
+        <span className="text-gray-200">|</span>
 
         {/* Gate dropdown */}
-        <div className="flex items-center gap-1">
-          <span className="text-gray-400">Gate:</span>
+        <div className="flex items-center gap-1.5">
+          <span>Gate:</span>
           <select
             data-testid="launch-confirm"
-            className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-700 bg-white"
+            className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 bg-white"
             value={confirmMode}
             onChange={(e) => setConfirmMode(e.target.value as ConfirmMode)}
           >
@@ -230,25 +230,25 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
               min={1}
               value={beforeOrd}
               onChange={(e) => setBeforeOrd(Math.max(1, Number(e.target.value) || 1))}
-              className="w-12 rounded border border-gray-200 px-1.5 py-0.5 text-[11px]"
+              className="w-14 rounded-lg border border-gray-200 px-2 py-1 text-xs"
             />
           )}
         </div>
 
-        <span className="text-gray-300">|</span>
+        <span className="text-gray-200">|</span>
 
         {/* Entity mode toggle */}
-        <div className="flex items-center gap-1">
-          <span className="text-gray-400">Mode:</span>
+        <div className="flex items-center gap-1.5">
+          <span>Mode:</span>
           {(['shared', 'isolated'] as EntityMode[]).map((m) => (
             <button
               key={m}
               type="button"
               data-testid={`launch-entity-${m}`}
               onClick={() => setEntityMode(m)}
-              className={`rounded px-2 py-0.5 capitalize ${
+              className={`rounded-lg px-2.5 py-1 capitalize text-xs font-medium transition-colors ${
                 entityMode === m
-                  ? 'bg-gray-800 text-white'
+                  ? 'bg-gray-900 text-white'
                   : 'text-gray-500 hover:bg-gray-100'
               }`}
             >
@@ -257,13 +257,13 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
           ))}
         </div>
 
-        <span className="text-gray-300">|</span>
+        <span className="text-gray-200">|</span>
 
         {/* Advanced toggle */}
         <button
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
-          className="text-gray-400 hover:text-gray-600"
+          className="text-gray-400 hover:text-gray-600 transition-colors"
         >
           {showAdvanced ? '▾ Advanced' : '▸ Advanced'}
         </button>
@@ -271,12 +271,12 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
 
       {/* Advanced: workflow + repo selectors */}
       {showAdvanced && (
-        <div className="flex flex-wrap gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-[11px]">
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-500">Workflow:</span>
+        <div className="flex flex-wrap gap-4 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500 font-medium">Workflow:</span>
             <select
               data-testid="launch-workflow"
-              className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] bg-white text-gray-700"
+              className="rounded-lg border border-gray-200 px-2 py-1 text-xs bg-white text-gray-700"
               value={workflow}
               onChange={(e) => { setWorkflow(e.target.value); setWorkflowDismissed(true); }}
             >
@@ -286,11 +286,11 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
               ))}
             </select>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-500">Repo:</span>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500 font-medium">Repo:</span>
             <select
               data-testid="launch-repo"
-              className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] bg-white text-gray-700"
+              className="rounded-lg border border-gray-200 px-2 py-1 text-xs bg-white text-gray-700"
               value={repoRef}
               onChange={(e) => setRepoRef(e.target.value)}
             >
@@ -304,12 +304,12 @@ export function ChatInput({ runId, onLaunched }: Props): React.ReactElement {
       )}
 
       {error && (
-        <p className="text-[11px] text-red-600" data-testid="launch-error">{error}</p>
+        <p className="text-xs text-red-600 px-1" data-testid="launch-error">{error}</p>
       )}
 
       {submitting && elapsedSecs >= 5 && (
-        <p className="text-[10px] text-gray-400 text-center">
-          Planning in progress — council routing + plan decomposition takes 30–60 s. Don’t re-submit.
+        <p className="text-xs text-gray-400 text-center">
+          Planning in progress — council routing + plan decomposition takes 30–60 s. Don't re-submit.
         </p>
       )}
     </div>

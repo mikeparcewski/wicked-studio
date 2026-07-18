@@ -407,6 +407,14 @@ export interface DomainGraphRequirement {
   error_paths: Array<{ id: string; statement: string }>;
 }
 
+/** Coverage stats from estate.coverage.json — present when code is indexed but not yet annotated. */
+export interface DomainCoverage {
+  coverage: number;
+  total: number;
+  behavior_bearing: number;
+  resolved: number;
+}
+
 /** The open-terminal request body (`POST /terminals`, DES-TERMINAL-001 §6). */
 export interface OpenTerminalBody {
   /** Working directory the PTY opens in. */
@@ -420,4 +428,21 @@ export interface OpenTerminalBody {
    * operator shell (surfaced as ungoverned in the UI, DES-TERMINAL-001 §7).
    */
   governed?: boolean;
+}
+
+/** Symbol-level code graph from estate (GET /repos/:id/graph). */
+export interface CodeGraphNode {
+  id: string;      // estate symbol ID (primary key)
+  name: string;    // short display name (function/class/type name)
+  kind: string;    // function | class | struct | interface | type_alias | method | enum
+  file: string;    // source file path
+  inDeg: number;   // incoming call/import count (hotspot indicator)
+  outDeg: number;  // outgoing call/import count
+  lang: string;    // language (typescript, rust, python, etc.)
+}
+export interface CodeGraphEdge { src: string; tgt: string; }
+export interface CodeGraphData {
+  nodes: CodeGraphNode[];
+  edges: CodeGraphEdge[];
+  stats: { nodeCount: number; edgeCount: number; fileCount: number };
 }
