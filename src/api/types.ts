@@ -345,6 +345,56 @@ export interface UnitContextInjectedEvent {
   priorUnits: InjectedContextRecord[];
 }
 
+// ── P2 governance-deep observability events (wicked-core#89) ────────────────
+
+/** P2 — governance hook fired for a tool call; records the per-call allow/deny decision. */
+export interface GovernanceHookFiredEvent {
+  type: 'governanceHookFired';
+  session: string;
+  ord: number;
+  attempt: number;
+  toolName: string;
+  decision: 'allow' | 'deny';
+  denyingPolicy: string | null;
+}
+
+/** P2 — a pinned deterministic validator was attached; confirms the governance floor is armed. */
+export interface ValidationPinAttachedEvent {
+  type: 'validationPinAttached';
+  session: string;
+  ord: number;
+  pin: string;
+  criterion: string;
+}
+
+/** P2 — a HumanConfirmIf gate escalated to human review. */
+export interface GateEscalatedEvent {
+  type: 'gateEscalated';
+  session: string;
+  ord: number;
+  condition: string;
+  verdictSummary: string;
+}
+
+/** P2 — a tool-executor command was dispatched (non-agent unit). */
+export interface ToolExecutorDispatchedEvent {
+  type: 'toolExecutorDispatched';
+  session: string;
+  ord: number;
+  cmd: string[];
+  workdir: string | null;
+}
+
+/** P2 — governance context was confirmed armed for a unit. */
+export interface GovernanceContextArmedEvent {
+  type: 'governanceContextArmed';
+  session: string;
+  ord: number;
+  attempt: number;
+  path: 'wrapped_cli' | 'acp';
+  dbPath: string;
+}
+
 /** Foundation wave: a unit was planned with full phase metadata. */
 export interface UnitPlannedEvent {
   type: 'unitPlanned';

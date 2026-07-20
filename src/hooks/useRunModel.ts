@@ -108,6 +108,16 @@ export interface UnitModel {
   workerSessionReuses: number;
   /** P2: cross-CLI context injections for this unit (from `unitContextInjected`), in arrival order. */
   contextInjections: InjectedContextRecord[];
+  /** P2: per-tool-call hook decisions for this unit (from `governanceHookFired`). */
+  hookFires: GovernanceHookRecord[];
+  /** P2: true iff a pinned deterministic validator was confirmed armed (from `validationPinAttached`). */
+  validationPinAttached: boolean;
+  /** P2: true iff a HumanConfirmIf escalation fired for this unit (from `gateEscalated`). */
+  gateEscalated: boolean;
+  /** P2: the tool executor command for this unit (from `toolExecutorDispatched`); null for agent units. */
+  toolExecutorCmd: string[] | null;
+  /** P2: true iff governance was confirmed armed for this unit (from `governanceContextArmed`). */
+  governanceArmed: boolean;
 }
 
 /** A recorded worker failure for one unit attempt (from `stepFailed`). */
@@ -115,6 +125,13 @@ export interface StepErrorRecord {
   attempt: number;
   detail: string;
   failureKind: string;
+}
+
+/** A recorded governance hook fire for one tool call (from `governanceHookFired`). */
+export interface GovernanceHookRecord {
+  toolName: string;
+  decision: 'allow' | 'deny';
+  denyingPolicy: string | null;
 }
 
 /** The current awaiting-human gate (prompt is `null` on a late-join with no live event). */
@@ -170,6 +187,11 @@ function blankUnit(ord: number): UnitModel {
     crashRedrives: 0,
     workerSessionReuses: 0,
     contextInjections: [],
+    hookFires: [],
+    validationPinAttached: false,
+    gateEscalated: false,
+    toolExecutorCmd: null,
+    governanceArmed: false,
   };
 }
 
@@ -220,6 +242,11 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       crashRedrives: 0,
       workerSessionReuses: 0,
       contextInjections: [],
+      hookFires: [],
+      validationPinAttached: false,
+      gateEscalated: false,
+      toolExecutorCmd: u.tool_cmd ?? null,
+      governanceArmed: false,
     });
   }
 
@@ -240,6 +267,8 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
   // P2 dedup: one reuse count per (ord, terminalId) pair; one injection record per recipient ord.
   const reusedOrdTerminalKeys = new Set<string>(); // `${ord}:${terminalId}`
   const contextInjectedOrds = new Set<number>(); // recipient ord → injections already recorded
+  // P2 governance-deep dedup: hook fires keyed by (ord, attempt, toolName) to handle WS reconnect replays.
+  const hookFireKeys = new Set<string>(); // `${ord}:${attempt}:${toolName}`
 
   const ensureUnit = (ord: number): UnitModel => {
     let u = units.get(ord);
@@ -471,6 +500,45 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
             }
           }
         }
+        break;
+      // ── P2 governance-deep events (wicked-core#89) ────────────────────────
+      case 'governanceHookFired':
+        // Dedup on (ord, attempt, toolName) — safe against WS reconnect replays.
+        if (
+          ord !== undefined &&
+          typeof ev.attempt === 'number' &&
+          typeof ev.toolName === 'string' &&
+          (ev.decision === 'allow' || ev.decision === 'deny')
+        ) {
+          const hookKey = `${ord}:${ev.attempt}:${ev.toolName}`;
+          if (!hookFireKeys.has(hookKey)) {
+            hookFireKeys.add(hookKey);
+            const u = ensureUnit(ord);
+            u.hookFires.push({
+              toolName: ev.toolName,
+              decision: ev.decision,
+              denyingPolicy: typeof ev.denyingPolicy === 'string' ? ev.denyingPolicy : null,
+            });
+          }
+        }
+        break;
+      case 'validationPinAttached':
+        // Idempotent: once armed, always armed.
+        if (ord !== undefined) ensureUnit(ord).validationPinAttached = true;
+        break;
+      case 'gateEscalated':
+        // Idempotent: escalation is a one-way flag.
+        if (ord !== undefined) ensureUnit(ord).gateEscalated = true;
+        break;
+      case 'toolExecutorDispatched':
+        // Last-write-wins — one dispatch per unit in practice; Array.isArray guards the field.
+        if (ord !== undefined && Array.isArray(ev.cmd)) {
+          ensureUnit(ord).toolExecutorCmd = ev.cmd as string[];
+        }
+        break;
+      case 'governanceContextArmed':
+        // Idempotent: governance armed is a one-way flag.
+        if (ord !== undefined) ensureUnit(ord).governanceArmed = true;
         break;
       default:
         break;
