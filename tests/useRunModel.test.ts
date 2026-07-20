@@ -314,3 +314,85 @@ describe('useRunModel — pendingGate rehydrate (cockpit adversarial review)', (
     expect(model.pendingGate).toEqual({ ord: 1, prompt: null });
   });
 });
+
+describe('useRunModel — P2 observability events (EVT-003/004/007)', () => {
+  test('workerSessionReused increments reuse count on the unit', () => {
+    const view = makeView({}, [makeUnit({ ord: 2 })]);
+    const events: CoreEvent[] = [
+      { type: 'workerSessionReused', session: 'run-1', terminalId: 'tid-1', ord: 2 },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.units[0]?.workerSessionReuses).toBe(1);
+  });
+
+  test('workerSessionReused deduplicates on same (ord, terminalId) — replay-safe', () => {
+    const view = makeView({}, [makeUnit({ ord: 2 })]);
+    const events: CoreEvent[] = [
+      { type: 'workerSessionReused', session: 'run-1', terminalId: 'tid-1', ord: 2 },
+      { type: 'workerSessionReused', session: 'run-1', terminalId: 'tid-1', ord: 2 },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.units[0]?.workerSessionReuses).toBe(1);
+  });
+
+  test('workerSessionClosed sets lastWorkerClose; last-write wins', () => {
+    const view = makeView({}, []);
+    const events: CoreEvent[] = [
+      { type: 'workerSessionClosed', session: 'run-1', terminalId: 'tid-1', reason: 'error' },
+      { type: 'workerSessionClosed', session: 'run-1', terminalId: 'tid-1', reason: 'run_complete' },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.lastWorkerClose).toEqual({ terminalId: 'tid-1', reason: 'run_complete' });
+  });
+
+  test('lastWorkerClose is null when no workerSessionClosed event has arrived', () => {
+    const model = mergeRunModel(makeView({}, []), []);
+    expect(model.lastWorkerClose).toBeNull();
+  });
+
+  test('unitContextInjected populates contextInjections on the recipient unit', () => {
+    const view = makeView({}, [makeUnit({ ord: 3, assigned_cli: 'antigravity' })]);
+    const events: CoreEvent[] = [
+      {
+        type: 'unitContextInjected',
+        session: 'run-1',
+        ord: 3,
+        recipientCli: 'antigravity',
+        priorUnits: [
+          { ord: 1, label: '[claude — unit 1]', outputBytes: 1024 },
+          { ord: 2, label: '[claude — unit 2]', outputBytes: 512 },
+        ],
+      },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.units[0]?.contextInjections).toHaveLength(2);
+    expect(model.units[0]?.contextInjections[0]).toEqual({
+      ord: 1,
+      label: '[claude — unit 1]',
+      outputBytes: 1024,
+    });
+    expect(model.units[0]?.contextInjections[1]).toEqual({
+      ord: 2,
+      label: '[claude — unit 2]',
+      outputBytes: 512,
+    });
+  });
+
+  test('unitContextInjected deduplicates on recipient ord — replay-safe', () => {
+    const view = makeView({}, [makeUnit({ ord: 3 })]);
+    const priorUnits = [{ ord: 1, label: '[claude — unit 1]', outputBytes: 100 }];
+    const events: CoreEvent[] = [
+      { type: 'unitContextInjected', session: 'run-1', ord: 3, recipientCli: 'antigravity', priorUnits },
+      { type: 'unitContextInjected', session: 'run-1', ord: 3, recipientCli: 'antigravity', priorUnits },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.units[0]?.contextInjections).toHaveLength(1);
+  });
+
+  test('P2 blank unit starts with zero reuses and empty injections', () => {
+    const view = makeView({}, [makeUnit({ ord: 5 })]);
+    const model = mergeRunModel(view, []);
+    expect(model.units[0]?.workerSessionReuses).toBe(0);
+    expect(model.units[0]?.contextInjections).toEqual([]);
+  });
+});

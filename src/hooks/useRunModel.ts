@@ -4,6 +4,7 @@ import type {
   AgentSession,
   CoreEvent,
   GateSpec,
+  InjectedContextRecord,
   PhaseRole,
   RoutingInfo,
   SessionView,
@@ -103,6 +104,10 @@ export interface UnitModel {
   stepErrors: StepErrorRecord[];
   /** P1: number of crash-recovery redrives observed for this unit (from `crashRecoveryRedrive`). */
   crashRedrives: number;
+  /** P2: how many times this unit reused an existing PTY session (from `workerSessionReused`). */
+  workerSessionReuses: number;
+  /** P2: cross-CLI context injections for this unit (from `unitContextInjected`), in arrival order. */
+  contextInjections: InjectedContextRecord[];
 }
 
 /** A recorded worker failure for one unit attempt (from `stepFailed`). */
@@ -134,6 +139,8 @@ export interface RunModel {
   activeTerminalId: string | null;
   /** P1: ACP fallback events for this session, in arrival order. */
   acpFallbacks: AcpFallbackRecord[];
+  /** P2: most-recent PTY session close (from `workerSessionClosed`); null until first event. */
+  lastWorkerClose: { terminalId: string; reason: 'run_complete' | 'error' } | null;
 }
 
 function blankUnit(ord: number): UnitModel {
@@ -161,6 +168,8 @@ function blankUnit(ord: number): UnitModel {
     gateEvals: [],
     stepErrors: [],
     crashRedrives: 0,
+    workerSessionReuses: 0,
+    contextInjections: [],
   };
 }
 
@@ -209,6 +218,8 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       gateEvals: [],
       stepErrors: [],
       crashRedrives: 0,
+      workerSessionReuses: 0,
+      contextInjections: [],
     });
   }
 
@@ -222,8 +233,13 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       : null;
   let activeTerminalId: string | null = null;
   const acpFallbacks: AcpFallbackRecord[] = [];
+  // P2 state
+  let lastWorkerClose: { terminalId: string; reason: 'run_complete' | 'error' } | null = null;
   // Dedup trackers for replay-safe accumulators (matches gateEvaluated pattern).
   const redrivedAttempts = new Map<number, Set<number>>(); // ord → Set<attempt>
+  // P2 dedup: one reuse count per (ord, terminalId) pair; one injection record per recipient ord.
+  const reusedOrdTerminalKeys = new Set<string>(); // `${ord}:${terminalId}`
+  const contextInjectedOrds = new Set<number>(); // recipient ord → injections already recorded
 
   const ensureUnit = (ord: number): UnitModel => {
     let u = units.get(ord);
@@ -416,13 +432,53 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
           }
         }
         break;
+      // ── P2 observability events ────────────────────────────────────────────
+      case 'workerSessionReused':
+        // Dedup: one reuse count per (ord, terminalId) — replay-safe.
+        if (ord !== undefined && typeof ev.terminalId === 'string') {
+          const key = `${ord}:${ev.terminalId}`;
+          if (!reusedOrdTerminalKeys.has(key)) {
+            reusedOrdTerminalKeys.add(key);
+            ensureUnit(ord).workerSessionReuses += 1;
+          }
+        }
+        break;
+      case 'workerSessionClosed':
+        // Last-write wins: a run's session can close multiple times (error → reopen → run_complete).
+        // Validate reason against the known literals for runtime robustness and type narrowing.
+        if (
+          typeof ev.terminalId === 'string' &&
+          (ev.reason === 'run_complete' || ev.reason === 'error')
+        ) {
+          lastWorkerClose = { terminalId: ev.terminalId, reason: ev.reason };
+        }
+        break;
+      case 'unitContextInjected':
+        // Dedup: one injection record per recipient ord — the event fires exactly once per dispatch.
+        if (ord !== undefined && Array.isArray(ev.priorUnits) && !contextInjectedOrds.has(ord)) {
+          contextInjectedOrds.add(ord);
+          const u = ensureUnit(ord);
+          for (const pi of ev.priorUnits as unknown[]) {
+            if (typeof pi === 'object' && pi !== null) {
+              const p = pi as Record<string, unknown>;
+              if (
+                typeof p.ord === 'number' &&
+                typeof p.label === 'string' &&
+                typeof p.outputBytes === 'number'
+              ) {
+                u.contextInjections.push({ ord: p.ord, label: p.label, outputBytes: p.outputBytes });
+              }
+            }
+          }
+        }
+        break;
       default:
         break;
     }
   }
 
   const unitList = [...units.values()].sort((a, b) => a.ord - b.ord);
-  return { session, units: unitList, pendingGate, activeTerminalId, acpFallbacks };
+  return { session, units: unitList, pendingGate, activeTerminalId, acpFallbacks, lastWorkerClose };
 }
 
 /** A per-CLI token/cost split for the Burn panel. */

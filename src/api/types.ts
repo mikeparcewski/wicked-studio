@@ -302,6 +302,49 @@ export interface AcpFallbackEvent {
   fallbackKind: string;
 }
 
+// ── P2 observability events ─────────────────────────────────────────────────
+
+/**
+ * P2 — one prior unit's context contributed to a cross-CLI injection.
+ * Mirrors `wicked_core::InjectedContext`: identity + size only, no raw content.
+ */
+export interface InjectedContextRecord {
+  ord: number;
+  label: string;
+  outputBytes: number;
+}
+
+/** P2 — an existing PTY session was reused for a subsequent unit in the same run (EVT-003). */
+export interface WorkerSessionReusedEvent {
+  type: 'workerSessionReused';
+  session: string;
+  terminalId: string;
+  ord: number;
+}
+
+/**
+ * P2 — a PTY worker session closed (EVT-004).
+ * `reason`: `"run_complete"` (normal end-of-run) | `"error"` (PTY write failure).
+ */
+export interface WorkerSessionClosedEvent {
+  type: 'workerSessionClosed';
+  session: string;
+  terminalId: string;
+  reason: 'run_complete' | 'error';
+}
+
+/**
+ * P2 — prior cross-CLI unit outputs were injected into a unit's context before dispatch (EVT-007).
+ * Carries identity + byte-size only — raw output content is not included.
+ */
+export interface UnitContextInjectedEvent {
+  type: 'unitContextInjected';
+  session: string;
+  ord: number;
+  recipientCli: string;
+  priorUnits: InjectedContextRecord[];
+}
+
 /** Foundation wave: a unit was planned with full phase metadata. */
 export interface UnitPlannedEvent {
   type: 'unitPlanned';
