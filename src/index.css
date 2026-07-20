@@ -1,3 +1,55 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html, body, #root {
+  background: var(--wk-canvas);
+  color: var(--wk-ink);
+  height: 100%;
+  font-family: "Archivo", ui-sans-serif, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Wicked design tokens — mirrors wicked-web/src/styles/tokens.css
+   Dark theme (default) + the light-theme teal-blue canvas ("the blue of wicked-agile"). */
+:root {
+  --wk-canvas:          #0d1117;
+  --wk-canvas-2:        #161c26;
+  --wk-surface:         #1b222e;
+  --wk-surface-2:       #0f1419;
+  --wk-ink:             #e6edf3;
+  --wk-muted:           rgba(230, 237, 243, 0.55);
+  --wk-faint:           rgba(230, 237, 243, 0.24);
+  --wk-hairline:        rgba(230, 237, 243, 0.07);
+  --wk-hairline-strong: rgba(230, 237, 243, 0.14);
+  --wk-accent:          #ffda19;
+  --wk-accent-ink:      #0d1117;
+  --wk-link:            #79c0ff;
+  --wk-ok:              #3fb950;
+  --wk-deny:            #f85149;
+  /* Light-theme teal-blue canvas — "the blue of wicked-agile" */
+  --wk-blue:            #1c4053;
+  --wk-blue-2:          #182f3c;
+  --wk-blue-surface:    #224a5e;
+  --wk-blue-surface-2:  #1a3b4e;
+  --wk-font-display:    "Archivo", ui-sans-serif, sans-serif;
+  --wk-font-mono:       "JetBrains Mono", ui-monospace, monospace;
+}
+
+code, pre, .font-mono {
+  font-family: var(--wk-font-mono);
+}
+
+/* Crew-site ambient background — matches wc.wickedagile.com lighter sections.
+   Three layers: amber glow (top-left) + deny glow (bottom-right) + schematic
+   SVG watermark at 8% ink opacity (same art as crew site body::before). */
+.wk-crew-bg {
+  background-color: #0d1117;
+  background-image:
+    radial-gradient(ellipse 50% 42% at 3% 5%, rgba(255,218,25,0.15), transparent 60%),
+    radial-gradient(ellipse 46% 46% at 97% 95%, rgba(248,81,73,0.11), transparent 62%),
+    url("data:image/svg+xml,%3Csvg%20width='1600'%20height='900'%20viewBox='0%200%201600%20900'%20xmlns='http://www.w3.org/2000/svg'%3E%3Cg%20fill='none'%20stroke='rgb(230,237,243)'%20stroke-opacity='0.08'%20stroke-width='1.4'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M312%20168%20H586'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M736%20166%20H998'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M1156%20166%20H1356'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M578%20162%20l8%206%20l-8%206'/%3E%3Cpath%20d='M990%20160%20l8%206%20l-8%206'/%3E%3Cpath%20d='M1348%20160%20l8%206%20l-8%206'/%3E%3Cpath%20d='M338%20453%20H584'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M768%20472%20H1054'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M1182%20472%20H1392'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M576%20447%20l8%206%20l-8%206'/%3E%3Cpath%20d='M1046%20466%20l8%206%20l-8%206'/%3E%3Cpath%20d='M1384%20466%20l8%206%20l-8%206'/%3E%3Cpath%20d='M250%20792%20H424'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M556%20782%20H754'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M924%20792%20H1064'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M1226%20792%20H1354'%20stroke-dasharray='5%209'/%3E%3Cpath%20d='M416%20786%20l8%206%20l-8%206'/%3E%3Cpath%20d='M746%20776%20l8%206%20l-8%206'/%3E%3Cpath%20d='M1056%20786%20l8%206%20l-8%206'/%3E%3Cpath%20d='M1346%20786%20l8%206%20l-8%206'/%3E%3Cpath%20d='M230%20224%20V430'%20stroke-dasharray='6%2010'/%3E%3Cpath%20d='M675%20226%20V420'%20stroke-dasharray='6%2010'/%3E%3Cpath%20d='M1118%20220%20V420'%20stroke-dasharray='6%2010'/%3E%3Cpath%20d='M205%20548%20V716'%20stroke-dasharray='6%2010'/%3E%3Cpath%20d='M820%20548%20V700'%20stroke-dasharray='6%2010'/%3E%3Cpath%20d='M1180%20552%20V690'%20stroke-dasharray='6%2010'/%3E%3Cpath%20d='M470%20590%20l9%2010%20l16%20-22'/%3E%3Cpath%20d='M900%20300%20l9%2010%20l16%20-22'/%3E%3Cpath%20d='M1250%20580%20l9%2010%20l16%20-22'/%3E%3Cpath%20d='M520%20250%20l8%209%20l15%20-20'/%3E%3Ccircle%20cx='360'%20cy='300'%20r='6'/%3E%3Ccircle%20cx='1000'%20cy='560'%20r='6'/%3E%3Ccircle%20cx='700'%20cy='860'%20r='6'/%3E%3Ccircle%20cx='1440'%20cy='300'%20r='6'/%3E%3Ccircle%20cx='230'%20cy='430'%20r='5'/%3E%3Ccircle%20cx='675'%20cy='420'%20r='5'/%3E%3Ccircle%20cx='1118'%20cy='420'%20r='5'/%3E%3Cg%20transform='translate(150%20120)'%3E%3Crect%20width='158'%20height='96'%20rx='13'%20stroke-width='1.8'/%3E%3Cpath%20d='M0%2025%20H158'/%3E%3Ccircle%20cx='18'%20cy='13'%20r='3'/%3E%3Ccircle%20cx='31'%20cy='13'%20r='3'/%3E%3Ccircle%20cx='44'%20cy='13'%20r='3'/%3E%3Cpath%20d='M22%2046%20l18%2014%20l-18%2014'/%3E%3Cpath%20d='M48%2074%20H98'/%3E%3Crect%20x='108'%20y='62'%20width='13'%20height='18'%20rx='2'/%3E%3C/g%3E%3Cg%20transform='translate(600%20120)'%3E%3Crect%20width='128'%20height='100'%20rx='18'%20stroke-width='1.8'/%3E%3Cpath%20d='M64%200%20V-16'/%3E%3Ccircle%20cx='64'%20cy='-21'%20r='4.5'/%3E%3Cpath%20d='M0%2046%20H-11'/%3E%3Cpath%20d='M128%2046%20H139'/%3E%3Ccircle%20cx='42'%20cy='44'%20r='8'/%3E%3Ccircle%20cx='86'%20cy='44'%20r='8'/%3E%3Cpath%20d='M40%2076%20H88'/%3E%3Cpath%20d='M52%2072%20V80%20M64%2072%20V80%20M76%2072%20V80'/%3E%3C/g%3E%3Cg%20transform='translate(1000%20110)'%3E%3Cpath%20d='M14%20112%20V24'/%3E%3Ccircle%20cx='14'%20cy='20'%20r='6'/%3E%3Cpath%20d='M14%2020%20H150'/%3E%3Cpath%20d='M44%2014%20l-16%2012%20M72%2014%20l-16%2012%20M100%2014%20l-16%2012%20M128%2014%20l-16%2012'/%3E%3Cpath%20d='M0%20112%20H60'/%3E%3Cpath%20d='M92%2082%20l14%2015%20l26%20-34'/%3E%3C/g%3E%3Cg%20transform='translate(1360%20150)'%3E%3Ccircle%20cx='56'%20cy='56'%20r='30'/%3E%3Ccircle%20cx='56'%20cy='56'%20r='11'/%3E%3Cpath%20d='M86%2056%20H98%20M14%2056%20H26%20M56%2086%20V98%20M56%2014%20V26'/%3E%3Cpath%20d='M77%2077%20L86%2086%20M35%2077%20L26%2086%20M35%2035%20L26%2026%20M77%2035%20L86%2026'/%3E%3C/g%3E%3Cg%20transform='translate(230%20430)'%3E%3Crect%20width='100'%20height='46'%20rx='23'%20stroke-width='1.8'/%3E%3Ccircle%20cx='72'%20cy='23'%20r='15'/%3E%3C/g%3E%3Cg%20transform='translate(590%20420)'%3E%3Crect%20width='170'%20height='104'%20rx='12'%20stroke-width='1.6'%20stroke-dasharray='7%207'/%3E%3Ccircle%20cx='40'%20cy='58'%20r='7'/%3E%3Cpath%20d='M40%2058%20H96'/%3E%3Cpath%20d='M96%2058%20C116%2058%20116%2034%20116%2034'/%3E%3Ccircle%20cx='116'%20cy='28'%20r='7'/%3E%3Cpath%20d='M96%2058%20C116%2058%20116%2082%20116%2082'/%3E%3Ccircle%20cx='116'%20cy='88'%20r='7'/%3E%3Crect%20x='128'%20y='18'%20width='30'%20height='15'%20rx='4'/%3E%3C/g%3E%3Cg%20transform='translate(1060%20420)'%3E%3Cpath%20d='M60%200%20L114%2020%20V52%20C114%2092%2090%20114%2060%20128%20C30%20114%206%2092%206%2052%20V20%20Z'%20stroke-width='1.8'/%3E%3Cpath%20d='M34%2060%20l18%2020%20l32%20-42'/%3E%3C/g%3E%3Cg%20transform='translate(1400%20490)'%3E%3Ccircle%20cx='0'%20cy='0'%20r='8'/%3E%3Cpath%20d='M12%200%20H52'/%3E%3Cpath%20d='M44%20-6%20l8%206%20l-8%206'/%3E%3Ccircle%20cx='66'%20cy='0'%20r='8'/%3E%3Cpath%20d='M78%200%20H118'/%3E%3Cpath%20d='M110%20-6%20l8%206%20l-8%206'/%3E%3Ccircle%20cx='132'%20cy='0'%20r='8'/%3E%3C/g%3E%3Cg%20transform='translate(150%20720)'%3E%3Ccircle%20cx='56'%20cy='56'%20r='30'/%3E%3Ccircle%20cx='56'%20cy='56'%20r='11'/%3E%3Cpath%20d='M86%2056%20H98%20M14%2056%20H26%20M56%2086%20V98%20M56%2014%20V26'/%3E%3Cpath%20d='M77%2077%20L86%2086%20M35%2077%20L26%2086%20M35%2035%20L26%2026%20M77%2035%20L86%2026'/%3E%3C/g%3E%3Cg%20transform='translate(430%20690)'%3E%3Cpath%20d='M0%2012%20C0%205%205%200%2012%200%20H92%20L120%2028%20V138%20C120%20145%20115%20150%20108%20150%20H12%20C5%20150%200%20145%200%20138%20Z'%20stroke-width='1.8'/%3E%3Cpath%20d='M92%200%20V28%20H120'/%3E%3Cpath%20d='M44%2062%20C33%2062%2038%2076%2027%2080%20C38%2084%2033%2098%2044%2098'/%3E%3Cpath%20d='M78%2062%20C89%2062%2084%2076%2095%2080%20C84%2084%2089%2098%2078%2098'/%3E%3Cpath%20d='M30%20120%20H92%20M30%20133%20H72'/%3E%3C/g%3E%3Cg%20transform='translate(760%20700)'%3E%3Crect%20width='158'%20height='96'%20rx='13'%20stroke-width='1.8'/%3E%3Cpath%20d='M0%2025%20H158'/%3E%3Ccircle%20cx='18'%20cy='13'%20r='3'/%3E%3Ccircle%20cx='31'%20cy='13'%20r='3'/%3E%3Ccircle%20cx='44'%20cy='13'%20r='3'/%3E%3Cpath%20d='M22%2046%20l18%2014%20l-18%2014'/%3E%3Cpath%20d='M48%2074%20H98'/%3E%3Crect%20x='108'%20y='62'%20width='13'%20height='18'%20rx='2'/%3E%3C/g%3E%3Cg%20transform='translate(1070%20700)'%3E%3Cpath%20d='M14%20112%20V24'/%3E%3Ccircle%20cx='14'%20cy='20'%20r='6'/%3E%3Cpath%20d='M14%2020%20H150'/%3E%3Cpath%20d='M44%2014%20l-16%2012%20M72%2014%20l-16%2012%20M100%2014%20l-16%2012%20M128%2014%20l-16%2012'/%3E%3Cpath%20d='M0%20112%20H60'/%3E%3Cpath%20d='M92%2082%20l14%2015%20l26%20-34'/%3E%3C/g%3E%3Cg%20transform='translate(1360%20690)'%3E%3Cpath%20d='M60%200%20L114%2020%20V52%20C114%2092%2090%20114%2060%20128%20C30%20114%206%2092%206%2052%20V20%20Z'%20stroke-width='1.8'/%3E%3Cpath%20d='M34%2060%20l18%2020%20l32%20-42'/%3E%3C/g%3E%3C/g%3E%3Cg%20fill='rgb(230,237,243)'%20fill-opacity='0.08'%3E%3Ccircle%20cx='150'%20cy='620'%20r='2.5'/%3E%3Ccircle%20cx='163'%20cy='620'%20r='2.5'/%3E%3Ccircle%20cx='176'%20cy='620'%20r='2.5'/%3E%3Ccircle%20cx='980'%20cy='860'%20r='2.5'/%3E%3Ccircle%20cx='993'%20cy='860'%20r='2.5'/%3E%3Ccircle%20cx='1006'%20cy='860'%20r='2.5'/%3E%3Ccircle%20cx='1300'%20cy='450'%20r='2.5'/%3E%3Ccircle%20cx='1313'%20cy='450'%20r='2.5'/%3E%3Ccircle%20cx='1326'%20cy='450'%20r='2.5'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: cover, cover, cover;
+  background-position: 0 0, 0 0, center;
+  background-repeat: no-repeat, no-repeat, no-repeat;
+}

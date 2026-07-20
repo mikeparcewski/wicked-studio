@@ -4,24 +4,12 @@ import { useGateStore } from '../store/gates.js';
 import { useSteeringStore, type SteeringAction } from '../store/steering.js';
 
 interface Props {
-  /** The run this gate belongs to. ALL actions bind to this id, never a list index (§11.2). */
   runId: string;
-  /** The unit ord the run paused before (from the awaitingHuman event / gate cache). */
   ord?: number;
-  /** The gate prompt. Absent after a daemon restart (prompt not persisted) — actions still work. */
   prompt?: string;
-  /** Called after any action resolves (the run leaves `awaiting_human`). */
   onResolved?: () => void;
 }
 
-/**
- * The steering gate — the load-bearing HITL control (DES-STUDIO-001 §3.2,
- * DES-CAMPAIGN-001 §11.1). Four distinct actions, all bound to `runId`:
- *  - Approve            -> POST /runs/:id/gate {approve:true}
- *  - Approve with steer  -> POST /runs/:id/gate {approve:true, amend:<text>}  (steers the next unit)
- *  - Reject             -> POST /runs/:id/gate {approve:false}                (cancels the run)
- *  - Cancel run          -> POST /runs/:id/cancel                             (distinct third action)
- */
 export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
@@ -37,8 +25,6 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
     setError(null);
     try {
       await action();
-      // Record the operator's intervention for the steering timeline (FR-8b) — thin,
-      // forward-only, "as recorded": the action the human took, not an engine outcome.
       recordSteering({
         runId,
         action: intervention.kind,
@@ -70,22 +56,42 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
 
   return (
     <div
-      className="rounded-lg border border-yellow-300 bg-white p-4 shadow-lg"
+      className="rounded-xl p-4"
+      style={{
+        background: '#161c26',
+        border: '1px solid rgba(255,218,25,0.3)',
+        boxShadow: '0 0 0 1px rgba(255,218,25,0.08)',
+      }}
       data-testid="steering-gate"
       data-run-id={runId}
     >
-      <p className="font-semibold text-sm mb-1">Awaiting human decision</p>
-      <p className="text-xs text-gray-400 font-mono mb-2">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#ffda19' }} />
+        <p className="font-semibold text-sm font-mono" style={{ color: '#ffda19' }}>
+          Awaiting human decision
+        </p>
+      </div>
+      <p className="text-xs font-mono mb-3" style={{ color: 'rgba(230,237,243,0.4)' }}>
         run {runId.slice(0, 8)}
         {typeof ord === 'number' ? ` · before unit #${ord}` : ''}
       </p>
-      <p className="text-xs text-gray-600 mb-3 whitespace-pre-wrap" data-testid="steering-prompt">
+      <p
+        className="text-xs mb-4 whitespace-pre-wrap leading-relaxed font-mono"
+        style={{ color: 'rgba(230,237,243,0.75)' }}
+        data-testid="steering-prompt"
+      >
         {prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve, reject, or cancel.'}
       </p>
 
       <textarea
         data-testid="steering-amend"
-        className="w-full rounded border p-2 text-xs mb-2 resize-none"
+        className="w-full rounded-lg p-2 text-xs mb-3 resize-none font-mono"
+        style={{
+          background: '#0f1419',
+          border: '1px solid rgba(230,237,243,0.14)',
+          color: '#e6edf3',
+          outline: 'none',
+        }}
         rows={2}
         placeholder="Optional steer / amend — sent with Approve with steer to guide the next unit"
         value={amend}
@@ -94,7 +100,7 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
       />
 
       {error && (
-        <p className="text-xs text-red-600 mb-2" data-testid="steering-error">
+        <p className="text-xs mb-3 font-mono" style={{ color: '#f85149' }} data-testid="steering-error">
           {error}
         </p>
       )}
@@ -104,7 +110,8 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
           data-testid="steering-approve"
           onClick={() => void approve()}
           disabled={loading}
-          className="rounded bg-green-600 px-3 py-1.5 text-xs text-white hover:bg-green-700 disabled:opacity-50"
+          className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+          style={{ background: '#3fb950', color: '#0d1117' }}
         >
           Approve
         </button>
@@ -112,7 +119,8 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
           data-testid="steering-approve-steer"
           onClick={() => void approveWithSteer()}
           disabled={loading || !amend.trim()}
-          className="rounded bg-amber-500 px-3 py-1.5 text-xs text-white hover:bg-amber-600 disabled:opacity-50"
+          className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+          style={{ background: '#ffda19', color: '#0d1117' }}
         >
           Approve with steer
         </button>
@@ -120,7 +128,8 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
           data-testid="steering-reject"
           onClick={() => void reject()}
           disabled={loading}
-          className="rounded bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-700 disabled:opacity-50"
+          className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+          style={{ background: 'rgba(248,81,73,0.15)', border: '1px solid rgba(248,81,73,0.3)', color: '#f85149' }}
         >
           Reject
         </button>
@@ -128,7 +137,8 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
           data-testid="steering-cancel"
           onClick={() => void cancel()}
           disabled={loading}
-          className="rounded bg-gray-700 px-3 py-1.5 text-xs text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-lg px-3 py-2 text-xs font-mono disabled:opacity-50 transition-opacity"
+          style={{ background: 'rgba(230,237,243,0.06)', border: '1px solid rgba(230,237,243,0.1)', color: 'rgba(230,237,243,0.55)' }}
         >
           Cancel run
         </button>

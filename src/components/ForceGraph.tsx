@@ -12,13 +12,16 @@ interface Props {
 }
 
 const KIND_COLORS: Record<string, string> = {
-  function: '#10b981',
-  method:   '#10b981',
-  class:    '#f97316',
-  struct:   '#f97316',
-  interface:'#3b82f6',
-  type_alias:'#3b82f6',
-  enum:     '#8b5cf6',
+  function:    '#10b981',
+  method:      '#10b981',
+  constructor: '#10b981',
+  class:       '#f97316',
+  struct:      '#f97316',
+  interface:   '#3b82f6',
+  type_alias:  '#3b82f6',
+  trait:       '#3b82f6',
+  enum:        '#8b5cf6',
+  macro:       '#a855f7',
 };
 
 const LANG_COLORS: Record<string, string> = {

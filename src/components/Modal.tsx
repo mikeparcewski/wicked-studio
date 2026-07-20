@@ -8,14 +8,23 @@ interface Props {
 
 export function Modal({ title, onClose, children }: Props): React.ReactElement {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="relative w-[90vw] h-[80vh] rounded-xl bg-white shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
-          <h2 className="text-sm font-semibold">{title}</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <div
+        className="relative w-[90vw] h-[80vh] rounded-xl flex flex-col shadow-2xl"
+        style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.1)' }}
+      >
+        <div
+          className="flex items-center justify-between px-4 py-3 shrink-0"
+          style={{ borderBottom: '1px solid rgba(230,237,243,0.07)' }}
+        >
+          <h2 className="text-sm font-semibold font-mono" style={{ color: '#e6edf3' }}>{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+            className="text-lg leading-none transition-colors"
+            style={{ color: 'rgba(230,237,243,0.35)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#e6edf3'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(230,237,243,0.35)'; }}
             aria-label="Close"
           >
             ✕

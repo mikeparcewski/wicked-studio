@@ -47,8 +47,8 @@ export function Terminal({ cwd, cmd, governed = true }: Props): React.ReactEleme
       convertEol: false,
       cursorBlink: true,
       fontSize: 12,
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-      theme: { background: '#111827', foreground: '#e5e7eb' },
+      fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+      theme: { background: '#0d1117', foreground: '#e6edf3', cursor: '#ffda19', cursorAccent: '#0d1117' },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -132,10 +132,10 @@ export function Terminal({ cwd, cmd, governed = true }: Props): React.ReactEleme
   return (
     <div data-testid="terminal" className="flex flex-col gap-1">
       <div className="flex items-center justify-between text-[11px]">
-        <span className="font-semibold text-gray-500">Terminal</span>
+        <span className="font-semibold font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>Terminal</span>
         <span
           data-testid="terminal-governed"
-          className={governed ? 'text-gray-400' : 'font-semibold text-amber-600'}
+          style={{ color: governed ? 'rgba(230,237,243,0.35)' : '#ffda19', fontWeight: governed ? undefined : 600 }}
         >
           {governed ? 'governed' : 'ungoverned operator shell'}
         </span>
@@ -143,7 +143,8 @@ export function Terminal({ cwd, cmd, governed = true }: Props): React.ReactEleme
       <div
         ref={hostRef}
         data-testid="terminal-host"
-        className="h-64 w-full overflow-hidden rounded bg-gray-900 p-1"
+        className="h-64 w-full overflow-hidden rounded p-1"
+        style={{ background: '#0d1117' }}
       />
     </div>
   );

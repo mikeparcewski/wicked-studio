@@ -1,16 +1,9 @@
 import { useGateStore } from '../store/gates.js';
 
 interface Props {
-  /** Focus a run when its gate toast is clicked (binds by run id, §11.2). */
   onSelect: (runId: string) => void;
 }
 
-/**
- * Toast container for open gates (DES-STUDIO-001 §3.1). Sourced from the gate
- * cache, keyed by run id (was `${sessionId}-${phaseId}`). Each toast surfaces the
- * awaiting run and jumps to it — the full Approve/Reject/Cancel control is the
- * inline SteeringGate in the run detail (§3.2).
- */
 export function GateNotifications({ onSelect }: Props): React.ReactElement {
   const gates = useGateStore((s) => s.gates);
   const open = Object.values(gates);
@@ -29,14 +22,26 @@ export function GateNotifications({ onSelect }: Props): React.ReactElement {
           onClick={() => onSelect(gate.runId)}
           data-testid="gate-toast"
           data-run-id={gate.runId}
-          className="w-72 rounded-lg border border-yellow-300 bg-white p-3 text-left shadow-lg hover:border-yellow-400"
+          className="w-72 rounded-xl p-3 text-left transition-all"
+          style={{
+            background: '#1b222e',
+            border: '1px solid rgba(255,218,25,0.35)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,218,25,0.55)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,218,25,0.35)'; }}
         >
-          <p className="text-xs font-semibold text-yellow-700">Run awaiting human</p>
-          <p className="text-[11px] text-gray-400 font-mono">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#ffda19' }} />
+            <p className="text-xs font-semibold" style={{ color: '#ffda19' }}>Run awaiting human</p>
+          </div>
+          <p className="text-[11px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
             {gate.runId.slice(0, 8)} · before unit #{gate.ord}
           </p>
-          <p className="mt-1 text-xs text-gray-600 line-clamp-2">{gate.prompt}</p>
-          <p className="mt-1 text-[11px] text-blue-600">Review →</p>
+          {gate.prompt && (
+            <p className="mt-1 text-xs line-clamp-2" style={{ color: 'rgba(230,237,243,0.6)' }}>{gate.prompt}</p>
+          )}
+          <p className="mt-1.5 text-[11px] font-mono" style={{ color: '#79c0ff' }}>Review →</p>
         </button>
       ))}
     </div>

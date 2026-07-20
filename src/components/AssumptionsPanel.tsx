@@ -15,31 +15,34 @@ function routingSummary(r: NonNullable<UnitModel['routing']>): string {
   return `degraded: ${r.reason}`;
 }
 
-/**
- * FR-6 Assumptions — **proto** (NFR-3 labeled). Shows routing provenance for every resolved
- * unit (council outcome, evaluator-distinct re-assignment, or degraded fallback). The full
- * assumptions surface (toolchain, no-rollback constraints, …) awaits a skill convention.
- */
 export function AssumptionsPanel({ model }: Props): React.ReactElement {
   const routed = model.units.filter((u) => u.resolved && u.routing != null);
 
   return (
     <div data-testid="assumptions" className="flex flex-col gap-2 text-[11px]">
-      <p className="rounded border border-dashed border-purple-300 bg-purple-50 p-1.5 text-purple-600">
+      <p
+        className="rounded p-1.5 font-mono"
+        style={{ background: 'rgba(167,139,250,0.08)', border: '1px dashed rgba(167,139,250,0.3)', color: '#a78bfa' }}
+      >
         proto — routing provenance per unit; structured-assumptions skill convention pending
       </p>
       {routed.length === 0 ? (
-        <p className="text-gray-400">
-          No routing decisions recorded yet. The full assumptions surface (assumed toolchain,
-          no-rollback, …) is coming with the skill convention.
+        <p style={{ color: 'rgba(230,237,243,0.4)' }}>
+          No routing decisions recorded yet.
         </p>
       ) : (
         <ul className="flex flex-col gap-1">
           {routed.map((u) => (
-            <li key={u.ord} className="rounded border border-gray-200 p-1.5 text-gray-600">
-              <span className="font-medium">unit #{u.ord}</span>
+            <li
+              key={u.ord}
+              className="rounded p-1.5 font-mono"
+              style={{ background: '#161c26', border: '1px solid rgba(230,237,243,0.07)', color: 'rgba(230,237,243,0.6)' }}
+            >
+              <span className="font-medium" style={{ color: '#e6edf3' }}>unit #{u.ord}</span>
               {u.description.includes(' — ') && (
-                <span className="ml-1 text-gray-400">{u.description.split(' — ')[0]}</span>
+                <span className="ml-1" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                  {u.description.split(' — ')[0]}
+                </span>
               )}{' '}
               — {routingSummary(u.routing!)}
             </li>

@@ -234,4 +234,17 @@ export const api = {
     const qs = queryString ? `?${queryString}` : '';
     return apiFetch<{ rules: import('./types.js').ConformanceRule[] }>(`/governance/rules/preview${qs}`);
   },
+
+  // ── System settings ──────────────────────────────────────────────────────────
+
+  /** Read persisted system settings (defaults applied server-side). */
+  getSettings: () =>
+    apiFetch<{ settings: import('./types.js').SystemSettings }>('/settings'),
+
+  /** Persist a partial settings update; returns the merged result. */
+  updateSettings: (patch: Partial<import('./types.js').SystemSettings>) =>
+    apiFetch<{ settings: import('./types.js').SystemSettings }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
 };

@@ -13,7 +13,12 @@ function GateStatus({ coverage, threshold }: { coverage: number; threshold: numb
   const pass = coverage >= threshold;
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold ${pass ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+      className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold font-mono"
+      style={{
+        background: pass ? 'rgba(63,185,80,0.12)' : 'rgba(248,81,73,0.12)',
+        color: pass ? '#3fb950' : '#f85149',
+        border: `1px solid ${pass ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)'}`,
+      }}
     >
       {pass ? 'GATE PASS' : 'GATE FAIL'}
     </span>
@@ -35,9 +40,13 @@ function Ledger({ report }: { report: CoverageReport }): React.ReactElement {
   return (
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
       {stats.map(({ label, value }) => (
-        <div key={label} className="rounded border border-gray-200 bg-white p-2 text-center">
-          <p className="text-[11px] text-gray-400">{label}</p>
-          <p className="text-sm font-semibold text-gray-800">{value}</p>
+        <div
+          key={label}
+          className="rounded p-2 text-center"
+          style={{ border: '1px solid rgba(230,237,243,0.07)', background: '#1b222e' }}
+        >
+          <p className="text-[11px]" style={{ color: 'rgba(230,237,243,0.4)' }}>{label}</p>
+          <p className="text-sm font-semibold" style={{ color: '#e6edf3' }}>{value}</p>
         </div>
       ))}
     </div>
@@ -45,11 +54,11 @@ function Ledger({ report }: { report: CoverageReport }): React.ReactElement {
 }
 
 function PerAppTable({ apps }: { apps: CoveragePerApp[] }): React.ReactElement {
-  if (apps.length === 0) return <p className="text-xs text-gray-400">No per-app data.</p>;
+  if (apps.length === 0) return <p className="text-xs" style={{ color: 'rgba(230,237,243,0.4)' }}>No per-app data.</p>;
   return (
     <table className="w-full text-[11px]">
       <thead>
-        <tr className="border-b text-left text-gray-500">
+        <tr className="border-b text-left" style={{ borderColor: 'rgba(230,237,243,0.08)', color: 'rgba(230,237,243,0.4)' }}>
           <th className="py-1 pr-3 font-medium">App</th>
           <th className="py-1 pr-3 font-medium text-right">Behavior-bearing</th>
           <th className="py-1 pr-3 font-medium text-right">Resolved</th>
@@ -60,13 +69,13 @@ function PerAppTable({ apps }: { apps: CoveragePerApp[] }): React.ReactElement {
       </thead>
       <tbody>
         {apps.map((a) => (
-          <tr key={a.app} className="border-b border-gray-100">
-            <td className="py-1 pr-3 font-mono text-gray-700">{a.app}</td>
-            <td className="py-1 pr-3 text-right text-gray-600">{a.behavior_bearing}</td>
-            <td className="py-1 pr-3 text-right text-green-700">{a.resolved}</td>
-            <td className="py-1 pr-3 text-right text-yellow-600">{a.risk_flagged}</td>
-            <td className="py-1 pr-3 text-right text-red-600">{a.unaccounted}</td>
-            <td className="py-1 text-right font-semibold">{pct(a.coverage)}</td>
+          <tr key={a.app} className="border-b" style={{ borderColor: 'rgba(230,237,243,0.06)' }}>
+            <td className="py-1 pr-3 font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>{a.app}</td>
+            <td className="py-1 pr-3 text-right" style={{ color: 'rgba(230,237,243,0.6)' }}>{a.behavior_bearing}</td>
+            <td className="py-1 pr-3 text-right" style={{ color: '#3fb950' }}>{a.resolved}</td>
+            <td className="py-1 pr-3 text-right" style={{ color: '#ffda19' }}>{a.risk_flagged}</td>
+            <td className="py-1 pr-3 text-right" style={{ color: '#f85149' }}>{a.unaccounted}</td>
+            <td className="py-1 text-right font-semibold" style={{ color: '#e6edf3' }}>{pct(a.coverage)}</td>
           </tr>
         ))}
       </tbody>
@@ -91,7 +100,8 @@ function NodeSortBtn({
     <button
       type="button"
       onClick={() => onSort(col)}
-      className="font-medium text-gray-500 hover:text-gray-800"
+      className="font-medium transition-colors"
+      style={{ color: active === col ? '#79c0ff' : 'rgba(230,237,243,0.4)' }}
     >
       {children}
       {active === col ? (dir === 'asc' ? ' ▲' : ' ▼') : ''}
@@ -137,8 +147,10 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
     });
   }, [nodes, query, kindFilter, appFilter, sortKey, sortDir]);
 
+  const inputStyle = { background: '#161c26', border: '1px solid rgba(230,237,243,0.1)', color: '#e6edf3' };
+
   if (nodes.length === 0) {
-    return <p className="text-xs text-green-700">No unaccounted nodes — gate is satisfied.</p>;
+    return <p className="text-xs" style={{ color: '#3fb950' }}>No unaccounted nodes — gate is satisfied.</p>;
   }
 
   return (
@@ -150,13 +162,15 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
           placeholder="Search name / file / id…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="rounded border border-gray-200 px-2 py-1 text-[11px] w-48"
+          className="rounded px-2 py-1 text-[11px] w-48 focus:outline-none"
+          style={inputStyle}
         />
         <select
           aria-label="Filter by kind"
           value={kindFilter}
           onChange={(e) => setKindFilter(e.target.value)}
-          className="rounded border border-gray-200 px-2 py-1 text-[11px]"
+          className="rounded px-2 py-1 text-[11px] focus:outline-none"
+          style={inputStyle}
         >
           <option value="">All kinds</option>
           {kinds.map((k) => <option key={k} value={k}>{k}</option>)}
@@ -165,19 +179,20 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
           aria-label="Filter by app"
           value={appFilter}
           onChange={(e) => setAppFilter(e.target.value)}
-          className="rounded border border-gray-200 px-2 py-1 text-[11px]"
+          className="rounded px-2 py-1 text-[11px] focus:outline-none"
+          style={inputStyle}
         >
           <option value="">All apps</option>
           {apps.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
-        <span className="ml-auto text-[11px] text-gray-400">
+        <span className="ml-auto text-[11px]" style={{ color: 'rgba(230,237,243,0.4)' }}>
           {filtered.length} / {nodes.length} hole{nodes.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="border-b text-left">
+          <tr className="border-b" style={{ borderColor: 'rgba(230,237,243,0.08)' }}>
             <th className="py-1 pr-3">
               <NodeSortBtn col="name" active={sortKey} dir={sortDir} onSort={handleSort}>Name</NodeSortBtn>
             </th>
@@ -194,11 +209,15 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
         </thead>
         <tbody>
           {filtered.map((n) => (
-            <tr key={n.symbol_id} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="py-1 pr-3 font-mono text-gray-700">{n.name ?? n.symbol_id}</td>
-              <td className="py-1 pr-3 text-gray-500">{n.kind ?? '—'}</td>
-              <td className="py-1 pr-3 text-gray-500">{n.app ?? '—'}</td>
-              <td className="py-1 text-gray-400" title={n.file}>
+            <tr
+              key={n.symbol_id}
+              className="border-b"
+              style={{ borderColor: 'rgba(230,237,243,0.06)' }}
+            >
+              <td className="py-1 pr-3 font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>{n.name ?? n.symbol_id}</td>
+              <td className="py-1 pr-3" style={{ color: 'rgba(230,237,243,0.45)' }}>{n.kind ?? '—'}</td>
+              <td className="py-1 pr-3" style={{ color: 'rgba(230,237,243,0.45)' }}>{n.app ?? '—'}</td>
+              <td className="py-1" style={{ color: 'rgba(230,237,243,0.35)' }} title={n.file}>
                 <div className="truncate max-w-xs">{n.file ?? '—'}</div>
               </td>
             </tr>
@@ -232,31 +251,36 @@ export function CoverageView(): React.ReactElement {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-800">Coverage gate</h2>
+        <h2 className="text-sm font-semibold" style={{ color: '#e6edf3' }}>Coverage gate</h2>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
-          className="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          className="rounded px-2 py-1 text-[11px] disabled:opacity-50"
+          style={{ border: '1px solid rgba(230,237,243,0.1)', color: 'rgba(230,237,243,0.6)' }}
         >
           {loading ? 'Loading…' : 'Refresh'}
         </button>
       </div>
 
       {error && (
-        <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+        <p className="rounded px-3 py-2 text-xs" style={{ background: 'rgba(248,81,73,0.08)', color: '#f85149' }}>
+          {error}
+        </p>
       )}
 
       {!loading && !error && report === null && (
-        <p className="text-xs text-gray-400">
-          No coverage data — run <code className="font-mono">wicked-core rules ingest</code> to populate.
+        <p className="text-xs" style={{ color: 'rgba(230,237,243,0.4)' }}>
+          No coverage data — run{' '}
+          <code className="font-mono" style={{ color: 'rgba(230,237,243,0.6)' }}>wicked-core rules ingest</code>{' '}
+          to populate.
         </p>
       )}
 
       {report && (
         <>
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold text-gray-900">{pct(report.coverage)}</span>
+            <span className="text-2xl font-bold" style={{ color: '#e6edf3' }}>{pct(report.coverage)}</span>
             <GateStatus coverage={report.coverage} threshold={report.resolve_threshold} />
           </div>
 
@@ -264,13 +288,15 @@ export function CoverageView(): React.ReactElement {
 
           {report.per_app.length > 0 && (
             <section className="flex flex-col gap-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Per-app</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                Per-app
+              </p>
               <PerAppTable apps={report.per_app} />
             </section>
           )}
 
           <section className="flex flex-col gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            <p className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
               Coverage holes ({report.unaccounted})
             </p>
             <UnaccountedList nodes={report.unaccounted_nodes} />

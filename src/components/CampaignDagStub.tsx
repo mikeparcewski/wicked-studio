@@ -11,12 +11,13 @@ export function CampaignDagStub(): React.ReactElement {
   return (
     <div
       data-testid="campaign-dag-stub"
-      className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-xs text-gray-400"
+      className="rounded-lg p-4 text-xs"
+      style={{ border: '1px dashed rgba(230,237,243,0.15)', background: '#161c26', color: 'rgba(230,237,243,0.4)' }}
     >
-      <p className="font-semibold text-gray-500">Campaign DAG — engine-real, not wired</p>
+      <p className="font-semibold" style={{ color: 'rgba(230,237,243,0.6)' }}>Campaign DAG — engine-real, not wired</p>
       <p className="mt-1">
-        Pending core&apos;s <code>Campaign</code> primitive + <code>RunFinished</code> /{' '}
-        <code>Campaign*</code> events (§4.3). Attaches to this same event stream when they land.
+        Pending core&apos;s <code className="font-mono">Campaign</code> primitive + <code className="font-mono">RunFinished</code> /{' '}
+        <code className="font-mono">Campaign*</code> events (§4.3). Attaches to this same event stream when they land.
       </p>
     </div>
   );

@@ -1,34 +1,65 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { CodeGraphData, RepoEntry } from '../api/types.js';
-import { ForceGraph } from './ForceGraph.js';
-import { RepoGraphModal } from './RepoGraphModal.js';
+import type { RepoEntry, SessionView } from '../api/types.js';
 
-type TabId = 'all' | 'graph';
 type SourceMode = 'local' | 'remote';
-type GraphMode = 'code' | 'domain';
 
 interface Props {
   onSelectRun?: (runId: string) => void;
+  autoShowRegister?: boolean;
+  navigate: (path: string) => void;
 }
 
-export function RepositoriesPanel({ onSelectRun }: Props): React.ReactElement {
+const TERMINAL = new Set(['completed', 'cancelled', 'failed']);
+
+function relativeTime(tsSeconds: number): string {
+  const tsMs = tsSeconds * 1000;
+  const diffDays = Math.floor((Date.now() - tsMs) / (1000 * 60 * 60 * 24));
+  if (diffDays < 1) return 'registered today';
+  if (diffDays === 1) return 'registered yesterday';
+  if (diffDays < 30) return `registered ${diffDays} days ago`;
+  return `registered ${new Date(tsMs).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+}
+
+const inputCss: React.CSSProperties = {
+  background: '#0f1419',
+  border: '1px solid rgba(230,237,243,0.14)',
+  color: '#e6edf3',
+  borderRadius: '6px',
+  padding: '6px 10px',
+  fontSize: '12px',
+  fontFamily: 'var(--wk-font-mono, monospace)',
+  outline: 'none',
+  width: '100%',
+};
+
+function StatCard({ label, value, hint }: { label: string; value: number; hint?: string }): React.ReactElement {
+  return (
+    <div
+      className="rounded-2xl p-5 flex flex-col gap-1"
+      style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+    >
+      <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'rgba(230,237,243,0.4)' }}>
+        {label}
+      </p>
+      <p className="text-3xl font-mono font-bold" style={{ color: '#e6edf3' }}>{value}</p>
+      {hint && (
+        <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>{hint}</p>
+      )}
+    </div>
+  );
+}
+
+export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: Props): React.ReactElement {
   const [repos, setRepos] = useState<RepoEntry[]>([]);
+  const [runs, setRuns] = useState<SessionView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabId>('all');
-
-  const [graphRepo, setGraphRepo] = useState<RepoEntry | null>(null);
-
-  // ── Graph tab state ───────────────────────────────────────────────────────
-  const [graphMode, setGraphMode] = useState<GraphMode>('code');
-  const [selectedRepoIds, setSelectedRepoIds] = useState<Set<string>>(new Set());
-  const [inlineGraphData, setInlineGraphData] = useState<CodeGraphData | null>(null);
-  const [inlineGraphLoading, setInlineGraphLoading] = useState(false);
+  const [search, setSearch] = useState('');
 
   const [rerunning, setRerunning] = useState<Record<string, boolean>>({});
   const [rerunError, setRerunError] = useState<Record<string, string>>({});
-  const [showRegister, setShowRegister] = useState(false);
+  const [showRegister, setShowRegister] = useState(autoShowRegister ?? false);
   const [sourceMode, setSourceMode] = useState<SourceMode>('local');
   const [newName, setNewName] = useState('');
   const [newPath, setNewPath] = useState('');
@@ -38,29 +69,16 @@ export function RepositoriesPanel({ onSelectRun }: Props): React.ReactElement {
   const [registering, setRegistering] = useState(false);
   const nameEditedRef = useRef(false);
 
-  // repo id → onboard run id; shown as a link after registration
-  const [onboardRunIds, setOnboardRunIds] = useState<Record<string, string>>({});
-
   useEffect(() => {
     setLoading(true);
-    api
-      .listRepos()
-      .then(({ repos: rs }) => setRepos(rs))
+    Promise.all([api.listRepos(), api.listRuns()])
+      .then(([{ repos: rs }, { runs: rv }]) => {
+        setRepos(rs);
+        setRuns(rv);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (tab !== 'graph' || graphMode !== 'code') return;
-    const firstId = Array.from(selectedRepoIds)[0];
-    if (!firstId) { setInlineGraphData(null); return; }
-    setInlineGraphLoading(true);
-    api
-      .getRepoGraph(firstId)
-      .then(({ graph }) => setInlineGraphData(graph))
-      .catch(() => setInlineGraphData(null))
-      .finally(() => setInlineGraphLoading(false));
-  }, [tab, graphMode, selectedRepoIds]);
 
   function deriveName(value: string): void {
     if (nameEditedRef.current) return;
@@ -73,10 +91,12 @@ export function RepositoriesPanel({ onSelectRun }: Props): React.ReactElement {
     setRerunError((prev) => ({ ...prev, [repoId]: '' }));
     try {
       const { runId } = await api.rerunOnboarding(repoId);
-      setOnboardRunIds((prev) => ({ ...prev, [repoId]: runId }));
       onSelectRun?.(runId);
     } catch (err) {
-      setRerunError((prev) => ({ ...prev, [repoId]: err instanceof Error ? err.message : String(err) }));
+      setRerunError((prev) => ({
+        ...prev,
+        [repoId]: err instanceof Error ? err.message : String(err),
+      }));
     } finally {
       setRerunning((prev) => ({ ...prev, [repoId]: false }));
     }
@@ -91,12 +111,11 @@ export function RepositoriesPanel({ onSelectRun }: Props): React.ReactElement {
     setRegisterError(null);
     setRegistering(true);
     try {
-      const { repo, onboardRunId } = isRemote
+      const { repo } = isRemote
         ? await api.cloneAndRegisterRepo(name, target, checkoutPath.trim() || undefined)
         : await api.registerRepo(name, target);
 
       setRepos((prev) => [...prev, repo]);
-      setOnboardRunIds((prev) => ({ ...prev, [repo.id]: onboardRunId }));
       setShowRegister(false);
       setNewName('');
       setNewPath('');
@@ -105,8 +124,7 @@ export function RepositoriesPanel({ onSelectRun }: Props): React.ReactElement {
       setSourceMode('local');
       nameEditedRef.current = false;
 
-      // Navigate straight to the onboarding run so the user can watch it
-      onSelectRun?.(onboardRunId);
+      navigate('/repo-detail/' + encodeURIComponent(repo.id));
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -118,33 +136,73 @@ export function RepositoriesPanel({ onSelectRun }: Props): React.ReactElement {
     newName.trim() && (sourceMode === 'remote' ? newGitUrl.trim() : newPath.trim()),
   );
 
+  const activeRuns = runs.filter((r) => !TERMINAL.has(r.session.status));
+
+  const filteredRepos =
+    search.trim() === ''
+      ? repos
+      : repos.filter((r) => r.name.toLowerCase().includes(search.trim().toLowerCase()));
+
+  function repoActiveRunCount(repoId: string): number {
+    return activeRuns.filter((r) => r.session.repo_ref === repoId).length;
+  }
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-6 py-4 border-b shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-800">Repositories</h2>
+    <div className="h-full overflow-y-auto">
+      {/* ── Header ── */}
+      <div className="px-8 pt-8 pb-4">
+        <div className="flex items-center gap-3 mb-5">
+          <h1
+            className="text-base font-bold font-mono flex-1"
+            style={{ color: '#e6edf3', letterSpacing: '-0.01em' }}
+          >
+            Repositories
+          </h1>
+          <input
+            style={{
+              background: '#1b222e',
+              border: '1px solid rgba(230,237,243,0.12)',
+              color: '#e6edf3',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontFamily: 'var(--wk-font-mono, monospace)',
+              outline: 'none',
+              width: '200px',
+            }}
+            placeholder="Search repos…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <button
             type="button"
             onClick={() => setShowRegister((v) => !v)}
-            className="rounded bg-emerald-600 px-3 py-1 text-[11px] text-white hover:bg-emerald-700"
+            className="shrink-0 rounded-lg px-4 py-1.5 text-xs font-semibold font-mono"
+            style={{ background: showRegister ? 'rgba(230,237,243,0.1)' : '#ffda19', color: showRegister ? '#e6edf3' : '#0d1117' }}
           >
-            {showRegister ? 'Cancel' : 'Add repository'}
+            {showRegister ? 'Cancel' : '+ Add Repository'}
           </button>
         </div>
 
+        {/* ── Registration form ── */}
         {showRegister && (
-          <div className="flex flex-col gap-2 mt-2 rounded-lg border p-3 bg-gray-50">
+          <div
+            className="flex flex-col gap-3 rounded-2xl p-5 mb-5"
+            style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
+          >
+            {/* Source mode tabs */}
             <div className="flex gap-1">
               {(['local', 'remote'] as SourceMode[]).map((m) => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setSourceMode(m)}
-                  className={`rounded px-2.5 py-1 text-[11px] font-medium capitalize transition-colors ${
+                  className="rounded-md px-3 py-1 text-[11px] font-mono font-medium transition-colors"
+                  style={
                     sourceMode === m
-                      ? 'bg-zinc-900 text-white'
-                      : 'text-zinc-500 hover:bg-zinc-100'
-                  }`}
+                      ? { background: 'rgba(230,237,243,0.12)', color: '#e6edf3' }
+                      : { color: 'rgba(230,237,243,0.4)' }
+                  }
                 >
                   {m === 'local' ? 'Local path' : 'Remote URL'}
                 </button>
@@ -152,7 +210,7 @@ export function RepositoriesPanel({ onSelectRun }: Props): React.ReactElement {
             </div>
 
             <input
-              className="rounded border p-2 text-xs"
+              style={inputCss}
               placeholder="Repo name"
               value={newName}
               onChange={(e) => {
@@ -163,23 +221,31 @@ export function RepositoriesPanel({ onSelectRun }: Props): React.ReactElement {
 
             {sourceMode === 'local' ? (
               <input
-                className="rounded border p-2 text-xs font-mono"
+                style={inputCss}
                 placeholder="Absolute path to git repo"
                 value={newPath}
-                onChange={(e) => { setNewPath(e.target.value); deriveName(e.target.value); }}
+                onChange={(e) => {
+                  setNewPath(e.target.value);
+                  deriveName(e.target.value);
+                }}
               />
             ) : (
               <>
                 <input
-                  className="rounded border p-2 text-xs font-mono"
+                  style={inputCss}
                   placeholder="https://github.com/org/repo or git@github.com:org/repo"
                   value={newGitUrl}
-                  onChange={(e) => { setNewGitUrl(e.target.value); deriveName(e.target.value); }}
+                  onChange={(e) => {
+                    setNewGitUrl(e.target.value);
+                    deriveName(e.target.value);
+                  }}
                 />
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] text-zinc-500 font-medium">Clone to (optional)</label>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                    Clone to (optional)
+                  </label>
                   <input
-                    className="rounded border p-2 text-xs font-mono"
+                    style={inputCss}
                     placeholder={`~/.wicked/repos/${newName || '<name>'}`}
                     value={checkoutPath}
                     onChange={(e) => setCheckoutPath(e.target.value)}
@@ -188,180 +254,193 @@ export function RepositoriesPanel({ onSelectRun }: Props): React.ReactElement {
               </>
             )}
 
-            <p className="text-[10px] text-zinc-500">
+            <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
               {sourceMode === 'remote'
-                ? `Clones to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then runs the onboarding workflow as a governed run — visible in the run list.`
-                : 'Runs the onboarding workflow (index → annotate → domain) as a governed run — visible in the run list.'}
+                ? `Clones to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then runs the onboarding workflow as a governed run.`
+                : 'Runs the onboarding workflow (index → annotate → domain) as a governed run.'}
             </p>
 
-            {registerError && <p className="text-[11px] text-red-600">{registerError}</p>}
+            {registerError && (
+              <p className="text-[11px] font-mono" style={{ color: '#f85149' }}>
+                {registerError}
+              </p>
+            )}
 
             <button
               type="button"
               onClick={() => void registerRepo()}
               disabled={registering || !canSubmit}
-              className="self-start rounded bg-emerald-600 px-3 py-1 text-[11px] text-white hover:bg-emerald-700 disabled:opacity-50"
+              className="self-start rounded-lg px-4 py-1.5 text-[11px] font-semibold font-mono disabled:opacity-50"
+              style={{ background: '#ffda19', color: '#0d1117' }}
             >
               {registering
-                ? sourceMode === 'remote' ? 'Cloning…' : 'Registering…'
-                : sourceMode === 'remote' ? 'Clone & onboard' : 'Register & onboard'}
+                ? sourceMode === 'remote'
+                  ? 'Cloning…'
+                  : 'Registering…'
+                : sourceMode === 'remote'
+                  ? 'Clone & onboard'
+                  : 'Register & onboard'}
             </button>
           </div>
         )}
-
-        <div className="flex gap-1 mt-3">
-          {(['all', 'graph'] as TabId[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`rounded px-3 py-1 text-[11px] font-medium capitalize ${
-                tab === t ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
-              }`}
-            >
-              {t === 'all' ? 'All' : 'Graph view'}
-            </button>
-          ))}
-        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        {tab === 'graph' ? (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-4">
-              <div className="flex gap-1">
-                {(['code', 'domain'] as GraphMode[]).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setGraphMode(m)}
-                    className={`rounded px-3 py-1 text-[11px] font-medium capitalize ${
-                      graphMode === m ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
-                    }`}
-                  >
-                    {m === 'code' ? 'Code' : 'Domain'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {repos.length === 0 ? (
-              <p className="text-xs text-gray-400">No repositories registered yet.</p>
-            ) : (
-              <div className="flex flex-col gap-1">
-                <p className="text-[10px] text-gray-400 mb-1">Select repos to visualize</p>
-                {repos.map((r) => (
-                  <label key={r.id} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedRepoIds.has(r.id)}
-                      onChange={(e) => {
-                        setSelectedRepoIds((prev) => {
-                          const next = new Set(prev);
-                          if (e.target.checked) next.add(r.id);
-                          else next.delete(r.id);
-                          return next;
-                        });
-                      }}
-                      className="accent-emerald-600"
-                    />
-                    <span className="text-xs text-gray-700">{r.name}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-
-            {graphMode === 'code' && selectedRepoIds.size > 0 && (
-              <div className="rounded-lg border border-gray-200 overflow-hidden" style={{ height: 400 }}>
-                {inlineGraphLoading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-xs text-gray-400">Loading graph…</p>
-                  </div>
-                ) : !inlineGraphData || inlineGraphData.nodes.length === 0 ? (
-                  <div className="flex items-center justify-center h-full bg-gray-50">
-                    <p className="text-xs text-gray-400">
-                      Code graph not yet available — run onboarding first
-                    </p>
-                  </div>
-                ) : (
-                  <ForceGraph
-                    nodes={inlineGraphData.nodes}
-                    edges={inlineGraphData.edges}
-                    width={600}
-                    height={400}
-                  />
-                )}
-              </div>
-            )}
-
-            {graphMode === 'domain' && (
-              <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-400">
-                Domain graph — open a repo's modal and use the Hotspots tab, or switch to Code mode to browse the file graph.
-              </div>
-            )}
+      <div className="px-8 pb-10">
+        {/* ── Stats row ── */}
+        {!loading && !error && (
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <StatCard label="Total Repos" value={repos.length} hint="registered with wicked-crew" />
+            <StatCard
+              label="Active Runs"
+              value={activeRuns.length}
+              hint={activeRuns.length === 1 ? '1 run in progress' : `${activeRuns.length} runs in progress`}
+            />
+            <StatCard
+              label="Tracked"
+              value={repos.length}
+              hint="onboarded and graph-indexed"
+            />
           </div>
-        ) : loading ? (
-          <p className="text-xs text-gray-400">Loading repositories…</p>
+        )}
+
+        {/* ── Content area ── */}
+        {loading ? (
+          <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+            Loading repositories…
+          </p>
         ) : error ? (
-          <p className="text-xs text-red-600">{error}</p>
+          <p className="text-xs font-mono" style={{ color: '#f85149' }}>{error}</p>
         ) : repos.length === 0 ? (
-          <p className="text-xs text-gray-400">No repositories registered yet.</p>
+          /* Empty state */
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div
+              className="rounded-2xl p-10 flex flex-col items-center gap-4"
+              style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)', maxWidth: 420 }}
+            >
+              <p className="text-2xl font-mono font-bold" style={{ color: 'rgba(230,237,243,0.15)' }}>
+                No repositories
+              </p>
+              <p className="text-sm font-mono" style={{ color: 'rgba(230,237,243,0.45)' }}>
+                Register a local git repo or clone a remote one. wicked-crew will index it,
+                annotate the domain model, and keep the knowledge graph up to date.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowRegister(true)}
+                className="rounded-lg px-5 py-2 text-xs font-semibold font-mono mt-2"
+                style={{ background: '#ffda19', color: '#0d1117' }}
+              >
+                + Add Repository
+              </button>
+            </div>
+          </div>
+        ) : filteredRepos.length === 0 ? (
+          <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+            No repos match &ldquo;{search}&rdquo;.
+          </p>
         ) : (
-          <div className="flex flex-col gap-3">
-            {repos.map((r) => {
-              const runId = onboardRunIds[r.id];
+          /* Repo cards grid */
+          <div className="grid grid-cols-2 gap-4">
+            {filteredRepos.map((repo) => {
+              const activeCount = repoActiveRunCount(repo.id);
+              const isRerunning = rerunning[repo.id] ?? false;
+              const runErr = rerunError[repo.id];
               return (
-                <div key={r.id} className="rounded-lg border bg-white p-4 shadow-sm">
-                  <p className="text-sm font-semibold text-gray-800">{r.name}</p>
-                  <p className="text-[11px] text-gray-500 font-mono mt-0.5">{r.root_path}</p>
-                  {r.git_url && (
-                    <p className="text-[10px] text-zinc-400 font-mono mt-0.5 truncate" title={r.git_url}>
-                      ↳ {r.git_url}
+                <div
+                  key={repo.id}
+                  className="rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-colors"
+                  style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
+                  onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      navigate('/repo-detail/' + encodeURIComponent(repo.id));
+                    }
+                  }}
+                >
+                  {/* Card header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-sm font-bold font-mono truncate"
+                        style={{ color: '#e6edf3' }}
+                      >
+                        {repo.name}
+                      </p>
+                      <p
+                        className="text-[11px] font-mono mt-0.5 truncate"
+                        style={{ color: 'rgba(230,237,243,0.4)' }}
+                        title={repo.root_path}
+                      >
+                        {repo.root_path}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {activeCount > 0 && (
+                        <span
+                          className="rounded-full px-2 py-0.5 text-[10px] font-mono font-semibold"
+                          style={{ background: 'rgba(63,185,80,0.15)', color: '#3fb950' }}
+                        >
+                          {activeCount} active
+                        </span>
+                      )}
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-mono"
+                        style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff' }}
+                      >
+                        {repo.default_branch}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Timestamp */}
+                  <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                    {relativeTime(repo.registered_at)}
+                  </p>
+
+                  {/* Error (if onboard failed) */}
+                  {runErr && (
+                    <p className="text-[11px] font-mono" style={{ color: '#f85149' }}>
+                      {runErr}
                     </p>
                   )}
-                  <div className="mt-1 flex gap-4 text-[11px] text-gray-400">
-                    <span>branch: {r.default_branch}</span>
-                    <span>registered: {new Date(r.registered_at * 1000).toLocaleDateString()}</span>
-                  </div>
-                  <div className="mt-2 flex items-center gap-3 flex-wrap">
-                    {runId && onSelectRun && (
-                      <button
-                        type="button"
-                        onClick={() => onSelectRun(runId)}
-                        className="text-[11px] text-emerald-600 hover:underline"
-                      >
-                        View onboarding run →
-                      </button>
-                    )}
+
+                  {/* Footer row — stop click propagation so buttons don't also navigate */}
+                  <div
+                    className="flex items-center justify-between mt-auto"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    role="presentation"
+                  >
                     <button
                       type="button"
-                      onClick={() => setGraphRepo(r)}
-                      className="text-[11px] text-emerald-600 hover:underline"
+                      onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
+                      className="text-xs font-mono hover:underline"
+                      style={{ color: '#79c0ff' }}
                     >
-                      View graph →
+                      View →
                     </button>
                     <button
                       type="button"
-                      disabled={rerunning[r.id]}
-                      onClick={() => void rerunOnboarding(r.id)}
-                      className="text-[11px] text-zinc-500 hover:text-zinc-700 hover:underline disabled:opacity-50"
+                      disabled={isRerunning}
+                      onClick={() => void rerunOnboarding(repo.id)}
+                      className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
+                      style={{
+                        background: 'rgba(230,237,243,0.07)',
+                        color: 'rgba(230,237,243,0.6)',
+                        border: '1px solid rgba(230,237,243,0.08)',
+                      }}
                     >
-                      {rerunning[r.id] ? 'Starting…' : '↺ Re-run onboarding'}
+                      {isRerunning ? 'Starting…' : 'Onboard'}
                     </button>
                   </div>
-                  {rerunError[r.id] && (
-                    <p className="mt-1 text-[11px] text-red-600">{rerunError[r.id]}</p>
-                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
-
-      {graphRepo && (
-        <RepoGraphModal repo={graphRepo} onClose={() => setGraphRepo(null)} />
-      )}
     </div>
   );
 }

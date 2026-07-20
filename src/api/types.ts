@@ -180,8 +180,6 @@ export interface CoreEvent {
   entity_mode?: string;
   // unitPlanned enrichment fields
   stage?: string;
-  role?: string;
-  gate?: string;
   skill_ref?: string | null;
   has_validator_pin?: boolean;
   executor_type?: string;
@@ -469,7 +467,7 @@ export interface DomainGraphRequirement {
   error_paths: Array<{ id: string; statement: string }>;
 }
 
-/** Coverage stats from estate.coverage.json — present when code is indexed but not yet annotated. */
+/** Coverage stats from `wicked-core coverage --json` — present when code is indexed but domain not yet annotated. */
 export interface DomainCoverage {
   coverage: number;
   total: number;
@@ -507,4 +505,9 @@ export interface CodeGraphData {
   nodes: CodeGraphNode[];
   edges: CodeGraphEdge[];
   stats: { nodeCount: number; edgeCount: number; fileCount: number };
+}
+
+/** Daemon-persisted system settings (~/.config/wicked-core/settings.json). */
+export interface SystemSettings {
+  graphNodeLimit: number;
 }

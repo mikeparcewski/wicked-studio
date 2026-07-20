@@ -5,34 +5,27 @@ import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore, outputKey } from '../store/runtime.js';
 import { RoutingProvenance } from './RoutingProvenance.js';
 
-const STAGE_STYLE: Record<StageKind, string> = {
-  recon: 'bg-blue-100 text-blue-700',
-  build: 'bg-green-100 text-green-700',
-  review: 'bg-indigo-100 text-indigo-700',
-  test: 'bg-amber-100 text-amber-700',
+const STAGE_STYLE: Record<StageKind, { bg: string; color: string }> = {
+  recon:   { bg: 'rgba(121,192,255,0.12)', color: '#79c0ff' },
+  build:   { bg: 'rgba(63,185,80,0.12)',   color: '#3fb950' },
+  review:  { bg: 'rgba(167,139,250,0.12)', color: '#a78bfa' },
+  test:    { bg: 'rgba(255,218,25,0.12)',  color: '#ffda19' },
 };
 
-const UNIT_STATUS_STYLE: Record<UnitStatus, string> = {
-  pending: 'text-gray-400',
-  distributed: 'text-blue-600',
-  done: 'text-green-600',
-  rejected: 'text-red-600',
+const UNIT_STATUS_COLOR: Record<UnitStatus, string> = {
+  pending:     'rgba(230,237,243,0.3)',
+  distributed: '#79c0ff',
+  done:        '#3fb950',
+  rejected:    '#f85149',
 };
 
 interface Props {
   runId: string;
   unit: WorkUnit;
-  /** True when the run is paused before this exact unit (the gated ord). Enables per-unit approve. */
   isGated: boolean;
-  /** Called after a per-unit approve resolves. */
   onResolved?: () => void;
 }
 
-/**
- * A work-unit row (DES-STUDIO-001 §11.9): ord, stage badge, assigned CLI,
- * status, routing provenance + denial reason, a per-unit approve on the gated
- * unit, and a lazy transcript. Auto-loads when the unit reaches `done`.
- */
 export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const liveOutput = useRuntimeStore((s) => s.outputs[outputKey(runId, unit.ord)]);
@@ -42,7 +35,6 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
   const [approving, setApproving] = useState(false);
   const autoLoadedRef = useRef(false);
 
-  // Auto-load and expand transcript when the unit finishes — no button required.
   useEffect(() => {
     if (unit.status !== 'done' || autoLoadedRef.current) return;
     autoLoadedRef.current = true;
@@ -91,43 +83,56 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
     }
   }
 
+  const stageBadge = STAGE_STYLE[unit.stage] ?? { bg: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.5)' };
+  const statusColor = UNIT_STATUS_COLOR[unit.status] ?? 'rgba(230,237,243,0.4)';
+
   return (
-    <li className="rounded border border-gray-200 p-2" data-testid="work-unit" data-ord={unit.ord}>
+    <li
+      className="rounded-lg p-3"
+      style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+      data-testid="work-unit"
+      data-ord={unit.ord}
+    >
       <div className="flex items-center gap-2 text-sm">
-        <span className="w-6 text-center text-xs text-gray-400 shrink-0">#{unit.ord}</span>
-        <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${STAGE_STYLE[unit.stage] ?? 'bg-gray-100 text-gray-600'}`}>
+        <span className="w-6 text-center text-xs shrink-0 font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+          #{unit.ord}
+        </span>
+        <span
+          className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase font-mono"
+          style={{ background: stageBadge.bg, color: stageBadge.color }}
+        >
           {unit.stage}
         </span>
         {(() => {
           const sep = unit.description.indexOf(' — ');
           return sep === -1 ? (
-            <span className="flex-1 truncate text-xs text-gray-700">{unit.description}</span>
+            <span className="flex-1 truncate text-xs" style={{ color: 'rgba(230,237,243,0.7)' }}>{unit.description}</span>
           ) : (
             <span className="flex-1 min-w-0 flex items-baseline gap-1">
-              <span className="text-xs font-medium text-gray-800 shrink-0">
+              <span className="text-xs font-medium shrink-0" style={{ color: '#e6edf3' }}>
                 {unit.description.slice(0, sep)}
               </span>
-              <span className="truncate text-[10px] text-gray-400">
+              <span className="truncate text-[10px]" style={{ color: 'rgba(230,237,243,0.4)' }}>
                 {unit.description.slice(sep + 3)}
               </span>
             </span>
           );
         })()}
-        <span className={`text-[11px] font-medium ${UNIT_STATUS_STYLE[unit.status] ?? 'text-gray-500'}`}>
+        <span className="text-[11px] font-medium font-mono shrink-0" style={{ color: statusColor }}>
           {unit.status}
         </span>
       </div>
 
-      <div className="mt-1 pl-8 flex flex-col gap-0.5">
+      <div className="mt-1.5 pl-8 flex flex-col gap-0.5">
         {unit.assigned_cli && (
-          <p className="text-[11px] text-gray-500">
-            CLI: <span className="font-mono">{unit.assigned_cli}</span>
+          <p className="text-[11px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+            cli: <span style={{ color: 'rgba(230,237,243,0.65)' }}>{unit.assigned_cli}</span>
           </p>
         )}
         <RoutingProvenance routing={unit.routing} />
         {unit.denial_reason && (
-          <p className="text-[11px] text-red-600" data-testid="unit-denial-reason">
-            Denied: {unit.denial_reason}
+          <p className="text-[11px] font-mono" style={{ color: '#f85149' }} data-testid="unit-denial-reason">
+            denied: {unit.denial_reason}
           </p>
         )}
 
@@ -136,7 +141,8 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
             type="button"
             data-testid="unit-transcript-toggle"
             onClick={() => void toggleTranscript()}
-            className="text-[11px] text-blue-600 hover:underline"
+            className="text-[11px] hover:underline font-mono"
+            style={{ color: '#79c0ff' }}
           >
             {showTranscript ? 'Hide transcript' : 'View transcript'}
           </button>
@@ -146,7 +152,8 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
               data-testid="unit-approve"
               onClick={() => void approve()}
               disabled={approving}
-              className="rounded bg-green-600 px-2 py-0.5 text-[11px] text-white hover:bg-green-700 disabled:opacity-50"
+              className="rounded px-2 py-0.5 text-[11px] font-semibold disabled:opacity-50"
+              style={{ background: '#3fb950', color: '#0d1117' }}
             >
               Approve this unit
             </button>
@@ -156,7 +163,8 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
         {showTranscript && (
           <pre
             data-testid="unit-transcript"
-            className="mt-1 max-h-96 overflow-auto rounded bg-gray-900 p-2 text-[10px] leading-tight text-gray-100 whitespace-pre-wrap"
+            className="mt-1 max-h-96 overflow-auto rounded-lg p-2 text-[10px] leading-tight whitespace-pre-wrap font-mono"
+            style={{ background: '#0d1117', color: '#e6edf3' }}
           >
             {loadingTranscript ? 'Loading…' : transcript}
           </pre>
