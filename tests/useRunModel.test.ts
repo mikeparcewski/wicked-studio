@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, test } from 'vitest';
 import { mergeRunModel, burnSummary } from '../src/hooks/useRunModel.js';
 import type { CoreEvent } from '../src/api/types.js';
-import { makeView, makeUnit } from './factories.js';
+import { makeView, makeUnit, makeUnitPlannedEvent } from './factories.js';
 
 /**
  * The hydrate + append contract (DES-STUDIO-COCKPIT-001 §1) and the rework math (T-D8).
@@ -252,6 +252,54 @@ describe('useRunModel — burnSummary (T-D8 rework math)', () => {
     const b = burnSummary(mergeRunModel(view, []));
     expect(b.noAdapterClis).toEqual(['claude-mini']);
     expect(b.pendingUsageClis).toEqual([]);
+  });
+});
+
+describe('role/gate/hasValidatorPin hydration', () => {
+  test('snapshot copies role, gate, hasValidatorPin from WorkUnit', () => {
+    const snap = makeView({}, [
+      makeUnit({ role: 'creator', gate: 'human_confirm', has_validator_pin: true }),
+    ]);
+    const m = mergeRunModel(snap, []);
+    expect(m.units[0]?.role).toBe('creator');
+    expect(m.units[0]?.gate).toBe('human_confirm');
+    expect(m.units[0]?.hasValidatorPin).toBe(true);
+    expect(m.units[0]?.executorType).toBe('agent'); // no tool_cmd
+  });
+
+  test('snapshot with tool_cmd sets executorType to tool', () => {
+    const snap = makeView({}, [makeUnit({ tool_cmd: ['cargo', 'test'] })]);
+    const m = mergeRunModel(snap, []);
+    expect(m.units[0]?.executorType).toBe('tool');
+  });
+
+  test('unitPlanned event merges role and gate onto event-only ord', () => {
+    const snap = makeView({}, []); // no units in snapshot
+    const ev = makeUnitPlannedEvent({ ord: 1, role: 'evaluator', gate: 'human_confirm' });
+    const m = mergeRunModel(snap, [ev as unknown as CoreEvent]);
+    expect(m.units[0]?.role).toBe('evaluator');
+    expect(m.units[0]?.gate).toBe('human_confirm');
+    expect(m.units[0]?.resolved).toBe(false); // event-only ord, not in snapshot
+  });
+
+  test('blankUnit defaults for new fields', () => {
+    const snap = makeView({}, []);
+    const ev: CoreEvent = {
+      type: 'unitDispatched', session: 'run-1', ord: 99, attempt: 0,
+    };
+    const m = mergeRunModel(snap, [ev]);
+    expect(m.units[0]?.role).toBeNull();
+    expect(m.units[0]?.gate).toBeNull();
+    expect(m.units[0]?.hasValidatorPin).toBe(false);
+    expect(m.units[0]?.executorType).toBeNull();
+  });
+
+  test('unitPlanned event on snapshot ord merges role without overwriting assignedCli', () => {
+    const snap = makeView({}, [makeUnit({ ord: 1, assigned_cli: 'claude' })]);
+    const ev = makeUnitPlannedEvent({ ord: 1, role: 'creator' });
+    const m = mergeRunModel(snap, [ev as unknown as CoreEvent]);
+    expect(m.units[0]?.assignedCli).toBe('claude'); // snapshot wins
+    expect(m.units[0]?.role).toBe('creator');       // event supplements
   });
 });
 

@@ -76,6 +76,12 @@ export interface WorkUnit {
   skill_ref?: string | null;
   /** The command this unit runs directly (Tool-executor phases). Absent for Agent units. */
   tool_cmd?: string[] | null;
+  /** Evaluator≠creator role. Present on def-driven units; absent on legacy/free-text. */
+  role?: PhaseRole;
+  /** Gate policy for this phase. Present on def-driven units; absent on legacy/free-text. */
+  gate?: GateSpec | string;
+  /** True when a pinned deterministic validator is attached to this unit. */
+  has_validator_pin?: boolean;
 }
 
 /** A run plus its ordered units (`SessionView`) — the shape `GET /runs` returns. */
@@ -167,6 +173,24 @@ export interface CoreEvent {
   denialReason?: string | null;
   /** `gateEvaluated`: the final deny-dominant decision over all layers (mirrors `gateDecided.allow`). */
   combined?: boolean;
+  // sessionStarted enrichment fields
+  workflow_id?: string | null;
+  cli_count?: number;
+  governed?: boolean;
+  entity_mode?: string;
+  // unitPlanned enrichment fields
+  stage?: string;
+  role?: string;
+  gate?: string;
+  skill_ref?: string | null;
+  has_validator_pin?: boolean;
+  executor_type?: string;
+  // unitDistributed enrichment fields
+  routing_method?: string;
+  agreement_pct?: number | null;
+  returned?: number | null;
+  dissent?: number | null;
+  degraded_reason?: string | null;
   [k: string]: unknown;
 }
 
@@ -222,6 +246,44 @@ export interface GateEvaluatedEvent {
   evaluatorPass: boolean | null;
   denialReason: string | null;
   combined: boolean;
+}
+
+/** Foundation wave: session started with enriched context. */
+export interface SessionStartedEvent {
+  type: 'sessionStarted';
+  session: string;
+  problem: string;
+  workflow_id: string | null;
+  cli_count: number;
+  governed: boolean;
+  entity_mode: 'shared' | 'isolated';
+}
+
+/** Foundation wave: a unit was planned with full phase metadata. */
+export interface UnitPlannedEvent {
+  type: 'unitPlanned';
+  session: string;
+  ord: number;
+  description: string;
+  stage: StageKind;
+  role: PhaseRole;
+  gate: 'auto' | 'human_confirm' | 'human_confirm_if';
+  skill_ref: string | null;
+  has_validator_pin: boolean;
+  executor_type: 'agent' | 'tool';
+}
+
+/** Foundation wave: a unit was distributed with full routing detail. */
+export interface UnitDistributedEvent {
+  type: 'unitDistributed';
+  session: string;
+  ord: number;
+  cli: string;
+  routing_method: 'council' | 'degraded' | 'evaluator_distinct' | 'tool';
+  agreement_pct: number | null;
+  returned: number | null;
+  dissent: number | null;
+  degraded_reason: string | null;
 }
 
 // ── Governance types (crew#40/42/43) ───────────────────────────────────────────

@@ -1,4 +1,4 @@
-import type { AgentSession, SessionView, WorkUnit } from '../src/api/types.js';
+import type { AgentSession, SessionView, UnitPlannedEvent, WorkUnit } from '../src/api/types.js';
 
 export function makeSession(overrides: Partial<AgentSession> = {}): AgentSession {
   return {
@@ -41,4 +41,22 @@ export function makeUnit(overrides: Partial<WorkUnit> = {}): WorkUnit {
 
 export function makeView(session: Partial<AgentSession> = {}, units: WorkUnit[] = []): SessionView {
   return { session: makeSession(session), units };
+}
+
+export function makeUnitPlannedEvent(
+  overrides: Partial<UnitPlannedEvent> = {}
+): UnitPlannedEvent {
+  return {
+    type: 'unitPlanned',
+    session: 'run-1',
+    ord: 0,
+    description: 'do something',
+    stage: 'build',
+    role: 'neutral',
+    gate: 'auto',
+    skill_ref: null,
+    has_validator_pin: false,
+    executor_type: 'agent',
+    ...overrides,
+  };
 }

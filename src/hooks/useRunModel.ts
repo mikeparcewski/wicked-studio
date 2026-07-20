@@ -3,6 +3,8 @@ import { api } from '../api/client.js';
 import type {
   AgentSession,
   CoreEvent,
+  GateSpec,
+  PhaseRole,
   RoutingInfo,
   SessionView,
   StageKind,
@@ -81,6 +83,14 @@ export interface UnitModel {
   denialReason: string | null;
   skillRef: string | null;
   phaseStatus: string | null;
+  /** Evaluator≠creator role from the phase def (null for free-text/legacy units). */
+  role: PhaseRole | null;
+  /** Gate policy from the phase def (null for free-text/legacy units). */
+  gate: GateSpec | string | null;
+  /** True when a pinned deterministic validator is attached. */
+  hasValidatorPin: boolean;
+  /** Executor type: 'agent' for council-routed, 'tool' for direct command. Null until resolved. */
+  executorType: 'agent' | 'tool' | null;
   /** Dispatch attempts seen via `unitDispatched`, ascending. `attempt>0` = rework. */
   attempts: number[];
   /** Token/cost usage per attempt (from `cliUsage`). */
@@ -119,6 +129,10 @@ function blankUnit(ord: number): UnitModel {
     denialReason: null,
     skillRef: null,
     phaseStatus: null,
+    role: null,
+    gate: null,
+    hasValidatorPin: false,
+    executorType: null,
     attempts: [],
     usage: [],
     filesRead: [],
@@ -161,6 +175,10 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       denialReason: u.denial_reason,
       skillRef: u.skill_ref ?? null,
       phaseStatus: u.phase_status,
+      role: u.role ?? null,
+      gate: u.gate ?? null,
+      hasValidatorPin: u.has_validator_pin ?? false,
+      executorType: u.tool_cmd != null ? 'tool' : 'agent',
       attempts: [],
       usage: [],
       filesRead: [],
@@ -191,6 +209,28 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
     switch (ev.type) {
       case 'sessionStarted':
         session.status = 'planning';
+        break;
+      case 'unitPlanned':
+        if (ord !== undefined) {
+          const u = ensureUnit(ord);
+          u.description = typeof ev.description === 'string' ? ev.description : u.description;
+          if (!u.resolved) {
+            // Unit not yet in snapshot — populate all phase metadata from the event.
+            if (typeof ev.stage === 'string') u.stage = ev.stage as StageKind;
+            if (typeof ev.role === 'string') u.role = ev.role as PhaseRole;
+            if (typeof ev.gate === 'string') u.gate = ev.gate;
+            u.hasValidatorPin = ev.has_validator_pin === true;
+            if (typeof ev.executor_type === 'string') u.executorType = ev.executor_type as 'agent' | 'tool';
+          } else {
+            // Unit is from snapshot — only supplement fields still at their null/false default
+            // so the event never clobbers authoritative snapshot values.
+            if (u.role === null && typeof ev.role === 'string') u.role = ev.role as PhaseRole;
+            if (u.gate === null && typeof ev.gate === 'string') u.gate = ev.gate;
+            if (!u.hasValidatorPin && ev.has_validator_pin === true) u.hasValidatorPin = true;
+            if (u.executorType === null && typeof ev.executor_type === 'string') u.executorType = ev.executor_type as 'agent' | 'tool';
+          }
+          if (!u.skillRef && typeof ev.skill_ref === 'string') u.skillRef = ev.skill_ref;
+        }
         break;
       case 'unitDistributed':
         if (ord !== undefined) {
