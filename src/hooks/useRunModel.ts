@@ -99,6 +99,17 @@ export interface UnitModel {
   filesRead: string[];
   /** Gate evaluations for this unit (from `gateEvaluated`), in arrival order. */
   gateEvals: GateEvalRecord[];
+  /** P1: worker failure records for this unit (from `stepFailed`), in arrival order. */
+  stepErrors: StepErrorRecord[];
+  /** P1: number of crash-recovery redrives observed for this unit (from `crashRecoveryRedrive`). */
+  crashRedrives: number;
+}
+
+/** A recorded worker failure for one unit attempt (from `stepFailed`). */
+export interface StepErrorRecord {
+  attempt: number;
+  detail: string;
+  failureKind: string;
 }
 
 /** The current awaiting-human gate (prompt is `null` on a late-join with no live event). */
@@ -107,11 +118,22 @@ export interface PendingGate {
   prompt: string | null;
 }
 
+/** A recorded ACP fallback event for this session (from `acpFallback`). */
+export interface AcpFallbackRecord {
+  cliKey: string;
+  reason: string;
+  fallbackKind: string;
+}
+
 /** The merged, panel-ready run model. */
 export interface RunModel {
   session: AgentSession;
   units: UnitModel[];
   pendingGate: PendingGate | null;
+  /** P1: most-recent PTY terminal id from `workerSessionStarted` (null until first event). */
+  activeTerminalId: string | null;
+  /** P1: ACP fallback events for this session, in arrival order. */
+  acpFallbacks: AcpFallbackRecord[];
 }
 
 function blankUnit(ord: number): UnitModel {
@@ -137,6 +159,8 @@ function blankUnit(ord: number): UnitModel {
     usage: [],
     filesRead: [],
     gateEvals: [],
+    stepErrors: [],
+    crashRedrives: 0,
   };
 }
 
@@ -183,6 +207,8 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       usage: [],
       filesRead: [],
       gateEvals: [],
+      stepErrors: [],
+      crashRedrives: 0,
     });
   }
 
@@ -194,6 +220,10 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
     session.status === 'awaiting_human'
       ? { ord: snapshot.units[session.unit_ix]?.ord ?? session.unit_ix + 1, prompt: null }
       : null;
+  let activeTerminalId: string | null = null;
+  const acpFallbacks: AcpFallbackRecord[] = [];
+  // Dedup trackers for replay-safe accumulators (matches gateEvaluated pattern).
+  const redrivedAttempts = new Map<number, Set<number>>(); // ord → Set<attempt>
 
   const ensureUnit = (ord: number): UnitModel => {
     let u = units.get(ord);
@@ -335,13 +365,64 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
           if (!u.gateEvals.some((g) => gateEvalKey(g) === key)) u.gateEvals.push(rec);
         }
         break;
+      // ── P1 observability events ────────────────────────────────────────────
+      case 'stepFailed':
+        if (
+          ord !== undefined &&
+          typeof ev.attempt === 'number' &&
+          typeof ev.detail === 'string' &&
+          typeof ev.failureKind === 'string'
+        ) {
+          const u = ensureUnit(ord);
+          // Dedup: one failure record per attempt (replay-safe).
+          if (!u.stepErrors.some((e) => e.attempt === ev.attempt)) {
+            u.stepErrors.push({ attempt: ev.attempt, detail: ev.detail, failureKind: ev.failureKind });
+          }
+        }
+        break;
+      case 'crashRecoveryRedrive':
+        if (ord !== undefined && typeof ev.attempt === 'number') {
+          let seen = redrivedAttempts.get(ord);
+          if (!seen) {
+            seen = new Set();
+            redrivedAttempts.set(ord, seen);
+          }
+          if (!seen.has(ev.attempt)) {
+            seen.add(ev.attempt);
+            ensureUnit(ord).crashRedrives += 1;
+          }
+        }
+        break;
+      case 'workerSessionStarted':
+        if (typeof ev.terminalId === 'string') {
+          activeTerminalId = ev.terminalId;
+        }
+        break;
+      case 'acpSessionStarted':
+        // No persistent model state — the event is observability-only (log / badge).
+        break;
+      case 'acpFallback':
+        if (
+          typeof ev.cliKey === 'string' &&
+          typeof ev.reason === 'string' &&
+          typeof ev.fallbackKind === 'string'
+        ) {
+          // Dedup: replay-safe (same cliKey+reason+fallbackKind is one event).
+          const isDupFallback = acpFallbacks.some(
+            (f) => f.cliKey === ev.cliKey && f.reason === ev.reason && f.fallbackKind === ev.fallbackKind,
+          );
+          if (!isDupFallback) {
+            acpFallbacks.push({ cliKey: ev.cliKey, reason: ev.reason, fallbackKind: ev.fallbackKind });
+          }
+        }
+        break;
       default:
         break;
     }
   }
 
   const unitList = [...units.values()].sort((a, b) => a.ord - b.ord);
-  return { session, units: unitList, pendingGate };
+  return { session, units: unitList, pendingGate, activeTerminalId, acpFallbacks };
 }
 
 /** A per-CLI token/cost split for the Burn panel. */

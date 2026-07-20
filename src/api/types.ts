@@ -257,6 +257,51 @@ export interface SessionStartedEvent {
   entity_mode: 'shared' | 'isolated';
 }
 
+// ── P1 observability events ─────────────────────────────────────────────────
+
+/** P1 — a worker failure halted this unit; `detail` is a bounded excerpt of raw output. */
+export interface StepFailedEvent {
+  type: 'stepFailed';
+  session: string;
+  ord: number;
+  attempt: number;
+  detail: string;
+  failureKind: string;
+}
+
+/** P1 — the engine restarted and is re-dispatching this unit; `attempt` is the NEW attempt number. */
+export interface CrashRecoveryRedriveEvent {
+  type: 'crashRecoveryRedrive';
+  session: string;
+  ord: number;
+  attempt: number;
+}
+
+/** P1 — a PTY worker session opened for the run; `terminalId` matches the terminal event stream. */
+export interface WorkerSessionStartedEvent {
+  type: 'workerSessionStarted';
+  session: string;
+  terminalId: string;
+  cliKey: string;
+}
+
+/** P1 — an ACP persistent session opened for a CLI; `acpSessionId` is the protocol session handle. */
+export interface AcpSessionStartedEvent {
+  type: 'acpSessionStarted';
+  session: string;
+  cliKey: string;
+  acpSessionId: string;
+}
+
+/** P1 — ACP unavailable or failed for a CLI; the run continues with single-shot fallback. */
+export interface AcpFallbackEvent {
+  type: 'acpFallback';
+  session: string;
+  cliKey: string;
+  reason: string;
+  fallbackKind: string;
+}
+
 /** Foundation wave: a unit was planned with full phase metadata. */
 export interface UnitPlannedEvent {
   type: 'unitPlanned';
