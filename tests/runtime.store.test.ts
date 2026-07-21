@@ -42,6 +42,20 @@ describe('runtime store (§11.4 — live output + per-run event log)', () => {
     expect(Object.keys(useRuntimeStore.getState().outputs)).toHaveLength(0);
   });
 
+  it('summarizes stepFailed using the event detail field', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'stepFailed', session: 'run-1', ord: 0, attempt: 2, detail: 'timeout', failureKind: 'timeout' } as CoreEvent);
+    const log = useRuntimeStore.getState().logs['run-1'] ?? [];
+    expect(log[0]).toMatchObject({ type: 'stepFailed', detail: 'timeout', attempt: 2 });
+  });
+
+  it('summarizes crashRecoveryRedrive with attempt number', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'crashRecoveryRedrive', session: 'run-1', ord: 0, attempt: 3 } as CoreEvent);
+    const log = useRuntimeStore.getState().logs['run-1'] ?? [];
+    expect(log[0]).toMatchObject({ type: 'crashRecoveryRedrive', detail: 'attempt 3', attempt: 3 });
+  });
+
   it('clear() drops a run\'s output and log', () => {
     const ingest = useRuntimeStore.getState().ingest;
     ingest(delta('run-1', 0, 'x'));

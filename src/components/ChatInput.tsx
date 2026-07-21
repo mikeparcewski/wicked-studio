@@ -4,6 +4,7 @@ import type { EntityMode, LaunchRunBody, RepoEntry, RosterSeat, WorkflowDef } fr
 import { useGateStore } from '../store/gates.js';
 import { ContextPopover } from './ContextPopover.js';
 import type { ConfirmMode } from './ContextPopover.js';
+import type { RunMode } from './runMode.js';
 
 interface Props {
   /** If set, we're in "run selected" mode — steer if gated, otherwise placeholder. */
@@ -18,6 +19,11 @@ interface Props {
   embedded?: boolean;
   /** When set, forces this workflow id on every launch (overrides the popover selector). */
   workflowOverride?: string;
+  /**
+   * Active run mode (Ask / Balanced / Autonomous). When provided, overrides the
+   * confirmMode selection from the context popover with the mode-derived value.
+   */
+  mode?: RunMode;
 }
 
 function detectWorkflow(text: string): string | null {
@@ -62,7 +68,8 @@ function ActivePill({
   );
 }
 
-export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride }: Props): React.ReactElement {
+
+export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
 
   // ── Steer mode state ───────────────────────────────────────────────────────
@@ -218,8 +225,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     const seats = roster.filter((s) => selectedClis.has(s.key));
     if (seats.length > 0) body.clisJson = JSON.stringify(seats);
     body.entityMode = entityMode;
-    if (confirmMode === 'all') body.humanConfirm = 'all';
-    else if (confirmMode === 'before') body.humanConfirm = `before:${beforeOrd}`;
+    // Ask → gate all; Autonomous → no human gates (confirmMode selection ignored); Balanced/unset → popover applies.
+    if (mode === 'ask') {
+      body.humanConfirm = 'all';
+    } else if (mode !== 'autonomous') {
+      if (confirmMode === 'all') body.humanConfirm = 'all';
+      else if (confirmMode === 'before') body.humanConfirm = `before:${beforeOrd}`;
+    }
     const firstRepo = repoRefs[0];
     if (firstRepo) body.repoRef = firstRepo;
     const wf = workflowOverride?.trim() || workflow;

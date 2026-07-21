@@ -7,6 +7,9 @@ import { STATUS_STYLE } from './RunCard.js';
 import { SteeringGate } from './SteeringGate.js';
 import { ChatInput } from './ChatInput.js';
 import { Markdown } from './Markdown.js';
+import type { RunMode } from './runMode.js';
+import { MODE_LABELS } from './runMode.js';
+export type { RunMode } from './runMode.js';
 
 interface Props {
   view: SessionView | null;
@@ -69,6 +72,8 @@ const SYSTEM_EVENT_TYPES = new Set([
   'awaitingHuman', 'gateDecided', 'resumed', 'runCancelled',
 ]);
 
+const ACTION_EVENT_TYPES = new Set(['stepFailed', 'crashRecoveryRedrive']);
+
 function systemEventLabel(type: string, detail: string): string {
   switch (type) {
     case 'sessionStarted':   return 'Run started';
@@ -101,14 +106,135 @@ function StopIcon(): React.ReactElement {
   );
 }
 
+function StepFailedCard({
+  detail,
+  onStop,
+  canStop,
+}: {
+  detail: string;
+  onStop: () => void;
+  canStop: boolean;
+}): React.ReactElement {
+  return (
+    <div
+      className="self-start max-w-[85%] rounded-xl px-4 py-3 flex flex-col gap-2 font-mono text-xs"
+      style={{ background: 'rgba(248,81,73,0.07)', border: '1px solid rgba(248,81,73,0.25)', color: '#f85149' }}
+    >
+      <div className="flex items-center gap-2 font-semibold text-[11px] uppercase tracking-wide">
+        <span>⚠</span>
+        <span>Step failure</span>
+      </div>
+      {detail && (
+        <pre className="text-[11px] leading-relaxed whitespace-pre-wrap break-words m-0 overflow-hidden" style={{ color: 'rgba(230,237,243,0.6)', fontFamily: 'inherit' }}>
+          {detail.length > 200 ? `${detail.slice(0, 200)}…` : detail}
+        </pre>
+      )}
+      <div className="flex items-center gap-2 mt-1">
+        <button
+          type="button"
+          title="Reassign not yet available"
+          disabled
+          className="rounded px-3 py-1 text-[11px] font-semibold opacity-30 cursor-not-allowed"
+          style={{ background: 'rgba(230,237,243,0.08)', color: '#e6edf3' }}
+        >
+          Reassign
+        </button>
+        <button
+          type="button"
+          onClick={canStop ? onStop : undefined}
+          disabled={!canStop}
+          className="rounded px-3 py-1 text-[11px] font-semibold transition-opacity hover:opacity-100 opacity-80 disabled:opacity-30 disabled:cursor-not-allowed"
+          style={{ background: 'rgba(248,81,73,0.15)', color: '#f85149', border: '1px solid rgba(248,81,73,0.3)' }}
+        >
+          Stop run
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CrashRedriveCard({ attempt }: { attempt: number }): React.ReactElement {
+  return (
+    <div
+      className="self-start max-w-[85%] rounded-xl px-4 py-3 flex flex-col gap-1 font-mono text-xs"
+      style={{ background: 'rgba(255,218,25,0.06)', border: '1px solid rgba(255,218,25,0.2)', color: '#ffda19' }}
+    >
+      <div className="flex items-center gap-2 font-semibold text-[11px] uppercase tracking-wide">
+        <span>↺</span>
+        <span>Crash recovery — attempt {attempt}</span>
+      </div>
+      <p className="text-[11px]" style={{ color: 'rgba(230,237,243,0.5)' }}>
+        The engine restarted and is re-dispatching this unit automatically.
+      </p>
+    </div>
+  );
+}
+
+function ModePill({
+  mode,
+  onChange,
+}: {
+  mode: RunMode;
+  onChange: (m: RunMode) => void;
+}): React.ReactElement {
+  const modes: RunMode[] = ['ask', 'balanced', 'autonomous'];
+
+  function handleKey(e: React.KeyboardEvent, idx: number): void {
+    let next = idx;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      next = (idx + 1) % modes.length;
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      next = (idx - 1 + modes.length) % modes.length;
+    } else {
+      return;
+    }
+    e.preventDefault();
+    onChange(modes[next]!);
+    (e.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+  }
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Run mode"
+      className="flex items-center rounded-lg overflow-hidden shrink-0"
+      style={{ background: 'rgba(230,237,243,0.06)', border: '1px solid rgba(230,237,243,0.1)' }}
+    >
+      {modes.map((m, idx) => (
+        <button
+          key={m}
+          type="button"
+          role="radio"
+          aria-checked={mode === m}
+          tabIndex={mode === m ? 0 : -1}
+          onClick={() => onChange(m)}
+          onKeyDown={(e) => handleKey(e, idx)}
+          className="px-3 py-1 text-[11px] font-mono font-medium transition-colors"
+          style={
+            mode === m
+              ? { background: 'rgba(255,218,25,0.15)', color: '#ffda19' }
+              : { background: 'transparent', color: 'rgba(230,237,243,0.45)' }
+          }
+        >
+          {MODE_LABELS[m]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function RunChat({
   view,
+  mode,
+  onModeChange,
   onLaunched,
   onNavigateBack,
   onRefresh,
   onKill,
 }: {
   view: SessionView;
+  mode: RunMode;
+  onModeChange: (m: RunMode) => void;
   onLaunched: (runId: string) => void;
   onNavigateBack: () => void;
   onRefresh: () => void;
@@ -165,9 +291,14 @@ function RunChat({
 
   const style = STATUS_STYLE[session.status] ?? { label: session.status, className: '', color: 'rgba(230,237,243,0.5)' };
   const isTerminal = ['completed', 'cancelled', 'failed'].includes(session.status);
-  const filteredLog = log.filter((e) => SYSTEM_EVENT_TYPES.has(e.type));
+  // Keep action + system events interleaved in arrival order (log is seq-ordered).
+  const eventLog = log.filter((e) => SYSTEM_EVENT_TYPES.has(e.type) || ACTION_EVENT_TYPES.has(e.type));
   const dotColor = statusDotColor(session.status);
   const pulse = ['executing', 'distributing', 'planning', 'awaiting_human'].includes(session.status);
+
+  function stopRun(): void {
+    void onKill?.(session.id);
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -195,6 +326,7 @@ function RunChat({
           {session.problem}
         </p>
         <span className="text-xs font-medium shrink-0 font-mono" style={{ color: style.color }}>{style.label}</span>
+        <ModePill mode={mode} onChange={onModeChange} />
         {!isTerminal && onKill && (
           <button
             type="button"
@@ -363,17 +495,37 @@ function RunChat({
           );
         })}
 
-        {/* System event pills */}
-        {filteredLog.map((entry) => (
-          <div key={entry.seq} className="flex justify-center">
-            <span
-              className="text-xs rounded-full px-3 py-1 font-mono"
-              style={{ color: 'rgba(230,237,243,0.4)', background: '#161c26', border: '1px solid rgba(230,237,243,0.07)' }}
-            >
-              {systemEventLabel(entry.type, entry.detail)}
-            </span>
-          </div>
-        ))}
+        {/* Action cards + system event pills — rendered in arrival (seq) order */}
+        {eventLog.map((entry) => {
+          if (entry.type === 'stepFailed') {
+            return (
+              <div key={entry.seq} className="flex flex-col gap-2">
+                <StepFailedCard
+                  detail={entry.detail}
+                  onStop={stopRun}
+                  canStop={onKill !== undefined && !isTerminal}
+                />
+              </div>
+            );
+          }
+          if (entry.type === 'crashRecoveryRedrive') {
+            return (
+              <div key={entry.seq} className="flex flex-col gap-2">
+                <CrashRedriveCard attempt={entry.attempt ?? 1} />
+              </div>
+            );
+          }
+          return (
+            <div key={entry.seq} className="flex justify-center">
+              <span
+                className="text-xs rounded-full px-3 py-1 font-mono"
+                style={{ color: 'rgba(230,237,243,0.4)', background: '#161c26', border: '1px solid rgba(230,237,243,0.07)' }}
+              >
+                {systemEventLabel(entry.type, entry.detail)}
+              </span>
+            </div>
+          );
+        })}
 
         {/* Steering gate */}
         {session.status === 'awaiting_human' && (
@@ -392,13 +544,24 @@ function RunChat({
       <ChatInput
         runId={isTerminal ? null : session.id}
         runStatus={isTerminal ? null : session.status}
+        mode={mode}
         onLaunched={onLaunched}
       />
     </div>
   );
 }
 
-function NewRunView({ chatMode, onLaunched }: { chatMode: boolean; onLaunched: (id: string) => void }): React.ReactElement {
+function NewRunView({
+  chatMode,
+  mode,
+  onModeChange,
+  onLaunched,
+}: {
+  chatMode: boolean;
+  mode: RunMode;
+  onModeChange: (m: RunMode) => void;
+  onLaunched: (id: string) => void;
+}): React.ReactElement {
   const heading = chatMode
     ? 'What do you want to explore?'
     : 'What do you need built?';
@@ -417,18 +580,25 @@ function NewRunView({ chatMode, onLaunched }: { chatMode: boolean; onLaunched: (
             {sub}
           </p>
         </div>
-        <ChatInput embedded onLaunched={onLaunched} {...(chatMode ? { workflowOverride: 'chat' } : {})} />
+        <div className="flex justify-center">
+          <ModePill mode={mode} onChange={onModeChange} />
+        </div>
+        <ChatInput embedded mode={mode} onLaunched={onLaunched} {...(chatMode ? { workflowOverride: 'chat' } : {})} />
       </div>
     </div>
   );
 }
 
 export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefresh, onKill }: Props): React.ReactElement {
+  const [mode, setMode] = useState<RunMode>('balanced');
+
   if (view) {
     return (
       <RunChat
         key={view.session.id}
         view={view}
+        mode={mode}
+        onModeChange={setMode}
         onLaunched={onLaunched}
         onNavigateBack={onNavigateBack}
         onRefresh={onRefresh}
@@ -436,5 +606,12 @@ export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefres
       />
     );
   }
-  return <NewRunView chatMode={chatMode ?? false} onLaunched={onLaunched} />;
+  return (
+    <NewRunView
+      chatMode={chatMode ?? false}
+      mode={mode}
+      onModeChange={setMode}
+      onLaunched={onLaunched}
+    />
+  );
 }

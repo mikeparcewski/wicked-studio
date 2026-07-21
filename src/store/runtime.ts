@@ -12,6 +12,8 @@ export interface LoggedEvent {
   seq: number;
   type: string;
   ord?: number;
+  /** Attempt number — preserved from any event that carries an `attempt` field. */
+  attempt?: number;
   ts: number;
   /** A short human summary of the frame (cli won, description, prompt, message...). */
   detail: string;
@@ -49,6 +51,10 @@ function summarize(event: CoreEvent): string {
       return 'run failed';
     case 'sessionCompleted':
       return 'run completed';
+    case 'stepFailed':
+      return typeof event.detail === 'string' ? event.detail : 'step failed';
+    case 'crashRecoveryRedrive':
+      return typeof event.attempt === 'number' ? `attempt ${event.attempt}` : 'crash recovery';
     case 'error':
       return typeof event.message === 'string' ? `error: ${event.message}` : 'error';
     default:
@@ -125,6 +131,7 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       // Every other run-scoped frame -> the per-run event log.
       const entry: LoggedEvent = { seq, type: event.type, ts: Date.now(), detail: summarize(event) };
       if (typeof event.ord === 'number') entry.ord = event.ord;
+      if (typeof event.attempt === 'number') entry.attempt = event.attempt;
       const prevLog = s.logs[session] ?? [];
       const nextLog = [...prevLog, entry];
       if (nextLog.length > LOG_CAP) nextLog.splice(0, nextLog.length - LOG_CAP);
