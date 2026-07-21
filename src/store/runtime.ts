@@ -69,6 +69,11 @@ interface RuntimeStore {
   logs: Record<string, LoggedEvent[]>;
   /** Executor type per unit, keyed `<session>:<ord>` — populated from unitPlanned events. */
   executorTypes: Record<string, 'agent' | 'tool'>;
+  /**
+   * PTY terminal id per active worker, keyed `<session>:<cliKey>` — populated from
+   * workerSessionStarted events. Used to open an observer terminal on agent click.
+   */
+  terminalIds: Record<string, string>;
   /** Monotonic arrival counter across all frames. */
   seq: number;
   /** Fold one CoreEvent: append output deltas, log every other run-scoped frame. */
@@ -81,6 +86,7 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
   outputs: {},
   logs: {},
   executorTypes: {},
+  terminalIds: {},
   seq: 0,
 
   ingest: (event) => {
@@ -128,6 +134,19 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
         };
       }
 
+      // workerSessionStarted: record the terminalId for that CLI so the UI can attach a viewer.
+      if (
+        event.type === 'workerSessionStarted' &&
+        typeof event.terminalId === 'string' &&
+        typeof event.cliKey === 'string'
+      ) {
+        const tKey = `${session}:${event.cliKey as string}`;
+        return {
+          seq,
+          terminalIds: { ...s.terminalIds, [tKey]: event.terminalId as string },
+        };
+      }
+
       // Every other run-scoped frame -> the per-run event log.
       const entry: LoggedEvent = { seq, type: event.type, ts: Date.now(), detail: summarize(event) };
       if (typeof event.ord === 'number') entry.ord = event.ord;
@@ -149,8 +168,12 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       for (const key of Object.keys(executorTypes)) {
         if (key.startsWith(`${session}:`)) delete executorTypes[key];
       }
+      const terminalIds = { ...s.terminalIds };
+      for (const key of Object.keys(terminalIds)) {
+        if (key.startsWith(`${session}:`)) delete terminalIds[key];
+      }
       const logs = { ...s.logs };
       delete logs[session];
-      return { outputs, executorTypes, logs };
+      return { outputs, executorTypes, terminalIds, logs };
     }),
 }));

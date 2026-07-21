@@ -6,6 +6,7 @@ import { useRuntimeStore } from '../store/runtime.js';
 import { STATUS_STYLE } from './RunCard.js';
 import { SteeringGate } from './SteeringGate.js';
 import { ChatInput } from './ChatInput.js';
+import { AgentTerminal } from './AgentTerminal.js';
 import { Markdown } from './Markdown.js';
 import type { RunMode } from './runMode.js';
 import { MODE_LABELS } from './runMode.js';
@@ -246,7 +247,9 @@ function RunChat({
   const executorTypes = useRuntimeStore((s) => s.executorTypes);
   /** "all" broadcasts; any other value is a CLI key (set by clicking an agent card). */
   const [injectTarget, setInjectTarget] = useState<string>('all');
+  const terminalIds = useRuntimeStore((s) => s.terminalIds);
 
+  const [agentTerminal, setAgentTerminal] = useState<{ cliKey: string; terminalId: string } | null>(null);
   const [transcripts, setTranscripts] = useState<
     Record<number, { text: string | null; loading: boolean; visible: boolean }>
   >({});
@@ -406,20 +409,39 @@ function RunChat({
                 {/* Meta row: avatar + attribution + stage + governance (clickable to target inject when agent is assigned) */}
                 <div className="flex items-center gap-2 flex-wrap">
                   {unit.assigned_cli ? (
-                    <button
-                      type="button"
-                      onClick={() => setInjectTarget(unit.assigned_cli!)}
-                      title={`Target ${unit.assigned_cli}`}
-                      aria-label={`Send message to ${unit.assigned_cli} only`}
-                      className="flex items-center gap-2 rounded-lg p-0 pr-1 transition-opacity hover:opacity-80"
-                      style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
-                    >
-                      <CliAvatar cli={unit.assigned_cli} />
-                      <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }}>
-                        {unit.assigned_cli}
-                        <span style={{ color: 'rgba(230,237,243,0.3)' }}> · unit {unit.ord}</span>
-                      </span>
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setInjectTarget(unit.assigned_cli!)}
+                        title={`Target ${unit.assigned_cli}`}
+                        aria-label={`Send message to ${unit.assigned_cli} only`}
+                        className="flex items-center gap-2 rounded-lg p-0 pr-1 transition-opacity hover:opacity-80"
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+                      >
+                        <CliAvatar cli={unit.assigned_cli} />
+                        <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }}>
+                          {unit.assigned_cli}
+                          <span style={{ color: 'rgba(230,237,243,0.3)' }}> · unit {unit.ord}</span>
+                        </span>
+                      </button>
+                      {terminalIds[`${session.id}:${unit.assigned_cli}`] && (
+                        <button
+                          type="button"
+                          aria-pressed={agentTerminal?.cliKey === unit.assigned_cli}
+                          aria-label={agentTerminal?.cliKey === unit.assigned_cli ? `Close ${unit.assigned_cli} terminal` : `Open ${unit.assigned_cli} terminal`}
+                          title={agentTerminal?.cliKey === unit.assigned_cli ? `Close ${unit.assigned_cli} terminal` : `Open ${unit.assigned_cli} terminal`}
+                          onClick={() => {
+                            const cli = unit.assigned_cli!;
+                            const tid = terminalIds[`${session.id}:${cli}`];
+                            setAgentTerminal(agentTerminal?.cliKey === cli ? null : { cliKey: cli, terminalId: tid! });
+                          }}
+                          className="text-xs rounded px-1 py-0.5 transition-opacity hover:opacity-80"
+                          style={{ background: 'rgba(230,237,243,0.06)', border: 'none', cursor: 'pointer', color: 'rgba(230,237,243,0.55)', fontFamily: 'monospace' }}
+                        >
+                          ⌨
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className="w-7 h-7 rounded-full shrink-0" style={{ background: 'rgba(230,237,243,0.06)' }} />
@@ -559,6 +581,15 @@ function RunChat({
         <div ref={bottomRef} />
       </div>
 
+      {agentTerminal && (
+        <div className="px-4 pb-3 shrink-0">
+          <AgentTerminal
+            terminalId={agentTerminal.terminalId}
+            cliKey={agentTerminal.cliKey}
+            onClose={() => setAgentTerminal(null)}
+          />
+        </div>
+      )}
       <ChatInput
         runId={isTerminal ? null : session.id}
         runStatus={isTerminal ? null : session.status}

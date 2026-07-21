@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useRuntimeStore, outputKey } from '../src/store/runtime.js';
 import type { CoreEvent } from '../src/api/types.js';
 
-const reset = (): void => useRuntimeStore.setState({ outputs: {}, logs: {}, executorTypes: {}, seq: 0 });
+const reset = (): void => useRuntimeStore.setState({ outputs: {}, logs: {}, executorTypes: {}, terminalIds: {}, seq: 0 });
 const delta = (session: string, ord: number, chunk: string): CoreEvent =>
   ({ type: 'cliOutputDelta', session, ord, chunk } as CoreEvent);
 
@@ -79,5 +79,33 @@ describe('runtime store (§11.4 — live output + per-run event log)', () => {
     ingest({ type: 'unitPlanned', session: 'run-1', ord: 0, description: 'task', executor_type: 'agent' } as CoreEvent);
     useRuntimeStore.getState().clear('run-1');
     expect(useRuntimeStore.getState().executorTypes['run-1:0']).toBeUndefined();
+  });
+
+  it('records terminalId from workerSessionStarted events keyed <run>:<cliKey>', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'workerSessionStarted', session: 'run-1', cliKey: 'claude', terminalId: 'tid-abc' } as CoreEvent);
+    ingest({ type: 'workerSessionStarted', session: 'run-1', cliKey: 'codex', terminalId: 'tid-xyz' } as CoreEvent);
+    const { terminalIds } = useRuntimeStore.getState();
+    expect(terminalIds['run-1:claude']).toBe('tid-abc');
+    expect(terminalIds['run-1:codex']).toBe('tid-xyz');
+  });
+
+  it('ignores workerSessionStarted without required fields', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    // missing terminalId
+    ingest({ type: 'workerSessionStarted', session: 'run-1', cliKey: 'claude' } as CoreEvent);
+    // missing cliKey
+    ingest({ type: 'workerSessionStarted', session: 'run-1', terminalId: 'tid-abc' } as CoreEvent);
+    expect(Object.keys(useRuntimeStore.getState().terminalIds)).toHaveLength(0);
+  });
+
+  it('clear() drops terminalIds for the run, preserving other runs', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'workerSessionStarted', session: 'run-1', cliKey: 'claude', terminalId: 'tid-1' } as CoreEvent);
+    ingest({ type: 'workerSessionStarted', session: 'run-2', cliKey: 'claude', terminalId: 'tid-2' } as CoreEvent);
+    useRuntimeStore.getState().clear('run-1');
+    const { terminalIds } = useRuntimeStore.getState();
+    expect(terminalIds['run-1:claude']).toBeUndefined();
+    expect(terminalIds['run-2:claude']).toBe('tid-2');
   });
 });
