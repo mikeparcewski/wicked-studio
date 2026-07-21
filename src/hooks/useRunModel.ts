@@ -277,8 +277,9 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
   const acpFallbacks: AcpFallbackRecord[] = [];
   // P2 state
   let lastWorkerClose: { terminalId: string; reason: 'run_complete' | 'error' } | null = null;
-  // P2 decisions-full state
-  let selectedWorkflow: string | null = null;
+  // P2 decisions-full state — seed workflow from snapshot so late-join/refresh picks it up
+  // even when `workflowSelected` already fired before reconnect (no event-replay on late-join).
+  let selectedWorkflow: string | null = snapshot.session.workflow_id || null;
   // Dedup trackers for replay-safe accumulators (matches gateEvaluated pattern).
   const redrivedAttempts = new Map<number, Set<number>>(); // ord → Set<attempt>
   // P2 dedup: one reuse count per (ord, terminalId) pair; one injection record per recipient ord.
@@ -567,13 +568,20 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       case 'unitReworkAmended':
         // Last-write-wins per ord: an operator can amend at most once per gate pause, so
         // a WS reconnect replay just overwrites the same value (idempotent in practice).
-        if (ord !== undefined && typeof ev.amendment === 'string') {
-          ensureUnit(ord).reworkAmendment = ev.amendment;
+        // Also update description so the cockpit reflects the amended text immediately —
+        // without this the description stays stale until the next full snapshot re-hydration.
+        if (ord !== undefined && typeof ev.amendment === 'string' && typeof ev.updatedDescription === 'string') {
+          const u = ensureUnit(ord);
+          u.reworkAmendment = ev.amendment;
+          u.description = ev.updatedDescription;
         }
         break;
       case 'unitOutputCaptured':
-        // Last-write-wins per attempt: the event fires exactly once per apply_step_result call
-        // per attempt, so a WS reconnect replay safely overwrites with the same values.
+        // Payload guard: validates that all required fields are present before writing.
+        // `ev.attempt` is not used for per-attempt state (only one output slot per unit);
+        // it guards that the event is well-formed before we trust the other fields.
+        // Last-write-wins: the event fires once per apply_step_result call, so a WS
+        // reconnect replay safely overwrites with the same values.
         if (
           ord !== undefined &&
           typeof ev.attempt === 'number' &&

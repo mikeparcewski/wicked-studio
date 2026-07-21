@@ -407,7 +407,7 @@ export interface GovernanceContextArmedEvent {
 // ── P2 decisions-full observability events (wicked-core EVT-001/012/013) ────
 
 /** P2 — a structured workflow def was selected; fires once per session, after SessionStarted and before
- *  the first UnitPlanned. Not emitted for free-text runs. `unit_count` is the number of phases. */
+ *  the first UnitPlanned. Not emitted for free-text runs. `unitCount` is the number of phases. */
 export interface WorkflowSelectedEvent {
   type: 'workflowSelected';
   session: string;
