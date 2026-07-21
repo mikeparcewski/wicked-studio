@@ -6,6 +6,7 @@ import { useRuntimeStore } from '../store/runtime.js';
 import { STATUS_STYLE } from './RunCard.js';
 import { SteeringGate } from './SteeringGate.js';
 import { ChatInput } from './ChatInput.js';
+import { Markdown } from './Markdown.js';
 
 interface Props {
   view: SessionView | null;
@@ -344,12 +345,15 @@ function RunChat({
                         {tc?.visible ? '▾ Hide transcript' : '▸ View transcript'}
                       </button>
                       {tc?.visible && (
-                        <pre
-                          className="mt-2.5 max-h-96 overflow-auto rounded-xl p-4 text-xs leading-5 whitespace-pre-wrap font-mono"
-                          style={{ background: '#0d1117', color: '#e6edf3' }}
+                        <div
+                          className="mt-2.5 max-h-96 overflow-auto rounded-xl p-4"
+                          style={{ background: '#0d1117' }}
                         >
-                          {tc.loading ? 'Loading…' : tc.text}
-                        </pre>
+                          {tc.loading
+                            ? <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>Loading…</span>
+                            : <Markdown className="whitespace-pre-wrap">{tc.text ?? ''}</Markdown>
+                          }
+                        </div>
                       )}
                     </div>
                   )}
