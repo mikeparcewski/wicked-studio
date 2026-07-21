@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { CenterDashboard } from './components/CenterDashboard.js';
 import { ChatsPage } from './components/ChatsPage.js';
-import { Dashboard } from './components/Dashboard.js';
 import { CoverageView } from './components/CoverageView.js';
 import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
@@ -76,6 +76,17 @@ export function App(): React.ReactElement {
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestRuntime = useRuntimeStore((s) => s.ingest);
   const ingestRunEvent = useRunEventStore((s) => s.ingest);
+
+  // Dashboard gate callbacks — the CenterDashboard handles the API call + store
+  // clearing itself; these callbacks exist for any post-confirmation side-effects
+  // the parent needs (currently: refresh the run list to pick up status changes).
+  const onDashboardApproveGate = useCallback((): void => {
+    refresh();
+  }, [refresh]);
+
+  const onDashboardRejectGate = useCallback((): void => {
+    refresh();
+  }, [refresh]);
 
   const handleEvent = useCallback(
     (event: CoreEvent) => {
@@ -208,11 +219,16 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // Dashboard: no run selected and not launching — show stats home
+    // Manager dashboard: no run selected and not launching — cross-session control surface
     if (panel === 'runs' && !runId && !selected && !showLaunch) {
       return (
         <div className="flex-1 overflow-y-auto">
-          <Dashboard runs={runs} navigate={navigate} />
+          <CenterDashboard
+            runs={runs}
+            onSelectRun={selectRun}
+            onApproveGate={onDashboardApproveGate}
+            onRejectGate={onDashboardRejectGate}
+          />
         </div>
       );
     }

@@ -160,6 +160,17 @@ export const api = {
   closeTerminal: (id: string) =>
     apiFetch<{ status: string }>(`/terminals/${encodeURIComponent(id)}/close`, { method: 'POST' }),
 
+  /**
+   * Inject a message into one or all active agent sessions (POST /runs/:id/inject).
+   * `target` is either `"all"` (broadcast) or a session-specific discriminator.
+   * Used by the manager dashboard's send-to-agents panel (crew#73).
+   */
+  injectMessage: (runId: string, message: string, target: string) =>
+    apiFetch<{ status: string }>(`/runs/${encodeURIComponent(runId)}/inject`, {
+      method: 'POST',
+      body: JSON.stringify({ message, target }),
+    }),
+
   // ── Workflow viewer + domain-model browser (crew#44) ─────────────────────────
 
   /** All registered workflow definitions (built-ins + any loaded drop-ins). */
