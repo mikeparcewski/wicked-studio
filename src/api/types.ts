@@ -173,11 +173,20 @@ export interface CoreEvent {
   denialReason?: string | null;
   /** `gateEvaluated`: the final deny-dominant decision over all layers (mirrors `gateDecided.allow`). */
   combined?: boolean;
-  // sessionStarted enrichment fields
+  // sessionStarted enrichment fields (snake_case — serde wire names)
   workflow_id?: string | null;
   cli_count?: number;
   governed?: boolean;
   entity_mode?: string;
+  // workflowSelected (EVT-001) — camelCase per event_to_json
+  workflowId?: string;
+  unitCount?: number;
+  // unitReworkAmended (EVT-012)
+  amendment?: string;
+  updatedDescription?: string;
+  // unitOutputCaptured (EVT-013)
+  outputBytes?: number;
+  stepStatus?: 'ok' | 'failed' | 'cancelled';
   // unitPlanned enrichment fields
   stage?: string;
   skill_ref?: string | null;
@@ -393,6 +402,44 @@ export interface GovernanceContextArmedEvent {
   attempt: number;
   path: 'wrapped_cli' | 'acp';
   dbPath: string;
+}
+
+// ── P2 decisions-full observability events (wicked-core EVT-001/012/013) ────
+
+/** P2 — a structured workflow def was selected; fires once per session, after SessionStarted and before
+ *  the first UnitPlanned. Not emitted for free-text runs. `unit_count` is the number of phases. */
+export interface WorkflowSelectedEvent {
+  type: 'workflowSelected';
+  session: string;
+  workflowId: string;
+  unitCount: number;
+}
+
+/** P2 — a human approved a gate with an amendment text that was injected into the unit's description
+ *  before re-dispatch. Fires after the amendment is persisted, before Resumed. Only emitted when
+ *  the amendment text is non-empty. The canonical record for the HITL paper trail. */
+export interface UnitReworkAmendedEvent {
+  type: 'unitReworkAmended';
+  session: string;
+  ord: number;
+  /** The raw amendment text supplied by the operator. */
+  amendment: string;
+  /** The unit's description after the amendment was injected. */
+  updatedDescription: string;
+}
+
+/** P2 — a worker's ApplyStepResult arrived and output is ready to be gated. Fires before GateDecided.
+ *  `outputBytes` is the byte length of the worker's output; `stepStatus` is "ok"/"failed"/"cancelled";
+ *  `governed` reflects whether the runner armed input governance for this unit. */
+export interface UnitOutputCapturedEvent {
+  type: 'unitOutputCaptured';
+  session: string;
+  ord: number;
+  attempt: number;
+  /** Byte length of the worker's raw output — distinguishes 0-byte from 8 MB truncated. */
+  outputBytes: number;
+  stepStatus: 'ok' | 'failed' | 'cancelled';
+  governed: boolean;
 }
 
 /** Foundation wave: a unit was planned with full phase metadata. */

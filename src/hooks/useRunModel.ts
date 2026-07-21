@@ -118,6 +118,13 @@ export interface UnitModel {
   toolExecutorCmd: string[] | null;
   /** P2: true iff governance was confirmed armed for this unit (from `governanceContextArmed`). */
   governanceArmed: boolean;
+  // ── P2 decisions-full fields (EVT-001/012/013) ──
+  /** P2: byte length of the last captured output for this unit (from `unitOutputCaptured`). Null until captured. */
+  outputBytes: number | null;
+  /** P2: whether the unit's output was governed (from `unitOutputCaptured`). */
+  outputGoverned: boolean;
+  /** P2: amendment text injected by the operator at a human gate (from `unitReworkAmended`). Null until amended. */
+  reworkAmendment: string | null;
 }
 
 /** A recorded worker failure for one unit attempt (from `stepFailed`). */
@@ -158,6 +165,8 @@ export interface RunModel {
   acpFallbacks: AcpFallbackRecord[];
   /** P2: most-recent PTY session close (from `workerSessionClosed`); null until first event. */
   lastWorkerClose: { terminalId: string; reason: 'run_complete' | 'error' } | null;
+  /** P2: workflow id from `workflowSelected`; null for free-text runs or before the event arrives. */
+  selectedWorkflow: string | null;
 }
 
 function blankUnit(ord: number): UnitModel {
@@ -192,6 +201,9 @@ function blankUnit(ord: number): UnitModel {
     gateEscalated: false,
     toolExecutorCmd: null,
     governanceArmed: false,
+    outputBytes: null,
+    outputGoverned: false,
+    reworkAmendment: null,
   };
 }
 
@@ -247,6 +259,9 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       gateEscalated: false,
       toolExecutorCmd: u.tool_cmd ?? null,
       governanceArmed: false,
+      outputBytes: null,
+      outputGoverned: false,
+      reworkAmendment: null,
     });
   }
 
@@ -262,6 +277,8 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
   const acpFallbacks: AcpFallbackRecord[] = [];
   // P2 state
   let lastWorkerClose: { terminalId: string; reason: 'run_complete' | 'error' } | null = null;
+  // P2 decisions-full state
+  let selectedWorkflow: string | null = null;
   // Dedup trackers for replay-safe accumulators (matches gateEvaluated pattern).
   const redrivedAttempts = new Map<number, Set<number>>(); // ord → Set<attempt>
   // P2 dedup: one reuse count per (ord, terminalId) pair; one injection record per recipient ord.
@@ -540,13 +557,49 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
         // Idempotent: governance armed is a one-way flag.
         if (ord !== undefined) ensureUnit(ord).governanceArmed = true;
         break;
+      // ── P2 decisions-full events (EVT-001/012/013) ─────────────────────────
+      case 'workflowSelected':
+        // Idempotent: set once — the workflow id is fixed for the session lifetime.
+        if (selectedWorkflow === null && typeof ev.workflowId === 'string') {
+          selectedWorkflow = ev.workflowId;
+        }
+        break;
+      case 'unitReworkAmended':
+        // Last-write-wins per ord: an operator can amend at most once per gate pause, so
+        // a WS reconnect replay just overwrites the same value (idempotent in practice).
+        if (ord !== undefined && typeof ev.amendment === 'string') {
+          ensureUnit(ord).reworkAmendment = ev.amendment;
+        }
+        break;
+      case 'unitOutputCaptured':
+        // Last-write-wins per attempt: the event fires exactly once per apply_step_result call
+        // per attempt, so a WS reconnect replay safely overwrites with the same values.
+        if (
+          ord !== undefined &&
+          typeof ev.attempt === 'number' &&
+          typeof ev.outputBytes === 'number' &&
+          typeof ev.governed === 'boolean'
+        ) {
+          const u = ensureUnit(ord);
+          u.outputBytes = ev.outputBytes;
+          u.outputGoverned = ev.governed;
+        }
+        break;
       default:
         break;
     }
   }
 
   const unitList = [...units.values()].sort((a, b) => a.ord - b.ord);
-  return { session, units: unitList, pendingGate, activeTerminalId, acpFallbacks, lastWorkerClose };
+  return {
+    session,
+    units: unitList,
+    pendingGate,
+    activeTerminalId,
+    acpFallbacks,
+    lastWorkerClose,
+    selectedWorkflow,
+  };
 }
 
 /** A per-CLI token/cost split for the Burn panel. */
