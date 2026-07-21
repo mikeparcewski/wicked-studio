@@ -647,6 +647,8 @@ export interface PhaseDef {
 export interface WorkflowDef {
   id: string;
   phases: PhaseDef[];
+  /** True for built-in workflows that have dedicated entry points and must not appear in the work-mode selector. */
+  is_system?: boolean;
 }
 
 /** Top-level requirements_graph.json artifact (schema 1.0.0). */
