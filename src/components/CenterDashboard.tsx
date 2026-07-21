@@ -21,6 +21,7 @@ interface Props {
   onSelectRun: (id: string) => void;
   onApproveGate: (runId: string, amend?: string) => void;
   onRejectGate: (runId: string) => void;
+  navigate: (path: string) => void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -721,6 +722,7 @@ export function CenterDashboard({
   onSelectRun,
   onApproveGate,
   onRejectGate,
+  navigate,
 }: Props): React.ReactElement {
   const byRun = useRunEventStore((s) => s.byRun);
   const gates = useGateStore((s) => s.gates);
@@ -858,6 +860,27 @@ export function CenterDashboard({
     [gates],
   );
 
+  // ── Chat sessions (workflow_id === 'chat' or unset legacy); newest-first, unsliced ──
+  const chatRuns = useMemo(
+    () =>
+      runs
+        .filter((v) => !v.session.workflow_id || v.session.workflow_id === 'chat')
+        .slice()
+        .reverse(),
+    [runs],
+  );
+
+  // ── Work runs — exclude chat sessions so the Runs panel doesn't overlap ────
+  const workRuns = useMemo(
+    () => runs.filter((v) => !!v.session.workflow_id && v.session.workflow_id !== 'chat'),
+    [runs],
+  );
+
+  const activeWorkRuns = useMemo(
+    () => workRuns.filter((v) => ACTIVE_STATUSES.has(v.session.status)),
+    [workRuns],
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -870,7 +893,7 @@ export function CenterDashboard({
         }
       `}</style>
 
-      <div style={{ maxWidth: '860px', margin: '0 auto', padding: '28px 32px' }}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '28px 32px' }}>
 
         {/* ── 1. Header + Status bar ──────────────────────────────────────────── */}
         <div
@@ -878,19 +901,17 @@ export function CenterDashboard({
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '28px',
+            marginBottom: '24px',
             gap: '16px',
             flexWrap: 'wrap',
           }}
         >
           <div>
-            <h1
-              style={{ fontSize: '20px', fontWeight: 600, color: '#e6edf3', margin: 0, ...mono }}
-            >
-              Manager dashboard
+            <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#e6edf3', margin: 0, ...mono }}>
+              wicked crew
             </h1>
             <p style={{ fontSize: '11px', color: 'rgba(230,237,243,0.38)', margin: '4px 0 0', ...mono }}>
-              wicked crew · cross-session control
+              cross-session control
             </p>
           </div>
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -909,81 +930,304 @@ export function CenterDashboard({
           </div>
         </div>
 
-        {/* ── 2. Filtered event feed ──────────────────────────────────────────── */}
-        <p style={{ ...sectionLabel, marginBottom: '10px' }}>Event feed</p>
-        <div
-          style={{
-            ...cardBase,
-            marginBottom: '28px',
-            padding: '14px',
-            maxHeight: '480px',
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
-          {/* Open gate action cards — always at top */}
-          {openGates.map((gate) => {
-            const v = runs.find((r) => r.session.id === gate.runId);
-            const lbl = v ? sessionLabel(v) : gate.runId.slice(0, 8);
-            return (
-              <GateActionCard
-                key={`gate-${gate.runId}-${gate.ord ?? 'x'}`}
-                runId={gate.runId}
-                ord={gate.ord}
-                prompt={gate.prompt}
-                sessionLbl={lbl}
-                onApprove={handleApprove}
-                onReject={handleReject}
-              />
-            );
-          })}
-
-          {/* Non-gate feed entries */}
-          {feedEntries.map((entry) => (
-            <FeedEventRow
-              key={entry.key}
-              type={entry.type}
-              sessionId={entry.sessionId}
-              sessionLbl={entry.sessionLbl}
-              // exactOptionalPropertyTypes: spread conditionally so undefined is never explicit
-              {...(entry.ord !== undefined ? { ord: entry.ord } : {})}
-              {...(entry.detail !== undefined ? { detail: entry.detail } : {})}
-            />
-          ))}
-
-          {/* Empty state */}
-          {openGates.length === 0 && feedEntries.length === 0 && (
-            <p
-              style={{
-                fontSize: '12px',
-                color: 'rgba(230,237,243,0.28)',
-                ...mono,
-                textAlign: 'center',
-                padding: '24px 0',
-              }}
-            >
-              {activeRuns.length === 0
-                ? 'No active sessions — start a run to see events here'
-                : 'Waiting for events…'}
-            </p>
-          )}
-        </div>
-
-        {/* ── 3. Progress per active session ─────────────────────────────────── */}
-        {activeRuns.length > 0 && (
-          <div style={{ marginBottom: '28px' }}>
-            <p style={{ ...sectionLabel, marginBottom: '10px' }}>Session progress</p>
+        {/* ── 2. Gate inbox — shown only when pending gates ───────────────────── */}
+        {openGates.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <p style={{ ...sectionLabel, marginBottom: '10px' }}>Gate inbox</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {activeRuns.map((v) => (
-                <ProgressRow key={v.session.id} view={v} onSelect={onSelectRun} />
-              ))}
+              {openGates.map((gate) => {
+                const v = runs.find((r) => r.session.id === gate.runId);
+                const lbl = v ? sessionLabel(v) : gate.runId.slice(0, 8);
+                return (
+                  <GateActionCard
+                    key={`gate-${gate.runId}-${gate.ord ?? 'x'}`}
+                    runId={gate.runId}
+                    ord={gate.ord}
+                    prompt={gate.prompt}
+                    sessionLbl={lbl}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* ── 4. Send-to-agents panel ─────────────────────────────────────────── */}
+        {/* ── 3. Three panels: Runs | Campaigns | Chats ───────────────────────── */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '2fr 1fr 1.5fr',
+            gap: '16px',
+            marginBottom: '28px',
+            alignItems: 'start',
+          }}
+        >
+
+          {/* ── Runs panel ── */}
+          <div style={{ ...cardBase, padding: '16px 20px' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '12px',
+              }}
+            >
+              <p style={sectionLabel}>Runs</p>
+              <button
+                type="button"
+                onClick={() => navigate('/runs/new')}
+                style={{
+                  background: '#ffda19',
+                  color: '#0d1117',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '4px 12px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  ...mono,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                Do Work
+              </button>
+            </div>
+
+            {workRuns.length === 0 ? (
+              <p style={{ fontSize: '11px', color: 'rgba(230,237,243,0.3)', ...mono, fontStyle: 'italic' }}>
+                No work sessions yet
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {[
+                  ...activeWorkRuns,
+                  ...workRuns.filter((v) => !ACTIVE_STATUSES.has(v.session.status)).slice(-3).reverse(),
+                ]
+                  .slice(0, 5)
+                  .map((v) => (
+                    <ProgressRow key={v.session.id} view={v} onSelect={onSelectRun} />
+                  ))}
+              </div>
+            )}
+
+            {workRuns.length > 5 && (
+              <button
+                type="button"
+                onClick={() => navigate('/work')}
+                style={{
+                  fontSize: '11px',
+                  color: '#79c0ff',
+                  ...mono,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px 0 0',
+                  display: 'block',
+                }}
+              >
+                view all →
+              </button>
+            )}
+          </div>
+
+          {/* ── Campaigns panel ── */}
+          <div style={{ ...cardBase, padding: '16px 20px' }}>
+            <p style={{ ...sectionLabel, marginBottom: '12px' }}>Campaigns</p>
+            <div
+              data-testid="campaign-dag-stub"
+              style={{
+                border: '1px dashed rgba(230,237,243,0.15)',
+                borderRadius: '8px',
+                padding: '12px',
+                background: '#161c26',
+              }}
+            >
+              <p
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: 'rgba(230,237,243,0.55)',
+                  ...mono,
+                  margin: '0 0 4px',
+                }}
+              >
+                Campaign DAG
+              </p>
+              <p
+                style={{
+                  fontSize: '10px',
+                  color: 'rgba(230,237,243,0.35)',
+                  ...mono,
+                  margin: 0,
+                  lineHeight: 1.5,
+                }}
+              >
+                Pending core&apos;s Campaign primitive + RunFinished events (§4.3).
+              </p>
+            </div>
+          </div>
+
+          {/* ── Chats panel ── */}
+          <div style={{ ...cardBase, padding: '16px 20px' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '12px',
+              }}
+            >
+              <p style={sectionLabel}>Chats</p>
+              <button
+                type="button"
+                onClick={() => navigate('/chat/new')}
+                style={{
+                  background: 'rgba(121,192,255,0.12)',
+                  color: '#79c0ff',
+                  border: '1px solid rgba(121,192,255,0.25)',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  ...mono,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                New Chat
+              </button>
+            </div>
+
+            {chatRuns.length === 0 ? (
+              <p style={{ fontSize: '11px', color: 'rgba(230,237,243,0.3)', ...mono, fontStyle: 'italic' }}>
+                No chats yet
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {chatRuns.slice(0, 4).map((v) => (
+                  <button
+                    key={v.session.id}
+                    type="button"
+                    onClick={() => onSelectRun(v.session.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 8px',
+                      background: 'transparent',
+                      border: '1px solid rgba(230,237,243,0.06)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      width: '100%',
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background = 'rgba(230,237,243,0.03)';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        background: ACTIVE_STATUSES.has(v.session.status)
+                          ? '#79c0ff'
+                          : v.session.status === 'completed'
+                          ? '#3fb950'
+                          : 'rgba(230,237,243,0.25)',
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: '#e6edf3',
+                        ...mono,
+                        flex: 1,
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {truncate(v.session.problem || v.session.id, 28)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {chatRuns.length > 4 && (
+              <button
+                type="button"
+                onClick={() => navigate('/chats')}
+                style={{
+                  fontSize: '11px',
+                  color: '#79c0ff',
+                  ...mono,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px 0 0',
+                  display: 'block',
+                }}
+              >
+                view all →
+              </button>
+            )}
+          </div>
+
+        </div>
+
+        {/* ── 4. Agent activity — compact feed, only when active sessions, no pending gates ── */}
+        {openGates.length === 0 && activeRuns.length > 0 && (
+          <div style={{ marginBottom: '28px' }}>
+            <p style={{ ...sectionLabel, marginBottom: '10px' }}>Agent activity</p>
+            <div
+              style={{
+                ...cardBase,
+                padding: '14px',
+                maxHeight: '220px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              {feedEntries.slice(0, 5).map((entry) => (
+                <FeedEventRow
+                  key={entry.key}
+                  type={entry.type}
+                  sessionId={entry.sessionId}
+                  sessionLbl={entry.sessionLbl}
+                  {...(entry.ord !== undefined ? { ord: entry.ord } : {})}
+                  {...(entry.detail !== undefined ? { detail: entry.detail } : {})}
+                />
+              ))}
+              {feedEntries.length === 0 && (
+                <p
+                  style={{
+                    fontSize: '12px',
+                    color: 'rgba(230,237,243,0.28)',
+                    ...mono,
+                    textAlign: 'center',
+                    padding: '12px 0',
+                  }}
+                >
+                  Waiting for events…
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── 5. Send-to-agents panel ─────────────────────────────────────────── */}
         <SendPanel activeRuns={activeRuns} />
 
       </div>

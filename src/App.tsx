@@ -219,7 +219,7 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // Manager dashboard: no run selected and not launching — cross-session control surface
+    // Home dashboard: no run selected and not launching — three-panel home view + manager controls
     if (panel === 'runs' && !runId && !selected && !showLaunch) {
       return (
         <div className="flex-1 overflow-y-auto">
@@ -228,6 +228,7 @@ export function App(): React.ReactElement {
             onSelectRun={selectRun}
             onApproveGate={onDashboardApproveGate}
             onRejectGate={onDashboardRejectGate}
+            navigate={navigate}
           />
         </div>
       );
