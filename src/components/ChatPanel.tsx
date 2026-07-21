@@ -371,7 +371,7 @@ function NewRunView({ chatMode, onLaunched }: { chatMode: boolean; onLaunched: (
             {sub}
           </p>
         </div>
-        <ChatInput embedded onLaunched={onLaunched} />
+        <ChatInput embedded onLaunched={onLaunched} {...(chatMode ? { workflowOverride: 'chat' } : {})} />
       </div>
     </div>
   );

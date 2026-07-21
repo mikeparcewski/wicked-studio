@@ -16,6 +16,8 @@ interface Props {
    * centered in the empty-state layout rather than docked to the bottom of the pane.
    */
   embedded?: boolean;
+  /** When set, forces this workflow id on every launch (overrides the popover selector). */
+  workflowOverride?: string;
 }
 
 function detectWorkflow(text: string): string | null {
@@ -60,7 +62,7 @@ function ActivePill({
   );
 }
 
-export function ChatInput({ runId, runStatus, onLaunched, embedded }: Props): React.ReactElement {
+export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
 
   // ── Steer mode state ───────────────────────────────────────────────────────
@@ -155,12 +157,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded }: Props): Re
 
   // ── Workflow signal detection ───────────────────────────────────────────────
   useEffect(() => {
-    if (!problem.trim() || workflow) {
+    if (!problem.trim() || workflow || workflowOverride) {
       setDetectedWorkflow(null);
       return;
     }
     setDetectedWorkflow(detectWorkflow(problem));
-  }, [problem, workflow]);
+  }, [problem, workflow, workflowOverride]);
 
   // ── Close popover on outside click ─────────────────────────────────────────
   useEffect(() => {
@@ -220,7 +222,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded }: Props): Re
     else if (confirmMode === 'before') body.humanConfirm = `before:${beforeOrd}`;
     const firstRepo = repoRefs[0];
     if (firstRepo) body.repoRef = firstRepo;
-    if (workflow) body.workflow = workflow;
+    const wf = workflowOverride?.trim() || workflow;
+    if (wf) body.workflow = wf;
 
     try {
       const { runId: newRunId } = await api.launchRun(body);
@@ -330,7 +333,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded }: Props): Re
   // ══════════════════════════════════════════════════════════════════════════
 
   const canSubmit = problem.trim().length > 0 && selectedClis.size > 0 && !submitting;
-  const showDetection = detectedWorkflow !== null && !workflowDismissed && !workflow;
+  const showDetection = detectedWorkflow !== null && !workflowDismissed && !workflow && !workflowOverride;
 
   // Determine whether CLIs differ from the defaults that loaded from the roster
   const defaultCliSet = new Set(
