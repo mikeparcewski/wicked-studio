@@ -692,7 +692,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {/* Planning latency hint */}
       {submitting && elapsedSecs >= 5 && (
         <p className="text-xs text-center font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
-          Planning in progress — council routing + plan decomposition takes 30–60 s. Don't re-submit.
+          Creating run… council distribution happens off-thread once launched.
         </p>
       )}
     </div>

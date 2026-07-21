@@ -23,8 +23,9 @@ const WORKFLOW_LABELS: Record<string, string> = {
  * executes it. Multi-phase (feature/bug/migration) workflows create one unit per
  * phase, each assigned to the winning CLI for that phase.
  *
- * Planning latency note: `launchRun` blocks the Rust actor for the entire planning
- * phase (~30-60 s). The elapsed timer is informational only; the run IS being created.
+ * Planning note: `launchRun` returns immediately once the Planning stub is created
+ * (~1 ms). Council distribution (CLI selection) happens off-thread; progress
+ * arrives via the WebSocket event stream (`/ws`) on the run detail page.
  */
 export function LaunchForm({ onLaunched, onCancel }: Props): React.ReactElement {
   const [problem, setProblem] = useState('');
@@ -336,7 +337,7 @@ export function LaunchForm({ onLaunched, onCancel }: Props): React.ReactElement 
 
       {submitting && elapsedSecs >= 5 && (
         <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-          Planning in progress — council routing + plan decomposition takes 30–60 s. Don't re-submit.
+          Creating run… council distribution happens off-thread once launched.
         </p>
       )}
     </div>
