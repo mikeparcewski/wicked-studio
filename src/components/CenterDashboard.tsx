@@ -1,11 +1,11 @@
 /**
- * CenterDashboard — the manager-persona home view (crew#73 / DES-STUDIO-MGRDASH-001).
+ * CenterDashboard — three-panel home view (crew#93 / DES-STUDIO-MGRDASH-001).
  *
- * Shown when no specific run or chat is selected. Provides:
- *   1. Status bar    — active session count, units in-flight, aggregate cost/tokens
- *   2. Event feed    — filtered cross-session stream (action-required + milestones only)
- *   3. Progress      — per-session unit ladder (click → open session)
- *   4. Send-to-agents — broadcast message input
+ * Shown when no specific run or chat is selected. Layout:
+ *   1. Status bar   — active session count, units in-flight, aggregate cost/tokens
+ *   2. Gate inbox   — visible only when pending gates exist
+ *   3. Three panels — Runs (work sessions) | Campaigns (§4.3 stub) | Chats
+ *   4. Agent activity — compact feed + broadcast send-to-agents (when active & no gates)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
