@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useRuntimeStore, outputKey } from '../src/store/runtime.js';
 import type { CoreEvent } from '../src/api/types.js';
 
-const reset = (): void => useRuntimeStore.setState({ outputs: {}, logs: {}, seq: 0 });
+const reset = (): void => useRuntimeStore.setState({ outputs: {}, logs: {}, executorTypes: {}, seq: 0 });
 const delta = (session: string, ord: number, chunk: string): CoreEvent =>
   ({ type: 'cliOutputDelta', session, ord, chunk } as CoreEvent);
 
@@ -49,5 +49,21 @@ describe('runtime store (§11.4 — live output + per-run event log)', () => {
     useRuntimeStore.getState().clear('run-1');
     expect(useRuntimeStore.getState().outputs[outputKey('run-1', 0)]).toBeUndefined();
     expect(useRuntimeStore.getState().logs['run-1']).toBeUndefined();
+  });
+
+  it('records executor_type from unitPlanned events', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'unitPlanned', session: 'run-1', ord: 0, description: 'task', executor_type: 'agent' } as CoreEvent);
+    ingest({ type: 'unitPlanned', session: 'run-1', ord: 1, description: 'cmd', executor_type: 'tool' } as CoreEvent);
+    const { executorTypes } = useRuntimeStore.getState();
+    expect(executorTypes['run-1:0']).toBe('agent');
+    expect(executorTypes['run-1:1']).toBe('tool');
+  });
+
+  it('clear() drops executorTypes for the run', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'unitPlanned', session: 'run-1', ord: 0, description: 'task', executor_type: 'agent' } as CoreEvent);
+    useRuntimeStore.getState().clear('run-1');
+    expect(useRuntimeStore.getState().executorTypes['run-1:0']).toBeUndefined();
   });
 });

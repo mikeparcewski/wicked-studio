@@ -116,6 +116,7 @@ function RunChat({
   const { session, units } = view;
   const gate = useGateStore((s) => s.gates[session.id]);
   const log = useRuntimeStore((s) => s.logs[session.id]) ?? [];
+  const executorTypes = useRuntimeStore((s) => s.executorTypes);
 
   const [transcripts, setTranscripts] = useState<
     Record<number, { text: string | null; loading: boolean; visible: boolean }>
@@ -313,12 +314,23 @@ function RunChat({
                       Rejected{unit.denial_reason ? `: ${unit.denial_reason}` : ''}
                     </div>
                   )}
-                  {unit.status === 'pending' && (
-                    <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
-                      <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(230,237,243,0.2)' }} />
-                      <span>Queued</span>
-                    </div>
-                  )}
+                  {unit.status === 'pending' && (() => {
+                    const isAgent = executorTypes[`${session.id}:${unit.ord}`] === 'agent';
+                    return isAgent ? (
+                      <div
+                        className="flex items-center gap-2 text-xs font-mono rounded-lg px-3 py-2"
+                        style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)', color: '#a78bfa' }}
+                      >
+                        <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#a78bfa' }} />
+                        <span>Council deliberating…</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(230,237,243,0.2)' }} />
+                        <span>Queued</span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Transcript toggle */}
                   {unit.status === 'done' && (

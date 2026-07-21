@@ -61,6 +61,8 @@ interface RuntimeStore {
   outputs: Record<string, string>;
   /** Per-run event log (excludes raw output deltas — those stream to `outputs`). */
   logs: Record<string, LoggedEvent[]>;
+  /** Executor type per unit, keyed `<session>:<ord>` — populated from unitPlanned events. */
+  executorTypes: Record<string, 'agent' | 'tool'>;
   /** Monotonic arrival counter across all frames. */
   seq: number;
   /** Fold one CoreEvent: append output deltas, log every other run-scoped frame. */
@@ -72,6 +74,7 @@ interface RuntimeStore {
 export const useRuntimeStore = create<RuntimeStore>((set) => ({
   outputs: {},
   logs: {},
+  executorTypes: {},
   seq: 0,
 
   ingest: (event) => {
@@ -98,6 +101,27 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       // Heartbeats would flood the log and carry no run detail.
       if (event.type === 'heartbeat') return { seq };
 
+      // unitPlanned: record executor type for council deliberation UI.
+      if (
+        event.type === 'unitPlanned' &&
+        typeof event.ord === 'number' &&
+        (event.executor_type === 'agent' || event.executor_type === 'tool')
+      ) {
+        const typeKey = `${session}:${event.ord}`;
+        return {
+          seq,
+          executorTypes: { ...s.executorTypes, [typeKey]: event.executor_type as 'agent' | 'tool' },
+          ...((): Pick<RuntimeStore, 'logs'> => {
+            const entry: LoggedEvent = { seq, type: event.type, ts: Date.now(), detail: summarize(event) };
+            entry.ord = event.ord as number;
+            const prevLog = s.logs[session] ?? [];
+            const nextLog = [...prevLog, entry];
+            if (nextLog.length > LOG_CAP) nextLog.splice(0, nextLog.length - LOG_CAP);
+            return { logs: { ...s.logs, [session]: nextLog } };
+          })(),
+        };
+      }
+
       // Every other run-scoped frame -> the per-run event log.
       const entry: LoggedEvent = { seq, type: event.type, ts: Date.now(), detail: summarize(event) };
       if (typeof event.ord === 'number') entry.ord = event.ord;
@@ -114,8 +138,12 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       for (const key of Object.keys(outputs)) {
         if (key.startsWith(`${session}:u`)) delete outputs[key];
       }
+      const executorTypes = { ...s.executorTypes };
+      for (const key of Object.keys(executorTypes)) {
+        if (key.startsWith(`${session}:`)) delete executorTypes[key];
+      }
       const logs = { ...s.logs };
       delete logs[session];
-      return { outputs, logs };
+      return { outputs, executorTypes, logs };
     }),
 }));
