@@ -568,12 +568,16 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       case 'unitReworkAmended':
         // Last-write-wins per ord: an operator can amend at most once per gate pause, so
         // a WS reconnect replay just overwrites the same value (idempotent in practice).
-        // Also update description so the cockpit reflects the amended text immediately —
-        // without this the description stays stale until the next full snapshot re-hydration.
-        if (ord !== undefined && typeof ev.amendment === 'string' && typeof ev.updatedDescription === 'string') {
+        // Guards are decoupled: reworkAmendment is written whenever ev.amendment is present
+        // (and ord is defined); description is only updated if ev.updatedDescription is also
+        // present, so this remains backward-compatible with older daemons that might not
+        // include that field.
+        if (ord !== undefined && typeof ev.amendment === 'string') {
           const u = ensureUnit(ord);
           u.reworkAmendment = ev.amendment;
-          u.description = ev.updatedDescription;
+          if (typeof ev.updatedDescription === 'string') {
+            u.description = ev.updatedDescription;
+          }
         }
         break;
       case 'unitOutputCaptured':

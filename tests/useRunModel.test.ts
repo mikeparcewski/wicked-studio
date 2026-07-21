@@ -396,3 +396,80 @@ describe('useRunModel — P2 observability events (EVT-003/004/007)', () => {
     expect(model.units[0]?.contextInjections).toEqual([]);
   });
 });
+
+describe('useRunModel — P2 decisions-full events (EVT-001/012/013)', () => {
+  test('selectedWorkflow is seeded from snapshot so late-join refresh gets the right value', () => {
+    const view = makeView({ workflow_id: 'wf-42' }, []);
+    const model = mergeRunModel(view, []);
+    expect(model.selectedWorkflow).toBe('wf-42');
+  });
+
+  test('selectedWorkflow is null for free-text runs (empty workflow_id)', () => {
+    const view = makeView({ workflow_id: '' }, []);
+    const model = mergeRunModel(view, []);
+    expect(model.selectedWorkflow).toBeNull();
+  });
+
+  test('workflowSelected event overwrites null but is idempotent once set', () => {
+    const view = makeView({ workflow_id: '' }, []);
+    const events: CoreEvent[] = [
+      { type: 'workflowSelected', session: 'run-1', workflowId: 'wf-99', unitCount: 3 },
+      { type: 'workflowSelected', session: 'run-1', workflowId: 'wf-other', unitCount: 3 },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.selectedWorkflow).toBe('wf-99'); // first one wins
+  });
+
+  test('unitReworkAmended sets reworkAmendment and description when updatedDescription is present', () => {
+    const view = makeView({}, [makeUnit({ ord: 0, description: 'original desc' })]);
+    const events: CoreEvent[] = [
+      {
+        type: 'unitReworkAmended',
+        session: 'run-1',
+        ord: 0,
+        amendment: 'operator note',
+        updatedDescription: 'original desc (operator amendment: operator note)',
+      },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.units[0]?.reworkAmendment).toBe('operator note');
+    expect(model.units[0]?.description).toBe('original desc (operator amendment: operator note)');
+  });
+
+  test('unitReworkAmended backward-compat: sets reworkAmendment even when updatedDescription is absent', () => {
+    const view = makeView({}, [makeUnit({ ord: 0, description: 'original desc' })]);
+    // Simulate an older daemon that emits unitReworkAmended without updatedDescription.
+    // CoreEvent.updatedDescription is optional so no type assertion is needed.
+    const events: CoreEvent[] = [
+      {
+        type: 'unitReworkAmended',
+        session: 'run-1',
+        ord: 0,
+        amendment: 'operator note',
+        // updatedDescription intentionally absent
+      },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.units[0]?.reworkAmendment).toBe('operator note');
+    // description must stay unchanged — not blanked out or corrupted
+    expect(model.units[0]?.description).toBe('original desc');
+  });
+
+  test('unitOutputCaptured populates outputBytes and outputGoverned', () => {
+    const view = makeView({}, [makeUnit({ ord: 0 })]);
+    const events: CoreEvent[] = [
+      {
+        type: 'unitOutputCaptured',
+        session: 'run-1',
+        ord: 0,
+        attempt: 1,
+        outputBytes: 4096,
+        stepStatus: 'ok',
+        governed: true,
+      },
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.units[0]?.outputBytes).toBe(4096);
+    expect(model.units[0]?.outputGoverned).toBe(true);
+  });
+});
