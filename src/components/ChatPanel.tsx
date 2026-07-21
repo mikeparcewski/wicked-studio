@@ -16,6 +16,34 @@ interface Props {
   onKill?: (runId: string) => void | Promise<void>;
 }
 
+// Per-CLI identity: consistent avatar colours across multi-agent runs
+const CLI_COLORS: Record<string, { bg: string; fg: string }> = {
+  claude:      { bg: 'rgba(139,92,246,0.25)',  fg: '#c4b5fd' },
+  codex:       { bg: 'rgba(59,130,246,0.25)',  fg: '#93c5fd' },
+  antigravity: { bg: 'rgba(34,197,94,0.2)',   fg: '#86efac' },
+  cursor:      { bg: 'rgba(20,184,166,0.2)',   fg: '#5eead4' },
+};
+const CLI_FALLBACK = { bg: 'rgba(230,237,243,0.1)', fg: 'rgba(230,237,243,0.55)' };
+
+function cliInitials(key: string): string {
+  const parts = key.split(/[-_]/);
+  if (parts.length > 1) return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
+  return key.slice(0, 2).toUpperCase();
+}
+
+function CliAvatar({ cli }: { cli: string }): React.ReactElement {
+  const { bg, fg } = CLI_COLORS[cli.toLowerCase()] ?? CLI_FALLBACK;
+  return (
+    <span
+      aria-hidden="true"
+      className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold font-mono select-none"
+      style={{ background: bg, color: fg }}
+    >
+      {cliInitials(cli)}
+    </span>
+  );
+}
+
 // Stage pill — wicked dark palette
 const STAGE_BADGE: Record<StageKind, { bg: string; color: string }> = {
   recon:   { bg: 'rgba(139,92,246,0.15)', color: '#a78bfa' },
@@ -239,24 +267,26 @@ function RunChat({
 
               {/* Agent response card */}
               <div className="self-start max-w-[85%] flex flex-col gap-2">
-                {/* Meta row */}
-                <div className="flex items-center gap-2 flex-wrap pl-1">
-                  {unit.assigned_cli && (
-                    <span
-                      className="rounded-full px-2.5 py-0.5 text-xs font-mono font-semibold"
-                      style={{ background: 'rgba(230,237,243,0.08)', color: 'rgba(230,237,243,0.7)' }}
-                    >
-                      {unit.assigned_cli}
-                    </span>
-                  )}
+                {/* Meta row: avatar + attribution + stage + governance */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {unit.assigned_cli
+                    ? <CliAvatar cli={unit.assigned_cli} />
+                    : <span className="w-7 h-7 rounded-full shrink-0" style={{ background: 'rgba(230,237,243,0.06)' }} />
+                  }
+                  <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }}>
+                    {unit.assigned_cli ?? 'agent'}
+                    <span style={{ color: 'rgba(230,237,243,0.3)' }}> · unit {unit.ord}</span>
+                  </span>
                   <span
-                    className="rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide font-mono"
+                    className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide font-mono"
                     style={{ background: stageBadge.bg, color: stageBadge.color }}
                   >
                     {unit.stage}
                   </span>
-                  <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>#{unit.ord}</span>
-                  <span className="text-sm truncate max-w-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }} title={unit.description}>
+                  {unit.has_validator_pin && (
+                    <span role="img" aria-label="Governance floor armed" style={{ color: '#ffda19', fontSize: '12px' }}>🔒</span>
+                  )}
+                  <span className="text-xs font-mono truncate max-w-xs" style={{ color: 'rgba(230,237,243,0.35)' }} title={unit.description}>
                     {unit.description}
                   </span>
                 </div>
