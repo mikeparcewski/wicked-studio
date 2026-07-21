@@ -71,7 +71,13 @@ export function SystemSettings(): React.ReactElement {
   }
 
   function saveDefaultClis(): void {
-    localStorage.setItem(CLI_DEFAULTS_KEY, JSON.stringify([...defaultClis]));
+    setError(null);
+    try {
+      localStorage.setItem(CLI_DEFAULTS_KEY, JSON.stringify([...defaultClis]));
+    } catch (e: unknown) {
+      setError(String(e));
+      return;
+    }
     setClisSaved(true);
     if (clisSavedTimerRef.current) clearTimeout(clisSavedTimerRef.current);
     clisSavedTimerRef.current = setTimeout(() => setClisSaved(false), 2500);

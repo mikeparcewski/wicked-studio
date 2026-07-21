@@ -27,6 +27,9 @@ function parse(pathname: string): Route {
   if (first === 'repo-detail' && second) {
     return { panel: 'repo-detail', runId: null, showLaunch: false, repoId: safeDecode(second), showRegisterRepo: false, chatMode: false };
   }
+  if (first === 'repo-detail') {
+    return { panel: 'repos', runId: null, showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false };
+  }
   if (first === 'repos' && second === 'new') {
     return { panel: 'repos', runId: null, showLaunch: false, repoId: null, showRegisterRepo: true, chatMode: false };
   }

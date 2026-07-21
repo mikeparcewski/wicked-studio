@@ -35,10 +35,9 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
       data-run-id={session.id}
       data-status={session.status}
       onClick={() => onSelect(session.id)}
-      className="w-full text-left px-3 py-2 rounded-md"
-      style={{ background: isActive ? 'rgba(0,0,0,0.35)' : 'transparent' }}
-      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'rgba(0,0,0,0.2)'; }}
-      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+      className={`w-full text-left px-3 py-2 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20 ${
+        isActive ? 'bg-black/35' : 'bg-transparent hover:bg-black/20 focus-visible:bg-black/20'
+      }`}
     >
       <div className="flex items-center gap-2">
         <span
