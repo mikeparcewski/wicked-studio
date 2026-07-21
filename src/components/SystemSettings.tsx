@@ -150,7 +150,10 @@ export function SystemSettings(): React.ReactElement {
             max={500}
             step={10}
             value={merged.graphNodeLimit}
-            onChange={(e) => patch('graphNodeLimit', Math.max(20, Math.min(500, Number(e.target.value))))}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (!Number.isNaN(n)) patch('graphNodeLimit', Math.max(20, Math.min(500, n)));
+            }}
             className="w-24 rounded px-2 py-1 text-sm text-right tabular-nums focus:outline-none"
             style={{ background: '#161c26', border: '1px solid rgba(230,237,243,0.12)', color: '#e6edf3' }}
           />

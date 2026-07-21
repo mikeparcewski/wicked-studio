@@ -256,7 +256,7 @@ export function App(): React.ReactElement {
         navigate={navigate}
       />
 
-      <div className="wk-crew-bg flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
         {renderCenter()}
       </div>
 
