@@ -717,6 +717,8 @@ function SendPanel({ activeRuns }: SendPanelProps): React.ReactElement {
 
 // ── CenterDashboard ───────────────────────────────────────────────────────────
 
+type SessionRange = 'last30' | 'last60' | 'all';
+
 export function CenterDashboard({
   runs,
   onSelectRun,
@@ -729,10 +731,21 @@ export function CenterDashboard({
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
 
-  // ── Derived: active sessions only ─────────────────────────────────────────
+  const [range, setRange] = useState<SessionRange>('last30');
+
+  // ── Range-filtered runs (positional — no timestamp on AgentSession) ────────
+  const filteredRuns = useMemo(() => {
+    if (range === 'all') return runs;
+    // runs is status-sorted (active first); slice(0, n) preserves active sessions
+    // and takes the n most-salient entries as a positional proxy for recency
+    const n = range === 'last30' ? 30 : 60;
+    return runs.slice(0, n);
+  }, [runs, range]);
+
+  // ── Derived: active sessions only (scoped to filteredRuns for consistency) ──
   const activeRuns = useMemo(
-    () => runs.filter((v) => ACTIVE_STATUSES.has(v.session.status)),
-    [runs],
+    () => filteredRuns.filter((v) => ACTIVE_STATUSES.has(v.session.status)),
+    [filteredRuns],
   );
 
   // ── Stats: aggregate cost/tokens from cliUsage events ────────────────────
@@ -765,11 +778,11 @@ export function CenterDashboard({
   // ── Units in-flight (distributed status) ──────────────────────────────────
   const unitsInFlight = useMemo(
     () =>
-      runs.reduce(
+      filteredRuns.reduce(
         (sum, v) => sum + v.units.filter((u) => u.status === 'distributed').length,
         0,
       ),
-    [runs],
+    [filteredRuns],
   );
 
   // ── Gate handlers (with steering store + gate-store sync) ─────────────────
@@ -863,17 +876,17 @@ export function CenterDashboard({
   // ── Chat sessions (workflow_id === 'chat' or unset legacy); newest-first, unsliced ──
   const chatRuns = useMemo(
     () =>
-      runs
+      filteredRuns
         .filter((v) => !v.session.workflow_id || v.session.workflow_id === 'chat')
         .slice()
         .reverse(),
-    [runs],
+    [filteredRuns],
   );
 
   // ── Work runs — exclude chat sessions so the Runs panel doesn't overlap ────
   const workRuns = useMemo(
-    () => runs.filter((v) => !!v.session.workflow_id && v.session.workflow_id !== 'chat'),
-    [runs],
+    () => filteredRuns.filter((v) => !!v.session.workflow_id && v.session.workflow_id !== 'chat'),
+    [filteredRuns],
   );
 
   const activeWorkRuns = useMemo(
@@ -908,13 +921,38 @@ export function CenterDashboard({
         >
           <div>
             <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#e6edf3', margin: 0, ...mono }}>
-              wicked crew
+              wicked-crew studio
             </h1>
             <p style={{ fontSize: '11px', color: 'rgba(230,237,243,0.38)', margin: '4px 0 0', ...mono }}>
               cross-session control
             </p>
           </div>
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* Range selector */}
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {(['last30', 'last60', 'all'] as SessionRange[]).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRange(r)}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: '5px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    ...mono,
+                    cursor: 'pointer',
+                    border: '1px solid',
+                    borderColor: range === r ? 'rgba(121,192,255,0.5)' : 'rgba(230,237,243,0.1)',
+                    background: range === r ? 'rgba(121,192,255,0.12)' : 'transparent',
+                    color: range === r ? '#79c0ff' : 'rgba(230,237,243,0.4)',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {r === 'last30' ? 'Last 30' : r === 'last60' ? 'Last 60' : 'All'}
+                </button>
+              ))}
+            </div>
             <Stat label="Active sessions" value={String(activeRuns.length)} color="#79c0ff" />
             <Stat label="Units in-flight" value={String(unitsInFlight)} color="#79c0ff" />
             <Stat

@@ -25,7 +25,7 @@ type AccordionId =
   | 'steering'
   | 'whatwhere'
   | 'assumptions'
-  | 'artifacts';
+  | 'files';
 
 const ACCORDIONS: { id: AccordionId; label: string }[] = [
   { id: 'whatwhere', label: 'What / Where' },
@@ -35,10 +35,11 @@ const ACCORDIONS: { id: AccordionId; label: string }[] = [
   { id: 'data', label: 'Data' },
   { id: 'steering', label: 'Steering' },
   { id: 'assumptions', label: 'Assumptions' },
-  { id: 'artifacts', label: 'Artifacts' },
+  { id: 'files', label: 'Files' },
 ];
 
-function ArtifactsPanel({ model }: { model: RunModel }): React.ReactElement {
+function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
+  // filesRead is populated from dataUsed events; field name is a misnomer — covers all tool_use paths
   const files = Array.from(
     new Set(model.units.flatMap((u) => u.filesRead))
   ).sort();
@@ -46,39 +47,49 @@ function ArtifactsPanel({ model }: { model: RunModel }): React.ReactElement {
   if (files.length === 0) {
     return (
       <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
-        No files referenced yet.
+        No files touched yet.
       </p>
     );
   }
 
   return (
-    <ul className="flex flex-col gap-1">
-      {files.map((f) => {
-        const parts = f.replace(/\\/g, '/').split('/');
-        const name = parts.pop() ?? f;
-        const dir = parts.length > 0 ? `${parts.join('/')}/` : '';
-        return (
-          <li key={f} title={f} className="flex items-start gap-1.5 min-w-0">
-            <span className="shrink-0 mt-0.5 text-[9px] font-mono" style={{ color: 'rgba(230,237,243,0.25)' }}>~</span>
-            <span className="min-w-0 leading-5 font-mono text-[10px] break-all">
-              {dir && <span style={{ color: 'rgba(230,237,243,0.3)' }}>{dir}</span>}
-              <span style={{ color: '#e6edf3' }}>{name}</span>
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+    <div>
+      <p className="text-[10px] font-mono mb-2" style={{ color: 'rgba(230,237,243,0.3)' }}>
+        {files.length} file{files.length !== 1 ? 's' : ''} touched
+      </p>
+      <ul className="flex flex-col gap-1">
+        {files.map((f) => {
+          const parts = f.replace(/\\/g, '/').split('/');
+          const name = parts.pop() ?? f;
+          const dir = parts.length > 0 ? `${parts.join('/')}/` : '';
+          return (
+            <li key={f} title={f} className="flex items-start gap-1.5 min-w-0">
+              <span className="shrink-0 mt-0.5 text-[9px] font-mono" style={{ color: 'rgba(230,237,243,0.25)' }}>~</span>
+              <span className="min-w-0 leading-5 font-mono text-[10px] break-all">
+                {dir && <span style={{ color: 'rgba(230,237,243,0.3)' }}>{dir}</span>}
+                <span style={{ color: '#e6edf3' }}>{name}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
 export function RightPanel({ view }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<AccordionId | null>('whatwhere');
+
   const [termOpen, setTermOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
 
   const { session } = view;
   const model = useRunModel(session.id, view);
+
+  const fileCount = model
+    ? new Set(model.units.flatMap((u) => u.filesRead)).size
+    : null;
 
   function toggleAccordion(id: AccordionId): void {
     setOpenAccordion((prev) => (prev === id ? null : id));
@@ -179,7 +190,17 @@ export function RightPanel({ view }: Props): React.ReactElement {
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               aria-expanded={openAccordion === id}
             >
-              <span className="text-xs font-medium font-mono">{label}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium font-mono">{label}</span>
+                {id === 'files' && fileCount !== null && fileCount > 0 && (
+                  <span
+                    className="text-[9px] font-mono px-1 py-0.5 rounded"
+                    style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff' }}
+                  >
+                    {fileCount}
+                  </span>
+                )}
+              </div>
               <span className="text-xs" style={{ color: 'rgba(230,237,243,0.3)' }}>
                 {openAccordion === id ? '▲' : '▼'}
               </span>
@@ -193,7 +214,7 @@ export function RightPanel({ view }: Props): React.ReactElement {
                 {id === 'steering' && <SteeringTimeline runId={model.session.id} />}
                 {id === 'whatwhere' && <WhatWhere model={model} />}
                 {id === 'assumptions' && <AssumptionsPanel model={model} />}
-                {id === 'artifacts' && <ArtifactsPanel model={model} />}
+                {id === 'files' && <FilesPanel model={model} />}
               </div>
             )}
             {openAccordion === id && !model && (

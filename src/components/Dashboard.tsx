@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry, RosterSeat, SessionView, WorkflowDef } from '../api/types.js';
 
+type SessionRange = 'last30' | 'last60' | 'all';
+
 interface Props {
   runs: SessionView[];
   navigate: (path: string) => void;
@@ -41,6 +43,7 @@ export function Dashboard({ runs, navigate }: Props): React.ReactElement {
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [roster, setRoster] = useState<RosterSeat[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
+  const [range, setRange] = useState<SessionRange>('last30');
 
   useEffect(() => {
     api.listRepos().then(({ repos: rs }) => setRepos(rs)).catch(() => {});
@@ -48,50 +51,59 @@ export function Dashboard({ runs, navigate }: Props): React.ReactElement {
     api.listWorkflows().then(({ workflows: ws }) => setWorkflows(ws)).catch(() => {});
   }, []);
 
+  // ── Session range filter ───────────────────────────────────────────────────
+  // runs is status-sorted (active first); slice(0, n) preserves active sessions
+  // and uses a positional proxy for recency (no timestamp on AgentSession).
+  const filteredRuns = range === 'last30'
+    ? runs.slice(0, 30)
+    : range === 'last60'
+    ? runs.slice(0, 60)
+    : runs;
+
   // ── Derived metrics ────────────────────────────────────────────────────────
 
-  const completedRuns = runs.filter((v) => v.session.status === 'completed');
-  const failedRuns = runs.filter((v) => v.session.status === 'failed');
-  const activeRuns = runs.filter((v) => ACTIVE_STATUSES.has(v.session.status));
+  const completedRuns = filteredRuns.filter((v) => v.session.status === 'completed');
+  const failedRuns = filteredRuns.filter((v) => v.session.status === 'failed');
+  const activeRuns = filteredRuns.filter((v) => ACTIVE_STATUSES.has(v.session.status));
 
   const successDivisor = completedRuns.length + failedRuns.length;
   const successRate =
     successDivisor > 0 ? Math.round((completedRuns.length / successDivisor) * 100) : 0;
 
-  const totalUnits = runs.reduce((s, v) => s + v.units.length, 0);
+  const totalUnits = filteredRuns.reduce((s, v) => s + v.units.length, 0);
   const avgUnits =
-    runs.length > 0 ? Math.round((totalUnits / runs.length) * 10) / 10 : 0;
+    filteredRuns.length > 0 ? Math.round((totalUnits / filteredRuns.length) * 10) / 10 : 0;
 
-  const gateDenials = runs.filter((v) => v.units.some((u) => u.status === 'rejected')).length;
+  const gateDenials = filteredRuns.filter((v) => v.units.some((u) => u.status === 'rejected')).length;
   const activeClis = roster.filter((r) => r.enabled_for_council).length;
 
-  // Sparkline: last 10 runs, oldest → newest
-  const sparklineRuns = runs.slice(Math.max(0, runs.length - 10));
+  // Sparkline: last 10 filtered runs, oldest → newest
+  const sparklineRuns = filteredRuns.slice(Math.max(0, filteredRuns.length - 10));
 
-  // Recent activity: last 5 runs, newest first
-  const recentRuns = runs.slice(-5).reverse();
+  // Recent activity: last 5 filtered runs, newest first
+  const recentRuns = filteredRuns.slice(-5).reverse();
 
-  // Gate approval rate across all units
-  const allUnits = runs.flatMap((v) => v.units);
+  // Gate approval rate across all filtered units
+  const allUnits = filteredRuns.flatMap((v) => v.units);
   const rejectedCount = allUnits.filter((u) => u.status === 'rejected').length;
   const gateApprovalRate =
     allUnits.length > 0
       ? Math.round(((allUnits.length - rejectedCount) / allUnits.length) * 100)
       : 100;
 
-  // CLI usage: % of runs that include each CLI key in session.clis
+  // CLI usage: % of filtered runs that include each CLI key in session.clis
   function cliUsagePct(key: string): number {
-    if (runs.length === 0) return 0;
-    const count = runs.filter((v) => v.session.clis.includes(key)).length;
-    return Math.round((count / runs.length) * 100);
+    if (filteredRuns.length === 0) return 0;
+    const count = filteredRuns.filter((v) => v.session.clis.includes(key)).length;
+    return Math.round((count / filteredRuns.length) * 100);
   }
 
   const cliPcts = roster.map((s) => cliUsagePct(s.key));
   const maxCliPct = Math.max(1, ...cliPcts);
 
-  // Workflow usage: how many runs used each workflow
+  // Workflow usage: how many filtered runs used each workflow
   function workflowRunCount(wfId: string): number {
-    return runs.filter((v) => v.session.workflow_id === wfId).length;
+    return filteredRuns.filter((v) => v.session.workflow_id === wfId).length;
   }
 
   const noWorkflowRuns = workflows.every((wf) => workflowRunCount(wf.id) === 0);
@@ -139,30 +151,62 @@ export function Dashboard({ runs, navigate }: Props): React.ReactElement {
                 ...monoText,
               }}
             >
-              wicked crew · last refreshed just now
+              wicked-crew studio · {filteredRuns.length} of {runs.length} sessions
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/runs/new')}
-            style={{
-              background: '#ffda19',
-              color: '#0d1117',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '8px 18px',
-              fontSize: '12px',
-              fontWeight: 700,
-              ...monoText,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              flexShrink: 0,
-            }}
-          >
-            Run Session Analysis ▷
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Session range filter */}
+            <div
+              style={{
+                display: 'flex',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                border: '1px solid rgba(230,237,243,0.1)',
+              }}
+            >
+              {([['last30', 'Last 30'], ['last60', 'Last 60'], ['all', 'All']] as [SessionRange, string][]).map(([r, label]) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRange(r)}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    ...monoText,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: range === r ? 'rgba(230,237,243,0.1)' : 'transparent',
+                    color: range === r ? '#e6edf3' : 'rgba(230,237,243,0.4)',
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/runs/new')}
+              style={{
+                background: '#ffda19',
+                color: '#0d1117',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px 18px',
+                fontSize: '12px',
+                fontWeight: 700,
+                ...monoText,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                flexShrink: 0,
+              }}
+            >
+              Do Work ▷
+            </button>
+          </div>
         </div>
 
         {/* ── 2. Key Metrics row ─────────────────────────────────────────────── */}
@@ -221,7 +265,7 @@ export function Dashboard({ runs, navigate }: Props): React.ReactElement {
               <span
                 style={{ fontSize: '30px', fontWeight: 600, color: '#e6edf3', ...monoText }}
               >
-                {runs.length}
+                {filteredRuns.length}
               </span>
               {activeRuns.length > 0 && (
                 <span
@@ -254,7 +298,7 @@ export function Dashboard({ runs, navigate }: Props): React.ReactElement {
                 ...monoText,
               }}
             >
-              {runs.length > 0 ? avgUnits : '—'}
+              {filteredRuns.length > 0 ? avgUnits : '—'}
             </p>
           </div>
 
@@ -419,8 +463,8 @@ export function Dashboard({ runs, navigate }: Props): React.ReactElement {
             }}
           >
             {[
-              `${runs.length} sessions analyzed`,
-              `${runs.length > 0 ? avgUnits : 0} avg units`,
+              `${filteredRuns.length} sessions analyzed`,
+              `${filteredRuns.length > 0 ? avgUnits : 0} avg units`,
               `${gateApprovalRate}% gate approval rate`,
             ].map((chip) => (
               <span
@@ -521,7 +565,7 @@ export function Dashboard({ runs, navigate }: Props): React.ReactElement {
                             ...monoText,
                           }}
                         >
-                          {runs.length > 0 ? `${pct}%` : '—'}
+                          {filteredRuns.length > 0 ? `${pct}%` : '—'}
                         </span>
                       </div>
                       <div

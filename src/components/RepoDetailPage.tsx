@@ -74,6 +74,21 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
 
   const displayedRuns = expanded ? runs : runs.slice(0, 10);
 
+  const graphStats = graph?.stats;
+
+  async function startOnboarding(): Promise<void> {
+    setOnboarding(true);
+    setOnboardError(null);
+    try {
+      const { runId } = await api.rerunOnboarding(repoId);
+      onSelectRun(runId);
+    } catch (e: unknown) {
+      setOnboardError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOnboarding(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6 p-8" style={{ color: '#e6edf3' }}>
       {/* Header */}
@@ -92,18 +107,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
               <h1 className="text-2xl font-semibold font-mono">{repo.name}</h1>
               <button
                 type="button"
-                onClick={async () => {
-                  setOnboarding(true);
-                  setOnboardError(null);
-                  try {
-                    const { runId } = await api.rerunOnboarding(repoId);
-                    onSelectRun(runId);
-                  } catch (e: unknown) {
-                    setOnboardError(e instanceof Error ? e.message : String(e));
-                  } finally {
-                    setOnboarding(false);
-                  }
-                }}
+                onClick={() => void startOnboarding()}
                 disabled={onboarding}
                 className="px-3 py-1 rounded-lg text-xs font-semibold font-mono transition-opacity disabled:opacity-50"
                 style={{ background: '#ffda19', color: '#0d1117' }}
@@ -198,95 +202,137 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
         </Section>
       )}
 
-      {/* Work & Chats history */}
-      {runs.length > 0 && (
-        <Section title="Work & Chats">
-          <div className="flex flex-col gap-1">
-            {displayedRuns.map(v => (
-              <RunLink key={v.session.id} view={v} selectedRunId={null} onSelect={onSelectRun} />
-            ))}
-          </div>
-          {runs.length > 10 && (
-            <button
-              type="button"
-              onClick={() => setExpanded(e => !e)}
-              className="mt-3 text-xs font-mono hover:underline"
-              style={{ color: 'rgba(230,237,243,0.4)' }}
-            >
-              {expanded ? '↑ show less' : `↓ show all ${runs.length} runs`}
-            </button>
+      {/* Two-column body — single col on narrow viewports, two col at md+ */}
+      <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
+        {/* Left column */}
+        <div className="flex flex-col gap-6">
+          {/* Work & Chats history */}
+          {runs.length > 0 && (
+            <Section title="Work & Chats">
+              <div className="flex flex-col gap-1">
+                {displayedRuns.map(v => (
+                  <RunLink key={v.session.id} view={v} selectedRunId={null} onSelect={onSelectRun} />
+                ))}
+              </div>
+              {runs.length > 10 && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(e => !e)}
+                  className="mt-3 text-xs font-mono hover:underline"
+                  style={{ color: 'rgba(230,237,243,0.4)' }}
+                >
+                  {expanded ? '↑ show less' : `↓ show all ${runs.length} runs`}
+                </button>
+              )}
+            </Section>
           )}
-        </Section>
-      )}
 
-      {/* Code Hotspots */}
-      <Section title="Code Hotspots">
-        {hotspots.length === 0 ? (
-          <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
-            Graph not yet indexed — run onboarding to build it.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {hotspots.map((node, i) => (
-              <div
-                key={node.id}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg"
-                style={{ background: '#161c26', border: '1px solid rgba(230,237,243,0.05)' }}
-              >
-                <span
-                  className="text-[10px] font-mono w-4 text-right shrink-0"
-                  style={{ color: 'rgba(230,237,243,0.3)' }}
-                >
-                  {i + 1}
-                </span>
-                <span
-                  className="flex-1 text-xs font-mono truncate"
-                  style={{ color: 'rgba(230,237,243,0.75)' }}
-                  title={node.file}
-                >
-                  {node.file}
-                </span>
-                <span
-                  className="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded"
-                  style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff' }}
-                >
-                  {node.inDeg} edges
-                </span>
+          {/* Code Hotspots */}
+          <Section title="Code Hotspots">
+            {hotspots.length === 0 ? (
+              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+                Graph not yet indexed — run onboarding to build it.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {hotspots.map((node, i) => (
+                  <div
+                    key={node.id}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg"
+                    style={{ background: '#161c26', border: '1px solid rgba(230,237,243,0.05)' }}
+                  >
+                    <span
+                      className="text-[10px] font-mono w-4 text-right shrink-0"
+                      style={{ color: 'rgba(230,237,243,0.3)' }}
+                    >
+                      {i + 1}
+                    </span>
+                    <span
+                      className="flex-1 text-xs font-mono truncate"
+                      style={{ color: 'rgba(230,237,243,0.75)' }}
+                      title={node.file}
+                    >
+                      {node.file}
+                    </span>
+                    <span
+                      className="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded"
+                      style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff' }}
+                    >
+                      {node.inDeg} edges
+                    </span>
+                    <button
+                      type="button"
+                      onClick={onOpenGraph}
+                      className="shrink-0 text-[10px] font-mono hover:underline"
+                      style={{ color: 'rgba(230,237,243,0.4)' }}
+                    >
+                      → Graph
+                    </button>
+                  </div>
+                ))}
                 <button
                   type="button"
                   onClick={onOpenGraph}
-                  className="shrink-0 text-[10px] font-mono hover:underline"
-                  style={{ color: 'rgba(230,237,243,0.4)' }}
+                  className="mt-2 self-start text-xs font-mono hover:underline"
+                  style={{ color: '#79c0ff' }}
                 >
-                  → Graph
+                  Open full graph →
                 </button>
               </div>
-            ))}
+            )}
+          </Section>
+        </div>
+
+        {/* Right column */}
+        <div className="flex flex-col gap-6">
+          {/* Graph Stats / "Git History" */}
+          <Section title="Code Graph">
+            {graphStats ? (
+              <div className="flex flex-col gap-3">
+                {[
+                  { label: 'Symbols', value: graphStats.nodeCount },
+                  { label: 'Edges', value: graphStats.edgeCount },
+                  { label: 'Files indexed', value: graphStats.fileCount },
+                ].map(s => (
+                  <div key={s.label} className="flex items-center justify-between">
+                    <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>{s.label}</span>
+                    <span className="text-sm font-semibold font-mono" style={{ color: '#e6edf3' }}>{s.value.toLocaleString()}</span>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={onOpenGraph}
+                  className="mt-2 self-start text-xs font-mono hover:underline"
+                  style={{ color: '#79c0ff' }}
+                >
+                  Browse full graph →
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+                No graph yet — run onboarding to index this repo.
+              </p>
+            )}
+          </Section>
+
+          {/* Contributors */}
+          <Section title="Contributors">
+            <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.4)', lineHeight: 1.6 }}>
+              Contributor data is derived from git history during onboarding and stored in the estate graph.
+              This surface will populate after the next full onboarding run.
+            </p>
             <button
               type="button"
-              onClick={onOpenGraph}
-              className="mt-2 self-start text-xs font-mono hover:underline"
-              style={{ color: '#79c0ff' }}
+              disabled={onboarding}
+              onClick={() => void startOnboarding()}
+              className="mt-3 self-start text-xs font-mono hover:underline disabled:opacity-50"
+              style={{ color: '#79c0ff', background: 'none', border: 'none', cursor: onboarding ? 'not-allowed' : 'pointer', padding: 0 }}
             >
-              Open full graph →
+              {onboarding ? 'Starting…' : 'Run onboarding now →'}
             </button>
-          </div>
-        )}
-      </Section>
-
-      {/* Git History — stub */}
-      <Section title="Git History">
-        <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
-          Indexing happens during onboarding and is stored in the estate graph. Coming in a future update.
-        </p>
-      </Section>
-
-      {/* Contributors — stub */}
-      <Section title="Contributors">
-        <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
-          Contributor data will be derived from git history. Coming in a future update.
-        </p>
-      </Section>
+          </Section>
+        </div>
+      </div>
     </div>
   );
 }

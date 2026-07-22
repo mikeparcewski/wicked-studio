@@ -85,8 +85,8 @@ function ActionLink({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`flex items-center gap-2 rounded text-xs font-semibold transition-opacity hover:opacity-70 ${
-        collapsed ? 'w-9 h-9 justify-center mx-auto' : 'w-full px-2 py-1'
+      className={`flex items-center gap-2 rounded text-sm font-semibold transition-opacity hover:opacity-70 ${
+        collapsed ? 'w-9 h-9 justify-center mx-auto' : 'w-full px-2 py-1.5'
       }`}
       style={{ color: S.accent, background: 'transparent' }}
     >
@@ -255,19 +255,37 @@ function CheckRow({ label, ok, detail }: { label: string; ok: boolean | null; de
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+function IconBell(): React.ReactElement {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6V11c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+    </svg>
+  );
+}
+
 export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
 
+  const isExpanded = !collapsed || hovered;
+
   useEffect(() => {
-    api.listRepos().then(({ repos: rs }) => {
-      const sorted = [...rs].sort((a, b) => b.registered_at - a.registered_at);
-      setRepos(sorted);
-    }).catch(() => { /* sidebar — fail silently */ });
+    function load(): void {
+      api.listRepos().then(({ repos: rs }) => {
+        const sorted = [...rs].sort((a, b) => b.registered_at - a.registered_at);
+        setRepos(sorted);
+      }).catch(() => { /* sidebar — fail silently */ });
+    }
+    load();
+    const id = setInterval(load, 5_000);
+    return () => clearInterval(id);
   }, []);
+
+  const awaitingCount = runs.filter(r => r.session.status === 'awaiting_human').length;
 
   const chats: SessionView[] = [];
   const work: SessionView[] = [];
@@ -286,24 +304,53 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
 
   return (
     <div
-      className={`flex flex-col shrink-0 transition-all duration-200 ${collapsed ? 'w-14' : 'w-[280px]'}`}
+      className={`flex flex-col shrink-0 transition-all duration-200 ${isExpanded ? 'w-[280px]' : 'w-14'}`}
       style={{ background: S.bg, borderRight: `1px solid ${S.border}` }}
+      onMouseEnter={() => { if (collapsed) setHovered(true); }}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-4 pt-5 pb-3 shrink-0">
         <button type="button" onClick={() => navigate('/')} className="shrink-0" aria-label="Home">
           <WickedLogo size={26} />
         </button>
-        {!collapsed && (
-          <span className="flex-1 text-sm font-semibold font-mono truncate" style={{ color: S.ink }}>
-            wicked crew
-          </span>
+        {isExpanded && (
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="flex-1 text-left text-sm font-semibold font-mono truncate transition-opacity hover:opacity-70"
+            style={{ color: S.ink, background: 'transparent' }}
+          >
+            wicked-crew studio
+          </button>
+        )}
+        {awaitingCount > 0 && (
+          <button
+            type="button"
+            aria-label={`${awaitingCount} run${awaitingCount > 1 ? 's' : ''} awaiting human`}
+            title={`${awaitingCount} awaiting human`}
+            className="relative shrink-0 flex items-center justify-center w-7 h-7 rounded-full"
+            style={{ color: S.accent }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const first = runs.find(r => r.session.status === 'awaiting_human');
+              if (first) onSelectRun(first.session.id);
+            }}
+          >
+            <IconBell />
+            <span
+              className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+              style={{ background: S.accent, color: S.accentInk }}
+            >
+              {awaitingCount}
+            </span>
+          </button>
         )}
         <button
           type="button"
           onClick={() => setCollapsed(v => !v)}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={`text-xs font-mono shrink-0 leading-none ${collapsed ? '' : 'ml-auto'}`}
+          className={`text-xs font-mono shrink-0 leading-none ${isExpanded ? 'ml-auto' : ''}`}
           style={{ color: S.faint }}
         >
           {collapsed ? '»' : '«'}
@@ -311,22 +358,22 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
       </div>
 
       {/* Connection pill — below logo, matching the gap between action links and section headers */}
-      {!collapsed && (
+      {isExpanded && (
         <div className="px-4 pt-1 pb-3">
           <ConnectionPill />
         </div>
       )}
 
       {/* Action links */}
-      <div className={`flex flex-col ${collapsed ? 'px-2 items-center gap-2 mt-1' : 'px-5 pt-1 pb-1 gap-1'}`}>
-        <ActionLink icon={<IconDoWork />} label="Do Work"        testId="new-run" onClick={() => navigate('/runs/new')}  collapsed={collapsed} />
-        <ActionLink icon={<IconChat />}   label="New Chat"                         onClick={() => navigate('/chat/new')} collapsed={collapsed} />
-        <ActionLink icon={<IconPlus />}   label="New Repository"                   onClick={() => navigate('/repos/new')} collapsed={collapsed} />
+      <div className={`flex flex-col ${!isExpanded ? 'px-2 items-center gap-2 mt-1' : 'px-5 pt-1 pb-1 gap-1'}`}>
+        <ActionLink icon={<IconDoWork />} label="Do Work"        testId="new-run" onClick={() => navigate('/runs/new')}  collapsed={!isExpanded} />
+        <ActionLink icon={<IconChat />}   label="New Chat"                         onClick={() => navigate('/chat/new')} collapsed={!isExpanded} />
+        <ActionLink icon={<IconPlus />}   label="New Repository"                   onClick={() => navigate('/repos/new')} collapsed={!isExpanded} />
       </div>
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto flex flex-col min-h-0 mt-2">
-        {!collapsed ? (
+        {isExpanded ? (
           <>
             {/* Search input (shared across all sections) */}
             {searchOpen && (
@@ -404,7 +451,7 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
             )}
           </>
         ) : (
-          /* Collapsed: dots for all runs */
+          /* Not expanded: dots for all runs */
           <div className="px-2 flex flex-col gap-0.5 mt-1">
             {runs.map(v => (
               <button
@@ -426,7 +473,7 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
       </div>
 
       {/* Footer */}
-      <div className={`px-2 pb-3 shrink-0 ${collapsed ? 'flex flex-col items-center gap-1' : ''}`}>
+      <div className={`px-2 pb-3 shrink-0 ${!isExpanded ? 'flex flex-col items-center gap-1' : ''}`}>
         <div className="relative">
           <button
             type="button"
@@ -434,7 +481,7 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
             onMouseDown={e => e.stopPropagation()}
             aria-label="Settings"
             className={`rounded transition-colors ${
-              collapsed
+              !isExpanded
                 ? 'w-9 h-9 flex items-center justify-center text-base'
                 : 'w-full flex items-center gap-2 px-2 py-1.5 text-xs'
             }`}
@@ -443,7 +490,7 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
             onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = S.faint; }}
           >
             <span>⚙</span>
-            {!collapsed && (
+            {isExpanded && (
               <>
                 <span>Settings</span>
                 <span className="ml-auto text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.25)' }}>v0.2.1</span>
