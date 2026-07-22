@@ -203,6 +203,14 @@ export const api = {
   getRepoGraph: (repoId: string) =>
     apiFetch<{ graph: import('./types.js').CodeGraphData | null }>(`/repos/${encodeURIComponent(repoId)}/graph`),
 
+  /** Git commit history for a repo (last 20 commits via git log). */
+  getRepoGitHistory: (repoId: string) =>
+    apiFetch<{ commits: import('./types.js').GitCommit[] }>(`/repos/${encodeURIComponent(repoId)}/git-history`),
+
+  /** Top contributors for a repo by commit count (via git shortlog). */
+  getRepoContributors: (repoId: string) =>
+    apiFetch<{ contributors: import('./types.js').GitContributor[] }>(`/repos/${encodeURIComponent(repoId)}/contributors`),
+
   /** Per-repo domain graph from <repo>/.wicked-estate/requirements/requirements_graph.json.
    *  Also returns coverage stats (if available) so the UI can show annotation progress. */
   getRepoDomainGraph: (repoId: string) =>

@@ -873,7 +873,7 @@ export function CenterDashboard({
     [gates],
   );
 
-  // ── Chat sessions (workflow_id === 'chat' or unset legacy); newest-first, unsliced ──
+  // ── Chat sessions (workflow_id === 'chat' or unset legacy); reversed from status-sort order ──
   const chatRuns = useMemo(
     () =>
       filteredRuns
@@ -949,7 +949,7 @@ export function CenterDashboard({
                     transition: 'all 0.15s',
                   }}
                 >
-                  {r === 'last30' ? 'Last 30' : r === 'last60' ? 'Last 60' : 'All'}
+                  {r === 'last30' ? 'Top 30' : r === 'last60' ? 'Top 60' : 'All'}
                 </button>
               ))}
             </div>

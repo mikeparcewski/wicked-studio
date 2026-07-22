@@ -716,6 +716,20 @@ export interface CodeGraphData {
   stats: { nodeCount: number; edgeCount: number; fileCount: number };
 }
 
+export interface GitCommit {
+  sha: string;
+  shortSha: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
+export interface GitContributor {
+  commits: number;
+  name: string;
+  email: string;
+}
+
 /** Daemon-persisted system settings (~/.config/wicked-core/settings.json). */
 export interface SystemSettings {
   graphNodeLimit: number;

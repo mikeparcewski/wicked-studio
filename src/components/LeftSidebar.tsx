@@ -257,7 +257,7 @@ function CheckRow({ label, ok, detail }: { label: string; ok: boolean | null; de
 
 function IconBell(): React.ReactElement {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden={true}>
       <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6V11c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
     </svg>
   );
@@ -274,15 +274,20 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
   const isExpanded = !collapsed || hovered;
 
   useEffect(() => {
+    let disposed = false;
+    let inFlight = false;
     function load(): void {
+      if (inFlight) return;
+      inFlight = true;
       api.listRepos().then(({ repos: rs }) => {
+        if (disposed) return;
         const sorted = [...rs].sort((a, b) => b.registered_at - a.registered_at);
         setRepos(sorted);
-      }).catch(() => { /* sidebar — fail silently */ });
+      }).catch(() => { /* sidebar — fail silently */ }).finally(() => { inFlight = false; });
     }
     load();
     const id = setInterval(load, 5_000);
-    return () => clearInterval(id);
+    return () => { disposed = true; clearInterval(id); };
   }, []);
 
   const awaitingCount = runs.filter(r => r.session.status === 'awaiting_human').length;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
-import type { CodeGraphData, RepoEntry, SessionView } from '../api/types.js';
+import type { CodeGraphData, GitCommit, GitContributor, RepoEntry, SessionView } from '../api/types.js';
 import { RunLink } from './RunLink.js';
 
 interface Props {
@@ -16,6 +16,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [graph, setGraph] = useState<CodeGraphData | null>(null);
+  const [commits, setCommits] = useState<GitCommit[] | null>(null);
+  const [contributors, setContributors] = useState<GitContributor[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -23,9 +25,13 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [onboardError, setOnboardError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
     setExpanded(false);
+    setCommits(null);
+    setContributors(null);
+    // Core data drives the page-level loading state; git sections load independently
     Promise.all([
       api.listRepos().then(({ repos }) => repos.find(r => r.id === repoId) ?? null),
       api.listRuns().then(({ runs: rs }) =>
@@ -33,12 +39,18 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
       ).catch(() => [] as SessionView[]),
       api.getRepoGraph(repoId).then(({ graph: g }) => g).catch(() => null),
     ]).then(([r, rs, g]) => {
+      if (cancelled) return;
       setRepo(r);
       setRuns(rs);
       setGraph(g);
     }).catch((err: unknown) => {
+      if (cancelled) return;
       setError(err instanceof Error ? err.message : 'Failed to load repo');
-    }).finally(() => setLoading(false));
+    }).finally(() => { if (!cancelled) setLoading(false); });
+    // Git sections are decoupled — they don't block the page skeleton
+    api.getRepoGitHistory(repoId).then(({ commits: c }) => { if (!cancelled) setCommits(c); }).catch(() => {});
+    api.getRepoContributors(repoId).then(({ contributors: c }) => { if (!cancelled) setContributors(c); }).catch(() => {});
+    return () => { cancelled = true; };
   }, [repoId]);
 
   if (loading) {
@@ -315,21 +327,77 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
             )}
           </Section>
 
+          {/* Git History */}
+          <Section title="Git History">
+            {commits === null ? (
+              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.25)' }}>Loading…</p>
+            ) : commits.length === 0 ? (
+              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+                No commits yet.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {commits.map((c) => (
+                  <div key={c.sha} className="flex items-start gap-2 min-w-0">
+                    {repo.git_url && /^https:\/\//i.test(repo.git_url) ? (
+                      <a
+                        href={`${repo.git_url.replace(/\.git$/, '')}/commit/${c.sha}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-[10px] font-mono hover:underline"
+                        style={{ color: '#79c0ff', marginTop: '1px' }}
+                      >
+                        {c.shortSha}
+                      </a>
+                    ) : (
+                      <span className="shrink-0 text-[10px] font-mono" style={{ color: '#79c0ff', marginTop: '1px' }}>
+                        {c.shortSha}
+                      </span>
+                    )}
+                    <span className="shrink-0 text-[9px] font-mono truncate max-w-[80px]" style={{ color: 'rgba(230,237,243,0.45)' }} title={c.author}>
+                      {c.author}
+                    </span>
+                    <span className="flex-1 text-[10px] font-mono truncate" style={{ color: 'rgba(230,237,243,0.8)' }} title={c.message}>
+                      {c.message.length > 72 ? `${c.message.slice(0, 72)}…` : c.message}
+                    </span>
+                    <span className="shrink-0 text-[9px] font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                      {c.date}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
           {/* Contributors */}
           <Section title="Contributors">
-            <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.4)', lineHeight: 1.6 }}>
-              Contributor data is derived from git history during onboarding and stored in the estate graph.
-              This surface will populate after the next full onboarding run.
-            </p>
-            <button
-              type="button"
-              disabled={onboarding}
-              onClick={() => void startOnboarding()}
-              className="mt-3 self-start text-xs font-mono hover:underline disabled:opacity-50"
-              style={{ color: '#79c0ff', background: 'none', border: 'none', cursor: onboarding ? 'not-allowed' : 'pointer', padding: 0 }}
-            >
-              {onboarding ? 'Starting…' : 'Run onboarding now →'}
-            </button>
+            {contributors === null ? (
+              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.25)' }}>Loading…</p>
+            ) : contributors.length === 0 ? (
+              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+                No contributors found.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {contributors.map((c) => {
+                  const initials = c.name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase();
+                  return (
+                    <div key={c.email} className="flex items-center gap-2">
+                      <span
+                        className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold font-mono"
+                        style={{ background: 'rgba(121,192,255,0.15)', color: '#79c0ff' }}
+                      >
+                        {initials}
+                      </span>
+                      <span className="flex-1 text-xs font-mono truncate" style={{ color: 'rgba(230,237,243,0.8)' }}>{c.name}</span>
+                      <span className="shrink-0 text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                        {c.commits} commit{c.commits !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </Section>
         </div>
       </div>
