@@ -54,8 +54,8 @@ function useKillShortcut(
     if (!runId) return;
     function handler(e: KeyboardEvent): void {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k' && runId) {
-        const tag = (e.target as HTMLElement).tagName.toLowerCase();
-        const editable = (e.target as HTMLElement).isContentEditable;
+        const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase() ?? '';
+        const editable = (e.target as HTMLElement | null)?.isContentEditable ?? false;
         if (tag === 'input' || tag === 'textarea' || tag === 'select' || editable) return;
         const run = runs.find((r) => r.session.id === runId);
         if (!run) return;

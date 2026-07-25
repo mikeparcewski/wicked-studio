@@ -56,7 +56,17 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       ? { 'Content-Type': 'application/json', ...init?.headers }
       : { ...init?.headers };
   const res = await fetch(`${apiBase()}${path}`, { ...init, headers });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    let msg: string;
+    try {
+      const body = JSON.parse(text) as { error?: unknown; message?: unknown };
+      const raw = body.error ?? body.message ?? text;
+      msg = typeof raw === 'string' ? raw : JSON.stringify(raw);
+    } catch { msg = text; }
+    if (!msg) msg = res.statusText || String(res.status);
+    throw new Error(`API ${res.status}: ${msg}`);
+  }
   return res.json() as Promise<T>;
 }
 

@@ -379,10 +379,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
               </p>
             ) : (
               <div className="flex flex-col gap-2">
-                {contributors.map((c) => {
+                {contributors.map((c, i) => {
                   const initials = c.name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase();
                   return (
-                    <div key={c.email} className="flex items-center gap-2">
+                    <div key={`${c.email}-${c.name}-${i}`} className="flex items-center gap-2">
                       <span
                         className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold font-mono"
                         style={{ background: 'rgba(121,192,255,0.15)', color: '#79c0ff' }}
