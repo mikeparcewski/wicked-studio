@@ -19,6 +19,7 @@ import { useEventStream } from './hooks/useEventStream.js';
 import { useRoute } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useGateStore } from './store/gates.js';
+import { useNotificationStore } from './store/notifications.js';
 import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
@@ -74,6 +75,7 @@ export function App(): React.ReactElement {
   const { panel, runId, repoId, showLaunch, showRegisterRepo, chatMode, navigate } = useRoute();
   const { runs, refresh } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
+  const ingestNotif = useNotificationStore((s) => s.ingest);
   const ingestRuntime = useRuntimeStore((s) => s.ingest);
   const ingestRunEvent = useRunEventStore((s) => s.ingest);
 
@@ -91,11 +93,12 @@ export function App(): React.ReactElement {
   const handleEvent = useCallback(
     (event: CoreEvent) => {
       ingestGate(event);
+      ingestNotif(event);
       ingestRuntime(event);
       ingestRunEvent(event);
       if (LIFECYCLE_EVENTS.has(event.type)) refresh();
     },
-    [ingestGate, ingestRuntime, ingestRunEvent, refresh],
+    [ingestGate, ingestNotif, ingestRuntime, ingestRunEvent, refresh],
   );
 
   useEventStream(handleEvent);

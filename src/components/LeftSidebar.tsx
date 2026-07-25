@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
+import { NotificationBell } from './NotificationBell.js';
 import { RunLink } from './RunLink.js';
 import { SettingsMenu } from './SettingsMenu.js';
 import { WickedLogo } from './WickedLogo.js';
@@ -255,14 +256,6 @@ function CheckRow({ label, ok, detail }: { label: string; ok: boolean | null; de
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-function IconBell(): React.ReactElement {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden={true}>
-      <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6V11c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-    </svg>
-  );
-}
-
 export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -289,8 +282,6 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
     const id = setInterval(load, 5_000);
     return () => { disposed = true; clearInterval(id); };
   }, []);
-
-  const awaitingCount = runs.filter(r => r.session.status === 'awaiting_human').length;
 
   const chats: SessionView[] = [];
   const work: SessionView[] = [];
@@ -329,28 +320,6 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
             wicked-crew studio
           </button>
         )}
-        {awaitingCount > 0 && (
-          <button
-            type="button"
-            aria-label={`${awaitingCount} run${awaitingCount > 1 ? 's' : ''} awaiting human`}
-            title={`${awaitingCount} awaiting human`}
-            className="relative shrink-0 flex items-center justify-center w-7 h-7 rounded-full"
-            style={{ color: S.accent }}
-            onClick={(e) => {
-              e.stopPropagation();
-              const first = runs.find(r => r.session.status === 'awaiting_human');
-              if (first) onSelectRun(first.session.id);
-            }}
-          >
-            <IconBell />
-            <span
-              className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"
-              style={{ background: S.accent, color: S.accentInk }}
-            >
-              {awaitingCount}
-            </span>
-          </button>
-        )}
         <button
           type="button"
           onClick={() => setCollapsed(v => !v)}
@@ -368,6 +337,11 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
           <ConnectionPill />
         </div>
       )}
+
+      {/* Notification bell — always visible (collapsed: icon-only with badge; expanded: label too) */}
+      <div className={isExpanded ? 'px-4 pb-2' : 'flex justify-center pb-2'}>
+        <NotificationBell navigate={navigate} collapsed={!isExpanded} />
+      </div>
 
       {/* Action links */}
       <div className={`flex flex-col ${!isExpanded ? 'px-2 items-center gap-2 mt-1' : 'px-5 pt-1 pb-1 gap-1'}`}>
