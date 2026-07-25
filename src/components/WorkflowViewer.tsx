@@ -398,7 +398,7 @@ function WorkflowBuilder({
         script: '',
         scriptLang: 'bash',
         scriptPath: '',
-        gate: p.gate === 'auto' ? 'auto' : 'human_confirm_if' in (p.gate ?? {}) ? 'human_if' : 'human',
+        gate: p.gate === 'auto' ? 'auto' : (typeof p.gate === 'object' && p.gate !== null && 'human_confirm_if' in p.gate) ? 'human_if' : 'human',
         role: p.role,
         dependsOn: p.depends_on,
         executesCode: p.executes_code,
@@ -468,7 +468,7 @@ function WorkflowBuilder({
             execMode: ex?.type === 'tool' ? 'command' : 'agent' as ExecMode,
             cmd: ex?.type === 'tool' ? ex.cmd.join(' ') : '',
             script: '', scriptLang: 'bash', scriptPath: '',
-            gate: p.gate === 'auto' ? 'auto' : 'human_confirm_if' in (p.gate ?? {}) ? 'human_if' : 'human',
+            gate: p.gate === 'auto' ? 'auto' : (typeof p.gate === 'object' && p.gate !== null && 'human_confirm_if' in p.gate) ? 'human_if' : 'human',
             role: p.role, dependsOn: p.depends_on,
             executesCode: p.executes_code, verifiedEvidence: p.verified_evidence,
           };
