@@ -262,6 +262,12 @@ export function RepoGraphModal({ repo, onClose, onSelectRun }: Props): React.Rea
   }
 
   useEffect(() => {
+    function handler(e: KeyboardEvent): void { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  useEffect(() => {
     setLoading(true);
     api
       .getRepoGraph(repo.id)

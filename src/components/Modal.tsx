@@ -1,14 +1,23 @@
-import { useId } from 'react';
+import { useId, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 interface Props {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Opt out of the document-level Escape-to-close handler (e.g. modals that embed a terminal). */
+  disableEscapeKey?: boolean;
 }
 
-export function Modal({ title, onClose, children }: Props): React.ReactElement {
+export function Modal({ title, onClose, children, disableEscapeKey }: Props): React.ReactElement {
   const titleId = useId();
+
+  useEffect(() => {
+    if (disableEscapeKey) return;
+    function handler(e: KeyboardEvent): void { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose, disableEscapeKey]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
       <div

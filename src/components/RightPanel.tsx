@@ -436,7 +436,7 @@ export function RightPanel({ view }: Props): React.ReactElement {
 
       {/* Terminal modal */}
       {termOpen && (
-        <Modal title="Operator shell" onClose={() => setTermOpen(false)}>
+        <Modal title="Operator shell" onClose={() => setTermOpen(false)} disableEscapeKey>
           <Terminal
             cwd={session.workdir ?? '.'}
             governed
