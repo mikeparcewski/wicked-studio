@@ -36,6 +36,51 @@ function cliInitials(key: string): string {
   return key.slice(0, 2).toUpperCase();
 }
 
+function DegradedRoutingBanner({ reason }: { reason: string }): React.ReactElement {
+  const [dismissed, setDismissed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const detailId = 'degraded-routing-detail';
+  if (dismissed) return <></>;
+  return (
+    <div
+      className="self-start max-w-[85%] rounded-xl px-4 py-2.5 text-xs font-mono flex flex-col gap-1.5"
+      style={{ background: 'rgba(255,218,25,0.08)', border: '1px solid rgba(255,218,25,0.2)', color: '#ffda19' }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="shrink-0" aria-hidden="true">⚠</span>
+        <span className="flex-1">Degraded routing: {reason}</span>
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="shrink-0 text-[10px] transition-opacity hover:opacity-70"
+          style={{ color: 'rgba(255,218,25,0.6)' }}
+          aria-expanded={expanded}
+          aria-controls={detailId}
+          aria-label={expanded ? 'Hide explanation' : 'Show explanation'}
+        >
+          {expanded ? '▲' : '▼'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className="shrink-0 transition-opacity hover:opacity-70"
+          style={{ color: 'rgba(255,218,25,0.5)' }}
+          aria-label="Dismiss degraded routing warning"
+        >
+          <span aria-hidden="true">✕</span>
+        </button>
+      </div>
+      {expanded && (
+        <p id={detailId} className="text-[10px] leading-relaxed pl-5" style={{ color: 'rgba(255,218,25,0.6)' }}>
+          The multi-model council could not reach a quorum vote. The unit proceeded using a
+          fallback routing strategy. Open the <strong>Decisions</strong> section in the Insights
+          panel on the right to see each reviewer's verdict.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function CliAvatar({ cli }: { cli: string }): React.ReactElement {
   const { bg, fg } = CLI_COLORS[cli.toLowerCase()] ?? CLI_FALLBACK;
   return (
@@ -395,13 +440,7 @@ function RunChat({
                 </div>
               )}
               {unit.routing !== null && unit.routing.method === 'degraded' && (
-                <div
-                  className="self-start max-w-[85%] rounded-xl px-4 py-2 text-xs flex items-center gap-2 font-mono"
-                  style={{ background: 'rgba(255,218,25,0.08)', border: '1px solid rgba(255,218,25,0.2)', color: '#ffda19' }}
-                >
-                  <span className="shrink-0">⚠</span>
-                  <span>Degraded routing: {unit.routing.reason}</span>
-                </div>
+                <DegradedRoutingBanner reason={unit.routing.reason} />
               )}
 
               {/* Agent response card */}

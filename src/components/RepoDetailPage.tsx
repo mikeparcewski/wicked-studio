@@ -330,7 +330,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           {/* Git History */}
           <Section title="Git History">
             {commits === null ? (
-              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.25)' }}>Loading…</p>
+              <SkeletonRows count={6} widths={['w-14', 'w-16', 'flex-1', 'w-12']} />
             ) : commits.length === 0 ? (
               <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
                 No commits yet.
@@ -372,7 +372,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           {/* Contributors */}
           <Section title="Contributors">
             {contributors === null ? (
-              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.25)' }}>Loading…</p>
+              <SkeletonContributors count={4} />
             ) : contributors.length === 0 ? (
               <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
                 No contributors found.
@@ -401,6 +401,50 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           </Section>
         </div>
       </div>
+    </div>
+  );
+}
+
+const SKELETON_BG = 'rgba(230,237,243,0.06)';
+
+function SkeletonBlock({ className }: { className: string }): React.ReactElement {
+  return (
+    <span
+      className={`inline-block rounded animate-pulse ${className}`}
+      style={{ background: SKELETON_BG }}
+    />
+  );
+}
+
+/** Generic skeleton row list — pass tailwind width classes for each column. */
+function SkeletonRows({ count, widths }: { count: number; widths: string[] }): React.ReactElement {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="flex items-center gap-2 min-w-0" style={{ opacity: Math.max(0.15, 1 - i * 0.12) }}>
+          {widths.map((w, j) => (
+            <SkeletonBlock key={j} className={`h-2.5 ${w}`} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SkeletonContributors({ count }: { count: number }): React.ReactElement {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="flex items-center gap-2" style={{ opacity: Math.max(0.15, 1 - i * 0.18) }}>
+          {/* avatar circle */}
+          <span
+            className="shrink-0 w-6 h-6 rounded-full animate-pulse"
+            style={{ background: SKELETON_BG }}
+          />
+          <SkeletonBlock className="h-2.5 w-28" />
+          <SkeletonBlock className="h-2 w-14 ml-auto" />
+        </div>
+      ))}
     </div>
   );
 }
