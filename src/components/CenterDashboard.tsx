@@ -13,6 +13,8 @@ import type { SessionView } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
 import { useRunEventStore } from '../store/events.js';
 import { useSteeringStore } from '../store/steering.js';
+import { useTimeRange } from '../hooks/useTimeRange.js';
+import { TimeRangeSelector } from './TimeRangeSelector.js';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -717,8 +719,6 @@ function SendPanel({ activeRuns }: SendPanelProps): React.ReactElement {
 
 // ── CenterDashboard ───────────────────────────────────────────────────────────
 
-type SessionRange = 'last30' | 'last60' | 'all';
-
 export function CenterDashboard({
   runs,
   onSelectRun,
@@ -731,16 +731,9 @@ export function CenterDashboard({
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
 
-  const [range, setRange] = useState<SessionRange>('last30');
+  const { range, setRange, filter: filterByRange } = useTimeRange('30d');
 
-  // ── Range-filtered runs (positional — no timestamp on AgentSession) ────────
-  const filteredRuns = useMemo(() => {
-    if (range === 'all') return runs;
-    // runs is status-sorted (active first); slice(0, n) preserves active sessions
-    // and takes the n most-salient entries as a positional proxy for recency
-    const n = range === 'last30' ? 30 : 60;
-    return runs.slice(0, n);
-  }, [runs, range]);
+  const filteredRuns = useMemo(() => filterByRange(runs), [runs, filterByRange]);
 
   // ── Derived: active sessions only (scoped to filteredRuns for consistency) ──
   const activeRuns = useMemo(
@@ -894,6 +887,18 @@ export function CenterDashboard({
     [workRuns],
   );
 
+  // ── Sessions Review: last 5 completed sessions in the window ─────────────
+  // No timestamp → use server-sort order (active first, then completed).
+  // The last N of the completed group are the "most recent" by positional proxy.
+  const recentlyCompleted = useMemo(
+    () =>
+      filteredRuns
+        .filter((v) => v.session.status === 'completed')
+        .slice(-5)
+        .reverse(),
+    [filteredRuns],
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -929,30 +934,7 @@ export function CenterDashboard({
           </div>
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
             {/* Range selector */}
-            <div style={{ display: 'flex', gap: '4px' }}>
-              {(['last30', 'last60', 'all'] as SessionRange[]).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRange(r)}
-                  style={{
-                    padding: '3px 8px',
-                    borderRadius: '5px',
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    ...mono,
-                    cursor: 'pointer',
-                    border: '1px solid',
-                    borderColor: range === r ? 'rgba(121,192,255,0.5)' : 'rgba(230,237,243,0.1)',
-                    background: range === r ? 'rgba(121,192,255,0.12)' : 'transparent',
-                    color: range === r ? '#79c0ff' : 'rgba(230,237,243,0.4)',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {r === 'last30' ? 'Top 30' : r === 'last60' ? 'Top 60' : 'All'}
-                </button>
-              ))}
-            </div>
+            <TimeRangeSelector value={range} onChange={setRange} />
             <Stat label="Active sessions" value={String(activeRuns.length)} color="#79c0ff" />
             <Stat label="Units in-flight" value={String(unitsInFlight)} color="#79c0ff" />
             <Stat
@@ -1265,7 +1247,96 @@ export function CenterDashboard({
           </div>
         )}
 
-        {/* ── 5. Send-to-agents panel ─────────────────────────────────────────── */}
+        {/* ── 5. Sessions Review — recently completed sessions in window ─────── */}
+        {recentlyCompleted.length > 0 && (
+          <div style={{ marginBottom: '28px' }}>
+            <p style={{ ...sectionLabel, marginBottom: '10px' }}>Sessions review</p>
+            <div
+              style={{
+                ...cardBase,
+                padding: '4px 0',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {recentlyCompleted.map((v, idx) => (
+                <button
+                  key={v.session.id}
+                  type="button"
+                  onClick={() => onSelectRun(v.session.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderTop: idx === 0 ? 'none' : '1px solid rgba(230,237,243,0.05)',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = 'rgba(230,237,243,0.03)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                  }}
+                >
+                  {/* Status dot */}
+                  <span
+                    style={{
+                      width: '7px',
+                      height: '7px',
+                      borderRadius: '50%',
+                      flexShrink: 0,
+                      background: '#3fb950',
+                    }}
+                  />
+                  {/* Intent */}
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      color: '#e6edf3',
+                      ...mono,
+                      flex: 1,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {truncate(v.session.problem || v.session.id, 60)}
+                  </span>
+                  {/* Session id */}
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      color: 'rgba(230,237,243,0.3)',
+                      ...mono,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {v.session.id.slice(0, 8)}
+                  </span>
+                  {/* Link caret */}
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      color: 'rgba(121,192,255,0.5)',
+                      ...mono,
+                      flexShrink: 0,
+                    }}
+                  >
+                    →
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── 6. Send-to-agents panel ─────────────────────────────────────────── */}
         <SendPanel activeRuns={activeRuns} />
 
       </div>

@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { SessionView } from '../api/types.js';
 import { RunLink } from './RunLink.js';
+import { useTimeRange } from '../hooks/useTimeRange.js';
+import { TimeRangeSelector } from './TimeRangeSelector.js';
 
 type StatusTab = 'all' | 'active' | 'completed' | 'failed';
 
@@ -26,12 +28,49 @@ const TABS: { id: StatusTab; label: string }[] = [
 export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<StatusTab>('all');
+  const { range, setRange, filter: filterByRange } = useTimeRange('30d');
 
-  const workRuns = runs.filter((v) => !!v.session.workflow_id && v.session.workflow_id !== 'chat');
+  const allWorkRuns = useMemo(
+    () => runs.filter((v) => !!v.session.workflow_id && v.session.workflow_id !== 'chat'),
+    [runs],
+  );
+
+  const windowedRuns = useMemo(() => filterByRange(allWorkRuns), [allWorkRuns, filterByRange]);
+
   const normalizedQuery = query.toLowerCase();
-  const searched = query
-    ? workRuns.filter(v => v.session.problem.toLowerCase().includes(normalizedQuery))
-    : workRuns;
+  const searched = useMemo(
+    () => query
+      ? windowedRuns.filter(v => v.session.problem.toLowerCase().includes(normalizedQuery))
+      : windowedRuns,
+    [windowedRuns, query, normalizedQuery],
+  );
+
+  // ── Metrics (scoped to time window, before search filter) ────────────────
+  const metrics = useMemo(() => {
+    const total = windowedRuns.length;
+    const active = windowedRuns.filter(v => isActiveStatus(v.session.status)).length;
+    const completed = windowedRuns.filter(v => isCompletedStatus(v.session.status)).length;
+    const terminal = windowedRuns.filter(v => isTerminal(v.session.status)).length;
+    const successRate = terminal > 0
+      ? `${Math.round((completed / terminal) * 100)}%`
+      : '—';
+
+    // Top workflow by frequency (work sessions only)
+    const freq = new Map<string, number>();
+    for (const v of windowedRuns) {
+      const wf = v.session.workflow_id;
+      if (wf && wf !== 'chat') {
+        freq.set(wf, (freq.get(wf) ?? 0) + 1);
+      }
+    }
+    let topWorkflow = '—';
+    let topCount = 0;
+    freq.forEach((count, wf) => {
+      if (count > topCount) { topCount = count; topWorkflow = wf; }
+    });
+
+    return { total, active, successRate, topWorkflow };
+  }, [windowedRuns]);
 
   const counts: Record<StatusTab, number> = {
     all: searched.length,
@@ -56,6 +95,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
       <div className="px-8 pt-8 pb-4 flex items-center gap-4">
         <h1 className="text-xl font-semibold font-mono">Work</h1>
         <div className="flex-1" />
+        <TimeRangeSelector value={range} onChange={setRange} />
         <input
           type="text"
           placeholder="Search work…"
@@ -77,6 +117,35 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
         >
           Do Work
         </button>
+      </div>
+
+      {/* Metrics row */}
+      <div className="px-8 pb-4 grid gap-3" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        {([
+          { label: 'Total Runs',    value: String(metrics.total),       accent: undefined },
+          { label: 'Active',        value: String(metrics.active),       accent: '#79c0ff' },
+          { label: 'Success Rate',  value: metrics.successRate,          accent: '#3fb950' },
+          { label: 'Top Workflow',  value: metrics.topWorkflow,          accent: undefined },
+        ] as const).map(s => (
+          <div
+            key={s.label}
+            className="rounded-xl px-4 py-3"
+            style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+          >
+            <p
+              className="text-[10px] font-mono uppercase tracking-widest"
+              style={{ color: 'rgba(230,237,243,0.4)', margin: 0 }}
+            >
+              {s.label}
+            </p>
+            <p
+              className="text-xl font-semibold font-mono mt-1 truncate"
+              style={{ color: s.accent ?? '#e6edf3', margin: '4px 0 0' }}
+            >
+              {s.value}
+            </p>
+          </div>
+        ))}
       </div>
 
       {/* Filter tabs */}

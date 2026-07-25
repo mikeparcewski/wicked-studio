@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { SessionView } from '../api/types.js';
+import { useTimeRange } from '../hooks/useTimeRange.js';
+import { TimeRangeSelector } from './TimeRangeSelector.js';
 
 interface Props {
   runs: SessionView[];
@@ -12,15 +14,32 @@ const terminal = (s: string): boolean =>
 
 export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
+  const { range, setRange, filter: filterByRange } = useTimeRange('30d');
+
   // Strict filter: include 'chat' runs and legacy runs with no workflow stamp as a transitional fallback.
-  const chats = runs.filter((v) => !v.session.workflow_id || v.session.workflow_id === 'chat');
+  const allChats = useMemo(
+    () => runs.filter((v) => !v.session.workflow_id || v.session.workflow_id === 'chat'),
+    [runs],
+  );
 
-  const active    = chats.filter(v => !terminal(v.session.status));
-  const completed = chats.filter(v => v.session.status === 'completed');
+  const chats = useMemo(() => filterByRange(allChats), [allChats, filterByRange]);
 
-  const filtered = query
-    ? chats.filter(v => v.session.problem.toLowerCase().includes(query.toLowerCase()))
-    : chats;
+  const active = useMemo(() => chats.filter(v => !terminal(v.session.status)), [chats]);
+
+  // Avg units per chat session (round to 1 decimal)
+  const avgUnits = useMemo(() => {
+    if (chats.length === 0) return '—';
+    const total = chats.reduce((sum, v) => sum + v.units.length, 0);
+    const avg = total / chats.length;
+    return avg % 1 === 0 ? String(avg) : avg.toFixed(1);
+  }, [chats]);
+
+  const filtered = useMemo(
+    () => query
+      ? chats.filter(v => v.session.problem.toLowerCase().includes(query.toLowerCase()))
+      : chats,
+    [chats, query],
+  );
 
   return (
     <div className="flex flex-col gap-6" style={{ color: '#e6edf3' }}>
@@ -29,6 +48,7 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
       <div className="px-8 pt-8 pb-4 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold font-mono">Chats</h1>
         <div className="flex items-center gap-3">
+          <TimeRangeSelector value={range} onChange={setRange} />
           <input
             type="text"
             placeholder="Search chats…"
@@ -56,9 +76,9 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
       {/* ── Stat cards ── */}
       <div className="px-8 grid grid-cols-3 gap-4">
         {([
-          { label: 'Total Chats', value: chats.length, accent: undefined },
-          { label: 'Active',      value: active.length,    accent: '#79c0ff' },
-          { label: 'Completed',   value: completed.length, accent: '#3fb950' },
+          { label: 'Total Chats', value: String(chats.length),  accent: undefined   },
+          { label: 'Active',      value: String(active.length), accent: '#79c0ff'   },
+          { label: 'Avg Units',   value: avgUnits,              accent: '#a78bfa'   },
         ] as const).map(s => (
           <div
             key={s.label}
