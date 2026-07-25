@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../api/types.js';
 import { RunLink } from './RunLink.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
@@ -28,6 +28,7 @@ const TABS: { id: StatusTab; label: string }[] = [
 export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<StatusTab>('all');
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const { range, setRange, filter: filterByRange } = useTimeRange('30d');
 
   const allWorkRuns = useMemo(
@@ -59,7 +60,9 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
     const freq = new Map<string, number>();
     for (const v of windowedRuns) {
       const wf = v.session.workflow_id;
-      if (wf && wf !== 'chat') {
+      // Skip chat and unresolved instance UUIDs (wf-<uuid>) — the sessionsDetail patch
+      // resolves known builtins; anything still starting with 'wf-' has no known def name.
+      if (wf && wf !== 'chat' && !wf.startsWith('wf-')) {
         freq.set(wf, (freq.get(wf) ?? 0) + 1);
       }
     }
@@ -149,11 +152,37 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
       </div>
 
       {/* Filter tabs */}
-      <div className="px-8 pb-3 flex items-center gap-2">
-        {TABS.map(t => (
+      <div
+        role="tablist"
+        aria-label="Filter by status"
+        className="px-8 pb-3 flex items-center gap-2"
+        onKeyDown={e => {
+          const ids = TABS.map(t => t.id);
+          const idx = ids.indexOf(tab);
+          let nextIdx: number | null = null;
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            nextIdx = (idx + 1) % ids.length;
+          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            nextIdx = (idx - 1 + ids.length) % ids.length;
+          }
+          if (nextIdx !== null) {
+            setTab(ids[nextIdx]!);
+            tabRefs.current[nextIdx]?.focus();
+          }
+        }}
+      >
+        {TABS.map((t, i) => (
           <button
             key={t.id}
+            ref={el => { tabRefs.current[i] = el; }}
+            id={`work-tab-${t.id}`}
             type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            aria-controls={`work-panel-${t.id}`}
+            tabIndex={tab === t.id ? 0 : -1}
             onClick={() => setTab(t.id)}
             className="rounded-full px-3 py-1 text-xs font-mono"
             style={
@@ -168,7 +197,12 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto px-5 pb-8 flex flex-col">
+      <div
+        id={`work-panel-${tab}`}
+        role="tabpanel"
+        aria-labelledby={`work-tab-${tab}`}
+        className="flex-1 overflow-y-auto px-5 pb-8 flex flex-col"
+      >
         {tab === 'all' ? (
           <>
             {activeGroup.length > 0 && (

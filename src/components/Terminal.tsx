@@ -52,51 +52,11 @@ export function Terminal({ cwd, cmd, governed = true }: Props): React.ReactEleme
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.open(host);
-    try {
-      fit.fit();
-    } catch {
-      /* container not laid out yet — keep xterm's default 80x24 */
-    }
 
     // xterm keystrokes → PTY stdin over the dedicated WS (raw, as a text frame).
     const dataSub = term.onData((chunk: string) => {
       if (socket && socket.readyState === WebSocket.OPEN) socket.send(chunk);
     });
-
-    void (async () => {
-      const p = propsRef.current;
-      let id: string;
-      try {
-        const opts: Parameters<typeof api.openTerminal>[0] = {
-          cwd: p.cwd,
-          cols: term.cols,
-          rows: term.rows,
-          governed: p.governed,
-        };
-        if (p.cmd !== undefined) opts.cmd = p.cmd;
-        id = (await api.openTerminal(opts)).id;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        term.write(`\r\n\x1b[31m[failed to open terminal: ${msg}]\x1b[0m\r\n`);
-        return;
-      }
-      if (disposed) {
-        // Unmounted before open resolved — reap the orphan PTY.
-        void api.closeTerminal(id).catch(() => {});
-        return;
-      }
-      terminalId = id;
-
-      const ws = new WebSocket(terminalWsUrl(id));
-      ws.binaryType = 'arraybuffer';
-      ws.onmessage = (ev: MessageEvent) => {
-        // Raw PTY output: binary frame → exact bytes; text frame → string.
-        if (typeof ev.data === 'string') term.write(ev.data);
-        else term.write(new Uint8Array(ev.data as ArrayBuffer));
-      };
-      socket = ws;
-    })();
 
     // Refit on container resize → tell the PTY its new dimensions.
     const observe =
@@ -112,10 +72,58 @@ export function Terminal({ cwd, cmd, governed = true }: Props): React.ReactEleme
             }
           })
         : undefined;
-    observe?.observe(host);
+
+    // Defer open to the next animation frame so the browser has completed layout and
+    // the container has non-zero dimensions. Opening xterm synchronously crashes
+    // Viewport.syncScrollArea with "cannot read properties of undefined (reading dimensions)".
+    const rafHandle = requestAnimationFrame(() => {
+      if (disposed) return;
+      term.open(host);
+      try {
+        fit.fit();
+      } catch {
+        /* container still not laid out — keep xterm's default 80x24 */
+      }
+      observe?.observe(host);
+
+      void (async () => {
+        const p = propsRef.current;
+        let id: string;
+        try {
+          const opts: Parameters<typeof api.openTerminal>[0] = {
+            cwd: p.cwd,
+            cols: term.cols,
+            rows: term.rows,
+            governed: p.governed,
+          };
+          if (p.cmd !== undefined) opts.cmd = p.cmd;
+          id = (await api.openTerminal(opts)).id;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          term.write(`\r\n\x1b[31m[failed to open terminal: ${msg}]\x1b[0m\r\n`);
+          return;
+        }
+        if (disposed) {
+          // Unmounted before open resolved — reap the orphan PTY.
+          void api.closeTerminal(id).catch(() => {});
+          return;
+        }
+        terminalId = id;
+
+        const ws = new WebSocket(terminalWsUrl(id));
+        ws.binaryType = 'arraybuffer';
+        ws.onmessage = (ev: MessageEvent) => {
+          // Raw PTY output: binary frame → exact bytes; text frame → string.
+          if (typeof ev.data === 'string') term.write(ev.data);
+          else term.write(new Uint8Array(ev.data as ArrayBuffer));
+        };
+        socket = ws;
+      })();
+    });
 
     return () => {
       disposed = true;
+      cancelAnimationFrame(rafHandle);
       observe?.disconnect();
       dataSub.dispose();
       try {

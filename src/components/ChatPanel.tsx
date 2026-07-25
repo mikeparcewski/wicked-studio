@@ -417,11 +417,12 @@ function RunChat({
           </div>
         </div>
 
-        {/* Unit messages */}
-        {[...units].sort((a, b) => a.ord - b.ord).map((unit) => {
+        {/* Unit messages — gate panel injected inline before the unit it blocks */}
+        {[...units].sort((a, b) => a.ord - b.ord).flatMap((unit) => {
           const tc = transcripts[unit.ord];
           const stageBadge = STAGE_BADGE[unit.stage] ?? { bg: 'rgba(230,237,243,0.08)', color: 'rgba(230,237,243,0.5)' };
-          return (
+          const gateBeforeThis = session.status === 'awaiting_human' && gate?.ord === unit.ord;
+          const unitEl = (
             <div key={unit.id} className="flex flex-col gap-2">
               {/* Council routing pill */}
               {unit.routing !== null && unit.routing.method === 'council' && (
@@ -520,10 +521,16 @@ function RunChat({
                   className="rounded-2xl px-5 py-4"
                   style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
                 >
-                  {unit.status === 'distributed' && (
+                  {unit.status === 'distributed' && !isTerminal && (
                     <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>
                       <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#79c0ff' }} />
                       <span>Working…</span>
+                    </div>
+                  )}
+                  {unit.status === 'distributed' && isTerminal && (
+                    <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
+                      <span>—</span>
+                      <span>Not started</span>
                     </div>
                   )}
                   {unit.status === 'done' && (
@@ -583,6 +590,19 @@ function RunChat({
               </div>
             </div>
           );
+          if (gateBeforeThis) {
+            return [
+              <div key={`gate-before-${unit.id}`} className="self-center w-full max-w-lg">
+                <SteeringGate
+                  runId={session.id}
+                  {...(gate ? { ord: gate.ord, prompt: gate.prompt } : {})}
+                  onResolved={onRefresh}
+                />
+              </div>,
+              unitEl,
+            ];
+          }
+          return [unitEl];
         })}
 
         {/* Action cards + system event pills — rendered in arrival (seq) order */}
@@ -617,8 +637,8 @@ function RunChat({
           );
         })}
 
-        {/* Steering gate */}
-        {session.status === 'awaiting_human' && (
+        {/* Steering gate — fallback position when gate.ord doesn't match any planned unit */}
+        {session.status === 'awaiting_human' && !units.some((u) => gate?.ord === u.ord) && (
           <div className="self-center w-full max-w-lg">
             <SteeringGate
               runId={session.id}

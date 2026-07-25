@@ -587,16 +587,21 @@ export function WorkflowViewer(): React.ReactElement {
   const [building, setBuilding] = useState(false);
   const [editTarget, setEditTarget] = useState<WorkflowDef | undefined>(undefined);
 
+  // Use a ref so `load` doesn't capture `selected` as a dep — that would recreate
+  // `load` on every selection change, causing the useEffect to re-fetch on every click.
+  const selectedRef = useRef<string | null>(null);
+  selectedRef.current = selected;
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const { workflows: wfs } = await api.listWorkflows();
       setWorkflows(wfs);
-      if (wfs.length > 0 && !selected) setSelected(wfs[0]?.id ?? null);
+      if (wfs.length > 0 && !selectedRef.current) setSelected(wfs[0]?.id ?? null);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setLoading(false); }
-  }, [selected]);
+  }, []);
 
   useEffect(() => { void load(); }, [load]);
 

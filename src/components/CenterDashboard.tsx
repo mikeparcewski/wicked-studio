@@ -554,8 +554,11 @@ function ProgressRow({ view, onSelect }: ProgressRowProps): React.ReactElement {
             </span>
           ) : (
             units.map((u) => {
-              const color = UNIT_STATUS_COLOR[u.status] ?? 'rgba(230,237,243,0.18)';
-              const pulse = UNIT_STATUS_PULSE[u.status] === true;
+              const isTerminalSession = ['completed', 'cancelled', 'failed'].includes(session.status);
+              const color = (isTerminalSession && u.status === 'distributed')
+                ? 'rgba(230,237,243,0.18)'
+                : (UNIT_STATUS_COLOR[u.status] ?? 'rgba(230,237,243,0.18)');
+              const pulse = UNIT_STATUS_PULSE[u.status] === true && !isTerminalSession;
               return (
                 <span
                   key={u.ord}
