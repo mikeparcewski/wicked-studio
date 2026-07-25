@@ -219,13 +219,16 @@ function CrashRedriveCard({ attempt }: { attempt: number }): React.ReactElement 
 function ModePill({
   mode,
   onChange,
+  readOnly = false,
 }: {
   mode: RunMode;
   onChange: (m: RunMode) => void;
+  readOnly?: boolean;
 }): React.ReactElement {
   const modes: RunMode[] = ['ask', 'balanced', 'autonomous'];
 
   function handleKey(e: React.KeyboardEvent, idx: number): void {
+    if (readOnly) return;
     let next = idx;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
       next = (idx + 1) % modes.length;
@@ -243,8 +246,14 @@ function ModePill({
     <div
       role="radiogroup"
       aria-label="Run mode"
+      aria-disabled={readOnly || undefined}
+      title={readOnly ? 'Run mode (read-only — run is complete)' : undefined}
       className="flex items-center rounded-lg overflow-hidden shrink-0"
-      style={{ background: 'rgba(230,237,243,0.06)', border: '1px solid rgba(230,237,243,0.1)' }}
+      style={{
+        background: 'rgba(230,237,243,0.06)',
+        border: '1px solid rgba(230,237,243,0.1)',
+        opacity: readOnly ? 0.6 : 1,
+      }}
     >
       {modes.map((m, idx) => (
         <button
@@ -252,14 +261,16 @@ function ModePill({
           type="button"
           role="radio"
           aria-checked={mode === m}
-          tabIndex={mode === m ? 0 : -1}
-          onClick={() => onChange(m)}
-          onKeyDown={(e) => handleKey(e, idx)}
-          className="px-3 py-1 text-[11px] font-mono font-medium transition-colors"
+          aria-disabled={readOnly}
+          tabIndex={readOnly ? -1 : mode === m ? 0 : -1}
+          onClick={readOnly ? undefined : () => onChange(m)}
+          onKeyDown={readOnly ? undefined : (e) => handleKey(e, idx)}
+          disabled={readOnly}
+          className="px-3 py-1 text-[11px] font-mono font-medium transition-colors disabled:cursor-default"
           style={
             mode === m
-              ? { background: 'rgba(255,218,25,0.15)', color: '#ffda19' }
-              : { background: 'transparent', color: 'rgba(230,237,243,0.45)' }
+              ? { background: 'rgba(255,218,25,0.15)', color: readOnly ? 'rgba(255,218,25,0.7)' : '#ffda19' }
+              : { background: 'transparent', color: 'rgba(230,237,243,0.35)' }
           }
         >
           {MODE_LABELS[m]}
@@ -376,7 +387,7 @@ function RunChat({
           {session.problem}
         </p>
         <span className="text-xs font-medium shrink-0 font-mono" style={{ color: style.color }}>{style.label}</span>
-        <ModePill mode={mode} onChange={onModeChange} />
+        <ModePill mode={mode} onChange={onModeChange} readOnly={isTerminal} />
         {!isTerminal && onKill && (
           <button
             type="button"
@@ -683,12 +694,22 @@ export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefres
   const [mode, setMode] = useState<RunMode>('balanced');
 
   if (view) {
+    const activeView = view;
+    const isTerminal = ['completed', 'cancelled', 'failed'].includes(activeView.session.status);
+    function handleModeChange(newMode: RunMode): void {
+      setMode(newMode);
+      if (!isTerminal) {
+        void api.injectMessage(activeView.session.id, `mode:${newMode}`, 'all').catch(() => {
+          // Best-effort: mode injection failure is non-fatal; the local state is already updated.
+        });
+      }
+    }
     return (
       <RunChat
-        key={view.session.id}
-        view={view}
+        key={activeView.session.id}
+        view={activeView}
         mode={mode}
-        onModeChange={setMode}
+        onModeChange={handleModeChange}
         onLaunched={onLaunched}
         onNavigateBack={onNavigateBack}
         onRefresh={onRefresh}
