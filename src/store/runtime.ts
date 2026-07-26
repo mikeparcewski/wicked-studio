@@ -33,6 +33,16 @@ function summarize(event: CoreEvent): string {
       return typeof event.description === 'string' ? event.description : 'unit planned';
     case 'unitDistributed':
       return typeof event.cli === 'string' ? `assigned -> ${event.cli}` : 'distributed';
+    case 'councilConvened':
+      return Array.isArray(event.clis) ? `council convened — polling ${event.clis.length} CLIs` : 'council convened';
+    case 'councilDeliberated':
+      return typeof event.agreementPct === 'number'
+        ? `ballot ${String(event.round ?? '?')} at ${event.agreementPct}% — below ${String(event.neededPct ?? '?')}%, runoff round starting`
+        : 'council deliberating';
+    case 'councilVoted':
+      return typeof event.agreementPct === 'number'
+        ? `council voted — ${event.agreementPct}% agreement (${String(event.votes ?? '?')} votes)`
+        : 'council voted';
     case 'unitExecuting':
       return 'executing';
     case 'gateDecided':
@@ -62,9 +72,26 @@ function summarize(event: CoreEvent): string {
   }
 }
 
+/** Live council deliberation state for one unit (councilConvened / councilDeliberated / councilVoted). */
+export interface CouncilStatus {
+  state: 'convened' | 'deliberating' | 'voted';
+  /** Roster keys polled (set on convened). */
+  clis?: string[];
+  /** Latest agreement percent (deliberating and voted). */
+  agreementPct?: number;
+  /** Vote count returned (deliberating and voted). */
+  votes?: number;
+  /** Deliberating only: the completed ballot number. */
+  round?: number;
+  /** Deliberating only: the approval bar the council must reach, as a percent. */
+  neededPct?: number;
+}
+
 interface RuntimeStore {
   /** Accumulated live CLI output, keyed `<run>:u<ord>` (§11.4). */
   outputs: Record<string, string>;
+  /** Live council deliberation per unit, keyed `<session>:<ord>`. */
+  councilStatus: Record<string, CouncilStatus>;
   /** Per-run event log (excludes raw output deltas — those stream to `outputs`). */
   logs: Record<string, LoggedEvent[]>;
   /** Executor type per unit, keyed `<session>:<ord>` — populated from unitPlanned events. */
@@ -84,6 +111,7 @@ interface RuntimeStore {
 
 export const useRuntimeStore = create<RuntimeStore>((set) => ({
   outputs: {},
+  councilStatus: {},
   logs: {},
   executorTypes: {},
   terminalIds: {},
@@ -113,16 +141,57 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       // Heartbeats would flood the log and carry no run detail.
       if (event.type === 'heartbeat') return { seq };
 
+      // Council deliberation lifecycle → live per-unit status (also logged below via fall-through
+      // is NOT used here: log the entry inline so the status map and log stay one atomic update).
+      if (
+        (event.type === 'councilConvened' ||
+          event.type === 'councilDeliberated' ||
+          event.type === 'councilVoted') &&
+        typeof event.ord === 'number'
+      ) {
+        const cKey = `${session}:${event.ord}`;
+        const status: CouncilStatus =
+          event.type === 'councilConvened'
+            ? { state: 'convened', ...(Array.isArray(event.clis) ? { clis: event.clis as string[] } : {}) }
+            : event.type === 'councilDeliberated'
+              ? {
+                  state: 'deliberating',
+                  ...(typeof event.round === 'number' ? { round: event.round } : {}),
+                  ...(typeof event.agreementPct === 'number' ? { agreementPct: event.agreementPct } : {}),
+                  ...(typeof event.neededPct === 'number' ? { neededPct: event.neededPct } : {}),
+                  ...(typeof event.votes === 'number' ? { votes: event.votes } : {}),
+                }
+              : {
+                  state: 'voted',
+                  ...(typeof event.agreementPct === 'number' ? { agreementPct: event.agreementPct } : {}),
+                  ...(typeof event.votes === 'number' ? { votes: event.votes } : {}),
+                };
+        const entry: LoggedEvent = { seq, type: event.type, ts: Date.now(), detail: summarize(event) };
+        entry.ord = event.ord;
+        if (typeof event.attempt === 'number') entry.attempt = event.attempt;
+        const prevLog = s.logs[session] ?? [];
+        const nextLog = [...prevLog, entry];
+        if (nextLog.length > LOG_CAP) nextLog.splice(0, nextLog.length - LOG_CAP);
+        return {
+          seq,
+          councilStatus: { ...s.councilStatus, [cKey]: status },
+          logs: { ...s.logs, [session]: nextLog },
+        };
+      }
+
       // unitPlanned: record executor type for council deliberation UI.
+      // The wire field is camelCase `executorType` (event_to_json); accept the legacy
+      // snake_case spelling too so older daemons keep working.
+      const executorType = (event.executorType ?? event.executor_type) as string | undefined;
       if (
         event.type === 'unitPlanned' &&
         typeof event.ord === 'number' &&
-        (event.executor_type === 'agent' || event.executor_type === 'tool')
+        (executorType === 'agent' || executorType === 'tool')
       ) {
         const typeKey = `${session}:${event.ord}`;
         return {
           seq,
-          executorTypes: { ...s.executorTypes, [typeKey]: event.executor_type as 'agent' | 'tool' },
+          executorTypes: { ...s.executorTypes, [typeKey]: executorType },
           ...((): Pick<RuntimeStore, 'logs'> => {
             const entry: LoggedEvent = { seq, type: event.type, ts: Date.now(), detail: summarize(event) };
             entry.ord = event.ord as number;
@@ -164,6 +233,10 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       for (const key of Object.keys(outputs)) {
         if (key.startsWith(`${session}:u`)) delete outputs[key];
       }
+      const councilStatus = { ...s.councilStatus };
+      for (const key of Object.keys(councilStatus)) {
+        if (key.startsWith(`${session}:`)) delete councilStatus[key];
+      }
       const executorTypes = { ...s.executorTypes };
       for (const key of Object.keys(executorTypes)) {
         if (key.startsWith(`${session}:`)) delete executorTypes[key];
@@ -174,6 +247,6 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       }
       const logs = { ...s.logs };
       delete logs[session];
-      return { outputs, executorTypes, terminalIds, logs };
+      return { outputs, councilStatus, executorTypes, terminalIds, logs };
     }),
 }));
