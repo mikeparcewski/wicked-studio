@@ -65,6 +65,11 @@ function summarize(event: CoreEvent): string {
       return typeof event.detail === 'string' ? event.detail : 'step failed';
     case 'crashRecoveryRedrive':
       return typeof event.attempt === 'number' ? `attempt ${event.attempt}` : 'crash recovery';
+    case 'workerMessageQueued':
+    case 'workerMessageInjected':
+      return typeof event.message === 'string'
+        ? `${String(event.target ?? 'all')}: "${event.message.length > 80 ? event.message.slice(0, 80) + '…' : event.message}"`
+        : event.type;
     case 'error':
       return typeof event.message === 'string' ? `error: ${event.message}` : 'error';
     default:

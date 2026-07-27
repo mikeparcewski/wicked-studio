@@ -159,6 +159,7 @@ function unitKey(runId: string, unitId: string, ord: number): string {
 const SYSTEM_EVENT_TYPES = new Set([
   'sessionStarted', 'sessionCompleted', 'sessionFailed',
   'awaitingHuman', 'gateDecided', 'resumed', 'runCancelled',
+  'workerMessageQueued', 'workerMessageInjected',
 ]);
 
 const ACTION_EVENT_TYPES = new Set(['stepFailed', 'crashRecoveryRedrive']);
@@ -172,6 +173,8 @@ function systemEventLabel(type: string, detail: string): string {
     case 'gateDecided':      return detail.includes('allow') ? 'Gate: allow' : 'Gate: deny';
     case 'resumed':          return 'Run resumed';
     case 'runCancelled':     return 'Run cancelled';
+    case 'workerMessageQueued':   return `Message queued for next turn — ${detail}`;
+    case 'workerMessageInjected': return `Message delivered — ${detail}`;
     default:                 return detail;
   }
 }
