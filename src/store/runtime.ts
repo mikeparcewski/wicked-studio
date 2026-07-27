@@ -77,6 +77,17 @@ function summarize(event: CoreEvent): string {
   }
 }
 
+/** One structured assumption parsed from a unit's output (assumptionRecorded). */
+export interface RecordedAssumption {
+  ord: number;
+  kind: string;
+  library: string;
+  transform: string;
+  /** false = needs-research placeholder — badge for human review. */
+  known: boolean;
+  detail: string;
+}
+
 /** Live council deliberation state for one unit (councilConvened / councilDeliberated / councilVoted). */
 export interface CouncilStatus {
   state: 'convened' | 'deliberating' | 'voted';
@@ -97,6 +108,8 @@ interface RuntimeStore {
   outputs: Record<string, string>;
   /** Live council deliberation per unit, keyed `<session>:<ord>`. */
   councilStatus: Record<string, CouncilStatus>;
+  /** Structured assumptions per run (assumptionRecorded events, arrival order). */
+  assumptions: Record<string, RecordedAssumption[]>;
   /** Per-run event log (excludes raw output deltas — those stream to `outputs`). */
   logs: Record<string, LoggedEvent[]>;
   /** Executor type per unit, keyed `<session>:<ord>` — populated from unitPlanned events. */
@@ -117,6 +130,7 @@ interface RuntimeStore {
 export const useRuntimeStore = create<RuntimeStore>((set) => ({
   outputs: {},
   councilStatus: {},
+  assumptions: {},
   logs: {},
   executorTypes: {},
   terminalIds: {},
@@ -145,6 +159,26 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
 
       // Heartbeats would flood the log and carry no run detail.
       if (event.type === 'heartbeat') return { seq };
+
+      // assumptionRecorded → per-run assumptions list (+ the normal log entry below
+      // is skipped: the panel is the surface, a log line would just duplicate it).
+      if (
+        event.type === 'assumptionRecorded' &&
+        typeof event.ord === 'number' &&
+        typeof event.library === 'string' &&
+        typeof event.transform === 'string'
+      ) {
+        const entry: RecordedAssumption = {
+          ord: event.ord,
+          kind: typeof event.kind === 'string' ? event.kind : 'external-transform',
+          library: event.library,
+          transform: event.transform,
+          known: event.known === true,
+          detail: typeof event.detail === 'string' ? event.detail : '',
+        };
+        const prev = s.assumptions[session] ?? [];
+        return { seq, assumptions: { ...s.assumptions, [session]: [...prev, entry] } };
+      }
 
       // Council deliberation lifecycle → live per-unit status (also logged below via fall-through
       // is NOT used here: log the entry inline so the status map and log stay one atomic update).
@@ -242,6 +276,8 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       for (const key of Object.keys(councilStatus)) {
         if (key.startsWith(`${session}:`)) delete councilStatus[key];
       }
+      const assumptions = { ...s.assumptions };
+      delete assumptions[session];
       const executorTypes = { ...s.executorTypes };
       for (const key of Object.keys(executorTypes)) {
         if (key.startsWith(`${session}:`)) delete executorTypes[key];
@@ -252,6 +288,6 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       }
       const logs = { ...s.logs };
       delete logs[session];
-      return { outputs, councilStatus, executorTypes, terminalIds, logs };
+      return { outputs, councilStatus, assumptions, executorTypes, terminalIds, logs };
     }),
 }));

@@ -212,6 +212,12 @@ export interface CoreEvent {
   round?: number;
   /** councilDeliberated: the approval bar the council must reach, as a percent. */
   neededPct?: number;
+  // assumptionRecorded (external-transform convention) — camelCase per event_to_json
+  kind?: string;
+  library?: string;
+  transform?: string;
+  known?: boolean;
+  detail?: string;
   [k: string]: unknown;
 }
 

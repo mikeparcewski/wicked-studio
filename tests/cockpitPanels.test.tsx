@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { mergeRunModel, type RunModel } from '../src/hooks/useRunModel.js';
 import type { CoreEvent } from '../src/api/types.js';
@@ -10,6 +10,7 @@ import { DataUsed } from '../src/components/DataUsed.js';
 import { WhatWhere } from '../src/components/WhatWhere.js';
 import { AssumptionsPanel } from '../src/components/AssumptionsPanel.js';
 import { SteeringTimeline } from '../src/components/SteeringTimeline.js';
+import { useRuntimeStore } from '../src/store/runtime.js';
 import { useSteeringStore } from '../src/store/steering.js';
 
 function modelWith(events: CoreEvent[] = []): RunModel {
@@ -167,13 +168,49 @@ describe('WhatWhere (FR-8)', () => {
   });
 });
 
-describe('AssumptionsPanel (FR-6 proto)', () => {
-  it('is labeled proto and shows routing provenance for all resolved units', () => {
+describe('AssumptionsPanel (FR-6)', () => {
+  afterEach(() => {
+    useRuntimeStore.setState({ assumptions: {} });
+  });
+
+  it('shows routing provenance for all resolved units', () => {
     const el = render(<AssumptionsPanel model={modelWith()} />).getByTestId('assumptions');
-    expect(el).toHaveTextContent('proto');
     // The model has a resolved unit with council routing (2 dissent, 80% agreement).
     expect(el).toHaveTextContent('dissent');
     expect(el).toHaveTextContent('claude');
+  });
+
+  it('renders recorded external-transform assumptions with a needs-review badge', () => {
+    const model = modelWith();
+    useRuntimeStore.setState({
+      assumptions: {
+        [model.session.id]: [
+          {
+            ord: 1,
+            kind: 'external-transform',
+            library: 'libpostal',
+            transform: 'address normalization',
+            known: true,
+            detail: 'expands abbreviations per locale',
+          },
+          {
+            ord: 2,
+            kind: 'external-transform',
+            library: 'stripe-tax',
+            transform: 'tax enrichment',
+            known: false,
+            detail: 'uses stripe-tax for jurisdiction resolution; rounding rules unverified',
+          },
+        ],
+      },
+    });
+    const view = render(<AssumptionsPanel model={model} />);
+    const items = view.getAllByTestId('assumption-transform');
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent('libpostal');
+    // Only the needs-research entry carries the review badge.
+    expect(view.getAllByTestId('needs-review-badge')).toHaveLength(1);
+    expect(items[1]).toHaveTextContent('needs review');
   });
 });
 
