@@ -212,6 +212,12 @@ export interface CoreEvent {
   round?: number;
   /** councilDeliberated: the approval bar the council must reach, as a percent. */
   neededPct?: number;
+  /** workerStalled: silent seconds before the stall event fired. */
+  stalledSecs?: number;
+  /** failureTriaged: the triage judge's decision. */
+  decision?: string;
+  /** failureTriaged: the judge's bounded reasoning. */
+  analysis?: string;
   // assumptionRecorded (external-transform convention) — camelCase per event_to_json
   kind?: string;
   library?: string;

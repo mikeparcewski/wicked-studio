@@ -65,6 +65,10 @@ function summarize(event: CoreEvent): string {
       return typeof event.detail === 'string' ? event.detail : 'step failed';
     case 'crashRecoveryRedrive':
       return typeof event.attempt === 'number' ? `attempt ${event.attempt}` : 'crash recovery';
+    case 'workerStalled':
+      return `no output for ${String(event.stalledSecs ?? '?')}s — may be waiting at an interactive prompt (open Term or inject)`;
+    case 'failureTriaged':
+      return `triage: ${String(event.decision ?? '?')}${typeof event.analysis === 'string' && event.analysis ? ' — ' + event.analysis.slice(0, 120) : ''}`;
     case 'workerMessageQueued':
     case 'workerMessageInjected':
       return typeof event.message === 'string'

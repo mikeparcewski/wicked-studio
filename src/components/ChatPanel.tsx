@@ -162,7 +162,7 @@ const SYSTEM_EVENT_TYPES = new Set([
   'workerMessageQueued', 'workerMessageInjected',
 ]);
 
-const ACTION_EVENT_TYPES = new Set(['stepFailed', 'crashRecoveryRedrive']);
+const ACTION_EVENT_TYPES = new Set(['stepFailed', 'crashRecoveryRedrive', 'workerStalled', 'failureTriaged']);
 
 function systemEventLabel(type: string, detail: string): string {
   switch (type) {
