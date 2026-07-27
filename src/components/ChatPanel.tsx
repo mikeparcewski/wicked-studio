@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api/client.js';
+import { api, downloadRunEvidence } from '../api/client.js';
 import type { SessionView, StageKind, UnitStatus } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore, outputKey } from '../store/runtime.js';
@@ -195,6 +195,70 @@ function StopIcon(): React.ReactElement {
       <circle cx="8" cy="8" r="6.75" stroke="currentColor" strokeWidth="1.5"/>
       <rect x="5.25" y="5.25" width="5.5" height="5.5" rx="0.75" fill="currentColor"/>
     </svg>
+  );
+}
+
+function DownloadIcon(): React.ReactElement {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M8 2v7.25m0 0L5.25 6.5M8 9.25l2.75-2.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.75 11v1.25c0 .69.56 1.25 1.25 1.25h8c.69 0 1.25-.56 1.25-1.25V11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/**
+ * Downloads the run's evidence bundle (run + units + transcripts + the gate /
+ * routing decision trail) as one JSON file. Disabled until the run reaches a
+ * terminal state — an in-flight run's evidence is still changing under you.
+ */
+function ExportEvidenceButton({ runId, disabled }: { runId: string; disabled: boolean }): React.ReactElement {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function exportEvidence(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      await downloadRunEvidence(runId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inert = disabled || busy;
+  const title = disabled
+    ? 'Export evidence — available once the run finishes'
+    : error ?? (busy ? 'Exporting evidence…' : 'Export evidence');
+
+  return (
+    <>
+      {error && (
+        <span
+          role="alert"
+          className="text-[11px] font-mono shrink-0 max-w-[14rem] truncate"
+          style={{ color: '#f85149' }}
+        >
+          Export failed: {error}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => void exportEvidence()}
+        disabled={inert}
+        title={title}
+        aria-label="Export evidence"
+        aria-busy={busy}
+        className="flex items-center justify-center w-6 h-6 rounded shrink-0 transition-opacity disabled:cursor-not-allowed"
+        style={{ color: error ? '#f85149' : '#79c0ff', opacity: inert ? 0.3 : 0.65 }}
+        onMouseEnter={(e) => { if (!inert) e.currentTarget.style.opacity = '1'; }}
+        onMouseLeave={(e) => { if (!inert) e.currentTarget.style.opacity = '0.65'; }}
+      >
+        <DownloadIcon />
+      </button>
+    </>
   );
 }
 
@@ -434,6 +498,7 @@ function RunChat({
         </p>
         <span className="text-xs font-medium shrink-0 font-mono" style={{ color: style.color }}>{style.label}</span>
         <ModePill mode={mode} onChange={onModeChange} readOnly={isTerminal} />
+        <ExportEvidenceButton runId={session.id} disabled={!isTerminal} />
         {!isTerminal && onKill && (
           <button
             type="button"

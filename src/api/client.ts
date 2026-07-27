@@ -70,6 +70,40 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return res.json() as Promise<T>;
 }
 
+/**
+ * Fetch a run's evidence bundle (`GET /runs/:id/evidence`) and hand it to the
+ * browser as a file download.
+ *
+ * Deliberately NOT an `apiFetch` call: the response is an attachment the operator
+ * keeps, not a JSON body the UI renders. The daemon names the file via
+ * `Content-Disposition`; the `<run-id>-evidence.json` fallback keeps the download
+ * named sensibly if a proxy strips the header.
+ */
+export async function downloadRunEvidence(runId: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/runs/${encodeURIComponent(runId)}/evidence`);
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = text;
+    try {
+      const body = JSON.parse(text) as { error?: unknown };
+      if (typeof body.error === 'string') msg = body.error;
+    } catch { /* not JSON — keep the raw text */ }
+    throw new Error(`API ${res.status}: ${msg || res.statusText || String(res.status)}`);
+  }
+  const filename =
+    /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1]
+    ?? `${runId.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 128)}-evidence.json`;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoke on the next tick — revoking synchronously can cancel the download.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 /** Approve / reject payload for the steering gate (`POST /runs/:id/gate`). */
 export interface GateDecision {
   approve: boolean;
