@@ -1,6 +1,6 @@
 {
   "name": "wicked-studio",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "wicked-studio — HITL React app for wicked-crew sessions",
   "type": "module",
   "scripts": {
