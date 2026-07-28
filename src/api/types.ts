@@ -767,6 +767,7 @@ export interface RequirementSummary {
   domain: string;
   reqId: string;
   title: string;
+  statement: string;
   status: string;
   risk: boolean;
   riskSource: 'operator' | 'data' | null;

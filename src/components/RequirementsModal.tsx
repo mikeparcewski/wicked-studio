@@ -221,6 +221,7 @@ function summaryOf(d: RequirementDetail): RequirementSummary {
     domain: d.domain,
     reqId: d.reqId,
     title: d.title,
+    statement: d.statement,
     status: d.status,
     risk: d.risk,
     riskSource: d.riskSource,
@@ -247,6 +248,9 @@ function RequirementRow({
       <span className="text-[10px] font-mono shrink-0 w-16" style={{ color: T.faint }}>{req.reqId}</span>
       <span className="flex-1 min-w-0">
         <span className="block text-[12px] truncate" style={{ color: T.ink }}>{req.title}</span>
+        {req.statement.trim() !== '' && (
+          <span className="block text-[11px] truncate" style={{ color: T.muted }}>{req.statement.trim()}</span>
+        )}
         <span className="block text-[10px] font-mono truncate" style={{ color: T.faint }}>{req.domain}</span>
       </span>
       {req.edited && (
@@ -430,6 +434,27 @@ function RequirementEditRail({
             <p className="text-[10px] font-mono" style={{ color: T.faint }}>
               risk derived from business rules — an operator toggle overrides it
             </p>
+          )}
+          {detail.businessRules.length > 0 && (
+            <div>
+              <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Business rules</span>
+              <ol className="mt-1 flex flex-col gap-1.5">
+                {detail.businessRules.map((r, i) => {
+                  const rule = r as { statement?: unknown; confidence?: unknown };
+                  const raw = typeof rule.statement === 'string' ? rule.statement.trim() : '';
+                  const st = raw !== '' ? raw : JSON.stringify(r);
+                  const conf = typeof rule.confidence === 'number' ? rule.confidence : null;
+                  return (
+                    <li key={i} className="text-[11px] leading-snug" style={{ color: T.ink }}>
+                      {st}
+                      {conf !== null && (
+                        <span className="text-[9px] font-mono ml-1.5" style={{ color: T.faint }}>conf {conf}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
           )}
           <div className="text-[10px] font-mono flex gap-3 flex-wrap" style={{ color: T.faint }}>
             <span>{detail.ruleCount} rules</span>

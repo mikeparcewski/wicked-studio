@@ -25,6 +25,7 @@ const row = {
   domain: 'billing',
   reqId: 'REQ-1',
   title: 'Totals include tax',
+  statement: 'Line items are summed before tax is applied per jurisdiction',
   status: 'active',
   risk: false,
   riskSource: null,
@@ -54,6 +55,9 @@ describe('RequirementsModal', () => {
   it('lists requirements from the server and shows corpus counts', async () => {
     render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
     expect(await screen.findByText('Totals include tax')).toBeInTheDocument();
+    expect(
+      screen.getByText('Line items are summed before tax is applied per jurisdiction'),
+    ).toBeInTheDocument();
     expect(listRequirements).toHaveBeenCalledWith('r1', { offset: 0, limit: 50 });
   });
 
