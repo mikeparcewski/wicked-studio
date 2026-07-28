@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry, CodeGraphNode, CodeGraphEdge, CodeGraphData, DomainGraph, DomainCoverage } from '../api/types.js';
 import { CytoGraph } from './CytoGraph.js';
@@ -168,57 +168,191 @@ function NodeDetailPanel({
 }
 
 function DomainGraphView({ graph }: { graph: DomainGraph }): React.ReactElement {
-  const domains = Object.entries(graph.domains);
-  return (
-    <div className="h-full overflow-y-auto p-4 flex flex-col gap-3">
-      {domains.length === 0 ? (
+  // A real GRAPH, not a listing (operator feedback): domains are nodes in the path
+  // hierarchy (the only edge material the current artifact carries — requirement
+  // `dependencies`/`entities` are empty at this fidelity), sized by requirement
+  // count via the CytoGraph inDeg channel. Clicking a node opens its requirements
+  // in a detail rail. The filter narrows to matching domains plus their ancestors
+  // so the visible slice stays connected.
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const { nodes, edges, reqCounts } = useMemo(() => {
+    const paths = Object.keys(graph.domains);
+    const present = new Set(paths);
+    const counts = new Map<string, number>();
+    for (const p of paths) counts.set(p, Object.keys(graph.domains[p]?.requirements ?? {}).length);
+    const parentOf = (p: string): string | null => {
+      if (p === '(root)') return null;
+      let cur = p;
+      while (cur.includes('/')) {
+        cur = cur.slice(0, cur.lastIndexOf('/'));
+        if (present.has(cur)) return cur;
+      }
+      return present.has('(root)') ? '(root)' : null;
+    };
+    const childCount = new Map<string, number>();
+    const es: CodeGraphEdge[] = [];
+    for (const p of paths) {
+      const par = parentOf(p);
+      if (par !== null) {
+        es.push({ src: par, tgt: p });
+        childCount.set(par, (childCount.get(par) ?? 0) + 1);
+      }
+    }
+    const ns: CodeGraphNode[] = paths.map((p) => ({
+      id: p,
+      name: p === '(root)' ? '(root)' : p.slice(p.lastIndexOf('/') + 1),
+      kind: 'domain',
+      file: p,
+      inDeg: Math.min(counts.get(p) ?? 0, 60),
+      outDeg: childCount.get(p) ?? 0,
+      lang: 'domain',
+    }));
+    return { nodes: ns, edges: es, reqCounts: counts };
+  }, [graph]);
+
+  const q = query.trim().toLowerCase();
+  const visible = useMemo(() => {
+    if (q === '') return { nodes, edges };
+    const direct = new Set(
+      nodes
+        .filter(
+          (n) =>
+            n.id.toLowerCase().includes(q) ||
+            Object.values(graph.domains[n.id]?.requirements ?? {}).some((r) =>
+              (r.title ?? '').toLowerCase().includes(q),
+            ),
+        )
+        .map((n) => n.id),
+    );
+    // Keep ancestors so the filtered slice stays a connected hierarchy.
+    const keep = new Set(direct);
+    const byId = new Map(edges.map((e) => [e.tgt, e.src]));
+    for (const id of direct) {
+      let cur = byId.get(id);
+      while (cur !== undefined && !keep.has(cur)) {
+        keep.add(cur);
+        cur = byId.get(cur);
+      }
+    }
+    return {
+      nodes: nodes.filter((n) => keep.has(n.id)),
+      edges: edges.filter((e) => keep.has(e.src) && keep.has(e.tgt)),
+    };
+  }, [nodes, edges, q, graph]);
+
+  const selectedDomain = selected !== null ? graph.domains[selected] : undefined;
+
+  if (nodes.length === 0) {
+    return (
+      <div className="h-full overflow-y-auto p-4">
         <p className="text-sm text-center mt-8 font-mono" style={{ color: T.faint }}>No domains in this graph.</p>
-      ) : (
-        domains.map(([domainId, domain]) => {
-          const reqs = Object.entries(domain.requirements ?? {});
-          return (
-            <div
-              key={domainId}
-              className="rounded-xl overflow-hidden border"
-              style={{ border: `1px solid ${T.hairlineS}`, background: T.surface2 }}
-            >
-              <div
-                className="px-4 py-2 border-b flex items-center gap-2"
-                style={{ borderColor: T.hairline, background: T.canvas2 }}
-              >
-                <span className="text-[11px] font-semibold font-mono" style={{ color: T.ink }}>{domainId}</span>
-                <span className="text-[10px] font-mono" style={{ color: T.faint }}>{reqs.length} reqs</span>
-              </div>
-              {domain.description && (
-                <p className="text-[11px] px-4 pt-2 pb-1" style={{ color: T.muted }}>{domain.description}</p>
-              )}
-              {reqs.length > 0 && (
-                <div className="divide-y" style={{ borderColor: T.hairline }}>
-                  {reqs.map(([reqId, req]) => (
-                    <div key={reqId} className="px-4 py-2" style={{ borderColor: T.hairline }}>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[10px] font-mono" style={{ color: T.faint }}>{reqId}</span>
-                        {req.status && (
-                          <span
-                            className="text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded font-mono"
-                            style={{
-                              background: req.status === 'active' ? 'rgba(63,185,80,0.15)' : req.status === 'deprecated' ? 'rgba(248,81,73,0.15)' : T.surface,
-                              color: req.status === 'active' ? T.ok : req.status === 'deprecated' ? T.deny : T.muted,
-                            }}
-                          >
-                            {req.status}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px]" style={{ color: T.ink }}>{req.title}</p>
-                    </div>
-                  ))}
+      </div>
+    );
+  }
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex items-center gap-3 px-4 py-2 shrink-0 border-b" style={{ borderColor: T.hairline }}>
+        <span className="text-[11px] font-mono shrink-0" style={{ color: T.muted }}>
+          {nodes.length} domains · {[...reqCounts.values()].reduce((a, b) => a + b, 0)} requirements
+        </span>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filter domains + requirement titles…"
+          className="flex-1 text-[11px] font-mono px-3 py-1.5 rounded-lg border outline-none"
+          style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
+        />
+        {q !== '' && (
+          <span className="text-[10px] font-mono shrink-0" style={{ color: T.faint }}>
+            {visible.nodes.length === 1 ? '1 match' : `${visible.nodes.length} matches`}
+          </span>
+        )}
+      </div>
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-hidden" style={{ background: T.canvas }}>
+          <CytoGraph
+            nodes={visible.nodes}
+            edges={visible.edges}
+            externalSelectedId={selected}
+            onNodeSelect={(n) => setSelected(n ? n.id : null)}
+          />
+        </div>
+        {selected !== null && selectedDomain && (
+          <DomainDetailPanel
+            domainId={selected}
+            domain={selectedDomain}
+            onClose={() => setSelected(null)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DomainDetailPanel({
+  domainId,
+  domain,
+  onClose,
+}: {
+  domainId: string;
+  domain: DomainGraph['domains'][string];
+  onClose: () => void;
+}): React.ReactElement {
+  const REQ_CAP = 150;
+  const reqs = Object.entries(domain.requirements ?? {});
+  return (
+    <div
+      className="w-[380px] shrink-0 border-l flex flex-col"
+      style={{ borderColor: T.hairlineS, background: T.surface2 }}
+    >
+      <div className="px-4 py-2.5 border-b flex items-center gap-2 shrink-0" style={{ borderColor: T.hairline, background: T.canvas2 }}>
+        <span className="text-[11px] font-semibold font-mono truncate" style={{ color: T.ink }}>{domainId}</span>
+        <span className="text-[10px] font-mono ml-auto shrink-0" style={{ color: T.faint }}>{reqs.length} reqs</span>
+        <button type="button" onClick={onClose} aria-label="Close domain details" className="text-sm shrink-0 px-1" style={{ color: T.muted }}>
+          ×
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {domain.description && (
+          <p className="text-[11px] px-4 pt-3 pb-1" style={{ color: T.muted }}>{domain.description}</p>
+        )}
+        {reqs.length === 0 ? (
+          <p className="text-[11px] px-4 py-3 font-mono" style={{ color: T.faint }}>No requirements recorded for this domain.</p>
+        ) : (
+          <div className="divide-y" style={{ borderColor: T.hairline }}>
+            {reqs.slice(0, REQ_CAP).map(([reqId, req]) => (
+              <div key={reqId} className="px-4 py-2.5" style={{ borderColor: T.hairline }}>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[10px] font-mono" style={{ color: T.faint }}>{reqId}</span>
+                  {req.status && (
+                    <span
+                      className="text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded font-mono"
+                      style={{
+                        background: req.status === 'active' ? 'rgba(63,185,80,0.15)' : req.status === 'deprecated' ? 'rgba(248,81,73,0.15)' : T.surface,
+                        color: req.status === 'active' ? T.ok : req.status === 'deprecated' ? T.deny : T.muted,
+                      }}
+                    >
+                      {req.status}
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })
-      )}
+                <p className="text-[11px]" style={{ color: T.ink }}>{req.title}</p>
+                {req.description && req.description !== req.title && (
+                  <p className="text-[10px] mt-0.5" style={{ color: T.muted }}>{req.description.slice(0, 160)}</p>
+                )}
+              </div>
+            ))}
+            {reqs.length > REQ_CAP && (
+              <p className="text-[10px] font-mono px-4 py-2" style={{ color: T.faint }}>
+                +{reqs.length - REQ_CAP} more requirements
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
