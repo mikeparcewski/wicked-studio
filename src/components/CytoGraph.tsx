@@ -190,7 +190,7 @@ export function CytoGraph({ nodes, edges, externalSelectedId, onNodeClick, onNod
       }
     });
 
-    cy.ready(() => { cy.fit(undefined, 40); });
+    cy.ready(() => { if (!cy.destroyed()) cy.fit(undefined, 40); });
 
     setCy(cy);
     return () => {
@@ -202,6 +202,11 @@ export function CytoGraph({ nodes, edges, externalSelectedId, onNodeClick, onNod
   // Sync external selection without rebuilding.
   useEffect(() => {
     if (!cy) return;
+    // The selection effect can fire after the instance was torn down (modal close /
+    // re-render race) — cytoscape then throws "Cannot read properties of null
+    // (reading 'isHeadless')" from inside animate(), which the ErrorBoundary turns
+    // into a full error screen on node click. A destroyed cy is a no-op, not a crash.
+    if (cy.destroyed()) return;
     cy.elements('node').unselect();
     cy.elements().removeClass('highlighted dimmed');
     if (externalSelectedId) {
@@ -212,7 +217,9 @@ export function CytoGraph({ nodes, edges, externalSelectedId, onNodeClick, onNod
         const neighbourhood = target.closedNeighborhood();
         cy.elements().addClass('dimmed');
         neighbourhood.removeClass('dimmed').addClass('highlighted');
-        cy.animate({ fit: { eles: neighbourhood, padding: 60 }, duration: 300 });
+        if (!cy.destroyed()) {
+          cy.animate({ fit: { eles: neighbourhood, padding: 60 }, duration: 300 });
+        }
       }
     }
   }, [cy, externalSelectedId]);

@@ -443,7 +443,10 @@ export function RepoGraphModal({ repo, onClose, onSelectRun }: Props): React.Rea
                   <p className="text-sm font-semibold font-mono" style={{ color: T.ink }}>Domain graph not yet generated</p>
                   <p className="text-xs leading-relaxed" style={{ color: T.muted }}>
                     The domain model requires full annotation coverage — every behavior-bearing
-                    node in the code graph must be linked to a requirement.
+                    node in the code graph must be linked to a requirement. To get there: run the
+                    <span className="font-mono"> domain-extraction</span> workflow for this repo
+                    (it annotates behavior nodes with requirement claims), then re-run Onboard —
+                    its domain phase runs <span className="font-mono">wicked-core domain-graph</span>.
                   </p>
                   {domainCoverage ? (
                     <div className="rounded-lg p-4 flex flex-col gap-2 border" style={{ border: `1px solid ${T.hairline}` }}>
