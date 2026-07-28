@@ -760,3 +760,42 @@ export interface GitContributor {
 export interface SystemSettings {
   graphNodeLimit: number;
 }
+
+// ── Requirements management (server-side search + overrides; crew api/requirements.ts) ──
+export interface RequirementSummary {
+  key: string;
+  domain: string;
+  reqId: string;
+  title: string;
+  status: string;
+  risk: boolean;
+  riskSource: 'operator' | 'data' | null;
+  edited: boolean;
+}
+
+export interface RequirementDetail extends RequirementSummary {
+  description: string;
+  notes: string;
+  sourceTitle: string;
+  ruleCount: number;
+  componentCount: number;
+  validationCount: number;
+  errorPathCount: number;
+  businessRules: unknown[];
+  legacyComponents: unknown[];
+}
+
+export interface RequirementsPage {
+  total: number;
+  corpus: number;
+  offset: number;
+  limit: number;
+  items: RequirementSummary[];
+}
+
+export interface RequirementPatch {
+  title?: string;
+  notes?: string;
+  status?: 'active' | 'deprecated' | 'review';
+  risk?: boolean;
+}

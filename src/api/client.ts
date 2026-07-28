@@ -240,6 +240,24 @@ export const api = {
       body: JSON.stringify({ name, content, lang }),
     }),
 
+  /** Server-side requirements search: tokenized AND-match + risk/domain filters + pagination. */
+  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; domain?: string; offset?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    if (params.risk) qs.set('risk', params.risk);
+    if (params.domain) qs.set('domain', params.domain);
+    qs.set('offset', String(params.offset ?? 0));
+    qs.set('limit', String(params.limit ?? 50));
+    return apiFetch<import('./types.js').RequirementsPage>(`/repos/${encodeURIComponent(repoId)}/requirements?${qs.toString()}`);
+  },
+  getRequirement: (repoId: string, key: string) =>
+    apiFetch<{ requirement: import('./types.js').RequirementDetail }>(`/repos/${encodeURIComponent(repoId)}/requirements/${encodeURIComponent(key)}`),
+  patchRequirement: (repoId: string, key: string, patch: import('./types.js').RequirementPatch) =>
+    apiFetch<{ requirement: import('./types.js').RequirementDetail }>(`/repos/${encodeURIComponent(repoId)}/requirements/${encodeURIComponent(key)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
   /** The requirements_graph.json domain model; `graph` is null when not generated yet. */
   getDomainGraph: () => apiFetch<{ graph: import('./types.js').DomainGraph | null }>('/domain-graph'),
 

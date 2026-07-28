@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { RequirementsModal } from './RequirementsModal.js';
 import type { CodeGraphData, GitCommit, GitContributor, RepoEntry, SessionView } from '../api/types.js';
 import { RunLink } from './RunLink.js';
 
@@ -13,6 +14,7 @@ interface Props {
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: Props): React.ReactElement {
+  const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [graph, setGraph] = useState<CodeGraphData | null>(null);
@@ -133,6 +135,14 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                 style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff', border: '1px solid rgba(121,192,255,0.2)' }}
               >
                 Open Graph →
+              </button>
+              <button
+                type="button"
+                onClick={() => setRequirementsOpen(true)}
+                className="px-3 py-1 rounded-lg text-xs font-semibold font-mono transition-opacity hover:opacity-80"
+                style={{ background: 'rgba(63,185,80,0.12)', color: '#3fb950', border: '1px solid rgba(63,185,80,0.2)' }}
+              >
+                Open Requirements →
               </button>
             </div>
             {onboardError && (
@@ -401,6 +411,13 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           </Section>
         </div>
       </div>
+      {requirementsOpen && repo && (
+        <RequirementsModal
+          repoId={repoId}
+          repoName={repo.name}
+          onClose={() => setRequirementsOpen(false)}
+        />
+      )}
     </div>
   );
 }
