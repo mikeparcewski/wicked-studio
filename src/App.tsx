@@ -136,14 +136,19 @@ export function App(): React.ReactElement {
 
   // ── Repo graph modal — opened from RepoDetailPage via onOpenGraph ───────────
   const [graphModalRepo, setGraphModalRepo] = useState<RepoEntry | null>(null);
+  const [graphModalFocus, setGraphModalFocus] = useState<string | null>(null);
 
-  const openGraphModal = useCallback(() => {
-    if (!repoId) return;
-    void api.listRepos().then(({ repos }) => {
-      const r = repos.find((x) => x.id === repoId);
-      if (r) setGraphModalRepo(r);
-    });
-  }, [repoId]);
+  const openGraphModal = useCallback(
+    (focus?: string) => {
+      if (!repoId) return;
+      setGraphModalFocus(focus ?? null);
+      void api.listRepos().then(({ repos }) => {
+        const r = repos.find((x) => x.id === repoId);
+        if (r) setGraphModalRepo(r);
+      });
+    },
+    [repoId],
+  );
 
   // Center panel content based on route
   function renderCenter(): React.ReactElement {
@@ -276,7 +281,8 @@ export function App(): React.ReactElement {
       {graphModalRepo !== null && (
         <RepoGraphModal
           repo={graphModalRepo}
-          onClose={() => setGraphModalRepo(null)}
+          initialFocus={graphModalFocus}
+          onClose={() => { setGraphModalRepo(null); setGraphModalFocus(null); }}
           onSelectRun={selectRun}
         />
       )}

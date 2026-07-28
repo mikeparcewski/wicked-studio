@@ -8,6 +8,8 @@ interface Props {
   repo: RepoEntry;
   onClose: () => void;
   onSelectRun?: (runId: string) => void;
+  /** Deep-link: open focused on this symbol (ego-slice + selected node). */
+  initialFocus?: string | null;
 }
 
 type TabId = 'graph' | 'hotspots';
@@ -63,10 +65,22 @@ function NodeDetailPanel({
   node,
   edges,
   onClose,
+  onBlast,
+  onExpand,
+  blast,
+  blastBusy,
+  expandBusy,
+  onFocusDependent,
 }: {
   node: CodeGraphNode;
   edges: CodeGraphEdge[];
   onClose: () => void;
+  onBlast?: (node: CodeGraphNode) => void;
+  onExpand?: (node: CodeGraphNode) => void;
+  blast?: import('../api/types.js').BlastRadius | null;
+  blastBusy?: boolean;
+  expandBusy?: boolean;
+  onFocusDependent?: (dep: { id: string; name: string }) => void;
 }): React.ReactElement {
   const calledBy = edges.filter((e) => e.tgt === node.id);
   const calls = edges.filter((e) => e.src === node.id);
@@ -105,6 +119,65 @@ function NodeDetailPanel({
       </div>
 
       <div className="overflow-y-auto flex-1 p-3 flex flex-col gap-3 text-[11px]">
+        {(onBlast !== undefined || onExpand !== undefined) && (
+          <div className="flex gap-2">
+            {onBlast !== undefined && (
+              <button
+                type="button"
+                onClick={() => onBlast(node)}
+                disabled={blastBusy}
+                className="flex-1 px-2 py-1 rounded-lg text-[10px] font-mono font-semibold disabled:opacity-50"
+                style={{ background: 'rgba(248,81,73,0.12)', color: T.deny, border: `1px solid ${T.hairline}` }}
+              >
+                {blastBusy ? 'Computing…' : '⚡ Blast radius'}
+              </button>
+            )}
+            {onExpand !== undefined && (
+              <button
+                type="button"
+                onClick={() => onExpand(node)}
+                disabled={expandBusy}
+                className="flex-1 px-2 py-1 rounded-lg text-[10px] font-mono font-semibold disabled:opacity-50"
+                style={{ background: 'rgba(121,192,255,0.12)', color: T.link, border: `1px solid ${T.hairline}` }}
+              >
+                {expandBusy ? 'Expanding…' : '⤢ Expand neighbors'}
+              </button>
+            )}
+          </div>
+        )}
+        {blast != null && (
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>
+              blast radius · {blast.dependents.length} dependents
+            </span>
+            {blast.unresolved > 0 && (
+              <span className="text-[10px] font-mono" style={{ color: T.deny }}>
+                +{blast.unresolved} unresolved call(s) — impact may be larger
+              </span>
+            )}
+            {blast.unresolved === -1 && (
+              <span className="text-[10px] font-mono" style={{ color: T.deny }}>blast radius failed to compute</span>
+            )}
+            <ul className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
+              {blast.dependents.slice(0, 30).map((d) => (
+                <li key={d.id}>
+                  <button
+                    type="button"
+                    onClick={() => onFocusDependent?.(d)}
+                    className="w-full text-left text-[10px] font-mono truncate hover:underline"
+                    style={{ color: T.link }}
+                    title={`${d.file}:${d.line}`}
+                  >
+                    {d.name} <span style={{ color: T.faint }}>({d.kind})</span>
+                  </button>
+                </li>
+              ))}
+              {blast.dependents.length > 30 && (
+                <li className="text-[10px] font-mono" style={{ color: T.faint }}>+{blast.dependents.length - 30} more</li>
+              )}
+            </ul>
+          </div>
+        )}
         {node.kind && (
           <div className="flex items-center gap-2">
             <span
@@ -368,7 +441,7 @@ function PanelDots(): React.ReactElement {
   );
 }
 
-export function RepoGraphModal({ repo, onClose, onSelectRun }: Props): React.ReactElement {
+export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Props): React.ReactElement {
   const [tab, setTab] = useState<TabId>('graph');
   const [graphType, setGraphType] = useState<GraphType>('code');
   const [loading, setLoading] = useState(true);
@@ -403,12 +476,23 @@ export function RepoGraphModal({ repo, onClose, onSelectRun }: Props): React.Rea
 
   useEffect(() => {
     setLoading(true);
+    const opts = initialFocus != null && initialFocus !== '' ? { focus: initialFocus, limit: 120 } : undefined;
     api
-      .getRepoGraph(repo.id)
-      .then(({ graph }) => setCodeData(graph))
+      .getRepoGraph(repo.id, opts)
+      .then(({ graph }) => {
+        setCodeData(graph);
+        // Deep-linked focus (e.g. from a requirement's component): select it on arrival.
+        if (opts !== undefined && graph !== null) {
+          const hit = graph.nodes.find((n) => n.id === initialFocus || n.name === initialFocus);
+          if (hit) {
+            setSelectedNode(hit);
+            setHighlightId(hit.id);
+          }
+        }
+      })
       .catch(() => setCodeData(null))
       .finally(() => setLoading(false));
-  }, [repo.id]);
+  }, [repo.id, initialFocus]);
 
   useEffect(() => {
     if (graphType !== 'domain' || domainData !== null) return;
@@ -428,6 +512,68 @@ export function RepoGraphModal({ repo, onClose, onSelectRun }: Props): React.Rea
   function handleNodeSelect(node: CodeGraphNode | null): void {
     setSelectedNode(node);
     if (node !== null) setHighlightId(node.id);
+    setBlast(null);
+  }
+
+  // ── Navigation actions (estate primitives via crew) ──────────────────────
+  const [blast, setBlast] = useState<import('../api/types.js').BlastRadius | null>(null);
+  const [blastBusy, setBlastBusy] = useState(false);
+  const [expandBusy, setExpandBusy] = useState(false);
+
+  function blastRadius(node: CodeGraphNode): void {
+    setBlastBusy(true);
+    api
+      .getBlastRadius(repo.id, node.name || node.id)
+      .then(setBlast)
+      .catch(() => setBlast({ target: node.name, dependents: [], unresolved: -1 }))
+      .finally(() => setBlastBusy(false));
+  }
+
+  /** MERGE a fetched ego-slice into the current view (progressive navigation). */
+  function mergeSlice(graph: NonNullable<Awaited<ReturnType<typeof api.getRepoGraph>>['graph']>): void {
+    setCodeData((prev) => {
+          if (prev === null) return prev;
+          const nodeIds = new Set(prev.nodes.map((n) => n.id));
+          const mergedNodes = [...prev.nodes, ...graph.nodes.filter((n) => !nodeIds.has(n.id))];
+          const edgeKey = (e: CodeGraphEdge): string => `${e.src}→${e.tgt}`;
+          const edgeKeys = new Set(prev.edges.map(edgeKey));
+          const mergedEdges = [...prev.edges, ...graph.edges.filter((e) => !edgeKeys.has(edgeKey(e)))];
+          return {
+            nodes: mergedNodes,
+            edges: mergedEdges,
+            stats: { nodeCount: mergedNodes.length, edgeCount: mergedEdges.length, fileCount: new Set(mergedNodes.map((n) => n.file)).size },
+          };
+    });
+  }
+
+  function expandNeighbors(node: CodeGraphNode): void {
+    setExpandBusy(true);
+    api
+      .getRepoGraph(repo.id, { focus: node.id, limit: 60 })
+      .then(({ graph }) => {
+        if (graph !== null) mergeSlice(graph);
+      })
+      .catch(() => undefined)
+      .finally(() => setExpandBusy(false));
+  }
+
+  /** Focus a blast-radius dependent: select in-slice, or fetch its ego-slice and merge first. */
+  function focusDependent(dep: { id: string; name: string }): void {
+    setBlast(null);
+    const hit = codeData?.nodes.find((n) => n.id === dep.id);
+    if (hit) {
+      handleNodeSelect(hit);
+      return;
+    }
+    api
+      .getRepoGraph(repo.id, { focus: dep.id, limit: 60 })
+      .then(({ graph }) => {
+        if (graph === null) return;
+        mergeSlice(graph);
+        const fetched = graph.nodes.find((n) => n.id === dep.id) ?? graph.nodes.find((n) => n.name === dep.name);
+        if (fetched) handleNodeSelect(fetched);
+      })
+      .catch(() => undefined);
   }
 
   function isTestFile(file: string): boolean {
@@ -709,6 +855,12 @@ export function RepoGraphModal({ repo, onClose, onSelectRun }: Props): React.Rea
                   node={selectedNode}
                   edges={codeData!.edges}
                   onClose={() => setSelectedNode(null)}
+                  onBlast={blastRadius}
+                  onExpand={expandNeighbors}
+                  blast={blast}
+                  blastBusy={blastBusy}
+                  expandBusy={expandBusy}
+                  onFocusDependent={focusDependent}
                 />
               )}
             </div>

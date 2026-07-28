@@ -34,9 +34,11 @@ interface Props {
   repoId: string;
   repoName: string;
   onClose: () => void;
+  /** Navigate to a component symbol in the code graph (requirement → code). */
+  onNavigateComponent?: (symbol: string) => void;
 }
 
-export function RequirementsModal({ repoId, repoName, onClose }: Props): React.ReactElement {
+export function RequirementsModal({ repoId, repoName, onClose, onNavigateComponent }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const [risk, setRisk] = useState<'all' | 'risk' | 'no-risk'>('all');
   const [offset, setOffset] = useState(0);
@@ -207,6 +209,7 @@ export function RequirementsModal({ repoId, repoName, onClose }: Props): React.R
               reqKey={selectedKey}
               onClose={() => setSelectedKey(null)}
               onSaved={absorbUpdate}
+              onNavigateComponent={onNavigateComponent}
             />
           )}
         </div>
@@ -285,11 +288,13 @@ function RequirementEditRail({
   reqKey,
   onClose,
   onSaved,
+  onNavigateComponent,
 }: {
   repoId: string;
   reqKey: string;
   onClose: () => void;
   onSaved: (d: RequirementDetail) => void;
+  onNavigateComponent?: ((symbol: string) => void) | undefined;
 }): React.ReactElement {
   const [detail, setDetail] = useState<RequirementDetail | null>(null);
   const [title, setTitle] = useState('');
@@ -466,11 +471,28 @@ function RequirementEditRail({
             <div>
               <span className="text-[10px] font-mono uppercase" style={{ color: T.faint }}>Components</span>
               <ul className="mt-1 flex flex-col gap-0.5">
-                {detail.legacyComponents.map((c, i) => (
-                  <li key={i} className="text-[10px] font-mono truncate" style={{ color: T.muted }}>
-                    {typeof c === 'string' ? c : JSON.stringify(c)}
-                  </li>
-                ))}
+                {detail.legacyComponents.map((c, i) => {
+                  const label = typeof c === 'string' ? c : JSON.stringify(c);
+                  // 'path#symbol' components navigate by the symbol part; bare paths by themselves.
+                  const symbol = typeof c === 'string' ? (c.includes('#') ? c.split('#')[1]! : c) : '';
+                  return (
+                    <li key={i} className="text-[10px] font-mono truncate">
+                      {onNavigateComponent !== undefined && symbol !== '' ? (
+                        <button
+                          type="button"
+                          onClick={() => onNavigateComponent(symbol)}
+                          className="hover:underline text-left truncate w-full"
+                          style={{ color: T.link }}
+                          title={`Open ${label} in the code graph`}
+                        >
+                          {label} →
+                        </button>
+                      ) : (
+                        <span style={{ color: T.muted }}>{label}</span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

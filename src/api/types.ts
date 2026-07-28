@@ -800,3 +800,11 @@ export interface RequirementPatch {
   status?: 'active' | 'deprecated' | 'review';
   risk?: boolean;
 }
+
+// ── Blast radius (wicked-estate blast-radius --json via crew) ──
+export interface BlastRadius {
+  target: string;
+  dependents: Array<{ id: string; name: string; kind: string; file: string; line: number }>;
+  /** Unresolved call-sites referencing the target — absence of dependents never means "safe". */
+  unresolved: number;
+}

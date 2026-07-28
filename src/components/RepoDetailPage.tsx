@@ -8,7 +8,7 @@ interface Props {
   repoId: string;
   onSelectRun: (id: string) => void;
   navigate: (path: string) => void;
-  onOpenGraph: () => void;
+  onOpenGraph: (focus?: string) => void;
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
@@ -130,7 +130,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
               </button>
               <button
                 type="button"
-                onClick={onOpenGraph}
+                onClick={() => onOpenGraph()}
                 className="px-3 py-1 rounded-lg text-xs font-semibold font-mono transition-opacity hover:opacity-80"
                 style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff', border: '1px solid rgba(121,192,255,0.2)' }}
               >
@@ -284,7 +284,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                     </span>
                     <button
                       type="button"
-                      onClick={onOpenGraph}
+                      onClick={() => onOpenGraph()}
                       className="shrink-0 text-[10px] font-mono hover:underline"
                       style={{ color: 'rgba(230,237,243,0.4)' }}
                     >
@@ -294,7 +294,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                 ))}
                 <button
                   type="button"
-                  onClick={onOpenGraph}
+                  onClick={() => onOpenGraph()}
                   className="mt-2 self-start text-xs font-mono hover:underline"
                   style={{ color: '#79c0ff' }}
                 >
@@ -323,7 +323,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                 ))}
                 <button
                   type="button"
-                  onClick={onOpenGraph}
+                  onClick={() => onOpenGraph()}
                   className="mt-2 self-start text-xs font-mono hover:underline"
                   style={{ color: '#79c0ff' }}
                 >
@@ -416,6 +416,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           repoId={repoId}
           repoName={repo.name}
           onClose={() => setRequirementsOpen(false)}
+          onNavigateComponent={(symbol) => {
+            setRequirementsOpen(false);
+            onOpenGraph(symbol);
+          }}
         />
       )}
     </div>

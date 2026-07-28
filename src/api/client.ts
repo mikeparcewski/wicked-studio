@@ -261,9 +261,18 @@ export const api = {
   /** The requirements_graph.json domain model; `graph` is null when not generated yet. */
   getDomainGraph: () => apiFetch<{ graph: import('./types.js').DomainGraph | null }>('/domain-graph'),
 
-  /** Symbol-level code graph for a repo via wicked-estate graph-view; `graph` is null when not yet built. */
-  getRepoGraph: (repoId: string) =>
-    apiFetch<{ graph: import('./types.js').CodeGraphData | null }>(`/repos/${encodeURIComponent(repoId)}/graph`),
+  /** Symbol-level code graph for a repo via wicked-estate graph-view; `graph` is null when not yet built.
+   *  `focus` switches to ego-graph mode (slice seeded from one symbol; the navigation primitive). */
+  getRepoGraph: (repoId: string, opts?: { focus?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (opts?.focus) qs.set('focus', opts.focus);
+    if (opts?.limit) qs.set('limit', String(opts.limit));
+    const suffix = qs.size > 0 ? `?${qs.toString()}` : '';
+    return apiFetch<{ graph: import('./types.js').CodeGraphData | null }>(`/repos/${encodeURIComponent(repoId)}/graph${suffix}`);
+  },
+  /** Blast radius for a symbol name — dependents + the unresolved-call count. */
+  getBlastRadius: (repoId: string, name: string) =>
+    apiFetch<import('./types.js').BlastRadius>(`/repos/${encodeURIComponent(repoId)}/graph/blast-radius?name=${encodeURIComponent(name)}`),
 
   /** Git commit history for a repo (last 20 commits via git log). */
   getRepoGitHistory: (repoId: string) =>
