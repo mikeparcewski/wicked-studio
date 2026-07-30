@@ -12,6 +12,7 @@ import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { RuleManager } from './components/RuleManager.js';
 import { ChatPanel } from './components/ChatPanel.js';
+import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { WorkPage } from './components/WorkPage.js';
 import { SystemSettings } from './components/SystemSettings.js';
@@ -238,6 +239,14 @@ export function App(): React.ReactElement {
             onRejectGate={onDashboardRejectGate}
             navigate={navigate}
           />
+        </div>
+      );
+    }
+    // NEW CHAT: the group-chat surface (warm seats + fan-out), not a run (crew#165).
+    if (chatMode && selected === null) {
+      return (
+        <div className="flex-1 overflow-hidden">
+          <GroupChat repoId={repoId} onBack={onNavigateBack} />
         </div>
       );
     }

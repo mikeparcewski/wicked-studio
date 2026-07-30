@@ -145,6 +145,22 @@ export const api = {
     apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
 
   /** A unit's captured transcript (string, or `null`). Pass the unit key (the suffix after `<run>:`). */
+  // ── Chat sessions (crew#165): warm seats + group fan-out ─────────────────
+  openChat: (body: { chatId?: string; clis?: string[]; repoRef?: string }) =>
+    apiFetch<{ chatId: string; seats: { cliKey: string; ok: boolean; error?: string }[] }>(`/chats`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  sendChatMessage: (chatId: string, text: string, targets?: string[]) =>
+    apiFetch<{ seats: string[] }>(`/chats/${encodeURIComponent(chatId)}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(targets === undefined ? { text } : { text, targets }),
+    }),
+  closeChat: (chatId: string) =>
+    apiFetch<{ ok: boolean }>(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' }),
+
   getUnitOutput: (id: string, unitKey: string) =>
     apiFetch<{ output: string | null }>(
       `/runs/${encodeURIComponent(id)}/units/${encodeURIComponent(unitKey)}/output`,
