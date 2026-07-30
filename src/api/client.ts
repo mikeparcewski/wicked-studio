@@ -241,10 +241,11 @@ export const api = {
     }),
 
   /** Server-side requirements search: tokenized AND-match + risk/domain filters + pagination. */
-  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; domain?: string; offset?: number; limit?: number }) => {
+  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; category?: 'functional' | 'config-data'; domain?: string; offset?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params.q) qs.set('q', params.q);
     if (params.risk) qs.set('risk', params.risk);
+    if (params.category) qs.set('category', params.category);
     if (params.domain) qs.set('domain', params.domain);
     qs.set('offset', String(params.offset ?? 0));
     qs.set('limit', String(params.limit ?? 50));

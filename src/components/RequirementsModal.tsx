@@ -41,6 +41,9 @@ interface Props {
 export function RequirementsModal({ repoId, repoName, onClose, onNavigateComponent }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const [risk, setRisk] = useState<'all' | 'risk' | 'no-risk'>('all');
+  // Functional by default: statements extracted from lockfiles/manifests/data fixtures
+  // are honest but they're about the tooling, not the product.
+  const [category, setCategory] = useState<'functional' | 'config-data' | 'all'>('functional');
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<RequirementsPage | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -48,10 +51,11 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(
-    (q: string, r: typeof risk, off: number) => {
+    (q: string, r: typeof risk, cat: typeof category, off: number) => {
       const params: Parameters<typeof api.listRequirements>[1] = { offset: off, limit: PAGE_SIZE };
       if (q.trim() !== '') params.q = q.trim();
       if (r !== 'all') params.risk = r;
+      if (cat !== 'all') params.category = cat;
       api
         .listRequirements(repoId, params)
         .then((p) => {
@@ -66,14 +70,19 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   // One debounced (250ms) server fetch covers search, filter, and pagination changes.
   useEffect(() => {
     if (debounceRef.current !== null) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchPage(query, risk, offset), 250);
+    debounceRef.current = setTimeout(() => fetchPage(query, risk, category, offset), 250);
     return () => {
       if (debounceRef.current !== null) clearTimeout(debounceRef.current);
     };
-  }, [query, risk, offset, fetchPage]);
+  }, [query, risk, category, offset, fetchPage]);
 
   function setFilter(r: 'all' | 'risk' | 'no-risk'): void {
     setRisk(r);
+    setOffset(0);
+  }
+
+  function setCategoryFilter(c: 'functional' | 'config-data' | 'all'): void {
+    setCategory(c);
     setOffset(0);
   }
 
@@ -135,6 +144,25 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
             className="flex-1 text-[12px] font-mono px-3 py-1.5 rounded-lg border outline-none"
             style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2, color: T.ink }}
           />
+          <div className="flex items-center gap-1" role="group" aria-label="Category filter">
+            {(['functional', 'config-data', 'all'] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCategoryFilter(c)}
+                aria-pressed={category === c}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold"
+                style={{
+                  background: category === c ? T.surface2 : 'transparent',
+                  color: category === c ? T.ink : T.faint,
+                  border: `1px solid ${category === c ? T.hairlineS : 'transparent'}`,
+                }}
+              >
+                {c === 'functional' ? 'Functional' : c === 'config-data' ? 'Config & data' : 'All'}
+              </button>
+            ))}
+          </div>
+          <div className="w-px h-4" style={{ background: T.hairline }} />
           <div className="flex items-center gap-1" role="group" aria-label="Risk filter">
             {(['all', 'risk', 'no-risk'] as const).map((r) => (
               <button
@@ -224,6 +252,7 @@ function summaryOf(d: RequirementDetail): RequirementSummary {
     domain: d.domain,
     reqId: d.reqId,
     title: d.title,
+    category: d.category,
     statement: d.statement,
     status: d.status,
     risk: d.risk,

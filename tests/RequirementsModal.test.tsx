@@ -28,6 +28,7 @@ const row = {
   statement: 'Line items are summed before tax is applied per jurisdiction',
   status: 'active',
   risk: false,
+  category: 'functional' as const,
   riskSource: null,
   edited: false,
 };
@@ -58,7 +59,7 @@ describe('RequirementsModal', () => {
     expect(
       screen.getByText('Line items are summed before tax is applied per jurisdiction'),
     ).toBeInTheDocument();
-    expect(listRequirements).toHaveBeenCalledWith('r1', { offset: 0, limit: 50 });
+    expect(listRequirements).toHaveBeenCalledWith('r1', { offset: 0, limit: 50, category: 'functional' });
   });
 
   it('search and risk filter go to the SERVER as query params', async () => {
@@ -67,13 +68,14 @@ describe('RequirementsModal', () => {
     await screen.findByText('Totals include tax');
     await user.type(screen.getByPlaceholderText(/Search requirements/), 'tax');
     await waitFor(() =>
-      expect(listRequirements).toHaveBeenCalledWith('r1', { offset: 0, limit: 50, q: 'tax' }),
+      expect(listRequirements).toHaveBeenCalledWith('r1', { offset: 0, limit: 50, q: 'tax', category: 'functional' }),
     );
     await user.click(screen.getByRole('button', { name: 'Risk' }));
     await waitFor(() =>
       expect(listRequirements).toHaveBeenCalledWith('r1', {
         offset: 0,
         limit: 50,
+        category: 'functional',
         q: 'tax',
         risk: 'risk',
       }),

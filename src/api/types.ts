@@ -767,6 +767,7 @@ export interface RequirementSummary {
   domain: string;
   reqId: string;
   title: string;
+  category: 'functional' | 'config-data';
   statement: string;
   status: string;
   risk: boolean;
