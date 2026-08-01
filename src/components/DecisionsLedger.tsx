@@ -5,6 +5,17 @@ interface Props {
   model: RunModel;
 }
 
+/**
+ * Which layer actually decided this gate.
+ *
+ * A DENIAL is always attributable — some layer said no, and it is named. An APPROVAL is not:
+ * each layer passes vacuously when it did not run. The deterministic floor reports that via
+ * `hasDeterministicFloor`, the agent judge via a null `agentVerdict`, and the evaluator second
+ * pass via an EMPTY `evaluatorPolicies` — the policy engine executes on every unit and
+ * default-allows when nothing matched, so `evaluatorPass === true` alone proves nothing
+ * (FINDING-025). Credit a layer for an approval only when it genuinely evaluated something;
+ * otherwise the honest answer is 'ungated'.
+ */
 function gateDecider(g: UnitModel['gateEvals'][number]): string {
   if (!g.combined) {
     const deniers: string[] = [];
@@ -13,7 +24,9 @@ function gateDecider(g: UnitModel['gateEvals'][number]): string {
     if (deniers.length === 0 && g.agentVerdict !== null) deniers.push('agent judge');
     return deniers.length > 0 ? deniers.join(' + ') : 'governance';
   }
-  if (g.evaluatorPass !== null) return 'evaluator (2nd pass)';
+  // `=== true`, not `!== null`: an allow whose evaluator says `false` is a contradictory record, and
+  // the one thing we must not do with a contradiction is name a layer as the approver. Fall through.
+  if (g.evaluatorPass === true && g.evaluatorPolicies.length > 0) return 'evaluator (2nd pass)';
   if (g.agentVerdict !== null) return 'agent judge';
   if (g.hasDeterministicFloor) return 'deterministic floor';
   return 'ungated';
@@ -136,6 +149,13 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                   {g.evaluatorPass !== null && (
                     <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
                       evaluator: {g.evaluatorPass ? 'pass' : 'fail'}
+                      {/* Name the policies that ran, or say plainly that none did — "pass" on its
+                          own reads as an enforced approval when it is a default-allow. */}
+                      {g.evaluatorPolicies.length > 0
+                        ? ` — ${g.evaluatorPolicies.join(', ')}`
+                        : g.evaluatorPass
+                          ? ' (no policy applied)'
+                          : ''}
                     </p>
                   )}
                   {g.denialReason && (

@@ -61,6 +61,14 @@ export interface GateEvalRecord {
   agentVerdict: string | null;
   agentReasoning: string | null;
   evaluatorPass: boolean | null;
+  /**
+   * Policy ids the evaluator second pass applied. EMPTY alongside `evaluatorPass: true` means
+   * nothing applied and the pass is a vacuous default-allow, not an enforced approval — the
+   * layer-3 analogue of `hasDeterministicFloor` (FINDING-025). Older cores omit the field; it
+   * defaults to `[]`, which reads as ungated and is the safe direction (never overclaims
+   * governance for a run whose core could not report it).
+   */
+  evaluatorPolicies: string[];
   denialReason: string | null;
   combined: boolean;
 }
@@ -216,6 +224,7 @@ function gateEvalKey(g: GateEvalRecord): string {
     g.agentVerdict,
     g.agentReasoning,
     g.evaluatorPass,
+    g.evaluatorPolicies,
     g.denialReason,
     g.combined,
   ]);
@@ -424,6 +433,10 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
             agentVerdict: ev.agentVerdict ?? null,
             agentReasoning: ev.agentReasoning ?? null,
             evaluatorPass: typeof ev.evaluatorPass === 'boolean' ? ev.evaluatorPass : null,
+            // Absent/malformed ⇒ `[]` (reads as ungated). Never infer governance we were not told about.
+            evaluatorPolicies: Array.isArray(ev.evaluatorPolicies)
+              ? (ev.evaluatorPolicies as unknown[]).filter((p): p is string => typeof p === 'string')
+              : [],
             denialReason: ev.denialReason ?? null,
             combined: ev.combined === true,
           };

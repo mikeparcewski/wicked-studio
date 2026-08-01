@@ -115,3 +115,125 @@ describe('DecisionsLedger — rework badge', () => {
     expect(screen.queryByTestId('rework-badge')).toBeNull();
   });
 });
+
+describe('DecisionsLedger — an approval is only credited to a layer that ran (FINDING-025)', () => {
+  /** A `gateEvaluated` for unit ord=1 with the layer signals under test. */
+  const gateEvent = (over: Partial<Record<string, unknown>>): CoreEvent =>
+    ({
+      type: 'gateEvaluated',
+      session: 's1',
+      ord: 1,
+      criterion: null,
+      hasDeterministicFloor: false,
+      deterministicPass: true,
+      agentVerdict: null,
+      agentReasoning: null,
+      evaluatorPass: true,
+      evaluatorPolicies: [],
+      denialReason: null,
+      combined: true,
+      ...over,
+    }) as unknown as CoreEvent;
+
+  const renderGate = (over: Partial<Record<string, unknown>>): void => {
+    const snap = makeView({}, [makeUnit({ ord: 1, routing: councilRouting })]);
+    render(<DecisionsLedger model={mergeRunModel(snap, [gateEvent(over)])} />);
+  };
+
+  // This is the exact shape every unit of run 7620a086 emitted: all three layers inert, yet the
+  // ledger credited the pass to "evaluator (2nd pass)". A default-allow is not a governed pass.
+  it('reports ungated when no layer ran, even though evaluatorPass is true', () => {
+    renderGate({});
+    const row = screen.getByTestId('ledger-row');
+    // The decider itself must say "ungated"; the criterion placeholder renders "(ungated)" too, so
+    // the negative assertion is the one that actually binds.
+    expect(row).toHaveTextContent('ungated');
+    expect(row).not.toHaveTextContent('evaluator (2nd pass)');
+  });
+
+  it('credits the evaluator only when it actually applied a policy', () => {
+    renderGate({ evaluatorPolicies: ['e2e-deny-curl-phase'] });
+    expect(screen.getByTestId('ledger-row')).toHaveTextContent('evaluator (2nd pass)');
+  });
+
+  // A DENIAL is always attributable — the denying layer named itself — so it must stay attributed
+  // regardless of the policy list, which is not populated on the deny path.
+  it('still names the evaluator as the denier on a denial', () => {
+    renderGate({ evaluatorPass: false, combined: false, evaluatorPolicies: [] });
+    const row = screen.getByTestId('ledger-row');
+    expect(row).toHaveTextContent('DENY');
+    expect(row).toHaveTextContent('evaluator (2nd pass)');
+  });
+
+  // Layers 1 and 2 already reported their own inertness; they must keep working unchanged.
+  it('still credits the deterministic floor when one gated the unit', () => {
+    renderGate({ hasDeterministicFloor: true, criterion: 'tests pass' });
+    expect(screen.getByTestId('ledger-row')).toHaveTextContent('deterministic floor');
+  });
+
+  it('still credits the agent judge when it returned a verdict', () => {
+    renderGate({ agentVerdict: 'pass' });
+    expect(screen.getByTestId('ledger-row')).toHaveTextContent('agent judge');
+  });
+
+  // A contradictory record — an ALLOW whose evaluator says it failed — must not be attributed to
+  // that evaluator. Unreachable from a healthy core, which is why it is worth pinning: a truncated
+  // or reordered event stream must degrade to "we don't know", never to a fabricated approver.
+  it('does not credit the evaluator for an allow when evaluatorPass is false', () => {
+    renderGate({ evaluatorPass: false, combined: true, evaluatorPolicies: ['pol-a'] });
+    expect(screen.getByTestId('ledger-row')).not.toHaveTextContent('· evaluator (2nd pass)');
+  });
+
+  // A core that predates the field must not be presented as governed.
+  it('treats a missing evaluatorPolicies field as ungated', () => {
+    const snap = makeView({}, [makeUnit({ ord: 1, routing: councilRouting })]);
+    const ev = gateEvent({}) as unknown as Record<string, unknown>;
+    delete ev.evaluatorPolicies;
+    render(<DecisionsLedger model={mergeRunModel(snap, [ev as unknown as CoreEvent])} />);
+    // NB: assert the ABSENCE of the evaluator credit, not the presence of "ungated" — the row also
+    // renders a literal "(ungated)" as the criterion placeholder, so a presence-only assertion here
+    // passes even against the buggy decider.
+    expect(screen.getByTestId('ledger-row')).not.toHaveTextContent('evaluator (2nd pass)');
+  });
+});
+
+describe('DecisionsLedger — the evaluator chip states whether a policy ran (FINDING-025)', () => {
+  const gate = (over: Partial<Record<string, unknown>>): CoreEvent =>
+    ({
+      type: 'gateEvaluated',
+      session: 's1',
+      ord: 1,
+      criterion: null,
+      hasDeterministicFloor: false,
+      deterministicPass: true,
+      agentVerdict: null,
+      agentReasoning: null,
+      evaluatorPass: true,
+      evaluatorPolicies: [],
+      denialReason: null,
+      combined: true,
+      ...over,
+    }) as unknown as CoreEvent;
+
+  const row = (over: Partial<Record<string, unknown>>): HTMLElement => {
+    const snap = makeView({}, [makeUnit({ ord: 1, routing: councilRouting })]);
+    render(<DecisionsLedger model={mergeRunModel(snap, [gate(over)])} />);
+    return screen.getByTestId('ledger-row');
+  };
+
+  it('says no policy applied when the pass was vacuous', () => {
+    expect(row({})).toHaveTextContent('evaluator: pass (no policy applied)');
+  });
+
+  it('names the policies when the pass was enforced', () => {
+    expect(row({ evaluatorPolicies: ['pol-a', 'pol-b'] })).toHaveTextContent(
+      'evaluator: pass — pol-a, pol-b',
+    );
+  });
+
+  it('does not append the vacuity note to a failure', () => {
+    const r = row({ evaluatorPass: false, combined: false });
+    expect(r).toHaveTextContent('evaluator: fail');
+    expect(r).not.toHaveTextContent('no policy applied');
+  });
+});
