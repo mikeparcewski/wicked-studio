@@ -329,6 +329,17 @@ export const api = {
     apiFetch<{ status: string }>('/governance/rules', { method: 'POST', body: JSON.stringify(rule) }),
 
   /**
+   * Retire a governance policy — withdraw it from enforcement without deleting it. The record stays
+   * listed (past decisions cite it), it just stops deciding gates. 404 if no policy has that id.
+   */
+  retirePolicy: (id: string) =>
+    apiFetch<{ status: string; id: string }>(`/governance/policies/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  /** Retire a conformance rule — withdraw it from recall. Same contract as `retirePolicy`. */
+  retireConformanceRule: (id: string) =>
+    apiFetch<{ status: string; id: string }>(`/governance/rules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  /**
    * Preview which conformance rules match a facet query (read-only, no actor impact).
    * Any omitted facet matches all values for that dimension.
    */

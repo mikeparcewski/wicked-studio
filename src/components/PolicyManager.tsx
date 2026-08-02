@@ -29,16 +29,38 @@ const POLICY_TEMPLATE: GovernancePolicy = {
 function PolicyRow({
   policy,
   onEdit,
+  onRetire,
 }: {
   policy: GovernancePolicy;
   onEdit: (p: GovernancePolicy) => void;
+  onRetire: (id: string) => Promise<void>;
 }): React.ReactElement {
+  // Retiring is a governance action with a visible blast radius (the policy stops deciding gates),
+  // so it takes a second click. Inline rather than window.confirm: a modal dialog blocks the page
+  // for anything driving this UI programmatically.
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const retired = policy.retired === true;
+
   return (
     <tr
       className="text-[11px]"
-      style={{ borderBottom: '1px solid rgba(230,237,243,0.06)' }}
+      style={{
+        borderBottom: '1px solid rgba(230,237,243,0.06)',
+        opacity: retired ? 0.45 : 1,
+      }}
     >
-      <td className="px-3 py-2 font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>{policy.id}</td>
+      <td className="px-3 py-2 font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>
+        {policy.id}
+        {retired && (
+          <span
+            className="ml-2 inline-flex rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+            style={{ background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.45)' }}
+          >
+            retired
+          </span>
+        )}
+      </td>
       <td className="px-3 py-2" style={{ color: 'rgba(230,237,243,0.45)' }}>{policy.kind}</td>
       <td className="px-3 py-2">
         <span
@@ -53,14 +75,37 @@ function PolicyRow({
       </td>
       <td className="px-3 py-2 truncate max-w-xs" style={{ color: 'rgba(230,237,243,0.5)' }}>{policy.rule}</td>
       <td className="px-3 py-2">
-        <button
-          type="button"
-          onClick={() => onEdit(policy)}
-          className="text-[10px] hover:underline"
-          style={{ color: '#79c0ff' }}
-        >
-          Edit
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => onEdit(policy)}
+            className="text-[10px] hover:underline"
+            style={{ color: '#79c0ff' }}
+          >
+            Edit
+          </button>
+          {!retired && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (!armed) {
+                  setArmed(true);
+                  return;
+                }
+                setBusy(true);
+                void onRetire(policy.id).finally(() => {
+                  setBusy(false);
+                  setArmed(false);
+                });
+              }}
+              className="text-[10px] hover:underline disabled:opacity-50"
+              style={{ color: armed ? '#f85149' : 'rgba(230,237,243,0.4)' }}
+            >
+              {busy ? 'Retiring…' : armed ? 'Confirm retire' : 'Retire'}
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -89,6 +134,17 @@ export function PolicyManager(): React.ReactElement {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Retire, not delete: the policy stays on the list (past decisions cite it) and stops enforcing.
+  const handleRetire = useCallback(async (id: string) => {
+    setError(null);
+    try {
+      await api.retirePolicy(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [load]);
 
   const openEditor = (policy?: GovernancePolicy) => {
     setEditorJson(JSON.stringify(policy ?? POLICY_TEMPLATE, null, 2));
@@ -186,7 +242,7 @@ export function PolicyManager(): React.ReactElement {
                 </tr>
               ) : (
                 policies.map((p) => (
-                  <PolicyRow key={p.id} policy={p} onEdit={openEditor} />
+                  <PolicyRow key={p.id} policy={p} onEdit={openEditor} onRetire={handleRetire} />
                 ))
               )}
             </tbody>
