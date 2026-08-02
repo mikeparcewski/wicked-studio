@@ -406,6 +406,127 @@ function ModePill({
   );
 }
 
+/**
+ * Read-only view for legacy workflow_id='chat' runs (old council-routed single-unit sessions).
+ * Renders as a simple conversation without governance chrome or a work-launcher input.
+ */
+function LegacyChatHistory({
+  view,
+  onNavigateBack,
+}: {
+  view: SessionView;
+  onNavigateBack: () => void;
+}): React.ReactElement {
+  const { session, units } = view;
+  const [transcripts, setTranscripts] = useState<
+    Record<number, { text: string | null; loading: boolean; visible: boolean }>
+  >({});
+  const autoLoadedOrds = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    for (const unit of units) {
+      if (unit.status === 'done' && !autoLoadedOrds.current.has(unit.ord)) {
+        autoLoadedOrds.current.add(unit.ord);
+        setTranscripts((prev) => ({ ...prev, [unit.ord]: { text: null, loading: true, visible: true } }));
+        void api
+          .getUnitOutput(session.id, unitKey(session.id, unit.id, unit.ord))
+          .then(({ output }) => {
+            setTranscripts((prev) => ({ ...prev, [unit.ord]: { text: output ?? null, loading: false, visible: true } }));
+          })
+          .catch(() => {
+            setTranscripts((prev) => ({ ...prev, [unit.ord]: { text: null, loading: false, visible: true } }));
+          });
+      }
+    }
+  }, [units, session.id]);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div
+        className="flex items-center gap-3 px-6 py-4 shrink-0"
+        style={{ borderBottom: '1px solid rgba(230,237,243,0.07)', background: '#1b222e' }}
+      >
+        <button
+          type="button"
+          onClick={onNavigateBack}
+          aria-label="Back"
+          className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors shrink-0"
+          style={{ color: 'rgba(230,237,243,0.4)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(230,237,243,0.06)'; e.currentTarget.style.color = '#e6edf3'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(230,237,243,0.4)'; }}
+        >
+          ←
+        </button>
+        <p className="flex-1 text-base font-semibold truncate" style={{ color: '#e6edf3' }} title={session.problem}>
+          {session.problem}
+        </p>
+        <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>legacy chat</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-6 max-w-3xl w-full mx-auto">
+        <div className="flex justify-end">
+          <div
+            className="max-w-[72%] rounded-2xl text-base px-5 py-3.5 leading-relaxed"
+            style={{ background: '#224a5e', color: '#e6edf3', border: '1px solid rgba(230,237,243,0.12)' }}
+          >
+            {session.problem}
+          </div>
+        </div>
+
+        {[...units].sort((a, b) => a.ord - b.ord).map((unit) => {
+          const tc = transcripts[unit.ord];
+          return (
+            <div key={unit.id} className="self-start max-w-[85%] flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                {unit.assigned_cli ? (
+                  <>
+                    <CliAvatar cli={unit.assigned_cli} />
+                    <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }}>
+                      {unit.assigned_cli}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }}>agent</span>
+                )}
+              </div>
+              <div
+                className="rounded-2xl px-5 py-4"
+                style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
+              >
+                {tc?.loading && (
+                  <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>Loading…</span>
+                )}
+                {!tc?.loading && tc?.text && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setTranscripts((prev) => ({ ...prev, [unit.ord]: { ...prev[unit.ord]!, visible: !tc.visible } }))}
+                      className="text-xs font-medium font-mono hover:underline"
+                      style={{ color: '#79c0ff' }}
+                    >
+                      {tc.visible ? '▾ Hide response' : '▸ View response'}
+                    </button>
+                    {tc.visible && (
+                      <div className="mt-2.5 max-h-96 overflow-auto rounded-xl p-4" style={{ background: '#0d1117' }}>
+                        <Markdown className="whitespace-pre-wrap">{tc.text}</Markdown>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!tc?.loading && !tc?.text && (
+                  <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                    Response not available — this session predates durable transcripts.
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RunChat({
   view,
   mode,
@@ -843,6 +964,11 @@ export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefres
 
   if (view) {
     const activeView = view;
+    // Legacy chat runs (workflow_id='chat') are old single-unit council-routed sessions.
+    // Render them as a simple conversation — no governance chrome, no work launcher.
+    if (activeView.session.workflow_id === 'chat') {
+      return <LegacyChatHistory view={activeView} onNavigateBack={onNavigateBack} />;
+    }
     const isTerminal = ['completed', 'cancelled', 'failed'].includes(activeView.session.status);
     function handleModeChange(newMode: RunMode): void {
       setMode(newMode);

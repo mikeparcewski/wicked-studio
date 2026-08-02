@@ -472,7 +472,7 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
             {isExpanded && (
               <>
                 <span>Settings</span>
-                <span className="ml-auto text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.25)' }}>v0.2.1</span>
+                <span className="ml-auto text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.25)' }}>v0.3.2</span>
               </>
             )}
           </button>
