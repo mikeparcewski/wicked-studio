@@ -160,6 +160,11 @@ export const api = {
     }),
   closeChat: (chatId: string) =>
     apiFetch<{ ok: boolean }>(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' }),
+  /** A chat's warm seats. Empty means the chat is gone — the daemon does not 404 an unknown id. */
+  getChat: (chatId: string) =>
+    apiFetch<{ chatId: string; seats: string[] }>(`/chats/${encodeURIComponent(chatId)}`),
+  /** Every live chat (FINDING-027). `idleSecs` is `number | null` — see the route's adapter. */
+  listChats: () => apiFetch<{ chats: { chatId: string; seats: string[]; idleSecs: number | null }[] }>(`/chats`),
 
   getUnitOutput: (id: string, unitKey: string) =>
     apiFetch<{ output: string | null }>(
