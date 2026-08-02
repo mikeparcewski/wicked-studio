@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { lostQuorum, quorumLabel } from './councilQuorum.js';
 import { api, downloadRunEvidence } from '../api/client.js';
 import type { SessionView, StageKind, UnitStatus } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
@@ -682,7 +683,10 @@ function RunChat({
                   <span>
                     <span className="font-semibold">Council → {unit.assigned_cli ?? '?'}</span>
                     <span className="ml-2" style={{ color: 'rgba(167,139,250,0.6)' }}>
-                      {unit.routing.returned} polled · {unit.routing.agreement_pct}% agree · {unit.routing.dissent} dissent
+                      {quorumLabel(unit.routing)} · {unit.routing.agreement_pct}% agree · {unit.routing.dissent} dissent
+                      {lostQuorum(unit.routing) && (
+                        <span className="ml-2" style={{ color: '#ffda19' }}>· quorum lost</span>
+                      )}
                     </span>
                   </span>
                 </div>

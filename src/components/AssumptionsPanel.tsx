@@ -1,5 +1,6 @@
 import type { RunModel, UnitModel } from '../hooks/useRunModel.js';
 import { useRuntimeStore } from '../store/runtime.js';
+import { isUnanimous, lostQuorum, quorumLabel } from './councilQuorum.js';
 
 interface Props {
   model: RunModel;
@@ -7,9 +8,15 @@ interface Props {
 
 function routingSummary(r: NonNullable<UnitModel['routing']>): string {
   if (r.method === 'council') {
-    return r.dissent > 0
-      ? `council: ${r.winner} (${r.dissent} dissent, ${r.agreement_pct}% agreement)`
-      : `council: ${r.winner} (unanimous)`;
+    // "unanimous" is reserved for a council that KEPT its quorum. Zero dissent among one
+    // surviving seat of three is silence, not agreement (FINDING-026 D). The exception is a
+    // pre-fix run with no `seated` recorded: no quorum signal exists, so `isUnanimous` keeps
+    // the old reading rather than casting doubt on every historical council.
+    if (isUnanimous(r)) return `council: ${r.winner} (unanimous)`;
+    const agreement = `${r.dissent} dissent, ${r.agreement_pct}% agreement`;
+    return lostQuorum(r)
+      ? `council: ${r.winner} (quorum lost — ${quorumLabel(r)}, ${agreement})`
+      : `council: ${r.winner} (${agreement})`;
   }
   if (r.method === 'evaluator_distinct') return `evaluator≠creator: ${r.winner} (was ${r.was})`;
   if (r.method === 'tool') return 'tool: direct command (no council)';

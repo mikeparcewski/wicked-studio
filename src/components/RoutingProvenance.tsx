@@ -1,4 +1,5 @@
 import type { RoutingInfo } from '../api/types.js';
+import { lostQuorum, quorumLabel } from './councilQuorum.js';
 
 interface Props {
   routing: RoutingInfo | null;
@@ -11,7 +12,8 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
     return (
       <p className="text-[11px] font-mono" style={{ color: 'rgba(230,237,243,0.45)' }} data-testid="routing-provenance">
         <span className="font-medium" style={{ color: 'rgba(230,237,243,0.6)' }}>Council:</span>{' '}
-        {routing.winner} won · {routing.agreement_pct}% agreement · {routing.returned} returned · {routing.dissent} dissent
+        {routing.winner} won · {routing.agreement_pct}% agreement · {quorumLabel(routing)} · {routing.dissent} dissent
+        {lostQuorum(routing) && <span style={{ color: '#ffda19' }}> · quorum lost</span>}
       </p>
     );
   }
