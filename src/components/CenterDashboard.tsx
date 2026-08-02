@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
+import { unitsInFlight } from '../api/run-state.js';
 import { useGateStore } from '../store/gates.js';
 import { useRunEventStore } from '../store/events.js';
 import { useSteeringStore } from '../store/steering.js';
@@ -771,15 +772,10 @@ export function CenterDashboard({
     };
   }, [byRun, activeRuns]);
 
-  // ── Units in-flight (distributed status) ──────────────────────────────────
-  const unitsInFlight = useMemo(
-    () =>
-      filteredRuns.reduce(
-        (sum, v) => sum + v.units.filter((u) => u.status === 'distributed').length,
-        0,
-      ),
-    [filteredRuns],
-  );
+  // ── Units in-flight ───────────────────────────────────────────────────────
+  // Counting `distributed` units counted the whole routed plan, not the running part of it: two
+  // runs parked at a human gate reported 10 in flight with the engine idle (FINDING-052).
+  const inFlight = useMemo(() => unitsInFlight(filteredRuns), [filteredRuns]);
 
   // ── Gate handlers (with steering store + gate-store sync) ─────────────────
   const handleApprove = useCallback(
@@ -939,7 +935,7 @@ export function CenterDashboard({
             {/* Range selector */}
             <TimeRangeSelector value={range} onChange={setRange} />
             <Stat label="Active sessions" value={String(activeRuns.length)} color="#79c0ff" />
-            <Stat label="Units in-flight" value={String(unitsInFlight)} color="#79c0ff" />
+            <Stat label="Units in-flight" value={String(inFlight)} color="#79c0ff" />
             <Stat
               label="Cost"
               value={stats.totalCost !== null ? formatCost(stats.totalCost) : '—'}
