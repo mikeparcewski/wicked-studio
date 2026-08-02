@@ -38,7 +38,12 @@ function cliInitials(key: string): string {
 
 /**
  * Live council deliberation status for a pending unit, derived from the
- * councilConvened / councilDeliberated (below-bar runoff) / councilVoted frames.
+ * councilConvened / councilSeatFailed / councilDeliberated (below-bar runoff) / councilVoted
+ * frames.
+ *
+ * Seats that failed are shown alongside the agreement percentage, not instead of it. A council
+ * that convened three seats and heard from one still reports 100% agreement — true of the votes
+ * cast, and misleading on its own.
  */
 function CouncilDeliberation({ runId, ord }: { runId: string; ord: number }): React.ReactElement {
   const status = useRuntimeStore((s) => s.councilStatus[`${runId}:${ord}`]);
@@ -49,16 +54,27 @@ function CouncilDeliberation({ runId, ord }: { runId: string; ord: number }): Re
       : status.state === 'deliberating'
         ? `Ballot ${status.round ?? '?'}: ${status.agreementPct ?? '?'}% — below the ${status.neededPct ?? 75}% bar, runoff in progress…`
         : `Council voted — ${status.agreementPct ?? '?'}% agreement (${status.votes ?? '?'} votes)`;
+  const failed = status?.failedSeats ?? [];
   return (
     <div
-      className="flex items-center gap-2 text-xs font-mono rounded-lg px-3 py-2"
+      className="flex flex-col gap-1 text-xs font-mono rounded-lg px-3 py-2"
       style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)', color: '#a78bfa' }}
     >
-      <span
-        className={`inline-block w-1.5 h-1.5 rounded-full ${status?.state === 'voted' ? '' : 'animate-pulse'}`}
-        style={{ background: '#a78bfa' }}
-      />
-      <span>{label}</span>
+      <div className="flex items-center gap-2">
+        <span
+          className={`inline-block w-1.5 h-1.5 rounded-full ${status?.state === 'voted' ? '' : 'animate-pulse'}`}
+          style={{ background: '#a78bfa' }}
+        />
+        <span>{label}</span>
+      </div>
+      {failed.length > 0 && (
+        // `why` is CRLF-normalized in the store, so a Windows seat's stderr does not put stray
+        // carriage returns into the tooltip.
+        <div className="pl-3.5" style={{ color: '#fca5a5' }} title={failed.map((f) => `${f.cli}: ${f.why}`).join('\n')}>
+          {failed.length} seat{failed.length === 1 ? '' : 's'} did not vote —{' '}
+          {failed.map((f) => `${f.cli} (${f.kind})`).join(', ')}
+        </div>
+      )}
     </div>
   );
 }

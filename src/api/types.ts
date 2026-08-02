@@ -212,6 +212,19 @@ export interface CoreEvent {
   round?: number;
   /** councilDeliberated: the approval bar the council must reach, as a percent. */
   neededPct?: number;
+  /**
+   * councilSeatFailed: the seat's exit code, when it ran far enough to have one.
+   *
+   * The branch itself arrives on the shared `kind` field — `spawn_failed`, `non_zero_exit`,
+   * `timed_out`, `pty_unsupported`, `invocation_empty`, `workdir_unavailable`,
+   * `prompt_write_failed`, `wait_failed`, `unreported`. Every seat that does not vote reports
+   * one; without it the council's quorum shrinks silently.
+   */
+  exitCode?: number | null;
+  /** councilSeatFailed: bounded capture of what the seat wrote to stderr (≤4 KiB). */
+  stderr?: string;
+  /** councilSeatFailed: how long the seat burned before failing — separates a spawn error from a timeout. */
+  latencyMs?: number;
   /** workerStalled: silent seconds before the stall event fired. */
   stalledSecs?: number;
   /** failureTriaged: the triage judge's decision. */

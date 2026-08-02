@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useRuntimeStore, outputKey } from '../src/store/runtime.js';
 import type { CoreEvent } from '../src/api/types.js';
 
-const reset = (): void => useRuntimeStore.setState({ outputs: {}, logs: {}, executorTypes: {}, terminalIds: {}, seq: 0 });
+const reset = (): void =>
+  useRuntimeStore.setState({ outputs: {}, logs: {}, executorTypes: {}, terminalIds: {}, councilStatus: {}, seq: 0 });
 const delta = (session: string, ord: number, chunk: string): CoreEvent =>
   ({ type: 'cliOutputDelta', session, ord, chunk } as CoreEvent);
 
@@ -107,5 +108,83 @@ describe('runtime store (§11.4 — live output + per-run event log)', () => {
     const { terminalIds } = useRuntimeStore.getState();
     expect(terminalIds['run-1:claude']).toBeUndefined();
     expect(terminalIds['run-2:claude']).toBe('tid-2');
+  });
+  // A seat that is polled and does not vote used to be invisible: the council simply reported a
+  // smaller vote count, or degraded with one unusable sentence. These pin the frame that names it.
+  const seatFailed = (session: string, ord: number, cli: string, extra: Record<string, unknown> = {}): CoreEvent =>
+    ({ type: 'councilSeatFailed', session, ord, round: 1, cli, kind: 'spawn_failed', detail: 'No such file or directory', ...extra } as CoreEvent);
+
+  it('accumulates councilSeatFailed onto the unit council status', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'councilConvened', session: 'run-1', ord: 0, clis: ['claude', 'codex', 'pi'] } as CoreEvent);
+    ingest(seatFailed('run-1', 0, 'codex'));
+    ingest(seatFailed('run-1', 0, 'pi', { kind: 'non_zero_exit', exitCode: 1, stderr: 'unknown flag --print' }));
+    const status = useRuntimeStore.getState().councilStatus['run-1:0'];
+    expect(status?.failedSeats).toHaveLength(2);
+    expect(status?.failedSeats?.[0]).toMatchObject({ cli: 'codex', kind: 'spawn_failed' });
+    // stderr is preferred over detail: it is what the seat itself said.
+    expect(status?.failedSeats?.[1]).toMatchObject({ cli: 'pi', kind: 'non_zero_exit', exitCode: 1, why: 'unknown flag --print' });
+    // The convened roster is not lost when a seat fails.
+    expect(status?.clis).toEqual(['claude', 'codex', 'pi']);
+  });
+
+  it('keeps failed seats when the council later votes', () => {
+    // The regression that matters: seats fail BEFORE the vote, and councilVoted replaces the
+    // status object. Dropping them there would erase the quorum context at exactly the moment
+    // the agreement percentage needs qualifying.
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'councilConvened', session: 'run-1', ord: 0, clis: ['claude', 'codex'] } as CoreEvent);
+    ingest(seatFailed('run-1', 0, 'codex'));
+    ingest({ type: 'councilVoted', session: 'run-1', ord: 0, agreementPct: 100, votes: 1 } as CoreEvent);
+    const status = useRuntimeStore.getState().councilStatus['run-1:0'];
+    expect(status?.state).toBe('voted');
+    expect(status?.agreementPct).toBe(100);
+    expect(status?.failedSeats).toHaveLength(1);
+    expect(status?.failedSeats?.[0]?.cli).toBe('codex');
+  });
+
+  it('records a seat failure that arrives before any convened frame', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest(seatFailed('run-1', 2, 'claude'));
+    const status = useRuntimeStore.getState().councilStatus['run-1:2'];
+    expect(status?.state).toBe('convened');
+    expect(status?.failedSeats).toHaveLength(1);
+  });
+
+  it('logs councilSeatFailed with the seat, the branch and the reason on one line', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest(seatFailed('run-1', 0, 'codex', { kind: 'non_zero_exit', exitCode: 2, stderr: 'boom\nsecond line' }));
+    const log = useRuntimeStore.getState().logs['run-1'] ?? [];
+    expect(log).toHaveLength(1);
+    const detail = log[0]?.detail ?? '';
+    expect(detail).toContain('codex');
+    expect(detail).toContain('non_zero_exit');
+    expect(detail).toContain('exit 2');
+    expect(detail).toContain('boom');
+    // Multi-line stderr must not break the one-line log.
+    expect(detail).not.toContain('second line');
+    expect(detail.split('\n')).toHaveLength(1);
+  });
+
+  it('strips carriage returns from a Windows seat so the log stays one clean line', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest(seatFailed('run-1', 0, 'codex', { kind: 'non_zero_exit', stderr: 'boom\r\nsecond line' }));
+    const detail = useRuntimeStore.getState().logs['run-1']?.[0]?.detail ?? '';
+    // Splitting on '\n' alone would leave the '\r' behind and render it as a stray glyph.
+    expect(detail).not.toContain('\r');
+    expect(detail).toContain('boom');
+    expect(detail).not.toContain('second line');
+    // The reason kept on the frame is normalized too — the tooltip reads it directly.
+    const seat = useRuntimeStore.getState().councilStatus['run-1:0']?.failedSeats?.[0];
+    expect(seat?.why).toBe('boom\nsecond line');
+  });
+
+  it('marks a truncated reason so a cut-off message does not read as a complete one', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest(seatFailed('run-1', 0, 'codex', { kind: 'non_zero_exit', stderr: 'x'.repeat(400) }));
+    const detail = useRuntimeStore.getState().logs['run-1']?.[0]?.detail ?? '';
+    expect(detail).toContain('…');
+    expect(detail).toContain('x'.repeat(159));
+    expect(detail).not.toContain('x'.repeat(161));
   });
 });
