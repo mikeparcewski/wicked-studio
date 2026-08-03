@@ -846,6 +846,9 @@ export interface RequirementsPage {
   offset: number;
   limit: number;
   items: RequirementSummary[];
+  /** Which source served the corpus: the live estate store, or the evidence-gated
+   *  `requirements_graph.json` snapshot, which can lag it by hours (FINDING-065). */
+  source: 'store' | 'artifact';
 }
 
 export interface RequirementPatch {

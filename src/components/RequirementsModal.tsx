@@ -190,6 +190,20 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               <p className="text-[12px] font-mono p-6" style={{ color: T.deny }}>{loadError}</p>
             ) : page === null ? (
               <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>Loading…</p>
+            ) : page.corpus === 0 ? (
+              // An EMPTY CORPUS is not a failed search. "No requirements match" asserts that
+              // something was searched and the filters excluded it — for a repo whose extraction
+              // has never run, that sentence is false and it hides the only action that would
+              // help. `corpus === 0` means there is nothing to search at all, so no filter can be
+              // responsible and the distinction is decidable here (FINDING-065).
+              <div className="p-6 space-y-1">
+                <p className="text-[12px] font-mono" style={{ color: T.ink }}>
+                  No requirements have been extracted for this repo.
+                </p>
+                <p className="text-[12px] font-mono" style={{ color: T.faint }}>
+                  Run domain extraction on it to populate this view.
+                </p>
+              </div>
             ) : page.items.length === 0 ? (
               <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>No requirements match.</p>
             ) : (

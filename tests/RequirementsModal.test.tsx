@@ -16,8 +16,12 @@ vi.mock('../src/api/client.js', () => ({
   },
 }));
 
-function page(items: RequirementsPage['items'], total = items.length): RequirementsPage {
-  return { total, corpus: 3, offset: 0, limit: 50, items };
+function page(
+  items: RequirementsPage['items'],
+  total = items.length,
+  corpus = 3,
+): RequirementsPage {
+  return { total, corpus, offset: 0, limit: 50, items, source: 'store' };
 }
 
 const row = {
@@ -112,5 +116,31 @@ describe('RequirementsModal', () => {
       expect(patchRequirement).toHaveBeenCalledWith('r1', 'billing::REQ-1', { notes: 'checked' }),
     );
     expect(await screen.findByText('saved ✓')).toBeInTheDocument();
+  });
+
+  // FINDING-065. Measured on `agent-frameworks-autogpt`: 42,925 indexed nodes, zero of them
+  // carrying a requirement, so the API answers 200 `{corpus: 0}` and the modal said
+  // "No requirements match." That sentence claims a corpus was searched and the filters
+  // excluded it. Nothing was searched, and the one action that would help — run extraction —
+  // appeared nowhere.
+  describe('empty corpus vs empty result', () => {
+    it('says extraction has not run when there is nothing to search', async () => {
+      listRequirements.mockResolvedValue(page([], 0, 0));
+      render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
+      expect(
+        await screen.findByText('No requirements have been extracted for this repo.'),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/Run domain extraction/)).toBeInTheDocument();
+      expect(screen.queryByText('No requirements match.')).not.toBeInTheDocument();
+    });
+
+    it('still says no match when a real corpus was searched and excluded everything', async () => {
+      listRequirements.mockResolvedValue(page([], 0, 3));
+      render(<RequirementsModal repoId="r1" repoName="repo" onClose={() => {}} />);
+      expect(await screen.findByText('No requirements match.')).toBeInTheDocument();
+      expect(
+        screen.queryByText('No requirements have been extracted for this repo.'),
+      ).not.toBeInTheDocument();
+    });
   });
 });
