@@ -126,6 +126,11 @@ export interface UnitModel {
   toolExecutorCmd: string[] | null;
   /** P2: true iff governance was confirmed armed for this unit (from `governanceContextArmed`). */
   governanceArmed: boolean;
+  /** P2: set iff the unit was declared governed but ran unchecked because its CLI has no
+   *  gate-hook adapter (from `governanceUnenforced`). Distinct from `!governanceArmed`, which
+   *  is also true for a unit that never asked for governance — this names the CLI and the
+   *  reason (FINDING-063). */
+  governanceUnenforced: { cli: string; reason: string } | null;
   // ── P2 decisions-full fields (EVT-001/012/013) ──
   /** P2: byte length of the last captured output for this unit (from `unitOutputCaptured`). Null until captured. */
   outputBytes: number | null;
@@ -209,6 +214,7 @@ function blankUnit(ord: number): UnitModel {
     gateEscalated: false,
     toolExecutorCmd: null,
     governanceArmed: false,
+    governanceUnenforced: null,
     outputBytes: null,
     outputGoverned: false,
     reworkAmendment: null,
@@ -268,6 +274,7 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       gateEscalated: false,
       toolExecutorCmd: u.tool_cmd ?? null,
       governanceArmed: false,
+      governanceUnenforced: null,
       outputBytes: null,
       outputGoverned: false,
       reworkAmendment: null,
@@ -575,6 +582,14 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
       case 'governanceContextArmed':
         // Idempotent: governance armed is a one-way flag.
         if (ord !== undefined) ensureUnit(ord).governanceArmed = true;
+        break;
+      case 'governanceUnenforced':
+        // One-way like its armed counterpart, and deliberately NOT folded into
+        // governanceArmed: the operator needs to see that governance was requested and
+        // skipped, not merely that it is absent.
+        if (ord !== undefined && typeof ev.cli === 'string' && typeof ev.reason === 'string') {
+          ensureUnit(ord).governanceUnenforced = { cli: ev.cli, reason: ev.reason };
+        }
         break;
       // ── P2 decisions-full events (EVT-001/012/013) ─────────────────────────
       case 'workflowSelected':

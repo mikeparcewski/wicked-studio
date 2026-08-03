@@ -462,6 +462,19 @@ export interface GovernanceContextArmedEvent {
   dbPath: string;
 }
 
+/** P2 — a unit the workflow declared GOVERNED ran with its tool calls unchecked, because the CLI it
+ *  was routed to has no gate-hook adapter (injection is claude-only). Distinct from a unit that was
+ *  never governed at all: both report `governed: false` on unitOutputCaptured, and only this event
+ *  separates "not asked for" from "asked for and not applied" (FINDING-063). */
+export interface GovernanceUnenforcedEvent {
+  type: 'governanceUnenforced';
+  session: string;
+  ord: number;
+  attempt: number;
+  cli: string;
+  reason: string;
+}
+
 // ── P2 decisions-full observability events (wicked-core EVT-001/012/013) ────
 
 /** P2 — a structured workflow def was selected; fires once per session, after SessionStarted and before

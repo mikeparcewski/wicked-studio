@@ -397,6 +397,36 @@ describe('useRunModel — P2 observability events (EVT-003/004/007)', () => {
   });
 });
 
+describe('useRunModel — governanceUnenforced (EVT-017, FINDING-063)', () => {
+  test('records the CLI and reason for a unit that was governed but ran unchecked', () => {
+    const view = makeView({}, [makeUnit({ ord: 4 })]);
+    const events: CoreEvent[] = [
+      {
+        type: 'governanceUnenforced',
+        session: 'run-1',
+        ord: 4,
+        attempt: 0,
+        cli: 'agy',
+        reason: "unit is governed but 'agy' has no input-governance adapter",
+      } as CoreEvent,
+    ];
+    const model = mergeRunModel(view, events);
+    expect(model.units[0]?.governanceUnenforced).toEqual({
+      cli: 'agy',
+      reason: "unit is governed but 'agy' has no input-governance adapter",
+    });
+  });
+
+  test('stays null for a unit that simply never armed governance', () => {
+    // The whole point of the event: `governanceArmed === false` is ALSO what an
+    // ungoverned-by-design unit looks like, so the two must not collapse in the model.
+    const view = makeView({}, [makeUnit({ ord: 1 })]);
+    const model = mergeRunModel(view, []);
+    expect(model.units[0]?.governanceArmed).toBe(false);
+    expect(model.units[0]?.governanceUnenforced).toBeNull();
+  });
+});
+
 describe('useRunModel — P2 decisions-full events (EVT-001/012/013)', () => {
   test('selectedWorkflow is seeded from snapshot so late-join refresh gets the right value', () => {
     const view = makeView({ workflow_id: 'wf-42' }, []);
