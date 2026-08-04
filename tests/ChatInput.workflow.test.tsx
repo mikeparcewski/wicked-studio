@@ -52,7 +52,6 @@ describe('ChatInput workflow selector (system-workflow filter)', () => {
       workflows: [
         // No is_system flag — caught by the SYSTEM_WORKFLOW_IDS denylist.
         { id: 'survey-repo',        phases: [] },
-        { id: 'repo-graph',         phases: [] },
         { id: 'domain-graph-slice', phases: [] },
         { id: 'memories',           phases: [] },
         { id: 'feature',            phases: [] },
@@ -64,7 +63,6 @@ describe('ChatInput workflow selector (system-workflow filter)', () => {
     const values = await openPopoverAndGetValues(user);
 
     expect(values).not.toContain('survey-repo');
-    expect(values).not.toContain('repo-graph');
     expect(values).not.toContain('domain-graph-slice');
     expect(values).not.toContain('memories');
     expect(values).toContain('feature');

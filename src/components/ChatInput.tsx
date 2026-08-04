@@ -80,7 +80,7 @@ function ActivePill({
 
 
 // Defense-in-depth denylist: catches system workflows that predate the is_system flag.
-const SYSTEM_WORKFLOW_IDS = new Set(['chat', 'onboarding', 'survey-repo', 'repo-graph', 'domain-graph-slice', 'memories']);
+const SYSTEM_WORKFLOW_IDS = new Set(['chat', 'onboarding', 'survey-repo', 'domain-graph-slice', 'memories']);
 
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
