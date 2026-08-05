@@ -732,14 +732,27 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                     <div className="rounded-lg p-4 flex flex-col gap-2 border" style={{ border: `1px solid ${T.hairline}` }}>
                       <div className="flex justify-between items-baseline">
                         <span className="text-[11px] font-mono" style={{ color: T.muted }}>Annotation coverage</span>
+                        {/* 0/0 is undefined, not 100% (FINDING-009). The engine documents coverage
+                            as "vacuously 1.0 when behavior_bearing == 0", so an unannotated repo
+                            rendered here as a full green bar reading 100.0%. */}
                         <span className="text-[11px] font-mono font-bold" style={{ color: T.ink }}>
-                          {(domainCoverage.coverage * 100).toFixed(1)}%
+                          {domainCoverage.behavior_bearing === 0
+                            ? 'not extracted'
+                            : domainCoverage.coverage < 1 && domainCoverage.coverage * 100 >= 99.95
+                              ? '<100%'
+                              : `${(domainCoverage.coverage * 100).toFixed(1)}%`}
                         </span>
                       </div>
                       <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: T.surface }}>
                         <div
                           className="h-full rounded-full"
-                          style={{ width: `${Math.max(domainCoverage.coverage * 100, 0.5)}%`, background: T.ok }}
+                          style={{
+                            width:
+                              domainCoverage.behavior_bearing === 0
+                                ? '0%'
+                                : `${Math.max(domainCoverage.coverage * 100, 0.5)}%`,
+                            background: T.ok,
+                          }}
                         />
                       </div>
                       <div className="flex gap-4 mt-1 text-[10px] font-mono tabular-nums" style={{ color: T.faint }}>

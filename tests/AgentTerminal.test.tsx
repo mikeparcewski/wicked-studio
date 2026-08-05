@@ -21,7 +21,7 @@ vi.mock('@xterm/xterm', () => {
     loadAddon = vi.fn();
     dispose = vi.fn();
     write = vi.fn();
-    onData = vi.fn((_cb: (d: string) => void) => ({ dispose: vi.fn() }));
+    onData = vi.fn((): { dispose: () => void } => ({ dispose: vi.fn() }));
     constructor() {
       h.terminals.push(this);
     }

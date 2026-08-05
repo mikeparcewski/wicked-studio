@@ -9,18 +9,87 @@ function pct(n: number): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
-function GateStatus({ coverage, threshold }: { coverage: number; threshold: number }): React.ReactElement {
-  const pass = coverage >= threshold;
+/** Coverage as a percentage, or an em dash when there is nothing to take a ratio over.
+ *
+ *  `coverage` is `(resolved + risk_flagged) / behavior_bearing`, which the engine documents as
+ *  "vacuously 1.0 when behavior_bearing == 0". Rendering that as "100.0%" told an operator their
+ *  unannotated repo was fully covered (FINDING-009). 0/0 is undefined, not complete. */
+function coveragePct(r: { behavior_bearing: number; coverage: number; unaccounted: number }): string {
+  if (r.behavior_bearing === 0) return '—';
+  // Never let ROUNDING claim a completeness the gate denies. 9,999 of 10,000 is 99.99%, which
+  // `toFixed(1)` renders as "100.0%" — displayed next to a GATE FAIL badge, since the engine gates
+  // on the exact integer `unaccounted`. wicked-core's own comment names this trap: "on a large
+  // graph a handful of bare nodes still round to 1.0000". Flagged in review of this change.
+  if (r.unaccounted > 0 && r.coverage * 100 >= 99.95) return '<100%';
+  return pct(r.coverage);
+}
+
+/** A percentage, or an em dash when its denominator is empty.
+ *
+ *  `coverage` is not the only vacuous ratio on this screen — `resolved_rate` is
+ *  `resolved / (resolved + risk_flagged)` and `mean_confidence` is a mean over the RESOLVED set.
+ *  On an unannotated repo all three have an empty denominator, and all three were rendering as
+ *  100.0%. Fixing only `coverage` (the one the finding named) would have left two more of the same
+ *  lie on the same card — the N-paths-one-hardened shape this codebase keeps paying for. */
+function ratioPct(value: number, denominator: number): string {
+  return denominator === 0 ? '—' : pct(value);
+}
+
+/** The gate's ACTUAL rule, as the engine states it (FINDING-009).
+ *
+ *  This badge used to be `coverage >= resolve_threshold`, which is wrong twice over:
+ *
+ *  1. `resolve_threshold` is the ANNOTATION-CONFIDENCE bar — "at/above which a `business_rule`
+ *     annotation counts as RESOLVED" (default 0.75). It is not a coverage bar. Comparing a
+ *     coverage ratio against it compares two different quantities.
+ *  2. The engine gates on the exact integer `unaccounted == 0`, deliberately NOT on the rounded
+ *     coverage float (`domain_model.rs`: on a large graph a handful of bare nodes still round to
+ *     1.0000). Since wicked-core#190 it also requires `behavior_bearing >= 1`, so an unannotated
+ *     repo cannot pass vacuously.
+ *
+ *  Measured divergence against the old rule — it claimed PASS in three of four cases where the
+ *  engine denies, agreeing only when everything really was accounted:
+ *
+ *      case                bb   unacc   cov    old badge    engine
+ *      unannotated repo     0       0   1.00   GATE PASS    DENY
+ *      partly annotated   100      10   0.90   GATE PASS    DENY
+ *      mostly annotated   100      20   0.80   GATE PASS    DENY
+ *      fully annotated    100       0   1.00   GATE PASS    pass
+ *
+ *  A badge that re-derives a verdict from the wrong inputs is not a status, it is a second opinion
+ *  presented as the first. The fields it needs were already on the report and already rendered two
+ *  rows below; only this comparison was wrong. */
+function gateVerdict(report: CoverageReport): 'pass' | 'deny' | 'no-data' {
+  if (report.behavior_bearing === 0) return 'no-data';
+  return report.unaccounted === 0 ? 'pass' : 'deny';
+}
+
+function GateStatus({ report }: { report: CoverageReport }): React.ReactElement {
+  const verdict = gateVerdict(report);
+  // `no-data` is called out separately rather than folded into FAIL: "nothing has been extracted
+  // yet" and "extraction left holes" are different problems with different next actions, and
+  // collapsing them is the defect this file already carries a note about.
+  const style = {
+    pass: { bg: 'rgba(63,185,80,0.12)', fg: '#3fb950', bd: 'rgba(63,185,80,0.3)', label: 'GATE PASS' },
+    deny: { bg: 'rgba(248,81,73,0.12)', fg: '#f85149', bd: 'rgba(248,81,73,0.3)', label: 'GATE FAIL' },
+    'no-data': {
+      bg: 'rgba(230,237,243,0.08)',
+      fg: 'rgba(230,237,243,0.6)',
+      bd: 'rgba(230,237,243,0.2)',
+      label: 'NOT EXTRACTED',
+    },
+  }[verdict];
   return (
     <span
       className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold font-mono"
-      style={{
-        background: pass ? 'rgba(63,185,80,0.12)' : 'rgba(248,81,73,0.12)',
-        color: pass ? '#3fb950' : '#f85149',
-        border: `1px solid ${pass ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)'}`,
-      }}
+      style={{ background: style.bg, color: style.fg, border: `1px solid ${style.bd}` }}
+      title={
+        verdict === 'no-data'
+          ? 'No behavior-bearing nodes: nothing has been annotated, so coverage is undefined rather than complete.'
+          : `Gate rule: behavior_bearing >= 1 and unaccounted == 0 (currently ${report.behavior_bearing} and ${report.unaccounted}).`
+      }
     >
-      {pass ? 'GATE PASS' : 'GATE FAIL'}
+      {style.label}
     </span>
   );
 }
@@ -32,9 +101,9 @@ function Ledger({ report }: { report: CoverageReport }): React.ReactElement {
     { label: 'Resolved', value: String(report.resolved) },
     { label: 'Risk-flagged', value: String(report.risk_flagged) },
     { label: 'Unaccounted', value: String(report.unaccounted) },
-    { label: 'Coverage', value: pct(report.coverage) },
-    { label: 'Resolved rate', value: pct(report.resolved_rate) },
-    { label: 'Mean confidence', value: pct(report.mean_confidence) },
+    { label: 'Coverage', value: coveragePct(report) },
+    { label: 'Resolved rate', value: ratioPct(report.resolved_rate, report.resolved + report.risk_flagged) },
+    { label: 'Mean confidence', value: ratioPct(report.mean_confidence, report.resolved) },
     { label: 'Threshold', value: pct(report.resolve_threshold) },
   ];
   return (
@@ -75,7 +144,7 @@ function PerAppTable({ apps }: { apps: CoveragePerApp[] }): React.ReactElement {
             <td className="py-1 pr-3 text-right" style={{ color: '#3fb950' }}>{a.resolved}</td>
             <td className="py-1 pr-3 text-right" style={{ color: '#ffda19' }}>{a.risk_flagged}</td>
             <td className="py-1 pr-3 text-right" style={{ color: '#f85149' }}>{a.unaccounted}</td>
-            <td className="py-1 text-right font-semibold" style={{ color: '#e6edf3' }}>{pct(a.coverage)}</td>
+            <td className="py-1 text-right font-semibold" style={{ color: '#e6edf3' }}>{coveragePct(a)}</td>
           </tr>
         ))}
       </tbody>
@@ -280,8 +349,8 @@ export function CoverageView(): React.ReactElement {
       {report && (
         <>
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold" style={{ color: '#e6edf3' }}>{pct(report.coverage)}</span>
-            <GateStatus coverage={report.coverage} threshold={report.resolve_threshold} />
+            <span className="text-2xl font-bold" style={{ color: '#e6edf3' }}>{coveragePct(report)}</span>
+            <GateStatus report={report} />
           </div>
 
           <Ledger report={report} />
