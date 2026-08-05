@@ -4,6 +4,8 @@ import { api, downloadRunEvidence } from '../api/client.js';
 import type { SessionView, StageKind, UnitStatus } from '../api/types.js';
 import { executingOrd } from '../api/run-state.js';
 import { useGateStore } from '../store/gates.js';
+import { useElicitationStore } from '../store/elicitations.js';
+import { ElicitationPrompt } from './ElicitationPrompt.js';
 import { useRuntimeStore, outputKey } from '../store/runtime.js';
 import { STATUS_STYLE } from './RunCard.js';
 import { SteeringGate } from './SteeringGate.js';
@@ -553,6 +555,7 @@ function RunChat({
   const ordered = useMemo(() => [...units].sort((a, b) => a.ord - b.ord), [units]);
   const executingUnitOrd = useMemo(() => executingOrd(session, units), [session, units]);
   const gate = useGateStore((s) => s.gates[session.id]);
+  const elicitation = useElicitationStore((s) => s.elicitations[session.id]);
   const log = useRuntimeStore((s) => s.logs[session.id]) ?? [];
   const executorTypes = useRuntimeStore((s) => s.executorTypes);
   /** "all" broadcasts; any other value is a CLI key (set by clicking an agent card). */
@@ -661,6 +664,14 @@ function RunChat({
 
       {/* Message thread */}
       <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-6 max-w-3xl w-full mx-auto">
+        {/* An open MCP elicitation suspends the agent's turn, so it leads the stream (DES-002).
+            `key` is REQUIRED: React reuses the instance across prop changes, so without it a
+            half-typed answer to elicitation A survives into B (v0.24 F3). */}
+        {elicitation !== undefined && (
+          <div className="self-center w-full max-w-lg">
+            <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />
+          </div>
+        )}
 
         {/* User prompt bubble */}
         <div className="flex justify-end">

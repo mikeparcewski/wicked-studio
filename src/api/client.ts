@@ -6,6 +6,8 @@ import type {
   RepoEntry,
   RosterSeat,
   SessionView,
+  ElicitationInfo,
+  ElicitationResponse,
 } from './types.js';
 
 export type * from './types.js';
@@ -173,6 +175,25 @@ export const api = {
 
   /** The daemon-cached gate prompt for a paused run (late-join reconcile, §3.3). */
   getGate: (id: string) => apiFetch<GateInfo>(`/runs/${encodeURIComponent(id)}/gate`),
+
+  /** The run's open elicitation, or null when there is none (404 -> null, DES-002). */
+  getElicitation: async (id: string): Promise<ElicitationInfo | null> => {
+    try {
+      return await apiFetch<ElicitationInfo>(`/runs/${encodeURIComponent(id)}/elicitation`);
+    } catch (e) {
+      // A 404 is the normal "nothing pending" answer, not a failure. Anything else propagates —
+      // swallowing a 500 here would show an empty panel for a broken daemon.
+      if (e instanceof Error && /\b404\b/.test(e.message)) return null;
+      throw e;
+    }
+  },
+
+  /** Answer an open elicitation. A 409 means our elicitationId was stale (DES-002 v0.22). */
+  respondToElicitation: (id: string, body: ElicitationResponse) =>
+    apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/elicitation`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   /** The council seats for the launch form. */
   getRoster: () => apiFetch<{ roster: RosterSeat[] }>('/roster'),

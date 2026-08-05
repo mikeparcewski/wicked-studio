@@ -165,6 +165,10 @@ export interface CoreEvent {
   description?: string;
   problem?: string;
   message?: string;
+  /** DES-002 `elicitationCreated`: the open question's id and its allowed answers. */
+  elicitationId?: string;
+  /** Ordered valid responses; `null`/absent means free-text. */
+  options?: string[] | null;
   // ── DES-STUDIO-COCKPIT-001 §3 B-events (Phase B insight wires) ──
   /** `unitDispatched`/`cliUsage`: 0-based dispatch attempt (`>0` = a re-dispatch / rework). */
   attempt?: number;
@@ -864,4 +868,21 @@ export interface BlastRadius {
   dependents: Array<{ id: string; name: string; kind: string; file: string; line: number }>;
   /** Unresolved call-sites referencing the target — absence of dependents never means "safe". */
   unresolved: number;
+}
+
+/** An open elicitation as `GET /runs/:id/elicitation` returns it (DES-002). */
+export interface ElicitationInfo {
+  runId: string;
+  elicitationId: string;
+  message: string;
+  /** Ordered set of valid responses; `null` means free-text. */
+  options: string[] | null;
+  receivedAt: string;
+}
+
+/** `POST /runs/:id/elicitation` body. `content` is required for accept, absent otherwise. */
+export interface ElicitationResponse {
+  elicitationId: string;
+  action: 'accept' | 'decline' | 'cancel';
+  content?: { response: string };
 }

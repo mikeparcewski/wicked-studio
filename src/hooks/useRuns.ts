@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useGateStore } from '../store/gates.js';
+import { useElicitationStore } from '../store/elicitations.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -23,6 +24,7 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void } {
   const status = useConnectionStore((s) => s.status);
   const setGate = useGateStore((s) => s.setGate);
   const reconcileGates = useGateStore((s) => s.reconcile);
+  const reconcileElicitations = useElicitationStore((s) => s.reconcile);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [tick, setTick] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -61,6 +63,10 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void } {
         .filter((v) => v.session.status === 'awaiting_human')
         .map((v) => v.session.id);
       reconcileGates(awaiting);
+      // Elicitations reconcile against ALL live runs, not just awaiting-human ones: a run can be
+      // executing and still hold an open MCP question (DES-002 v0.25 — an absent run must bump so
+      // an in-flight GET cannot resurrect a zombie prompt).
+      reconcileElicitations(fetched.map((v) => v.session.id));
 
       for (const id of awaiting) {
         if (useGateStore.getState().gates[id]) continue;
@@ -83,7 +89,7 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void } {
     return () => {
       cancelled = true;
     };
-  }, [status, tick, setGate, reconcileGates]);
+  }, [status, tick, setGate, reconcileGates, reconcileElicitations]);
 
   return { runs, refresh };
 }
