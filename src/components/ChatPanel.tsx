@@ -434,8 +434,13 @@ function LegacyChatHistory({
         setTranscripts((prev) => ({ ...prev, [unit.ord]: { text: null, loading: true, visible: true } }));
         void api
           .getUnitOutput(session.id, unitKey(session.id, unit.id, unit.ord))
-          .then(({ output }) => {
-            setTranscripts((prev) => ({ ...prev, [unit.ord]: { text: output ?? null, loading: false, visible: true } }));
+          .then(({ output, outputUnavailable }) => {
+            // `outputUnavailable` rather than a bare null: a denied unit has no stored transcript
+            // BY DESIGN, and the pane must say so instead of rendering blank (FINDING-006).
+            setTranscripts((prev) => ({
+              ...prev,
+              [unit.ord]: { text: output ?? outputUnavailable ?? null, loading: false, visible: true },
+            }));
           })
           .catch(() => {
             setTranscripts((prev) => ({ ...prev, [unit.ord]: { text: null, loading: false, visible: true } }));
@@ -583,10 +588,16 @@ function RunChat({
         }));
         void api
           .getUnitOutput(session.id, unitKey(session.id, unit.id, unit.ord))
-          .then(({ output }) => {
+          .then(({ output, outputUnavailable }) => {
+            // "(no transcript captured)" is FALSE for a denied unit — its output was captured and
+            // then deliberately not stored. Say what the daemon says (FINDING-006).
             setTranscripts((prev) => ({
               ...prev,
-              [unit.ord]: { text: output ?? '(no transcript captured)', loading: false, visible: true },
+              [unit.ord]: {
+                text: output ?? outputUnavailable ?? '(no transcript captured)',
+                loading: false,
+                visible: true,
+              },
             }));
           })
           .catch(() => {

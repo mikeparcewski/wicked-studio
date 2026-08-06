@@ -168,8 +168,21 @@ export const api = {
   /** Every live chat (FINDING-027). `idleSecs` is `number | null` — see the route's adapter. */
   listChats: () => apiFetch<{ chats: { chatId: string; seats: string[]; idleSecs: number | null }[] }>(`/chats`),
 
+  /**
+   * A unit's stored transcript.
+   *
+   * `output` is `null` whenever the daemon holds no transcript, and `outputUnavailable` then
+   * says WHY — the unit was denied (deny-dominates stores no output past a deny), has not
+   * finished, or the store disagrees with itself. Render that text rather than inventing a
+   * message: "no transcript captured" is false for a denied unit, whose output was captured
+   * and then deliberately not retained (FINDING-006).
+   *
+   * Optional because a daemon predating the field sends `{output: null}` alone — the studio
+   * bundle is served BY the daemon, so that only happens against a separately-run older one,
+   * and the callers fall back rather than render an empty pane.
+   */
   getUnitOutput: (id: string, unitKey: string) =>
-    apiFetch<{ output: string | null }>(
+    apiFetch<{ output: string | null; outputUnavailable?: string }>(
       `/runs/${encodeURIComponent(id)}/units/${encodeURIComponent(unitKey)}/output`,
     ),
 

@@ -35,16 +35,19 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
   const [approving, setApproving] = useState(false);
   const autoLoadedRef = useRef(false);
 
+  // Auto-open for both TERMINAL statuses, not just `done`. A rejected unit is the one an
+  // operator opens the run to read, and it was the one that stayed shut — so the panel that
+  // would have carried the daemon's reason never asked for it (FINDING-006).
   useEffect(() => {
-    if (unit.status !== 'done' || autoLoadedRef.current) return;
+    if ((unit.status !== 'done' && unit.status !== 'rejected') || autoLoadedRef.current) return;
     autoLoadedRef.current = true;
     setShowTranscript(true);
     setLoadingTranscript(true);
     const unitKey = unit.id.startsWith(`${runId}:`) ? unit.id.slice(runId.length + 1) : `u${unit.ord}`;
     void api
       .getUnitOutput(runId, unitKey)
-      .then(({ output }) => {
-        setTranscript(output ?? liveOutput ?? '(no transcript captured)');
+      .then(({ output, outputUnavailable }) => {
+        setTranscript(output ?? outputUnavailable ?? liveOutput ?? '(no transcript captured)');
       })
       .catch((err) => {
         setTranscript(liveOutput ?? `(failed to load: ${err instanceof Error ? err.message : String(err)})`);
@@ -62,8 +65,10 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
       setLoadingTranscript(true);
       try {
         const unitKey = unit.id.startsWith(`${runId}:`) ? unit.id.slice(runId.length + 1) : `u${unit.ord}`;
-        const { output } = await api.getUnitOutput(runId, unitKey);
-        setTranscript(output ?? liveOutput ?? '(no transcript captured)');
+        // The daemon's `outputUnavailable` outranks the in-memory live scrap: it is a statement
+        // about the durable RECORD, and it survives a page reload that the scrap does not.
+        const { output, outputUnavailable } = await api.getUnitOutput(runId, unitKey);
+        setTranscript(output ?? outputUnavailable ?? liveOutput ?? '(no transcript captured)');
       } catch (err) {
         setTranscript(liveOutput ?? `(failed to load transcript: ${err instanceof Error ? err.message : String(err)})`);
       } finally {
