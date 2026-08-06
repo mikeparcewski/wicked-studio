@@ -435,8 +435,11 @@ function LegacyChatHistory({
         void api
           .getUnitOutput(session.id, unitKey(session.id, unit.id, unit.ord))
           .then(({ output, outputUnavailable }) => {
-            // `outputUnavailable` rather than a bare null: a denied unit has no stored transcript
-            // BY DESIGN, and the pane must say so instead of rendering blank (FINDING-006).
+            // `outputUnavailable` rather than a bare null: this auto-load only runs for a `done`
+            // unit, so the case here is a completed unit whose output the daemon could not return
+            // (not the denied case — a denied unit is not `done` and never reaches this block). The
+            // pane names the reason instead of rendering blank (FINDING-006; review on #215 noted
+            // the earlier comment mis-described this as the denied path).
             setTranscripts((prev) => ({
               ...prev,
               [unit.ord]: { text: output ?? outputUnavailable ?? null, loading: false, visible: true },
