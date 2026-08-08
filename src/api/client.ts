@@ -1,4 +1,5 @@
 import type {
+  CoreEvent,
   GateInfo,
   LaunchRunBody,
   OnboardRef,
@@ -123,6 +124,12 @@ export const api = {
 
   /** One run's detail (`SessionView`). */
   getRun: (id: string) => apiFetch<{ run: SessionView }>(`/runs/${encodeURIComponent(id)}`),
+
+  /** A run's durably-persisted event trail (`GET /runs/:id/events`). Used to backfill the event
+   * store on a reload with no live `/ws` replay so Burn/insight panels are not empty (FINDING-013).
+   * Rejects (503) when the engine build has no event-log binding — callers treat that as "no backfill". */
+  getRunEvents: (id: string) =>
+    apiFetch<{ events: CoreEvent[] }>(`/runs/${encodeURIComponent(id)}/events`),
 
   /** Launch a run → the new run id. */
   launchRun: (body: LaunchRunBody) =>

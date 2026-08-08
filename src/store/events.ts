@@ -29,6 +29,12 @@ interface RunEventStore {
   byRun: Record<string, CoreEvent[]>;
   /** Fold one CoreEvent (drops output deltas / heartbeats / run-less frames). */
   ingest: (event: CoreEvent) => void;
+  /** Seed a run's log from the durably-persisted event trail (`GET /runs/:id/events`), ONLY when the
+   * run has no frames yet. The studio's `/ws` stream has no late-join replay, so a page reloaded
+   * against a finished (or already-running) run showed an empty Burn panel ("usage not yet reported")
+   * even though the usage was persisted. This backfills it. Guarded on emptiness so it never
+   * double-counts a live `cliUsage` already ingested from the socket (FINDING-013). */
+  hydrate: (runId: string, events: CoreEvent[]) => void;
   /** Drop a run's log. */
   clear: (runId: string) => void;
 }
@@ -47,6 +53,18 @@ export const useRunEventStore = create<RunEventStore>((set) => ({
       return { byRun: { ...s.byRun, [session]: next } };
     });
   },
+
+  hydrate: (runId, events) =>
+    set((s) => {
+      // Never clobber live frames already streamed from /ws — hydration is a backfill for the
+      // reload-with-no-socket case only.
+      if ((s.byRun[runId] ?? []).length > 0) return s;
+      const frames = events.filter(
+        (e) => e.session === runId && !IGNORED.has(e.type),
+      );
+      if (frames.length === 0) return s;
+      return { byRun: { ...s.byRun, [runId]: frames } };
+    }),
 
   clear: (runId) =>
     set((s) => {

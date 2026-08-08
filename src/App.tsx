@@ -107,6 +107,28 @@ export function App(): React.ReactElement {
 
   useEventStream(handleEvent);
 
+  // FINDING-013: /ws has no late-join replay, so a page reloaded against a run shows an empty Burn
+  // panel even though usage was durably recorded. When the selected run has no frames yet (a reload
+  // with no live socket history), backfill from the persisted event trail. Guarded on emptiness (and
+  // again inside the store) so a live run's streamed frames are never double-counted; a 503 (engine
+  // with no event-log binding) or a run with no history simply leaves the panels as they are.
+  useEffect(() => {
+    if (!runId) return;
+    if ((useRunEventStore.getState().byRun[runId] ?? []).length > 0) return;
+    let cancelled = false;
+    api
+      .getRunEvents(runId)
+      .then(({ events }) => {
+        if (!cancelled) useRunEventStore.getState().hydrate(runId, events);
+      })
+      .catch(() => {
+        /* no event-log binding, or the run has no persisted history — no backfill */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runId]);
+
   const selectRun = useCallback(
     (id: string) => navigate(`/runs/${encodeURIComponent(id)}`),
     [navigate],
