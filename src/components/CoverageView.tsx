@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
-import type { CoveragePerApp, CoverageReport, RepoEntry, UnaccountedNode } from '../api/types.js';
+import type { CoveragePerApp, CoverageReport, GraphKind, RepoEntry, UnaccountedNode } from '../api/types.js';
 
 type SortKey = 'name' | 'kind' | 'file' | 'app';
 type SortDir = 'asc' | 'desc';
@@ -306,15 +306,27 @@ export function CoverageView(): React.ReactElement {
   // `''` = the legacy daemon-wide view (kept so the panel still renders before any repo is chosen).
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [repoRef, setRepoRef] = useState<string>('');
+  // #122: the repo's code-graph summary (node counts by kind). Only meaningful per-repo — the daemon
+  // store has no repo code graph — so it's null for the daemon-wide view.
+  const [graphKinds, setGraphKinds] = useState<GraphKind[] | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { report: r } = repoRef
-        ? await api.getCoverageReportForRepo(repoRef)
-        : await api.getCoverageReport();
-      setReport(r);
+      if (repoRef) {
+        // Coverage + graph summary for the chosen repo, in parallel (#122).
+        const [{ report: r }, { kinds }] = await Promise.all([
+          api.getCoverageReportForRepo(repoRef),
+          api.getGraphKindsForRepo(repoRef),
+        ]);
+        setReport(r);
+        setGraphKinds(kinds);
+      } else {
+        const { report: r } = await api.getCoverageReport();
+        setReport(r);
+        setGraphKinds(null); // no daemon-wide code graph
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -375,6 +387,32 @@ export function CoverageView(): React.ReactElement {
           <code className="font-mono" style={{ color: 'rgba(230,237,243,0.6)' }}>wicked-core rules ingest</code>{' '}
           to populate.
         </p>
+      )}
+
+      {/* #122: what the repo's estate graph actually holds — node counts by kind. Only for a chosen
+          repo (the daemon has no repo code graph). */}
+      {graphKinds && (
+        <section className="flex flex-col gap-1" aria-label="Code graph summary">
+          <p className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+            Code graph ({graphKinds.reduce((n, k) => n + k.count, 0)} nodes)
+          </p>
+          {graphKinds.length === 0 ? (
+            <p className="text-xs" style={{ color: 'rgba(230,237,243,0.4)' }}>
+              This repo’s graph holds no nodes yet — onboard the repo to populate it.
+            </p>
+          ) : (
+            <table className="text-xs" style={{ color: 'rgba(230,237,243,0.7)' }}>
+              <tbody>
+                {graphKinds.map((k) => (
+                  <tr key={k.kind}>
+                    <td className="pr-4 font-mono">{k.kind}</td>
+                    <td className="text-right tabular-nums">{k.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
       )}
 
       {report && (

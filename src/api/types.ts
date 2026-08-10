@@ -689,6 +689,12 @@ export interface CoverageReport {
   unaccounted_nodes: UnaccountedNode[];
 }
 
+/** One entry of a repo's code-graph summary — a node kind and how many the graph holds (#122). */
+export interface GraphKind {
+  kind: string;
+  count: number;
+}
+
 // ── Workflow viewer + domain-model browser types (crew#44) ──────────────────
 
 /** Gate position in the value→strategy→execution ladder. */

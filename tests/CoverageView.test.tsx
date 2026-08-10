@@ -133,6 +133,9 @@ describe('CoverageView', () => {
     const perRepo = vi
       .spyOn(client.api, 'getCoverageReportForRepo')
       .mockResolvedValue({ report: { ...BASE_REPORT, coverage: 0.42 } });
+    const graph = vi
+      .spyOn(client.api, 'getGraphKindsForRepo')
+      .mockResolvedValue({ kinds: [{ kind: 'function', count: 2 }] });
     vi.spyOn(client.api, 'listRepos').mockResolvedValue({
       repos: [
         {
@@ -151,5 +154,10 @@ describe('CoverageView', () => {
     // The repo-scoped endpoint is called with the repo id; the daemon-wide report is not re-fetched.
     await waitFor(() => expect(perRepo).toHaveBeenCalledWith('autogpt'));
     expect(daemon).toHaveBeenCalledTimes(1); // only the initial ''-default load, not after selection
+    // #122: selecting a repo also loads + renders its code-graph summary.
+    await waitFor(() => expect(graph).toHaveBeenCalledWith('autogpt'));
+    await waitFor(() =>
+      expect(screen.getByLabelText('Code graph summary')).toHaveTextContent('function'),
+    );
   });
 });

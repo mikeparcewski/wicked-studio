@@ -368,6 +368,13 @@ export const api = {
       `/governance/coverage?repo=${encodeURIComponent(repoRef)}`,
     ),
 
+  /** A repo's code-graph summary — node counts by kind, over that repo's OWN store (#122). Repo-scoped
+   *  only; the daemon 404s an unknown repo and 400s a missing one. */
+  getGraphKindsForRepo: (repoRef: string) =>
+    apiFetch<{ kinds: import('./types.js').GraphKind[] }>(
+      `/governance/graph?repo=${encodeURIComponent(repoRef)}`,
+    ),
+
   /** All recorded governance claims (decisions) from the conformance store. */
   listClaims: () => apiFetch<{ claims: import('./types.js').GovernanceClaim[] }>('/governance/claims'),
 
