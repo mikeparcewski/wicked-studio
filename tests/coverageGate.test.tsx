@@ -29,7 +29,12 @@ import type { CoverageReport } from '../src/api/types.js';
 
 let current: CoverageReport;
 vi.mock('../src/api/client.js', () => ({
-  api: { getCoverageReport: () => Promise.resolve({ report: current }) },
+  // `listRepos` is mocked to empty so the FINDING-009 repo picker mounts with the daemon-wide view;
+  // these cases assert the gate BADGE over a fixed report, independent of which repo is selected.
+  api: {
+    getCoverageReport: () => Promise.resolve({ report: current }),
+    listRepos: () => Promise.resolve({ repos: [] }),
+  },
 }));
 
 const { CoverageView } = await import('../src/components/CoverageView.js');

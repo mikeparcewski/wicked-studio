@@ -123,4 +123,33 @@ describe('CoverageView', () => {
     await user.click(screen.getByRole('button', { name: /refresh/i }));
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
   });
+
+  // FINDING-009: selecting a repo must measure THAT repo (repo-scoped endpoint), not the vacuous
+  // daemon-wide report. Falsifiable: if the picker's onChange did not route to the repo-scoped call,
+  // `getCoverageReportForRepo` would never be invoked with the repo id.
+  it('selecting a repo loads that repo’s coverage (not the daemon-wide report)', async () => {
+    const user = userEvent.setup();
+    const daemon = vi.spyOn(client.api, 'getCoverageReport').mockResolvedValue({ report: BASE_REPORT });
+    const perRepo = vi
+      .spyOn(client.api, 'getCoverageReportForRepo')
+      .mockResolvedValue({ report: { ...BASE_REPORT, coverage: 0.42 } });
+    vi.spyOn(client.api, 'listRepos').mockResolvedValue({
+      repos: [
+        {
+          id: 'autogpt',
+          name: 'AutoGPT',
+          root_path: '/tmp/autogpt',
+          default_branch: 'main',
+          registered_at: 1,
+        },
+      ],
+    });
+    render(<CoverageView />);
+    // The picker renders the registered repo once listRepos resolves.
+    await waitFor(() => expect(screen.getByRole('option', { name: 'AutoGPT' })).toBeInTheDocument());
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Coverage repo' }), 'autogpt');
+    // The repo-scoped endpoint is called with the repo id; the daemon-wide report is not re-fetched.
+    await waitFor(() => expect(perRepo).toHaveBeenCalledWith('autogpt'));
+    expect(daemon).toHaveBeenCalledTimes(1); // only the initial ''-default load, not after selection
+  });
 });

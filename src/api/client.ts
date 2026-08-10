@@ -361,6 +361,13 @@ export const api = {
   /** Front-half coverage gate report; `report` is `null` on an empty store. */
   getCoverageReport: () => apiFetch<{ report: import('./types.js').CoverageReport | null }>('/governance/coverage'),
 
+  /** Coverage for ONE registered repo, over that repo's OWN code graph (FINDING-009) — not the
+   *  vacuous daemon-store report. The daemon rejects an unknown repo, surfaced here as a 404 throw. */
+  getCoverageReportForRepo: (repoRef: string) =>
+    apiFetch<{ report: import('./types.js').CoverageReport | null }>(
+      `/governance/coverage?repo=${encodeURIComponent(repoRef)}`,
+    ),
+
   /** All recorded governance claims (decisions) from the conformance store. */
   listClaims: () => apiFetch<{ claims: import('./types.js').GovernanceClaim[] }>('/governance/claims'),
 

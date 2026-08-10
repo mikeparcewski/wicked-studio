@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
-import type { CoveragePerApp, CoverageReport, UnaccountedNode } from '../api/types.js';
+import type { CoveragePerApp, CoverageReport, RepoEntry, UnaccountedNode } from '../api/types.js';
 
 type SortKey = 'name' | 'kind' | 'file' | 'app';
 type SortDir = 'asc' | 'desc';
@@ -301,18 +301,33 @@ export function CoverageView(): React.ReactElement {
   const [report, setReport] = useState<CoverageReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // FINDING-009: coverage is per-repo (computed over the repo's OWN graph). The bare endpoint reads
+  // the daemon store and reports a vacuous 1.0 that names no repo, so let the operator pick a repo.
+  // `''` = the legacy daemon-wide view (kept so the panel still renders before any repo is chosen).
+  const [repos, setRepos] = useState<RepoEntry[]>([]);
+  const [repoRef, setRepoRef] = useState<string>('');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { report: r } = await api.getCoverageReport();
+      const { report: r } = repoRef
+        ? await api.getCoverageReportForRepo(repoRef)
+        : await api.getCoverageReport();
       setReport(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
+  }, [repoRef]);
+
+  // Load the repo list once so the picker can offer real, registered repos.
+  useEffect(() => {
+    void api
+      .listRepos()
+      .then(({ repos: rs }) => setRepos(rs))
+      .catch(() => setRepos([])); // no repos endpoint / none registered → daemon-wide view only
   }, []);
 
   useEffect(() => { void load(); }, [load]);
@@ -321,15 +336,31 @@ export function CoverageView(): React.ReactElement {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold" style={{ color: '#e6edf3' }}>Coverage gate</h2>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="rounded px-2 py-1 text-[11px] disabled:opacity-50"
-          style={{ border: '1px solid rgba(230,237,243,0.1)', color: 'rgba(230,237,243,0.6)' }}
-        >
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* FINDING-009: pick the repo to measure; `All` is the legacy daemon-wide (vacuous) view. */}
+          <select
+            aria-label="Coverage repo"
+            value={repoRef}
+            onChange={(e) => setRepoRef(e.target.value)}
+            disabled={loading}
+            className="rounded px-2 py-1 text-[11px] disabled:opacity-50"
+            style={{ border: '1px solid rgba(230,237,243,0.1)', color: 'rgba(230,237,243,0.6)', background: 'transparent' }}
+          >
+            <option value="">All (daemon)</option>
+            {repos.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="rounded px-2 py-1 text-[11px] disabled:opacity-50"
+            style={{ border: '1px solid rgba(230,237,243,0.1)', color: 'rgba(230,237,243,0.6)' }}
+          >
+            {loading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {error && (
