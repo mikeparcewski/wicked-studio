@@ -1,7 +1,7 @@
 {
   "name": "wicked-studio",
   "version": "0.5.0",
-  "description": "wicked-studio \u2014 HITL React app for wicked-crew sessions",
+  "description": "wicked-studio — HITL React app for wicked-crew sessions",
   "type": "module",
   "scripts": {
     "dev": "vite",
