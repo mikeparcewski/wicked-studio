@@ -1,5 +1,6 @@
 import type {
   CoreEvent,
+  GateDecision,
   GateInfo,
   LaunchRunBody,
   OnboardRef,
@@ -105,12 +106,6 @@ export async function downloadRunEvidence(runId: string): Promise<void> {
   a.remove();
   // Revoke on the next tick — revoking synchronously can cancel the download.
   setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-/** Approve / reject payload for the steering gate (`POST /runs/:id/gate`). */
-export interface GateDecision {
-  approve: boolean;
-  amend?: string;
 }
 
 /**
