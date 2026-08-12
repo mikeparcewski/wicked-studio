@@ -1,0 +1,742 @@
+---
+/**
+ * index.astro — the wicked-studio landing page (ws.wickedagile.com).
+ *
+ * POSITIONING (four-plane era): wicked-studio is the CODER'S FRONT DOOR of the
+ * wicked platform's EXPERIENCE plane — the run board for governed agent
+ * delivery. A Vite/React SPA that is a PURE HTTP/WS client of the wicked-crew
+ * daemon: launch and steer governed runs, answer human gates, watch live
+ * CoreEvent streams, drive terminals — everything the daemon exposes on
+ * /api/v1 and /ws, and nothing else. Its sibling front door is
+ * wicked-interactive (the creator skin); both are pure clients of the same
+ * control plane.
+ *
+ * HONEST BOUNDARIES honored on this page:
+ *  - Studio imports ZERO crew source. The only artifact the two products share
+ *    is the published wire contract, wicked-crew-api-types. Every capability
+ *    shown here rides GET/POST /api/v1/… + the /ws CoreEvent stream — real
+ *    routes from src/api/client.ts, never invented ones.
+ *  - Two ship modes, both real: BUNDLED (crew's release build copies studio's
+ *    built dist into the daemon's serving tree — `npx wicked-crew serve`,
+ *    same-origin, one port) and STANDALONE (VITE_API_HOST baked at build time,
+ *    dist/ served from any static server; the daemon's loopback CORS admits
+ *    localhost origins). The standalone mode is proven by a scripted e2e
+ *    (e2e/studio_standalone_test.py) that drives a real browser against a
+ *    live daemon.
+ *  - The Project model is SHIPPED in the control plane (/api/v1/projects,
+ *    nine routes; a project's activity feed merges crew core events with
+ *    wicked.interactive.* bus events carrying the same project_id). The
+ *    studio's DEDICATED project browser is the next surface to land in this
+ *    skin — say "landing in this skin", never "shipped here".
+ *  - Governance vocabulary (deny-dominates, evaluator ≠ creator, gates) is
+ *    crew's — studio SURFACES it, it does not own it. The skin never grades
+ *    anything.
+ *  - Panels named on the board are the SPA's real routes (useRoute.ts):
+ *    runs, work, chats, coverage, workflows, domain, policies, rules, repos.
+ */
+import Base from 'wicked-web/layouts/Base.astro';
+import Topbar from 'wicked-web/components/Topbar.astro';
+import Footer from 'wicked-web/components/Footer.astro';
+import SameGarden from 'wicked-web/components/SameGarden.astro';
+import '../styles/studio.css';
+
+const title = 'wicked-studio — the coder’s front door: launch, watch, steer, verified';
+const description =
+  'wicked-studio is the coder-facing skin of the wicked platform’s experience plane — the run board for governed agent delivery. Launch a run from a plain-text brief, watch live CoreEvents stream over WebSocket, answer the human gates that hold it, and drive a real terminal into the worker’s worktree. A pure HTTP/WS client of the wicked-crew daemon’s /api/v1: zero crew source imported, the wire contract (wicked-crew-api-types) is the only shared artifact. Ships bundled inside `npx wicked-crew serve` or standalone against any daemon via VITE_API_HOST. One project model, two skins: the same projects the creator skin (wicked-interactive) drives.';
+const repo = 'https://github.com/mikeparcewski/wicked-studio';
+
+// The run board: the SPA's real panels (src/hooks/useRoute.ts), each fed by a
+// real /api/v1 route (src/api/client.ts). The board auto-cycles; click to pin.
+const PANELS = [
+  { id: 'runs',       api: 'GET /runs · WS /ws',            line: 'The run board itself: launch from a brief, watch the phase ladder and unit list move, read live output, answer the steering timeline.' },
+  { id: 'work',       api: 'GET /runs/:id/events',           line: 'Every work unit across every run in one queue — what’s streaming, what’s held at a gate, what landed.' },
+  { id: 'chats',      api: 'POST /chats',                    line: 'Group chat with your whole roster: fan one question out, watch each seat answer side by side.' },
+  { id: 'coverage',   api: 'GET /governance/coverage?repo=', line: 'Repo-scoped coverage with a graph view — scoped to the repo you asked about, never a vacuous store-wide 1.0.' },
+  { id: 'workflows',  api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
+  { id: 'domain',     api: 'GET /domain-graph',              line: 'The domain-model browser: requirements and their graph, per repo — what the record actually knows about your problem space.' },
+  { id: 'policies',   api: 'GET /governance/policies',       line: 'Policies and conformance rules — the deterministic floor a run must clear. The skin surfaces the gate; it never grades.' },
+  { id: 'repos',      api: 'POST /repos',                    line: 'Registered repos, their onboarding runs, and code-graph summaries — the ground the workers stand on.' },
+];
+
+// The insight rail: the per-run panels fed by the CoreEvent stream.
+const RAIL = [
+  { id: 'Burn',        line: 'Tokens, cost, and rework per CLI — live during the run, not on the invoice.' },
+  { id: 'Decisions',   line: 'Every human call on the record: who approved what, when, and why.' },
+  { id: 'Governance',  line: 'The audit view: which policies were checked, which verdicts held the run.' },
+  { id: 'Assumptions', line: 'External transforms recorded with honest confidence — needs-research is badged for you.' },
+  { id: 'Steering',    line: 'The timeline of gates raised and answered — approve, amend, reject.' },
+  { id: 'Files',       line: 'The diffs each unit produced, straight from the worktree.' },
+  { id: 'Term',        line: 'A real PTY into the worker’s worktree — raw bytes over /ws/terminals/:id.' },
+  { id: 'Cov',         line: 'Repo-scoped coverage, one click from the run that changed it.' },
+];
+---
+
+<Base title={title} description={description} favicon="/favicon.svg">
+  <Topbar pkg="wicked-studio" repo={repo} />
+
+  <!-- ── Hero: the console IS the product — launch, watch, steer ─────────── -->
+  <section class="hero">
+    <div class="amber-floor" aria-hidden="true"></div>
+    <div class="wrap hero-head">
+      <div class="kicker kicker--plane">wicked-studio · the coder’s front door of the wicked platform</div>
+      <h1>Launch. Watch. Steer.<br><span class="y">Verified.</span></h1>
+      <p class="lede">
+        The run board for governed agent delivery. Describe the problem, watch the live
+        event stream phase by phase, and answer the gates that hold it — <b>the decision
+        is always yours</b>. This is not a mock of the product: it <b>is</b> the interface,
+        and the one below is live. Drive it.
+      </p>
+    </div>
+
+    <div class="wrap hero-console-wrap">
+      <!-- A hands-on mirror of the real SPA (LaunchForm → the brief input,
+           LiveOutput → the feed, SteeringGate → the gate, AgentTerminal → the
+           term line, InsightRail → the chips). Auto-runs on scroll-in, then
+           hands you the wheel at the gate. Vocabulary = real /api/v1 routes. -->
+      <div class="console" data-console aria-label="wicked-studio — launch, watch, and steer a governed run">
+        <div class="mock-bar">
+          <span class="mock-dots"><i></i><i></i><i></i></span>
+          <span class="mock-url">127.0.0.1:7701 · served by your crew daemon · same-origin</span>
+        </div>
+        <div class="console-body">
+          <form class="console-launch" data-console-launch>
+            <label class="cl-k" for="console-brief">launch a run</label>
+            <input id="console-brief" class="cl-input" data-console-input type="text"
+                   value="add rate-limiting to the public API" autocomplete="off" spellcheck="false"
+                   aria-label="Brief — launch a governed run from a plain-text problem" />
+            <button type="submit" class="cl-go" data-console-go>Launch ↵</button>
+          </form>
+          <div class="console-cols">
+            <div class="console-feed" data-console-feed role="log" aria-live="polite" aria-label="live CoreEvent feed">
+              <span class="cf-k">live events · ws /ws</span>
+            </div>
+            <div class="console-gate" data-console-gate hidden>
+              <span class="cg-k">steering gate · awaiting your decision</span>
+              <span class="cg-stamp" data-cg-stamp>DENY</span>
+              <span class="cg-t" data-cg-t>schema-drift · re-verified against the worktree</span>
+              <div class="cg-actions">
+                <button type="button" class="cg-btn cg-btn--ok" data-cg-action="approve">Approve</button>
+                <button type="button" class="cg-btn" data-cg-action="steer">Approve with steer</button>
+                <button type="button" class="cg-btn" data-cg-action="reject">Reject</button>
+              </div>
+            </div>
+          </div>
+          <div class="console-term">
+            <span class="ct-line" data-console-term><span class="ct-p">studio ›</span> term attach r-7c19 <span class="ct-c"># real PTY · /ws/terminals/:id</span></span>
+          </div>
+          <!-- The insight rail — click a chip to read what that panel answers. -->
+          <div class="console-rail" data-rail aria-label="Insight rail panels">
+            <span class="cr-k">insight rail</span>
+            {RAIL.map((r, i) => (
+              <button type="button" class:list={['cr-chip', { 'is-active': i === 0 }]} data-rail-chip data-i={i}>{r.id}</button>
+            ))}
+          </div>
+          <p class="console-rail-line" data-rail-line aria-live="polite">{RAIL[0].line}</p>
+        </div>
+      </div>
+
+      <!-- Phone-native console: the live console is a desktop affordance. On a
+           phone we hide it and tell the same launch → watch → steer story as a
+           compact static list. -->
+      <div class="console-static">
+        <ol class="cs-steps">
+          <li><span class="cs-n">1</span><div><b>Launch</b> a run from a plain-text brief: <code>add rate-limiting to the public API</code></div></li>
+          <li><span class="cs-n">2</span><div><b>Watch</b> live CoreEvents stream over <code>/ws</code> — phase ladder, unit list, burn, diffs</div></li>
+          <li><span class="cs-n">3</span><div><b>Steer</b> the gate — approve, amend, or reject. <span class="cs-chip">schema-drift · DENY → held for you</span></div></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="wrap hero-foot">
+      <div class="hero-tags" role="list">
+        <span role="listitem">pure client of /api/v1 + /ws</span>
+        <span role="listitem">zero crew source imported</span>
+        <span role="listitem">bundled or standalone</span>
+        <span role="listitem">the decision is yours</span>
+        <span role="listitem">dark / light</span>
+        <span role="listitem">local-first</span>
+      </div>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#get">Get it</a>
+        <a class="btn btn-ghost" href="#client">See the seam</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── The run board — every daemon surface, one skin ──────────────────── -->
+  <section class="board" aria-labelledby="board-h">
+    <div class="wrap">
+      <div class="sec-head sec-head--wide">
+        <div class="kicker">The run board · the SPA’s real panels</div>
+        <h2 id="board-h">If the daemon exposes it, the board shows it.</h2>
+        <p class="sec-sub">
+          Every panel below is a real route in the SPA, fed by a real route on the daemon —
+          <b>nothing rendered here is privileged</b>. The governance vocabulary you’ll meet
+          (deny-dominates gates, evaluator ≠ creator) is <a href="https://wc.wickedagile.com">crew’s</a>;
+          the skin surfaces it and never grades anything. The board auto-cycles — click a panel to pin it.
+        </p>
+      </div>
+
+      <div class="board-layout">
+        <div class="board-list" data-board role="tablist" aria-label="Studio panels">
+          {PANELS.map((p, i) => (
+            <button type="button" role="tab" class:list={['board-item', { 'is-active': i === 0 }]} data-board-item data-i={i} aria-selected={i === 0 ? 'true' : 'false'}>
+              <span class="bi-dot" aria-hidden="true"></span>
+              <span class="bi-name">{p.id}</span>
+            </button>
+          ))}
+        </div>
+        <div class="board-stage" data-board-stage>
+          <div class="board-stage-bar">
+            <span class="bs-name" data-bs-name>runs</span>
+            <code class="bs-api" data-bs-api>{PANELS[0].api}</code>
+          </div>
+          <p class="bs-line" data-bs-line>{PANELS[0].line}</p>
+        </div>
+      </div>
+      <div class="board-status">
+        <button type="button" class="board-status-btn is-playing" data-board-toggle aria-live="polite">
+          <span class="bs-ic" aria-hidden="true">▶</span>
+          <span class="bs-txt" data-board-status-txt>auto-cycling · click a panel to pin it</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── One project, two skins — the experience-plane story ─────────────── -->
+  <section class="proj" aria-labelledby="proj-h">
+    <div class="wrap">
+      <div class="sec-head sec-head--wide">
+        <div class="kicker kicker--plane">The experience plane · one project model</div>
+        <h2 id="proj-h">One project. Two front doors.</h2>
+        <p class="sec-sub">
+          The Project model lives in the <b>control plane</b> — <code>/api/v1/projects</code>, nine
+          routes — and both skins are pure clients of it. A project groups runs, chats, and docs;
+          its activity feed <b>merges</b> crew’s durable core events with
+          <a href="https://wi.wickedagile.com">wicked-interactive</a>’s bus events carrying the same
+          <code>project_id</code>. The coder’s door and the creator’s door open onto the
+          <b>same room</b> — flip the skin below and watch the same project re-render.
+        </p>
+      </div>
+
+      <div class="proj-card" data-proj data-skin="studio">
+        <div class="proj-bar">
+          <span class="proj-id">project · <b>payments-refresh</b></span>
+          <div class="proj-skins" role="tablist" aria-label="Which skin renders this project">
+            <button type="button" role="tab" class="proj-skin is-active" data-proj-skin="studio" aria-selected="true">studio · coder</button>
+            <button type="button" role="tab" class="proj-skin" data-proj-skin="interactive" aria-selected="false">interactive · creator</button>
+          </div>
+        </div>
+
+        <!-- The STUDIO rendering: the merged activity feed as a run board log. -->
+        <ol class="proj-feed proj-feed--studio" aria-label="The project as the coder’s skin renders it">
+          <li><span class="pf-src pf-src--crew">crew</span><code>run r-7c19</code><span class="pf-note">feature workflow · build → adversarial-review → test — held once, steered, landed</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>gate decision</code><span class="pf-note">schema-drift DENY → approved with steer · on the decisions ledger</span></li>
+          <li><span class="pf-src pf-src--int">interactive</span><code>doc payments-deck</code><span class="pf-note">the creator skin’s deck, in this same feed — created, drafted, delivered</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>chat c-2214</code><span class="pf-note">roster fan-out: “what breaks if we shard the ledger?” — three seats answered</span></li>
+        </ol>
+
+        <!-- The INTERACTIVE rendering: the same project as the creator's canvas. -->
+        <ol class="proj-feed proj-feed--interactive" aria-label="The project as the creator’s skin renders it">
+          <li><span class="pf-src pf-src--int">interactive</span><code>wicked.interactive.doc.created</code><span class="pf-note">the deck asks for a first draft — over the bus</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>governed run answers</code><span class="pf-note">a crew run drafts it — heartbeats stream while it works</span></li>
+          <li><span class="pf-src pf-src--int">interactive</span><code>wicked.interactive.draft.completed</code><span class="pf-note">a real draft, idempotency-keyed — replays can’t double-deliver</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>run r-7c19 · evidence</code><span class="pf-note">the coder’s run sits in the creator’s view too — same feed, other door</span></li>
+        </ol>
+
+        <div class="proj-foot">
+          <code class="proj-call">GET /api/v1/projects/payments-refresh/activity</code>
+          <span class="proj-same" data-proj-same>same project · same feed · rendered by the <b data-proj-skin-label>coder’s</b> skin</span>
+        </div>
+      </div>
+
+      <p class="honest-note">
+        <b>Where this stands:</b> the Project model is <b>shipped in the control plane</b> — nine
+        routes, the merged activity feed, durable gate prompts across member runs
+        (<code>GET /projects/:id/prompts</code>). The studio’s <b>dedicated project browser is
+        landing in this skin next</b>; the run board you saw above already rides the same daemon.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── The client seam — a pure client, nothing privileged ─────────────── -->
+  <section class="pair" id="client" aria-labelledby="pair-h">
+    <div class="wrap">
+      <div class="sec-head sec-head--wide">
+        <div class="kicker">One API · zero private seams</div>
+        <h2 id="pair-h">If the skin can show it, the API serves it.</h2>
+        <p class="sec-sub">
+          Studio imports <b>zero</b> crew source. The only artifact the two products share is the
+          published wire contract — <code>wicked-crew-api-types</code>. Everything on this page rides
+          <code>/api/v1</code> and the <code>/ws</code> CoreEvent stream; there is no back channel.
+          How the SPA finds its daemon is one deliberate seam — flip it.
+        </p>
+      </div>
+
+      <div class="pair-panel" data-pair data-mode="bundled">
+        <div class="pair-modes" role="tablist" aria-label="How the SPA finds the daemon">
+          <button type="button" role="tab" class="pair-mode is-active" data-pair-mode="bundled" aria-selected="true">bundled · same-origin</button>
+          <button type="button" role="tab" class="pair-mode" data-pair-mode="standalone" aria-selected="false">standalone · VITE_API_HOST</button>
+        </div>
+
+        <div class="pair-stage pair-stage--bundled">
+          <pre class="pair-code"><code>$ npx wicked-crew serve            <span class="c"># UI + API · one port · same origin</span>
+
+apiBase() → window.location.origin + '/api/v1'
+wsBase()  → wss? + window.location.host          <span class="c"># /ws CoreEvents</span></code></pre>
+          <p class="pair-note">
+            Crew’s release build copies studio’s built <code>dist/</code> into the daemon’s serving
+            tree — one command, one port. No host is baked into the bundle:
+            <code>--port</code> / <code>CREW_PORT</code> just work.
+          </p>
+        </div>
+
+        <div class="pair-stage pair-stage--standalone">
+          <pre class="pair-code"><code>$ VITE_API_HOST=127.0.0.1:7701 npm run build
+$ npx serve dist                   <span class="c"># any static server · SPA fallback</span>
+
+apiBase() → http://127.0.0.1:7701/api/v1
+wsBase()  → ws://127.0.0.1:7701                  <span class="c"># same contract, other origin</span></code></pre>
+          <p class="pair-note">
+            The daemon’s loopback CORS admits any <code>localhost</code> origin, so a standalone
+            studio on its own port drives a local daemon out of the box — the daemon stays fully
+            functional headless either way.
+          </p>
+        </div>
+
+        <div class="pair-proof">
+          <span class="pair-proof-k">the carve, proven</span>
+          <span class="pair-proof-t"><code>e2e/studio_standalone_test.py</code> builds the SPA, serves <code>dist/</code> from a plain
+          static server, points it at a live daemon, and drives a real browser through a real flow —
+          list runs → open a run → approve a human gate → watch CoreEvents over WS.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Where studio sits: THE four-plane map (shared chrome, canonical) ──
+       current="wicked-studio" renders this product's card as the
+       "you are here" marker — the map stays complete, the site never
+       promotes itself. -->
+  <SameGarden current="wicked-studio" />
+
+  <!-- ── Get it ───────────────────────────────────────────────────────────── -->
+  <div class="finale">
+    <section class="get" id="get">
+      <div class="wrap get-grid">
+        <div class="get-intro">
+          <div class="kicker">Get it</div>
+          <h2>One command. The studio is already in it.</h2>
+          <p>
+            The studio ships <b>bundled inside wicked-crew</b>: <code>npx wicked-crew serve</code>
+            starts the daemon and serves this skin same-origin on one port — nothing else to
+            install. Running the skin <b>standalone</b> against any daemon is equally supported;
+            it’s the same build, pointed by one env var.
+          </p>
+          <p class="get-alt">
+            Prefer the whole family? <code>npx wicked-installer</code> is the interactive,
+            cross-CLI installer for every wicked-* product.
+          </p>
+        </div>
+        <div class="install-stack">
+          <div class="install install--primary" role="group" aria-label="Run the studio bundled with wicked-crew">
+            <div class="install__bar">
+              <span class="install__label"><span class="install__star" aria-hidden="true">★</span> Recommended · bundled with crew</span>
+              <button class="install__copy" type="button" aria-label="Copy the bundled serve command"
+                onclick="navigator.clipboard&&navigator.clipboard.writeText('npx wicked-crew serve').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
+            </div>
+            <pre class="install__code"><code>npx wicked-crew serve   <span class="c"># daemon + this studio · one port · same origin</span></code></pre>
+            <p class="install__note">Node ≥ 22. The daemon serves the studio at its own origin — open the printed URL and launch a run. <span class="install__ver">wicked-studio npm v0.1.0</span></p>
+          </div>
+
+          <div class="install-or" aria-hidden="true"><span>or run the skin standalone</span></div>
+
+          <div class="install install--secondary" role="group" aria-label="Run wicked-studio standalone against a daemon">
+            <div class="install__bar">
+              <span class="install__label">Standalone · your own daemon</span>
+              <button class="install__copy" type="button" aria-label="Copy the standalone build commands"
+                onclick="navigator.clipboard&&navigator.clipboard.writeText('VITE_API_HOST=127.0.0.1:7701 npm run build\nnpx serve dist').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
+            </div>
+            <pre class="install__code"><code>VITE_API_HOST=127.0.0.1:7701 npm run build
+npx serve dist          <span class="c"># any static server · SPA fallback to index.html</span></code></pre>
+          </div>
+        </div>
+        <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-studio#readme" target="_blank" rel="noopener" aria-label="View wicked-studio on GitHub">
+          <svg viewBox="0 0 16 16" width="42" height="42" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span>View on GitHub</span>
+        </a>
+      </div>
+    </section>
+
+    <Footer repo={repo} />
+  </div>
+
+  <!-- ── The console: launch → the feed streams → the gate is yours ──────── -->
+  <script is:inline>
+    (function () {
+      var root = document.querySelector('[data-console]');
+      if (!root) return;
+      var feed = root.querySelector('[data-console-feed]');
+      var gate = root.querySelector('[data-console-gate]');
+      var stamp = root.querySelector('[data-cg-stamp]');
+      var gateT = root.querySelector('[data-cg-t]');
+      var termEl = root.querySelector('[data-console-term]');
+      var form = root.querySelector('[data-console-launch]');
+      var input = root.querySelector('[data-console-input]');
+      if (!feed || !gate || !stamp) return;
+
+      var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var STEP = 700;
+      var timer = null;
+      var resolved = false;
+      var runSeq = 0;      // guards a stale stream after a relaunch
+      var workerFlip = 0;  // cycles the dispatched worker on relaunch
+
+      function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      function clearFeed() {
+        var rows = feed.querySelectorAll('.cf-row');
+        for (var i = 0; i < rows.length; i++) rows[i].parentNode.removeChild(rows[i]);
+      }
+      function addRow(html, cls) {
+        var row = document.createElement('span');
+        row.className = 'cf-row' + (cls ? ' ' + cls : '');
+        row.innerHTML = html;
+        feed.appendChild(row);
+        feed.scrollTop = feed.scrollHeight;
+        return row;
+      }
+      function setTerm(cmd, comment) {
+        if (!termEl) return;
+        termEl.innerHTML = '<span class="ct-p">studio ›</span> ' + cmd +
+          (comment ? ' <span class="ct-c"># ' + comment + '</span>' : '');
+      }
+      function setButtons(enabled) {
+        var btns = gate.querySelectorAll('[data-cg-action]');
+        for (var i = 0; i < btns.length; i++) btns[i].disabled = !enabled;
+      }
+      function hideCue() {
+        var cue = gate.querySelector('[data-cg-cue]');
+        if (cue) cue.parentNode.removeChild(cue);
+      }
+      function dropAmend() {
+        var amend = gate.querySelector('.cg-amend');
+        if (amend) amend.parentNode.removeChild(amend);
+      }
+      function hideGate() {
+        hideCue(); dropAmend();
+        gate.hidden = true;
+        gate.removeAttribute('data-verdict');
+        stamp.textContent = 'DENY';
+        if (gateT) gateT.textContent = 'schema-drift · re-verified against the worktree';
+        setButtons(true);
+        resolved = false;
+      }
+      function showGate() {
+        gate.hidden = false;
+        gate.setAttribute('data-verdict', 'deny');
+        stamp.textContent = 'DENY';
+        if (gateT) gateT.textContent = 'schema-drift · re-verified against the worktree';
+        setButtons(true);
+        resolved = false;
+        hideCue();
+        var cue = document.createElement('span');
+        cue.className = 'cg-cue';
+        cue.setAttribute('data-cg-cue', '');
+        cue.textContent = '☝ The decision is yours';
+        gate.appendChild(cue);
+      }
+
+      // Feed steps in the daemon's real vocabulary: POST /runs launches, /ws
+      // streams CoreEvents, the gate holds until POST /runs/:id/gate answers it.
+      function steps(worker) {
+        return [
+          { h: 'run <b>r-7c19</b> launched · workflow <b>feature</b> · <b>POST /api/v1/runs</b>' },
+          { h: 'ws <b>/ws</b> subscribed · CoreEvents streaming · phase ladder live' },
+          { h: 'unit <b>2/6</b> build · <b>' + worker + '</b> session · usage 38k in / 5k out' },
+          { h: 'diff captured · Files panel updated · Burn ticking per CLI' },
+          { h: 'evaluator ≠ creator · review unit routed to a <b>different CLI</b>' },
+          { h: 'policy <b>schema-drift</b> · <b>FAIL</b> — migration ≠ checked-in schema', c: 'cf-row--gate' },
+          { h: 'gate raised · <b>held for your decision</b>', c: 'cf-row--gate' }
+        ];
+      }
+      function stream(worker) {
+        if (timer) { clearTimeout(timer); timer = null; }
+        runSeq++;
+        var seq = runSeq;
+        clearFeed();
+        hideGate();
+        setTerm('term attach r-7c19', 'real PTY · /ws/terminals/:id');
+        var list = steps(worker);
+        if (reduced) {
+          for (var i = 0; i < list.length; i++) addRow(list[i].h, list[i].c);
+          showGate();
+          return;
+        }
+        var idx = 0;
+        (function tick() {
+          if (seq !== runSeq) return;
+          if (idx >= list.length) { showGate(); return; }
+          addRow(list[idx].h, list[idx].c);
+          idx++;
+          timer = setTimeout(tick, STEP);
+        })();
+      }
+
+      // --- gate resolutions: the human takes the wheel (the skin never grades) ---
+      function resolveApprove() {
+        if (resolved) return;
+        resolved = true; setButtons(false); hideCue(); dropAmend();
+        addRow('you approved · override recorded on the decisions ledger', 'cf-row--ok');
+        addRow('transition <b>allowed</b> → ship', 'cf-row--ok');
+        gate.setAttribute('data-verdict', 'allow');
+        stamp.textContent = 'ALLOW';
+        if (gateT) gateT.textContent = 'your call · recorded in the steering timeline';
+        setTerm('gate approve r-7c19', 'POST /api/v1/runs/r-7c19/gate');
+      }
+      function resolveReject() {
+        if (resolved) return;
+        resolved = true; setButtons(false); hideCue(); dropAmend();
+        addRow('run <b>rejected</b> · returned to build', 'cf-row--gate');
+        addRow('unit 2 reopened · awaiting a new diff');
+        gate.setAttribute('data-verdict', 'deny');
+        stamp.textContent = 'DENY';
+        if (gateT) gateT.textContent = 'gate stands · nothing shipped';
+        setTerm('gate reject r-7c19', 'held at build · nothing ships');
+      }
+      function resolveSteer(text) {
+        if (resolved) return;
+        resolved = true; setButtons(false); hideCue(); dropAmend();
+        addRow('amendment applied · <b>' + escapeHtml(text) + '</b>');
+        addRow('re-running build · the amendment rides the next prompt');
+        addRow('policy <b>schema-drift</b> · <b>PASS</b>', 'cf-row--ok');
+        addRow('gate <b>build → ship</b> · <b>PASS</b>', 'cf-row--ok');
+        gate.setAttribute('data-verdict', 'allow');
+        stamp.textContent = 'ALLOW';
+        if (gateT) gateT.textContent = 'steered · re-verified against the worktree · PASS';
+        setTerm('run resume r-7c19', 'POST /api/v1/runs/r-7c19/resume');
+      }
+      function openAmend() {
+        if (resolved) return;
+        var existing = gate.querySelector('.cg-amend input');
+        if (existing) { existing.focus(); existing.select(); return; }
+        hideCue();
+        var wrap = document.createElement('div');
+        wrap.className = 'cg-amend';
+        var amInput = document.createElement('input');
+        amInput.type = 'text';
+        amInput.value = 'add rollback migration + regen schema';
+        amInput.setAttribute('aria-label', 'Amendment to steer the next unit');
+        var apply = document.createElement('button');
+        apply.type = 'button';
+        apply.className = 'cg-btn cg-btn--ok';
+        apply.textContent = 'Apply ↵';
+        wrap.appendChild(amInput);
+        wrap.appendChild(apply);
+        gate.appendChild(wrap);
+        amInput.focus();
+        amInput.select();
+        function submit() {
+          var text = amInput.value.trim();
+          if (text) resolveSteer(text);
+        }
+        apply.addEventListener('click', submit);
+        amInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        });
+      }
+
+      gate.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest('[data-cg-action]') : null;
+        if (!btn || btn.disabled) return;
+        var action = btn.getAttribute('data-cg-action');
+        if (action === 'approve') resolveApprove();
+        else if (action === 'reject') resolveReject();
+        else if (action === 'steer') openAmend();
+      });
+
+      // Relaunch from the brief — reset + re-stream a fresh run that ends again
+      // at the gate, so a visitor can drive their own problem in.
+      if (form) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          workerFlip = (workerFlip + 1) % 2;
+          stream(workerFlip === 0 ? 'codex' : 'claude');
+          if (input) input.blur();
+        });
+      }
+
+      // Auto-play the run when the console scrolls into view.
+      // Reduced-motion renders it fully, instantly.
+      var started = false;
+      function startOnce() {
+        if (started) return; started = true;
+        stream('claude');
+      }
+      if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en) {
+            if (en.isIntersecting) { startOnce(); io.disconnect(); }
+          });
+        }, { threshold: 0.3 });
+        io.observe(root);
+      } else {
+        startOnce();
+      }
+    })();
+  </script>
+
+  <!-- ── The insight rail chips: click a panel, read what it answers ─────── -->
+  <script is:inline>
+    (function () {
+      var chips = Array.prototype.slice.call(document.querySelectorAll('[data-rail-chip]'));
+      var line = document.querySelector('[data-rail-line]');
+      if (!chips.length || !line) return;
+      var LINES = [
+        'Tokens, cost, and rework per CLI — live during the run, not on the invoice.',
+        'Every human call on the record: who approved what, when, and why.',
+        'The audit view: which policies were checked, which verdicts held the run.',
+        'External transforms recorded with honest confidence — needs-research is badged for you.',
+        'The timeline of gates raised and answered — approve, amend, reject.',
+        'The diffs each unit produced, straight from the worktree.',
+        'A real PTY into the worker’s worktree — raw bytes over /ws/terminals/:id.',
+        'Repo-scoped coverage, one click from the run that changed it.'
+      ];
+      chips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          var i = parseInt(chip.getAttribute('data-i'), 10);
+          if (isNaN(i) || !LINES[i]) return;
+          chips.forEach(function (c) { c.classList.remove('is-active'); });
+          chip.classList.add('is-active');
+          line.textContent = LINES[i];
+        });
+      });
+    })();
+  </script>
+
+  <!-- ── The run board: auto-cycling panel switcher (click to pin) ───────── -->
+  <script is:inline>
+    (function () {
+      var items = Array.prototype.slice.call(document.querySelectorAll('[data-board-item]'));
+      var stage = document.querySelector('[data-board-stage]');
+      var nameEl = document.querySelector('[data-bs-name]');
+      var apiEl = document.querySelector('[data-bs-api]');
+      var lineEl = document.querySelector('[data-bs-line]');
+      var toggle = document.querySelector('[data-board-toggle]');
+      var statusTxt = document.querySelector('[data-board-status-txt]');
+      if (!items.length || !stage || !nameEl || !apiEl || !lineEl) return;
+
+      var PANELS = [
+        { id: 'runs',      api: 'GET /runs · WS /ws',            line: 'The run board itself: launch from a brief, watch the phase ladder and unit list move, read live output, answer the steering timeline.' },
+        { id: 'work',      api: 'GET /runs/:id/events',           line: 'Every work unit across every run in one queue — what’s streaming, what’s held at a gate, what landed.' },
+        { id: 'chats',     api: 'POST /chats',                    line: 'Group chat with your whole roster: fan one question out, watch each seat answer side by side.' },
+        { id: 'coverage',  api: 'GET /governance/coverage?repo=', line: 'Repo-scoped coverage with a graph view — scoped to the repo you asked about, never a vacuous store-wide 1.0.' },
+        { id: 'workflows', api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
+        { id: 'domain',    api: 'GET /domain-graph',              line: 'The domain-model browser: requirements and their graph, per repo — what the record actually knows about your problem space.' },
+        { id: 'policies',  api: 'GET /governance/policies',       line: 'Policies and conformance rules — the deterministic floor a run must clear. The skin surfaces the gate; it never grades.' },
+        { id: 'repos',     api: 'POST /repos',                    line: 'Registered repos, their onboarding runs, and code-graph summaries — the ground the workers stand on.' }
+      ];
+      var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var current = 0;
+      var timer = null;
+      var pinned = false;
+
+      function render(i) {
+        current = i;
+        var p = PANELS[i];
+        nameEl.textContent = p.id;
+        apiEl.textContent = p.api;
+        lineEl.textContent = p.line;
+        items.forEach(function (it, j) {
+          it.classList.toggle('is-active', j === i);
+          it.setAttribute('aria-selected', j === i ? 'true' : 'false');
+        });
+      }
+      function play() {
+        if (timer || reduced) return;
+        timer = setInterval(function () { render((current + 1) % PANELS.length); }, 3000);
+        if (toggle) toggle.classList.add('is-playing');
+        if (statusTxt) statusTxt.textContent = 'auto-cycling · click a panel to pin it';
+      }
+      function pause(msg) {
+        if (timer) { clearInterval(timer); timer = null; }
+        if (toggle) toggle.classList.remove('is-playing');
+        if (statusTxt) statusTxt.textContent = msg || 'paused · click to resume';
+      }
+      items.forEach(function (it) {
+        it.addEventListener('click', function () {
+          var i = parseInt(it.getAttribute('data-i'), 10);
+          if (isNaN(i)) return;
+          pinned = true;
+          pause('pinned · ' + PANELS[i].id + ' — click ▶ to resume');
+          render(i);
+        });
+      });
+      if (toggle) {
+        toggle.addEventListener('click', function () {
+          if (timer) { pinned = true; pause(); }
+          else { pinned = false; play(); }
+        });
+      }
+      render(0);
+      if (!reduced) {
+        if ('IntersectionObserver' in window) {
+          var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (en) {
+              if (en.isIntersecting && !pinned) { play(); }
+              else if (!en.isIntersecting) { if (timer) { clearInterval(timer); timer = null; } }
+            });
+          }, { threshold: 0.3 });
+          io.observe(stage);
+        } else {
+          play();
+        }
+      }
+    })();
+  </script>
+
+  <!-- ── One project, two skins: flip which door renders the same room ───── -->
+  <script is:inline>
+    (function () {
+      var card = document.querySelector('[data-proj]');
+      if (!card) return;
+      var buttons = Array.prototype.slice.call(card.querySelectorAll('[data-proj-skin]'));
+      var label = card.querySelector('[data-proj-skin-label]');
+      buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var skin = btn.getAttribute('data-proj-skin');
+          if (!skin) return;
+          card.setAttribute('data-skin', skin);
+          buttons.forEach(function (b) {
+            var active = b === btn;
+            b.classList.toggle('is-active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          if (label) label.textContent = skin === 'studio' ? 'coder’s' : 'creator’s';
+        });
+      });
+    })();
+  </script>
+
+  <!-- ── The client seam: bundled ↔ standalone pairing modes ─────────────── -->
+  <script is:inline>
+    (function () {
+      var panel = document.querySelector('[data-pair]');
+      if (!panel) return;
+      var buttons = Array.prototype.slice.call(panel.querySelectorAll('[data-pair-mode]'));
+      buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var mode = btn.getAttribute('data-pair-mode');
+          if (!mode) return;
+          panel.setAttribute('data-mode', mode);
+          buttons.forEach(function (b) {
+            var active = b === btn;
+            b.classList.toggle('is-active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+        });
+      });
+    })();
+  </script>
+</Base>
