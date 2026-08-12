@@ -1,0 +1,63 @@
+{
+  "schema": "wicked-qe-verdict/1",
+  "product": "wicked-studio",
+  "run_date": "2026-08-12",
+  "operator": "mike.parcewski@gmail.com",
+  "script": "e2e/studio_standalone_test.py",
+  "result": "PASS",
+  "ok": true,
+  "steps": {
+    "static_server": {
+      "ok": true,
+      "origin": "http://127.0.0.1:4310",
+      "root": "dist/"
+    },
+    "daemon": {
+      "ok": true,
+      "origin": "http://127.0.0.1:7901",
+      "stub": true,
+      "bin": "wicked-crew/packages/crew/dist/cli/index.js",
+      "headless_no_bundled_studio": false
+    },
+    "cors": {
+      "ok": true,
+      "allow_origin_echoed": "http://127.0.0.1:4310",
+      "preflight_status": 204
+    },
+    "projects": {
+      "ok": true,
+      "status": 200,
+      "count": 1
+    },
+    "launch": {
+      "ok": true,
+      "run_id": "79fdc26d-cb88-460d-bc28-675ec75a56fe",
+      "status": "awaiting_human"
+    },
+    "browser_flow": {
+      "ok": true,
+      "run_list_rendered": true,
+      "run_opened_gate_visible": true,
+      "gate_approved_via_ui": true,
+      "ws_urls": ["ws://127.0.0.1:7901/ws"],
+      "ws_frames_received": 8,
+      "ws_event_types": [
+        "gateDecided",
+        "gateEvaluated",
+        "resumed",
+        "sessionCompleted",
+        "unitDispatched",
+        "unitDone",
+        "unitExecuting",
+        "unitOutputCaptured"
+      ],
+      "session_completed_over_ws": true,
+      "final_status_via_rest": "completed",
+      "console_errors": []
+    }
+  },
+  "summary": "Studio SPA builds standalone, serves from a plain static file server on a separate port, connects to a running wicked-crew daemon cross-origin via CORS, lists projects, launches a run, renders the human gate in a real Chromium browser, approves the gate through the UI, receives 8 CoreEvent frames over WebSocket, and observes sessionCompleted. All 6 steps passed with zero console errors.",
+  "crew_version": "0.5.0",
+  "studio_version": "0.1.0",
+  "wicked_crew_api_types_version": "0.1.0"
+}
