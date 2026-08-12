@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+e2e/shots/
+*.log
+.DS_Store
+*.tgz
+.wicked-vault/

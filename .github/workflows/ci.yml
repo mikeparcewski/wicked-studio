@@ -1,0 +1,60 @@
+# PR + main gate for wicked-studio (lint · typecheck · test · build).
+#
+# Deliberately simple compared to wicked-crew's CI: studio is a PURE CLIENT of
+# the daemon's published wire contract (`wicked-crew-api-types`) — no sibling
+# checkout, no engine build, no daemon. If this workflow ever needs a wicked-core
+# or wicked-crew checkout to go green, the carve has regressed into source
+# coupling and THAT is the bug to fix.
+#
+# The functional standalone proof (built dist served from its own origin, driven
+# against a live crew daemon by a real browser) is `e2e/studio_standalone_test.py`
+# — operator-run, since it needs a crew daemon binary and Playwright.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # CI runs an explicit build step below; skip the prepare-time dist build so
+  # install stays install.
+  WICKED_STUDIO_SKIP_PREPARE: '1'
+
+jobs:
+  check:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install (clean, from lockfile)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build (tsc + vite)
+        run: npm run build
+
+      - name: Assert the dist artifact exists
+        run: node -e "const {statSync} = require('node:fs'); statSync('dist/index.html'); console.log('dist/index.html present');"

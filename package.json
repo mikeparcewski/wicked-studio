@@ -1,8 +1,29 @@
 {
   "name": "wicked-studio",
-  "version": "0.5.0",
-  "description": "wicked-studio — HITL React app for wicked-crew sessions",
+  "version": "0.1.0",
+  "description": "The coder-facing skin of the wicked experience plane — a pure HTTP/WS client of the wicked-crew daemon's /api/v1",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikeparcewski/wicked-studio.git"
+  },
+  "homepage": "https://github.com/mikeparcewski/wicked-studio#readme",
+  "bugs": {
+    "url": "https://github.com/mikeparcewski/wicked-studio/issues"
+  },
+  "keywords": [
+    "wicked-crew",
+    "hitl",
+    "agent-orchestration",
+    "react",
+    "spa"
+  ],
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -10,7 +31,8 @@
     "preview": "vite preview",
     "lint": "eslint src tests",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "node scripts/prepare-dist.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.56.0",
@@ -29,17 +51,24 @@
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^24.13.3",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.5.2",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "jsdom": "^25.0.1",
     "postcss": "^8.5.25",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.5.4",
+    "typescript-eslint": "^8.63.0",
     "vite": "^6.4.3",
     "vitest": "^3.2.6",
-    "wicked-crew-api-types": "*"
+    "wicked-crew-api-types": "github:mikeparcewski/wicked-crew#api-types-v0.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   },
   "license": "MIT"
 }
