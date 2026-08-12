@@ -1,6 +1,9 @@
 node_modules/
 dist/
 coverage/
+.astro/
+playwright-report/
+test-results/
 e2e/shots/
 *.log
 .DS_Store

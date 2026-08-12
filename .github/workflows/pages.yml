@@ -1,0 +1,62 @@
+name: Deploy site to GitHub Pages
+
+# Auto-deploys the site on every push to main; also runnable by hand.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least-privilege token: read the repo, write the Pages deployment, and mint the
+# OIDC token actions/deploy-pages needs to claim the github-pages environment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; let an in-progress run finish so a live deploy
+# is never cancelled mid-flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Configure GitHub Pages
+        # enablement: true turns Pages on the first time this runs — Pages is not
+        # yet enabled on the repo, so the deploy job would otherwise 404.
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+        with:
+          enablement: true
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install dependencies
+        # The site is an Astro app under site/ that consumes the shared
+        # github:mikeparcewski/wicked-web chrome (pinned in site/package-lock.json).
+        run: npm ci
+        working-directory: site
+      - name: Build
+        run: npm run build
+        working-directory: site
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ./site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
