@@ -308,8 +308,8 @@ export function App(): React.ReactElement {
         <RightPanel view={selected} />
       )}
 
-      {/* Gate toasts — always mounted, renders above everything */}
-      <GateNotifications onSelect={selectRun} />
+      {/* Gate toasts — always mounted, renders above everything; scoped to the current run */}
+      <GateNotifications onSelect={selectRun} runId={runId} />
 
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (

@@ -2,11 +2,14 @@ import { useGateStore } from '../store/gates.js';
 
 interface Props {
   onSelect: (runId: string) => void;
+  /** When set, only show the gate toast for this run (fixes studio#10). */
+  runId?: string | null;
 }
 
-export function GateNotifications({ onSelect }: Props): React.ReactElement {
+export function GateNotifications({ onSelect, runId }: Props): React.ReactElement {
   const gates = useGateStore((s) => s.gates);
-  const open = Object.values(gates);
+  const all = Object.values(gates);
+  const open = runId ? all.filter((g) => g.runId === runId) : all;
 
   if (open.length === 0) return <></>;
 
