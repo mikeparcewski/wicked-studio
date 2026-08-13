@@ -6,6 +6,8 @@ import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
 import { PolicyManager } from './components/PolicyManager.js';
+import { ProjectDetailPage } from './components/ProjectDetailPage.js';
+import { ProjectsPage } from './components/ProjectsPage.js';
 import { RepositoriesPanel } from './components/RepositoriesPanel.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
@@ -74,7 +76,7 @@ function useKillShortcut(
 }
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, showLaunch, showRegisterRepo, chatMode, navigate } = useRoute();
+  const { panel, runId, repoId, projectId, showLaunch, showRegisterRepo, chatMode, navigate } = useRoute();
   const { runs, refresh } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestElicitation = useElicitationStore((s) => s.ingest);
@@ -243,6 +245,20 @@ export function App(): React.ReactElement {
       return (
         <div className="flex-1 overflow-y-auto">
           <WorkPage runs={runs} selectedRunId={runId} onSelect={selectRun} navigate={navigate} />
+        </div>
+      );
+    }
+    if (panel === 'projects') {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <ProjectsPage navigate={navigate} />
+        </div>
+      );
+    }
+    if (panel === 'project-detail' && projectId) {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <ProjectDetailPage projectId={projectId} navigate={navigate} />
         </div>
       );
     }

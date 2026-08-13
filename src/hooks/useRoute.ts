@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type Panel = 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'chats' | 'work' | 'repo-detail';
+export type Panel = 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail';
 
-const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'chats', 'work', 'repo-detail'];
+const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'chats', 'work', 'repo-detail', 'projects', 'project-detail'];
 
 interface Route {
   panel: Panel;
@@ -16,6 +16,8 @@ interface Route {
   showRegisterRepo: boolean;
   /** True when the launch form is in chat mode (vs. work mode). */
   chatMode: boolean;
+  /** Non-null only when panel === 'project-detail'. */
+  projectId: string | null;
 }
 
 function safeDecode(s: string): string {
@@ -25,23 +27,26 @@ function safeDecode(s: string): string {
 function parse(pathname: string): Route {
   const [, first = '', second = ''] = pathname.split('/');
   if (first === 'repo-detail' && second) {
-    return { panel: 'repo-detail', runId: null, showLaunch: false, repoId: safeDecode(second), showRegisterRepo: false, chatMode: false };
+    return { panel: 'repo-detail', runId: null, showLaunch: false, repoId: safeDecode(second), showRegisterRepo: false, chatMode: false, projectId: null };
   }
   if (first === 'repo-detail') {
-    return { panel: 'repos', runId: null, showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false };
+    return { panel: 'repos', runId: null, showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false, projectId: null };
   }
   if (first === 'repos' && second === 'new') {
-    return { panel: 'repos', runId: null, showLaunch: false, repoId: null, showRegisterRepo: true, chatMode: false };
+    return { panel: 'repos', runId: null, showLaunch: false, repoId: null, showRegisterRepo: true, chatMode: false, projectId: null };
   }
   if (first === 'chat' && second === 'new') {
-    return { panel: 'runs', runId: null, showLaunch: true, repoId: null, showRegisterRepo: false, chatMode: true };
+    return { panel: 'runs', runId: null, showLaunch: true, repoId: null, showRegisterRepo: false, chatMode: true, projectId: null };
+  }
+  if (first === 'projects' && second) {
+    return { panel: 'project-detail', runId: null, showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false, projectId: safeDecode(second) };
   }
   if ((PANELS as string[]).includes(first) && first !== 'runs') {
-    return { panel: first as Panel, runId: null, showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false };
+    return { panel: first as Panel, runId: null, showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false, projectId: null };
   }
-  if (second === 'new') return { panel: 'runs', runId: null, showLaunch: true, repoId: null, showRegisterRepo: false, chatMode: false };
-  if (second) return { panel: 'runs', runId: safeDecode(second), showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false };
-  return { panel: 'runs', runId: null, showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false };
+  if (second === 'new') return { panel: 'runs', runId: null, showLaunch: true, repoId: null, showRegisterRepo: false, chatMode: false, projectId: null };
+  if (second) return { panel: 'runs', runId: safeDecode(second), showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false, projectId: null };
+  return { panel: 'runs', runId: null, showLaunch: false, repoId: null, showRegisterRepo: false, chatMode: false, projectId: null };
 }
 
 export function useRoute(): Route & {

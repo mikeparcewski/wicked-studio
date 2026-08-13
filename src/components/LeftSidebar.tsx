@@ -369,6 +369,13 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
               </div>
             )}
 
+            {/* ── Projects section ── */}
+            <SectionLabel
+              label="Projects"
+              asLink
+              onClick={() => navigate('/projects')}
+            />
+
             {/* ── Repositories section ── */}
             <SectionLabel
               label="Repositories"
