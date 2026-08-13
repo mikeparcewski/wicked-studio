@@ -14,6 +14,7 @@ export function GateNotifications({ onSelect }: Props): React.ReactElement {
     <div
       className="fixed bottom-4 right-4 flex flex-col gap-2 z-50"
       data-testid="gate-notification"
+      style={{ pointerEvents: 'none' }}
     >
       {open.map((gate) => (
         <button
@@ -27,6 +28,7 @@ export function GateNotifications({ onSelect }: Props): React.ReactElement {
             background: '#1b222e',
             border: '1px solid rgba(255,218,25,0.35)',
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            pointerEvents: 'auto',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,218,25,0.55)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,218,25,0.35)'; }}
