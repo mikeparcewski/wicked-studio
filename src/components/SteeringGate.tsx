@@ -83,6 +83,9 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
   const reject = (): Promise<void> =>
     run(() => api.confirmGate(runId, { approve: false }), { kind: 'reject' });
 
+  const cancel = (): Promise<void> =>
+    run(() => api.cancelRun(runId), { kind: 'cancel' });
+
   const { headline, footnote } = cleanPrompt(
     prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.',
   );
@@ -169,8 +172,8 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
         </p>
       )}
 
-      {/* Three-button layout: Approve / Approve+steer / Reject (cancel run removed — same effect as Reject) */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* Four-button layout (2×2): Approve / Approve+steer / Reject / Cancel run */}
+      <div className="grid grid-cols-2 gap-2">
         <button
           data-testid="steering-approve"
           onClick={() => void approve()}
@@ -197,6 +200,15 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
           style={{ background: 'rgba(248,81,73,0.15)', border: '1px solid rgba(248,81,73,0.3)', color: '#f85149' }}
         >
           Reject
+        </button>
+        <button
+          data-testid="steering-cancel"
+          onClick={() => void cancel()}
+          disabled={loading}
+          className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+          style={{ background: 'rgba(139,148,158,0.12)', border: '1px solid rgba(139,148,158,0.25)', color: 'rgba(139,148,158,0.9)' }}
+        >
+          Cancel run
         </button>
       </div>
 
