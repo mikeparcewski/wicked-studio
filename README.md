@@ -1,5 +1,7 @@
 # wicked-studio
 
+> **v0.1.0** · [![CI](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml) · [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
 **The coder-facing skin of the wicked experience plane.** A React SPA that is a *pure HTTP/WS
 client* of the [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon: launch and
 steer governed agent runs, answer human gates, watch live CoreEvent streams, browse projects,
@@ -82,6 +84,23 @@ Extracted from the wicked-crew monorepo (`packages/studio`) as its own product �
 the code as-is and preserved the package's full in-monorepo history via `git subtree split`
 (92 commits). An earlier, pre-consolidation incarnation of this product is archived read-only at
 [wicked-studio-archived](https://github.com/mikeparcewski/wicked-studio-archived).
+
+## Requirements
+
+- Node.js ≥ 22.0.0
+- npm ≥ 10 (for workspaces and `prepare` hooks)
+- A running [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon (v0.4.0+) for the SPA to connect to
+- A modern browser (Chrome, Edge, Firefox, Safari)
+- macOS, Linux, or Windows
+
+## Contributing
+
+1. Fork the repo and create a feature branch.
+2. `npm install && npm run dev` — SPA on `:4200`, daemon on `:7701`.
+3. `npm test && npm run typecheck && npm run lint` before committing.
+4. Open a PR; CI runs all four gates on ubuntu / macos / windows.
+
+The only external coupling is the wire contract (`wicked-crew-api-types`). Studio imports **zero** crew source — all crew interaction goes through `/api/v1` and `/ws`. Keep it that way.
 
 ## License
 
