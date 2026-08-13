@@ -46,6 +46,11 @@ export function Burn({ model }: Props): React.ReactElement {
               <p className="text-[10px]" style={{ color: 'rgba(230,237,243,0.35)' }}>
                 {tokens(b.totalInput)} in / {tokens(b.totalOutput)} out
               </p>
+              {(b.totalCacheRead > 0 || b.totalCacheCreation > 0) && (
+                <p className="text-[10px]" style={{ color: 'rgba(96,165,250,0.55)' }}>
+                  {tokens(b.totalCacheRead)} cached · {tokens(b.totalCacheCreation)} written
+                </p>
+              )}
             </div>
             <div style={cardStyle}>
               <p style={{ color: 'rgba(230,237,243,0.4)' }}>cost{b.costComplete && !partialTotals ? '' : ' (partial)'}</p>
