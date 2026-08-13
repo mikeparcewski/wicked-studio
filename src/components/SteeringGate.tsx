@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api, type GateDecision } from '../api/client.js';
+import type { CoverageReport } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
 import { useSteeringStore, type SteeringAction } from '../store/steering.js';
 
@@ -7,15 +8,44 @@ interface Props {
   runId: string;
   ord?: number;
   prompt?: string;
+  /** When present, fetches coverage stats for inline display at the gate card. */
+  repoRef?: string;
   onResolved?: () => void;
 }
 
-export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.ReactElement {
+/** Strip the bracketed architectural footnote from a workflow gate prompt. */
+function cleanPrompt(raw: string): { headline: string; footnote: string | null } {
+  const bracketIdx = raw.indexOf('[');
+  if (bracketIdx === -1) return { headline: raw.trim(), footnote: null };
+  return {
+    headline: raw.slice(0, bracketIdx).trim(),
+    footnote: raw.slice(bracketIdx + 1, raw.lastIndexOf(']') !== -1 ? raw.lastIndexOf(']') : undefined).trim(),
+  };
+}
+
+/** Format a coverage report into a compact summary for gate-card display. */
+function coverageLabel(r: CoverageReport): string {
+  const pct = r.behavior_bearing === 0 ? '—' : `${(r.coverage * 100).toFixed(1)}%`;
+  const resolvedPct = r.behavior_bearing === 0 ? '' : ` · resolved ${(r.resolved_rate * 100).toFixed(0)}%`;
+  return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
+}
+
+export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
   const [amend, setAmend] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<CoverageReport | null>(null);
+
+  useEffect(() => {
+    if (!repoRef) return;
+    // Fetch coverage stats for this repo — the evaluator unit writes these to
+    // the estate store, so they reflect the numbers the gate was checking.
+    api.getCoverageReportForRepo(repoRef).then(({ report }) => {
+      if (report) setCoverage(report);
+    }).catch(() => { /* best-effort: no stats is fine */ });
+  }, [repoRef]);
 
   async function run(
     action: () => Promise<unknown>,
@@ -52,7 +82,15 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
 
   const reject = (): Promise<void> =>
     run(() => api.confirmGate(runId, { approve: false }), { kind: 'reject' });
-  const cancel = (): Promise<void> => run(() => api.cancelRun(runId), { kind: 'cancel' });
+
+  const cancel = (): Promise<void> =>
+    run(() => api.cancelRun(runId), { kind: 'cancel' });
+
+  const { headline, footnote } = cleanPrompt(
+    prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.',
+  );
+
+  const isCoverageFail = headline.toLowerCase().includes('not pass') || headline.toLowerCase().includes('coverage');
 
   return (
     <div
@@ -75,14 +113,39 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
         run {runId.slice(0, 8)}
         {typeof ord === 'number' ? ` · before unit #${ord}` : ''}
       </p>
+
+      {/* Headline prompt — the actionable part only */}
       <p
-        className="text-xs mb-4 whitespace-pre-wrap leading-relaxed font-mono"
-        style={{ color: 'rgba(230,237,243,0.75)' }}
+        className="text-xs mb-1 leading-relaxed font-mono"
+        style={{ color: 'rgba(230,237,243,0.85)' }}
         data-testid="steering-prompt"
       >
-        {prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve, reject, or cancel.'}
+        {headline}
       </p>
 
+      {/* Coverage stats — shown when evaluator gate fails and we have repo coverage data */}
+      {isCoverageFail && coverage && (
+        <p className="text-xs mb-2 font-mono" style={{ color: 'rgba(96,165,250,0.85)' }}>
+          {coverageLabel(coverage)}
+        </p>
+      )}
+
+      {/* Footnote disclosure — architectural explanation, collapsed by default */}
+      {footnote && (
+        <details className="mb-3">
+          <summary
+            className="text-[10px] font-mono cursor-pointer select-none"
+            style={{ color: 'rgba(230,237,243,0.3)' }}
+          >
+            why this gate fired
+          </summary>
+          <p className="text-[10px] font-mono mt-1 leading-relaxed" style={{ color: 'rgba(230,237,243,0.35)' }}>
+            {footnote}
+          </p>
+        </details>
+      )}
+
+      {/* Steer textarea — guide the re-run */}
       <textarea
         data-testid="steering-amend"
         className="w-full rounded-lg p-2 text-xs mb-3 resize-none font-mono"
@@ -93,7 +156,11 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
           outline: 'none',
         }}
         rows={2}
-        placeholder="Optional steer / amend — sent with Approve with steer to guide the next unit"
+        placeholder={
+          isCoverageFail && coverage && coverage.unaccounted > 0
+            ? `${coverage.unaccounted} nodes unaccounted — add guidance for the evaluator, e.g. "focus on services/ directory"`
+            : 'Optional steer — guide the next unit when approving with steer'
+        }
         value={amend}
         onChange={(e) => setAmend(e.target.value)}
         disabled={loading}
@@ -105,6 +172,7 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
         </p>
       )}
 
+      {/* Four-button layout (2×2): Approve / Approve+steer / Reject / Cancel run */}
       <div className="grid grid-cols-2 gap-2">
         <button
           data-testid="steering-approve"
@@ -122,7 +190,7 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
           style={{ background: '#ffda19', color: '#0d1117' }}
         >
-          Approve with steer
+          Approve + steer
         </button>
         <button
           data-testid="steering-reject"
@@ -137,12 +205,17 @@ export function SteeringGate({ runId, ord, prompt, onResolved }: Props): React.R
           data-testid="steering-cancel"
           onClick={() => void cancel()}
           disabled={loading}
-          className="rounded-lg px-3 py-2 text-xs font-mono disabled:opacity-50 transition-opacity"
-          style={{ background: 'rgba(230,237,243,0.06)', border: '1px solid rgba(230,237,243,0.1)', color: 'rgba(230,237,243,0.55)' }}
+          className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+          style={{ background: 'rgba(139,148,158,0.12)', border: '1px solid rgba(139,148,158,0.25)', color: 'rgba(139,148,158,0.9)' }}
         >
           Cancel run
         </button>
       </div>
+
+      {/* Mode-selector note: workflow gates are always HITL regardless of run-level human_confirm */}
+      <p className="text-[10px] font-mono mt-2" style={{ color: 'rgba(230,237,243,0.25)' }}>
+        Workflow-declared gate — run-level human_confirm setting does not apply here.
+      </p>
     </div>
   );
 }

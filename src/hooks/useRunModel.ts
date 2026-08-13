@@ -51,6 +51,10 @@ export interface UsageRecord {
   inputTokens: number;
   outputTokens: number;
   costUsd: number | null;
+  /** Prompt-cache read tokens (cheaper than fresh input). Present when the daemon emits them. */
+  cacheReadTokens: number;
+  /** Prompt-cache creation tokens (written to cache). Present when the daemon emits them. */
+  cacheCreationTokens: number;
 }
 
 /** One gate evaluation's depth (from `gateEvaluated`), in arrival order. */
@@ -407,17 +411,26 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
         ) {
           const u = ensureUnit(ord);
           const cost = typeof ev.costUsd === 'number' ? ev.costUsd : null;
+          // cacheReadTokens / cacheCreationTokens are on the wire (Rust CoreEvent::CliUsage)
+          // but not yet in the shared TypeScript contract type — read defensively.
+          const raw = ev as unknown as Record<string, unknown>;
+          const cacheRead = typeof raw['cacheReadTokens'] === 'number' ? (raw['cacheReadTokens'] as number) : 0;
+          const cacheCreation = typeof raw['cacheCreationTokens'] === 'number' ? (raw['cacheCreationTokens'] as number) : 0;
           const existing = u.usage.find((r) => r.attempt === ev.attempt);
           if (existing) {
             existing.inputTokens = ev.inputTokens;
             existing.outputTokens = ev.outputTokens;
             existing.costUsd = cost;
+            existing.cacheReadTokens = cacheRead;
+            existing.cacheCreationTokens = cacheCreation;
           } else {
             u.usage.push({
               attempt: ev.attempt,
               inputTokens: ev.inputTokens,
               outputTokens: ev.outputTokens,
               costUsd: cost,
+              cacheReadTokens: cacheRead,
+              cacheCreationTokens: cacheCreation,
             });
           }
         }
@@ -681,6 +694,10 @@ export interface BurnSummary {
   pendingUsageClis: string[];
   /** Whether any usage record exists at all (else the panel is "awaiting usage"). */
   hasUsage: boolean;
+  /** Total prompt-cache read tokens (re-used from cache; cheaper than fresh input). 0 when none reported. */
+  totalCacheRead: number;
+  /** Total prompt-cache creation tokens (written to cache). 0 when none reported. */
+  totalCacheCreation: number;
 }
 
 /** The file stem of an argv[0] (posix/windows basename, extension stripped, lowercased). */
@@ -714,6 +731,8 @@ function unitIsClaude(assignedInvocation: string | null, assignedCli: string | n
 export function burnSummary(model: RunModel): BurnSummary {
   let totalInput = 0;
   let totalOutput = 0;
+  let totalCacheRead = 0;
+  let totalCacheCreation = 0;
   let costSum = 0;
   let costCount = 0;
   let usageCount = 0;
@@ -745,6 +764,8 @@ export function burnSummary(model: RunModel): BurnSummary {
         costCount += 1;
       }
       if (r.attempt > firstAttempt) reworkTokens += r.inputTokens + r.outputTokens;
+      totalCacheRead += r.cacheReadTokens;
+      totalCacheCreation += r.cacheCreationTokens;
       const e = perCli.get(cli) ?? { cli, input: 0, output: 0, cost: null };
       e.input += r.inputTokens;
       e.output += r.outputTokens;
@@ -766,6 +787,8 @@ export function burnSummary(model: RunModel): BurnSummary {
     noAdapterClis: [...noAdapter],
     pendingUsageClis: [...pending],
     hasUsage: usageCount > 0,
+    totalCacheRead,
+    totalCacheCreation,
   };
 }
 

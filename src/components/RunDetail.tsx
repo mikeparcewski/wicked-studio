@@ -89,6 +89,7 @@ export function RunDetail({ view, onRefresh }: Props): React.ReactElement {
             <SteeringGate
               runId={session.id}
               {...(gate ? { ord: gate.ord, prompt: gate.prompt } : {})}
+              {...(session.repo_ref ? { repoRef: session.repo_ref } : {})}
               onResolved={onRefresh}
             />
           )}

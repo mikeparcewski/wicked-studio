@@ -81,7 +81,7 @@ describe('useRunModel — mergeRunModel (hydrate + append)', () => {
     expect(u?.status).toBe('done');
     expect(u?.attempts).toEqual([0]);
     expect(u?.filesRead).toEqual(['/a.ts', '/b.ts', '/c.ts']);
-    expect(u?.usage).toEqual([{ attempt: 0, inputTokens: 100, outputTokens: 40, costUsd: 0.5 }]);
+    expect(u?.usage).toEqual([{ attempt: 0, inputTokens: 100, outputTokens: 40, costUsd: 0.5, cacheReadTokens: 0, cacheCreationTokens: 0 }]);
     expect(u?.gateEvals).toHaveLength(1);
     expect(u?.gateEvals[0]?.combined).toBe(true);
     expect(u?.gateEvals[0]?.agentVerdict).toBe('PASS');
