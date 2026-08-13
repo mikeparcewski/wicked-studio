@@ -1,15 +1,22 @@
 import type {
+  ActivityPage,
+  AttachMemberBody,
   CoreEvent,
+  CreateProjectBody,
   GateDecision,
   GateInfo,
   LaunchRunBody,
   OnboardRef,
   OpenTerminalBody,
+  Project,
+  ProjectDetail,
+  ProjectMember,
   RepoEntry,
   RosterSeat,
   SessionView,
   ElicitationInfo,
   ElicitationResponse,
+  UpdateProjectBody,
 } from './types.js';
 
 export type * from './types.js';
@@ -420,4 +427,50 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(patch),
     }),
+
+  // ── Projects (DES-PROJECT-001) ───────────────────────────────────────────────
+
+  /** All projects; `status=active` (default) or `archived` filters. Includes the synthesized "Unfiled" default. */
+  listProjects: (status?: 'active' | 'archived') => {
+    const qs = status ? `?status=${status}` : '';
+    return apiFetch<{ projects: Project[] }>(`/projects${qs}`);
+  },
+
+  /** One project's detail (project + members). */
+  getProject: (id: string) =>
+    apiFetch<ProjectDetail>(`/projects/${encodeURIComponent(id)}`),
+
+  /** Create a project. 409 when name collides with an active project. */
+  createProject: (body: CreateProjectBody) =>
+    apiFetch<{ project: Project }>('/projects', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Rename / describe / archive / restore a project. Rejects the `default` project. */
+  updateProject: (id: string, body: UpdateProjectBody) =>
+    apiFetch<{ project: Project }>(`/projects/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  /** Members of a project. */
+  listProjectMembers: (id: string) =>
+    apiFetch<{ members: ProjectMember[] }>(`/projects/${encodeURIComponent(id)}/members`),
+
+  /** Attach a member (run, chat, repo, doc …) to a project. */
+  attachProjectMember: (id: string, body: AttachMemberBody) =>
+    apiFetch<{ member: ProjectMember }>(`/projects/${encodeURIComponent(id)}/members`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Detach a member by its id. */
+  detachProjectMember: (id: string, memberId: string) =>
+    apiFetch<{ ok: boolean }>(`/projects/${encodeURIComponent(id)}/members/${encodeURIComponent(memberId)}`, {
+      method: 'DELETE',
+    }),
+
+  /** Activity feed (newest-first, cursor-paginated). `cursor` is opaque. */
+  getProjectActivity: (id: string, cursor?: string) => {
+    const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return apiFetch<ActivityPage>(`/projects/${encodeURIComponent(id)}/activity${qs}`);
+  },
 };
