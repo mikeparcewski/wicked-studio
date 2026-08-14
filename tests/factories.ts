@@ -14,6 +14,9 @@ export function makeSession(overrides: Partial<AgentSession> = {}): AgentSession
     attempt: 0,
     workdir: null,
     repo_ref: null,
+  extra_write_roots: [],
+  archived_at: null,
+  archive_note: null,
     ...overrides,
   };
 }
