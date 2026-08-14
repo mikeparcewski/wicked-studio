@@ -121,8 +121,19 @@ export async function downloadRunEvidence(runId: string): Promise<void> {
  * daemon endpoint backed by one core-ts method.
  */
 export const api = {
-  /** Run list, actionable-first (daemon-sorted). Reconciles the daemon gate cache. */
-  listRuns: () => apiFetch<{ runs: SessionView[] }>('/runs'),
+  /** Run list, actionable-first (daemon-sorted). Reconciles the daemon gate cache.
+   *  Archived runs are excluded server-side by default (crew#265); pass `includeArchived`
+   *  to get the complete history. */
+  listRuns: (includeArchived?: boolean) =>
+    apiFetch<{ runs: SessionView[] }>(includeArchived ? '/runs?include=archived' : '/runs'),
+
+  /** Archive (or unarchive) a TERMINAL run (crew#265) — write-off, not delete.
+   *  404 unknown; 409 when the run is non-terminal. */
+  archiveRun: (id: string, archived: boolean, note?: string) =>
+    apiFetch<{ runId: string; archived: boolean }>(`/runs/${encodeURIComponent(id)}/archive`, {
+      method: 'POST',
+      body: JSON.stringify(note === undefined ? { archived } : { archived, note }),
+    }),
 
   /** One run's detail (`SessionView`). */
   getRun: (id: string) => apiFetch<{ run: SessionView }>(`/runs/${encodeURIComponent(id)}`),

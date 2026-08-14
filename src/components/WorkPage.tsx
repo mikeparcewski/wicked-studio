@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { RunLink } from './RunLink.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
@@ -30,6 +31,35 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
   const [tab, setTab] = useState<StatusTab>('all');
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const { range, setRange, filter: filterByRange } = useTimeRange('30d');
+  // Archived runs (crew#265) are WRITTEN OFF: excluded from the default list server-side, so the
+  // chip fetches the complete history on demand rather than always paying for it. `null` = not
+  // yet fetched; refetch on toggle-on so an unarchive elsewhere is reflected.
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedRuns, setArchivedRuns] = useState<SessionView[] | null>(null);
+  useEffect(() => {
+    if (!showArchived) return;
+    let cancelled = false;
+    api
+      .listRuns(true)
+      .then(({ runs: all }) => {
+        if (cancelled) return;
+        setArchivedRuns(all.filter((v) => v.session.archived_at != null));
+      })
+      .catch(() => {
+        if (!cancelled) setArchivedRuns([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showArchived]);
+  async function unarchive(id: string): Promise<void> {
+    try {
+      await api.archiveRun(id, false);
+      setArchivedRuns((prev) => (prev ? prev.filter((v) => v.session.id !== id) : prev));
+    } catch {
+      /* surfaced on next fetch; the row simply stays */
+    }
+  }
 
   const allWorkRuns = useMemo(
     () => runs.filter((v) => !!v.session.workflow_id && v.session.workflow_id !== 'chat'),
@@ -194,6 +224,21 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
             {t.label} {counts[t.id]}
           </button>
         ))}
+        <div className="flex-1" />
+        {/* Archived is orthogonal to status: a write-off toggle, not a fifth status tab. */}
+        <button
+          type="button"
+          aria-pressed={showArchived}
+          onClick={() => setShowArchived(s => !s)}
+          className="rounded-full px-3 py-1 text-xs font-mono"
+          style={
+            showArchived
+              ? { background: 'rgba(230,237,243,0.1)', color: '#e6edf3', border: '1px dashed rgba(230,237,243,0.3)' }
+              : { color: 'rgba(230,237,243,0.4)', border: '1px dashed rgba(230,237,243,0.15)' }
+          }
+        >
+          Archived{archivedRuns !== null ? ` ${archivedRuns.length}` : ''}
+        </button>
       </div>
 
       {/* List */}
@@ -238,6 +283,32 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
             ) : (
               filtered.map(v => (
                 <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+              ))
+            )}
+          </>
+        )}
+        {showArchived && archivedRuns !== null && (
+          <>
+            <GroupLabel>Archived</GroupLabel>
+            {archivedRuns.length === 0 ? (
+              <p className="px-3 py-3 text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+                Nothing archived.
+              </p>
+            ) : (
+              archivedRuns.map(v => (
+                <div key={v.session.id} className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0" style={{ opacity: 0.55 }}>
+                    <RunLink view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void unarchive(v.session.id)}
+                    className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
+                    style={{ color: 'rgba(230,237,243,0.55)', border: '1px solid rgba(230,237,243,0.15)' }}
+                  >
+                    Unarchive
+                  </button>
+                </div>
               ))
             )}
           </>

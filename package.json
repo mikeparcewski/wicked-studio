@@ -65,7 +65,7 @@
     "typescript-eslint": "^8.63.0",
     "vite": "^6.4.3",
     "vitest": "^3.2.6",
-    "wicked-crew-api-types": "^0.1.0"
+    "wicked-crew-api-types": "^0.3.0"
   },
   "engines": {
     "node": ">=22.0.0"

@@ -36,6 +36,9 @@ function session(status: SessionStatus, unit_ix: number): AgentSession {
     attempt: 0,
     workdir: null,
     repo_ref: null,
+  extra_write_roots: [],
+  archived_at: null,
+  archive_note: null,
   };
 }
 
