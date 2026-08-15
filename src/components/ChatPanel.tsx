@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
 import { api, downloadRunEvidence } from '../api/client.js';
-import type { SessionView, StageKind, UnitStatus } from '../api/types.js';
+import type { SessionView, StageKind, UnitStatus, WorkUnit } from '../api/types.js';
 import { executingOrd } from '../api/run-state.js';
 import { useGateStore } from '../store/gates.js';
 import { useElicitationStore } from '../store/elicitations.js';
@@ -174,6 +174,17 @@ const UNIT_STATUS_TEXT: Record<UnitStatus, string> = {
 
 function unitKey(runId: string, unitId: string, ord: number): string {
   return unitId.startsWith(`${runId}:`) ? unitId.slice(runId.length + 1) : `u${ord}`;
+}
+
+/**
+ * The unit's phase name for its output header (crew#272). Workflow units are keyed
+ * `<run>:<phase_id>` (`run-1:survey` → `survey`); free-text units carry only the
+ * synthetic `u<ord>` suffix, so the methodology stage is the closest thing to a
+ * phase name they have.
+ */
+function phaseName(runId: string, unit: WorkUnit): string {
+  const key = unitKey(runId, unit.id, unit.ord);
+  return /^u\d+$/.test(key) ? unit.stage : key;
 }
 
 const SYSTEM_EVENT_TYPES = new Set([
@@ -822,9 +833,33 @@ function RunChat({
                     </div>
                   )}
                   {unit.status === 'done' && (
-                    <div className="flex items-center gap-2 text-sm font-mono" style={{ color: '#3fb950' }}>
-                      <span>✓</span>
-                      <span className="font-medium">{UNIT_STATUS_TEXT[unit.status]}</span>
+                    <div data-testid={`unit-output-${unit.ord}`}>
+                      {/* Output header: phase name + status (crew#272) */}
+                      <div className="flex items-center gap-2 text-sm font-mono">
+                        <span style={{ color: '#3fb950' }}>✓</span>
+                        <span className="font-medium" style={{ color: '#3fb950' }}>{phaseName(session.id, unit)}</span>
+                        <span className="text-xs" style={{ color: 'rgba(230,237,243,0.4)' }}>{UNIT_STATUS_TEXT[unit.status]}</span>
+                        <button
+                          type="button"
+                          data-testid={`unit-output-toggle-${unit.ord}`}
+                          onClick={() => toggleTranscript(unit.ord)}
+                          className="ml-auto text-xs font-medium font-mono hover:underline"
+                          style={{ color: '#79c0ff' }}
+                        >
+                          {tc?.visible ? '▾ Hide output' : '▸ Show output'}
+                        </button>
+                      </div>
+                      {/* The unit's OUTPUT is the primary message body (crew#272): auto-loaded,
+                          expanded, and rendered in the main flow — not buried behind a
+                          transcript toggle the user has to dig for. */}
+                      {tc?.visible && (
+                        <div className="mt-2.5 max-h-[28rem] overflow-y-auto">
+                          {tc.loading
+                            ? <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>Loading output…</span>
+                            : <Markdown className="whitespace-pre-wrap">{tc.text ?? ''}</Markdown>
+                          }
+                        </div>
+                      )}
                     </div>
                   )}
                   {unit.status === 'rejected' && (
@@ -848,30 +883,6 @@ function RunChat({
                     );
                   })()}
 
-                  {/* Transcript toggle */}
-                  {unit.status === 'done' && (
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        onClick={() => toggleTranscript(unit.ord)}
-                        className="text-xs font-medium font-mono hover:underline"
-                        style={{ color: '#79c0ff' }}
-                      >
-                        {tc?.visible ? '▾ Hide transcript' : '▸ View transcript'}
-                      </button>
-                      {tc?.visible && (
-                        <div
-                          className="mt-2.5 max-h-96 overflow-auto rounded-xl p-4"
-                          style={{ background: '#0d1117' }}
-                        >
-                          {tc.loading
-                            ? <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>Loading…</span>
-                            : <Markdown className="whitespace-pre-wrap">{tc.text ?? ''}</Markdown>
-                          }
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
