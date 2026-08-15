@@ -1,0 +1,81 @@
+# wicked-studio — npm release (studio#15).
+#
+# The daemon bundles studio's dist as its default local skin (`wicked-crew build:with-studio`),
+# which today consumes this repo as a git dependency. Publishing the dist artifact to npm gives
+# crew (and any other consumer) a public, auditable, semver-ranged dependency — the same
+# argument that moved wicked-crew-api-types onto the registry.
+#
+# Self-contained rather than a wicked-ci caller for the same reason release-api-types.yml is:
+# tokenless OIDC trusted publishing with `--provenance`, tag/manifest agreement guarded, and a
+# post-publish registry probe (FINDING-096: a green publish for something no operator can
+# install is not a release).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  # OIDC trusted publishing — no NPM_TOKEN stored in this repo.
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # SHA-pinned to match ci.yml — a release workflow is the last place to float an action tag.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+
+      # npm 12 is the major that published wicked-core-ts / agent-acp-bridges /
+      # wicked-crew-api-types through this tokenless OIDC path.
+      - name: Upgrade npm (provenance-capable)
+        run: npm install -g npm@12
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # The published artifact IS the dist (package.json files: ["dist"]).
+      - name: Build
+        run: npm run build
+
+      - name: Tag and manifest must agree
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          echo "  tag      : ${GITHUB_REF_NAME}  -> ${TAG_VERSION}"
+          echo "  manifest : ${PKG_VERSION}"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} implies ${TAG_VERSION} but package.json says ${PKG_VERSION}. Bump the manifest and re-tag rather than publishing a version the tag does not name."
+            exit 1
+          fi
+
+      - name: Publish to npm (trusted publisher + provenance)
+        run: npm publish --access public --provenance
+
+      - name: The registry can actually serve it
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          for i in 1 2 3 4 5 6; do
+            if npm view "wicked-studio@${TAG_VERSION}" version; then
+              echo "  ok — obtainable from the registry"
+              exit 0
+            fi
+            echo "  not visible yet (attempt $i), waiting…"
+            sleep 10
+          done
+          echo "::error::wicked-studio@${TAG_VERSION} is still not resolvable after publish (FINDING-096)."
+          exit 1
