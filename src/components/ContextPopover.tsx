@@ -174,6 +174,16 @@ export function ContextPopover({
                   data-testid={`launch-seat-${seat.key}`}
                 />
                 <span>{seat.key}</span>
+                {seat.health?.status === 'inactive' && (
+                  <span
+                    className="rounded-full border px-1.5 text-[10px] font-mono"
+                    style={{ color: '#f85149', borderColor: 'rgba(248,81,73,0.5)' }}
+                    title={seat.health.message ?? 'marked inactive by the platform'}
+                    data-testid={`seat-health-${seat.key}`}
+                  >
+                    inactive
+                  </span>
+                )}
               </label>
             ))}
           </div>
