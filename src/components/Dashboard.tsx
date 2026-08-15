@@ -537,14 +537,28 @@ export function Dashboard({ runs, navigate }: Props): React.ReactElement {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span
+                            title={
+                              seat.health?.status === 'inactive'
+                                ? `inactive — ${seat.health.message ?? 'no detail'}`
+                                : seat.enabled_for_council
+                                  ? 'active'
+                                  : 'not on the council'
+                            }
                             style={{
                               display: 'inline-block',
                               width: '7px',
                               height: '7px',
                               borderRadius: '50%',
-                              background: seat.enabled_for_council
-                                ? '#3fb950'
-                                : 'rgba(230,237,243,0.18)',
+                              // Runtime seat health outranks static council membership
+                              // (crew#274): red = the platform detected quota/auth/worker
+                              // errors; green = council-enabled and healthy; dim = not
+                              // council-enabled.
+                              background:
+                                seat.health?.status === 'inactive'
+                                  ? '#f85149'
+                                  : seat.enabled_for_council
+                                    ? '#3fb950'
+                                    : 'rgba(230,237,243,0.18)',
                               flexShrink: 0,
                             }}
                           />
@@ -557,6 +571,21 @@ export function Dashboard({ runs, navigate }: Props): React.ReactElement {
                           >
                             {seat.display_name}
                           </span>
+                          {seat.health?.status === 'inactive' && (
+                            <span
+                              title={seat.health.message ?? ''}
+                              style={{
+                                fontSize: '10px',
+                                color: '#f85149',
+                                border: '1px solid rgba(248,81,73,0.4)',
+                                borderRadius: '9999px',
+                                padding: '0 6px',
+                                ...monoText,
+                              }}
+                            >
+                              inactive
+                            </span>
+                          )}
                         </div>
                         <span
                           style={{
