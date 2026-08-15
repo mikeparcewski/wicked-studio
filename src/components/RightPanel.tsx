@@ -50,8 +50,10 @@ const DELETE_TOOLS: ReadonlySet<string> = new Set(['DeleteFile', 'Remove']);
 
 type FileOpKind = 'write' | 'delete';
 
-function FilePath({ path, opKind }: { path: string; opKind?: FileOpKind }): React.ReactElement {
-  const [copied, setCopied] = useState(false);
+type FileFeedback = 'opened' | 'copied' | 'open-failed';
+
+function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; runId: string }): React.ReactElement {
+  const [feedback, setFeedback] = useState<FileFeedback | null>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current); }, []);
   const parts = path.replace(/\\/g, '/').split('/');
@@ -72,37 +74,75 @@ function FilePath({ path, opKind }: { path: string; opKind?: FileOpKind }): Reac
         ? '#e6edf3'
         : '#e6edf3';
 
+  function flash(state: FileFeedback): void {
+    setFeedback(state);
+    if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = setTimeout(() => { setFeedback(null); resetTimerRef.current = null; }, 2000);
+  }
+
   function handleCopy(): void {
     void navigator.clipboard.writeText(path).then(() => {
-      setCopied(true);
-      if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current);
-      resetTimerRef.current = setTimeout(() => { setCopied(false); resetTimerRef.current = null; }, 1500);
+      flash('copied');
     }).catch(() => { /* clipboard unavailable — silently ignore */ });
   }
 
+  /**
+   * Open with the OS default application (crew#273). The open happens DAEMON-side
+   * (`POST /open` → `open`/`xdg-open`/`start`) — a browser SPA cannot spawn a
+   * process. A daemon without the route 404s; fall back to copying the path so
+   * the click still hands the operator something actionable.
+   */
+  function handleOpen(): void {
+    api.openPath(path, runId)
+      .then(() => flash('opened'))
+      .catch(() => {
+        void navigator.clipboard.writeText(path).catch(() => { /* clipboard unavailable */ });
+        flash('open-failed');
+      });
+  }
+
   return (
-    <li title={copied ? 'Copied!' : path} className="flex items-start gap-1.5 min-w-0">
+    <li title={path} className="flex items-start gap-1.5 min-w-0">
       <span className="shrink-0 mt-0.5 text-[9px] font-mono select-none" style={{ color: glyphColor }}>
         {glyph}
       </span>
       <button
         type="button"
-        onClick={handleCopy}
-        className="min-w-0 leading-5 font-mono text-[10px] break-all text-left transition-opacity hover:opacity-70"
-        title={copied ? 'Copied!' : `Click to copy: ${path}`}
+        onClick={handleOpen}
+        className="min-w-0 flex-1 leading-5 font-mono text-[10px] break-all text-left transition-opacity hover:opacity-70"
+        title={`Open with system default app: ${path}`}
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
       >
         {dir && <span style={{ color: 'rgba(230,237,243,0.3)' }}>{dir}</span>}
         <span style={{ color: nameColor }}>{name}</span>
-        {copied && (
-          <span className="ml-1 text-[9px]" style={{ color: '#3fb950' }}>✓</span>
+        {feedback === 'opened' && (
+          <span className="ml-1 text-[9px]" style={{ color: '#3fb950' }}>✓ opened</span>
         )}
+        {feedback === 'copied' && (
+          <span className="ml-1 text-[9px]" style={{ color: '#3fb950' }}>✓ copied</span>
+        )}
+        {feedback === 'open-failed' && (
+          <span className="ml-1 text-[9px]" style={{ color: '#ffda19' }}>
+            open unavailable — path copied
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={handleCopy}
+        aria-label={`Copy path ${path}`}
+        title="Copy path"
+        className="shrink-0 mt-0.5 text-[9px] font-mono leading-5 transition-opacity hover:opacity-70"
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'rgba(230,237,243,0.35)' }}
+      >
+        ⧉
       </button>
     </li>
   );
 }
 
 function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
+  const runId = model.session.id;
   // Build sets of "write units" and "delete units" from governance hook fires.
   // governanceHookFired events carry toolName but not file paths, so we use a unit's
   // entire filesRead set as a proxy for "files touched by write operations".
@@ -169,10 +209,10 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
           ) : (
             <ul className="flex flex-col gap-1">
               {sortedModified.map((f) => (
-                <FilePath key={f} path={f} opKind="write" />
+                <FilePath key={f} path={f} opKind="write" runId={runId} />
               ))}
               {sortedDeleted.map((f) => (
-                <FilePath key={f} path={f} opKind="delete" />
+                <FilePath key={f} path={f} opKind="delete" runId={runId} />
               ))}
             </ul>
           )}
@@ -187,7 +227,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
           </p>
           <ul className="flex flex-col gap-1">
             {sortedReferenced.map((f) => (
-              <FilePath key={f} path={f} />
+              <FilePath key={f} path={f} runId={runId} />
             ))}
           </ul>
         </div>

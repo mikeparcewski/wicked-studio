@@ -280,6 +280,20 @@ export const api = {
     apiFetch<{ status: string }>(`/terminals/${encodeURIComponent(id)}/close`, { method: 'POST' }),
 
   /**
+   * Ask the daemon to open a file/folder with the OS default application
+   * (crew#273: `POST /open {path, runId?}` → macOS `open` / linux `xdg-open` /
+   * windows `start`, validated daemon-side against the run's workdir + evidence
+   * roots). The open MUST happen daemon-side — the studio is a browser SPA and
+   * cannot spawn a process. A daemon predating the route 404s; callers treat
+   * that as "unsupported" and fall back to copy-path.
+   */
+  openPath: (path: string, runId?: string) =>
+    apiFetch<{ status: string }>('/open', {
+      method: 'POST',
+      body: JSON.stringify(runId === undefined ? { path } : { path, runId }),
+    }),
+
+  /**
    * Inject a message into one or all active agent sessions (POST /runs/:id/inject).
    * `target` is either `"all"` (broadcast) or a session-specific discriminator.
    * Used by the manager dashboard's send-to-agents panel (crew#73).
