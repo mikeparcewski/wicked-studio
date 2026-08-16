@@ -14,6 +14,14 @@ interface Props {
    * surfaced as ungoverned in the UI. Omitted / `true` = the safe governed default.
    */
   governed?: boolean;
+  /**
+   * Bytes to type into the PTY as soon as the stdin channel is up — sent ONCE over
+   * the dedicated terminal WS, the exact same text-frame path keystrokes take
+   * (`ws.send` → daemon `writeTerminal`). Used by seat sign-in: the roster's
+   * `login_invocation` + `"\n"` runs in the operator's own interactive login shell,
+   * echoing visibly so they can complete the CLI's URL/paste flow in this terminal.
+   */
+  initialInput?: string;
 }
 
 /**
@@ -29,11 +37,11 @@ interface Props {
  * A terminal is a stateful session: it opens ONCE for the component's lifetime.
  * Remount with a React `key` to start a fresh terminal (e.g. a different cwd).
  */
-export function Terminal({ cwd, cmd, governed = true }: Props): React.ReactElement {
+export function Terminal({ cwd, cmd, governed = true, initialInput }: Props): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   // Snapshot the open-time props; the session opens once (see effect deps: []).
-  const propsRef = useRef({ cwd, cmd, governed });
-  propsRef.current = { cwd, cmd, governed };
+  const propsRef = useRef({ cwd, cmd, governed, initialInput });
+  propsRef.current = { cwd, cmd, governed, initialInput };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -112,6 +120,14 @@ export function Terminal({ cwd, cmd, governed = true }: Props): React.ReactEleme
 
         const ws = new WebSocket(terminalWsUrl(id));
         ws.binaryType = 'arraybuffer';
+        // Type `initialInput` into the PTY the moment the stdin channel is up —
+        // once, over the same WS text-frame path as keystrokes. The PTY's input is
+        // kernel-buffered, so sending at open is safe even before the shell prompts.
+        const line = propsRef.current.initialInput;
+        if (line !== undefined && line.length > 0) {
+          if (ws.readyState === WebSocket.OPEN) ws.send(line);
+          else ws.onopen = () => ws.send(line);
+        }
         ws.onmessage = (ev: MessageEvent) => {
           // Raw PTY output: binary frame → exact bytes; text frame → string.
           if (typeof ev.data === 'string') term.write(ev.data);

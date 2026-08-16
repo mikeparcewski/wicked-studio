@@ -23,6 +23,8 @@ interface Props {
   onNavigateBack: () => void;
   onRefresh: () => void;
   onKill?: (runId: string) => void | Promise<void>;
+  /** App-level route navigation — threaded to ChatInput's seat sign-in warning (→ /system). */
+  navigate?: (path: string) => void;
 }
 
 // Per-CLI identity: consistent avatar colours across multi-agent runs
@@ -558,6 +560,7 @@ function RunChat({
   onNavigateBack,
   onRefresh,
   onKill,
+  navigate,
 }: {
   view: SessionView;
   mode: RunMode;
@@ -566,6 +569,7 @@ function RunChat({
   onNavigateBack: () => void;
   onRefresh: () => void;
   onKill?: (runId: string) => void | Promise<void>;
+  navigate?: (path: string) => void;
 }): React.ReactElement {
   const { session, units } = view;
   // `ord` order is what `unit_ix` indexes into, so both the render order and the cursor derive from
@@ -964,6 +968,7 @@ function RunChat({
         onLaunched={onLaunched}
         injectTarget={injectTarget}
         onClearInjectTarget={() => setInjectTarget('all')}
+        {...(navigate !== undefined ? { navigate } : {})}
       />
     </div>
   );
@@ -974,11 +979,13 @@ function NewRunView({
   mode,
   onModeChange,
   onLaunched,
+  navigate,
 }: {
   chatMode: boolean;
   mode: RunMode;
   onModeChange: (m: RunMode) => void;
   onLaunched: (id: string) => void;
+  navigate?: (path: string) => void;
 }): React.ReactElement {
   const heading = chatMode
     ? 'What do you want to explore?'
@@ -1001,13 +1008,19 @@ function NewRunView({
         <div className="flex justify-center">
           <ModePill mode={mode} onChange={onModeChange} />
         </div>
-        <ChatInput embedded mode={mode} onLaunched={onLaunched} {...(chatMode ? { workflowOverride: 'chat' } : {})} />
+        <ChatInput
+          embedded
+          mode={mode}
+          onLaunched={onLaunched}
+          {...(chatMode ? { workflowOverride: 'chat' } : {})}
+          {...(navigate !== undefined ? { navigate } : {})}
+        />
       </div>
     </div>
   );
 }
 
-export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefresh, onKill }: Props): React.ReactElement {
+export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefresh, onKill, navigate }: Props): React.ReactElement {
   const [mode, setMode] = useState<RunMode>('balanced');
 
   if (view) {
@@ -1036,6 +1049,7 @@ export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefres
         onNavigateBack={onNavigateBack}
         onRefresh={onRefresh}
         {...(onKill !== undefined ? { onKill } : {})}
+        {...(navigate !== undefined ? { navigate } : {})}
       />
     );
   }
@@ -1045,6 +1059,7 @@ export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefres
       mode={mode}
       onModeChange={setMode}
       onLaunched={onLaunched}
+      {...(navigate !== undefined ? { navigate } : {})}
     />
   );
 }

@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
+import { Modal } from './Modal.js';
+import { Terminal } from './Terminal.js';
 
 const CLI_DEFAULTS_KEY = 'wicked_default_clis';
+
+/**
+ * Client-side mirror of the daemon's worker_config_root rule (empty or absolute).
+ * The daemon stays authoritative — this only pre-warns; a 400 still renders inline.
+ */
+function isAbsolutePathLike(p: string): boolean {
+  return p.startsWith('/') || p.startsWith('\\\\') || /^[A-Za-z]:[\\/]/.test(p);
+}
 
 interface SettingRowProps {
   label: string;
@@ -45,6 +55,11 @@ export function SystemSettings(): React.ReactElement {
   const [defaultClis, setDefaultClis] = useState<Set<string>>(new Set());
   const [clisSaved, setClisSaved] = useState(false);
   const clisSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Seat whose sign-in terminal modal is open, or null. */
+  const [signInSeat, setSignInSeat] = useState<RosterSeat | null>(null);
+  /** Daemon 400 from a save whose patch included worker_config_root — rendered inline at the field. */
+  const [workerRootError, setWorkerRootError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getSettings()
@@ -94,6 +109,7 @@ export function SystemSettings(): React.ReactElement {
     if (Object.keys(dirty).length === 0) return;
     setSaving(true);
     setError(null);
+    setWorkerRootError(null);
     try {
       const { settings: next } = await api.updateSettings(dirty);
       setSettings(next);
@@ -102,7 +118,11 @@ export function SystemSettings(): React.ReactElement {
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
       savedTimerRef.current = setTimeout(() => setSaved(false), 2500);
     } catch (e: unknown) {
-      setError(String(e));
+      // A rejected patch that touched worker_config_root (the daemon 400s a
+      // non-absolute path) belongs at the field, not the page banner.
+      const msg = e instanceof Error ? e.message : String(e);
+      if ('worker_config_root' in dirty) setWorkerRootError(msg);
+      else setError(msg);
     } finally {
       setSaving(false);
     }
@@ -110,6 +130,8 @@ export function SystemSettings(): React.ReactElement {
 
   const merged: Settings = { graphNodeLimit: 150, ...settings, ...dirty };
   const hasDirty = Object.keys(dirty).length > 0;
+  const workerRoot = merged.worker_config_root ?? '';
+  const workerRootInvalid = workerRoot !== '' && !isAbsolutePathLike(workerRoot);
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -166,6 +188,52 @@ export function SystemSettings(): React.ReactElement {
         </SettingRow>
       </section>
 
+      <section
+        className="rounded-xl px-5 mb-6"
+        style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+      >
+        <h2
+          className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
+          style={{ color: 'rgba(230,237,243,0.4)' }}
+        >
+          Workers
+        </h2>
+
+        <SettingRow
+          label="Worker config root"
+          description="Base directory for the engine-owned worker CLI config homes (e.g. the claude worker home is <root>/claude). Empty = the engine default ~/.wicked-worker. Must be an absolute path; takes effect on the next worker spawn."
+        >
+          <div className="flex flex-col items-end gap-1">
+            <input
+              type="text"
+              aria-label="Worker config root"
+              placeholder="~/.wicked-worker"
+              value={workerRoot}
+              onChange={(e) => {
+                setWorkerRootError(null);
+                patch('worker_config_root', e.target.value);
+              }}
+              className="w-56 rounded px-2 py-1 text-sm font-mono focus:outline-none"
+              style={{
+                background: '#161c26',
+                border: `1px solid ${workerRootInvalid || workerRootError ? 'rgba(248,81,73,0.5)' : 'rgba(230,237,243,0.12)'}`,
+                color: '#e6edf3',
+              }}
+            />
+            {workerRootInvalid && (
+              <p className="text-xs" style={{ color: '#f85149' }} data-testid="worker-root-invalid">
+                Must be empty or an absolute path.
+              </p>
+            )}
+            {workerRootError && (
+              <p className="text-xs" style={{ color: '#f85149' }} data-testid="worker-root-error">
+                {workerRootError}
+              </p>
+            )}
+          </div>
+        </SettingRow>
+      </section>
+
       <div className="flex items-center gap-3 mb-8">
         <button
           type="button"
@@ -182,7 +250,7 @@ export function SystemSettings(): React.ReactElement {
         {saved && <span className="text-xs font-medium" style={{ color: '#3fb950' }}>Saved</span>}
       </div>
 
-      {/* ── CLIs section ──────────────────────────────────────────────────── */}
+      {/* ── CLI seats & sign-in ───────────────────────────────────────────── */}
       <section
         className="rounded-xl px-5 mb-6"
         style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
@@ -191,30 +259,65 @@ export function SystemSettings(): React.ReactElement {
           className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
           style={{ color: 'rgba(230,237,243,0.4)' }}
         >
-          Default CLIs
+          CLI seats &amp; sign-in
         </h2>
         <p className="text-xs mb-4" style={{ color: 'rgba(230,237,243,0.4)' }}>
-          Which CLIs are pre-selected when you open the launch form. Changes take effect on the next new session.
+          Checked CLIs are pre-selected when you open the launch form (takes effect on the next new
+          session). The status shows whether each seat looks signed in; Sign in opens that CLI&apos;s
+          own login flow in a terminal.
         </p>
         {roster.length === 0 ? (
           <p className="text-xs italic pb-4 font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>Loading roster…</p>
         ) : (
           <div className="flex flex-col gap-2 pb-4">
             {roster.map((seat) => (
-              <label key={seat.key} className="flex items-center gap-3 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={defaultClis.has(seat.key)}
-                  onChange={() => toggleDefaultCli(seat.key)}
-                  className="accent-[#ffda19] w-3.5 h-3.5 shrink-0"
-                />
-                <span className="text-sm font-mono flex-1" style={{ color: '#e6edf3' }}>
-                  {seat.display_name}
-                </span>
+              <div key={seat.key} className="flex items-center gap-3">
+                {/* The label wraps ONLY the checkbox + name so the status/sign-in
+                    controls on the row never toggle the default-CLI checkbox. */}
+                <label className="flex items-center gap-3 cursor-pointer group flex-1 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={defaultClis.has(seat.key)}
+                    onChange={() => toggleDefaultCli(seat.key)}
+                    className="accent-[#ffda19] w-3.5 h-3.5 shrink-0"
+                  />
+                  <span className="text-sm font-mono truncate" style={{ color: '#e6edf3' }}>
+                    {seat.display_name}
+                  </span>
+                </label>
                 <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
                   {seat.key}
                 </span>
-              </label>
+                {seat.signed_in === true && (
+                  <span
+                    className="text-xs font-mono"
+                    style={{ color: '#3fb950' }}
+                    data-testid={`seat-signin-${seat.key}`}
+                  >
+                    ✓ signed in
+                  </span>
+                )}
+                {seat.signed_in === false && (
+                  <span
+                    className="text-xs font-mono"
+                    style={{ color: '#f85149' }}
+                    data-testid={`seat-signin-${seat.key}`}
+                  >
+                    sign in needed
+                  </span>
+                )}
+                {seat.login_invocation !== undefined && seat.login_invocation !== '' && seat.signed_in !== true && (
+                  <button
+                    type="button"
+                    onClick={() => setSignInSeat(seat)}
+                    aria-label={`Sign in ${seat.display_name}`}
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium shrink-0"
+                    style={{ background: 'rgba(255,218,25,0.15)', color: '#ffda19', border: '1px solid rgba(255,218,25,0.3)' }}
+                  >
+                    Sign in
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -235,6 +338,37 @@ export function SystemSettings(): React.ReactElement {
           </div>
         )}
       </section>
+
+      {/* ── Seat sign-in terminal ─────────────────────────────────────────────
+          An interactive login shell (NO cmd — `login_invocation` is a SHELL LINE,
+          not an argv) into which Terminal types the line + "\n" over the terminal
+          WS once the PTY is up. The operator completes the CLI's URL/paste flow
+          right here. Keyed by seat so switching seats starts a fresh session. */}
+      {signInSeat !== null && (
+        <Modal
+          title={`Sign in — ${signInSeat.display_name}`}
+          onClose={() => setSignInSeat(null)}
+          disableEscapeKey
+        >
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>
+              Running{' '}
+              <code
+                className="rounded px-1 py-0.5"
+                style={{ background: 'rgba(230,237,243,0.06)', color: '#e6edf3' }}
+              >
+                {signInSeat.login_invocation}
+              </code>{' '}
+              in your shell — complete the sign-in flow below, then close this panel.
+            </p>
+            <Terminal
+              key={signInSeat.key}
+              cwd="."
+              initialInput={`${signInSeat.login_invocation ?? ''}\n`}
+            />
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
