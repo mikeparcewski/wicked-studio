@@ -184,6 +184,16 @@ export function ContextPopover({
                     inactive
                   </span>
                 )}
+                {seat.signed_in === false && (
+                  <span
+                    className="rounded-full border px-1.5 text-[10px] font-mono"
+                    style={{ color: '#f85149', borderColor: 'rgba(248,81,73,0.5)' }}
+                    title={`${seat.key} isn't signed in — runs routed there will fall back or fail. Sign in in Settings.`}
+                    data-testid={`seat-signin-${seat.key}`}
+                  >
+                    sign in needed
+                  </span>
+                )}
               </label>
             ))}
           </div>

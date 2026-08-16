@@ -31,6 +31,12 @@ interface Props {
   injectTarget?: string;
   /** Called when the user clears the agent-specific inject target (resets to "all"). */
   onClearInjectTarget?: () => void;
+  /**
+   * App-level route navigation (App.tsx's useRoute().navigate), threaded down so the
+   * seat sign-in warning can jump to Settings (/system). Optional — surfaces without
+   * it just render the warning with no working link.
+   */
+  navigate?: (path: string) => void;
 }
 
 const INJECT_STATUSES = new Set(['executing', 'distributing', 'planning']);
@@ -82,7 +88,7 @@ function ActivePill({
 // Defense-in-depth denylist: catches system workflows that predate the is_system flag.
 const SYSTEM_WORKFLOW_IDS = new Set(['chat', 'onboarding', 'survey-repo', 'domain-graph-slice', 'memories']);
 
-export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget }: Props): React.ReactElement {
+export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
 
   // ── Steer mode state ───────────────────────────────────────────────────────
@@ -466,6 +472,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const canSubmit = problem.trim().length > 0 && selectedClis.size > 0 && !submitting;
   const showDetection = detectedWorkflow !== null && !workflowDismissed && !workflow && !workflowOverride;
 
+  // Seats routed to by this launch that the daemon observed as NOT signed in.
+  // Strictly `=== false` — `null`/absent means "unknowable cheaply", not a problem.
+  // A warning only: fallbacks exist, so the launch is never blocked on it.
+  const unsignedSelected = roster.filter(
+    (s) => selectedClis.has(s.key) && s.signed_in === false,
+  );
+
   // Determine whether CLIs differ from the defaults that loaded from the roster
   const defaultCliSet = new Set(
     roster.filter((s) => s.enabled_for_council).map((s) => s.key),
@@ -561,6 +574,33 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             style={{ color: 'rgba(230,237,243,0.35)' }}
           >
             ✕
+          </button>
+        </div>
+      )}
+
+      {/* Seat sign-in warning — selected seats observed as signed_in === false */}
+      {unsignedSelected.length > 0 && (
+        <div
+          data-testid="signin-warning"
+          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
+          style={{
+            background: 'rgba(248,81,73,0.08)',
+            border: '1px solid rgba(248,81,73,0.3)',
+            color: '#f85149',
+          }}
+        >
+          <span className="flex-1">
+            ⚠ {unsignedSelected.map((s) => s.key).join(', ')}{' '}
+            {unsignedSelected.length === 1 ? "isn't" : "aren't"} signed in — runs routed there
+            will fall back or fail. Sign in in Settings.
+          </span>
+          <button
+            type="button"
+            onClick={() => navigate?.('/system')}
+            className="rounded-lg px-3 py-1 font-semibold text-xs shrink-0"
+            style={{ background: 'rgba(248,81,73,0.15)', color: '#f85149', border: '1px solid rgba(248,81,73,0.35)' }}
+          >
+            Open Settings
           </button>
         </div>
       )}

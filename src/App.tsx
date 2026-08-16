@@ -301,6 +301,7 @@ export function App(): React.ReactElement {
           onNavigateBack={onNavigateBack}
           onRefresh={refresh}
           onKill={onKill}
+          navigate={navigate}
         />
       </div>
     );

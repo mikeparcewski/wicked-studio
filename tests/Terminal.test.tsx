@@ -171,6 +171,44 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
     await waitFor(() => expect(client.api.closeTerminal).toHaveBeenCalledWith('term-xyz'));
   });
 
+  it('initialInput: opens a plain login shell (no cmd) and types the line into the PTY over the WS', async () => {
+    render(<Terminal cwd="/work" initialInput={'codex auth login\n'} />);
+    await waitFor(() => expect(FakeWebSocket.last).toBeTruthy());
+
+    // Seat sign-in contract: login_invocation is a SHELL LINE, so the PTY is the
+    // user's interactive login shell — cmd is NOT forwarded to openTerminal.
+    expect(client.api.openTerminal).toHaveBeenCalledWith({
+      cwd: '/work',
+      cols: 80,
+      rows: 24,
+      governed: true,
+    });
+    // ...and the line goes down the SAME stdin path keystrokes use: a WS text frame.
+    expect(FakeWebSocket.last?.send).toHaveBeenCalledWith('codex auth login\n');
+  });
+
+  it('initialInput: waits for ws.onopen when the socket is still connecting', async () => {
+    // Force the CONNECTING path — the component must defer the write to onopen.
+    class ConnectingWebSocket extends FakeWebSocket {
+      constructor(url: string) {
+        super(url);
+        this.readyState = FakeWebSocket.CONNECTING;
+      }
+    }
+    vi.stubGlobal('WebSocket', ConnectingWebSocket);
+
+    render(<Terminal cwd="/work" initialInput={'claude login\n'} />);
+    await waitFor(() => expect(FakeWebSocket.last).toBeTruthy());
+    const ws = FakeWebSocket.last!;
+    expect(ws.send).not.toHaveBeenCalled();
+
+    act(() => {
+      ws.readyState = FakeWebSocket.OPEN;
+      ws.onopen?.({});
+    });
+    expect(ws.send).toHaveBeenCalledWith('claude login\n');
+  });
+
   it('surfaces the ungoverned operator shell loudly in the UI (§7)', () => {
     const { rerender } = render(<Terminal cwd="/work" governed />);
     expect(screen.getByTestId('terminal-governed')).toHaveTextContent('governed');
