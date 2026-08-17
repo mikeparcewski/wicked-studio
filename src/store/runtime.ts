@@ -195,14 +195,22 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       const seq = s.seq + 1;
 
       // Live output delta -> append to the (run, unit) buffer (§11.4).
-      if (
-        event.type === 'cliOutputDelta' &&
-        typeof event.ord === 'number' &&
-        typeof event.chunk === 'string'
-      ) {
+      // `unitOutputDelta` is the delta-relay spelling of the same frame (see the
+      // temporary UnitOutputDeltaEvent extension in api/types.ts): identical
+      // append semantics, one shared buffer, so ChatPanel's live narration and
+      // the older LiveOutput consumers read the same text whichever frame the
+      // daemon emits.
+      // unitOutputDelta carries `text` (shared contract 0.5.1); cliOutputDelta carries `chunk`.
+      const deltaText =
+        event.type === 'unitOutputDelta' && typeof event.text === 'string'
+          ? event.text
+          : event.type === 'cliOutputDelta' && typeof event.chunk === 'string'
+            ? event.chunk
+            : null;
+      if (deltaText !== null && typeof event.ord === 'number') {
         const key = outputKey(session, event.ord);
         const prev = s.outputs[key] ?? '';
-        let combined = prev + event.chunk;
+        let combined = prev + deltaText;
         if (combined.length > OUTPUT_CAP) combined = combined.slice(combined.length - OUTPUT_CAP);
         return { seq, outputs: { ...s.outputs, [key]: combined } };
       }

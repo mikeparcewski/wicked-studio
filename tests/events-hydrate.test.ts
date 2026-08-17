@@ -17,13 +17,15 @@ describe('FINDING-013: run-event hydration', () => {
     const persisted: CoreEvent[] = [
       usage('run1', 100),
       { type: 'cliOutputDelta', session: 'run1', text: 'noise' } as unknown as CoreEvent,
+      { type: 'unitOutputDelta', session: 'run1', ord: 0, text: 'noise' } as unknown as CoreEvent,
     ];
     useRunEventStore.getState().hydrate('run1', persisted);
     const frames = useRunEventStore.getState().byRun['run1'] ?? [];
     // The cliUsage is backfilled (Burn can now show the persisted total)...
     expect(frames.filter((e) => e.type === 'cliUsage')).toHaveLength(1);
-    // ...and the high-volume output delta is dropped, same as the live ingest path.
+    // ...and the high-volume output deltas (both spellings) are dropped, same as the live ingest path.
     expect(frames.some((e) => e.type === 'cliOutputDelta')).toBe(false);
+    expect(frames.some((e) => e.type === 'unitOutputDelta')).toBe(false);
   });
 
   it('never clobbers live frames already streamed from /ws', () => {

@@ -418,6 +418,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             </button>
           </div>
           <div className="flex items-center gap-2">
+            {/* Subtle mode chip: this composer is steering a LIVE run (messages inject
+                into the active worker turn), not launching a new one. */}
+            <span
+              data-testid="steering-live-chip"
+              className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-mono shrink-0"
+              style={{ background: 'rgba(121,192,255,0.08)', color: '#79c0ff', border: '1px solid rgba(121,192,255,0.2)' }}
+            >
+              <span className="inline-block w-1 h-1 rounded-full animate-pulse" style={{ background: '#79c0ff' }} />
+              steering live run
+            </span>
             <p
               className="text-[10px] font-mono flex-1"
               style={{ color: 'rgba(230,237,243,0.3)' }}

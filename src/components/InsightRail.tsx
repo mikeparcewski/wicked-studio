@@ -65,10 +65,11 @@ export function InsightRail({ model }: Props): React.ReactElement {
         {tab === 'unwired' && (
           <div className="flex flex-col gap-2 text-[11px]">
             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-2 text-gray-500">
-              <p className="font-semibold">Live output streaming — engine-pending</p>
+              <p className="font-semibold">Live output streaming — delta relay</p>
               <p className="mt-1 text-gray-400">
-                The engine does not yet emit <code>cliOutputDelta</code> events. Output is
-                available as a transcript after each unit completes (auto-shown below).
+                Runs on a daemon emitting <code>unitOutputDelta</code> (delta relay) stream
+                live narration into the run thread; older daemons without the relay only
+                provide the transcript after each unit completes (auto-shown below).
               </p>
             </div>
             <CampaignDagStub />

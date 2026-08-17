@@ -111,3 +111,32 @@ describe('ChatInput inject mode (§11.7 — operator message injection)', () => 
     await waitFor(() => expect(field).toHaveValue(''));
   });
 });
+
+describe('ChatInput composer routes by run state (unified conversation)', () => {
+  it('executing run: inject mode carries the subtle "steering live run" chip', () => {
+    render(<ChatInput runId="run-1" runStatus="executing" onLaunched={vi.fn()} />);
+    const chip = screen.getByTestId('steering-live-chip');
+    expect(chip).toHaveTextContent('steering live run');
+    expect(screen.getByPlaceholderText(/send message to all agents/i)).toBeInTheDocument();
+  });
+
+  it('awaiting_human run: the composer answers the gate (approve + steer), no live-run chip', async () => {
+    const user = userEvent.setup();
+    const confirmGate = vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' });
+    render(<ChatInput runId="run-1" runStatus="awaiting_human" onLaunched={vi.fn()} />);
+
+    expect(screen.queryByTestId('steering-live-chip')).not.toBeInTheDocument();
+    const field = screen.getByPlaceholderText(/send steering guidance/i);
+    await user.type(field, 'prefer pytest');
+    await user.click(screen.getByRole('button', { name: /steer/i }));
+    expect(confirmGate).toHaveBeenCalledWith('run-1', { approve: true, amend: 'prefer pytest' });
+    // Gate answering must never route through the mid-run inject endpoint.
+    expect(client.api.injectMessage).not.toHaveBeenCalled();
+  });
+
+  it('no active run (terminal → runId null): launch form, no live-run chip', () => {
+    render(<ChatInput runId={null} onLaunched={vi.fn()} />);
+    expect(screen.queryByTestId('steering-live-chip')).not.toBeInTheDocument();
+    expect(screen.getByTestId('launch-problem')).toBeInTheDocument();
+  });
+});

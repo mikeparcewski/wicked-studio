@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { SessionView, SessionStatus } from '../api/types.js';
+import type { SessionView } from '../api/types.js';
 import { useRunModel } from '../hooks/useRunModel.js';
 import type { RunModel } from '../hooks/useRunModel.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
@@ -240,10 +240,6 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
   );
 }
 
-const STEER_STATUSES: ReadonlySet<SessionStatus> = new Set([
-  'executing', 'distributing', 'planning',
-]);
-
 export function RightPanel({ view }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<AccordionId | null>('whatwhere');
@@ -251,16 +247,11 @@ export function RightPanel({ view }: Props): React.ReactElement {
   const [termOpen, setTermOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
 
-  // Steering input state (scope C)
-  const [steerText, setSteerText] = useState('');
-  const [steerSending, setSteerSending] = useState(false);
-  const [steerError, setSteerError] = useState<string | null>(null);
-  const steerRef = useRef<HTMLTextAreaElement>(null);
-  const steerInflightRef = useRef(false);
-
+  // Steering INPUT lives in the run thread's composer (ChatInput routes by run
+  // state: inject while executing, gate-answer while awaiting_human). This panel
+  // keeps only the read side — the SteeringTimeline accordion above.
   const { session } = view;
   const model = useRunModel(session.id, view);
-  const canSteer = STEER_STATUSES.has(session.status);
 
   const fileCount = model
     ? new Set(model.units.flatMap((u) => u.filesRead)).size
@@ -400,79 +391,6 @@ export function RightPanel({ view }: Props): React.ReactElement {
           </div>
         ))}
       </div>
-
-      {/* Compact steering input — visible when the run is executing, planning, or distributing */}
-      {canSteer && (
-        <div
-          className="shrink-0 px-3 py-2 flex flex-col gap-1.5"
-          style={{ borderTop: '1px solid rgba(230,237,243,0.07)', background: '#090d12' }}
-        >
-          <p className="text-[9px] font-mono uppercase tracking-widest" style={{ color: 'rgba(230,237,243,0.3)' }}>
-            Steer
-          </p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const msg = steerText.trim();
-              if (!msg || steerInflightRef.current) return;
-              steerInflightRef.current = true;
-              setSteerSending(true);
-              setSteerError(null);
-              void api.injectMessage(session.id, msg, 'all')
-                .then(() => {
-                  setSteerText('');
-                })
-                .catch((err: unknown) => {
-                  const errMsg = err instanceof Error ? err.message : String(err);
-                  setSteerError(errMsg || 'Failed to send instruction — please try again.');
-                })
-                .finally(() => {
-                  steerInflightRef.current = false;
-                  setSteerSending(false);
-                });
-            }}
-            className="flex flex-col gap-1"
-          >
-            <div className="flex gap-1.5">
-              <textarea
-                ref={steerRef}
-                value={steerText}
-                onChange={(e) => { setSteerText(e.target.value); setSteerError(null); }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    e.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                aria-label="Steering instruction"
-                rows={2}
-                placeholder="Send instruction to agents…"
-                disabled={steerSending}
-                className="flex-1 resize-none rounded text-[11px] font-mono px-2 py-1.5 leading-relaxed"
-                style={{
-                  background: 'rgba(230,237,243,0.05)',
-                  border: '1px solid rgba(230,237,243,0.1)',
-                  color: '#e6edf3',
-                  outline: 'none',
-                  minHeight: 0,
-                }}
-              />
-              <button
-                type="submit"
-                aria-label={steerSending ? 'Sending…' : 'Send steering instruction'}
-                disabled={steerSending || !steerText.trim()}
-                className="shrink-0 self-end rounded px-2 py-1 text-[11px] font-mono font-medium transition-opacity disabled:opacity-30"
-                style={{ background: 'rgba(121,192,255,0.15)', color: '#79c0ff', border: '1px solid rgba(121,192,255,0.2)' }}
-              >
-                {steerSending ? '…' : '↑'}
-              </button>
-            </div>
-            {steerError && (
-              <p className="text-[10px] font-mono" style={{ color: '#f85149' }}>{steerError}</p>
-            )}
-          </form>
-        </div>
-      )}
 
       {/* Terminal modal */}
       {termOpen && (
