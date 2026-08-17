@@ -107,6 +107,21 @@ function summarize(event: CoreEvent): string {
   }
 }
 
+/**
+ * The streamed text a frame carries, or null when it is not an output delta.
+ * `unitOutputDelta` is the delta-relay spelling (shared contract 0.5.1, `text`);
+ * `cliOutputDelta` is the legacy spelling (`chunk`). Identical append semantics,
+ * one shared buffer, so every consumer reads the same text whichever frame the
+ * daemon emits — live (`ingest`) or replayed (`hydrateOutputs`).
+ */
+function deltaTextOf(event: CoreEvent): string | null {
+  return event.type === 'unitOutputDelta' && typeof event.text === 'string'
+    ? event.text
+    : event.type === 'cliOutputDelta' && typeof event.chunk === 'string'
+      ? event.chunk
+      : null;
+}
+
 /** One structured assumption parsed from a unit's output (assumptionRecorded). */
 export interface RecordedAssumption {
   ord: number;
@@ -173,6 +188,17 @@ interface RuntimeStore {
   seq: number;
   /** Fold one CoreEvent: append output deltas, log every other run-scoped frame. */
   ingest: (event: CoreEvent) => void;
+  /**
+   * Seed a run's live-output buffers from the durably-persisted event trail
+   * (`GET /runs/:id/events`). `/ws` has no late-join replay, and `outputs` was fed
+   * ONLY by live frames — so a page opened (or reloaded) after a unit started
+   * showed a bare "Working…" for a unit whose streamed text already existed, until
+   * the next live delta happened to arrive. Same backfill idea as the run-event
+   * store's `hydrate` (FINDING-013), with the guard moved per-key: a buffer that a
+   * live `/ws` frame has already started is never touched, so replayed deltas are
+   * never double-appended to live ones.
+   */
+  hydrateOutputs: (session: string, events: CoreEvent[]) => void;
   /** Drop a run's accumulated output + log. */
   clear: (session: string) => void;
 }
@@ -194,19 +220,9 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
     set((s) => {
       const seq = s.seq + 1;
 
-      // Live output delta -> append to the (run, unit) buffer (§11.4).
-      // `unitOutputDelta` is the delta-relay spelling of the same frame (see the
-      // temporary UnitOutputDeltaEvent extension in api/types.ts): identical
-      // append semantics, one shared buffer, so ChatPanel's live narration and
-      // the older LiveOutput consumers read the same text whichever frame the
-      // daemon emits.
-      // unitOutputDelta carries `text` (shared contract 0.5.1); cliOutputDelta carries `chunk`.
-      const deltaText =
-        event.type === 'unitOutputDelta' && typeof event.text === 'string'
-          ? event.text
-          : event.type === 'cliOutputDelta' && typeof event.chunk === 'string'
-            ? event.chunk
-            : null;
+      // Live output delta -> append to the (run, unit) buffer (§11.4). ChatPanel's
+      // live narration and the older LiveOutput consumers read the same buffer.
+      const deltaText = deltaTextOf(event);
       if (deltaText !== null && typeof event.ord === 'number') {
         const key = outputKey(session, event.ord);
         const prev = s.outputs[key] ?? '';
@@ -366,6 +382,28 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       return { seq, logs: { ...s.logs, [session]: nextLog } };
     });
   },
+
+  hydrateOutputs: (session, events) =>
+    set((s) => {
+      // Fold the trail's deltas per key first, then merge — one state write, and the
+      // per-key liveness check stays atomic with it (a live frame that lands between
+      // the fetch and this set() wins wholesale; skipping the key loses the older
+      // replayed text but can never double-count, mirroring FINDING-013's guard).
+      const folded: Record<string, string> = {};
+      for (const event of events) {
+        if (event.session !== session) continue;
+        const deltaText = deltaTextOf(event);
+        if (deltaText === null || typeof event.ord !== 'number') continue;
+        const key = outputKey(session, event.ord);
+        if (s.outputs[key] !== undefined) continue; // live buffer already started
+        let combined = (folded[key] ?? '') + deltaText;
+        if (combined.length > OUTPUT_CAP) combined = combined.slice(combined.length - OUTPUT_CAP);
+        folded[key] = combined;
+      }
+      if (Object.keys(folded).length === 0) return s;
+      // Spread order matters: existing (live) buffers win over the replayed fold.
+      return { outputs: { ...folded, ...s.outputs } };
+    }),
 
   clear: (session) =>
     set((s) => {

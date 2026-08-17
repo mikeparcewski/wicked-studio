@@ -114,14 +114,26 @@ export function App(): React.ReactElement {
   // with no live socket history), backfill from the persisted event trail. Guarded on emptiness (and
   // again inside the store) so a live run's streamed frames are never double-counted; a 503 (engine
   // with no event-log binding) or a run with no history simply leaves the panels as they are.
+  //
+  // The same replay gap hid the run thread's live narration: the runtime store's `outputs` buffers
+  // were fed ONLY by live `unitOutputDelta`/`cliOutputDelta` frames (the structured-event hydrate
+  // above deliberately drops them), so opening an already-executing run showed a bare "Working…"
+  // even though the streamed text was durably recorded. The same fetch now also seeds those
+  // buffers, per-key guarded inside the store so live frames are never double-counted.
   useEffect(() => {
     if (!runId) return;
-    if ((useRunEventStore.getState().byRun[runId] ?? []).length > 0) return;
+    const hasFrames = (useRunEventStore.getState().byRun[runId] ?? []).length > 0;
+    const hasOutputs = Object.keys(useRuntimeStore.getState().outputs).some((k) =>
+      k.startsWith(`${runId}:u`),
+    );
+    if (hasFrames && hasOutputs) return;
     let cancelled = false;
     api
       .getRunEvents(runId)
       .then(({ events }) => {
-        if (!cancelled) useRunEventStore.getState().hydrate(runId, events);
+        if (cancelled) return;
+        useRunEventStore.getState().hydrate(runId, events);
+        useRuntimeStore.getState().hydrateOutputs(runId, events);
       })
       .catch(() => {
         /* no event-log binding, or the run has no persisted history — no backfill */

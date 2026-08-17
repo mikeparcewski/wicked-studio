@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
 import { api, downloadRunEvidence } from '../api/client.js';
 import type { SessionView, StageKind, UnitStatus, WorkUnit } from '../api/types.js';
@@ -6,7 +6,7 @@ import { executingOrd } from '../api/run-state.js';
 import { useGateStore } from '../store/gates.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { ElicitationPrompt } from './ElicitationPrompt.js';
-import { useRuntimeStore, outputKey } from '../store/runtime.js';
+import { useRuntimeStore, outputKey, type CouncilStatus } from '../store/runtime.js';
 import { STATUS_STYLE } from './RunCard.js';
 import { SteeringGate } from './SteeringGate.js';
 import { ChatInput } from './ChatInput.js';
@@ -43,17 +43,17 @@ function cliInitials(key: string): string {
 }
 
 /**
- * Live council deliberation status for a pending unit, derived from the
+ * Live council deliberation status for a not-yet-started unit, derived from the
  * councilConvened / councilSeatFailed / councilDeliberated (below-bar runoff) / councilVoted
- * frames.
+ * frames. Rendered as the queued phase's stepper tooltip (operator UX directive: routing
+ * chatter for future work belongs in the stepper, not as standalone thread blocks).
  *
- * Seats that failed are shown alongside the agreement percentage, not instead of it. A council
+ * Seats that failed are named alongside the agreement percentage, not instead of it. A council
  * that convened three seats and heard from one still reports 100% agreement — true of the votes
  * cast, and misleading on its own.
  */
-function CouncilDeliberation({ runId, ord }: { runId: string; ord: number }): React.ReactElement {
-  const status = useRuntimeStore((s) => s.councilStatus[`${runId}:${ord}`]);
-  const label = !status
+function councilLabel(status: CouncilStatus | undefined): string {
+  const line = !status
     ? 'Council deliberating…'
     : status.state === 'convened'
       ? `Council convened — polling ${status.clis?.length ?? '?'} CLI${(status.clis?.length ?? 0) === 1 ? '' : 's'}…`
@@ -61,26 +61,115 @@ function CouncilDeliberation({ runId, ord }: { runId: string; ord: number }): Re
         ? `Ballot ${status.round ?? '?'}: ${status.agreementPct ?? '?'}% — below the ${status.neededPct ?? 75}% bar, runoff in progress…`
         : `Council voted — ${status.agreementPct ?? '?'}% agreement (${status.votes ?? '?'} votes)`;
   const failed = status?.failedSeats ?? [];
+  if (failed.length === 0) return line;
+  // `why` is CRLF-normalized in the store, so a Windows seat's stderr does not put stray
+  // carriage returns into the tooltip.
+  return `${line}\n${failed.length} seat${failed.length === 1 ? '' : 's'} did not vote — ${failed
+    .map((f) => `${f.cli} (${f.kind})`)
+    .join(', ')}`;
+}
+
+/** One line of routing provenance for a phase's stepper tooltip. */
+function routingSummary(unit: WorkUnit): string | null {
+  if (unit.routing === null) return unit.assigned_cli ? `→ ${unit.assigned_cli}` : null;
+  switch (unit.routing.method) {
+    case 'council':
+      return `Council → ${unit.assigned_cli ?? '?'} · ${quorumLabel(unit.routing)} · ${
+        unit.routing.agreement_pct
+      }% agree · ${unit.routing.dissent} dissent${lostQuorum(unit.routing) ? ' · quorum lost' : ''}`;
+    case 'evaluator_distinct':
+      return `Evaluator-distinct → ${unit.assigned_cli ?? '?'} (was: ${unit.routing.was})`;
+    case 'degraded':
+      return `Degraded routing: ${unit.routing.reason}`;
+    default:
+      return unit.assigned_cli ? `→ ${unit.assigned_cli}` : null;
+  }
+}
+
+/** A phase's place in the run: finished, judged-and-rejected, running now, or still to come. */
+type StepState = 'done' | 'rejected' | 'active' | 'queued';
+
+const STEP_STYLE: Record<StepState, { color: string; background: string; border: string }> = {
+  done:     { color: '#3fb950',               background: 'rgba(63,185,80,0.1)',   border: '1px solid rgba(63,185,80,0.25)' },
+  rejected: { color: '#f85149',               background: 'rgba(248,81,73,0.1)',   border: '1px solid rgba(248,81,73,0.3)' },
+  active:   { color: '#ffda19',               background: 'rgba(255,218,25,0.12)', border: '1px solid rgba(255,218,25,0.35)' },
+  queued:   { color: 'rgba(230,237,243,0.3)', background: 'transparent',           border: '1px solid rgba(230,237,243,0.08)' },
+};
+
+/**
+ * Compact process stepper at the top of the run thread (operator UX directive): every phase
+ * of the workflow in ord order — done phases checked, the executing one highlighted, future
+ * ones dimmed. This is the run's map; the conversational timeline below it carries only the
+ * phases that have actually run (or are running), so queued work no longer renders as a
+ * column of tall empty "Not started" blocks. Routing provenance and live council chatter for
+ * a queued phase live here, in the phase's tooltip, until the phase starts.
+ */
+function ProcessStepper({
+  runId,
+  units,
+  executingUnitOrd,
+}: {
+  runId: string;
+  /** Already ord-sorted (the caller's memoized `ordered`). */
+  units: WorkUnit[];
+  executingUnitOrd: number | null;
+}): React.ReactElement | null {
+  const councilStatus = useRuntimeStore((s) => s.councilStatus);
+  if (units.length === 0) return null;
   return (
     <div
-      className="flex flex-col gap-1 text-xs font-mono rounded-lg px-3 py-2"
-      style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)', color: '#a78bfa' }}
+      data-testid="process-stepper"
+      aria-label="Workflow phases"
+      className="flex items-center gap-1.5 flex-wrap px-6 py-2.5 shrink-0 font-mono text-[11px]"
+      style={{ borderBottom: '1px solid rgba(230,237,243,0.05)', background: '#161c26' }}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className={`inline-block w-1.5 h-1.5 rounded-full ${status?.state === 'voted' ? '' : 'animate-pulse'}`}
-          style={{ background: '#a78bfa' }}
-        />
-        <span>{label}</span>
-      </div>
-      {failed.length > 0 && (
-        // `why` is CRLF-normalized in the store, so a Windows seat's stderr does not put stray
-        // carriage returns into the tooltip.
-        <div className="pl-3.5" style={{ color: '#fca5a5' }} title={failed.map((f) => `${f.cli}: ${f.why}`).join('\n')}>
-          {failed.length} seat{failed.length === 1 ? '' : 's'} did not vote —{' '}
-          {failed.map((f) => `${f.cli} (${f.kind})`).join(', ')}
-        </div>
-      )}
+      {units.map((unit, i) => {
+        const state: StepState =
+          unit.status === 'done'
+            ? 'done'
+            : unit.status === 'rejected'
+              ? 'rejected'
+              : unit.ord === executingUnitOrd
+                ? 'active'
+                : 'queued';
+        const live = councilStatus[`${runId}:${unit.ord}`];
+        const tooltip = [
+          unit.description,
+          routingSummary(unit),
+          // Live deliberation chatter only matters while the phase has not produced anything
+          // else to look at; once it starts, the phase entry in the thread takes over.
+          state === 'queued' && unit.status === 'pending' ? councilLabel(live) : null,
+        ]
+          .filter((line): line is string => line !== null && line.length > 0)
+          .join('\n');
+        const s = STEP_STYLE[state];
+        return (
+          <Fragment key={unit.id}>
+            {i > 0 && (
+              <span aria-hidden="true" style={{ color: 'rgba(230,237,243,0.15)' }}>
+                ›
+              </span>
+            )}
+            <span
+              data-testid={`stepper-phase-${unit.ord}`}
+              data-state={state}
+              title={tooltip}
+              className="rounded-full px-2.5 py-0.5 flex items-center gap-1.5 whitespace-nowrap"
+              style={{ background: s.background, border: s.border, color: s.color }}
+            >
+              {state === 'done' && <span aria-hidden="true">✓</span>}
+              {state === 'rejected' && <span aria-hidden="true">✗</span>}
+              {state === 'active' && (
+                <span
+                  className="inline-block w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
+                  style={{ background: '#ffda19' }}
+                />
+              )}
+              {phaseName(runId, unit)}
+            </span>
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
@@ -97,7 +186,7 @@ const NARRATION_TAIL = 4096;
  * worker never grows the thread's DOM unbounded (the store keeps its own
  * larger cap for the full-output consumers).
  */
-function LiveNarration({ runId, ord }: { runId: string; ord: number }): React.ReactElement {
+function LiveNarration({ runId, ord, phase }: { runId: string; ord: number; phase: string }): React.ReactElement {
   const live = useRuntimeStore((s) => s.outputs[outputKey(runId, ord)]);
   const [visible, setVisible] = useState(true);
   const scrollRef = useRef<HTMLPreElement>(null);
@@ -116,6 +205,8 @@ function LiveNarration({ runId, ord }: { runId: string; ord: number }): React.Re
     <div data-testid={`live-narration-${ord}`}>
       <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>
         <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#79c0ff' }} />
+        {/* Phase label leads the entry (operator UX directive) — mirrors the done-unit header. */}
+        <span className="font-medium" style={{ color: '#79c0ff' }}>{phase}</span>
         <span>{hasText ? 'Working — live output' : 'Working…'}</span>
         {hasText && (
           <button
@@ -619,10 +710,22 @@ function RunChat({
   // happen per unit, each call re-sorting the plan from inside the loop (PR #179 review).
   const ordered = useMemo(() => [...units].sort((a, b) => a.ord - b.ord), [units]);
   const executingUnitOrd = useMemo(() => executingOrd(session, units), [session, units]);
+  // The conversational timeline holds ONLY phases that have run or are running (rejected counts:
+  // it ran far enough to be judged). Future work is the stepper's job — a queued unit used to
+  // render one tall, empty "Not started" block per phase, which is what the operator flagged.
+  const timeline = useMemo(
+    () =>
+      ordered.filter(
+        (u) =>
+          u.status === 'done' ||
+          u.status === 'rejected' ||
+          (u.status === 'distributed' && u.ord === executingUnitOrd),
+      ),
+    [ordered, executingUnitOrd],
+  );
   const gate = useGateStore((s) => s.gates[session.id]);
   const elicitation = useElicitationStore((s) => s.elicitations[session.id]);
   const log = useRuntimeStore((s) => s.logs[session.id]) ?? [];
-  const executorTypes = useRuntimeStore((s) => s.executorTypes);
   /** "all" broadcasts; any other value is a CLI key (set by clicking an agent card). */
   const [injectTarget, setInjectTarget] = useState<string>('all');
   const terminalIds = useRuntimeStore((s) => s.terminalIds);
@@ -636,7 +739,7 @@ function RunChat({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [units.length, log.length]);
+  }, [timeline.length, log.length]);
 
   useEffect(() => {
     for (const unit of units) {
@@ -733,6 +836,10 @@ function RunChat({
         )}
       </div>
 
+      {/* Process stepper — the run's map: every phase, in order, with its state at a glance.
+          The timeline below renders only the phases that have entered the conversation. */}
+      <ProcessStepper runId={session.id} units={ordered} executingUnitOrd={executingUnitOrd} />
+
       {/* Message thread */}
       <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-6 max-w-3xl w-full mx-auto">
         {/* An open MCP elicitation suspends the agent's turn, so it leads the stream (DES-002).
@@ -754,8 +861,9 @@ function RunChat({
           </div>
         </div>
 
-        {/* Unit messages — gate panel injected inline before the unit it blocks */}
-        {ordered.flatMap((unit) => {
+        {/* Phase entries — only phases that have run or are running; gate panel injected
+            inline before the unit it blocks when that unit has already entered the thread */}
+        {timeline.flatMap((unit) => {
           const tc = transcripts[unit.ord];
           const stageBadge = STAGE_BADGE[unit.stage] ?? { bg: 'rgba(230,237,243,0.08)', color: 'rgba(230,237,243,0.5)' };
           const gateBeforeThis = session.status === 'awaiting_human' && gate?.ord === unit.ord;
@@ -861,16 +969,11 @@ function RunChat({
                   className="rounded-2xl px-5 py-4"
                   style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
                 >
-                  {unit.status === 'distributed' && unit.ord === executingUnitOrd && (
-                    <LiveNarration runId={session.id} ord={unit.ord} />
-                  )}
-                  {/* Routed but not dispatched. `isTerminal` used to be the test here, which made
-                      every queued unit of a merely PAUSED run claim to be working (FINDING-052). */}
-                  {unit.status === 'distributed' && unit.ord !== executingUnitOrd && (
-                    <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
-                      <span>—</span>
-                      <span>Not started</span>
-                    </div>
+                  {/* A `distributed` unit is in the timeline ONLY as the cursor unit of an
+                      executing run (FINDING-052: distributed = routed, not running — queued
+                      units live in the stepper now, never as thread blocks). */}
+                  {unit.status === 'distributed' && (
+                    <LiveNarration runId={session.id} ord={unit.ord} phase={phaseName(session.id, unit)} />
                   )}
                   {unit.status === 'done' && (
                     <div data-testid={`unit-output-${unit.ord}`}>
@@ -907,22 +1010,6 @@ function RunChat({
                       Rejected{unit.denial_reason ? `: ${unit.denial_reason}` : ''}
                     </div>
                   )}
-                  {unit.status === 'pending' && (() => {
-                    // Unknown executor type (late join — unitPlanned fired before the WS
-                    // connected, and there is no replay) defaults to agent: council units
-                    // dominate, and tool units correct themselves on the next live frame.
-                    const executorType = executorTypes[`${session.id}:${unit.ord}`];
-                    const isAgent = executorType ? executorType === 'agent' : true;
-                    return isAgent ? (
-                      <CouncilDeliberation runId={session.id} ord={unit.ord} />
-                    ) : (
-                      <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
-                        <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(230,237,243,0.2)' }} />
-                        <span>Queued</span>
-                      </div>
-                    );
-                  })()}
-
                 </div>
               </div>
             </div>
@@ -974,8 +1061,11 @@ function RunChat({
           );
         })}
 
-        {/* Steering gate — fallback position when gate.ord doesn't match any planned unit */}
-        {session.status === 'awaiting_human' && !units.some((u) => gate?.ord === u.ord) && (
+        {/* Steering gate — fallback position when the gated unit has no timeline entry. This is
+            now the COMMON path: awaiting_human pauses BEFORE a not-yet-started unit, and queued
+            units no longer render as thread blocks, so the card lands here — after everything
+            that has already run, which is exactly where the pause chronologically is. */}
+        {session.status === 'awaiting_human' && !timeline.some((u) => gate?.ord === u.ord) && (
           <div className="self-center w-full max-w-lg">
             <SteeringGate
               runId={session.id}

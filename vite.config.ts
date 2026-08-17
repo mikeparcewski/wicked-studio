@@ -13,6 +13,8 @@ export default defineConfig({
     // Playwright suite (site/tests/e2e, run by the Site E2E workflow).
     // Without this, vitest's default include sweeps those *.spec.ts files
     // and fails resolving @playwright/test (installed only under site/).
-    exclude: [...configDefaults.exclude, 'site/**'],
+    // wicked-worktrees/ holds governed-run worktrees (gitignored checkouts a
+    // crew run makes INSIDE this repo) — same sweep problem, foreign suites.
+    exclude: [...configDefaults.exclude, 'site/**', 'wicked-worktrees/**'],
   },
 });
