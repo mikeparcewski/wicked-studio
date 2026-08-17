@@ -195,8 +195,13 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       const seq = s.seq + 1;
 
       // Live output delta -> append to the (run, unit) buffer (§11.4).
+      // `unitOutputDelta` is the delta-relay spelling of the same frame (see the
+      // temporary UnitOutputDeltaEvent extension in api/types.ts): identical
+      // append semantics, one shared buffer, so ChatPanel's live narration and
+      // the older LiveOutput consumers read the same text whichever frame the
+      // daemon emits.
       if (
-        event.type === 'cliOutputDelta' &&
+        (event.type === 'cliOutputDelta' || event.type === 'unitOutputDelta') &&
         typeof event.ord === 'number' &&
         typeof event.chunk === 'string'
       ) {

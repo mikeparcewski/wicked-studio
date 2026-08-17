@@ -7,8 +7,9 @@ import type { CoreEvent } from '../api/types.js';
  * a summarized event log): this keeps the *structured* frames the insight merge needs —
  * lifecycle + the Phase-B insight events — so the merge stays a pure function of them.
  *
- * `cliOutputDelta` (streamed by the runtime store into `outputs`) and heartbeats are
- * dropped here — they carry no structured insight and would flood the buffer.
+ * `cliOutputDelta` / `unitOutputDelta` (streamed by the runtime store into `outputs`)
+ * and heartbeats are dropped here — they carry no structured insight and would flood
+ * the buffer.
  */
 
 /**
@@ -22,7 +23,7 @@ import type { CoreEvent } from '../api/types.js';
  */
 const CAP = 50000;
 
-const IGNORED: ReadonlySet<string> = new Set(['cliOutputDelta', 'heartbeat']);
+const IGNORED: ReadonlySet<string> = new Set(['cliOutputDelta', 'unitOutputDelta', 'heartbeat']);
 
 interface RunEventStore {
   /** Ordered, capped structured frames keyed by run id. */

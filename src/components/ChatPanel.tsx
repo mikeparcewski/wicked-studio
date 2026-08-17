@@ -85,19 +85,61 @@ function CouncilDeliberation({ runId, ord }: { runId: string; ord: number }): Re
   );
 }
 
-/** Shows the last few lines of live ACP output while a unit is executing. */
-function LiveOutputPreview({ runId, ord }: { runId: string; ord: number }): React.ReactElement | null {
+/** Trailing window of live narration rendered per unit (~4KB). */
+const NARRATION_TAIL = 4096;
+
+/**
+ * Live narration for the ACTIVE unit — the streamed `unitOutputDelta` /
+ * `cliOutputDelta` text from the `/ws` CoreEvent stream (accumulated by the
+ * runtime store into `outputs`), rendered inside the unit's block in place of
+ * the old empty "Working…" wait. Collapsible, autoscrolled to the newest text,
+ * and windowed to the trailing ~{@link NARRATION_TAIL} bytes so a chatty
+ * worker never grows the thread's DOM unbounded (the store keeps its own
+ * larger cap for the full-output consumers).
+ */
+function LiveNarration({ runId, ord }: { runId: string; ord: number }): React.ReactElement {
   const live = useRuntimeStore((s) => s.outputs[outputKey(runId, ord)]);
-  if (!live) return null;
-  // Show the trailing 800 chars so the display stays compact.
-  const tail = live.length > 800 ? '…' + live.slice(live.length - 800) : live;
+  const [visible, setVisible] = useState(true);
+  const scrollRef = useRef<HTMLPreElement>(null);
+
+  // Pin the narration viewport to the newest text as chunks stream in.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [live, visible]);
+
+  const hasText = typeof live === 'string' && live.length > 0;
+  const tail =
+    hasText && live.length > NARRATION_TAIL ? '…' + live.slice(live.length - NARRATION_TAIL) : live;
+
   return (
-    <pre
-      className="mt-2 max-h-48 overflow-auto rounded-lg p-2 text-[10px] leading-snug whitespace-pre-wrap font-mono"
-      style={{ background: 'rgba(13,17,23,0.6)', color: 'rgba(230,237,243,0.65)', border: '1px solid rgba(230,237,243,0.06)' }}
-    >
-      {tail}
-    </pre>
+    <div data-testid={`live-narration-${ord}`}>
+      <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>
+        <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#79c0ff' }} />
+        <span>{hasText ? 'Working — live output' : 'Working…'}</span>
+        {hasText && (
+          <button
+            type="button"
+            data-testid={`live-narration-toggle-${ord}`}
+            onClick={() => setVisible((v) => !v)}
+            className="ml-auto text-xs font-medium font-mono hover:underline"
+            style={{ color: '#79c0ff' }}
+          >
+            {visible ? '▾ Hide live output' : '▸ Show live output'}
+          </button>
+        )}
+      </div>
+      {hasText && visible && (
+        <pre
+          ref={scrollRef}
+          data-testid={`live-narration-text-${ord}`}
+          className="mt-2 max-h-64 overflow-auto rounded-lg p-2.5 text-[11px] leading-snug whitespace-pre-wrap break-words font-mono"
+          style={{ background: 'rgba(13,17,23,0.6)', color: 'rgba(230,237,243,0.65)', border: '1px solid rgba(230,237,243,0.06)' }}
+        >
+          {tail}
+        </pre>
+      )}
+    </div>
   );
 }
 
@@ -820,13 +862,7 @@ function RunChat({
                   style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
                 >
                   {unit.status === 'distributed' && unit.ord === executingUnitOrd && (
-                    <div>
-                      <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>
-                        <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#79c0ff' }} />
-                        <span>Working…</span>
-                      </div>
-                      <LiveOutputPreview runId={session.id} ord={unit.ord} />
-                    </div>
+                    <LiveNarration runId={session.id} ord={unit.ord} />
                   )}
                   {/* Routed but not dispatched. `isTerminal` used to be the test here, which made
                       every queued unit of a merely PAUSED run claim to be working (FINDING-052). */}

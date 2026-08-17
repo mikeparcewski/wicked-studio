@@ -25,6 +25,31 @@ describe('runtime store (§11.4 — live output + per-run event log)', () => {
     expect(useRuntimeStore.getState().outputs[outputKey('run-1', 1)]).toBe('B');
   });
 
+  // The delta-relay spelling of the live-output frame (unitOutputDelta) folds into the SAME
+  // per-(run, unit) buffer as cliOutputDelta — one buffer, whichever frame the daemon emits.
+  it('accumulates unitOutputDelta into the same buffer as cliOutputDelta', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'unitOutputDelta', session: 'run-1', ord: 0, chunk: 'hello ' } as CoreEvent);
+    ingest({ type: 'unitOutputDelta', session: 'run-1', ord: 0, chunk: 'relay' } as CoreEvent);
+    expect(useRuntimeStore.getState().outputs[outputKey('run-1', 0)]).toBe('hello relay');
+    // Interleaved spellings still append in arrival order.
+    ingest(delta('run-1', 0, '!'));
+    expect(useRuntimeStore.getState().outputs[outputKey('run-1', 0)]).toBe('hello relay!');
+  });
+
+  it('does not log unitOutputDelta frames (high-volume, stream-only)', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'unitOutputDelta', session: 'run-1', ord: 0, chunk: 'noise' } as CoreEvent);
+    expect(useRuntimeStore.getState().logs['run-1']).toBeUndefined();
+  });
+
+  it('ignores a unitOutputDelta with no ord or no chunk', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'unitOutputDelta', session: 'run-1', chunk: 'x' } as CoreEvent);
+    ingest({ type: 'unitOutputDelta', session: 'run-1', ord: 0 } as CoreEvent);
+    expect(Object.keys(useRuntimeStore.getState().outputs)).toHaveLength(0);
+  });
+
   it('logs lifecycle frames to the per-run log but NOT output deltas', () => {
     const ingest = useRuntimeStore.getState().ingest;
     ingest({ type: 'unitDistributed', session: 'run-1', ord: 0, cli: 'claude' } as CoreEvent);
