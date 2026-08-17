@@ -1,0 +1,257 @@
+// Unit tests for src/api/interactive.ts — DES-MERGE-001 slice 2.
+//
+// Three concerns, one per AC:
+//   1. Resolver: every URL derives from apiBase() and sits under
+//      /api/v1/projects/<id>/interactive/ — no second origin, no port literal.
+//   2. A 503 {code:"bridge_unavailable", hint} rejects with BridgeUnavailableError
+//      carrying the hint verbatim (§7.12 — the UI must show something actionable).
+//   3. Happy path: each wrapper hits the right method/path/body and returns the
+//      declared shape, pinned against the bridge's real responses.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  BridgeUnavailableError,
+  createDoc,
+  getSources,
+  getVersions,
+  interactiveUrl,
+  listDocs,
+  postEvent,
+  postExport,
+  postFork,
+} from '../src/api/interactive.js';
+import { apiBase } from '../src/api/client.js';
+
+/** Point jsdom's window.location at an arbitrary origin (as client.resolver does). */
+function setLocation(url: string): void {
+  Object.defineProperty(window, 'location', {
+    value: new URL(url),
+    writable: true,
+    configurable: true,
+  });
+}
+
+interface Call { url: string; init: RequestInit | undefined }
+
+/** Stub fetch with a fixed response; returns the log of calls it received. */
+function stubFetch(body: unknown, status = 200): Call[] {
+  const calls: Call[] = [];
+  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    return Promise.resolve({
+      ok: status >= 200 && status < 300,
+      status,
+      statusText: String(status),
+      text: () => Promise.resolve(JSON.stringify(body)),
+      json: () => Promise.resolve(body),
+    });
+  }));
+  return calls;
+}
+
+const PROJECT = 'proj-abc-123';
+const DOC = 'q3-report';
+
+/** Prod default: same-origin, no dev split. */
+function prodOrigin(): void {
+  vi.stubEnv('VITE_API_HOST', '');
+  setLocation('http://127.0.0.1:7788/');
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+// ── 1. URL resolver ─────────────────────────────────────────────────────────
+
+describe('interactive URL resolver', () => {
+  /** One entry per wrapper: a plausible response body and the call to make. */
+  const CASES: Array<[name: string, body: unknown, call: () => Promise<unknown>]> = [
+    ['listDocs',   [],                                 () => listDocs(PROJECT)],
+    ['getVersions', { head: 0, versions: [] },         () => getVersions(PROJECT, DOC)],
+    ['createDoc',  { name: DOC, head: 0 },             () => createDoc(PROJECT, { name: DOC })],
+    ['postFork',   { version: 1, parent: 0 },          () => postFork(PROJECT, DOC, 0)],
+    ['postExport', { format: 'pdf', path: '/tmp/a.pdf', file: 'a.pdf', download: '/d/x/api/export/file/a.pdf' },
+                                                       () => postExport(PROJECT, DOC, 1, 'pdf')],
+    ['getSources', { sources: [] },                    () => getSources(PROJECT, DOC)],
+    ['postEvent',  { ok: true, event_id: 'e1', correlation_id: 'c1' },
+                                                       () => postEvent(PROJECT, { event_type: 'wicked.interactive.chat.posted' })],
+  ];
+
+  describe('prod (same-origin)', () => {
+    beforeEach(prodOrigin);
+
+    it.each(CASES)('%s: URL derives from apiBase() under the project-scoped mount', async (_name, body, call) => {
+      const calls = stubFetch(body);
+      await call();
+      const url = calls[0]!.url;
+      expect(url.startsWith(apiBase())).toBe(true);
+      expect(url).toContain(`/api/v1/projects/${PROJECT}/interactive/`);
+    });
+
+    it.each(CASES)('%s: nothing beyond apiBase() carries an origin or a port', async (_name, body, call) => {
+      const calls = stubFetch(body);
+      await call();
+      // Strip the resolver's own prefix; what remains must be a bare path —
+      // no scheme, no `host:port`, and specifically never the bridge's 4400+.
+      const tail = calls[0]!.url.slice(apiBase().length);
+      expect(tail).not.toContain('://');
+      expect(tail).not.toMatch(/:\d/);
+      expect(calls[0]!.url).not.toContain('4400');
+    });
+  });
+
+  it('dev split: VITE_API_HOST wins over window.location, for interactive too', async () => {
+    vi.stubEnv('VITE_API_HOST', '127.0.0.1:7701');
+    setLocation('http://127.0.0.1:4200/'); // the vite dev server origin
+    const calls = stubFetch([]);
+    await listDocs(PROJECT);
+    expect(calls[0]!.url).toBe(
+      `http://127.0.0.1:7701/api/v1/projects/${PROJECT}/interactive/api/docs`,
+    );
+    expect(calls[0]!.url).not.toContain(':4200');
+    expect(calls[0]!.url).not.toContain('4400');
+  });
+
+  it('interactiveUrl resolves a bridge-relative download through the proxy', () => {
+    prodOrigin();
+    expect(interactiveUrl(PROJECT, '/d/q3-report/api/export/file/a.pdf')).toBe(
+      `${apiBase()}/projects/${PROJECT}/interactive/d/q3-report/api/export/file/a.pdf`,
+    );
+    // Tolerates a path the bridge handed back without its leading slash.
+    expect(interactiveUrl(PROJECT, 'doc/1')).toBe(
+      `${apiBase()}/projects/${PROJECT}/interactive/doc/1`,
+    );
+  });
+
+  it('project and doc ids are encoded, not interpolated raw', async () => {
+    prodOrigin();
+    const calls = stubFetch({ head: 0, versions: [] });
+    await getVersions('proj/../evil', 'doc name');
+    expect(calls[0]!.url).toContain('/projects/proj%2F..%2Fevil/interactive/');
+    expect(calls[0]!.url).toContain('/d/doc%20name/api/versions');
+  });
+});
+
+// ── 2. BridgeUnavailableError (§7.12) ───────────────────────────────────────
+
+describe('BridgeUnavailableError', () => {
+  beforeEach(prodOrigin);
+
+  it('a 503 bridge_unavailable rejects with the typed error', async () => {
+    stubFetch({ code: 'bridge_unavailable', hint: 'npm i -g wicked-interactive' }, 503);
+    await expect(listDocs(PROJECT)).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
+  it('carries the hint verbatim so the UI can render it', async () => {
+    const hint = 'run: npm i -g wicked-interactive && wicked-crew restart';
+    stubFetch({ code: 'bridge_unavailable', hint }, 503);
+    const err = await listDocs(PROJECT).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BridgeUnavailableError);
+    expect((err as BridgeUnavailableError).hint).toBe(hint);
+    // The hint is reachable from `message` too, for bare error-boundary renders.
+    expect((err as BridgeUnavailableError).message).toContain(hint);
+  });
+
+  it('applies to every wrapper, not just the read path', async () => {
+    stubFetch({ code: 'bridge_unavailable', hint: 'install it' }, 503);
+    await expect(postExport(PROJECT, DOC, 1, 'pdf')).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
+  it('a 503 without the bridge shape stays a generic Error', async () => {
+    stubFetch({ error: 'service overloaded' }, 503);
+    const err = await listDocs(PROJECT).catch((e: unknown) => e);
+    expect(err).not.toBeInstanceOf(BridgeUnavailableError);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe('API 503: service overloaded');
+  });
+
+  it("surfaces the bridge's {error} message on ordinary failures", async () => {
+    stubFetch({ error: 'doc already exists' }, 409);
+    await expect(createDoc(PROJECT, { name: DOC })).rejects.toThrow('API 409: doc already exists');
+  });
+});
+
+// ── 3. Happy path — methods, bodies, shapes ─────────────────────────────────
+
+describe('happy-path shapes', () => {
+  beforeEach(prodOrigin);
+
+  it('listDocs returns the registry array as-is', async () => {
+    const docs = [{ name: DOC, kind: 'doc', head: 3, versions: 4, updated_at: '2026-08-17T00:00:00Z' }];
+    stubFetch(docs);
+    await expect(listDocs(PROJECT)).resolves.toEqual(docs);
+  });
+
+  it('getVersions returns the manifest (head + lineage)', async () => {
+    const manifest = {
+      head: 1,
+      versions: [
+        { version: 0, parent: null, feedback_file: null, html_file: '_v0.html', created_at: '2026-08-17T00:00:00Z' },
+        { version: 1, parent: 0, feedback_file: '_v1.md', html_file: '_v1.html', created_at: '2026-08-17T01:00:00Z' },
+      ],
+    };
+    stubFetch(manifest);
+    await expect(getVersions(PROJECT, DOC)).resolves.toEqual(manifest);
+  });
+
+  it('createDoc POSTs the body as JSON and returns the created doc', async () => {
+    const created = { name: DOC, head: 0, generating: true };
+    const calls = stubFetch(created);
+    const body = { name: DOC, kind: 'source' as const, source_paths: ['/data.csv'], brief: 'Q3' };
+    await expect(createDoc(PROJECT, body)).resolves.toEqual(created);
+    expect(calls[0]!.init?.method).toBe('POST');
+    expect(calls[0]!.init?.body).toBe(JSON.stringify(body));
+    expect(calls[0]!.init?.headers).toMatchObject({ 'Content-Type': 'application/json' });
+  });
+
+  it('postFork sends {from} — the bridge names it that, not "version"', async () => {
+    const calls = stubFetch({ version: 4, parent: 3 });
+    await expect(postFork(PROJECT, DOC, 3)).resolves.toEqual({ version: 4, parent: 3 });
+    expect(calls[0]!.init?.body).toBe(JSON.stringify({ from: 3 }));
+  });
+
+  it('postExport sends {version, format} and returns the download URL', async () => {
+    const result = {
+      format: 'pdf',
+      path: '/home/u/docs/q3-report/_v3.pdf',
+      file: '_v3.pdf',
+      download: '/d/q3-report/api/export/file/_v3.pdf',
+    };
+    const calls = stubFetch(result);
+    await expect(postExport(PROJECT, DOC, 3, 'pdf')).resolves.toEqual(result);
+    expect(calls[0]!.init?.body).toBe(JSON.stringify({ version: 3, format: 'pdf' }));
+  });
+
+  it('getSources unwraps {sources} into the entry list', async () => {
+    const sources = [{
+      path: '/home/u/data.csv', note: '', status: 'indexed',
+      added_at: '2026-08-17T00:00:00Z', indexed_at: '2026-08-17T00:01:00Z',
+    }];
+    stubFetch({ sources });
+    await expect(getSources(PROJECT, DOC)).resolves.toEqual(sources);
+  });
+
+  it('postEvent posts {event_type, payload} to the top-level bus route', async () => {
+    const ack = { ok: true, event_id: 'evt-1', correlation_id: 'corr-1' };
+    const calls = stubFetch(ack);
+    await expect(postEvent(PROJECT, {
+      event_type: 'wicked.interactive.review.requested',
+      payload: { document_id: DOC, reviewers: ['a11y'] },
+    })).resolves.toEqual(ack);
+    // Top-level: the bus stream is shared across docs, so no /d/<id> prefix.
+    expect(calls[0]!.url).toBe(`${apiBase()}/projects/${PROJECT}/interactive/api/events`);
+    expect(calls[0]!.init?.body).toBe(JSON.stringify({
+      event_type: 'wicked.interactive.review.requested',
+      payload: { document_id: DOC, reviewers: ['a11y'] },
+    }));
+  });
+
+  it('postEvent defaults a missing payload to {} (the bridge requires the field)', async () => {
+    const calls = stubFetch({ ok: true, event_id: 'e', correlation_id: 'c' });
+    await postEvent(PROJECT, { event_type: 'wicked.interactive.status.requested' });
+    expect(calls[0]!.init?.body).toBe(JSON.stringify({
+      event_type: 'wicked.interactive.status.requested', payload: {},
+    }));
+  });
+});
