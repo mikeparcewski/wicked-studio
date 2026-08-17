@@ -12,7 +12,7 @@ import type { CoreEvent } from '../src/api/types.js';
 import { makeView, makeUnit } from './factories.js';
 
 const relayDelta = (session: string, ord: number, chunk: string): CoreEvent =>
-  ({ type: 'unitOutputDelta', session, ord, chunk } as CoreEvent);
+  ({ type: 'unitOutputDelta', session, ord, attempt: 0, text: chunk } as CoreEvent);
 
 /** An executing run whose cursor (unit_ix 0) sits on a distributed unit at ord 0. */
 function executingView(extraUnits: ReturnType<typeof makeUnit>[] = []): ReturnType<typeof makeView> {

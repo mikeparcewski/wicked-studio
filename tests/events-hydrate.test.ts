@@ -17,7 +17,7 @@ describe('FINDING-013: run-event hydration', () => {
     const persisted: CoreEvent[] = [
       usage('run1', 100),
       { type: 'cliOutputDelta', session: 'run1', text: 'noise' } as unknown as CoreEvent,
-      { type: 'unitOutputDelta', session: 'run1', ord: 0, chunk: 'noise' } as unknown as CoreEvent,
+      { type: 'unitOutputDelta', session: 'run1', ord: 0, text: 'noise' } as unknown as CoreEvent,
     ];
     useRunEventStore.getState().hydrate('run1', persisted);
     const frames = useRunEventStore.getState().byRun['run1'] ?? [];

@@ -13,26 +13,3 @@
  */
 
 export type * from 'wicked-crew-api-types';
-
-// ── Temporary local extension (delta relay) ──────────────────────────────────
-//
-// TODO(wicked-crew-api-types@0.5.1): the delta-relay contract is not published
-// yet — the local crew checkout's `feat/delta-relay` still packs 0.5.0, which
-// is byte-identical to the registry 0.5.0 this package.json pins. Once 0.5.1
-// lands with `UnitOutputDeltaEvent` in the shared contract, DELETE this local
-// definition and re-export it from 'wicked-crew-api-types' like everything
-// else above (drift risk lives exactly here — task #84 is why this file is
-// otherwise a pure re-export).
-
-/**
- * Live narration delta for one unit — streamed text from the active worker,
- * relayed verbatim over `/ws`. Same append semantics as `cliOutputDelta`
- * (high-volume, excluded from the durable event log, so there is no replay:
- * a late-joining client starts from the next chunk).
- */
-export interface UnitOutputDeltaEvent {
-  type: 'unitOutputDelta';
-  session: string;
-  ord: number;
-  chunk: string;
-}

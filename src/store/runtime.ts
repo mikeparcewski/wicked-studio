@@ -200,14 +200,17 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       // append semantics, one shared buffer, so ChatPanel's live narration and
       // the older LiveOutput consumers read the same text whichever frame the
       // daemon emits.
-      if (
-        (event.type === 'cliOutputDelta' || event.type === 'unitOutputDelta') &&
-        typeof event.ord === 'number' &&
-        typeof event.chunk === 'string'
-      ) {
+      // unitOutputDelta carries `text` (shared contract 0.5.1); cliOutputDelta carries `chunk`.
+      const deltaText =
+        event.type === 'unitOutputDelta' && typeof event.text === 'string'
+          ? event.text
+          : event.type === 'cliOutputDelta' && typeof event.chunk === 'string'
+            ? event.chunk
+            : null;
+      if (deltaText !== null && typeof event.ord === 'number') {
         const key = outputKey(session, event.ord);
         const prev = s.outputs[key] ?? '';
-        let combined = prev + event.chunk;
+        let combined = prev + deltaText;
         if (combined.length > OUTPUT_CAP) combined = combined.slice(combined.length - OUTPUT_CAP);
         return { seq, outputs: { ...s.outputs, [key]: combined } };
       }
