@@ -82,6 +82,58 @@ describe('runtime store (§11.4 — live output + per-run event log)', () => {
     expect(log[0]).toMatchObject({ type: 'crashRecoveryRedrive', detail: 'attempt 3', attempt: 3 });
   });
 
+  // hydrateOutputs: the late-join replay for `outputs`. /ws has no replay, so a page opened
+  // after a unit started never saw the already-streamed text (the run-thread render gap) —
+  // the persisted trail (GET /runs/:id/events) backfills it, per-key guarded against
+  // double-counting frames the live socket already appended.
+  describe('hydrateOutputs (persisted-trail backfill)', () => {
+    const relay = (session: string, ord: number, text: string): CoreEvent =>
+      ({ type: 'unitOutputDelta', session, ord, attempt: 0, text } as CoreEvent);
+
+    it('folds persisted deltas (both spellings) into the per-(run, unit) buffers', () => {
+      useRuntimeStore.getState().hydrateOutputs('run-1', [
+        relay('run-1', 1, 'hello '),
+        { type: 'unitDone', session: 'run-1', ord: 1 } as CoreEvent,
+        relay('run-1', 2, 'world'),
+        delta('run-1', 2, '!'),
+      ]);
+      expect(useRuntimeStore.getState().outputs[outputKey('run-1', 1)]).toBe('hello ');
+      expect(useRuntimeStore.getState().outputs[outputKey('run-1', 2)]).toBe('world!');
+    });
+
+    it('never touches a buffer a live frame already started (no double-count, live wins)', () => {
+      useRuntimeStore.getState().ingest(relay('run-1', 2, 'live text'));
+      useRuntimeStore.getState().hydrateOutputs('run-1', [
+        relay('run-1', 1, 'replayed u1'),
+        relay('run-1', 2, 'replayed u2'), // same delta the socket already delivered
+      ]);
+      const { outputs } = useRuntimeStore.getState();
+      expect(outputs[outputKey('run-1', 2)]).toBe('live text');
+      expect(outputs[outputKey('run-1', 1)]).toBe('replayed u1');
+    });
+
+    it('ignores other runs\' frames and non-delta frames', () => {
+      useRuntimeStore.getState().hydrateOutputs('run-1', [
+        relay('run-2', 1, 'someone else'),
+        { type: 'unitExecuting', session: 'run-1', ord: 1 } as CoreEvent,
+        relay('run-1', 1, 'mine'),
+      ]);
+      const { outputs } = useRuntimeStore.getState();
+      expect(outputs[outputKey('run-1', 1)]).toBe('mine');
+      expect(outputs[outputKey('run-2', 1)]).toBeUndefined();
+    });
+
+    it('caps a replayed buffer at the same limit as the live path', () => {
+      useRuntimeStore.getState().hydrateOutputs('run-1', [
+        relay('run-1', 1, 'HEAD-' + 'x'.repeat(250_000) + '-TAIL'),
+      ]);
+      const buf = useRuntimeStore.getState().outputs[outputKey('run-1', 1)] ?? '';
+      expect(buf).toHaveLength(200_000);
+      expect(buf.endsWith('-TAIL')).toBe(true);
+      expect(buf).not.toContain('HEAD-');
+    });
+  });
+
   it('clear() drops a run\'s output and log', () => {
     const ingest = useRuntimeStore.getState().ingest;
     ingest(delta('run-1', 0, 'x'));

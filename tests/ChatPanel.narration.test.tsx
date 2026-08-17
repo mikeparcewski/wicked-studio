@@ -96,7 +96,7 @@ describe('ChatPanel live narration (unitOutputDelta → active unit block)', () 
     expect(text).not.toContain('HEAD-');
   });
 
-  it('shows narration only on the ACTIVE unit — queued distributed units stay "Not started"', () => {
+  it('shows narration only on the ACTIVE unit — queued units get no thread block at all', () => {
     const view = makeView({ status: 'executing', unit_ix: 0 }, [
       makeUnit({ id: 'run-1:u0', ord: 0, status: 'distributed', assigned_cli: 'claude' }),
       makeUnit({ id: 'run-1:u1', ord: 1, status: 'distributed', assigned_cli: 'codex' }),
@@ -109,7 +109,47 @@ describe('ChatPanel live narration (unitOutputDelta → active unit block)', () 
     expect(screen.getByTestId('live-narration-0')).toBeInTheDocument();
     expect(screen.queryByTestId('live-narration-1')).not.toBeInTheDocument();
     expect(screen.queryByText('should not render')).not.toBeInTheDocument();
-    expect(screen.getByText('Not started')).toBeInTheDocument();
+    // The queued phase is the stepper's job now — no tall empty block in the timeline.
+    expect(screen.queryByText('Not started')).not.toBeInTheDocument();
+    expect(screen.getByTestId('stepper-phase-1')).toHaveAttribute('data-state', 'queued');
+  });
+
+  it('streams live text for the real daemon shape: 1-based ords, cursor unit_ix into the ord order', () => {
+    // Mirrors the live governed run: unit 1 done, unit 2 distributed + executing under
+    // unit_ix=1 (a 0-based index into the ord-ordered plan, NOT an ord).
+    const view = makeView({ status: 'executing', unit_ix: 1 }, [
+      makeUnit({ id: 'run-1:clarify', ord: 1, stage: 'recon', status: 'done', assigned_cli: 'claude' }),
+      makeUnit({ id: 'run-1:design', ord: 2, stage: 'recon', status: 'distributed', assigned_cli: 'claude' }),
+      makeUnit({ id: 'run-1:build', ord: 3, stage: 'build', status: 'distributed', assigned_cli: 'claude' }),
+    ]);
+    vi.spyOn(client.api, 'getUnitOutput').mockResolvedValue({ output: 'clarify output' });
+    render(<ChatPanel view={view} onLaunched={vi.fn()} onNavigateBack={vi.fn()} onRefresh={vi.fn()} />);
+    act(() => {
+      useRuntimeStore.getState().ingest(relayDelta('run-1', 2, 'Studying both repos'));
+    });
+    expect(screen.getByTestId('live-narration-text-2')).toHaveTextContent('Studying both repos');
+    // The entry names its phase (the unit-id suffix), not just a status word.
+    expect(screen.getByTestId('live-narration-2')).toHaveTextContent('design');
+    // The queued build phase has no block; the done clarify phase keeps its output entry.
+    expect(screen.queryByTestId('live-narration-3')).not.toBeInTheDocument();
+  });
+
+  it('renders text already hydrated from the persisted trail (late-join reload, no live frame yet)', () => {
+    // The render-gap root cause: /ws has no replay, so a page opened after the unit began
+    // showed a bare "Working…" until the NEXT live delta. hydrateOutputs backfills the buffer
+    // from GET /runs/:id/events; the block must render that text with zero live frames.
+    act(() => {
+      useRuntimeStore.getState().hydrateOutputs('run-1', [
+        relayDelta('run-1', 0, 'recorded before '),
+        relayDelta('run-1', 0, 'the page opened'),
+      ]);
+    });
+    render(
+      <ChatPanel view={executingView()} onLaunched={vi.fn()} onNavigateBack={vi.fn()} onRefresh={vi.fn()} />,
+    );
+    expect(screen.getByTestId('live-narration-text-0')).toHaveTextContent(
+      'recorded before the page opened',
+    );
   });
 
   it('legacy cliOutputDelta frames feed the same narration block', () => {
