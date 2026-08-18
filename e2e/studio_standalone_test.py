@@ -59,6 +59,13 @@ What "independent" means here, and what this script proves end-to-end:
      generation window renders NOTHING while real narration lands, and no
      `status.requested` heartbeat is ever emitted; and a landed version tags the
      message that triggered it (§7.6).
+ 14. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
+     ranked: in one DOM snapshot an executing card carries the breathing 2px
+     `live-edge` element while a gate-waiting card carries a treatment that is
+     present at the same time and different in computed pixels (wider, solid,
+     accent-coloured, unanimated), the run chip inside the executing card carries
+     the same edge, and under prefers-reduced-motion the animation is replaced by
+     a wider solid edge rather than dropped.
 
 The daemon is the ONE thing this repo cannot supply. Point CREW_CLI at a built
 crew CLI entry (`.../packages/crew/dist/cli/index.js`); it defaults to the sibling
@@ -1447,6 +1454,162 @@ try:
     }
     if not report["steps"]["doc_thread"]["ok"]:
         fail("doc_thread_verdict", "slice-10 document-thread assertions did not all hold — see doc_thread")
+
+    # ── 15. Operator UX directive: the live edge on the board ──────────────────
+    # The ACTIVE-WORK signal is a breathing 2px strip along the leading edge of the
+    # element doing work, and the thing that has to hold is the RANKING: a busy card
+    # must be visible without out-shouting a card that needs a human. So both states
+    # are asserted in ONE DOM snapshot, and asserted to be DIFFERENT — same testid,
+    # different state, different computed pixels.
+    #
+    # The gate side is the real daemon (a run genuinely parked on a human gate). The
+    # executing side pins `GET /runs` for ONE run's status word, the same discipline
+    # slice 7 used for its complex gate: the run is real and filed, the payload
+    # travels the full app path (fetch → useRuns → board → card), and the assertion
+    # is about the treatment rather than about whether the stub engine happens to
+    # still be mid-unit when the browser looks.
+    edge_gate = new_project(f"edge-gate-{tag}")
+    attach_run(edge_gate, await_gate(launch("live edge: parks on a gate", "all")))
+    edge_busy = new_project(f"edge-busy-{tag}")
+    edge_busy_run = launch("live edge: executing while the board is watched", "none")
+    attach_run(edge_busy, edge_busy_run)
+
+    def pin_executing(route):
+        """Hold ONE run at `executing` in the run list; pass every other run through."""
+        response = route.fetch()
+        body = response.json()
+        for view in body.get("runs", []):
+            if view["session"]["id"] == edge_busy_run:
+                view["session"]["status"] = "executing"
+        route.fulfill(response=response, json=body)
+
+    # Everything the browser needs to know about one card's edge, in one snapshot.
+    EDGE = """id => {
+      const card = document.querySelector(`[data-testid="project-card"][data-project-id="${id}"]`);
+      if (!card) return null;
+      const own = card.querySelector(':scope > [data-testid="live-edge"]');
+      const chip = card.querySelector('[data-testid="run-chip"] [data-testid="live-edge"]');
+      const read = (el) => {
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        return { state: el.dataset.edgeState, className: el.className,
+                 animation: cs.animationName, duration: cs.animationDuration,
+                 width: cs.width, background: cs.backgroundColor, opacity: cs.opacity };
+      };
+      return { attention: card.dataset.attention, own: read(own), chip: read(chip) };
+    }"""
+
+    edge_console: list[str] = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.on("console", lambda m: edge_console.append(m.text) if m.type == "error" else None)
+        page.route(f"{API}/runs", pin_executing)
+
+        page.goto(f"{STUDIO_ORIGIN}/", wait_until="networkidle")
+        page.locator('[data-testid="project-board"]').wait_for(timeout=30000)
+        # AC: an executing card exposes the live-edge element.
+        busy_edge_ok, busy_edge_ms = within(
+            page,
+            """id => { const c = document.querySelector(
+                         `[data-testid="project-card"][data-project-id="${id}"]`);
+                       return c?.querySelector(
+                         ':scope > [data-testid="live-edge"]')?.dataset.edgeState === 'executing'; }""",
+            edge_busy,
+            budget_ms=30000,
+        )
+        # AC: the gate-waiting card's treatment is present AT THE SAME TIME — one
+        # snapshot, both cards, so this cannot pass by the two states taking turns.
+        page.evaluate(f"() => {{ window.__readEdge = {EDGE}; }}")
+        busy = page.evaluate("id => window.__readEdge(id)", edge_busy)
+        gate = page.evaluate("id => window.__readEdge(id)", edge_gate)
+        simultaneous = page.evaluate(
+            """ids => ids.every(id => !!document.querySelector(
+                 `[data-testid="project-card"][data-project-id="${id}"] [data-testid="live-edge"]`))""",
+            [edge_busy, edge_gate],
+        )
+        page.screenshot(path=str(SHOTS / "liveedge-board-executing-vs-gate.png"), full_page=True)
+        # A second shot with the executing card actually on screen. Attention order puts
+        # every gate-waiting card above it — which is the point — so the first shot alone
+        # shows a reviewer only the treatment that was already there.
+        page.evaluate(
+            """id => document.querySelector(
+                 `[data-testid="project-card"][data-project-id="${id}"]`
+               )?.scrollIntoView({ block: 'center' })""",
+            edge_busy,
+        )
+        page.screenshot(path=str(SHOTS / "liveedge-board-executing.png"), full_page=True)
+        browser.close()
+
+        # AC (rule 4): prefers-reduced-motion substitutes a STATIC, higher-contrast
+        # edge. Asserted in a real CSS engine, which is the only place the media
+        # query exists — the unit tests pin the class the component maps to.
+        reduced_browser = p.chromium.launch()
+        reduced_page = reduced_browser.new_page()
+        reduced_page.emulate_media(reduced_motion="reduce")
+        reduced_page.route(f"{API}/runs", pin_executing)
+        reduced_page.goto(f"{STUDIO_ORIGIN}/", wait_until="networkidle")
+        reduced_page.locator('[data-testid="project-board"]').wait_for(timeout=30000)
+        reduced_ok, reduced_ms = within(
+            reduced_page,
+            """id => { const c = document.querySelector(
+                         `[data-testid="project-card"][data-project-id="${id}"]`);
+                       return c?.querySelector(
+                         ':scope > [data-testid="live-edge"]')?.dataset.edgeState === 'executing'; }""",
+            edge_busy,
+            budget_ms=30000,
+        )
+        reduced_page.evaluate(f"() => {{ window.__readEdge = {EDGE}; }}")
+        reduced = reduced_page.evaluate("id => window.__readEdge(id)", edge_busy)
+        reduced_page.screenshot(path=str(SHOTS / "liveedge-reduced-motion.png"), full_page=True)
+        reduced_browser.close()
+
+    busy_own = (busy or {}).get("own") or {}
+    gate_own = (gate or {}).get("own") or {}
+    busy_chip = (busy or {}).get("chip") or {}
+    reduced_own = (reduced or {}).get("own") or {}
+    report["steps"]["live_edge"] = {
+        "ok": all([
+            busy_edge_ok, simultaneous,
+            busy_own.get("state") == "executing",
+            gate_own.get("state") == "gate",
+            # Distinct, and distinct in PIXELS rather than only in a class name.
+            busy_own.get("className") != gate_own.get("className"),
+            busy_own.get("background") != gate_own.get("background"),
+            busy_own.get("width") != gate_own.get("width"),
+            # Motion is what catches the eye — and only executing gets it. A gate is
+            # louder by contrast, so a wall of busy cards cannot drown it out.
+            busy_own.get("animation") == "wk-live-pulse",
+            busy_own.get("duration") == "2s",
+            gate_own.get("animation") == "none",
+            gate_own.get("opacity") == "1",
+            # Rule 5: the same treatment on the run chip inside the card.
+            busy_chip.get("state") == "executing",
+            # Rule 4: no animation, and MORE contrast than the breath it replaced.
+            reduced_ok,
+            reduced_own.get("animation") == "none",
+            reduced_own.get("opacity") == "1",
+            reduced_own.get("width") != busy_own.get("width"),
+        ]),
+        "gate_project": edge_gate,
+        "busy_project": edge_busy,
+        "busy_run": edge_busy_run,
+        "executing_card_exposes_live_edge": busy_edge_ok,
+        "executing_edge_ms": busy_edge_ms,
+        "both_treatments_present_at_once": simultaneous,
+        "executing_edge": busy_own,
+        "gate_edge": gate_own,
+        "executing_run_chip_edge": busy_chip,
+        "reduced_motion_edge": reduced_own,
+        "reduced_motion_ms": reduced_ms,
+        "console_errors": edge_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("liveedge-board-executing-vs-gate.png", "liveedge-board-executing.png",
+                         "liveedge-reduced-motion.png")],
+    }
+    if not report["steps"]["live_edge"]["ok"]:
+        fail("live_edge_verdict", "live-edge assertions did not all hold — see live_edge")
 
     report["ok"] = True
     print(json.dumps(report, indent=2))

@@ -5,6 +5,7 @@ import type { Attention, BoardProject } from '../hooks/useBoardModel.js';
 import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { GateChip } from './GateChip.js';
+import { edgeStateOf, LiveEdge } from './LiveEdge.js';
 import { STATUS_STYLE } from './RunCard.js';
 
 /**
@@ -63,6 +64,8 @@ const CSS = {
     height: `${CARD_H}px`, boxSizing: 'border-box', overflow: 'hidden', background: '#161b22',
     border: `1px solid ${S.border}`, borderRadius: '10px', padding: '14px',
     display: 'flex', flexDirection: 'column',
+    // Anchors the live edge, and the radius above clips its ends (see LiveEdge).
+    position: 'relative',
   },
   header: { display: 'flex', alignItems: 'center', gap: '8px' },
   name: {
@@ -181,7 +184,13 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
 
   return (
     <section data-testid="project-card" data-project-id={project.id} data-attention={attention} style={CSS.card}>
-      {/* Header — name, repo binding, status dot */}
+      {/* The card's own state signal, read from the RUNS rather than from `attention`:
+          a project bucketed as `failing` can still have something executing on it, and
+          the edge answers "is work moving here", not "which bucket did this sort into". */}
+      <LiveEdge state={edgeStateOf(runs.map((v) => v.session.status))} />
+
+      {/* Header — name, repo binding, status dot. The dot stays for colour continuity
+          with the sort bucket; it is no longer the thing that catches the eye. */}
       <div style={CSS.header}>
         <span
           data-testid="project-status-dot"
@@ -262,11 +271,14 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
                     data-run-id={session.id}
                     data-status={session.status}
                     style={{
-                      ...CSS.chip, flex: 1, minWidth: 0, overflow: 'hidden',
+                      ...CSS.chip, flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative',
+                      // Clears the strip so a phase label never sits on top of it.
+                      paddingLeft: '10px',
                       border: `1px solid ${waiting ? 'rgba(255,218,25,0.3)' : S.border}`,
                       background: waiting ? 'rgba(255,218,25,0.1)' : 'transparent',
                     }}
                   >
+                    <LiveEdge state={edgeStateOf([session.status])} />
                     <span style={{ color: style?.color ?? S.faint }}>{phase}</span>
                     {/* Elapsed exists only where the wire carries a timestamp: `AgentSession`
                         has no `started_at`, so a gate's daemon-cached `receivedAt` is the one
