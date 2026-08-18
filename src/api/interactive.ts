@@ -253,3 +253,21 @@ export function postEvent(projectId: string, evt: InteractiveEvent): Promise<Eve
     jsonPost({ event_type: evt.event_type, payload: evt.payload ?? {} }),
   );
 }
+
+/**
+ * The INJECT wire (§2.2 case 2, §7.7): one `chat.posted` carrying the anchor id into the
+ * live agent's session. Both authors of a user message use it — the composer's steer and
+ * the feedback overlay's submitted batch — so there is one spelling of "put this in the
+ * run" rather than two payloads that drift.
+ */
+export function injectDocMessage(
+  projectId: string,
+  docId: string,
+  text: string,
+  sourceMessageId: string,
+): Promise<EventAck> {
+  return postEvent(projectId, {
+    event_type: 'wicked.interactive.chat.posted',
+    payload: { role: 'user', text, document_id: docId, source_message_id: sourceMessageId },
+  });
+}

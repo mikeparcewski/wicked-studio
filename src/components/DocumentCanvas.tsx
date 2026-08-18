@@ -7,15 +7,21 @@ import {
 } from '../api/interactive.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
+import { FeedbackOverlay } from './FeedbackOverlay.js';
 import { VersionStrip } from './VersionStrip.js';
 
-// The Document-mode canvas (DES-MERGE-001 §1.3, §6.3 slice 8). Replaces the slice-4
-// placeholder: with a doc in the route we frame it, without one we let the user pick.
+// The Document-mode canvas (DES-MERGE-001 §1.3, §6.3 slice 8, tightened by slices 11+12).
+// With a doc in the route we frame it, without one we let the user pick.
 //
 // The frame carries the RENDERED DOCUMENT, never the interactive app (§5.3) — its src
 // is built by the slice-2 client from `apiBase()`, so it resolves onto the page's own
-// origin through crew's project-scoped proxy (§7.2). That is what keeps
-// `contentDocument` reachable for the slice 11+12 overlay.
+// origin through crew's project-scoped proxy (§7.2).
+//
+// §5.5, closed: agent-authored HTML is influenced by untrusted input (attached sources,
+// scraped pages), so the frame is FULLY sandboxed — `allow-scripts` and nothing else. It
+// cannot read `localStorage`, cannot call `/api/v1` with the user's ambient authority,
+// and the parent cannot read `contentDocument` back. Everything the overlay needs comes
+// over the instrument bridge instead (§7.3: the overlay never shipped without it).
 
 const S = {
   card:   '#161b22',
@@ -190,6 +196,11 @@ function DocFrame({
     () => getVersions(projectId, docId), [projectId, docId],
   );
   const [loaded, setLoaded] = useState(false);
+  // The overlay's instrumentation handshake is keyed to LOADS, not to renders: every
+  // swapped version is a different document with a different inventory (§4.3 / INV-1
+  // guarantees a wid survives WITHIN a document's lineage, not that rects do).
+  const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
+  const [loadNonce, setLoadNonce] = useState(0);
   useEffect(() => { setLoaded(false); }, [projectId, docId, version]);
 
   const subject = `“${docId}”`;
@@ -215,17 +226,23 @@ function DocFrame({
     <>
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
       <iframe
+        // Keyed on the VERSION so a swap REPLACES the element instead of mutating its
+        // src. Mutating it navigates the frame, and a frame navigation lands in the
+        // joint session history — so Back undid the frame's move rather than the route's
+        // (§4.2: the version lives in the URL, and Back must rewind it in one press).
+        // A freshly created frame's first load replaces its own entry instead.
+        key={shown}
+        ref={setFrameEl}
         data-testid="doc-canvas"
         data-doc-id={docId}
         data-version={shown}
         src={src}
         title={`Document ${docId}, version ${shown}`}
-        onLoad={() => setLoaded(true)}
-        // §5.5 status quo: `allow-scripts` because documents ARE interactive HTML, and
-        // `allow-same-origin` only until the slice 11+12 instrument bridge replaces the
-        // overlay's contentDocument reads with postMessage — then this drops to
-        // `allow-scripts` alone. Tracked there, not "someday".
-        sandbox="allow-scripts allow-same-origin"
+        onLoad={() => { setLoaded(true); setLoadNonce((n) => n + 1); }}
+        // §5.5, §7.3: `allow-scripts` because documents ARE interactive HTML, and NOTHING
+        // else. `allow-same-origin` is not "not yet" here — it is gone, and the overlay
+        // below is what made removing it possible. Pinned by a regression test.
+        sandbox="allow-scripts"
         style={{ border: 'none', display: 'block', height: '100%', width: '100%' }}
       />
       {/* The frame is in the DOM while it loads, so the named status sits over it. */}
@@ -234,6 +251,15 @@ function DocFrame({
           <Loading subject={subject} />
         </div>
       )}
+      {/* Point-and-comment (§4.3). A document whose bridge never answers leaves this
+          disabled-with-a-reason; the canvas above is unaffected either way. */}
+      <FeedbackOverlay
+        frame={frameEl}
+        loadNonce={loadNonce}
+        projectId={projectId}
+        docId={docId}
+        version={shown}
+      />
       </div>
       <VersionStrip
         projectId={projectId}

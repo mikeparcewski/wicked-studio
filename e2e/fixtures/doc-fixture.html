@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>__DOC__ v__V__</title></head>
+<body style="font-family:system-ui;padding:24px;background:#fff;color:#111;margin:0">
+  <!-- The FIXTURE BRIDGE (DES-MERGE-001 §5.5, slices 11+12).
+
+       In production `core/instrument.js` (wicked-interactive, the sibling slice)
+       injects the `data-wid` anchors AND the bridge script below into every rendered
+       document. This fixture is the same contract, hand-written, so studio's half can
+       be built and proven against the CONTRACT before the injector ships.
+
+       If the two ever disagree, instrument-protocol.ts is the arbiter — it is the one
+       module that defines the envelope, and both ends validate against it. -->
+
+  <h1 data-wid="h1">__DOC__ — version __V__</h1>
+  <p data-wid="p1">Seeded fixture document, served by the fake interactive bridge.</p>
+  <p data-wid="p2">A second commentable paragraph, so a batch can hold more than one item.</p>
+  <div style="height:1400px"></div>
+  <p data-wid="tail">Far enough down the page that scroll-to-wid has somewhere to go.</p>
+  <pre id="isolation" data-testid="isolation-probe" style="font-size:12px;color:#555"></pre>
+
+  <script>
+    document.body.setAttribute('data-scripts-ran', '1');
+
+    // ── §5.5 isolation probe ────────────────────────────────────────────────
+    // With `allow-same-origin` dropped this frame has an OPAQUE origin, so reaching
+    // into the parent must throw. The verdict is written into the DOM because the
+    // parent can no longer evaluate anything in here to ask.
+    var verdict = 'REACHED-PARENT-STORAGE';
+    try {
+      void parent.localStorage.length;
+    } catch (e) {
+      verdict = 'THREW: ' + ((e && e.name) || 'Error');
+    }
+    document.getElementById('isolation').textContent = verdict;
+    document.body.setAttribute('data-parent-localstorage', verdict);
+
+    // ── The instrument bridge ───────────────────────────────────────────────
+    function inventory() {
+      var widMap = {};
+      var nodes = document.querySelectorAll('[data-wid]');
+      for (var i = 0; i < nodes.length; i++) {
+        var r = nodes[i].getBoundingClientRect();
+        widMap[nodes[i].getAttribute('data-wid')] = {
+          x: r.x, y: r.y, width: r.width, height: r.height,
+          top: r.top, left: r.left, right: r.right, bottom: r.bottom
+        };
+      }
+      return { v: 1, type: 'wid-inventory', widMap: widMap,
+               scrollX: window.scrollX, scrollY: window.scrollY };
+    }
+
+    // The parent is cross-origin from here (opaque origin), so "*" is the only
+    // targetOrigin that reaches it. Rects and scroll offsets carry nothing private.
+    function post(msg) { parent.postMessage(msg, '*'); }
+
+    window.addEventListener('message', function (e) {
+      var m = e.data;
+      if (!m || m.v !== 1) return;
+      if (m.type === 'request-inventory') {
+        post(inventory());
+      } else if (m.type === 'scroll-to-wid' && typeof m.wid === 'string') {
+        var el = document.querySelector('[data-wid="' + m.wid.replace(/["\\]/g, '') + '"]');
+        if (el) el.scrollIntoView({ block: 'center' });
+        post({ v: 1, type: 'scroll-ack', wid: m.wid });
+      }
+    });
+
+    window.addEventListener('scroll', function () {
+      post({ v: 1, type: 'scroll-state', scrollX: window.scrollX, scrollY: window.scrollY });
+    });
+    window.addEventListener('resize', function () { post(inventory()); });
+
+    // Unprompted first post: the parent asks on load anyway, but a document that
+    // volunteers its inventory shortens the handshake by a round trip.
+    post(inventory());
+  </script>
+</body>
+</html>

@@ -111,12 +111,22 @@ describe('DocumentCanvas — the frame (§5.3, §6.3)', () => {
     expect(frame.getAttribute('src')).toContain('/d/a%2Fb%20c/doc/3');
   });
 
-  it('AC: carries the §5.5 status-quo sandbox — allow-scripts + allow-same-origin', async () => {
+  // ── REGRESSION PIN (§5.5, §7.3) ────────────────────────────────────────────
+  // Agent-authored HTML is influenced by untrusted input. With `allow-same-origin` it
+  // executes on the app's origin with the user's ambient authority — it could read
+  // localStorage and call /api/v1. §7.3 merged slices 11+12 precisely so that the
+  // overlay could never be the reason someone put this back "just for now". If this
+  // test ever needs changing, the change is a security decision, not a refactor.
+  it('AC: the frame is FULLY sandboxed — allow-scripts, and never allow-same-origin', async () => {
     stubFetch({ '/api/versions': { body: MANIFEST } });
     render(<DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}} />);
 
     const frame = await screen.findByTestId('doc-canvas');
-    expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
+    expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+    const sandbox = frame.getAttribute('sandbox') ?? '';
+    expect(sandbox.split(/\s+/)).not.toContain('allow-same-origin');
+    // Neither by any other spelling of "give the document the app's authority".
+    expect(sandbox).not.toMatch(/allow-(same-origin|top-navigation|popups-to-escape-sandbox)/);
   });
 
   it('§3.3: while the doc loads the surface NAMES it — never a bare spinner', async () => {

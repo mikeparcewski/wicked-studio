@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { createDoc, getVersions, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
+import { createDoc, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
+import { retryBatchInject } from '../interactive/feedbackBatch.js';
+import { scrollToWid } from '../interactive/widScroller.js';
 import { versionPath, type Navigate } from '../hooks/useRoute.js';
 import { nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState } from '../store/docThread.js';
 
@@ -43,7 +45,7 @@ const COMPOSER: Record<GenState, { placeholder: string; submit: string }> = {
 
 // ── Message renderers ────────────────────────────────────────────────────────
 
-function Bubble({ msg, projectId }: { msg: DocMsg; projectId: string }): React.ReactElement | null {
+function Bubble({ msg, projectId, docId }: { msg: DocMsg; projectId: string; docId: string | null }): React.ReactElement | null {
   if (msg.kind === 'user') {
     return (
       <div className="flex justify-end">
@@ -51,10 +53,35 @@ function Bubble({ msg, projectId }: { msg: DocMsg; projectId: string }): React.R
           data-testid="doc-message"
           data-message-id={msg.id}
           data-version={msg.version === undefined ? undefined : String(msg.version)}
-          className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed"
+          data-items={msg.items === undefined ? undefined : String(msg.items.length)}
+          className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
           style={{ background: S.user, color: S.ink, border: `1px solid ${S.border}` }}
         >
           {msg.text}
+          {/* §4.3: each batched item DEEP-LINKS back to its element — the frame scrolls
+              it into view over the same protocol that reported its rect. */}
+          {msg.items !== undefined && msg.items.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {msg.items.map((item, i) => (
+                <button
+                  key={`${item.wid}-${i}`}
+                  type="button"
+                  data-testid="feedback-item-link"
+                  data-wid={item.wid}
+                  title={`Show “${item.wid}” in the document`}
+                  onClick={() => scrollToWid(item.wid)}
+                  className="rounded-full px-2 py-0.5 text-[10px] font-mono"
+                  style={{ background: 'rgba(255,218,25,0.1)', color: S.accent,
+                           border: '1px solid rgba(255,218,25,0.25)', cursor: 'pointer' }}
+                >
+                  {i + 1}. {item.wid}
+                </button>
+              ))}
+            </div>
+          )}
+          {msg.notRecorded === true && docId !== null && (
+            <NotRecordedChip projectId={projectId} docId={docId} msgId={msg.id} text={msg.text} />
+          )}
         </div>
       </div>
     );
@@ -104,6 +131,38 @@ function Bubble({ msg, projectId }: { msg: DocMsg; projectId: string }): React.R
     );
   }
   return null;
+}
+
+/**
+ * §7.7's failure shape, made actionable (§3.3). The bus event landed — the document IS
+ * regenerating — so this never blocks the batch or offers to "undo" it. It says exactly
+ * what did not happen (the run has no record of the message) and retries that one wire.
+ */
+function NotRecordedChip({
+  projectId, docId, msgId, text,
+}: { projectId: string; docId: string; msgId: string; text: string }): React.ReactElement {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      data-testid="feedback-not-recorded"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        // A retry that fails again is not a new failure to report — the chip IS the
+        // report, and it stays up. Swallowed deliberately rather than left to reject
+        // unhandled into the console.
+        void retryBatchInject(projectId, docId, msgId, text)
+          .catch(() => {})
+          .finally(() => setBusy(false));
+      }}
+      className="mt-2 block rounded-full px-2 py-0.5 text-[10px] font-mono disabled:opacity-40"
+      style={{ background: 'rgba(248,81,73,0.1)', color: S.danger,
+               border: '1px solid rgba(248,81,73,0.3)', cursor: 'pointer' }}
+    >
+      {busy ? 'retrying…' : 'not recorded in the run — retry'}
+    </button>
+  );
 }
 
 /**
@@ -233,7 +292,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
         store.addDivider(key, forked.version);
         store.addUserMsg(key, msgId, body);
         store.setGenState(key, 'generating');
-        await inject(projectId, docId, body, msgId);
+        await injectDocMessage(projectId, docId, body, msgId);
         setText('');
         navigate(versionPath(projectId, docId, forked.version));
         return;
@@ -248,7 +307,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
         });
         store.setGenState(key, 'generating');
       } else {
-        await inject(projectId, docId, body, msgId);
+        await injectDocMessage(projectId, docId, body, msgId);
       }
       setText('');
     } catch (e: unknown) {
@@ -286,7 +345,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
                   onAnswered={() => useDocThreadStore.getState().setGenState(key, 'generating')}
                 />
               )) || null
-            : <Bubble key={m.id} msg={m} projectId={projectId} />,
+            : <Bubble key={m.id} msg={m} projectId={projectId} docId={docId} />,
         )}
         <div ref={bottom} />
       </div>
@@ -347,10 +406,3 @@ function docName(brief: string): string {
   return brief.split(/\s+/).slice(0, 6).join(' ').slice(0, 60);
 }
 
-/** Steering = one `chat.posted` carrying the anchor id (§7.6) into the agent's session. */
-function inject(projectId: string, docId: string, text: string, msgId: string): Promise<unknown> {
-  return postEvent(projectId, {
-    event_type: 'wicked.interactive.chat.posted',
-    payload: { role: 'user', text, document_id: docId, source_message_id: msgId },
-  });
-}
