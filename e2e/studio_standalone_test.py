@@ -41,11 +41,14 @@ What "independent" means here, and what this script proves end-to-end:
      (§7.11) is approved inline and the run advances on the same page with no
      navigation, while a COMPLEX one deep-links to the thread with the gate message
      scrolled into view and focused
- 11. (DES-MERGE-001 slice 8) Document mode renders the canvas: a seeded doc frames
-     with a non-empty contentDocument, the frame carries the §5.5 sandbox, its
-     request shares the PAGE's origin, the picker orders most-recent-first and
-     navigates, and a bridge_unavailable 503 shows its hint verbatim. This one
-     section runs against a SECOND, same-origin build (see §12 in the body).
+ 11. (DES-MERGE-001 slice 8, as tightened by slice 12) Document mode renders the
+     canvas: a seeded doc frames and its scripts run — re-derived from the browser's
+     FRAME TREE, because slice 12 made `contentDocument` null on purpose and the
+     parent asserting that null IS the security claim — the frame carries the §5.5
+     sandbox with `allow-same-origin` gone, its request shares the PAGE's origin, the
+     picker orders most-recent-first and navigates, and a bridge_unavailable 503 shows
+     its hint verbatim. This one section runs against a SECOND, same-origin build
+     (see §12 in the body).
  12. (DES-MERGE-001 slice 9) the version strip on that same rig: a 3-version doc
      shows 3 entries oldest→newest with the routed one highlighted, selecting v1
      swaps the frame to the v1 URL (and Back rewinds it), §7.6's scroll affordance
@@ -59,7 +62,17 @@ What "independent" means here, and what this script proves end-to-end:
      generation window renders NOTHING while real narration lands, and no
      `status.requested` heartbeat is ever emitted; and a landed version tags the
      message that triggered it (§7.6).
- 14. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
+ 14. (DES-MERGE-001 slices 11+12, merged per §7.3) point-and-comment, on a frame the
+     overlay could never have shipped without: `sandbox="allow-scripts"` and nothing
+     else, with a fixture document that speaks the postMessage instrument bridge. A
+     script inside that document reaching for `parent.localStorage` THROWS (isolation
+     proven from the inside, not asserted from outside); clicking a `[data-wid]`
+     heading opens the comment box within 4 px of the rect the browser's own frame
+     tree reports; two comments submit as ONE thread message carrying both, ONE
+     `feedback.submitted` event and ONE inject; each submitted item deep-links back to
+     its element over the protocol; and an inject the bridge refuses leaves the batch
+     standing with a retryable "not recorded" chip (§7.7).
+ 15. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
      ranked: in one DOM snapshot an executing card carries the breathing 2px
      `live-edge` element while a gate-waiting card carries a treatment that is
      present at the same time and different in computed pixels (wider, solid,
@@ -913,16 +926,17 @@ try:
     emitted_events: list[dict] = []
     BRIDGE_DOWN_HINT = ("run `npx wicked-interactive serve` in this project's root — "
                         "the bridge could not be started")
-    # `data-wid` anchors are what core/instrument.js injects (§5.5) — the fixture carries
-    # them so slice 11+12 inherits a document shaped like the real thing.
-    DOC_HTML = (
-        "<!doctype html><html><head><meta charset='utf-8'><title>__DOC__ v__V__</title></head>"
-        "<body style='font-family:system-ui;padding:24px;background:#fff;color:#111'>"
-        "<h1 data-wid='h1'>__DOC__ — version __V__</h1>"
-        "<p data-wid='p1'>Seeded fixture document, served by the fake interactive bridge.</p>"
-        "<script>document.body.setAttribute('data-scripts-ran','1');</script>"
-        "</body></html>"
-    )
+    # A phrase the fake bridge refuses to inject, so §15 can drive §7.7's failure path.
+    INJECT_FAIL_MARK = "unrecordable"
+    # The bus event interactive's feedbackStore.js has always emitted — contract unchanged
+    # by the merge (§7.7); what changed is that the CLIENT authors it alongside the inject.
+    FEEDBACK_EVENT = "wicked.interactive.feedback.submitted"
+    # The FIXTURE BRIDGE (slices 11+12): `data-wid` anchors plus the postMessage bridge
+    # that core/instrument.js injects in production (§5.5), kept in a real .html file so
+    # the browser fixture is one artifact rather than a Python string literal. It also
+    # carries the isolation probe: a script reaching for `parent.localStorage`, whose
+    # verdict it writes into its own DOM — the parent can no longer evaluate in here to ask.
+    DOC_HTML = (REPO / "e2e" / "fixtures" / "doc-fixture.html").read_text(encoding="utf-8")
     INTERACTIVE_RE = re.compile(r"^/api/v1/projects/([^/]+)/interactive(/.*)$")
     VERSIONS_RE = re.compile(r"^/d/([^/]+)/api/versions$")
     RENDER_RE = re.compile(r"^/d/([^/]+)/doc/(\d+)$")
@@ -1055,8 +1069,17 @@ try:
                                     "generating": True, "project_id": body.get("project")})
 
         def _emit(self) -> None:
-            """`POST /api/events` — the GENERATING/GATED composer's wire (§2.2 cases 2-3)."""
-            emitted_events.append(self._body())
+            """`POST /api/events` — the GENERATING/GATED composer's wire (§2.2 cases 2-3)
+            and both of the feedback batch's writes (§7.7)."""
+            body = self._body()
+            emitted_events.append(body)
+            # §7.7: a failing INJECT must not block the batch. One marker phrase fails the
+            # `chat.posted` wire while the `feedback.submitted` event that actually drives
+            # the document still succeeds — which is exactly the split the chip describes.
+            payload = body.get("payload") or {}
+            if (body.get("event_type") == "wicked.interactive.chat.posted"
+                    and INJECT_FAIL_MARK in str(payload.get("text") or "")):
+                return self._json(500, {"error": "run not found"})
             return self._json(200, {"ok": True, "event_id": f"ev-{len(emitted_events)}",
                                     "correlation_id": "c-doc"})
 
@@ -1100,16 +1123,21 @@ try:
         rows.first.click()
         picker_nav_ok = wait_for_path(page, f"/p/{doc_project}/document/launch-deck")
 
-        # ── AC: the seeded doc renders, with a non-empty contentDocument ───────────
+        # ── AC: the seeded doc renders, and IS a document ─────────────────────────
+        # Slice 12 supersedes slice 8's original wording here. `contentDocument` was the
+        # evidence when the frame was same-origin; it is null now, BY DESIGN, and that is
+        # the point of the slice. The claim is unchanged — the document rendered and its
+        # scripts ran — so it is re-derived from the browser's FRAME TREE (Playwright
+        # reaches into a cross-origin frame; the page's own JS cannot).
         frame = page.locator('[data-testid="doc-canvas"]')
         frame.wait_for(timeout=30000)
         page.frame_locator('[data-testid="doc-canvas"]').locator("[data-wid='h1']").wait_for(timeout=30000)
         sandbox = frame.get_attribute("sandbox")
         frame_src = frame.get_attribute("src")
-        content_text = frame.evaluate(
-            "el => (el.contentDocument && el.contentDocument.body.innerText || '').trim()")
-        scripts_ran = frame.evaluate(
-            "el => !!el.contentDocument && el.contentDocument.body.dataset.scriptsRan === '1'")
+        content_document_readable = frame.evaluate("el => el.contentDocument !== null")
+        rendered_frame = next(f for f in page.frames if f.url and "/doc/" in f.url)
+        content_text = rendered_frame.evaluate("() => (document.body.innerText || '').trim()")
+        scripts_ran = rendered_frame.evaluate("() => document.body.dataset.scriptsRan === '1'")
         page.screenshot(path=str(SHOTS / "slice8-doc-canvas.png"), full_page=True)
 
         # ── AC: the frame's REQUEST url shares the page's origin ───────────────────
@@ -1136,7 +1164,11 @@ try:
         "ok": all([
             picker_order == ["launch-deck", "q3-report", "stale-brief", "roadmap"],
             picker_nav_ok,
-            sandbox == "allow-scripts allow-same-origin",
+            # §5.5/§7.3, closed: the sandbox is allow-scripts and NOTHING else, and the
+            # parent can no longer read the frame back. Both halves asserted.
+            sandbox == "allow-scripts",
+            "allow-same-origin" not in (sandbox or ""),
+            content_document_readable is False,
             len(content_text) > 0,
             scripts_ran,
             frame_src is not None and frame_src.endswith("/doc/2"),
@@ -1152,7 +1184,8 @@ try:
         "picker_navigated_to_doc": picker_nav_ok,
         "frame_src": frame_src,
         "frame_sandbox": sandbox,
-        "frame_content_document_text": content_text[:120],
+        "frame_content_document_readable_by_parent": content_document_readable,
+        "frame_rendered_text": content_text[:120],
         "frame_scripts_executed": scripts_ran,
         "page_origin": page_origin,
         "frame_request_origins": frame_request_origins,
@@ -1397,8 +1430,8 @@ try:
         page.screenshot(path=str(SHOTS / "slice10-thread-version-anchor.png"), full_page=True)
         browser.close()
 
-    docd.shutdown()
-
+    # Slice 10's assertions are made below, but the fixture server stays up: §15 runs on
+    # the same rig, and its wire assertions are made against the same recorded lists.
     steers = [e for e in emitted_events if e.get("event_type") == "wicked.interactive.chat.posted"]
     heartbeats = [e for e in emitted_events
                   if e.get("event_type") == "wicked.interactive.status.requested"]
@@ -1455,7 +1488,183 @@ try:
     if not report["steps"]["doc_thread"]["ok"]:
         fail("doc_thread_verdict", "slice-10 document-thread assertions did not all hold — see doc_thread")
 
-    # ── 15. Operator UX directive: the live edge on the board ──────────────────
+    # ── 15. Slices 11+12 (§6.3, merged per §7.3): point-and-comment, SANDBOXED ──
+    # §7.3 merged these two slices so that the overlay could never exist against a
+    # same-origin frame. This section is where that merge is cashed: every assertion
+    # below is made about a frame carrying `sandbox="allow-scripts"` and nothing else,
+    # against a fixture document that implements the postMessage instrument bridge the
+    # way core/instrument.js will (`e2e/fixtures/doc-fixture.html`).
+    #
+    #   · ISOLATION, proven not asserted: a script inside the document reaches for
+    #     `parent.localStorage` and records what happened. It must have THROWN — that is
+    #     §5.5's whole risk (agent-authored HTML with the app's ambient authority) shut.
+    #   · ANCHORING: clicking a `[data-wid]` heading opens the comment box within 4 px of
+    #     that element's real on-screen rect — measured through the browser's frame tree,
+    #     which is the only remaining way to learn where anything in there is.
+    #   · BATCHING: two comments submit as ONE thread message carrying both, ONE
+    #     `feedback.submitted` event, and ONE inject (§4.3: N submits would be N runs and
+    #     N versions for one round of edits).
+    #   · DEEP-LINK: clicking a submitted item scrolls the frame back to its element —
+    #     over the protocol, since the parent cannot touch the document to do it itself.
+    #   · §7.7's failure split: an inject the bridge refuses leaves the batch standing
+    #     with a retryable "not recorded" chip, and the feedback event still went.
+    FB_DOC = "launch-deck"
+    FB_ONE = "make this title punchier"
+    FB_TWO = "cut this paragraph in half"
+    FB_FAIL = f"this one is {INJECT_FAIL_MARK}"
+    overlay_console: list[str] = []
+
+    def centre(box: dict) -> tuple[float, float]:
+        return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.on("console", lambda m: overlay_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text else None)
+
+        page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document/{FB_DOC}", wait_until="networkidle")
+        page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
+        doc_frame = page.frame_locator('[data-testid="doc-canvas"]')
+        doc_frame.locator("[data-wid='h1']").wait_for(timeout=30000)
+        overlay_sandbox = page.locator('[data-testid="doc-canvas"]').get_attribute("sandbox")
+
+        # ── AC: a script in the doc reaching for parent.localStorage THREW ─────────
+        isolation_verdict = doc_frame.locator('[data-testid="isolation-probe"]').inner_text()
+
+        # ── AC: the frame answered the instrument bridge, so the overlay is live ───
+        page.locator('[data-testid="feedback-overlay"][data-ready="true"]').wait_for(timeout=30000)
+        toggle = page.locator('[data-testid="feedback-toggle"]')
+        overlay_enabled = toggle.is_enabled()
+        toggle.click()
+        page.locator('[data-testid="feedback-hitlayer"]').wait_for(timeout=10000)
+        page.screenshot(path=str(SHOTS / "slice12-overlay-ready.png"), full_page=True)
+
+        # ── AC: clicking a [data-wid] heading anchors the box within 4 px ──────────
+        # The heading's rect comes from the BROWSER's frame tree, in page coordinates —
+        # an independent measurement of the same element the bridge reported to the app.
+        h1_box = doc_frame.locator("[data-wid='h1']").bounding_box()
+        page.mouse.click(*centre(h1_box))
+        card = page.locator('[data-testid="feedback-comment"]')
+        card.wait_for(timeout=10000)
+        card_wid = card.get_attribute("data-wid")
+        card_box = card.bounding_box()
+        anchor_dx = abs(card_box["x"] - h1_box["x"])
+        anchor_dy = card_box["y"] - (h1_box["y"] + h1_box["height"])
+        page.screenshot(path=str(SHOTS / "slice12-comment-anchored.png"), full_page=True)
+
+        # ── AC: two comments batch, then submit as ONE message ────────────────────
+        page.locator('[data-testid="feedback-comment-input"]').fill(FB_ONE)
+        page.locator('[data-testid="feedback-comment-add"]').click()
+
+        p1_box = doc_frame.locator("[data-wid='p1']").bounding_box()
+        page.mouse.click(*centre(p1_box))
+        page.locator('[data-testid="feedback-comment-input"]').fill(FB_TWO)
+        page.locator('[data-testid="feedback-comment-add"]').click()
+        pins_before_submit = page.locator('[data-testid="feedback-pin"]').count()
+        # Nothing may have gone anywhere yet: batching is the point (§4.3).
+        emitted_before_submit = len([e for e in emitted_events
+                                     if e.get("event_type") == FEEDBACK_EVENT])
+        page.screenshot(path=str(SHOTS / "slice12-batch-of-two.png"), full_page=True)
+
+        messages_before = page.locator('[data-testid="doc-message"]').count()
+        page.locator('[data-testid="feedback-submit"]').click()
+        page.locator('[data-testid="doc-message"][data-items="2"]').wait_for(timeout=15000)
+        messages_added = page.locator('[data-testid="doc-message"]').count() - messages_before
+        batch_msg = page.locator('[data-testid="doc-message"][data-items="2"]')
+        batch_text = batch_msg.inner_text()
+        page.screenshot(path=str(SHOTS / "slice12-batch-submitted.png"), full_page=True)
+
+        # ── AC: each item DEEP-LINKS back to its element, over the protocol ────────
+        # Scroll the document away first, so "came back" is observable rather than vacuous.
+        frame_obj = next(f for f in page.frames if f.url and "/doc/" in f.url)
+        frame_obj.evaluate("() => window.scrollTo(0, 900)")
+        scrolled_away = frame_obj.evaluate("() => window.scrollY")
+        batch_msg.locator('[data-testid="feedback-item-link"][data-wid="h1"]').click()
+        page.wait_for_timeout(600)
+        scrolled_back = frame_obj.evaluate("() => window.scrollY")
+        page.screenshot(path=str(SHOTS / "slice12-deep-link.png"), full_page=True)
+
+        # ── AC (§7.7): a refused inject does NOT block the batch ───────────────────
+        frame_obj.evaluate("() => window.scrollTo(0, 0)")
+        page.wait_for_timeout(300)
+        toggle.click()  # back into commenting
+        page.locator('[data-testid="feedback-hitlayer"]').wait_for(timeout=10000)
+        page.mouse.click(*centre(doc_frame.locator("[data-wid='h1']").bounding_box()))
+        page.locator('[data-testid="feedback-comment-input"]').fill(FB_FAIL)
+        page.locator('[data-testid="feedback-comment-add"]').click()
+        page.locator('[data-testid="feedback-submit"]').click()
+        chip = page.locator('[data-testid="feedback-not-recorded"]')
+        chip.wait_for(timeout=15000)
+        chip_retryable = chip.is_enabled()
+        # The batch itself STANDS: the message is in the transcript and the bus event went.
+        unrecordable_rendered = page.locator(
+            f'[data-testid="doc-message"]:has-text("{INJECT_FAIL_MARK}")').count()
+        page.screenshot(path=str(SHOTS / "slice12-not-recorded-chip.png"), full_page=True)
+        browser.close()
+
+    docd.shutdown()
+
+    feedback_events = [e for e in emitted_events if e.get("event_type") == FEEDBACK_EVENT]
+    batch_event = (feedback_events[0].get("payload") or {}) if feedback_events else {}
+    batch_injects = [e for e in emitted_events
+                     if e.get("event_type") == "wicked.interactive.chat.posted"
+                     and FB_ONE in str((e.get("payload") or {}).get("text") or "")]
+    report["steps"]["feedback_overlay"] = {
+        "ok": all([
+            # §5.5/§7.3: the frame the overlay ran against was FULLY sandboxed…
+            overlay_sandbox == "allow-scripts",
+            # …and the document proved it, from the inside.
+            isolation_verdict.startswith("THREW"),
+            overlay_enabled,
+            # §4.3's anchoring budget, both axes.
+            card_wid == "h1", anchor_dx <= 4, 0 <= anchor_dy <= 4,
+            # Batched, not streamed: two pins, nothing emitted until Submit.
+            pins_before_submit == 2, emitted_before_submit == 0,
+            # ONE message with BOTH items, ONE bus event, ONE inject.
+            messages_added == 1,
+            FB_ONE in batch_text, FB_TWO in batch_text,
+            len(feedback_events) == 2,  # the batch of two, then the unrecordable one
+            [i.get("wid") for i in (batch_event.get("items") or [])] == ["h1", "p1"],
+            [i.get("comment") for i in (batch_event.get("items") or [])] == [FB_ONE, FB_TWO],
+            batch_event.get("version") == 2,
+            len(batch_injects) == 1,
+            # The deep-link brought the element back over the protocol.
+            scrolled_away > 400, scrolled_back < 100,
+            # §7.7: the refused inject is a retryable chip, not a lost batch.
+            chip_retryable, unrecordable_rendered == 1,
+            not overlay_console,
+        ]),
+        "project_id": doc_project,
+        "doc": FB_DOC,
+        "frame_sandbox": overlay_sandbox,
+        "parent_localstorage_from_inside_frame": isolation_verdict,
+        "overlay_enabled_after_handshake": overlay_enabled,
+        "heading_rect_from_frame_tree": h1_box,
+        "comment_box_rect": card_box,
+        "comment_box_wid": card_wid,
+        "anchor_error_px": {"x": anchor_dx, "y": anchor_dy},
+        "pins_before_submit": pins_before_submit,
+        "feedback_events_before_submit": emitted_before_submit,
+        "thread_messages_added_by_submit": messages_added,
+        "batch_message_text": batch_text[:400],
+        "feedback_events": feedback_events,
+        "injects_carrying_the_batch": batch_injects,
+        "frame_scroll_before_deep_link": scrolled_away,
+        "frame_scroll_after_deep_link": scrolled_back,
+        "not_recorded_chip_retryable": chip_retryable,
+        "unrecordable_batch_still_in_transcript": unrecordable_rendered == 1,
+        "console_errors": overlay_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice12-overlay-ready.png", "slice12-comment-anchored.png",
+                         "slice12-batch-of-two.png", "slice12-batch-submitted.png",
+                         "slice12-deep-link.png", "slice12-not-recorded-chip.png")],
+    }
+    if not report["steps"]["feedback_overlay"]["ok"]:
+        fail("feedback_overlay_verdict",
+             "slice-11+12 point-and-comment assertions did not all hold — see feedback_overlay")
+
+    # ── 16. Operator UX directive: the live edge on the board ──────────────────
     # The ACTIVE-WORK signal is a breathing 2px strip along the leading edge of the
     # element doing work, and the thing that has to hold is the RANKING: a busy card
     # must be visible without out-shouting a card that needs a human. So both states
