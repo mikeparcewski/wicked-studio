@@ -57,8 +57,10 @@ export function ExportMenu({ projectId, docId, version, compact = false }: Expor
       data-testid="export-menu"
       data-doc-id={docId}
       data-version={version}
+      // Capped: the hint below can be a whole install command, and a control that grows to
+      // fit its own error message would push the surface it sits on out of the way.
       style={{ alignSelf: 'center', display: 'flex', flexDirection: 'column',
-               flexShrink: 0, gap: '2px', minWidth: 0 }}
+               flexShrink: 0, gap: '2px', maxWidth: '220px', minWidth: 0 }}
     >
       <div style={{ alignItems: 'center', display: 'flex', gap: compact ? '7px' : '5px' }}>
         {!compact && (
