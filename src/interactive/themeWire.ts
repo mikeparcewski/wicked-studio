@@ -83,6 +83,18 @@ export function serviceReason(e: unknown): string {
   return message.replace(/^API \d{3}: /, '');
 }
 
+/**
+ * A refusal, as the transcript reads it. The service's reason is carried WHOLE and the
+ * client only supplies a subject where the reason has not already named one — a guard
+ * that says "refused http://…: link-local" needs no "the service refused http://…"
+ * bolted in front of it, and stacking the two would make the message look paraphrased
+ * when the point is that it is not.
+ */
+export function refusalText(target: string, reason: string, verb: string): string {
+  const subject = target.trim();
+  return reason.includes(subject) ? reason : `${subject} ${verb}: ${reason}`;
+}
+
 /** §3.3: an error with no next action is banned. The service's named fix wins whenever
  *  it gave one; otherwise the next action is the other way to learn the same theme. */
 export function learnFix(kind: LearnKind, e: unknown): string {
@@ -126,11 +138,7 @@ export async function learnThemeFromThread(
     return { ok: true, themeId: res.theme_id };
   } catch (e: unknown) {
     const reason = serviceReason(e);
-    store.addActionable(
-      key,
-      `The service refused to learn from ${value.trim()}: ${reason}`,
-      learnFix(kind, e),
-    );
+    store.addActionable(key, refusalText(value, reason, 'was not learned from'), learnFix(kind, e));
     return { ok: false, reason };
   }
 }
@@ -188,7 +196,7 @@ export async function attachSourceFromThread(
     const reason = serviceReason(e);
     store.addActionable(
       key,
-      `${path.trim()} was not attached: ${reason}`,
+      refusalText(path, reason, 'was not attached'),
       e instanceof ServiceHintError ? e.hint
         : 'Check the path exists and the service can read it, then attach it again.',
     );

@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   attachSourceFromThread, learnBody, learnFix, learnReady, learnThemeFromThread,
-  serviceReason, sourceStatusLine,
+  refusalText, serviceReason, sourceStatusLine,
 } from '../src/interactive/themeWire.js';
 import { listThemes } from '../src/api/interactive.js';
 import { apiBase } from '../src/api/client.js';
@@ -155,11 +155,21 @@ describe('SSRF rejection surfacing (§4.6 — the guard stays server-side)', () 
     expect(calls[0]!.url).toBe(`${apiBase()}/projects/${PROJECT}/interactive/api/theme/learn`);
     for (const call of calls) expect(call.url).not.toContain('169.254.169.254');
 
-    const actionable = thread().find((m) => m.kind === 'actionable');
+    const actionable = thread().find((m) => m.kind === 'actionable') as Extract<DocMsg, { kind: 'actionable' }>;
     expect(actionable).toBeDefined();
-    // Verbatim: the guard's own sentence, not a paraphrase and not an HTTP status.
-    expect((actionable as Extract<DocMsg, { kind: 'actionable' }>).text).toContain(REASON);
-    expect((actionable as Extract<DocMsg, { kind: 'actionable' }>).text).not.toContain('API 400');
+    // Verbatim: the guard's own sentence, carried WHOLE — not a paraphrase, not summarised
+    // and not an HTTP status. This reason names no URL, so the client supplies the subject
+    // (and only then); the reason itself is untouched.
+    expect(actionable.text).toContain(REASON);
+    expect(actionable.text).toBe(`${METADATA} was not learned from: ${REASON}`);
+    expect(actionable.text).not.toContain('API 400');
+  });
+
+  it('supplies a subject only when the service reason has not already named one', () => {
+    expect(refusalText('http://x.dev', 'refused http://x.dev: private range', 'was not learned from'))
+      .toBe('refused http://x.dev: private range');
+    expect(refusalText('http://x.dev', 'not reachable', 'was not learned from'))
+      .toBe('http://x.dev was not learned from: not reachable');
   });
 
   it('a refusal still carries a next action — §3.3 bans an error without one', async () => {
