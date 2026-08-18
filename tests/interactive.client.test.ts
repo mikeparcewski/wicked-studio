@@ -11,13 +11,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BridgeUnavailableError,
   createDoc,
+  getDemoSpec,
+  getLatestRecording,
   getSources,
+  listDemos,
   getVersions,
   interactiveUrl,
   listDocs,
   postEvent,
   postExport,
   postFork,
+  requestRecord,
 } from '../src/api/interactive.js';
 import { apiBase } from '../src/api/client.js';
 
@@ -50,6 +54,7 @@ function stubFetch(body: unknown, status = 200): Call[] {
 
 const PROJECT = 'proj-abc-123';
 const DOC = 'q3-report';
+const DEMO = 'checkout-walkthrough';
 
 /** Prod default: same-origin, no dev split. */
 function prodOrigin(): void {
@@ -76,6 +81,11 @@ describe('interactive URL resolver', () => {
     ['getSources', { sources: [] },                    () => getSources(PROJECT, DOC)],
     ['postEvent',  { ok: true, event_id: 'e1', correlation_id: 'c1' },
                                                        () => postEvent(PROJECT, { event_type: 'wicked.interactive.chat.posted' })],
+    // Slice 13's demo surface — same mount, same rules: no second origin, no port.
+    ['listDemos',  [],                                 () => listDemos(PROJECT)],
+    ['getDemoSpec', { steps: [] },                     () => getDemoSpec(PROJECT, DEMO)],
+    ['getLatestRecording', { version: 1 },             () => getLatestRecording(PROJECT, DEMO)],
+    ['requestRecord', { queued: true },                () => requestRecord(PROJECT, DEMO)],
   ];
 
   describe('prod (same-origin)', () => {
@@ -253,5 +263,47 @@ describe('happy-path shapes', () => {
     expect(calls[0]!.init?.body).toBe(JSON.stringify({
       event_type: 'wicked.interactive.status.requested', payload: {},
     }));
+  });
+
+  // ── Demo wrappers (§4.5, slice 13) ────────────────────────────────────────
+
+  it('listDemos narrows the ONE registry to kind:"demo" — no second route', async () => {
+    const registry = [
+      { name: 'q3-report', kind: 'doc', head: 1, versions: 1, updated_at: '2026-08-19T00:00:00Z' },
+      { name: DEMO, kind: 'demo', head: 2, versions: 2, updated_at: '2026-08-18T00:00:00Z' },
+    ];
+    const calls = stubFetch(registry);
+    await expect(listDemos(PROJECT)).resolves.toEqual([registry[1]]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(`${apiBase()}/projects/${PROJECT}/interactive/api/docs`);
+  });
+
+  it('getDemoSpec reads the spec under the demo\'s own /d/<id> mount', async () => {
+    const spec = {
+      steps: [{ index: 0, title: 'Open the storefront', timestamp: 0, thumbnail: '/d/x/demo/t0.png' }],
+      target_url: 'https://shop.example/',
+    };
+    const calls = stubFetch(spec);
+    await expect(getDemoSpec(PROJECT, DEMO)).resolves.toEqual(spec);
+    expect(calls[0]!.url).toBe(
+      `${apiBase()}/projects/${PROJECT}/interactive/d/${DEMO}/api/demo/spec`,
+    );
+  });
+
+  it('getLatestRecording carries the ffmpeg_absent shape through untouched (§4.5)', async () => {
+    // Best-effort post-processing: the version LANDED, only the conversion did not, and
+    // the hint is the service's own command — the client never rewrites it.
+    const rec = { version: 3, ffmpeg_absent: true, ffmpeg_hint: 'brew install ffmpeg' };
+    stubFetch(rec);
+    await expect(getLatestRecording(PROJECT, DEMO)).resolves.toEqual(rec);
+  });
+
+  it('requestRecord POSTs (no body fields — the spec is already the service\'s)', async () => {
+    const calls = stubFetch({ queued: true });
+    await expect(requestRecord(PROJECT, DEMO)).resolves.toEqual({ queued: true });
+    expect(calls[0]!.init?.method).toBe('POST');
+    expect(calls[0]!.url).toBe(
+      `${apiBase()}/projects/${PROJECT}/interactive/d/${DEMO}/api/demo/record`,
+    );
   });
 });

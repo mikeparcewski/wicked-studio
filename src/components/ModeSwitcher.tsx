@@ -11,54 +11,39 @@ const S = {
 
 export interface ModeSpec {
   label: string;
-  /**
-   * THE ONE FLAG THIS SLICE IS ALLOWED (DES-MERGE-001 §6.0). An unavailable mode is
-   * DISABLED, never hidden (§1.3 rule 3) — hiding it teaches the user the feature
-   * does not exist. Document flipped to `true` in slice 8; Video follows in slice 13,
-   * and when it does this field and its branches delete cleanly.
-   */
-  available: boolean;
-  /**
-   * The ONE action that enables this mode, named as an action (§1.3 rule 3). Rendered
-   * as the disabled tab's `title` and verbatim in the mode's placeholder.
-   */
-  enables: string;
   /** What this mode is, with its subject — never a bare "coming soon" (§3.3). */
   summary: string;
 }
 
+/**
+ * Slice 13 landed Video's surface, which retired `available`/`enables` and the
+ * placeholder they fed: every mode now has a real surface, and each one states its own
+ * missing dependency where that dependency actually bites (a missing ffmpeg leaves the
+ * storyboard standing with the install command beside the player, §4.5) rather than
+ * greying out the whole verb. §1.3 rule 3 still stands for a mode that genuinely cannot
+ * open — that is slice 17's preflight gate, which knows what is installed; this switcher
+ * never did.
+ */
 export const MODE_SPECS: Record<Mode, ModeSpec> = {
   chat: {
     label: 'Chat',
-    available: true,
-    enables: '',
     summary: 'Talk to an agent with no artifact committed yet — and choose a mode by conversation.',
   },
   build: {
     label: 'Build',
-    available: true,
-    enables: '',
     summary: 'Governed code work: units, phases, gates and evidence, on a crew run.',
   },
   document: {
     label: 'Document',
-    // Flipped by slice 8 (§6.3): the canvas is wired, so the tab is live and the
-    // placeholder is unreachable for this mode. Video is the last `false` left.
-    available: true,
-    enables: '',
     summary:
       'Document mode is where the interactive canvas lands: an HTML doc, deck or report, '
       + 'its version strip, and point-and-comment feedback — all against this project’s one thread.',
   },
   video: {
     label: 'Video',
-    available: false,
-    enables:
-      'Install the demo recorder (ffmpeg) and connect the interactive document service to '
-      + 'this project to record demos here.',
     summary:
-      'Video mode is where the demo storyboard and player land: chapters derived from the '
-      + 'document’s steps, recorded and re-recorded from the same thread.',
+      'Video mode is the demo storyboard and player: chapters derived from the spec’s steps, '
+      + 'recorded and re-recorded from the same thread.',
   },
 };
 
@@ -95,15 +80,14 @@ export function ModeSwitcher({ mode, onSelect }: Props): React.ReactElement {
             aria-selected={active}
             data-testid={`mode-tab-${m}`}
             data-mode={m}
-            disabled={!spec.available}
-            title={spec.available ? spec.summary : spec.enables}
+            title={spec.summary}
             onClick={() => onSelect(m)}
             style={{
               background: 'transparent',
               border: 'none',
               borderBottom: `2px solid ${active ? S.accent : 'transparent'}`,
-              color: !spec.available ? S.faint : active ? S.ink : S.muted,
-              cursor: spec.available ? 'pointer' : 'not-allowed',
+              color: active ? S.ink : S.muted,
+              cursor: 'pointer',
               fontSize: '13px',
               fontWeight: active ? 700 : 500,
               padding: '10px 14px',

@@ -8,7 +8,7 @@ import { HomeBoard } from './components/HomeBoard.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
-import { ModePlaceholder } from './components/ModePlaceholder.js';
+import { VideoStoryboard } from './components/VideoStoryboard.js';
 import { PolicyManager } from './components/PolicyManager.js';
 import { ProjectShell } from './components/ProjectShell.js';
 import { ProjectDetailPage } from './components/ProjectDetailPage.js';
@@ -283,7 +283,23 @@ export function App(): React.ReactElement {
         </>
       );
     }
-    if (m === 'video') return <ModePlaceholder mode={m} />;
+    // Video is the same two-sibling shape (§6.4 slice 13): the storyboard + player pair
+    // beside the SAME thread the other modes render — a demo is a document whose manifest
+    // says `kind: "demo"`, so its conversation is the project's one conversation (§1.3
+    // rule 1), not a second transcript keyed to a different artifact type.
+    if (m === 'video') {
+      return (
+        <>
+          <VideoStoryboard projectId={pid} demoId={artifactId} navigate={navigate} />
+          <DocumentThread
+            projectId={pid}
+            docId={artifactId}
+            selectedVersion={null}
+            navigate={navigate}
+          />
+        </>
+      );
+    }
     if (m === 'chat' && !artifactId) return groupChatSurface(null);
     return artifactId ? runSurface() : dashboardSurface();
   }

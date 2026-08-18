@@ -24,9 +24,10 @@ What "independent" means here, and what this script proves end-to-end:
      CoreEvent frames arrive over ws://<daemon>/ws until the run completes
   6. (post-#243) the project surface answers: GET /api/v1/projects returns 200 with
      a list, cross-origin
-  7. (DES-MERGE-001 slice 4) the project shell: /p/:projectId/:mode renders the
-     four-mode switcher, an unavailable mode is disabled with its enabling action in
-     the tooltip, clicking Build is a real (back-button-correct) navigation, and the
+  7. (DES-MERGE-001 slice 4, as slice 13 left it) the project shell:
+     /p/:projectId/:mode renders the four-mode switcher, every mode is a live tab
+     whose tooltip names what it is, a deep-linked mode states a subject rather than
+     spinning, clicking Build is a real (back-button-correct) navigation, and the
      pre-merge /runs/:id and /projects/:id bookmarks redirect into the new shape
   8. (DES-MERGE-001 slice 5) the orchestrator board at /: the gate-waiting project
      sorts first, an empty project's card IS its four quick actions (each pre-bound
@@ -72,7 +73,14 @@ What "independent" means here, and what this script proves end-to-end:
      `feedback.submitted` event and ONE inject; each submitted item deep-links back to
      its element over the protocol; and an inject the bridge refuses leaves the batch
      standing with a retryable "not recorded" chip (§7.7).
- 15. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
+ 15. (DES-MERGE-001 slice 13) Video mode on that same rig: the picker lists the
+     registry's DEMOS most-recent-first (and none of its documents), a seeded demo
+     shows N chapter cards matching its spec's N steps in order, clicking chapter 3
+     moves the player to that step's timestamp, the player renders the service's own
+     recording bytes fetched through the proxy, and the ffmpeg-absent demo shows the
+     service's install command VERBATIM while still rendering its full storyboard —
+     degradation, not a crash (§4.5).
+ 16. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
      ranked: in one DOM snapshot an executing card carries the breathing 2px
      `live-edge` element while a gate-waiting card carries a treatment that is
      present at the same time and different in computed pixels (wider, solid,
@@ -91,7 +99,7 @@ studio itself unless SKIP_STUDIO_BUILD=1 (in which case dist/ must already be
 baked for CREW_PORT).
 
 Env knobs: CREW_CLI, CREW_PORT (default 7901), STUDIO_PORT (default 4310),
-DOC_PORT (default 4320, the same-origin rig for §10), SKIP_STUDIO_BUILD,
+DOC_PORT (default 4320, the same-origin rig for §12-§16), SKIP_STUDIO_BUILD,
 SLICE10_WINDOW_S (default 10, the generation window §13 pushes filler across).
 
 Prints a JSON report to stdout (exit 0/1); screenshots land in e2e/shots/.
@@ -352,26 +360,33 @@ try:
         browser = p.chromium.launch()
         page = browser.new_page()
 
-        # Land on a mode whose surface makes no API calls, so this section asserts the
-        # SHELL rather than whatever a live surface happens to be doing. Document became
-        # a live surface in slice 8 (§10 below owns it), so Video is that mode now.
+        # This section asserts the SHELL, not whatever surface sits under it. Every mode
+        # became a live surface by slice 13, so there is no longer an inert one to land
+        # on: the shell claims are made on Video (whose own surface §16 owns) and the
+        # surface's own calls are simply not this section's subject.
         page.goto(f"{STUDIO_ORIGIN}/p/{project_id}/video", wait_until="networkidle")
         switcher = page.locator('[data-testid="mode-switcher"]')
         switcher.wait_for(timeout=30000)
         tabs = switcher.locator('[role="tab"]')
         tab_labels = [tabs.nth(i).inner_text() for i in range(tabs.count())]
 
-        # AC: an unavailable mode is DISABLED (never hidden) and its tooltip names the
-        # one action that enables it (§1.3 rule 3).
+        # AC (§1.3 rule 3, as slice 13 left it): a mode is never HIDDEN, and its tooltip
+        # names what it is, with its subject. The disabled branch retired with the
+        # placeholder — every verb now has a surface, and a missing dependency is stated
+        # where it bites (§16) instead of greying out the whole mode. A mode that
+        # genuinely cannot open is slice 17's preflight gate.
         video = page.locator('[data-testid="mode-tab-video"]')
         video_title = video.get_attribute("title") or ""
-        disabled_ok = (
-            video.is_disabled()
-            and re.search(r"install|connect|create", video_title, re.I) is not None
+        tabs_live_ok = (
+            all(tabs.nth(i).is_enabled() for i in range(tabs.count()))
+            and re.search(r"storyboard", video_title, re.I) is not None
         )
-        # The deep-linked unavailable mode still states what it is and how to enable it
-        # (§3.3: no bare spinner, every state names a subject).
-        placeholder_ok = page.locator('[data-testid="mode-enabling-action-video"]').is_visible()
+        # The deep-linked mode states a subject either way (§3.3: no bare spinner). This
+        # rig has no bridge behind it, so the named failure IS that state.
+        surface_named_ok = page.locator(
+            '[data-testid="video-canvas-error"], [data-testid="video-canvas-loading"], '
+            '[data-testid="demo-picker"], [data-testid="demo-picker-empty"]'
+        ).first.is_visible()
         page.screenshot(path=str(SHOTS / "slice4-mode-switcher.png"), full_page=True)
 
         # AC: clicking Build changes the URL, and the back button returns.
@@ -397,14 +412,14 @@ try:
     report["steps"]["project_shell"] = {
         "ok": all([
             tab_labels == ["Chat", "Build", "Document", "Video"],
-            disabled_ok, placeholder_ok, build_url_ok, back_ok, redirect_ok, run_open,
+            tabs_live_ok, surface_named_ok, build_url_ok, back_ok, redirect_ok, run_open,
             project_redirect_ok,
         ]),
         "project_id": project_id,
         "mode_tabs": tab_labels,
-        "disabled_mode_titles_enabling_action": disabled_ok,
-        "disabled_mode_title": video_title,
-        "unavailable_mode_states_enabling_action": placeholder_ok,
+        "every_mode_tab_live_and_named": tabs_live_ok,
+        "video_tab_title": video_title,
+        "deep_linked_mode_states_a_subject": surface_named_ok,
         "build_click_changed_url": build_url_ok,
         "back_button_returned": back_ok,
         "legacy_run_redirected": redirect_ok,
@@ -899,6 +914,7 @@ try:
 
     doc_project = new_project(f"doc-canvas-{tag}")
     down_project = new_project(f"doc-bridge-down-{tag}")
+    demo_project = new_project(f"demo-video-{tag}")  # §16's subject (slice 13)
 
     # Deliberately NOT in recency order — the picker must sort, not echo (§6.3).
     FIXTURE_DOCS = [
@@ -911,6 +927,40 @@ try:
     ]
     STRIP_DOC = "roadmap"
     ANCHORED_MESSAGE = "msg-v3"
+
+    # ── Slice 13's seed (§4.5): demos live in the SAME registry as documents, keyed by
+    # `kind: "demo"`. They are scoped to their own project so §12's picker order (a
+    # merged AC) keeps asserting exactly the four documents it was written against — and
+    # so the video picker's filter is provable: DEMO_PROJECT's registry carries a
+    # document too, and Video mode must not list it.
+    RECORDED_DEMO = "checkout-walkthrough"
+    FFMPEG_DEMO = "flaky-render"
+    FIXTURE_DEMOS = [
+        {"name": "onboarding-tour", "kind": "demo", "head": 1, "versions": 1, "updated_at": "2026-08-12T09:00:00Z"},
+        {"name": RECORDED_DEMO, "kind": "demo", "head": 2, "versions": 2, "updated_at": "2026-08-18T13:00:00Z"},
+        {"name": FFMPEG_DEMO, "kind": "demo", "head": 1, "versions": 1, "updated_at": "2026-08-16T10:00:00Z"},
+    ]
+    # The agent authors the spec; the service executes it (ADR-0018). Chapter offsets are
+    # STEP BOUNDARIES — the storyboard's only authority on where chapter N begins.
+    DEMO_STEPS = [
+        {"index": 0, "title": "Open the storefront", "timestamp": 0},
+        {"index": 1, "title": "Add a hoodie to the cart", "timestamp": 6.5},
+        {"index": 2, "title": "Enter the card details", "timestamp": 12},
+        {"index": 3, "title": "Confirm the order", "timestamp": 21.25},
+        {"index": 4, "title": "Land on the receipt", "timestamp": 27},
+    ]
+    DEMO_GIF_PATH = f"/d/{RECORDED_DEMO}/demo/v2.gif"
+    # A real 1×1 GIF: the player must render the SERVICE's bytes, fetched through the
+    # proxy on the page's own origin — not a data: URL the SPA could have invented.
+    TINY_GIF = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+    # §4.5: ffmpeg post-processing is best-effort, so the VERSION still landed and the
+    # service names the command that fixes it. Studio shows this string verbatim.
+    FFMPEG_HINT = ("ffmpeg is not on PATH — install it (macOS: `brew install ffmpeg`, "
+                   "Debian/Ubuntu: `sudo apt install ffmpeg`) and record again")
+    record_requests: list[str] = []
+    DEMO_SPEC_RE = re.compile(r"^/d/([^/]+)/api/demo/spec$")
+    DEMO_REC_RE = re.compile(r"^/d/([^/]+)/api/demo/recordings$")
+    DEMO_RECORD_RE = re.compile(r"^/d/([^/]+)/api/demo/record$")
 
     def seed_versions(name: str) -> list[dict]:
         head = next(d["head"] for d in FIXTURE_DOCS if d["name"] == name)
@@ -1004,7 +1054,27 @@ try:
                 self._json(503, {"code": "bridge_unavailable", "hint": BRIDGE_DOWN_HINT})
                 return True
             if rest == "/api/docs":
-                self._json(200, FIXTURE_DOCS)
+                # ONE registry (§4.5): the demo project's rows carry documents too, and
+                # Video mode is what narrows them to `kind: "demo"`.
+                self._json(200, FIXTURE_DOCS + FIXTURE_DEMOS
+                           if project == demo_project else FIXTURE_DOCS)
+                return True
+            m = DEMO_SPEC_RE.match(rest)
+            if m:
+                self._json(200, {"steps": DEMO_STEPS, "target_url": "https://shop.example/"})
+                return True
+            m = DEMO_REC_RE.match(rest)
+            if m:
+                # Two demos, two states: one recorded (gif only — ffmpeg produced no mp4
+                # on this box either, which is the common case), one whose post-process
+                # found no ffmpeg at all. Both are 200s: the VERSION landed regardless.
+                self._json(200,
+                           {"version": 1, "ffmpeg_absent": True, "ffmpeg_hint": FFMPEG_HINT}
+                           if urllib.parse.unquote(m.group(1)) == FFMPEG_DEMO
+                           else {"version": 2, "gif_url": DEMO_GIF_PATH})
+                return True
+            if rest == DEMO_GIF_PATH:
+                self._send(200, TINY_GIF, "image/gif")
                 return True
             m = VERSIONS_RE.match(rest)
             if m:
@@ -1097,6 +1167,12 @@ try:
                 fork = FORK_RE.match(rest)
                 if project == down_project:
                     return self._json(503, {"code": "bridge_unavailable", "hint": BRIDGE_DOWN_HINT})
+                record = DEMO_RECORD_RE.match(rest)
+                if record:
+                    # Slice 13 only has to make the action REAL and say so; the thread
+                    # wiring (and the version it lands) is slice 14's.
+                    record_requests.append(urllib.parse.unquote(record.group(1)))
+                    return self._json(200, {"queued": True})
                 if fork:
                     return self._fork(urllib.parse.unquote(fork.group(1)))
                 if rest == "/api/docs":
@@ -1620,7 +1696,8 @@ try:
         page.screenshot(path=str(SHOTS / "slice12-not-recorded-chip.png"), full_page=True)
         browser.close()
 
-    docd.shutdown()
+    # NB: the fixture server stays up — §16 (Video mode) is the last section on this rig
+    # and shuts it down there.
 
     feedback_events = [e for e in emitted_events if e.get("event_type") == FEEDBACK_EVENT]
     batch_event = (feedback_events[0].get("payload") or {}) if feedback_events else {}
@@ -1682,7 +1759,154 @@ try:
         fail("feedback_overlay_verdict",
              "slice-11+12 point-and-comment assertions did not all hold — see feedback_overlay")
 
-    # ── 16. Operator UX directive: the live edge on the board ──────────────────
+    # ── 16. Slice 13 (DES-MERGE-001 §4.5, §6.4): Video mode — storyboard + player ──
+    # Same same-origin rig: the fake bridge now also serves a seeded demo spec, a real
+    # (1×1) GIF, and a demo whose post-process found no ffmpeg. What this proves:
+    #   · the picker lists DEMOS most-recent-first out of the one registry, and does not
+    #     list the documents that sit in the same registry;
+    #   · a seeded demo shows N chapter cards matching its spec's N steps, in spec order;
+    #   · clicking chapter 3 seeks the player to that step's timestamp. The recording here
+    #     is a GIF — the artifact the service produces when ffmpeg made no mp4 — which has
+    #     no timeline to scrub, so the seek is asserted where the surface actually carries
+    #     it (`data-chapter` / `data-position`, the same values a <video> gets written to
+    #     its `currentTime`; that write is pinned in tests/VideoStoryboard.test.tsx);
+    #   · the ffmpeg-absent demo shows the service's install command VERBATIM, still
+    #     renders its full storyboard, and logs no console error — degradation, not a crash.
+    demo_console: list[str] = []
+    demo_requests: list[str] = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.on("console", lambda m: demo_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text else None)
+        page.on("request", lambda r: demo_requests.append(r.url))
+
+        # ── AC: the picker lists demos, most-recent first, and navigates ───────────
+        # `domcontentloaded`, not `networkidle`: the shell holds a live /ws and the mode
+        # surface's own loads are what the locator waits below are for — idling the
+        # network is neither necessary here nor something a live socket guarantees.
+        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video", wait_until="domcontentloaded")
+        page.locator('[data-testid="mode-switcher"]').wait_for(timeout=30000)
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
+        demo_rows = page.locator('[data-testid="demo-picker-row"]')
+        demo_rows.first.wait_for(timeout=30000)
+        demo_order = [demo_rows.nth(i).get_attribute("data-demo-id") for i in range(demo_rows.count())]
+        page.screenshot(path=str(SHOTS / "slice13-demo-picker.png"), full_page=True)
+        demo_rows.first.click()
+        demo_nav_ok = wait_for_path(page, f"/p/{demo_project}/video/{RECORDED_DEMO}")
+
+        # ── AC: N chapter cards, matching the spec's N steps, in spec order ────────
+        cards = page.locator('[data-testid="chapter-card"]')
+        cards.first.wait_for(timeout=30000)
+        card_count = cards.count()
+        card_indexes = [cards.nth(i).get_attribute("data-index") for i in range(card_count)]
+        card_titles = [cards.nth(i).inner_text() for i in range(card_count)]
+        player = page.locator('[data-testid="demo-player"]')
+        player_kind = player.get_attribute("data-player-kind")
+        # The player renders the SERVICE's bytes, through the proxy, on the page's origin.
+        gif_src = page.locator('[data-testid="demo-gif"]').get_attribute("src")
+        # Decoded, not merely requested: the assertion is that the SERVICE's bytes came
+        # back through the proxy and are renderable, so wait for the decode before asking.
+        page.wait_for_function(
+            """() => { const el = document.querySelector('[data-testid="demo-gif"]');
+                       return !!el && el.complete && el.naturalWidth > 0; }""", timeout=30000)
+        gif_loaded = page.locator('[data-testid="demo-gif"]').evaluate("el => el.naturalWidth > 0")
+        page.screenshot(path=str(SHOTS / "slice13-storyboard.png"), full_page=True)
+
+        # ── AC: clicking chapter 3 seeks the player to that chapter's timestamp ────
+        cards.nth(2).click()
+        page.wait_for_function(
+            """() => document.querySelector('[data-testid="demo-player"]')
+                 ?.getAttribute('data-chapter') === '2'""", timeout=30000)
+        seek_chapter = player.get_attribute("data-chapter")
+        seek_position = player.get_attribute("data-position")
+        seek_selected = cards.nth(2).get_attribute("data-selected")
+        others_unselected = [cards.nth(i).get_attribute("data-selected")
+                             for i in (0, 1, 3, 4)]
+        page.screenshot(path=str(SHOTS / "slice13-chapter-seek.png"), full_page=True)
+
+        # ── AC (§4.5): a missing ffmpeg is ACTIONABLE, and the storyboard still renders ──
+        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video/{FFMPEG_DEMO}", wait_until="domcontentloaded")
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
+        hint_el = page.locator('[data-testid="demo-ffmpeg-hint"]')
+        hint_el.wait_for(timeout=30000)
+        ffmpeg_hint_text = hint_el.inner_text()
+        ffmpeg_flagged = page.locator('[data-testid="demo-no-recording"]').get_attribute("data-ffmpeg-absent")
+        ffmpeg_cards = page.locator('[data-testid="chapter-card"]').count()
+        # …and the whole app is still standing: mode switcher, thread, no error surface.
+        ffmpeg_shell_ok = (page.locator('[data-testid="mode-switcher"]').is_visible()
+                           and page.locator('[data-testid="thread"]').is_visible()
+                           and page.locator('[data-testid="video-canvas-error"]').count() == 0)
+        # §3.3 wants a control adjacent to the statement, so the record action is real.
+        page.locator('[data-testid="demo-record"]').click()
+        queued_el = page.locator('[data-testid="demo-record-queued"]')
+        queued_el.wait_for(timeout=30000)
+        record_queued_ok = queued_el.is_visible()
+        page.screenshot(path=str(SHOTS / "slice13-ffmpeg-absent.png"), full_page=True)
+        browser.close()
+
+    expected_gif = (f"{DOC_ORIGIN}/api/v1/projects/{urllib.parse.quote(demo_project)}"
+                    f"/interactive{DEMO_GIF_PATH}")
+    # §5.3: every byte the surface pulls — spec, recording, GIF — is on the PAGE's own
+    # origin through crew's proxy. No second origin, and never the bridge's own port.
+    demo_origins = sorted({"{u.scheme}://{u.netloc}".format(u=urllib.parse.urlparse(u))
+                           for u in demo_requests if "/interactive/" in u})
+    report["steps"]["video_storyboard"] = {
+        "ok": all([
+            # Most-recent first, demos only — the documents in the same registry are absent.
+            demo_order == [RECORDED_DEMO, "flaky-render", "onboarding-tour"],
+            all(d["name"] not in (demo_order or []) for d in FIXTURE_DOCS),
+            demo_nav_ok,
+            card_count == len(DEMO_STEPS),
+            card_indexes == [str(i) for i in range(len(DEMO_STEPS))],
+            all(step["title"] in title for step, title in zip(DEMO_STEPS, card_titles)),
+            player_kind == "gif",
+            gif_src == expected_gif, gif_loaded,
+            demo_origins == [DOC_ORIGIN],
+            seek_chapter == "2",
+            seek_position == str(DEMO_STEPS[2]["timestamp"]),
+            seek_selected == "true",
+            others_unselected == ["false"] * 4,
+            FFMPEG_HINT in ffmpeg_hint_text,
+            ffmpeg_flagged == "true",
+            ffmpeg_cards == len(DEMO_STEPS),
+            ffmpeg_shell_ok,
+            record_queued_ok, record_requests == [FFMPEG_DEMO],
+            not demo_console,
+        ]),
+        "project_id": demo_project,
+        "picker_order_most_recent_first": demo_order,
+        "picker_navigated_to_demo": demo_nav_ok,
+        "chapter_cards": card_count,
+        "spec_steps": len(DEMO_STEPS),
+        "chapter_order": card_indexes,
+        "chapter_titles": card_titles,
+        "player_kind": player_kind,
+        "player_src": gif_src,
+        "player_bytes_decoded": gif_loaded,
+        "interactive_request_origins": demo_origins,
+        "seek_chapter": seek_chapter,
+        "seek_position_seconds": seek_position,
+        "seek_expected_seconds": DEMO_STEPS[2]["timestamp"],
+        "seek_selection": {"clicked": seek_selected, "others": others_unselected},
+        "ffmpeg_hint_verbatim": FFMPEG_HINT in ffmpeg_hint_text,
+        "ffmpeg_hint_rendered": ffmpeg_hint_text,
+        "ffmpeg_storyboard_still_rendered": ffmpeg_cards,
+        "ffmpeg_shell_intact": ffmpeg_shell_ok,
+        "record_action_queued": record_queued_ok,
+        "record_requests_seen_by_bridge": record_requests,
+        "console_errors": demo_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice13-demo-picker.png", "slice13-storyboard.png",
+                         "slice13-chapter-seek.png", "slice13-ffmpeg-absent.png")],
+    }
+    docd.shutdown()  # last section on the same-origin rig
+
+    if not report["steps"]["video_storyboard"]["ok"]:
+        fail("video_storyboard_verdict",
+             "slice-13 Video-mode assertions did not all hold — see video_storyboard")
+
+    # ── 17. Operator UX directive: the live edge on the board ──────────────────
     # The ACTIVE-WORK signal is a breathing 2px strip along the leading edge of the
     # element doing work, and the thing that has to hold is the RANKING: a busy card
     # must be visible without out-shouting a card that needs a human. So both states
