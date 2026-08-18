@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api, type GateDecision } from '../api/client.js';
 import type { CoverageReport } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
 import { useSteeringStore, type SteeringAction } from '../store/steering.js';
+import { GATE_HASH } from './GateChip.js';
 
 interface Props {
   runId: string;
@@ -37,6 +38,20 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [coverage, setCoverage] = useState<CoverageReport | null>(null);
+  const message = useRef<HTMLParagraphElement>(null);
+
+  // Arrived from a board gate chip (§1.4 complex gate): put the MESSAGE in view and
+  // give it focus, so a keyboard lands on the question rather than wherever the
+  // thread happened to leave it. One-shot — the hash is consumed on arrival, or the
+  // next render (this thread re-renders on every frame) would yank focus back.
+  useEffect(() => {
+    if (window.location.hash !== GATE_HASH) return;
+    const el = message.current;
+    if (el === null) return;
+    el.scrollIntoView({ block: 'center' });
+    el.focus({ preventScroll: true });
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [runId]);
 
   useEffect(() => {
     if (!repoRef) return;
@@ -116,8 +131,11 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
 
       {/* Headline prompt — the actionable part only */}
       <p
+        ref={message}
+        // Focusable only programmatically: the deep-link target, never a tab stop.
+        tabIndex={-1}
         className="text-xs mb-1 leading-relaxed font-mono"
-        style={{ color: 'rgba(230,237,243,0.85)' }}
+        style={{ color: 'rgba(230,237,243,0.85)', outline: 'none' }}
         data-testid="steering-prompt"
       >
         {headline}

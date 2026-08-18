@@ -83,6 +83,29 @@ describe('SteeringGate (§11.1 — the three/four distinct actions)', () => {
     expect(useGateStore.getState().gates['run-42']).toBeUndefined();
   });
 
+  // Arriving from a board gate chip (slice 7): the `#gate` hash is the focus intent.
+  describe('deep-linked from the board (§6.2 slice 7)', () => {
+    beforeEach(() => window.history.replaceState(null, '', '/p/proj-1/build/run-42'));
+
+    it('scrolls the gate message into view, focuses it, and consumes the hash', () => {
+      window.history.replaceState(null, '', '/p/proj-1/build/run-42#gate');
+      const scrollIntoView = vi.fn();
+      vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(scrollIntoView);
+      render(<SteeringGate runId="run-42" ord={3} prompt="Approve the acceptance criteria?" />);
+      expect(document.activeElement).toBe(screen.getByTestId('steering-prompt'));
+      expect(scrollIntoView).toHaveBeenCalled();
+      // One-shot: the path survives, the intent does not — the thread re-renders on
+      // every frame and must not keep yanking focus back.
+      expect(window.location.hash).toBe('');
+      expect(window.location.pathname).toBe('/p/proj-1/build/run-42');
+    });
+
+    it('leaves focus alone without the hash', () => {
+      render(<SteeringGate runId="run-42" ord={3} prompt="?" />);
+      expect(document.activeElement).toBe(document.body);
+    });
+  });
+
   it('works id-only when the prompt is unavailable (daemon restart, §3.3)', async () => {
     const user = userEvent.setup();
     render(<SteeringGate runId="run-42" />);
