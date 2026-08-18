@@ -54,41 +54,57 @@ code, pre, .font-mono {
   background-repeat: no-repeat, no-repeat, no-repeat;
 }
 
-/* Live edge — slow breathing accent strip for the EXECUTING state (operator UX directive).
-   Applied via .wk-live-edge on an absolutely-positioned child inside a position:relative
-   container with overflow:hidden.  The parent's border-radius clips the strip's corners.
+/* Live edge — the leading-edge strip that marks the element doing work, and the one
+   waiting on a human (see components/LiveEdge.tsx for the ranking rationale). Rendered
+   on an absolutely-positioned child of a position:relative container; an overflow:hidden
+   parent clips the strip's ends to its border-radius.
 
-   Gate-waiting keeps its yellow treatment (higher visual priority) and never shows this strip.
-
-   prefers-reduced-motion: animation is removed; the strip stays fully opaque so the state
-   remains obvious without motion.  The JS component also sets data-reduced="true" on the
-   element when window.matchMedia matches, so unit tests can assert the reduced branch without
-   a real CSS engine. */
+   Selector order matters here — every rule below is one class deep, so the variants win
+   by coming last. Keep --gate and --pill after the reduced-motion block. */
 
 @keyframes wk-live-pulse {
   0%, 100% { opacity: 0.5; }
-  50%       { opacity: 1;   }
+  50%      { opacity: 1;   }
 }
 
+/* EXECUTING: 2px, breathing, faint matching glow. Slow and low-contrast on purpose. */
 .wk-live-edge {
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #79c0ff;
+  background: var(--wk-link);
   box-shadow: 0 0 8px rgba(121, 192, 255, 0.2);
   animation: wk-live-pulse 2s ease-in-out infinite;
+  pointer-events: none;
 }
+
+/* Reduced motion: no animation, and MORE contrast than the breath averaged — a solid
+   edge at full opacity, one pixel wider. Set twice on purpose: the media query is the
+   real behaviour in a browser, the --static class is what LiveEdge maps the state to so
+   the branch is assertable in a unit test without a CSS engine. */
+.wk-live-edge--static { animation: none; opacity: 1; width: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .wk-live-edge {
-    animation: none;
-    opacity: 1;
-  }
+  .wk-live-edge { animation: none; opacity: 1; width: 3px; }
 }
 
-.wk-live-edge[data-reduced="true"] {
+/* GATE-WAITING: out-ranks executing — wider, accent-yellow, solid, never breathing. */
+.wk-live-edge--gate {
+  width: 3px;
+  background: var(--wk-accent);
+  box-shadow: 0 0 10px rgba(255, 218, 25, 0.3);
   animation: none;
   opacity: 1;
+}
+
+/* Fully-rounded containers (the stepper's phase chips): inset clear of the cap curve. */
+.wk-live-edge--pill {
+  left: 3px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  box-shadow: none;
 }

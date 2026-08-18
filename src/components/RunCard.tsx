@@ -1,4 +1,5 @@
 import type { SessionStatus, SessionView } from '../api/types.js';
+import { edgeStateOf, LiveEdge } from './LiveEdge.js';
 
 // Status metadata — className uses wicked semantic colors
 export const STATUS_STYLE: Record<SessionStatus, { label: string; className: string; color: string }> = {
@@ -30,7 +31,7 @@ export function RunCard({ view, selected, onSelect }: Props): React.ReactElement
       data-run-id={session.id}
       data-status={session.status}
       aria-pressed={selected}
-      className="w-full text-left rounded-lg p-4 transition"
+      className="w-full text-left rounded-lg p-4 transition relative overflow-hidden"
       style={{
         background: selected ? '#1b222e' : '#161c26',
         border: selected
@@ -39,6 +40,8 @@ export function RunCard({ view, selected, onSelect }: Props): React.ReactElement
         boxShadow: selected ? '0 0 0 1px rgba(121,192,255,0.1)' : 'none',
       }}
     >
+      {/* Same treatment as the board card, so a run reads identically on both surfaces. */}
+      <LiveEdge state={edgeStateOf([session.status])} />
       <div className="flex justify-between items-start gap-2 mb-1">
         <p className="font-semibold text-sm line-clamp-2 flex-1 font-mono" style={{ color: '#e6edf3' }}>
           {session.problem}

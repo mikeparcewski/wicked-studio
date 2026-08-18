@@ -7,6 +7,7 @@ import { useGateStore } from '../store/gates.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { ElicitationPrompt } from './ElicitationPrompt.js';
 import { useRuntimeStore, outputKey, type CouncilStatus } from '../store/runtime.js';
+import { LiveEdge } from './LiveEdge.js';
 import { STATUS_STYLE } from './RunCard.js';
 import { SteeringGate } from './SteeringGate.js';
 import { ChatInput } from './ChatInput.js';
@@ -89,11 +90,17 @@ function routingSummary(unit: WorkUnit): string | null {
 /** A phase's place in the run: finished, judged-and-rejected, running now, or still to come. */
 type StepState = 'done' | 'rejected' | 'active' | 'queued';
 
+/**
+ * `active` is link-blue, not accent-yellow: yellow is the colour of a gate — the state
+ * that needs a human — and spending it on "a phase is running" left the two ranked the
+ * same. Executing now carries the same blue live edge it carries on the board, and the
+ * attention colour is free to mean only one thing.
+ */
 const STEP_STYLE: Record<StepState, { color: string; background: string; border: string }> = {
-  done:     { color: '#3fb950',               background: 'rgba(63,185,80,0.1)',   border: '1px solid rgba(63,185,80,0.25)' },
-  rejected: { color: '#f85149',               background: 'rgba(248,81,73,0.1)',   border: '1px solid rgba(248,81,73,0.3)' },
-  active:   { color: '#ffda19',               background: 'rgba(255,218,25,0.12)', border: '1px solid rgba(255,218,25,0.35)' },
-  queued:   { color: 'rgba(230,237,243,0.3)', background: 'transparent',           border: '1px solid rgba(230,237,243,0.08)' },
+  done:     { color: '#3fb950',               background: 'rgba(63,185,80,0.1)',    border: '1px solid rgba(63,185,80,0.25)' },
+  rejected: { color: '#f85149',               background: 'rgba(248,81,73,0.1)',    border: '1px solid rgba(248,81,73,0.3)' },
+  active:   { color: '#79c0ff',               background: 'rgba(121,192,255,0.12)', border: '1px solid rgba(121,192,255,0.35)' },
+  queued:   { color: 'rgba(230,237,243,0.3)', background: 'transparent',            border: '1px solid rgba(230,237,243,0.08)' },
 };
 
 /**
@@ -154,16 +161,16 @@ function ProcessStepper({
               data-testid={`stepper-phase-${unit.ord}`}
               data-state={state}
               title={tooltip}
-              className="rounded-full px-2.5 py-0.5 flex items-center gap-1.5 whitespace-nowrap"
+              className="rounded-full px-2.5 py-0.5 flex items-center gap-1.5 whitespace-nowrap relative"
               style={{ background: s.background, border: s.border, color: s.color }}
             >
               {state === 'done' && <span aria-hidden="true">✓</span>}
               {state === 'rejected' && <span aria-hidden="true">✗</span>}
+              {/* The breathing edge is the signal; the dot stays only for colour
+                  continuity with the run's status, so it no longer pulses too. */}
+              {state === 'active' && <LiveEdge state="executing" pill />}
               {state === 'active' && (
-                <span
-                  className="inline-block w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
-                  style={{ background: '#ffda19' }}
-                />
+                <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#79c0ff' }} />
               )}
               {phaseName(runId, unit)}
             </span>

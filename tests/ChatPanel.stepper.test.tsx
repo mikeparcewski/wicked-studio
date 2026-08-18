@@ -63,6 +63,25 @@ describe('ChatPanel process stepper (workflow map at the top of the thread)', ()
     expect(await screen.findByText('clarify output')).toBeInTheDocument();
   });
 
+  // Rule 5 of the live-edge directive: the stepper's active phase gets the same
+  // treatment the board does, and only it — a queued or done phase is not doing work.
+  it('gives the active phase the live edge, and no other phase one', async () => {
+    vi.spyOn(client.api, 'getUnitOutput').mockResolvedValue({ output: 'clarify output' });
+    render(<ChatPanel view={workflowView()} onLaunched={vi.fn()} onNavigateBack={vi.fn()} onRefresh={vi.fn()} />);
+    // Let the done phase's transcript land, so no fetch settles after teardown.
+    expect(await screen.findByText('clarify output')).toBeInTheDocument();
+
+    const stepper = screen.getByTestId('process-stepper');
+    const edge = within(within(stepper).getByTestId('stepper-phase-2')).getByTestId('live-edge');
+    expect(edge).toHaveAttribute('data-edge-state', 'executing');
+    // Inset variant: an edge at left:0 would land on a fully-rounded pill's cap curve.
+    expect(edge.className).toContain('wk-live-edge--pill');
+    expect(within(stepper).getAllByTestId('live-edge')).toHaveLength(1);
+
+    // The dot stays for colour continuity but no longer competes: it does not pulse.
+    expect(within(stepper).getByTestId('stepper-phase-2').querySelector('.animate-pulse')).toBeNull();
+  });
+
   it('keeps queued phases OUT of the timeline: no empty blocks, no per-unit meta rows', async () => {
     vi.spyOn(client.api, 'getUnitOutput').mockResolvedValue({ output: 'clarify output' });
     render(<ChatPanel view={workflowView()} onLaunched={vi.fn()} onNavigateBack={vi.fn()} onRefresh={vi.fn()} />);
