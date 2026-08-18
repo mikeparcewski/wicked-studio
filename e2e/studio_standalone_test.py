@@ -28,6 +28,10 @@ What "independent" means here, and what this script proves end-to-end:
      four-mode switcher, an unavailable mode is disabled with its enabling action in
      the tooltip, clicking Build is a real (back-button-correct) navigation, and the
      pre-merge /runs/:id and /projects/:id bookmarks redirect into the new shape
+  8. (DES-MERGE-001 slice 5) the orchestrator board at /: the gate-waiting project
+     sorts first, an empty project's card IS its four quick actions (each pre-bound
+     to that project), doc tiles are placeholders rather than iframes (§7.5), and
+     20+ projects stay windowed inside a viewport-bounded board
 
 The daemon is the ONE thing this repo cannot supply. Point CREW_CLI at a built
 crew CLI entry (`.../packages/crew/dist/cli/index.js`); it defaults to the sibling
@@ -352,6 +356,129 @@ try:
     }
     if not report["steps"]["project_shell"]["ok"]:
         fail("project_shell_verdict", "slice-4 shell assertions did not all hold — see project_shell")
+
+    # ── 9. Slice 5 (DES-MERGE-001 §6.2): the orchestrator board at / ──────────
+    def new_project(name: str) -> str:
+        _, _, created = http_json("POST", f"{API}/projects", {"name": name})
+        return created["project"]["id"]
+
+    def attach_run(project: str, run: str) -> None:
+        http_json(
+            "POST", f"{API}/projects/{project}/members",
+            {"kind": "crew.run", "ref": run, "attachedBy": "studio"},
+        )
+
+    def launch(problem: str, human_confirm: str) -> str:
+        _, _, body = http_json("POST", f"{API}/runs", {"problem": problem, "humanConfirm": human_confirm})
+        return body["runId"]
+
+    def await_gate(rid: str) -> str:
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            _, _, body = http_json("GET", f"{API}/runs/{rid}")
+            if body["run"]["session"]["status"] == "awaiting_human":
+                return rid
+            time.sleep(0.5)
+        fail("board_seed", f"run {rid} never parked on a human gate")
+        return rid  # unreachable — fail() exits
+
+    tag = run_id[:8]
+    gate_project = new_project(f"board-gate-{tag}")
+    attach_run(gate_project, await_gate(launch("board seed: parks on a gate", "all")))
+    busy_project = new_project(f"board-busy-{tag}")
+    busy_run = launch("board seed: runs unattended", "none")
+    attach_run(busy_project, busy_run)
+    empty_project = new_project(f"board-empty-{tag}")
+
+    def settled(page, expr: str, arg=None) -> bool:
+        """The board sorts once memberships land — poll for the settled state, not the first paint."""
+        try:
+            page.wait_for_function(expr, arg=arg, timeout=30000)
+            return True
+        except Exception:
+            return False
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        viewport = page.viewport_size
+
+        # AC: with a gate-waiting, a running and an empty project seeded, the FIRST card
+        # is the gate-waiting one (§1.4 — sorted by attention, not recency).
+        page.goto(f"{STUDIO_ORIGIN}/", wait_until="networkidle")
+        page.locator('[data-testid="project-board"]').wait_for(timeout=30000)
+        gate_first_ok = settled(
+            page,
+            """id => { const c = document.querySelector('[data-testid="project-card"]');
+                       return !!c && c.dataset.projectId === id && c.dataset.attention === 'gate'; }""",
+            gate_project,
+        )
+        first_card = page.locator('[data-testid="project-card"]').first
+        gate_chip_ok = "gate" in first_card.inner_text().lower()
+
+        # AC: the empty project's card shows the four quick actions, each pre-bound to it.
+        empty_card = page.locator(f'[data-testid="project-card"][data-project-id="{empty_project}"]')
+        empty_card.wait_for(timeout=30000)
+        actions = empty_card.locator('[data-testid="quick-action"]')
+        modes = [actions.nth(i).get_attribute("data-mode") for i in range(actions.count())]
+        empty_actions_ok = modes == ["chat", "build", "document", "video"]
+        prebound_ok = all(
+            actions.nth(i).get_attribute("href") == f"/p/{empty_project}/{m}"
+            for i, m in enumerate(modes)
+        )
+        # §7.5: doc tiles are PLACEHOLDERS — no card mounts a live document.
+        no_iframes = page.locator('[data-testid="project-card"] iframe').count() == 0
+        page.screenshot(path=str(SHOTS / "slice5-board-attention.png"), full_page=True)
+
+        # AC: 20 more projects stay windowed — the board is bounded by the viewport, and
+        # what is MOUNTED is bounded with it (§1.4: legible at ~20 cards).
+        for i in range(20):
+            new_project(f"board-bulk-{tag}-{i:02d}")
+        page.goto(f"{STUDIO_ORIGIN}/", wait_until="networkidle")
+        board = page.locator('[data-testid="project-board"]')
+        board.wait_for(timeout=30000)
+        bulk_loaded = settled(
+            page,
+            """() => Number(document.querySelector('[data-testid="project-board"]')?.dataset.total || 0) >= 20""",
+        )
+        total = int(board.get_attribute("data-total") or 0)
+        rendered = page.locator('[data-testid="project-card"]').count()
+        board_box = board.bounding_box() or {"height": 1e9}
+        doc_height = page.evaluate("() => document.documentElement.scrollHeight")
+        board_bounded = board_box["height"] <= viewport["height"] + 1
+        page_bounded = doc_height <= viewport["height"] + 1
+        windowed = rendered < total
+        page.screenshot(path=str(SHOTS / "slice5-board-windowed.png"), full_page=True)
+
+        browser.close()
+
+    report["steps"]["orchestrator_board"] = {
+        "ok": all([
+            gate_first_ok, gate_chip_ok, empty_actions_ok, prebound_ok, no_iframes,
+            bulk_loaded, board_bounded, page_bounded, windowed,
+        ]),
+        "gate_project": gate_project,
+        "busy_project": busy_project,
+        "busy_run": busy_run,
+        "empty_project": empty_project,
+        "gate_waiting_sorted_first": gate_first_ok,
+        "gate_state_on_card": gate_chip_ok,
+        "empty_card_quick_actions": modes,
+        "quick_actions_prebound_to_project": prebound_ok,
+        "doc_tiles_are_placeholders_no_iframe": no_iframes,
+        "projects_total": total,
+        "cards_mounted": rendered,
+        "board_height_px": board_box["height"],
+        "viewport_height_px": viewport["height"],
+        "document_scroll_height_px": doc_height,
+        "board_height_bounded_by_viewport": board_bounded,
+        "page_does_not_grow_with_projects": page_bounded,
+        "virtualized_fewer_cards_than_projects": windowed,
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice5-board-attention.png", "slice5-board-windowed.png")],
+    }
+    if not report["steps"]["orchestrator_board"]["ok"]:
+        fail("orchestrator_board_verdict", "slice-5 board assertions did not all hold — see orchestrator_board")
 
     report["ok"] = True
     print(json.dumps(report, indent=2))
