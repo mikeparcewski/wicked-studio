@@ -107,6 +107,8 @@ export interface CreateDocBody {
   /** The thread message this generation came from (§7.6). The bridge writes it into
    *  the version's `meta.sourceMessageId` at commit; the client only supplies it. */
   source_message_id?: string;
+  /** A learned theme to apply to this generation (§4.6, slice 16). */
+  theme_id?: string;
 }
 
 export interface CreateDocResult {
@@ -290,6 +292,71 @@ export function postEvent(projectId: string, evt: InteractiveEvent): Promise<Eve
   );
 }
 
+// ── Theme types (§4.6, §6.4 slice 16) ────────────────────────────────────────
+
+export type LearnKind = 'url' | 'pdf' | 'image';
+
+/**
+ * One row of `GET /api/themes` — the library, which is `src/themes/*.json` plus everything
+ * the agent has learned (§4.6). `name` is the slug id, exactly as `DocSummary.name` is:
+ * one spelling of "the id of a thing in a registry" across the whole seam. It is what
+ * `CreateDocBody.theme_id` carries back.
+ */
+export interface ThemeSummary {
+  name: string;
+  /** Absent on the built-in themes, which were not learned from anything. */
+  source?: LearnKind;
+  learned_at?: string;
+}
+
+export interface LearnThemeBody {
+  kind: LearnKind;
+  /** Live URL to capture via headless chrome (kind: 'url'). Never fetched by the SPA —
+   *  the bridge proxy owns the SSRF guard (§4.6: reject loopback, private, link-local). */
+  url?: string;
+  /** Absolute path of a local PDF or image (kind: 'pdf' | 'image'). Read server-side;
+   *  the client sends the PATH ONLY — nothing is uploaded from the browser. */
+  path?: string;
+}
+
+/** The bridge queues immediately and the agent runs async. */
+export interface LearnThemeResult {
+  theme_id: string;
+  status: 'queued';
+  /** An informative message the bridge authored — show it in the thread, never paraphrase. */
+  message?: string;
+}
+
+/** `GET /api/themes` — the theme library (built-ins + everything learned, §4.6). */
+export function listThemes(projectId: string): Promise<ThemeSummary[]> {
+  return iFetch<{ themes: ThemeSummary[] } | ThemeSummary[]>(
+    `${interactiveBase(projectId)}/api/themes`,
+  ).then((r) => (Array.isArray(r) ? r : r.themes));
+}
+
+/**
+ * `POST /api/theme/learn { kind, url? | path? }` — submit one source for the agent to learn.
+ *
+ * The SSRF guard lives entirely server-side (§4.6: reject loopback/link-local/private, resolve
+ * every address and pin the validated IP). The SPA sends the URL to the bridge proxy, NEVER to
+ * the target itself — `page.on('request')` in the E2E AC confirms this.
+ */
+export function learnTheme(projectId: string, body: LearnThemeBody): Promise<LearnThemeResult> {
+  return iFetch<LearnThemeResult>(
+    `${interactiveBase(projectId)}/api/theme/learn`, jsonPost(body));
+}
+
+/**
+ * `POST /d/:docId/api/sources { path }` — attach a local reference path (§4.9).
+ *
+ * The body is `application/json` carrying only the path string — the service reads the files
+ * server-side. Nothing is uploaded from the browser. The E2E AC uses `page.on('request')` to
+ * confirm no `multipart/form-data` body leaves the page.
+ */
+export function attachSource(projectId: string, docId: string, path: string): Promise<SourceEntry> {
+  return iFetch<SourceEntry>(`${docBase(projectId, docId)}/api/sources`, jsonPost({ path }));
+}
+
 // ── Demo types (§4.5, §6.4 slice 13) ────────────────────────────────────────
 
 /** One chapter of a demo spec — the agent authors the spec; the service executes it. */
@@ -375,9 +442,16 @@ export function injectDocMessage(
   docId: string,
   text: string,
   sourceMessageId: string,
+  /** The theme the composer had picked when this message was sent (§4.6, slice 16).
+   *  Carried on the message rather than set on the document, because a pick applies to
+   *  the GENERATION the message starts — the same reason `CreateDocBody` carries it. */
+  themeId?: string,
 ): Promise<EventAck> {
   return postEvent(projectId, {
     event_type: 'wicked.interactive.chat.posted',
-    payload: { role: 'user', text, document_id: docId, source_message_id: sourceMessageId },
+    payload: {
+      role: 'user', text, document_id: docId, source_message_id: sourceMessageId,
+      ...(themeId === undefined || themeId === '' ? {} : { theme_id: themeId }),
+    },
   });
 }
