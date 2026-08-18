@@ -5,7 +5,9 @@ import { CoverageView } from './components/CoverageView.js';
 import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
+import { ModePlaceholder } from './components/ModePlaceholder.js';
 import { PolicyManager } from './components/PolicyManager.js';
+import { ProjectShell } from './components/ProjectShell.js';
 import { ProjectDetailPage } from './components/ProjectDetailPage.js';
 import { ProjectsPage } from './components/ProjectsPage.js';
 import { RepositoriesPanel } from './components/RepositoriesPanel.js';
@@ -19,7 +21,8 @@ import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { WorkPage } from './components/WorkPage.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { useEventStream } from './hooks/useEventStream.js';
-import { useRoute } from './hooks/useRoute.js';
+import { useLegacyRedirect } from './hooks/useLegacyRedirect.js';
+import { modePath, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useGateStore } from './store/gates.js';
 import { useElicitationStore } from './store/elicitations.js';
@@ -76,7 +79,7 @@ function useKillShortcut(
 }
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, showLaunch, showRegisterRepo, chatMode, navigate } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, navigate } = useRoute();
   const { runs, refresh } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestElicitation = useElicitationStore((s) => s.ingest);
@@ -108,6 +111,9 @@ export function App(): React.ReactElement {
   );
 
   useEventStream(handleEvent);
+
+  // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
+  useLegacyRedirect({ panel, runId, projectId, mode, showLaunch }, navigate);
 
   // FINDING-013: /ws has no late-join replay, so a page reloaded against a run shows an empty Burn
   // panel even though usage was durably recorded. When the selected run has no frames yet (a reload
@@ -143,20 +149,30 @@ export function App(): React.ReactElement {
     };
   }, [runId]);
 
-  const selectRun = useCallback(
-    (id: string) => navigate(`/runs/${encodeURIComponent(id)}`),
-    [navigate],
+  // Inside the project shell, selecting a run stays in the shell (Chat keeps Chat, every
+  // other mode opens Build) instead of bouncing out to /runs/:id and redirecting back.
+  const runPath = useCallback(
+    (id: string) =>
+      projectId && mode
+        ? modePath(projectId, mode === 'chat' ? 'chat' : 'build', id)
+        : `/runs/${encodeURIComponent(id)}`,
+    [projectId, mode],
   );
+
+  const selectRun = useCallback((id: string) => navigate(runPath(id)), [navigate, runPath]);
 
   const onLaunched = useCallback(
     (id: string) => {
       refresh();
-      navigate(`/runs/${encodeURIComponent(id)}`);
+      navigate(runPath(id));
     },
-    [navigate, refresh],
+    [navigate, refresh, runPath],
   );
 
-  const onNavigateBack = useCallback(() => navigate('/'), [navigate]);
+  const onNavigateBack = useCallback(
+    () => navigate(projectId && mode ? modePath(projectId, mode) : '/'),
+    [navigate, projectId, mode],
+  );
 
   const onKill = useCallback(
     async (id: string) => {
@@ -190,8 +206,66 @@ export function App(): React.ReactElement {
     [repoId],
   );
 
+  // The three center surfaces, rendered by the legacy routes AND by the project shell.
+  // Slice 4 WIRES them; sharing the expression is what keeps "the same surface" literal.
+  const dashboardSurface = (): React.ReactElement => (
+    <div className="flex-1 overflow-y-auto">
+      <CenterDashboard
+        runs={runs}
+        onSelectRun={selectRun}
+        onApproveGate={onDashboardApproveGate}
+        onRejectGate={onDashboardRejectGate}
+        navigate={navigate}
+      />
+    </div>
+  );
+
+  const groupChatSurface = (repo: string | null): React.ReactElement => (
+    <div className="flex-1 overflow-hidden">
+      <GroupChat repoId={repo} onBack={onNavigateBack} />
+    </div>
+  );
+
+  const runSurface = (): React.ReactElement => (
+    <div className="flex-1 overflow-hidden">
+      <ChatPanel
+        view={selected}
+        chatMode={chatMode}
+        onLaunched={onLaunched}
+        onNavigateBack={onNavigateBack}
+        onRefresh={refresh}
+        onKill={onKill}
+        navigate={navigate}
+      />
+    </div>
+  );
+
+  /**
+   * What a mode renders inside the shell (DES-MERGE-001 §6.2, slice 4). Document and
+   * Video state what is coming and the action that enables it; Chat and Build reuse the
+   * existing surfaces above.
+   *
+   * Build with nothing open is the existing run home, UNSCOPED: scoping a project's runs
+   * is the board's data plumbing (slices 5-6) and needs launch to file the run it creates,
+   * so filtering here first would hide a run the user had just launched.
+   */
+  function renderModeSurface(m: Mode): React.ReactElement {
+    if (m === 'document' || m === 'video') return <ModePlaceholder mode={m} />;
+    if (m === 'chat' && !artifactId) return groupChatSurface(null);
+    return artifactId ? runSurface() : dashboardSurface();
+  }
+
   // Center panel content based on route
   function renderCenter(): React.ReactElement {
+    // The project shell owns every `/p/*` route and is checked FIRST — the panel parse
+    // below is untouched and still owns the flat cross-project lists and side panels.
+    if (projectId !== null && mode !== null) {
+      return (
+        <ProjectShell projectId={projectId} mode={mode} artifactId={artifactId} navigate={navigate}>
+          {renderModeSurface(mode)}
+        </ProjectShell>
+      );
+    }
     if (panel === 'coverage') {
       return (
         <div className="flex-1 overflow-y-auto p-6">
@@ -267,6 +341,8 @@ export function App(): React.ReactElement {
         </div>
       );
     }
+    // `/projects/:id` redirects into the shell (§1.5); this renders only for the tick
+    // before the redirect lands, and is the fallback if the redirect never does.
     if (panel === 'project-detail' && projectId) {
       return (
         <div className="flex-1 overflow-y-auto">
@@ -283,40 +359,14 @@ export function App(): React.ReactElement {
     }
     // Home dashboard: no run selected and not launching — three-panel home view + manager controls
     if (panel === 'runs' && !runId && !selected && !showLaunch) {
-      return (
-        <div className="flex-1 overflow-y-auto">
-          <CenterDashboard
-            runs={runs}
-            onSelectRun={selectRun}
-            onApproveGate={onDashboardApproveGate}
-            onRejectGate={onDashboardRejectGate}
-            navigate={navigate}
-          />
-        </div>
-      );
+      return dashboardSurface();
     }
     // NEW CHAT: the group-chat surface (warm seats + fan-out), not a run (crew#165).
     if (chatMode && selected === null) {
-      return (
-        <div className="flex-1 overflow-hidden">
-          <GroupChat repoId={repoId} onBack={onNavigateBack} />
-        </div>
-      );
+      return groupChatSurface(repoId);
     }
     // Run selected or launch form
-    return (
-      <div className="flex-1 overflow-hidden">
-        <ChatPanel
-          view={selected}
-          chatMode={chatMode}
-          onLaunched={onLaunched}
-          onNavigateBack={onNavigateBack}
-          onRefresh={refresh}
-          onKill={onKill}
-          navigate={navigate}
-        />
-      </div>
-    );
+    return runSurface();
   }
 
   return (

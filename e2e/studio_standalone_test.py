@@ -24,6 +24,10 @@ What "independent" means here, and what this script proves end-to-end:
      CoreEvent frames arrive over ws://<daemon>/ws until the run completes
   6. (post-#243) the project surface answers: GET /api/v1/projects returns 200 with
      a list, cross-origin
+  7. (DES-MERGE-001 slice 4) the project shell: /p/:projectId/:mode renders the
+     four-mode switcher, an unavailable mode is disabled with its enabling action in
+     the tooltip, clicking Build is a real (back-button-correct) navigation, and the
+     pre-merge /runs/:id and /projects/:id bookmarks redirect into the new shape
 
 The daemon is the ONE thing this repo cannot supply. Point CREW_CLI at a built
 crew CLI entry (`.../packages/crew/dist/cli/index.js`); it defaults to the sibling
@@ -44,11 +48,13 @@ Operator-run smoke — though it spends no tokens (stub engine, no real CLI seat
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -260,6 +266,92 @@ try:
     }
     if not report["steps"]["browser_flow"]["ok"]:
         fail("browser_flow_verdict", "run list / WS completion assertions did not all hold — see browser_flow")
+
+    # ── 8. Slice 4 (DES-MERGE-001 §6.2): project shell, mode switcher, redirects ─
+    # File the run under a real project first: run→project resolution is membership-based,
+    # and `default` is the SYNTHESIZED unfiled project, which deliberately never redirects.
+    _, _, created = http_json("POST", f"{API}/projects", {"name": f"slice4-{run_id[:12]}"})
+    project_id = created["project"]["id"]
+    http_json(
+        "POST", f"{API}/projects/{project_id}/members",
+        {"kind": "crew.run", "ref": run_id, "attachedBy": "studio"},
+    )
+
+    def wait_for_path(page, path: str, timeout: float = 30.0) -> bool:
+        """Poll the SPA's path — pushState/replaceState, not document navigations."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if urllib.parse.urlparse(page.url).path == path:
+                return True
+            page.wait_for_timeout(200)
+        return False
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+
+        # Land on a mode whose surface makes no API calls, so this section asserts the
+        # SHELL rather than whatever a live surface happens to be doing.
+        page.goto(f"{STUDIO_ORIGIN}/p/{project_id}/document", wait_until="networkidle")
+        switcher = page.locator('[data-testid="mode-switcher"]')
+        switcher.wait_for(timeout=30000)
+        tabs = switcher.locator('[role="tab"]')
+        tab_labels = [tabs.nth(i).inner_text() for i in range(tabs.count())]
+
+        # AC: an unavailable mode is DISABLED (never hidden) and its tooltip names the
+        # one action that enables it (§1.3 rule 3).
+        video = page.locator('[data-testid="mode-tab-video"]')
+        video_title = video.get_attribute("title") or ""
+        disabled_ok = (
+            video.is_disabled()
+            and re.search(r"install|connect|create", video_title, re.I) is not None
+        )
+        # The deep-linked unavailable mode still states what it is and how to enable it
+        # (§3.3: no bare spinner, every state names a subject).
+        placeholder_ok = page.locator('[data-testid="mode-enabling-action-document"]').is_visible()
+        page.screenshot(path=str(SHOTS / "slice4-mode-switcher.png"), full_page=True)
+
+        # AC: clicking Build changes the URL, and the back button returns.
+        page.locator('[data-testid="mode-tab-build"]').click()
+        build_url_ok = wait_for_path(page, f"/p/{project_id}/build")
+        page.go_back()
+        back_ok = wait_for_path(page, f"/p/{project_id}/document")
+
+        # AC: a legacy bookmark lands on the new shape with the run open.
+        page.goto(f"{STUDIO_ORIGIN}/runs/{run_id}", wait_until="networkidle")
+        redirect_ok = wait_for_path(page, f"/p/{project_id}/build/{run_id}")
+        surface = page.locator('[data-testid="mode-surface"]')
+        surface.wait_for(timeout=30000)
+        run_open = problem[:30] in surface.inner_text()
+        page.screenshot(path=str(SHOTS / "slice4-legacy-redirect.png"), full_page=True)
+
+        # AC: /projects/:id keeps working as a bookmark too.
+        page.goto(f"{STUDIO_ORIGIN}/projects/{project_id}", wait_until="networkidle")
+        project_redirect_ok = wait_for_path(page, f"/p/{project_id}/build")
+
+        browser.close()
+
+    report["steps"]["project_shell"] = {
+        "ok": all([
+            tab_labels == ["Chat", "Build", "Document", "Video"],
+            disabled_ok, placeholder_ok, build_url_ok, back_ok, redirect_ok, run_open,
+            project_redirect_ok,
+        ]),
+        "project_id": project_id,
+        "mode_tabs": tab_labels,
+        "disabled_mode_titles_enabling_action": disabled_ok,
+        "disabled_mode_title": video_title,
+        "unavailable_mode_states_enabling_action": placeholder_ok,
+        "build_click_changed_url": build_url_ok,
+        "back_button_returned": back_ok,
+        "legacy_run_redirected": redirect_ok,
+        "run_open_after_redirect": run_open,
+        "legacy_project_redirected": project_redirect_ok,
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice4-mode-switcher.png", "slice4-legacy-redirect.png")],
+    }
+    if not report["steps"]["project_shell"]["ok"]:
+        fail("project_shell_verdict", "slice-4 shell assertions did not all hold — see project_shell")
 
     report["ok"] = True
     print(json.dumps(report, indent=2))
