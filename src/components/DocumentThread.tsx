@@ -149,7 +149,12 @@ function NotRecordedChip({
       disabled={busy}
       onClick={() => {
         setBusy(true);
-        void retryBatchInject(projectId, docId, msgId, text).finally(() => setBusy(false));
+        // A retry that fails again is not a new failure to report — the chip IS the
+        // report, and it stays up. Swallowed deliberately rather than left to reject
+        // unhandled into the console.
+        void retryBatchInject(projectId, docId, msgId, text)
+          .catch(() => {})
+          .finally(() => setBusy(false));
       }}
       className="mt-2 block rounded-full px-2 py-0.5 text-[10px] font-mono disabled:opacity-40"
       style={{ background: 'rgba(248,81,73,0.1)', color: S.danger,
