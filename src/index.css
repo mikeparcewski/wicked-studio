@@ -53,3 +53,42 @@ code, pre, .font-mono {
   background-position: 0 0, 0 0, center;
   background-repeat: no-repeat, no-repeat, no-repeat;
 }
+
+/* Live edge — slow breathing accent strip for the EXECUTING state (operator UX directive).
+   Applied via .wk-live-edge on an absolutely-positioned child inside a position:relative
+   container with overflow:hidden.  The parent's border-radius clips the strip's corners.
+
+   Gate-waiting keeps its yellow treatment (higher visual priority) and never shows this strip.
+
+   prefers-reduced-motion: animation is removed; the strip stays fully opaque so the state
+   remains obvious without motion.  The JS component also sets data-reduced="true" on the
+   element when window.matchMedia matches, so unit tests can assert the reduced branch without
+   a real CSS engine. */
+
+@keyframes wk-live-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1;   }
+}
+
+.wk-live-edge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #79c0ff;
+  box-shadow: 0 0 8px rgba(121, 192, 255, 0.2);
+  animation: wk-live-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-live-edge {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+.wk-live-edge[data-reduced="true"] {
+  animation: none;
+  opacity: 1;
+}
