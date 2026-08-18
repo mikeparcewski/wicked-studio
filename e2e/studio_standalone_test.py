@@ -46,6 +46,11 @@ What "independent" means here, and what this script proves end-to-end:
      request shares the PAGE's origin, the picker orders most-recent-first and
      navigates, and a bridge_unavailable 503 shows its hint verbatim. This one
      section runs against a SECOND, same-origin build (see §12 in the body).
+ 12. (DES-MERGE-001 slice 9) the version strip on that same rig: a 3-version doc
+     shows 3 entries oldest→newest with the routed one highlighted, selecting v1
+     swaps the frame to the v1 URL (and Back rewinds it), §7.6's scroll affordance
+     is disabled-with-a-reason where the anchor is null, and Fork from v1 creates a
+     4th version whose parent is 1 — asserted through the API, labelled in the UI.
 
 The daemon is the ONE thing this repo cannot supply. Point CREW_CLI at a built
 crew CLI entry (`.../packages/crew/dist/cli/index.js`); it defaults to the sibling
@@ -865,7 +870,26 @@ try:
         {"name": "stale-brief", "kind": "doc", "head": 1, "versions": 1, "updated_at": "2026-08-10T08:00:00Z"},
         {"name": "launch-deck", "kind": "doc", "head": 2, "versions": 2, "updated_at": "2026-08-18T11:30:00Z"},
         {"name": "q3-report", "kind": "doc", "head": 1, "versions": 1, "updated_at": "2026-08-17T16:00:00Z"},
+        # Slice 9's subject: three versions, one of them ANCHORED to a thread message
+        # (§7.6) and two with a null anchor, which is what every pre-merge doc looks like.
+        {"name": "roadmap", "kind": "doc", "head": 3, "versions": 3, "updated_at": "2026-08-05T08:00:00Z"},
     ]
+    STRIP_DOC = "roadmap"
+    ANCHORED_MESSAGE = "msg-v3"
+
+    def seed_versions(name: str) -> list[dict]:
+        head = next(d["head"] for d in FIXTURE_DOCS if d["name"] == name)
+        rows = [{"version": v, "parent": v - 1 or None, "feedback_file": None,
+                 "html_file": f"v{v}.html", "created_at": f"2026-08-1{v}T11:30:00Z"}
+                for v in range(1, head + 1)]
+        if name == STRIP_DOC:  # only the newest version carries an anchor
+            rows[-1]["meta"] = {"sourceMessageId": ANCHORED_MESSAGE}
+        return rows
+
+    # The manifest is the SERVICE's, and fork mutates it — so the fixture holds real
+    # state (append-only, per INV-4) rather than deriving a fresh list per request.
+    doc_versions = {d["name"]: seed_versions(d["name"]) for d in FIXTURE_DOCS}
+    versions_lock = threading.Lock()
     BRIDGE_DOWN_HINT = ("run `npx wicked-interactive serve` in this project's root — "
                         "the bridge could not be started")
     # `data-wid` anchors are what core/instrument.js injects (§5.5) — the fixture carries
@@ -881,6 +905,7 @@ try:
     INTERACTIVE_RE = re.compile(r"^/api/v1/projects/([^/]+)/interactive(/.*)$")
     VERSIONS_RE = re.compile(r"^/d/([^/]+)/api/versions$")
     RENDER_RE = re.compile(r"^/d/([^/]+)/doc/(\d+)$")
+    FORK_RE = re.compile(r"^/d/([^/]+)/api/fork$")
     WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
     class DocFixtureHandler(SimpleHTTPRequestHandler):
@@ -943,14 +968,13 @@ try:
             m = VERSIONS_RE.match(rest)
             if m:
                 name = urllib.parse.unquote(m.group(1))
-                head = next((d["head"] for d in FIXTURE_DOCS if d["name"] == name), None)
-                if head is None:
+                with versions_lock:
+                    rows = list(doc_versions.get(name, []))
+                if not rows:
                     self._json(404, {"error": f"no such doc: {name}"})
                 else:
-                    self._json(200, {"head": head, "kind": "doc", "versions": [
-                        {"version": v, "parent": v - 1 or None, "feedback_file": None,
-                         "html_file": f"v{v}.html", "created_at": "2026-08-18T11:30:00Z"}
-                        for v in range(1, head + 1)]})
+                    self._json(200, {"head": max(r["version"] for r in rows),
+                                     "kind": "doc", "versions": rows})
                 return True
             m = RENDER_RE.match(rest)
             if m:
@@ -973,7 +997,33 @@ try:
                 self.path = "/index.html"  # client-side routes resolve to the shell
             return super().do_GET()
 
+        def _fork(self, name: str) -> None:
+            """`POST /d/:docId/api/fork` — branch, append (never mutate: INV-4), report
+            the new version and its PARENT. The UI asserts lineage through this reply,
+            not by predicting what the branch produced."""
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length) or b"{}")
+            parent = body.get("from")
+            with versions_lock:
+                rows = doc_versions.get(name)
+                if not rows or not any(r["version"] == parent for r in rows):
+                    return self._json(400, {"error": f"cannot fork {name} from {parent!r}"})
+                created = max(r["version"] for r in rows) + 1
+                rows.append({"version": created, "parent": parent, "feedback_file": None,
+                             "html_file": f"v{created}.html",
+                             "created_at": "2026-08-18T12:00:00Z"})
+            return self._json(200, {"version": created, "parent": parent})
+
         def do_POST(self):  # noqa: N802
+            path = urllib.parse.urlparse(self.path).path
+            m = INTERACTIVE_RE.match(path)
+            if m:
+                project, rest = urllib.parse.unquote(m.group(1)), m.group(2)
+                fork = FORK_RE.match(rest)
+                if project == down_project:
+                    return self._json(503, {"code": "bridge_unavailable", "hint": BRIDGE_DOWN_HINT})
+                if fork:
+                    return self._fork(urllib.parse.unquote(fork.group(1)))
             return self._proxy()
 
     docd = ThreadingHTTPServer(
@@ -1032,11 +1082,9 @@ try:
         page.screenshot(path=str(SHOTS / "slice8-bridge-unavailable.png"), full_page=True)
         browser.close()
 
-    docd.shutdown()
-
     report["steps"]["doc_canvas"] = {
         "ok": all([
-            picker_order == ["launch-deck", "q3-report", "stale-brief"],
+            picker_order == ["launch-deck", "q3-report", "stale-brief", "roadmap"],
             picker_nav_ok,
             sandbox == "allow-scripts allow-same-origin",
             len(content_text) > 0,
@@ -1071,6 +1119,120 @@ try:
     }
     if not report["steps"]["doc_canvas"]["ok"]:
         fail("doc_canvas_verdict", "slice-8 document-canvas assertions did not all hold — see doc_canvas")
+
+    # ── 13. Slice 9 (DES-MERGE-001 §6.3): the version strip, fork, and §7.6 ───
+    # Same same-origin rig as §12 — the fake bridge now holds REAL manifest state, so
+    # fork is a service write the UI reads back rather than a canned reply. Asserted:
+    # a 3-version doc shows 3 entries oldest→newest with the routed one highlighted;
+    # selecting v1 swaps the frame to the v1 URL and is back-button-correct; §7.6's
+    # scroll affordance is disabled-with-a-reason where the anchor is null and live
+    # where it is not; and Fork from v1 produces a 4th version whose parent is 1 —
+    # asserted THROUGH THE API, then shown in the strip as "continues from v1".
+    strip_url = f"{DOC_ORIGIN}/p/{doc_project}/document/{STRIP_DOC}"
+    doc_api = (f"{DOC_ORIGIN}/api/v1/projects/{urllib.parse.quote(doc_project)}"
+               f"/interactive/d/{STRIP_DOC}/api/versions")
+    frame_at = ("() => document.querySelector('[data-testid=\"doc-canvas\"]')"
+                "?.getAttribute('data-version') === '%s'")
+    strip_console: list[str] = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.on("console", lambda m: strip_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text else None)
+        page.goto(strip_url, wait_until="networkidle")
+        page.locator('[data-testid="version-strip"]').wait_for(timeout=30000)
+        entries = page.locator('[data-testid="version-entry"]')
+
+        # ── AC: a 3-version doc shows 3 entries, oldest → newest, head highlighted ──
+        entry_versions = [entries.nth(i).get_attribute("data-version") for i in range(entries.count())]
+        selected_at_head = [entries.nth(i).get_attribute("data-selected") for i in range(entries.count())]
+        head_src = page.locator('[data-testid="doc-canvas"]').get_attribute("src")
+
+        # ── AC (§7.6): a NULL anchor disables the scroll affordance, with the reason ──
+        v1_scroll = entries.nth(0).locator('[data-testid="version-scroll"]')
+        v1_scroll_disabled = v1_scroll.is_disabled()
+        v1_scroll_title = v1_scroll.get_attribute("title") or ""
+        v3_scroll_enabled = entries.nth(2).locator('[data-testid="version-scroll"]').is_enabled()
+        page.screenshot(path=str(SHOTS / "slice9-version-strip.png"), full_page=True)
+
+        # ── AC: selecting v1 changes the frame src to the v1 URL ───────────────────
+        entries.nth(0).locator('[data-testid="version-select"]').click()
+        page.wait_for_function(frame_at % "1", timeout=30000)
+        v1_src = page.locator('[data-testid="doc-canvas"]').get_attribute("src")
+        v1_query = urllib.parse.urlparse(page.url).query
+        v1_highlighted = entries.nth(0).get_attribute("data-selected")
+        v1_frame_text = page.frame_locator('[data-testid="doc-canvas"]').locator(
+            "[data-wid='h1']").inner_text()
+        page.screenshot(path=str(SHOTS / "slice9-version-selected.png"), full_page=True)
+
+        # The version lives in the URL, so Back rewinds the rewind (not app state).
+        page.go_back()
+        back_ok = page.wait_for_function(frame_at % "3", timeout=30000) is not None
+        back_query = urllib.parse.urlparse(page.url).query
+
+        # ── AC: Fork from v1 creates a 4th version whose parent is 1 ───────────────
+        entries.nth(0).locator('[data-testid="version-fork"]').click()
+        page.wait_for_function(
+            "() => document.querySelectorAll('[data-testid=\"version-entry\"]').length === 4",
+            timeout=30000)
+        page.wait_for_function(frame_at % "4", timeout=30000)
+        fork_query = urllib.parse.urlparse(page.url).query
+        forked = page.locator('[data-testid="version-entry"][data-version="4"]')
+        fork_parent_attr = forked.get_attribute("data-parent")
+        fork_label = forked.locator('[data-testid="version-lineage"]').inner_text()
+        page.screenshot(path=str(SHOTS / "slice9-fork.png"), full_page=True)
+        browser.close()
+
+    # The lineage claim is the SERVICE's, so it is asserted through the API too.
+    _, _, forked_manifest = http_json("GET", doc_api)
+    api_v4 = next((v for v in forked_manifest["versions"] if v["version"] == 4), None)
+
+    docd.shutdown()
+
+    expected_v1_src = (f"{DOC_ORIGIN}/api/v1/projects/{urllib.parse.quote(doc_project)}"
+                       f"/interactive/d/{STRIP_DOC}/doc/1")
+    report["steps"]["version_strip"] = {
+        "ok": all([
+            entry_versions == ["1", "2", "3"],
+            selected_at_head == ["false", "false", "true"],
+            head_src is not None and head_src.endswith("/doc/3"),
+            v1_scroll_disabled,
+            "scroll to" in v1_scroll_title and "merge" in v1_scroll_title,
+            v3_scroll_enabled,
+            v1_src == expected_v1_src,
+            v1_query == "v=1",
+            v1_highlighted == "true",
+            "version 1" in v1_frame_text,
+            back_ok, back_query == "",
+            fork_query == "v=4",
+            fork_parent_attr == "1",
+            fork_label.strip() == "continues from v1",
+            api_v4 is not None and api_v4["parent"] == 1,
+            len(forked_manifest["versions"]) == 4,
+            forked_manifest["head"] == 4,
+            not strip_console,
+        ]),
+        "doc": STRIP_DOC,
+        "entries_oldest_to_newest": entry_versions,
+        "highlighted_at_head": selected_at_head,
+        "head_frame_src": head_src,
+        "null_anchor_scroll_disabled": v1_scroll_disabled,
+        "null_anchor_title": v1_scroll_title,
+        "anchored_scroll_enabled": v3_scroll_enabled,
+        "v1_frame_src": v1_src,
+        "v1_frame_heading": v1_frame_text,
+        "v1_query": v1_query,
+        "back_returns_to_head": back_ok and back_query == "",
+        "fork_query": fork_query,
+        "fork_lineage_label": fork_label,
+        "fork_manifest_from_api": forked_manifest,
+        "console_errors": strip_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice9-version-strip.png", "slice9-version-selected.png",
+                         "slice9-fork.png")],
+    }
+    if not report["steps"]["version_strip"]["ok"]:
+        fail("version_strip_verdict", "slice-9 version-strip assertions did not all hold — see version_strip")
 
     report["ok"] = True
     print(json.dumps(report, indent=2))
