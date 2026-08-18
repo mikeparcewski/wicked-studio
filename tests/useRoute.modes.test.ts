@@ -59,7 +59,9 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
 
 describe('useRoute — the existing panel routes keep working', () => {
   it('still parses every legacy shape unchanged', () => {
-    expect(routeAt('/').current).toMatchObject({ panel: 'runs', runId: null, mode: null });
+    // `/` became the orchestrator board in slice 5; the run list moved to `/runs`.
+    expect(routeAt('/').current).toMatchObject({ panel: 'home', runId: null, mode: null });
+    expect(routeAt('/runs').current).toMatchObject({ panel: 'runs', runId: null });
     expect(routeAt('/runs/run-1').current).toMatchObject({ panel: 'runs', runId: 'run-1' });
     expect(routeAt('/runs/new').current).toMatchObject({ panel: 'runs', showLaunch: true });
     expect(routeAt('/chat/new').current).toMatchObject({ showLaunch: true, chatMode: true });
@@ -75,7 +77,8 @@ describe('useRoute — the existing panel routes keep working', () => {
   it('a legacy route carries no mode, and panelPath is unchanged', () => {
     const r = routeAt('/runs/run-1');
     expect(r.current.mode).toBeNull();
-    expect(r.current.panelPath('runs')).toBe('/');
+    expect(r.current.panelPath('home')).toBe('/');
+    expect(r.current.panelPath('runs')).toBe('/runs');
     expect(r.current.panelPath('coverage')).toBe('/coverage');
   });
 });

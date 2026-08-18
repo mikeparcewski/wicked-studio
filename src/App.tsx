@@ -4,6 +4,7 @@ import { ChatsPage } from './components/ChatsPage.js';
 import { CoverageView } from './components/CoverageView.js';
 import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
+import { HomeBoard } from './components/HomeBoard.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
 import { ModePlaceholder } from './components/ModePlaceholder.js';
 import { PolicyManager } from './components/PolicyManager.js';
@@ -169,8 +170,10 @@ export function App(): React.ReactElement {
     [navigate, refresh, runPath],
   );
 
+  // Outside the project shell, "back" belongs to the list the run was opened from —
+  // `/runs`, not the board (§1.5): `/` is now a different surface, not this one's parent.
   const onNavigateBack = useCallback(
-    () => navigate(projectId && mode ? modePath(projectId, mode) : '/'),
+    () => navigate(projectId && mode ? modePath(projectId, mode) : '/runs'),
     [navigate, projectId, mode],
   );
 
@@ -265,6 +268,11 @@ export function App(): React.ReactElement {
           {renderModeSurface(mode)}
         </ProjectShell>
       );
+    }
+    // `/` is the orchestrator board (§1.4, slice 5); the flat run list it replaced is
+    // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
+    if (panel === 'home') {
+      return <HomeBoard runs={runs} navigate={navigate} />;
     }
     if (panel === 'coverage') {
       return (

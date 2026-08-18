@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type Panel = 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail';
+export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail';
 
 const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'chats', 'work', 'repo-detail', 'projects', 'project-detail'];
 
@@ -83,6 +83,11 @@ export function modePath(projectId: string, mode: Mode, artifactId?: string | nu
 
 function parse(pathname: string): Route {
   const [, first = '', second = '', third = '', fourth = ''] = pathname.split('/');
+  // `/` is the orchestrator board (DES-MERGE-001 §1.5, slice 5). The flat run list it
+  // replaced keeps its own route, `/runs` — the power-user escape hatch, not a redirect.
+  if (first === '') {
+    return route({ panel: 'home' });
+  }
   // The project+mode parse runs AHEAD of the panel parse (DES-MERGE-001 §1.5); the
   // `Panel` union below is untouched and still owns every side panel.
   if (first === 'p' && second) {
@@ -143,7 +148,7 @@ export function useRoute(): Route & {
     setPathname(path);
   }, []);
 
-  const panelPath = useCallback((p: Panel) => (p === 'runs' ? '/' : `/${p}`), []);
+  const panelPath = useCallback((p: Panel) => (p === 'home' ? '/' : `/${p}`), []);
 
   return { ...parse(pathname), navigate, panelPath };
 }
