@@ -1,9 +1,12 @@
 import { useRef, useState } from 'react';
 import {
-  getDemoSpec, getLatestRecording, interactiveUrl, listDemos, requestRecord,
+  getDemoSpec, getLatestRecording, getVersions, interactiveUrl, listDemos,
 } from '../api/interactive.js';
 import type { DemoRecording, DemoStep, DocSummary } from '../api/interactive.js';
+import { recordFromThread, recordingSubject, submitStepFeedback, type StepComment } from '../interactive/demoWire.js';
 import { modePath, type Navigate } from '../hooks/useRoute.js';
+import { statusLine } from '../store/narration.js';
+import { threadKey, useDocThreadStore, type DocMsg } from '../store/docThread.js';
 import { Failed, Loading, PANEL, S, useLoad, type Failure } from './SurfaceState.js';
 
 // Video mode's surface (DES-MERGE-001 §1.3, §4.5, §6.4 slice 13): storyboard + player.
@@ -81,6 +84,19 @@ export function playerState(
   return { kind: 'missing', ffmpeg: false };
 }
 
+/** Stable identity for "this thread has said nothing", so the selector never re-renders. */
+const NO_MESSAGES: DocMsg[] = [];
+
+const ACTION: React.CSSProperties = {
+  border: 'none', borderRadius: '6px', cursor: 'pointer', flexShrink: 0,
+  fontSize: '11px', fontWeight: 600, padding: '5px 11px',
+};
+
+const BAR: React.CSSProperties = {
+  alignItems: 'center', background: '#0f1419', borderTop: `1px solid ${S.border}`,
+  display: 'flex', flexShrink: 0, gap: '8px', padding: '8px 12px',
+};
+
 // ── Demo picker — the mode with no `:demoId` in the route ────────────────────
 
 /** Most-recent first, same rule as the slice-8 doc picker. A null `updated_at` sinks. */
@@ -148,17 +164,20 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
 // ── The missing-recording panel — §3.3 actionable, never a dead end ──────────
 
 function MissingRecording({
-  projectId, demoId, state,
-}: { projectId: string; demoId: string; state: Extract<PlayerState, { kind: 'missing' }> }): React.ReactElement {
+  demoId, state, record,
+}: {
+  demoId: string; record: (ask: string) => Promise<void>;
+  state: Extract<PlayerState, { kind: 'missing' }>;
+}): React.ReactElement {
   const [queued, setQueued] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function record(): Promise<void> {
+  async function go(): Promise<void> {
     setBusy(true);
     setError(null);
     try {
-      await requestRecord(projectId, demoId);
+      await record(`Record “${demoId}”.`);
       setQueued(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -197,7 +216,7 @@ function MissingRecording({
           type="button"
           data-testid="demo-record"
           disabled={busy || queued}
-          onClick={() => void record()}
+          onClick={() => void go()}
           style={{
             background: 'transparent', border: `1px solid ${S.border}`, borderRadius: '6px',
             color: queued ? S.muted : S.ink, cursor: busy || queued ? 'default' : 'pointer',
@@ -224,13 +243,30 @@ function MissingRecording({
 // ── Player + storyboard — the demo surface itself ────────────────────────────
 
 function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string }): React.ReactElement {
-  // Two INDEPENDENT loads on purpose: the spec is what makes the storyboard, and a
+  const key = threadKey(projectId, demoId);
+  // A re-authored spec is a NEW VERSION of the same demo (§7.10's continuation), so the
+  // surface re-reads the service when one lands rather than showing the steps it was fed
+  // at mount. `reloads` is the same read on the near side of the stream: a submitted
+  // batch asks for a re-authoring now, and the frame confirming it may be seconds behind.
+  const landed = useDocThreadStore((s) => s.landed[key]);
+  const recording = useDocThreadStore((s) => s.genState[key]) === 'generating';
+  const messages = useDocThreadStore((s) => s.messages[key] ?? NO_MESSAGES);
+  const [reloads, setReloads] = useState(0);
+  const nonce = `${landed ?? 0}:${reloads}`;
+
+  // Three INDEPENDENT loads on purpose: the spec is what makes the storyboard, and a
   // recording that 404s, errors, or reports a missing ffmpeg must leave the chapters
   // standing (§4.5 — degradation is required behaviour, not a nicety).
-  const [spec, specFailure, retrySpec] = useLoad(() => getDemoSpec(projectId, demoId), [projectId, demoId]);
-  const [rec, recFailure] = useLoad(() => getLatestRecording(projectId, demoId), [projectId, demoId]);
+  const [spec, specFailure, retrySpec] = useLoad(() => getDemoSpec(projectId, demoId), [projectId, demoId, nonce]);
+  const [rec, recFailure] = useLoad(() => getLatestRecording(projectId, demoId), [projectId, demoId, nonce]);
+  const [manifest] = useLoad(() => getVersions(projectId, demoId), [projectId, demoId, nonce]);
   const [chapter, setChapter] = useState(0);
   const [at, setAt] = useState(0);
+  const [draft, setDraft] = useState<StepComment | null>(null);
+  const [items, setItems] = useState<StepComment[]>([]);
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const video = useRef<HTMLVideoElement>(null);
 
   const subject = `“${demoId}”`;
@@ -241,6 +277,21 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
   // arrive: `index` IS the chapter number the user sees, so the two cannot disagree.
   const steps = [...(spec.steps ?? [])].sort((a, b) => a.index - b.index);
   const player = playerState(projectId, rec, recFailure);
+  const version = manifest?.head ?? rec?.version ?? null;
+
+  /** §3.4's two altitudes, one stream: the thread keeps the transcript, this keeps the
+   *  headline. Rule 1 (a real streamed line) wins; rule 3 — the demo and its first step —
+   *  is why a bare `Working…` is never needed and never rendered here. */
+  const status = statusLine(
+    messages.filter((m): m is Extract<DocMsg, { kind: 'narration' }> => m.kind === 'narration').map((m) => m.text),
+    recordingSubject(demoId, steps.length, steps[0]?.title),
+  );
+
+  /** Both record paths are the same wire (§2.3): the ask lands in the thread first. */
+  async function record(ask: string): Promise<void> {
+    setSent(false);
+    await recordFromThread({ projectId, demoId, ask, steps: steps.length, first: steps[0]?.title });
+  }
 
   /** Clicking chapter N seeks the player there; with no seekable recording it puts the
    *  step itself in focus instead, so the click always resolves to something visible. */
@@ -251,6 +302,31 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
     setAt(seconds);
     if (el) el.currentTime = seconds;
     else card?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+  }
+
+  /** One comment queued against one step. Batched, never sent per comment (§4.3). */
+  function commit(): void {
+    if (draft === null || draft.text.trim() === '') return;
+    setItems((prev) => [...prev, { index: draft.index, text: draft.text.trim() }]);
+    setDraft(null);
+  }
+
+  /** §4.3's batch, aimed at the spec: N step comments → one message, one re-authoring. */
+  async function send(): Promise<void> {
+    if (items.length === 0 || version === null || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await submitStepFeedback(projectId, demoId, version, items);
+      setItems([]);
+      setDraft(null);
+      setSent(true);
+      setReloads((n) => n + 1);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -285,7 +361,7 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
             </p>
           </div>
         ) : (
-          <MissingRecording projectId={projectId} demoId={demoId} state={player} />
+          <MissingRecording demoId={demoId} state={player} record={record} />
         )}
       </div>
 
@@ -310,11 +386,12 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
             data-index={String(step.index)}
             data-timestamp={String(step.timestamp)}
             data-selected={String(step.index === chapter)}
+            data-comments={String(items.filter((i) => i.index === step.index).length)}
             title={`Chapter ${step.index + 1}: ${step.title} — ${player.kind === 'video' ? 'seeks to' : 'starts at'} ${mmss(step.timestamp)}`}
             onClick={(e) => onChapter(step, e.currentTarget)}
             style={{
               background: step.index === chapter ? 'rgba(255,218,25,0.1)' : 'transparent',
-              border: `1px solid ${step.index === chapter ? S.accent : S.border}`,
+              border: `1px solid ${step.index === chapter || items.some((i) => i.index === step.index) ? S.accent : S.border}`,
               borderRadius: '8px', color: S.ink, cursor: 'pointer', flexShrink: 0,
               padding: '8px', textAlign: 'left', width: '160px',
             }}
@@ -334,6 +411,101 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
           </button>
         ))}
       </div>
+
+      {/*
+        The one action bar under the storyboard. It is one bar and not four because the
+        four things it says are the same thing at different moments of one loop — what
+        the recorder is doing, what you are commenting on, what is queued, and what to do
+        with the version that came back — and §3.3 wants each of them stated WITH its
+        control rather than scattered around the surface.
+
+        Commenting targets the SELECTED chapter, which is the chapter the player is
+        already parked on: a step is picked by clicking it, exactly as a document element
+        is picked by clicking it (§4.3), and the click keeps its existing meaning.
+      */}
+      {steps.length > 0 && (
+        <div data-testid="demo-actions" style={BAR}>
+          {recording ? (
+            <span data-testid="demo-record-status" style={{ color: S.ink, fontSize: '12px' }}>{status}</span>
+          ) : draft !== null ? (
+            <>
+              <span style={{ color: S.muted, fontFamily: 'monospace', fontSize: '10px', flexShrink: 0 }}>
+                step {draft.index + 1}
+              </span>
+              <textarea
+                data-testid="step-comment-input"
+                autoFocus
+                rows={1}
+                value={draft.text}
+                placeholder={`What should “${steps.find((s) => s.index === draft.index)?.title ?? ''}” do instead?`}
+                onChange={(e) => setDraft({ index: draft.index, text: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
+                  if (e.key === 'Escape') setDraft(null);
+                }}
+                style={{
+                  background: 'transparent', border: `1px solid ${S.border}`, borderRadius: '6px',
+                  color: S.ink, flex: 1, fontFamily: 'inherit', fontSize: '12px', padding: '5px 7px', resize: 'none',
+                }}
+              />
+              <button type="button" data-testid="step-comment-add" onClick={commit}
+                      disabled={draft.text.trim() === ''}
+                      style={{ ...ACTION, background: S.accent, color: '#0d1117' }}>
+                Add to batch
+              </button>
+              <button type="button" data-testid="step-comment-cancel" onClick={() => setDraft(null)}
+                      style={{ ...ACTION, background: 'transparent', border: `1px solid ${S.border}`, color: S.muted }}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                data-testid="step-comment-open"
+                data-index={String(chapter)}
+                onClick={() => { setDraft({ index: chapter, text: '' }); setSent(false); }}
+                style={{ ...ACTION, background: 'transparent', border: `1px solid ${S.border}`, color: S.ink }}
+              >
+                Comment on step {chapter + 1}
+              </button>
+              {sent && (
+                <>
+                  <span style={{ color: S.ink, fontSize: '12px' }}>
+                    “{demoId}” was re-authored from your comments — record it again to see the change.
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="demo-rerecord"
+                    onClick={() => void record(`Re-record “${demoId}” with the updated steps.`)}
+                    style={{ ...ACTION, background: S.accent, color: '#0d1117' }}
+                  >
+                    Re-record
+                  </button>
+                </>
+              )}
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  data-testid="step-feedback-submit"
+                  data-count={String(items.length)}
+                  disabled={busy || version === null}
+                  title={version === null ? 'This demo has no version to comment on yet.' : 'One message, one re-authoring'}
+                  onClick={() => void send()}
+                  style={{ ...ACTION, background: S.accent, color: '#0d1117', marginLeft: 'auto' }}
+                >
+                  {busy ? 'Sending…' : `Send ${items.length} comment${items.length === 1 ? '' : 's'}`}
+                </button>
+              )}
+            </>
+          )}
+          {error !== null && (
+            <span data-testid="step-feedback-error" style={{ color: '#f85149', fontFamily: 'monospace', fontSize: '11px' }}>
+              {error} — nothing was sent; try again.
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

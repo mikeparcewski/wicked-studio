@@ -23,10 +23,10 @@ export const FEEDBACK_EVENT = 'wicked.interactive.feedback.submitted';
  * it is the same anchor the item's deep-link resolves through, so the message a human
  * reads and the target the agent edits are provably the same element.
  */
-export function composeBatchMessage(items: FeedbackItem[]): string {
+export function composeBatchMessage(items: FeedbackItem[], subject = 'this document'): string {
   const where = items.length === 1 ? '1 place' : `${items.length} places`;
   return [
-    `Feedback on ${where} in this document:`,
+    `Feedback on ${where} in ${subject}:`,
     ...items.map((item, i) => `${i + 1}. [${item.wid}] ${item.text}`),
   ].join('\n');
 }
@@ -36,6 +36,12 @@ export interface SubmitBatchArgs {
   docId: string;
   version: number;
   items: FeedbackItem[];
+  /** What the batch is feedback ON, in the message's own words. */
+  subject?: string;
+  /** What the agent must re-author. Omitted for document elements (the default the
+   *  contract has always carried); `"demo_step"` for a storyboard step, whose edit is a
+   *  SPEC diff rather than an HTML fragment (§4.5 — the spec is what gets re-recorded). */
+  target?: string;
 }
 
 export interface SubmitBatchResult {
@@ -48,9 +54,9 @@ export interface SubmitBatchResult {
 
 /** Write 1 then write 2. Throws only when write 1 fails — nothing was submitted then. */
 export async function submitFeedbackBatch(
-  { projectId, docId, version, items }: SubmitBatchArgs,
+  { projectId, docId, version, items, subject, target }: SubmitBatchArgs,
 ): Promise<SubmitBatchResult> {
-  const text = composeBatchMessage(items);
+  const text = composeBatchMessage(items, subject);
   const msgId = nextMsgId();
   const key = threadKey(projectId, docId);
 
@@ -60,6 +66,7 @@ export async function submitFeedbackBatch(
       document_id: docId,
       version,
       source_message_id: msgId,
+      ...(target === undefined ? {} : { target }),
       items: items.map((item) => ({ wid: item.wid, comment: item.text })),
     },
   });

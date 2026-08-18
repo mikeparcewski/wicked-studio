@@ -296,6 +296,7 @@ export function App(): React.ReactElement {
             docId={artifactId}
             selectedVersion={null}
             navigate={navigate}
+            mode="video"
           />
         </>
       );

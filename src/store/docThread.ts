@@ -11,7 +11,7 @@
 // rather than rendered under a guessed key.
 
 import { create } from 'zustand';
-import { isWhimsy } from './narration.js';
+import { isFiller } from './narration.js';
 import type { CoreEvent } from '../api/types.js';
 
 // ── Transcript ───────────────────────────────────────────────────────────────
@@ -94,6 +94,13 @@ interface DocThreadStore {
   genState: Record<string, GenState>;
   /** The user message a landing version will be tagged with (§7.6, client half). */
   anchor: Record<string, string>;
+  /**
+   * The newest version the stream has landed, per thread. The transcript tags its anchor
+   * message (§7.6) and does not otherwise care; a mode SURFACE does — a re-authored demo
+   * spec is a new version of the same artifact (§7.10's continuation rhythm), so the
+   * storyboard re-reads the service rather than showing the steps it was fed at mount.
+   */
+  landed: Record<string, number>;
   /** Fold one CoreEvent — every non-interactive frame is ignored. */
   ingest: (event: CoreEvent) => void;
   /** Append the user's message and make it the pending version anchor. */
@@ -117,6 +124,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
   messages: {},
   genState: {},
   anchor: {},
+  landed: {},
 
   ingest: (event) => {
     const frame = frameOf(event);
@@ -146,9 +154,11 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         }
         const done = state === 'complete' || state === 'error';
         const next: GenState = done ? 'terminal' : was === 'gated' ? 'gated' : 'generating';
-        // §3.2: filler never reaches the transcript, but a filtered frame still carries
-        // the state transition it rode in on — dropping the LINE is not dropping the fact.
-        if (text === null || isWhimsy(text)) return { genState: { ...s.genState, [key]: next } };
+        // §3.2/§3.3: filler never reaches the transcript — rotating flavour text and a
+        // subject-less `Working…` are both dropped AT THE SEAM, so an upstream bridge that
+        // still speaks either cannot put it on screen. A filtered frame still carries the
+        // state transition it rode in on: dropping the LINE is not dropping the fact.
+        if (text === null || isFiller(text)) return { genState: { ...s.genState, [key]: next } };
         return {
           messages: append(messages, key, { kind: 'narration', id: nextMsgId(), text }),
           genState: { ...s.genState, [key]: next },
@@ -216,6 +226,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         return {
           messages: tagged,
           anchor,
+          landed: { ...s.landed, [key]: version },
           genState: generated ? { ...s.genState, [key]: 'terminal' } : s.genState,
         };
       }
@@ -252,6 +263,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       const messages = { ...s.messages }; delete messages[key];
       const genState = { ...s.genState }; delete genState[key];
       const anchor = { ...s.anchor }; delete anchor[key];
-      return { messages, genState, anchor };
+      const landed = { ...s.landed }; delete landed[key];
+      return { messages, genState, anchor, landed };
     }),
 }));
