@@ -49,11 +49,12 @@ describe('ModeSwitcher (DES-MERGE-001 §1.3)', () => {
 });
 
 describe('ModePlaceholder (§3.3 — every state names a subject)', () => {
+  // Document left the placeholder in slice 8 (§6.3) — Video is the only mode still on it.
   it('states what the mode is and the one action that enables it', () => {
-    render(<ModePlaceholder mode="document" />);
-    const card = screen.getByTestId('mode-placeholder-document');
-    expect(card).toHaveTextContent(/interactive canvas/i);
-    expect(screen.getByTestId('mode-enabling-action-document')).toHaveTextContent(/connect/i);
+    render(<ModePlaceholder mode="video" />);
+    const card = screen.getByTestId('mode-placeholder-video');
+    expect(card).toHaveTextContent(/storyboard/i);
+    expect(screen.getByTestId('mode-enabling-action-video')).toHaveTextContent(/install/i);
   });
 
   it('carries the SAME enabling action as the disabled tab tooltip — one source of truth', () => {

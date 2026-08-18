@@ -14,8 +14,8 @@ export interface ModeSpec {
   /**
    * THE ONE FLAG THIS SLICE IS ALLOWED (DES-MERGE-001 §6.0). An unavailable mode is
    * DISABLED, never hidden (§1.3 rule 3) — hiding it teaches the user the feature
-   * does not exist. Document flips to `true` in slice 8, Video in slice 13; when both
-   * are `true` this field and its branches delete cleanly.
+   * does not exist. Document flipped to `true` in slice 8; Video follows in slice 13,
+   * and when it does this field and its branches delete cleanly.
    */
   available: boolean;
   /**
@@ -42,10 +42,10 @@ export const MODE_SPECS: Record<Mode, ModeSpec> = {
   },
   document: {
     label: 'Document',
-    available: false,
-    enables:
-      'Connect the interactive document service to this project (crew proxies it at '
-      + '/api/v1/projects/:projectId/interactive) to create documents here.',
+    // Flipped by slice 8 (§6.3): the canvas is wired, so the tab is live and the
+    // placeholder is unreachable for this mode. Video is the last `false` left.
+    available: true,
+    enables: '',
     summary:
       'Document mode is where the interactive canvas lands: an HTML doc, deck or report, '
       + 'its version strip, and point-and-comment feedback — all against this project’s one thread.',

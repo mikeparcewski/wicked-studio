@@ -6,6 +6,7 @@ import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { HomeBoard } from './components/HomeBoard.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
+import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { ModePlaceholder } from './components/ModePlaceholder.js';
 import { PolicyManager } from './components/PolicyManager.js';
 import { ProjectShell } from './components/ProjectShell.js';
@@ -244,16 +245,17 @@ export function App(): React.ReactElement {
   );
 
   /**
-   * What a mode renders inside the shell (DES-MERGE-001 §6.2, slice 4). Document and
-   * Video state what is coming and the action that enables it; Chat and Build reuse the
-   * existing surfaces above.
+   * What a mode renders inside the shell (DES-MERGE-001 §6.2, slice 4). Document is the
+   * interactive canvas (§6.3, slice 8); Video still states what is coming and the action
+   * that enables it; Chat and Build reuse the existing surfaces above.
    *
    * Build with nothing open is the existing run home, UNSCOPED: scoping a project's runs
    * is the board's data plumbing (slices 5-6) and needs launch to file the run it creates,
    * so filtering here first would hide a run the user had just launched.
    */
-  function renderModeSurface(m: Mode): React.ReactElement {
-    if (m === 'document' || m === 'video') return <ModePlaceholder mode={m} />;
+  function renderModeSurface(m: Mode, pid: string): React.ReactElement {
+    if (m === 'document') return <DocumentCanvas projectId={pid} docId={artifactId} navigate={navigate} />;
+    if (m === 'video') return <ModePlaceholder mode={m} />;
     if (m === 'chat' && !artifactId) return groupChatSurface(null);
     return artifactId ? runSurface() : dashboardSurface();
   }
@@ -265,7 +267,7 @@ export function App(): React.ReactElement {
     if (projectId !== null && mode !== null) {
       return (
         <ProjectShell projectId={projectId} mode={mode} artifactId={artifactId} navigate={navigate}>
-          {renderModeSurface(mode)}
+          {renderModeSurface(mode, projectId)}
         </ProjectShell>
       );
     }
