@@ -237,7 +237,9 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
   if (specFailure) return <Failed surface="video" subject={subject} failure={specFailure} onRetry={retrySpec} />;
   if (spec === null) return <Loading surface="video" subject={subject} />;
 
-  const steps = spec.steps ?? [];
+  // Ordered by the step's own declared position, not by however the JSON happened to
+  // arrive: `index` IS the chapter number the user sees, so the two cannot disagree.
+  const steps = [...(spec.steps ?? [])].sort((a, b) => a.index - b.index);
   const player = playerState(projectId, rec, recFailure);
 
   /** Clicking chapter N seeks the player there; with no seekable recording it puts the
@@ -308,7 +310,7 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
             data-index={String(step.index)}
             data-timestamp={String(step.timestamp)}
             data-selected={String(step.index === chapter)}
-            title={`Chapter ${step.index + 1}: ${step.title} — seeks to ${mmss(step.timestamp)}`}
+            title={`Chapter ${step.index + 1}: ${step.title} — ${player.kind === 'video' ? 'seeks to' : 'starts at'} ${mmss(step.timestamp)}`}
             onClick={(e) => onChapter(step, e.currentTarget)}
             style={{
               background: step.index === chapter ? 'rgba(255,218,25,0.1)' : 'transparent',
