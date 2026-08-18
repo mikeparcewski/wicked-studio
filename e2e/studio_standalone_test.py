@@ -1530,6 +1530,16 @@ try:
             [edge_busy, edge_gate],
         )
         page.screenshot(path=str(SHOTS / "liveedge-board-executing-vs-gate.png"), full_page=True)
+        # A second shot with the executing card actually on screen. Attention order puts
+        # every gate-waiting card above it — which is the point — so the first shot alone
+        # shows a reviewer only the treatment that was already there.
+        page.evaluate(
+            """id => document.querySelector(
+                 `[data-testid="project-card"][data-project-id="${id}"]`
+               )?.scrollIntoView({ block: 'center' })""",
+            edge_busy,
+        )
+        page.screenshot(path=str(SHOTS / "liveedge-board-executing.png"), full_page=True)
         browser.close()
 
         # AC (rule 4): prefers-reduced-motion substitutes a STATIC, higher-contrast
@@ -1595,7 +1605,8 @@ try:
         "reduced_motion_ms": reduced_ms,
         "console_errors": edge_console[:10],
         "screenshots": [str(SHOTS / n) for n in
-                        ("liveedge-board-executing-vs-gate.png", "liveedge-reduced-motion.png")],
+                        ("liveedge-board-executing-vs-gate.png", "liveedge-board-executing.png",
+                         "liveedge-reduced-motion.png")],
     }
     if not report["steps"]["live_edge"]["ok"]:
         fail("live_edge_verdict", "live-edge assertions did not all hold — see live_edge")
