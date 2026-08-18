@@ -135,6 +135,12 @@ NPM = "npm.cmd" if os.name == "nt" else "npm"
 report: dict = {"ok": False, "steps": {}}
 
 
+# Gate toasts from the runs earlier sections seeded are pinned bottom-right and overlap
+# the Document-mode composer. They are not this section's surface — same spirit as the
+# `fonts.g` console filter — so the doc sections suppress them rather than fight them.
+# Hiding is display-only: nothing about the asserted behaviour changes.
+HIDE_GATE_TOASTS = '[data-testid="gate-notification"] { display: none !important; }'
+
 def fail(step: str, why: str) -> None:
     report["steps"][step] = {"ok": False, "error": why}
     print(json.dumps(report, indent=2))
@@ -1248,7 +1254,11 @@ try:
             "[data-wid='h1']").inner_text()
         page.screenshot(path=str(SHOTS / "slice9-version-selected.png"), full_page=True)
 
-        # The version lives in the URL, so Back rewinds the rewind (not app state).
+        # The version lives in the URL, so Back rewinds the rewind (not app state) — in
+        # ONE press. That holds only because a version swap REPLACES the frame element
+        # rather than navigating it: mutating `src` navigates the frame, a frame
+        # navigation lands in the JOINT session history, and Back then undoes the frame's
+        # move instead of the route's. (Independent of the sandbox — verified both ways.)
         page.go_back()
         back_ok = page.wait_for_function(frame_at % "3", timeout=30000) is not None
         back_query = urllib.parse.urlparse(page.url).query
@@ -1356,6 +1366,7 @@ try:
 
         # ── AC: one thread, one composer, beside the canvas — never over it (§2.5) ──
         page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document", wait_until="networkidle")
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
         thread = page.locator('[data-testid="thread"]')
         thread.wait_for(timeout=30000)
         page.wait_for_function("() => typeof window.__pushFrame === 'function'", timeout=30000)
@@ -1524,6 +1535,7 @@ try:
                 if m.type == "error" and "fonts.g" not in m.text else None)
 
         page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document/{FB_DOC}", wait_until="networkidle")
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
         page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
         doc_frame = page.frame_locator('[data-testid="doc-canvas"]')
         doc_frame.locator("[data-wid='h1']").wait_for(timeout=30000)
@@ -1585,6 +1597,11 @@ try:
         scrolled_back = frame_obj.evaluate("() => window.scrollY")
         page.screenshot(path=str(SHOTS / "slice12-deep-link.png"), full_page=True)
 
+        # "No console errors" is a claim about the WORKING overlay — snapshot it before
+        # the deliberate 500 below, whose failed request chromium logs as a console error.
+        # Same discipline slice 8 uses for its seeded 503.
+        overlay_console_clean = list(overlay_console)
+
         # ── AC (§7.7): a refused inject does NOT block the batch ───────────────────
         frame_obj.evaluate("() => window.scrollTo(0, 0)")
         page.wait_for_timeout(300)
@@ -1633,7 +1650,7 @@ try:
             scrolled_away > 400, scrolled_back < 100,
             # §7.7: the refused inject is a retryable chip, not a lost batch.
             chip_retryable, unrecordable_rendered == 1,
-            not overlay_console,
+            not overlay_console_clean,
         ]),
         "project_id": doc_project,
         "doc": FB_DOC,
@@ -1654,7 +1671,8 @@ try:
         "frame_scroll_after_deep_link": scrolled_back,
         "not_recorded_chip_retryable": chip_retryable,
         "unrecordable_batch_still_in_transcript": unrecordable_rendered == 1,
-        "console_errors": overlay_console[:10],
+        "console_errors_driving_the_overlay": overlay_console_clean[:10],
+        "console_errors_including_seeded_500": overlay_console[:10],
         "screenshots": [str(SHOTS / n) for n in
                         ("slice12-overlay-ready.png", "slice12-comment-anchored.png",
                          "slice12-batch-of-two.png", "slice12-batch-submitted.png",

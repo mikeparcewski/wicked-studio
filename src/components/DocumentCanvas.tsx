@@ -226,6 +226,12 @@ function DocFrame({
     <>
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
       <iframe
+        // Keyed on the VERSION so a swap REPLACES the element instead of mutating its
+        // src. Mutating it navigates the frame, and a frame navigation lands in the
+        // joint session history — so Back undid the frame's move rather than the route's
+        // (§4.2: the version lives in the URL, and Back must rewind it in one press).
+        // A freshly created frame's first load replaces its own entry instead.
+        key={shown}
         ref={setFrameEl}
         data-testid="doc-canvas"
         data-doc-id={docId}

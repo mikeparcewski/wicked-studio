@@ -192,7 +192,9 @@ export function FeedbackOverlay({
             data-wid={item.wid}
             title={item.text}
             style={{
-              position: 'absolute', left: `${box.left}px`, top: `${box.top}px`,
+              // Just OUTSIDE the element's left edge where there is room, so the pin
+              // marks the target without sitting on top of the text being commented on.
+              position: 'absolute', left: `${Math.max(0, box.left - 18)}px`, top: `${box.top}px`,
               background: S.accent, borderRadius: '9px', color: '#0d1117',
               fontSize: '10px', fontWeight: 700, padding: '1px 6px', pointerEvents: 'none',
             }}
