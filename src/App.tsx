@@ -7,6 +7,7 @@ import { GateNotifications } from './components/GateNotifications.js';
 import { HomeBoard } from './components/HomeBoard.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
+import { DocumentThread } from './components/DocumentThread.js';
 import { ModePlaceholder } from './components/ModePlaceholder.js';
 import { PolicyManager } from './components/PolicyManager.js';
 import { ProjectShell } from './components/ProjectShell.js';
@@ -31,6 +32,7 @@ import { useElicitationStore } from './store/elicitations.js';
 import { useNotificationStore } from './store/notifications.js';
 import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
+import { useDocThreadStore } from './store/docThread.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { api } from './api/client.js';
 
@@ -88,6 +90,7 @@ export function App(): React.ReactElement {
   const ingestNotif = useNotificationStore((s) => s.ingest);
   const ingestRuntime = useRuntimeStore((s) => s.ingest);
   const ingestRunEvent = useRunEventStore((s) => s.ingest);
+  const ingestDocThread = useDocThreadStore((s) => s.ingest);
 
   // Dashboard gate callbacks — the CenterDashboard handles the API call + store
   // clearing itself; these callbacks exist for any post-confirmation side-effects
@@ -107,9 +110,12 @@ export function App(): React.ReactElement {
       ingestNotif(event);
       ingestRuntime(event);
       ingestRunEvent(event);
+      // Relayed interactive frames feed BOTH altitudes off the one subscription (§3.4):
+      // the runtime store's board headline above, the doc transcript here.
+      ingestDocThread(event);
       if (LIFECYCLE_EVENTS.has(event.type)) refresh();
     },
-    [ingestGate, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, refresh],
+    [ingestGate, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, refresh],
   );
 
   useEventStream(handleEvent);
@@ -257,13 +263,24 @@ export function App(): React.ReactElement {
     // The document's VERSION rides in the query (`?v=N`, slice 9) — the artifact is the
     // doc, the version is a lens on it — so the strip's selection is a real navigation.
     if (m === 'document') {
+      // Canvas and thread are SIBLINGS, never nested: §1.2's "mode surface + the one
+      // conversation thread, always present" (slice 10). The thread is fixed-width and
+      // dismissible-by-navigation — never force-opened over the canvas (§2.5).
       return (
-        <DocumentCanvas
-          projectId={pid}
-          docId={artifactId}
-          version={routedVersion(search)}
-          navigate={navigate}
-        />
+        <>
+          <DocumentCanvas
+            projectId={pid}
+            docId={artifactId}
+            version={routedVersion(search)}
+            navigate={navigate}
+          />
+          <DocumentThread
+            projectId={pid}
+            docId={artifactId}
+            selectedVersion={routedVersion(search)}
+            navigate={navigate}
+          />
+        </>
       );
     }
     if (m === 'video') return <ModePlaceholder mode={m} />;

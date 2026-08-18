@@ -51,6 +51,14 @@ What "independent" means here, and what this script proves end-to-end:
      swaps the frame to the v1 URL (and Back rewinds it), §7.6's scroll affordance
      is disabled-with-a-reason where the anchor is null, and Fork from v1 creates a
      4th version whose parent is 1 — asserted through the API, labelled in the UI.
+ 13. (DES-MERGE-001 slice 10) the ONE conversation in Document mode, on that same rig:
+     the thread mounts beside the canvas with a single composer; typing while idle
+     creates the doc-generation run (the message and an informative run opening land
+     in the transcript, the anchor id riding with the request); typing while generating
+     injects steering with the chip visible; the whole whimsy list pushed over a
+     generation window renders NOTHING while real narration lands, and no
+     `status.requested` heartbeat is ever emitted; and a landed version tags the
+     message that triggered it (§7.6).
 
 The daemon is the ONE thing this repo cannot supply. Point CREW_CLI at a built
 crew CLI entry (`.../packages/crew/dist/cli/index.js`); it defaults to the sibling
@@ -63,7 +71,8 @@ studio itself unless SKIP_STUDIO_BUILD=1 (in which case dist/ must already be
 baked for CREW_PORT).
 
 Env knobs: CREW_CLI, CREW_PORT (default 7901), STUDIO_PORT (default 4310),
-DOC_PORT (default 4320, the same-origin rig for §10), SKIP_STUDIO_BUILD.
+DOC_PORT (default 4320, the same-origin rig for §10), SKIP_STUDIO_BUILD,
+SLICE10_WINDOW_S (default 10, the generation window §13 pushes filler across).
 
 Prints a JSON report to stdout (exit 0/1); screenshots land in e2e/shots/.
 Operator-run smoke — though it spends no tokens (stub engine, no real CLI seats).
@@ -890,6 +899,11 @@ try:
     # state (append-only, per INV-4) rather than deriving a fresh list per request.
     doc_versions = {d["name"]: seed_versions(d["name"]) for d in FIXTURE_DOCS}
     versions_lock = threading.Lock()
+    # Slice 10's two composer wires, recorded verbatim so the run can assert WHICH wire
+    # each composer state chose — and that no `status.requested` heartbeat is ever among
+    # them (§3.2's second deletion is a claim about what the client does NOT send).
+    created_docs: list[dict] = []
+    emitted_events: list[dict] = []
     BRIDGE_DOWN_HINT = ("run `npx wicked-interactive serve` in this project's root — "
                         "the bridge could not be started")
     # `data-wid` anchors are what core/instrument.js injects (§5.5) — the fixture carries
@@ -1014,6 +1028,31 @@ try:
                              "created_at": "2026-08-18T12:00:00Z"})
             return self._json(200, {"version": created, "parent": parent})
 
+        def _body(self) -> dict:
+            return json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+
+        def _create_doc(self, project: str) -> None:
+            """`POST /api/docs` — the IDLE composer's wire (§2.2 case 1). The message is
+            the brief; the bridge slugifies the derived name and opens generation."""
+            body = self._body()
+            body["_project_path"] = project
+            created_docs.append(body)
+            slug = re.sub(r"[^a-z0-9]+", "-", (body.get("name") or "untitled").lower()).strip("-")
+            with versions_lock:
+                doc_versions.setdefault(slug, [{
+                    "version": 1, "parent": None, "feedback_file": None, "html_file": "v1.html",
+                    "created_at": "2026-08-18T12:05:00Z",
+                    "meta": {"sourceMessageId": body.get("source_message_id")},
+                }])
+            return self._json(200, {"name": slug, "head": 1, "kind": "doc",
+                                    "generating": True, "project_id": body.get("project")})
+
+        def _emit(self) -> None:
+            """`POST /api/events` — the GENERATING/GATED composer's wire (§2.2 cases 2-3)."""
+            emitted_events.append(self._body())
+            return self._json(200, {"ok": True, "event_id": f"ev-{len(emitted_events)}",
+                                    "correlation_id": "c-doc"})
+
         def do_POST(self):  # noqa: N802
             path = urllib.parse.urlparse(self.path).path
             m = INTERACTIVE_RE.match(path)
@@ -1024,6 +1063,10 @@ try:
                     return self._json(503, {"code": "bridge_unavailable", "hint": BRIDGE_DOWN_HINT})
                 if fork:
                     return self._fork(urllib.parse.unquote(fork.group(1)))
+                if rest == "/api/docs":
+                    return self._create_doc(project)
+                if rest == "/api/events":
+                    return self._emit()
             return self._proxy()
 
     docd = ThreadingHTTPServer(
@@ -1187,8 +1230,6 @@ try:
     _, _, forked_manifest = http_json("GET", doc_api)
     api_v4 = next((v for v in forked_manifest["versions"] if v["version"] == 4), None)
 
-    docd.shutdown()
-
     expected_v1_src = (f"{DOC_ORIGIN}/api/v1/projects/{urllib.parse.quote(doc_project)}"
                        f"/interactive/d/{STRIP_DOC}/doc/1")
     report["steps"]["version_strip"] = {
@@ -1233,6 +1274,179 @@ try:
     }
     if not report["steps"]["version_strip"]["ok"]:
         fail("version_strip_verdict", "slice-9 version-strip assertions did not all hold — see version_strip")
+
+    # ── 14. Slice 10 (DES-MERGE-001 §6.3): the ONE conversation in Document mode ──
+    # Same same-origin rig; the fake bridge now also answers the composer's two wires
+    # and RECORDS what it was sent, so each assertion is about the wire the composer
+    # chose, not about button text. What this proves:
+    #   · the thread mounts BESIDE the canvas with ONE composer (§2.1) — no second input;
+    #   · typing while IDLE creates the doc-generation run, and the thread shows the
+    #     user's message plus the run opening as an informative line with a subject
+    #     (§2.2 case 1, §3.3) — the anchor id travelling with the request (§7.6);
+    #   · typing while GENERATING injects steering with `steering-chip` visible (case 2);
+    #   · over a generation window in which the upstream bridge speaks the WHOLE whimsy
+    #     list, the transcript renders NONE of it while real narration lands (§3.2), and
+    #     the client emits no `status.requested` heartbeat at any point;
+    #   · a landed version tags the message that triggered it (§7.6, client half), which
+    #     is what makes slice 9's scroll targets resolvable going forward.
+    WHIMSY = ["Wiring the harness…", "Pondering the loop…", "Tightening the bolts…",
+              "Consulting the spine…", "Aligning the lanes…", "Reticulating splines…",
+              "Checking the gates…"]
+    FILLER_RE = re.compile(r"reticulating|splines|bolts", re.I)
+    # §6.3 words this as a 60 s window. The filler rotated every 4 s, so the property is
+    # "many rotations, none rendered"; the clock is a knob and the pushes are what count.
+    GEN_WINDOW_S = float(os.environ.get("SLICE10_WINDOW_S", "10"))
+    BRIEF = "a deck for the Q3 review"
+    CREATED_DOC = "a-deck-for-the-q3-review"
+    REAL_STATUS = "Rewriting slide 3 — tightening the headline"
+    STEER = "keep it to five slides"
+    THREAD_TEXT = """() => document.querySelector('[data-testid="thread"]')?.innerText ?? ''"""
+    PUSH_STATUS = """args => window.__pushFrame({ type: 'interactiveEvent', event: {
+         event_type: 'wicked.interactive.status.posted',
+         payload: { project_id: args.project, document_id: args.doc,
+                    state: 'working', message: args.text } } })"""
+    thread_console: list[str] = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.add_init_script(WS_TAP)
+        page.on("console", lambda m: thread_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text else None)
+
+        # ── AC: one thread, one composer, beside the canvas — never over it (§2.5) ──
+        page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document", wait_until="networkidle")
+        thread = page.locator('[data-testid="thread"]')
+        thread.wait_for(timeout=30000)
+        page.wait_for_function("() => typeof window.__pushFrame === 'function'", timeout=30000)
+        idle_state = thread.get_attribute("data-composer-state")
+        composers = page.locator('[data-testid="doc-composer"]').count()
+        canvas_beside_thread = page.locator('[data-testid="doc-picker-row"]').first.is_visible()
+        page.screenshot(path=str(SHOTS / "slice10-thread-idle.png"), full_page=True)
+
+        # ── AC: typing while IDLE creates the doc-generation run ───────────────────
+        page.fill('[data-testid="doc-composer"]', BRIEF)
+        page.click('[data-testid="doc-composer-submit"]')
+        created_nav = wait_for_path(page, f"/p/{doc_project}/document/{CREATED_DOC}")
+        page.locator('[data-testid="doc-message"]').first.wait_for(timeout=30000)
+        first_message = page.locator('[data-testid="doc-message"]').first.inner_text()
+        anchor_id = page.locator('[data-testid="doc-message"]').first.get_attribute("data-message-id")
+        opening = page.locator('[data-testid="doc-narration"]').first.inner_text()
+        generating_state = thread.get_attribute("data-composer-state")
+        chip_while_generating = page.locator('[data-testid="steering-chip"]').is_visible()
+        create_body = created_docs[0] if created_docs else {}
+        page.screenshot(path=str(SHOTS / "slice10-thread-created.png"), full_page=True)
+
+        # ── AC: the whimsy never reaches the transcript, and real narration does ───
+        pushed = 0
+        started = time.time()
+        while time.time() - started < GEN_WINDOW_S:
+            page.evaluate(PUSH_STATUS, {"project": doc_project, "doc": CREATED_DOC,
+                                        "text": WHIMSY[pushed % len(WHIMSY)]})
+            pushed += 1
+            page.wait_for_timeout(400)
+        page.evaluate(PUSH_STATUS, {"project": doc_project, "doc": CREATED_DOC,
+                                    "text": REAL_STATUS})
+        real_narration_ok, real_narration_ms = within(
+            page,
+            """text => (document.querySelector('[data-testid="thread"]')?.innerText ?? '')
+                 .includes(text)""",
+            REAL_STATUS,
+        )
+        transcript = page.evaluate(THREAD_TEXT)
+        filler_hit = FILLER_RE.search(transcript)
+        # Filler carried the state it rode in on: dropping the LINE is not dropping the fact.
+        state_after_window = thread.get_attribute("data-composer-state")
+        page.screenshot(path=str(SHOTS / "slice10-thread-narration.png"), full_page=True)
+
+        # ── AC: typing while GENERATING injects steering rather than creating ──────
+        page.fill('[data-testid="doc-composer"]', STEER)
+        page.click('[data-testid="doc-composer-submit"]')
+        steer_rendered, steer_ms = within(
+            page,
+            """text => Array.from(document.querySelectorAll('[data-testid="doc-message"]'))
+                 .some(m => m.innerText.includes(text))""",
+            STEER,
+        )
+        chip_after_steer = page.locator('[data-testid="steering-chip"]').is_visible()
+        docs_created_by_steer = len(created_docs)
+        page.screenshot(path=str(SHOTS / "slice10-thread-steering.png"), full_page=True)
+
+        # ── AC (§7.6, client half): the landed version tags the message that caused it ──
+        page.evaluate(
+            """args => window.__pushFrame({ type: 'interactiveEvent', event: {
+                 event_type: 'wicked.interactive.version.created',
+                 payload: { project_id: args.project, document_id: args.doc,
+                            version: 2, parent: 1, kind: 'generated' } } })""",
+            {"project": doc_project, "doc": CREATED_DOC},
+        )
+        tagged_ok, tag_ms = within(
+            page,
+            """() => { const m = document.querySelectorAll('[data-testid="doc-message"]');
+                       return m.length > 0 && m[m.length - 1].getAttribute('data-version') === '2'; }""",
+        )
+        terminal_state = thread.get_attribute("data-composer-state")
+        chip_when_terminal = page.locator('[data-testid="steering-chip"]').count()
+        page.screenshot(path=str(SHOTS / "slice10-thread-version-anchor.png"), full_page=True)
+        browser.close()
+
+    docd.shutdown()
+
+    steers = [e for e in emitted_events if e.get("event_type") == "wicked.interactive.chat.posted"]
+    heartbeats = [e for e in emitted_events
+                  if e.get("event_type") == "wicked.interactive.status.requested"]
+    report["steps"]["doc_thread"] = {
+        "ok": all([
+            idle_state == "idle", composers == 1, canvas_beside_thread,
+            created_nav, len(created_docs) == 1,
+            create_body.get("brief") == BRIEF, create_body.get("project") == doc_project,
+            anchor_id is not None and create_body.get("source_message_id") == anchor_id,
+            BRIEF in first_message, CREATED_DOC in opening,
+            generating_state == "generating", chip_while_generating,
+            pushed >= len(WHIMSY), filler_hit is None,
+            real_narration_ok, state_after_window == "generating",
+            steer_rendered, chip_after_steer, docs_created_by_steer == 1,
+            len(steers) == 1,
+            [(s.get("payload") or {}).get("text") for s in steers] == [STEER],
+            [(s.get("payload") or {}).get("document_id") for s in steers] == [CREATED_DOC],
+            not heartbeats,
+            tagged_ok, terminal_state == "terminal", chip_when_terminal == 0,
+        ]),
+        "project_id": doc_project,
+        "created_doc": CREATED_DOC,
+        "composer_state_idle": idle_state,
+        "composer_count": composers,
+        "canvas_and_thread_both_visible": canvas_beside_thread,
+        "create_navigated_to_doc": created_nav,
+        "create_request_body": create_body,
+        "first_thread_message": first_message,
+        "run_opening_narration": opening,
+        "version_anchor_id": anchor_id,
+        "composer_state_generating": generating_state,
+        "steering_chip_visible_while_generating": chip_while_generating,
+        "whimsy_lines_pushed": pushed,
+        "whimsy_window_seconds": GEN_WINDOW_S,
+        "filler_rendered": filler_hit.group(0) if filler_hit else None,
+        "real_narration_rendered": real_narration_ok,
+        "real_narration_ms": real_narration_ms,
+        "state_survived_filtered_frames": state_after_window,
+        "steer_message_rendered": steer_rendered,
+        "steer_render_ms": steer_ms,
+        "steer_emitted_events": steers,
+        "steer_created_no_new_doc": docs_created_by_steer == 1,
+        "status_requested_heartbeats": heartbeats,
+        "version_tagged_triggering_message": tagged_ok,
+        "version_tag_ms": tag_ms,
+        "composer_state_terminal": terminal_state,
+        "transcript": transcript[:600],
+        "console_errors": thread_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice10-thread-idle.png", "slice10-thread-created.png",
+                         "slice10-thread-narration.png", "slice10-thread-steering.png",
+                         "slice10-thread-version-anchor.png")],
+    }
+    if not report["steps"]["doc_thread"]["ok"]:
+        fail("doc_thread_verdict", "slice-10 document-thread assertions did not all hold — see doc_thread")
 
     report["ok"] = True
     print(json.dumps(report, indent=2))
