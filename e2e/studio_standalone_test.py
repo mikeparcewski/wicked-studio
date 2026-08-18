@@ -37,6 +37,10 @@ What "independent" means here, and what this script proves end-to-end:
      `unitOutputDelta` updates that card's headline within 2 s while its neighbour
      is untouched, and a relayed `wicked.interactive.status.posted` adds a doc
      activity line — all over the page's ONE existing socket
+ 10. (DES-MERGE-001 slice 7) gate chips on that board are ANSWERABLE: a SIMPLE gate
+     (§7.11) is approved inline and the run advances on the same page with no
+     navigation, while a COMPLEX one deep-links to the thread with the gate message
+     scrolled into view and focused
 
 The daemon is the ONE thing this repo cannot supply. Point CREW_CLI at a built
 crew CLI entry (`.../packages/crew/dist/cli/index.js`); it defaults to the sibling
@@ -687,6 +691,136 @@ try:
     }
     if not report["steps"]["board_live"]["ok"]:
         fail("board_live_verdict", "slice-6 live-board assertions did not all hold — see board_live")
+
+    # ── 11. Slice 7 (DES-MERGE-001 §6.2): answerable gate chips on the board ──
+    # Two gates, two shapes (§7.11 — "the AC asserts both shapes via fixtures"):
+    #   - SIMPLE is the gate crew actually raises: a prompt-only payload, whose two
+    #     answers are the two `POST /runs/:id/gate` accepts. Answered inline, on `/`.
+    #   - COMPLEX is a payload that names more than two choices. Crew does not send
+    #     one yet, so it is delivered through the same WebSocket tap slice 6 uses —
+    #     a real `awaitingHuman` frame for a run that IS genuinely parked on a gate,
+    #     travelling the full app path (onmessage → gate store → card).
+    simple_project = new_project(f"slice7-simple-{tag}")
+    simple_run = await_gate(launch("slice7: a simple gate, answered from the board", "all"))
+    attach_run(simple_project, simple_run)
+    complex_project = new_project(f"slice7-complex-{tag}")
+    complex_run = await_gate(launch("slice7: a gate that needs the thread", "all"))
+    attach_run(complex_project, complex_run)
+
+    slice7_console: list[str] = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.add_init_script(WS_TAP)
+        page.on("console", lambda m: slice7_console.append(m.text) if m.type == "error" else None)
+
+        page.goto(f"{STUDIO_ORIGIN}/", wait_until="networkidle")
+        page.locator('[data-testid="project-board"]').wait_for(timeout=30000)
+        page.wait_for_function("() => typeof window.__pushFrame === 'function'", timeout=30000)
+        # Same sentinel discipline as slice 6: any navigation or reload wipes it.
+        page.evaluate("() => { window.__slice7 = 'same page'; }")
+
+        # ── AC: a simple gate is answered ON the board, and the run advances there ─
+        approve = page.locator(f'[data-testid="gate-approve-{simple_run}"]')
+        approve.wait_for(timeout=30000)
+        # §1.4: the chip is a CONTROL, not a badge — and a simple gate never sends the
+        # user to the thread to answer it.
+        inline_ok = (
+            page.locator(f'[data-testid="gate-reject-{simple_run}"]').count() == 1
+            and page.locator(f'[data-testid="gate-open-{simple_run}"]').count() == 0
+        )
+        approve.click()
+        # Disabled while the POST is open — the double-submit guard, visible (§3.3).
+        disabled_ok, _ = within(
+            page,
+            """id => { const b = document.querySelector(`[data-testid="gate-approve-${id}"]`);
+                       return b === null || b.disabled; }""",
+            simple_run,
+            budget_ms=3000,
+        )
+        advanced_ok, advance_ms = within(
+            page,
+            """id => { const chip = document.querySelector(`[data-testid="run-chip"][data-run-id="${id}"]`);
+                       return !!chip && chip.dataset.status !== 'awaiting_human'; }""",
+            simple_run,
+            budget_ms=20000,  # gate decision → resume → run-list reconcile (400 ms debounce)
+        )
+        chip_status = page.evaluate(
+            """id => document.querySelector(
+                 `[data-testid="run-chip"][data-run-id="${id}"]`)?.dataset.status ?? null""",
+            simple_run,
+        )
+        no_nav_ok = (
+            page.evaluate("() => window.__slice7 === 'same page'")
+            and urllib.parse.urlparse(page.url).path == "/"
+        )
+        _, _, simple_final = http_json("GET", f"{API}/runs/{simple_run}")
+        simple_rest_status = simple_final["run"]["session"]["status"]
+        page.screenshot(path=str(SHOTS / "slice7-board-gate-answered.png"), full_page=True)
+
+        # ── AC: a complex gate's chip navigates to the thread, message focused ────
+        page.evaluate(
+            """args => window.__pushFrame({ type: 'awaitingHuman', session: args.run, ord: args.ord,
+                 prompt: args.prompt, choices: ['ship it', 'rework the plan', 'split the slice'] })""",
+            {"run": complex_run, "ord": 0, "prompt": "Which way should this go?"},
+        )
+        open_chip = page.locator(f'[data-testid="gate-open-{complex_run}"]')
+        open_chip.wait_for(timeout=30000)
+        deep_link = open_chip.get_attribute("href")
+        # A card cannot answer a question that needs prose — so it does not offer to.
+        complex_shape_ok = (
+            page.locator(f'[data-testid="gate-approve-{complex_run}"]').count() == 0
+            and deep_link == f"/p/{complex_project}/build/{complex_run}#gate"
+        )
+        open_chip.click()
+        deep_link_ok = wait_for_path(page, f"/p/{complex_project}/build/{complex_run}")
+        focus_ok, focus_ms = within(
+            page,
+            """() => document.activeElement?.dataset?.testid === 'steering-prompt'""",
+            budget_ms=30000,
+        )
+        # Focused AND in view (§6.2: "scrolled into view and focused"), and the one-shot
+        # intent is consumed so the live thread cannot keep yanking focus back.
+        in_view = page.evaluate(
+            """() => { const el = document.querySelector('[data-testid="steering-prompt"]');
+                       if (!el) return false;
+                       const r = el.getBoundingClientRect();
+                       return r.top >= 0 && r.bottom <= window.innerHeight; }""")
+        hash_consumed = page.evaluate("() => window.location.hash === ''")
+        page.screenshot(path=str(SHOTS / "slice7-gate-deep-link.png"), full_page=True)
+        browser.close()
+
+    report["steps"]["gate_chips"] = {
+        "ok": all([
+            inline_ok, disabled_ok, advanced_ok, no_nav_ok,
+            simple_rest_status != "awaiting_human",
+            complex_shape_ok, deep_link_ok, focus_ok, in_view, hash_consumed,
+        ]),
+        "simple_project": simple_project,
+        "simple_run": simple_run,
+        "complex_project": complex_project,
+        "complex_run": complex_run,
+        "simple_gate_answerable_inline": inline_ok,
+        "chip_disabled_in_flight": disabled_ok,
+        "run_advanced_on_the_board": advanced_ok,
+        "advance_ms": advance_ms,
+        "chip_status_after_approve": chip_status,
+        "status_via_rest_after_approve": simple_rest_status,
+        "no_navigation_or_reload": no_nav_ok,
+        "complex_gate_deep_links_only": complex_shape_ok,
+        "complex_gate_href": deep_link,
+        "navigated_to_thread": deep_link_ok,
+        "gate_message_focused": focus_ok,
+        "focus_ms": focus_ms,
+        "gate_message_in_view": in_view,
+        "focus_intent_consumed": hash_consumed,
+        "console_errors": slice7_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice7-board-gate-answered.png", "slice7-gate-deep-link.png")],
+    }
+    if not report["steps"]["gate_chips"]["ok"]:
+        fail("gate_chips_verdict", "slice-7 gate-chip assertions did not all hold — see gate_chips")
 
     report["ok"] = True
     print(json.dumps(report, indent=2))
