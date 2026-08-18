@@ -18,7 +18,6 @@ const MAX_TILES = 3;
 const MAX_CHIPS = 2;
 
 const S = {
-  card:   '#161b22',
   border: 'rgba(230,237,243,0.1)',
   ink:    '#e6edf3',
   muted:  'rgba(230,237,243,0.55)',
@@ -41,6 +40,35 @@ const ACTIONS: { mode: Mode; label: string; glyph: string }[] = [
   { mode: 'video',    label: 'Record demo', glyph: '▶' },
 ];
 
+const CSS = {
+  card: {
+    height: `${CARD_H}px`, boxSizing: 'border-box', overflow: 'hidden', background: '#161b22',
+    border: `1px solid ${S.border}`, borderRadius: '10px', padding: '14px',
+    display: 'flex', flexDirection: 'column',
+  },
+  header: { display: 'flex', alignItems: 'center', gap: '8px' },
+  name: {
+    fontSize: '13px', fontWeight: 700, color: S.ink, textDecoration: 'none',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  repo: { marginLeft: 'auto', fontSize: '10px', fontFamily: 'monospace', color: S.faint, flexShrink: 0 },
+  label: { fontSize: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: S.faint },
+  tile: {
+    flex: 1, minWidth: 0, background: 'rgba(230,237,243,0.04)',
+    border: `1px solid ${S.border}`, borderRadius: '6px', padding: '5px 7px',
+  },
+  tileName: { fontSize: '11px', color: S.ink, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  chip: {
+    display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none',
+    fontSize: '11px', fontFamily: 'monospace', color: S.muted, borderRadius: '5px', padding: '3px 7px',
+  },
+  quick: {
+    display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none',
+    background: 'rgba(230,237,243,0.05)', border: `1px solid ${S.border}`,
+    borderRadius: '6px', color: S.ink,
+  },
+} as const satisfies Record<string, React.CSSProperties>;
+
 /** Coarse, honest relative time — the board never needs second precision. */
 export function ago(from: number, now: number = Date.now()): string {
   const secs = Math.max(0, Math.round((now - from) / 1000));
@@ -53,9 +81,7 @@ export function ago(from: number, now: number = Date.now()): string {
 function Region({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
   return (
     <div style={{ marginTop: '10px', minHeight: '46px' }}>
-      <p style={{ fontSize: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: S.faint, margin: '0 0 4px' }}>
-        {title}
-      </p>
+      <p style={{ ...CSS.label, margin: '0 0 4px' }}>{title}</p>
       {children}
     </div>
   );
@@ -71,22 +97,15 @@ function Invitation({ text }: { text: string }): React.ReactElement {
  * documents to keep mounted for a surface the user is only scanning.
  */
 function DocTile({ name, kind, updatedAt }: { name: string; kind: string; updatedAt: string | null }): React.ReactElement {
-  const when = updatedAt === null ? null : Date.parse(updatedAt);
+  const when = updatedAt === null ? NaN : Date.parse(updatedAt);
   return (
-    <div
-      data-testid="doc-tile"
-      data-doc-kind={kind}
-      style={{
-        flex: 1, minWidth: 0, background: 'rgba(230,237,243,0.04)', border: `1px solid ${S.border}`,
-        borderRadius: '6px', padding: '5px 7px',
-      }}
-    >
-      <p style={{ fontSize: '11px', color: S.ink, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+    <div data-testid="doc-tile" data-doc-kind={kind} style={CSS.tile}>
+      <p style={CSS.tileName}>
         <span aria-hidden style={{ marginRight: '4px' }}>{kind === 'demo' ? '▶' : '▤'}</span>
         {name}
       </p>
       <p style={{ fontSize: '10px', color: S.faint, margin: '2px 0 0', fontFamily: 'monospace' }}>
-        {when !== null && !Number.isNaN(when) ? `${ago(when)} ago` : 'not yet edited'}
+        {Number.isNaN(when) ? 'not yet edited' : `${ago(when)} ago`}
       </p>
     </div>
   );
@@ -102,74 +121,28 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
   const gates = useGateStore((s) => s.gates);
   const empty = runs.length === 0 && docs.length === 0;
 
-  function go(path: string, e: React.MouseEvent): void {
-    e.preventDefault();
-    navigate(path);
-  }
-
-  const action = (a: (typeof ACTIONS)[number], large: boolean): React.ReactElement => {
-    const path = modePath(project.id, a.mode);
-    return (
-      <a
-        key={a.mode}
-        href={path}
-        onClick={(e) => go(path, e)}
-        data-testid="quick-action"
-        data-mode={a.mode}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: large ? 'flex-start' : 'center',
-          gap: '6px', textDecoration: 'none', background: 'rgba(230,237,243,0.05)',
-          border: `1px solid ${S.border}`, borderRadius: '6px', color: S.ink,
-          padding: large ? '10px 12px' : '6px 8px', fontSize: large ? '12px' : '11px',
-          fontWeight: large ? 600 : 400,
-        }}
-      >
-        <span aria-hidden>{a.glyph}</span> {a.label}
-      </a>
-    );
-  };
+  /** Every affordance on the card is a real link — deep-linkable, middle-clickable. */
+  const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
+    href: path,
+    onClick: (e) => { e.preventDefault(); navigate(path); },
+  });
 
   return (
-    <section
-      data-testid="project-card"
-      data-project-id={project.id}
-      data-attention={attention}
-      style={{
-        height: `${CARD_H}px`, boxSizing: 'border-box', overflow: 'hidden',
-        background: S.card, border: `1px solid ${S.border}`, borderRadius: '10px', padding: '14px',
-        display: 'flex', flexDirection: 'column',
-      }}
-    >
+    <section data-testid="project-card" data-project-id={project.id} data-attention={attention} style={CSS.card}>
       {/* Header — name, repo binding, status dot */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={CSS.header}>
         <span
           data-testid="project-status-dot"
           aria-hidden
           style={{ width: '8px', height: '8px', borderRadius: '50%', background: DOT[attention], flexShrink: 0 }}
         />
-        <a
-          href={modePath(project.id, 'build')}
-          onClick={(e) => go(modePath(project.id, 'build'), e)}
-          style={{
-            fontSize: '13px', fontWeight: 700, color: S.ink, textDecoration: 'none',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}
-        >
-          {project.name}
-        </a>
-        <span
-          data-testid="project-repo"
-          style={{ marginLeft: 'auto', fontSize: '10px', fontFamily: 'monospace', color: S.faint, flexShrink: 0 }}
-        >
-          {repo ?? 'no repo'}
-        </span>
+        <a {...link(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>
+        <span data-testid="project-repo" style={CSS.repo}>{repo ?? 'no repo'}</span>
       </div>
 
       {/* Documents — placeholder tiles only (§7.5), capped so the card cannot grow */}
       <Region title="Documents">
-        {docs.length === 0 ? (
-          <Invitation text="No documents yet." />
-        ) : (
+        {docs.length === 0 ? <Invitation text="No documents yet." /> : (
           <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
             {docs.slice(0, MAX_TILES).map((d) => (
               <DocTile key={d.name} name={d.name} kind={d.kind} updatedAt={d.updated_at} />
@@ -185,9 +158,7 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
 
       {/* Crew runs — phase, gate state, elapsed */}
       <Region title="Crew runs">
-        {runs.length === 0 ? (
-          <Invitation text="No runs yet." />
-        ) : (
+        {runs.length === 0 ? <Invitation text="No runs yet." /> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {runs.slice(0, MAX_CHIPS).map(({ session, units }) => {
               const style = STATUS_STYLE[session.status];
@@ -197,17 +168,14 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
               return (
                 <a
                   key={session.id}
-                  href={modePath(project.id, 'build', session.id)}
-                  onClick={(e) => go(modePath(project.id, 'build', session.id), e)}
+                  {...link(modePath(project.id, 'build', session.id))}
                   data-testid="run-chip"
                   data-run-id={session.id}
                   data-status={session.status}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none',
-                    fontSize: '11px', fontFamily: 'monospace', color: S.muted,
+                    ...CSS.chip,
                     border: `1px solid ${waiting ? 'rgba(255,218,25,0.3)' : S.border}`,
                     background: waiting ? 'rgba(255,218,25,0.1)' : 'transparent',
-                    borderRadius: '5px', padding: '3px 7px',
                   }}
                 >
                   <span style={{ color: style?.color ?? S.faint }}>{phase}</span>
@@ -215,8 +183,9 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
                   {/* Elapsed exists only where the wire carries a timestamp: `AgentSession`
                       has no `started_at`, so a gate's daemon-cached `receivedAt` is the one
                       honest clock on this surface. */}
-                  {waiting && gate && <span style={{ marginLeft: 'auto' }}>waiting {ago(gate.receivedAt)}</span>}
-                  {!waiting && <span style={{ marginLeft: 'auto' }}>{style?.label ?? session.status}</span>}
+                  <span style={{ marginLeft: 'auto' }}>
+                    {waiting ? (gate ? `waiting ${ago(gate.receivedAt)}` : 'needs you') : style?.label ?? session.status}
+                  </span>
                 </a>
               );
             })}
@@ -230,11 +199,7 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
       </Region>
 
       {/* Quick actions — large when the card IS the empty state (§1.4) */}
-      {empty && (
-        <p style={{ fontSize: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: S.faint, margin: '10px 0 0' }}>
-          Start here
-        </p>
-      )}
+      {empty && <p style={{ ...CSS.label, margin: '10px 0 0' }}>Start here</p>}
       <div
         data-testid="quick-actions"
         style={{
@@ -242,7 +207,21 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
           gridTemplateColumns: empty ? '1fr 1fr' : 'repeat(4, minmax(0,1fr))',
         }}
       >
-        {ACTIONS.map((a) => action(a, empty))}
+        {ACTIONS.map((a) => (
+          <a
+            key={a.mode}
+            {...link(modePath(project.id, a.mode))}
+            data-testid="quick-action"
+            data-mode={a.mode}
+            style={{
+              ...CSS.quick, justifyContent: empty ? 'flex-start' : 'center',
+              padding: empty ? '10px 12px' : '6px 8px',
+              fontSize: empty ? '12px' : '11px', fontWeight: empty ? 600 : 400,
+            }}
+          >
+            <span aria-hidden>{a.glyph}</span> {a.label}
+          </a>
+        ))}
       </div>
     </section>
   );
