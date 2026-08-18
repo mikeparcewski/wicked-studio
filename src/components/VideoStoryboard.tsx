@@ -231,7 +231,6 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
   const [chapter, setChapter] = useState(0);
   const [at, setAt] = useState(0);
   const video = useRef<HTMLVideoElement>(null);
-  const cards = useRef<HTMLDivElement>(null);
 
   const subject = `“${demoId}”`;
   if (specFailure) return <Failed surface="video" subject={subject} failure={specFailure} onRetry={retrySpec} />;
@@ -277,9 +276,9 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
             <img data-testid="demo-gif" src={player.src} alt={`Recording of ${demoId}`} style={{ maxWidth: '100%' }} />
             <p data-testid="demo-position" style={{ fontSize: '12px', color: S.muted, margin: 0 }}>
               {steps.length > 0
-                ? `Chapter ${chapter + 1} of ${steps.length} · ${mmss(at)} — the GIF loops the whole demo; `
-                  + 'record with ffmpeg installed for a scrubbable video.'
-                : 'The GIF loops the whole demo.'}
+                ? `Chapter ${chapter + 1} of ${steps.length}, at ${mmss(at)} — this recording is a `
+                  + 'looping GIF with no timeline, so the chapter is shown rather than played to.'
+                : 'This recording is a looping GIF of the whole demo.'}
             </p>
           </div>
         ) : (
@@ -289,7 +288,6 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
 
       {/* The storyboard: one card per SPEC STEP, in spec order (§4.5). */}
       <div
-        ref={cards}
         data-testid="demo-storyboard"
         data-steps={String(steps.length)}
         style={{
