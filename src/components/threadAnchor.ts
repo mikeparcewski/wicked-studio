@@ -4,9 +4,10 @@
 // and the anchor is resolved through the DOM by the contract both sides publish —
 // `data-testid="thread"` on the container, `data-message-id` on each message.
 //
-// Slice 9 owns the SCROLL only. Document mode's own thread is slice 10; until it
-// lands the anchor resolves against whatever thread is mounted, and resolves to
-// nothing when none is. A miss is reported, never thrown.
+// Slice 9 owns the SCROLL only; slice 10 mounted Document mode's own thread, which
+// publishes that contract and tags a landed version onto the message that triggered
+// it. A version whose anchor is not on screen (a pre-merge doc, or a message from a
+// session this client never saw) is a reported miss, never a throw.
 
 /** Selector-safe attribute match — a message id may legally contain quotes or spaces. */
 function messageSelector(messageId: string): string {

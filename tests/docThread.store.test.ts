@@ -33,7 +33,7 @@ function messages(): DocMsg[] {
 }
 
 function texts(): string[] {
-  return messages().map((m) => ('text' in m ? m.text : `divider:v${m.version}`));
+  return messages().flatMap((m) => ('text' in m ? [m.text] : []));
 }
 
 function state(): string | undefined {
@@ -56,9 +56,10 @@ describe('composer state mapping (§2.2)', () => {
       state: 'asking', request_id: 'req-7', question: 'Deck or one-pager?', options: ['Deck', 'One-pager'],
     }));
     expect(state()).toBe('gated');
-    const gate = messages()[0];
-    expect(gate).toMatchObject({ kind: 'gate', requestId: 'req-7', question: 'Deck or one-pager?' });
-    expect(gate.kind === 'gate' && gate.options).toEqual(['Deck', 'One-pager']);
+    expect(messages()[0]).toMatchObject({
+      kind: 'gate', requestId: 'req-7', question: 'Deck or one-pager?',
+      options: ['Deck', 'One-pager'],
+    });
   });
 
   it('a status arriving DURING a gate narrates without clearing the gate', () => {
