@@ -11,8 +11,15 @@ import { STATUS_STYLE } from './RunCard.js';
  * count instead of scrolling.
  */
 
-/** Fixed card height in px. The board's windowing math depends on it. */
-export const CARD_H = 264;
+/**
+ * Fixed card height in px — the board's windowing math depends on it.
+ *
+ * Sized by the TALLEST variant, the empty card: header + two regions + the 2×2
+ * quick-action grid. The actions are bottom-anchored (`marginTop: auto`) inside an
+ * `overflow: hidden` box, so a height that merely fits would clip the primary
+ * affordance the moment a font metric moved. This carries ~16px of slack.
+ */
+export const CARD_H = 280;
 
 const MAX_TILES = 3;
 const MAX_CHIPS = 2;
