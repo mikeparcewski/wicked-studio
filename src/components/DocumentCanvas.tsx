@@ -1,13 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import {
-  BridgeUnavailableError,
-  getVersions,
-  interactiveUrl,
-  listDocs,
-} from '../api/interactive.js';
+import { useEffect, useState } from 'react';
+import { getVersions, interactiveUrl, listDocs } from '../api/interactive.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { FeedbackOverlay } from './FeedbackOverlay.js';
+import { Failed, Loading, PANEL, S, useLoad } from './SurfaceState.js';
 import { VersionStrip } from './VersionStrip.js';
 
 // The Document-mode canvas (DES-MERGE-001 §1.3, §6.3 slice 8, tightened by slices 11+12).
@@ -23,94 +19,6 @@ import { VersionStrip } from './VersionStrip.js';
 // and the parent cannot read `contentDocument` back. Everything the overlay needs comes
 // over the instrument bridge instead (§7.3: the overlay never shipped without it).
 
-const S = {
-  card:   '#161b22',
-  border: 'rgba(230,237,243,0.1)',
-  ink:    '#e6edf3',
-  muted:  'rgba(230,237,243,0.55)',
-  accent: '#ffda19',
-  label:  'rgba(230,237,243,0.3)',
-};
-
-const PANEL: React.CSSProperties = {
-  background: S.card, border: `1px solid ${S.border}`, borderRadius: '10px',
-  padding: '20px 22px', maxWidth: '640px',
-};
-
-/** What the client failed with, flattened to the two things the UI renders (§3.3). */
-interface Failure { message: string; hint?: string }
-
-function asFailure(e: unknown): Failure {
-  return e instanceof BridgeUnavailableError
-    ? { message: e.message, hint: e.hint }
-    : { message: e instanceof Error ? e.message : String(e) };
-}
-
-/** §3.3: a working state names its subject. Never a bare spinner, never "Loading…". */
-function Loading({ subject }: { subject: string }): React.ReactElement {
-  return (
-    <div data-testid="doc-canvas-loading" style={{ padding: '32px', color: S.muted, fontSize: '13px' }}>
-      Loading {subject}…
-    </div>
-  );
-}
-
-/**
- * §3.3: an error with no next action is banned. A `bridge_unavailable` 503 carries a
- * named install/fix command (§7.12) and it is shown VERBATIM — retyping it would be
- * retyping a command the user has to run. Everything else at least offers Retry.
- */
-function Failed({
-  subject, failure, onRetry,
-}: { subject: string; failure: Failure; onRetry: () => void }): React.ReactElement {
-  return (
-    <div data-testid="doc-canvas-error" style={{ padding: '32px' }}>
-      <div style={PANEL}>
-        <p style={{ fontSize: '13px', color: S.ink, margin: '0 0 10px' }}>Could not load {subject}.</p>
-        <p
-          data-testid={failure.hint ? 'doc-bridge-hint' : 'doc-error-detail'}
-          style={{
-            fontSize: '13px', color: failure.hint ? S.ink : S.muted, margin: '0 0 14px',
-            lineHeight: 1.5, borderLeft: `2px solid ${S.accent}`, paddingLeft: '10px',
-          }}
-        >
-          {failure.hint ? <><strong>To fix:</strong> {failure.hint}</> : failure.message}
-        </p>
-        <button
-          type="button"
-          data-testid="doc-canvas-retry"
-          onClick={onRetry}
-          style={{
-            background: 'transparent', border: `1px solid ${S.border}`, borderRadius: '6px',
-            color: S.ink, cursor: 'pointer', fontSize: '12px', padding: '6px 12px',
-          }}
-        >
-          Retry
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** One async load, re-runnable by Retry. Returns `[value, failure, retry]`. */
-function useLoad<T>(load: () => Promise<T>, deps: React.DependencyList): [T | null, Failure | null, () => void] {
-  const [attempt, setAttempt] = useState(0);
-  const [value, setValue] = useState<T | null>(null);
-  const [failure, setFailure] = useState<Failure | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    setValue(null);
-    setFailure(null);
-    load().then(
-      (v) => { if (!cancelled) setValue(v); },
-      (e: unknown) => { if (!cancelled) setFailure(asFailure(e)); },
-    );
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `load` is re-created per render; the caller declares the real deps
-  }, [...deps, attempt]);
-  return [value, failure, useCallback(() => setAttempt((n) => n + 1), [])];
-}
-
 // ── Doc picker — the mode with no `:docId` in the route ──────────────────────
 
 /** Most-recent first (§6.3). The bridge already sorts; a null `updated_at` sinks. */
@@ -121,8 +29,8 @@ function byRecency(a: DocSummary, b: DocSummary): number {
 function DocPicker({ projectId, navigate }: { projectId: string; navigate: Navigate }): React.ReactElement {
   const [docs, failure, retry] = useLoad(() => listDocs(projectId), [projectId]);
 
-  if (failure) return <Failed subject="this project's documents" failure={failure} onRetry={retry} />;
-  if (docs === null) return <Loading subject="this project's documents" />;
+  if (failure) return <Failed surface="doc" subject="this project's documents" failure={failure} onRetry={retry} />;
+  if (docs === null) return <Loading surface="doc" subject="this project's documents" />;
 
   // §1.4's rule, applied to a surface: an empty region renders an invitation, never a
   // blank. Creation itself is slice 10, so the invitation points at the thread.
@@ -204,8 +112,8 @@ function DocFrame({
   useEffect(() => { setLoaded(false); }, [projectId, docId, version]);
 
   const subject = `“${docId}”`;
-  if (failure) return <Failed subject={subject} failure={failure} onRetry={retry} />;
-  if (manifest === null) return <Loading subject={subject} />;
+  if (failure) return <Failed surface="doc" subject={subject} failure={failure} onRetry={retry} />;
+  if (manifest === null) return <Loading surface="doc" subject={subject} />;
 
   const shown = resolveVersion(manifest, version);
   // Version-addressed: the VersionStrip swaps this number through the route, nothing else.
@@ -248,7 +156,7 @@ function DocFrame({
       {/* The frame is in the DOM while it loads, so the named status sits over it. */}
       {loaded ? null : (
         <div style={{ background: '#0d1117', inset: 0, position: 'absolute' }}>
-          <Loading subject={subject} />
+          <Loading surface="doc" subject={subject} />
         </div>
       )}
       {/* Point-and-comment (§4.3). A document whose bridge never answers leaves this
