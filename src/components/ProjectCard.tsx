@@ -27,7 +27,7 @@ import { STATUS_STYLE } from './RunCard.js';
  * `overflow: hidden` box, so a height that merely fits would clip the primary
  * affordance the moment a font metric moved. This carries ~16px of slack.
  */
-export const CARD_H = 340;
+export const CARD_H = 352;
 
 const MAX_TILES = 3;
 const MAX_CHIPS = 2;

@@ -142,7 +142,9 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
   // so the unfiled runs that legitimately belong to no project cost exactly one pass
   // each rather than one per `GET /runs` reconcile.
   useEffect(() => {
-    if (projects.length === 0) return;
+    // Nothing is "unplaced" until the first membership read has landed — without this
+    // the initial run list would fan out a second, identical read behind the first.
+    if (projects.length === 0 || Object.keys(bindings).length === 0) return;
     const known = new Set(Object.values(bindings).flatMap((b) => [...b.runIds]));
     const unplaced = runs.filter((v) => !known.has(v.session.id) && !placed.current.has(v.session.id));
     if (unplaced.length === 0) return;

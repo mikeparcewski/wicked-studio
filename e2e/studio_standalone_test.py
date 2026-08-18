@@ -32,6 +32,11 @@ What "independent" means here, and what this script proves end-to-end:
      sorts first, an empty project's card IS its four quick actions (each pre-bound
      to that project), doc tiles are placeholders rather than iframes (§7.5), and
      20+ projects stay windowed inside a viewport-bounded board
+  9. (DES-MERGE-001 slice 6) that board is LIVE: while the page sits on `/` and
+     never reloads, a real gate arrival re-sorts a card ahead of another, a
+     `unitOutputDelta` updates that card's headline within 2 s while its neighbour
+     is untouched, and a relayed `wicked.interactive.status.posted` adds a doc
+     activity line — all over the page's ONE existing socket
 
 The daemon is the ONE thing this repo cannot supply. Point CREW_CLI at a built
 crew CLI entry (`.../packages/crew/dist/cli/index.js`); it defaults to the sibling
@@ -479,6 +484,209 @@ try:
     }
     if not report["steps"]["orchestrator_board"]["ok"]:
         fail("orchestrator_board_verdict", "slice-5 board assertions did not all hold — see orchestrator_board")
+
+    # ── 10. Slice 6 (DES-MERGE-001 §6.2): the board goes LIVE ─────────────────
+    # Every assertion below happens on ONE page load: the browser lands on `/` once
+    # and is never navigated or reloaded again, which is the property slice 6 exists
+    # to prove ("a card updates in place while the user is looking at a different
+    # card", §1.4).
+    #
+    # Two frame sources, deliberately:
+    #   - the GATE re-sort is driven by the real daemon (a run genuinely parks on a
+    #     human gate while the page watches), because attention order is derived from
+    #     run state and a faked frame would prove nothing about it;
+    #   - the DELTA and the relayed interactive frame are delivered into the page's
+    #     own socket handler through a WebSocket tap installed as an init script. The
+    #     page still opens exactly one real socket to the daemon (asserted), and the
+    #     frame travels the full app path — onmessage → runtime store → card. The tap
+    #     is how a *specific* frame gets delivered on demand: the stub engine's own
+    #     deltas are not addressable, and crew's `interactiveEvent` relay (slice 3)
+    #     is not merged yet, so this is the only way to exercise its envelope.
+    WS_TAP = """
+      (() => {
+        const Real = window.WebSocket;
+        class TapWS extends Real {
+          constructor(...args) {
+            super(...args);
+            window.__pushFrame = (frame) =>
+              this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(frame) }));
+          }
+        }
+        window.WebSocket = TapWS;
+      })();
+    """
+
+    CARD_INDEX = """id => Array.from(document.querySelectorAll('[data-testid="project-card"]'))
+                             .findIndex(c => c.dataset.projectId === id)"""
+    LIVE_LINE = """id => { const c = document.querySelector(
+                             `[data-testid="project-card"][data-project-id="${id}"]`);
+                           return c?.querySelector('[data-testid="live-line"]')?.textContent ?? null; }"""
+
+    def within(page, expr, arg=None, budget_ms: int = 2000):
+        """Assert a DOM condition holds within `budget_ms`, and report what it took."""
+        started = time.time()
+        try:
+            page.wait_for_function(expr, arg=arg, timeout=budget_ms)
+            return True, round((time.time() - started) * 1000)
+        except Exception:
+            return False, round((time.time() - started) * 1000)
+
+    # A is created FIRST and parks on a gate; B is created SECOND (so it wins the
+    # updated_at tiebreak once it too has a gate) and starts with no runs at all.
+    live_a = new_project(f"live-a-{tag}")
+    attach_run(live_a, await_gate(launch("slice6: parks on a gate and stays there", "all")))
+    live_b = new_project(f"live-b-{tag}")
+
+    live_ws_urls: list[str] = []
+    live_console: list[str] = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.add_init_script(WS_TAP)
+        page.on("websocket", lambda ws: live_ws_urls.append(ws.url))
+        page.on("console", lambda m: live_console.append(m.text) if m.type == "error" else None)
+
+        page.goto(f"{STUDIO_ORIGIN}/", wait_until="networkidle")
+        page.locator('[data-testid="project-board"]').wait_for(timeout=30000)
+        page.wait_for_function("() => typeof window.__pushFrame === 'function'", timeout=30000)
+        # A sentinel on the window: any navigation or reload from here on wipes it, so
+        # every assertion below is provably about THIS page load.
+        page.evaluate("() => { window.__slice6 = 'same page'; }")
+
+        both_visible = settled(
+            page,
+            """ids => ids.every(id => document.querySelector(
+                 `[data-testid="project-card"][data-project-id="${id}"]`))""",
+            [live_a, live_b],
+        )
+        a_before = page.evaluate(CARD_INDEX, live_a)
+        b_before = page.evaluate(CARD_INDEX, live_b)
+        board_scroll_before = page.evaluate(
+            """() => document.querySelector('[data-testid="project-board"]').scrollTop""")
+
+        # ── AC: a gate arrival re-sorts the board, no navigation, no reload ────
+        # The run is launched and filed while the page watches; the board has to pick
+        # up both the new membership and, moments later, the gate it parks on.
+        rb = launch("slice6: gates while the board is watching", "all")
+        attach_run(live_b, rb)
+        chip_ok = settled(
+            page,
+            """id => !!document.querySelector(
+                 `[data-testid="project-card"][data-project-id="${id}"] [data-testid="run-chip"]`)""",
+            live_b,
+        )
+        await_gate(rb)
+        resorted, resort_ms = within(
+            page,
+            """ids => { const cards = Array.from(document.querySelectorAll('[data-testid="project-card"]'))
+                          .map(c => c.dataset.projectId);
+                        const [a, b] = ids;
+                        return cards.indexOf(b) >= 0 && cards.indexOf(b) < cards.indexOf(a); }""",
+            [live_a, live_b],
+            budget_ms=5000,  # includes the run-list reconcile the gate frame triggers
+        )
+        a_after_gate = page.evaluate(CARD_INDEX, live_a)
+        b_after_gate = page.evaluate(CARD_INDEX, live_b)
+        page.screenshot(path=str(SHOTS / "slice6-board-gate-resort.png"), full_page=True)
+
+        # ── AC: a delta for B updates B's headline within 2 s; A is unchanged ──
+        _, _, rb_view = http_json("GET", f"{API}/runs/{rb}")
+        units = rb_view["run"]["units"]
+        ix = rb_view["run"]["session"]["unit_ix"]
+        ord_ = units[ix]["ord"] if ix < len(units) else 0
+        headline = "Writing the acceptance criteria for AC-3"
+        a_line_before = page.evaluate(LIVE_LINE, live_a)
+        b_line_before = page.evaluate(LIVE_LINE, live_b)
+        page.evaluate(
+            """args => window.__pushFrame(
+                 { type: 'unitOutputDelta', session: args.run, ord: args.ord, text: args.text + '\\n' })""",
+            {"run": rb, "ord": ord_, "text": headline},
+        )
+        headline_ok, headline_ms = within(
+            page,
+            """args => { const c = document.querySelector(
+                           `[data-testid="project-card"][data-project-id="${args.id}"]`);
+                         return (c?.querySelector('[data-testid="live-line"]')?.textContent ?? '')
+                           .includes(args.text); }""",
+            {"id": live_b, "text": headline},
+        )
+        a_line_after = page.evaluate(LIVE_LINE, live_a)
+        a_card_text = page.evaluate(
+            """id => document.querySelector(
+                 `[data-testid="project-card"][data-project-id="${id}"]`)?.innerText ?? ''""",
+            live_a,
+        )
+        a_untouched = a_line_after == a_line_before and headline not in a_card_text
+        page.screenshot(path=str(SHOTS / "slice6-board-live-headline.png"), full_page=True)
+
+        # ── AC: a relayed wicked.interactive.status.posted lands on its project ─
+        doc_status = "Rewriting slide 3 — tightening the headline"
+        page.evaluate(
+            """args => window.__pushFrame({ type: 'interactiveEvent', event: {
+                 event_type: 'wicked.interactive.status.posted',
+                 payload: { project_id: args.id, document_id: 'launch-deck', message: args.text } } })""",
+            {"id": live_b, "text": doc_status},
+        )
+        doc_ok, doc_ms = within(
+            page,
+            """args => { const c = document.querySelector(
+                           `[data-testid="project-card"][data-project-id="${args.id}"]`);
+                         return (c?.querySelector('[data-testid="doc-activity"]')?.textContent ?? '')
+                           .includes(args.text); }""",
+            {"id": live_b, "text": doc_status},
+        )
+
+        # The live region is new furniture inside a FIXED-height card, and the quick
+        # actions are bottom-anchored inside `overflow: hidden` — so a height that
+        # merely fit would silently clip the primary affordance. Measured, not eyeballed.
+        clipped = page.evaluate(
+            """() => Array.from(document.querySelectorAll('[data-testid="project-card"]'))
+                 .filter(c => c.scrollHeight > c.clientHeight + 1)
+                 .map(c => `${c.dataset.projectId}:${c.scrollHeight}>${c.clientHeight}`)""")
+        same_page = page.evaluate("() => window.__slice6 === 'same page'")
+        board_scroll_after = page.evaluate(
+            """() => document.querySelector('[data-testid="project-board"]').scrollTop""")
+        page.screenshot(path=str(SHOTS / "slice6-board-doc-activity.png"), full_page=True)
+        browser.close()
+
+    # One socket for the whole surface (§3.5) — the board did not open its own.
+    one_socket = len([u for u in live_ws_urls if "/ws" in u]) == 1
+
+    report["steps"]["board_live"] = {
+        "ok": all([
+            both_visible, chip_ok, resorted, b_after_gate < a_after_gate, b_before > a_before,
+            headline_ok, a_untouched, doc_ok, same_page, one_socket,
+            board_scroll_before == board_scroll_after, not clipped,
+        ]),
+        "project_a": live_a,
+        "project_b": live_b,
+        "run_b": rb,
+        "both_cards_mounted": both_visible,
+        "card_order_before_gate": {"a": a_before, "b": b_before},
+        "launched_run_reached_card_without_reload": chip_ok,
+        "gate_moved_b_ahead_of_a": resorted,
+        "card_order_after_gate": {"a": a_after_gate, "b": b_after_gate},
+        "gate_resort_ms": resort_ms,
+        "b_headline_before": b_line_before,
+        "b_headline_updated_within_2s": headline_ok,
+        "headline_update_ms": headline_ms,
+        "card_a_unchanged": a_untouched,
+        "card_a_headline": a_line_after,
+        "doc_activity_within_2s": doc_ok,
+        "doc_activity_ms": doc_ms,
+        "no_navigation_or_reload": same_page,
+        "cards_clipped_by_fixed_height": clipped,
+        "board_scroll_unchanged": board_scroll_before == board_scroll_after,
+        "one_ws_subscription": one_socket,
+        "ws_urls": live_ws_urls,
+        "console_errors": live_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice6-board-gate-resort.png", "slice6-board-live-headline.png",
+                         "slice6-board-doc-activity.png")],
+    }
+    if not report["steps"]["board_live"]["ok"]:
+        fail("board_live_verdict", "slice-6 live-board assertions did not all hold — see board_live")
 
     report["ok"] = True
     print(json.dumps(report, indent=2))
