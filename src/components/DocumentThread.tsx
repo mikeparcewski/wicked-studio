@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDoc, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
+import { DemoWizard } from './DemoWizard.js';
+import { recordFromThread } from '../interactive/demoWire.js';
 import { retryBatchInject } from '../interactive/feedbackBatch.js';
 import { scrollToWid } from '../interactive/widScroller.js';
-import { versionPath, type Navigate } from '../hooks/useRoute.js';
+import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState } from '../store/docThread.js';
 
 // Document mode's half of the ONE conversation (DES-MERGE-001 §2, §6.3 slice 10).
@@ -240,9 +242,16 @@ export interface DocumentThreadProps {
   /** The routed `?v=N`; `null` means the head, which fork resolves from the manifest. */
   selectedVersion: number | null;
   navigate: Navigate;
+  /**
+   * Which artifact this thread's composer is launching (§6.4 slice 14). A demo IS a
+   * document, so this is the SAME thread with the same four states — what differs is
+   * only case 1: a demo's steps are ordered, so the launch discloses the wizard (§4.1)
+   * instead of taking the message as a brief. Default keeps Document mode untouched.
+   */
+  mode?: 'document' | 'video';
 }
 
-export function DocumentThread({ projectId, docId, selectedVersion, navigate }: DocumentThreadProps): React.ReactElement {
+export function DocumentThread({ projectId, docId, selectedVersion, navigate, mode = 'document' }: DocumentThreadProps): React.ReactElement {
   const key = docId === null ? null : threadKey(projectId, docId);
   const messages = useDocThreadStore((s) => (key === null ? EMPTY : s.messages[key] ?? EMPTY));
   const streamed = useDocThreadStore((s) => (key === null ? undefined : s.genState[key]));
@@ -252,6 +261,11 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The demo path's ordered disclosure (§4.1), seeded by the message that opened it. The
+  // anchor id is minted BEFORE the wizard so the version it lands tags the same message
+  // the transcript shows (§7.6) — the wizard is a longer way to write case 1, not a
+  // different case.
+  const [wizard, setWizard] = useState<{ seed: string; msgId: string } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }); }, [messages.length]);
@@ -268,6 +282,14 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
     setBusy(true);
     setError(null);
     try {
+      // 1 — LAUNCH, the demo path (§4.5): the ask names the demo, and the wizard collects
+      // the steps it is made of, in order. Nothing is created until the wizard submits.
+      if ((docId === null || key === null) && mode === 'video') {
+        setWizard({ seed: body, msgId });
+        setText('');
+        return;
+      }
+
       // 1 — LAUNCH. The message IS the brief; the doc's generation run opens with it.
       if (docId === null || key === null) {
         const created = await createDoc(projectId, {
@@ -318,19 +340,39 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
   }
 
   const { placeholder, submit: label } = COMPOSER[state];
+  // Case 1 is the only state whose words differ by artifact — what the composer DOES is
+  // the same function of run state either way (§2.2), it just says what it will make.
+  const prompt = mode === 'video' && state === 'idle'
+    ? 'Describe the demo you want to record…' : placeholder;
 
   return (
     <div
       data-testid="thread"
       data-composer-state={state}
-      className="flex flex-col shrink-0"
+      className="flex flex-col shrink-0 relative"
       style={{ width: '340px', background: S.panel, borderLeft: `1px solid ${S.border}` }}
     >
+      {wizard !== null && (
+        <DemoWizard
+          projectId={projectId}
+          seed={wizard.seed}
+          msgId={wizard.msgId}
+          onCancel={() => setWizard(null)}
+          onCreated={(name) => {
+            setWizard(null);
+            // The demo exists with its spec and no recording — so the surface it opens on
+            // is the one that OFFERS to record it (§3.3: the control beside the statement).
+            navigate(modePath(projectId, 'video', name));
+          }}
+        />
+      )}
       <div className="flex-1 overflow-y-auto px-3.5 py-4 flex flex-col gap-3">
         {messages.length === 0 && (
           <p className="text-xs leading-relaxed" style={{ color: S.muted }}>
             {docId === null
-              ? 'Describe the document you want — “a deck for the Q3 review”, “write this up as a report” — and it is created from that message.'
+              ? mode === 'video'
+                ? 'Describe the demo you want — “a walkthrough of the checkout flow” — and its steps are authored from there, in order.'
+                : 'Describe the document you want — “a deck for the Q3 review”, “write this up as a report” — and it is created from that message.'
               : 'Ask for a change and it lands as a new version. Everything the agent says about this document appears here.'}
           </p>
         )}
@@ -352,6 +394,28 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
 
       <div className="shrink-0 px-3.5 py-3 flex flex-col gap-2"
            style={{ borderTop: `1px solid ${S.border}`, background: S.footer }}>
+        {/* §2.3: asking for a recording is an input like any other, so it is a MESSAGE —
+            the same wire the storyboard's own Record button uses, offered here because
+            the composer is where the user already is when they decide to re-run it. */}
+        {mode === 'video' && docId !== null && state !== 'generating' && (
+          <button
+            type="button"
+            data-testid="thread-record"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              setError(null);
+              void recordFromThread({ projectId, demoId: docId, ask: `Record “${docId}”.` })
+                .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+                .finally(() => setBusy(false));
+            }}
+            className="self-start rounded-full px-2.5 py-0.5 text-[10px] font-mono disabled:opacity-40"
+            style={{ background: 'rgba(255,218,25,0.1)', color: S.accent,
+                     border: '1px solid rgba(255,218,25,0.25)', cursor: 'pointer' }}
+          >
+            record this demo
+          </button>
+        )}
         {state === 'generating' && (
           <span
             data-testid="steering-chip"
@@ -359,7 +423,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
             style={{ background: 'rgba(121,192,255,0.08)', color: S.live, border: '1px solid rgba(121,192,255,0.2)' }}
           >
             <span className="w-1 h-1 rounded-full shrink-0" style={{ background: S.live }} />
-            steering the live document run
+            steering the live {mode === 'video' ? 'demo' : 'document'} run
           </span>
         )}
         <div className="flex items-end gap-2 rounded-2xl px-3 py-2"
@@ -368,7 +432,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
             data-testid="doc-composer"
             className="flex-1 resize-none text-sm outline-none border-0 bg-transparent leading-6"
             style={{ color: S.ink, fontFamily: 'inherit', minHeight: '28px' }}
-            placeholder={placeholder}
+            placeholder={prompt}
             value={text}
             rows={1}
             disabled={busy}

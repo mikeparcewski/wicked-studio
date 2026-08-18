@@ -140,8 +140,10 @@ describe('storyboard chapters (§4.5)', () => {
     render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
     await screen.findByTestId('demo-gif');
 
+    // Spec, recording AND the version manifest slice 14 reads to know what a step
+    // comment is commenting ON — every one of them under the project's proxy mount.
     for (const url of seen) {
-      expect(url).toContain(`/api/v1/projects/${PROJECT}/interactive/d/${DEMO}/api/demo/`);
+      expect(url).toContain(`/api/v1/projects/${PROJECT}/interactive/d/${DEMO}/api/`);
       expect(url).not.toContain('4400');
     }
     expect((screen.getByTestId('demo-gif') as HTMLImageElement).getAttribute('src'))

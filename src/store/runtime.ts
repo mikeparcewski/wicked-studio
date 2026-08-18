@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { isWhimsy } from './narration.js';
+import { isFiller } from './narration.js';
 import type { CoreEvent } from '../api/types.js';
 
 /** Cap per (run, unit) output buffer so a chatty CLI can't grow memory unbounded. */
@@ -221,9 +221,10 @@ export function docActivityOf(frame: CoreEvent): { projectId: string; activity: 
       : {};
   const projectId = pick(payload, 'project_id', 'project') ?? pick(event, 'project_id', 'project');
   const message = pick(payload, 'message', 'status', 'text');
-  // §3.2 is a rule about SCREENS, not about one component: filler dropped from the
-  // transcript must not survive as the card's headline either.
-  if (projectId === null || message === null || isWhimsy(message)) return null;
+  // §3.2/§3.3 are rules about SCREENS, not about one component: what is dropped from the
+  // transcript — flavour text, and a subject-less `Working…` — must not survive as the
+  // card's headline either, where rule 3 already has a truthful subject to fall back on.
+  if (projectId === null || message === null || isFiller(message)) return null;
   return {
     projectId,
     activity: {

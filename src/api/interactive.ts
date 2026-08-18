@@ -77,6 +77,19 @@ export interface ExportResult {
   download: string;
 }
 
+/**
+ * One step as the ordered wizard authored it (§4.5, §4.1: the demo path is the one path
+ * with genuinely ordered steps, so the wizard survives there). `index` is the AUTHORING
+ * position and is what the service's spec order must agree with; a step is a `subject`
+ * (what the step is about) plus an `action` (what happens to it) — never a bare label,
+ * for the same reason a status line is never bare (§3.3).
+ */
+export interface DemoStepDraft {
+  index: number;
+  subject: string;
+  action: string;
+}
+
 export interface CreateDocBody {
   name: string;
   html?: string;
@@ -84,6 +97,9 @@ export interface CreateDocBody {
   source_paths?: string[];
   brief?: string;
   url?: string;
+  /** `kind: "demo"` only — the wizard's ordered steps, which the agent authors the
+   *  deterministic spec from (ADR-0018: the agent authors, the service records). */
+  demo_steps?: DemoStepDraft[];
   style?: 'web' | 'ppt' | 'brochure' | 'doc';
   /** Crew project binding. Registration is the authority: a doc that cannot be
    *  filed is a loud error with no doc created (DES-PROJECT-001 §2.3). */
