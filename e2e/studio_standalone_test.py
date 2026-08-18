@@ -949,6 +949,10 @@ try:
         {"index": 3, "title": "Confirm the order", "timestamp": 21.25},
         {"index": 4, "title": "Land on the receipt", "timestamp": 27},
     ]
+    # Slice 14 re-authors a spec at ONE step, so the fixture holds the spec as STATE:
+    # "the new version's spec differs at step 2" has to be read back off the service,
+    # not predicted by the client that asked for it.
+    demo_specs = {d["name"]: [dict(s) for s in DEMO_STEPS] for d in FIXTURE_DEMOS}
     DEMO_GIF_PATH = f"/d/{RECORDED_DEMO}/demo/v2.gif"
     # A real 1×1 GIF: the player must render the SERVICE's bytes, fetched through the
     # proxy on the page's own origin — not a data: URL the SPA could have invented.
@@ -974,6 +978,13 @@ try:
     # The manifest is the SERVICE's, and fork mutates it — so the fixture holds real
     # state (append-only, per INV-4) rather than deriving a fresh list per request.
     doc_versions = {d["name"]: seed_versions(d["name"]) for d in FIXTURE_DOCS}
+    # A demo is a doc, so its lineage lives in the SAME manifest state (§4.5) — which is
+    # what slice 14's step feedback appends to when the agent re-authors a step.
+    for demo in FIXTURE_DEMOS:
+        doc_versions[demo["name"]] = [
+            {"version": v, "parent": v - 1 or None, "feedback_file": None,
+             "html_file": f"v{v}.html", "created_at": f"2026-08-1{v}T09:00:00Z"}
+            for v in range(1, demo["head"] + 1)]
     versions_lock = threading.Lock()
     # Slice 10's two composer wires, recorded verbatim so the run can assert WHICH wire
     # each composer state chose — and that no `status.requested` heartbeat is ever among
@@ -1061,17 +1072,24 @@ try:
                 return True
             m = DEMO_SPEC_RE.match(rest)
             if m:
-                self._json(200, {"steps": DEMO_STEPS, "target_url": "https://shop.example/"})
+                name = urllib.parse.unquote(m.group(1))
+                with versions_lock:
+                    steps = [dict(s) for s in demo_specs.get(name, [])]
+                self._json(200, {"steps": steps, "target_url": "https://shop.example/"})
                 return True
             m = DEMO_REC_RE.match(rest)
             if m:
-                # Two demos, two states: one recorded (gif only — ffmpeg produced no mp4
-                # on this box either, which is the common case), one whose post-process
-                # found no ffmpeg at all. Both are 200s: the VERSION landed regardless.
-                self._json(200,
-                           {"version": 1, "ffmpeg_absent": True, "ffmpeg_hint": FFMPEG_HINT}
-                           if urllib.parse.unquote(m.group(1)) == FFMPEG_DEMO
-                           else {"version": 2, "gif_url": DEMO_GIF_PATH})
+                # Three demos, three states: one recorded (gif only — ffmpeg produced no
+                # mp4 on this box either, which is the common case), one whose post-process
+                # found no ffmpeg at all, and one just authored and never recorded. All are
+                # 200s: the VERSION landed regardless (§4.5).
+                name = urllib.parse.unquote(m.group(1))
+                if name == FFMPEG_DEMO:
+                    self._json(200, {"version": 1, "ffmpeg_absent": True, "ffmpeg_hint": FFMPEG_HINT})
+                elif name == RECORDED_DEMO:
+                    self._json(200, {"version": 2, "gif_url": DEMO_GIF_PATH})
+                else:
+                    self._json(200, {"version": 1})
                 return True
             if rest == DEMO_GIF_PATH:
                 self._send(200, TINY_GIF, "image/gif")
@@ -1135,13 +1153,21 @@ try:
             body["_project_path"] = project
             created_docs.append(body)
             slug = re.sub(r"[^a-z0-9]+", "-", (body.get("name") or "untitled").lower()).strip("-")
+            kind = "demo" if body.get("kind") == "demo" else "doc"
             with versions_lock:
                 doc_versions.setdefault(slug, [{
                     "version": 1, "parent": None, "feedback_file": None, "html_file": "v1.html",
                     "created_at": "2026-08-18T12:05:00Z",
                     "meta": {"sourceMessageId": body.get("source_message_id")},
                 }])
-            return self._json(200, {"name": slug, "head": 1, "kind": "doc",
+                # Slice 14's wizard: the agent authors the spec FROM the ordered steps it
+                # was given, so the storyboard that comes back is the order authored.
+                if kind == "demo":
+                    demo_specs.setdefault(slug, [
+                        {"index": s.get("index"), "timestamp": 0,
+                         "title": f"{s.get('subject')} — {s.get('action')}"}
+                        for s in (body.get("demo_steps") or [])])
+            return self._json(200, {"name": slug, "head": 1, "kind": kind,
                                     "generating": True, "project_id": body.get("project")})
 
         def _emit(self) -> None:
@@ -1156,6 +1182,26 @@ try:
             if (body.get("event_type") == "wicked.interactive.chat.posted"
                     and INJECT_FAIL_MARK in str(payload.get("text") or "")):
                 return self._json(500, {"error": "run not found"})
+            # Slice 14 (§4.5): feedback aimed at `demo_step` is a request to RE-AUTHOR the
+            # spec, so the model-free service applies it at the named step and lands a new
+            # version — the same append-only manifest a document generation writes (INV-4).
+            if (body.get("event_type") == FEEDBACK_EVENT
+                    and payload.get("target") == "demo_step"):
+                name = str(payload.get("document_id") or "")
+                with versions_lock:
+                    steps = demo_specs.get(name)
+                    rows = doc_versions.get(name)
+                    if steps is not None and rows:
+                        for item in payload.get("items") or []:
+                            at = re.match(r"^step-(\d+)$", str(item.get("wid") or ""))
+                            if at and int(at.group(1)) < len(steps):
+                                steps[int(at.group(1))]["title"] = str(item.get("comment") or "")
+                        created = max(r["version"] for r in rows) + 1
+                        rows.append({"version": created, "parent": created - 1,
+                                     "feedback_file": f"feedback-v{created}.json",
+                                     "html_file": f"v{created}.html",
+                                     "created_at": "2026-08-18T14:00:00Z",
+                                     "meta": {"sourceMessageId": payload.get("source_message_id")}})
             return self._json(200, {"ok": True, "event_id": f"ev-{len(emitted_events)}",
                                     "correlation_id": "c-doc"})
 
@@ -1900,13 +1946,255 @@ try:
                         ("slice13-demo-picker.png", "slice13-storyboard.png",
                          "slice13-chapter-seek.png", "slice13-ffmpeg-absent.png")],
     }
-    docd.shutdown()  # last section on the same-origin rig
-
     if not report["steps"]["video_storyboard"]["ok"]:
         fail("video_storyboard_verdict",
              "slice-13 Video-mode assertions did not all hold — see video_storyboard")
 
-    # ── 17. Operator UX directive: the live edge on the board ──────────────────
+    # ── 17. Slice 14 (DES-MERGE-001 §4.5, §6.4): record + re-record from the thread ──
+    # Same same-origin rig, one section later; the fake bridge now holds each demo's SPEC
+    # as state and applies a step diff when feedback names one, so every claim below is
+    # read back off the service rather than predicted by the client that asked for it.
+    #
+    #   · the ordered wizard (§4.1/§4.5): the composer's ask opens it, steps are authored
+    #     in order, and the demo the service creates carries those steps IN THAT ORDER —
+    #     then the surface it lands on is the one that offers to record it (§3.3);
+    #   · commenting on storyboard step 2 and submitting produces a NEW VERSION whose
+    #     spec differs at step 2 and nowhere else, shown as a continuation (§7.10) and
+    #     offering the re-record a new spec needs to become a new video;
+    #   · the recording status is INFORMATIVE — it names the demo and its step — and is
+    #     never a bare `Working…`, asserted with the bridge streaming exactly that (§3.3).
+    WIZARD_ASK = "a walkthrough of the checkout flow"
+    WIZARD_DEMO = "a-walkthrough-of-the-checkout-flow"
+    WIZARD_STEPS = [("the storefront", "open it"), ("the cart", "add a hoodie to it")]
+    # "Step 2" as the user sees it — the card labelled `2.`, which is spec index 1.
+    COMMENT_INDEX = 1
+    STEP_COMMENT = "Add TWO hoodies to the cart, not one"
+    BARE_STATUS = "Working…"
+    REAL_RECORD_STATUS = "Step 2 of 5 — Add a hoodie to the cart"
+    STATUS_TEXT = """() => document.querySelector('[data-testid="demo-record-status"]')?.innerText ?? ''"""
+    record_before = list(record_requests)
+    versions_before = len(doc_versions[RECORDED_DEMO])
+    spec_before = [dict(s) for s in demo_specs[RECORDED_DEMO]]
+    rec_console: list[str] = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.add_init_script(WS_TAP)
+        page.on("console", lambda m: rec_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text else None)
+
+        # ── AC: the composer's ask opens the ORDERED wizard; nothing is created yet ──
+        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video", wait_until="domcontentloaded")
+        page.locator('[data-testid="thread"]').wait_for(timeout=30000)
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
+        page.wait_for_function("() => typeof window.__pushFrame === 'function'", timeout=30000)
+        docs_created_before = len(created_docs)
+        page.fill('[data-testid="doc-composer"]', WIZARD_ASK)
+        page.click('[data-testid="doc-composer-submit"]')
+        wizard = page.locator('[data-testid="demo-wizard"]')
+        wizard.wait_for(timeout=30000)
+        wizard_stage_first = wizard.get_attribute("data-stage")
+        docs_created_by_ask = len(created_docs) - docs_created_before
+        page.screenshot(path=str(SHOTS / "slice14-wizard-target.png"), full_page=True)
+
+        # ── AC: steps are authored IN ORDER, and submitted in that order ───────────
+        page.fill('[data-testid="wizard-target"]', "https://shop.example/")
+        page.wait_for_function(
+            """() => document.querySelector('[data-testid="demo-wizard"]')
+                 ?.getAttribute('data-stage') === 'steps'""", timeout=30000)
+        wizard_stage_second = wizard.get_attribute("data-stage")
+        for n, (subject, action) in enumerate(WIZARD_STEPS, start=1):
+            page.fill('[data-testid="wizard-step-subject"]', subject)
+            page.fill('[data-testid="wizard-step-action"]', action)
+            page.click('[data-testid="wizard-step-add"]')
+            page.wait_for_function(
+                """n => document.querySelector('[data-testid="demo-wizard"]')
+                     ?.getAttribute('data-steps') === String(n)""", arg=n, timeout=30000)
+        listed = page.locator('[data-testid="wizard-step"]')
+        wizard_order = [listed.nth(i).get_attribute("data-index") for i in range(listed.count())]
+        wizard_labels = [listed.nth(i).inner_text() for i in range(listed.count())]
+        page.screenshot(path=str(SHOTS / "slice14-wizard-steps.png"), full_page=True)
+        page.click('[data-testid="wizard-create"]')
+        wizard_nav_ok = wait_for_path(page, f"/p/{demo_project}/video/{WIZARD_DEMO}")
+        created_demo = created_docs[-1] if created_docs else {}
+
+        # ── AC: completion lands on the surface that OFFERS to record it ───────────
+        authored = page.locator('[data-testid="chapter-card"]')
+        authored.first.wait_for(timeout=30000)
+        authored_titles = [authored.nth(i).inner_text() for i in range(authored.count())]
+        record_offered = page.locator('[data-testid="demo-record"]').is_visible()
+        page.screenshot(path=str(SHOTS / "slice14-authored-demo.png"), full_page=True)
+
+        # ── AC: recording status is INFORMATIVE, never a bare "Working…" (§3.3) ────
+        page.click('[data-testid="demo-record"]')
+        status_el = page.locator('[data-testid="demo-record-status"]')
+        status_el.wait_for(timeout=30000)
+        status_on_request = page.evaluate(STATUS_TEXT)
+        # The bridge speaks the banned line; the seam is what must refuse to render it.
+        page.evaluate(
+            """args => window.__pushFrame({ type: 'interactiveEvent', event: {
+                 event_type: 'wicked.interactive.status.posted',
+                 payload: { project_id: args.project, document_id: args.doc,
+                            state: 'working', message: args.text } } })""",
+            {"project": demo_project, "doc": WIZARD_DEMO, "text": BARE_STATUS})
+        page.wait_for_timeout(500)
+        status_after_bare = page.evaluate(STATUS_TEXT)
+        bare_in_thread = BARE_STATUS in page.evaluate(
+            """() => document.querySelector('[data-testid="thread"]')?.innerText ?? ''""")
+        # …and a line that DOES name its subject wins over the fallback (§3.4 rule 1).
+        page.evaluate(
+            """args => window.__pushFrame({ type: 'interactiveEvent', event: {
+                 event_type: 'wicked.interactive.status.posted',
+                 payload: { project_id: args.project, document_id: args.doc,
+                            state: 'working', message: args.text } } })""",
+            {"project": demo_project, "doc": WIZARD_DEMO, "text": REAL_RECORD_STATUS})
+        real_status_ok, real_status_ms = within(
+            page,
+            """text => (document.querySelector('[data-testid="demo-record-status"]')?.innerText ?? '')
+                 .includes(text)""",
+            REAL_RECORD_STATUS,
+        )
+        page.screenshot(path=str(SHOTS / "slice14-record-status.png"), full_page=True)
+
+        # ── AC: commenting on step 2 produces a new version whose spec differs there ──
+        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video/{RECORDED_DEMO}", wait_until="domcontentloaded")
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
+        cards = page.locator('[data-testid="chapter-card"]')
+        cards.first.wait_for(timeout=30000)
+        commented_label = cards.nth(COMMENT_INDEX).inner_text()
+        cards.nth(COMMENT_INDEX).click()
+        page.click('[data-testid="step-comment-open"]')
+        page.fill('[data-testid="step-comment-input"]', STEP_COMMENT)
+        page.click('[data-testid="step-comment-add"]')
+        commented_card_marks = cards.nth(COMMENT_INDEX).get_attribute("data-comments")
+        page.screenshot(path=str(SHOTS / "slice14-step-comment.png"), full_page=True)
+        page.click('[data-testid="step-feedback-submit"]')
+
+        # The storyboard re-reads the SERVICE and shows the step that came back (§7.10).
+        spec_shown_ok, spec_shown_ms = within(
+            page,
+            """text => Array.from(document.querySelectorAll('[data-testid="chapter-card"]'))
+                 .some(c => c.innerText.includes(text))""",
+            STEP_COMMENT,
+            budget_ms=15000,
+        )
+        # …as a CONTINUATION: one message with its deep-linkable target, no new thread.
+        batch_msg = page.locator('[data-testid="doc-message"]').last
+        batch_items = batch_msg.get_attribute("data-items")
+        batch_text = batch_msg.inner_text()
+        rerecord_offered = page.locator('[data-testid="demo-rerecord"]').is_visible()
+        page.screenshot(path=str(SHOTS / "slice14-respec.png"), full_page=True)
+
+        # ── AC: the offer is real — re-recording goes through the proxied service ──
+        page.click('[data-testid="demo-rerecord"]')
+        rerecord_status_ok, _ = within(
+            page,
+            """demo => (document.querySelector('[data-testid="demo-record-status"]')?.innerText ?? '')
+                 .includes(demo)""",
+            RECORDED_DEMO,
+            budget_ms=15000,
+        )
+        page.screenshot(path=str(SHOTS / "slice14-rerecord.png"), full_page=True)
+        browser.close()
+
+    spec_after = demo_specs[RECORDED_DEMO]
+    versions_after = doc_versions[RECORDED_DEMO]
+    new_records = [r for r in record_requests if r not in record_before or record_requests.count(r) > record_before.count(r)]
+    feedback_events = [e for e in emitted_events
+                       if e.get("event_type") == FEEDBACK_EVENT
+                       and (e.get("payload") or {}).get("target") == "demo_step"]
+    report["steps"]["video_record"] = {
+        "ok": all([
+            # The wizard: ordered, and nothing created until it submits.
+            wizard_stage_first == "target", wizard_stage_second == "steps",
+            docs_created_by_ask == 0,
+            wizard_order == ["0", "1"],
+            wizard_nav_ok,
+            created_demo.get("kind") == "demo",
+            created_demo.get("url") == "https://shop.example/",
+            [s.get("index") for s in created_demo.get("demo_steps") or []] == [0, 1],
+            [s.get("subject") for s in created_demo.get("demo_steps") or []]
+                == [s[0] for s in WIZARD_STEPS],
+            # …and the demo the SERVICE authored carries those steps, in that order.
+            len(authored_titles) == len(WIZARD_STEPS),
+            all(f"{subject} — {action}" in title
+                for (subject, action), title in zip(WIZARD_STEPS, authored_titles)),
+            record_offered,
+            # The status: informative, and never the banned line (the slice's AC).
+            WIZARD_DEMO in status_on_request,
+            status_after_bare.strip() != BARE_STATUS,
+            BARE_STATUS not in status_after_bare,
+            not bare_in_thread,
+            real_status_ok,
+            # Step feedback: ONE event, aimed at the step, and a version that landed.
+            len(feedback_events) == 1,
+            [i.get("wid") for i in (feedback_events[0].get("payload") or {}).get("items") or []]
+                == [f"step-{COMMENT_INDEX}"] if feedback_events else False,
+            commented_card_marks == "1",
+            len(versions_after) == versions_before + 1,
+            # The spec differs AT step 2 — and nowhere else.
+            spec_after[COMMENT_INDEX]["title"] == STEP_COMMENT,
+            [s["title"] for i, s in enumerate(spec_after) if i != COMMENT_INDEX]
+                == [s["title"] for i, s in enumerate(spec_before) if i != COMMENT_INDEX],
+            spec_shown_ok,
+            batch_items == "1", STEP_COMMENT in batch_text,
+            # The re-record: offered, and a real request through the proxy.
+            rerecord_offered,
+            WIZARD_DEMO in new_records, RECORDED_DEMO in new_records,
+            rerecord_status_ok,
+            not rec_console,
+        ]),
+        "project_id": demo_project,
+        "wizard": {
+            "stage_before_target": wizard_stage_first,
+            "stage_after_target": wizard_stage_second,
+            "docs_created_by_the_ask": docs_created_by_ask,
+            "step_order": wizard_order,
+            "step_labels": wizard_labels,
+            "submitted_steps": created_demo.get("demo_steps"),
+            "created_kind": created_demo.get("kind"),
+            "navigated": wizard_nav_ok,
+            "storyboard_titles": authored_titles,
+            "offers_record": record_offered,
+        },
+        "recording_status": {
+            "on_request": status_on_request,
+            "after_bare_working_pushed": status_after_bare,
+            "bare_line_reached_the_thread": bare_in_thread,
+            "real_streamed_line_won": real_status_ok,
+            "real_streamed_line_ms": real_status_ms,
+        },
+        "step_feedback": {
+            "commented_card": commented_label,
+            "commented_spec_index": COMMENT_INDEX,
+            "card_marked_pending": commented_card_marks,
+            "events_emitted": len(feedback_events),
+            "event_payload": (feedback_events[0].get("payload") if feedback_events else None),
+            "versions_before": versions_before,
+            "versions_after": len(versions_after),
+            "landed_version": versions_after[-1] if versions_after else None,
+            "spec_before": [s["title"] for s in spec_before],
+            "spec_after": [s["title"] for s in spec_after],
+            "spec_rendered_ms": spec_shown_ms,
+            "thread_message_items": batch_items,
+            "offers_rerecord": rerecord_offered,
+        },
+        "record_requests_seen_by_bridge": record_requests,
+        "console_errors": rec_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice14-wizard-target.png", "slice14-wizard-steps.png",
+                         "slice14-authored-demo.png", "slice14-record-status.png",
+                         "slice14-step-comment.png", "slice14-respec.png",
+                         "slice14-rerecord.png")],
+    }
+    docd.shutdown()  # last section on the same-origin rig
+
+    if not report["steps"]["video_record"]["ok"]:
+        fail("video_record_verdict",
+             "slice-14 record/re-record assertions did not all hold — see video_record")
+
+    # ── 18. Operator UX directive: the live edge on the board ──────────────────
     # The ACTIVE-WORK signal is a breathing 2px strip along the leading edge of the
     # element doing work, and the thing that has to hold is the RANKING: a busy card
     # must be visible without out-shouting a card that needs a human. So both states
