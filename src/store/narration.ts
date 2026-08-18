@@ -50,7 +50,11 @@ export function isFiller(text: string): boolean {
 }
 
 /**
- * §3.4's derivation, for one line: the last streamed status that actually names
+ * §3.4's derivation, for one line, over a doc/demo thread's streamed statuses. The crew
+ * side of the same rule is `useBoardHeadline`'s `deriveHeadline`, which reads a run's
+ * delta buffer instead — one rule, two streams, deliberately not one function.
+ *
+ * The last streamed status that actually names
  * something, and otherwise the caller's derived subject (rule 3 — there is always a
  * truthful subject available from state the client already has, which is precisely why
  * a bare `Working…` is never needed).
