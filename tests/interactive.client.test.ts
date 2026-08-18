@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BridgeUnavailableError,
+  ServiceHintError,
   createDoc,
   getDemoSpec,
   getLatestRecording,
@@ -179,6 +180,55 @@ describe('BridgeUnavailableError', () => {
   it("surfaces the bridge's {error} message on ordinary failures", async () => {
     stubFetch({ error: 'doc already exists' }, 409);
     await expect(createDoc(PROJECT, { name: DOC })).rejects.toThrow('API 409: doc already exists');
+  });
+});
+
+// ── 2b. ServiceHintError (§4.4, §3.3) ───────────────────────────────────────
+//
+// The typed 4xx that carries a NAMED fix — §4.4's lazy-dependency case (a PPTX
+// export with python-pptx absent is a clean 400 with an install hint). slice 15's
+// actionable-message path depends on `iFetch` producing THIS error from the wire,
+// so the branch is pinned here directly rather than only through the mocked
+// `postExport` in the export-wire tests.
+
+describe('ServiceHintError', () => {
+  beforeEach(prodOrigin);
+
+  it('a 400 carrying {error, hint} rejects with the typed error', async () => {
+    stubFetch({ error: 'pptx export unavailable', hint: 'pip install python-pptx' }, 400);
+    await expect(postExport(PROJECT, DOC, 3, 'pptx')).rejects.toBeInstanceOf(ServiceHintError);
+  });
+
+  it('carries the install command verbatim and states the status in the message', async () => {
+    const hint = 'pip install python-pptx (PPTX export needs it; HTML and PDF do not)';
+    stubFetch({ error: 'pptx export unavailable: python-pptx is not importable', hint }, 400);
+    const err = await postExport(PROJECT, DOC, 3, 'pptx').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ServiceHintError);
+    expect((err as ServiceHintError).hint).toBe(hint);
+    // The message keeps the status and the service's own reason for a bare render.
+    expect((err as ServiceHintError).message).toBe(
+      'API 400: pptx export unavailable: python-pptx is not importable');
+  });
+
+  it('trims the hint, and a whitespace-only hint is no hint — stays a generic Error', async () => {
+    stubFetch({ error: 'nope', hint: '  pip install python-pptx  ' }, 400);
+    const trimmed = await postExport(PROJECT, DOC, 3, 'pptx').catch((e: unknown) => e);
+    expect((trimmed as ServiceHintError).hint).toBe('pip install python-pptx');
+
+    stubFetch({ error: 'nope', hint: '   ' }, 400);
+    const blank = await postExport(PROJECT, DOC, 3, 'pptx').catch((e: unknown) => e);
+    expect(blank).not.toBeInstanceOf(ServiceHintError);
+    expect(blank).toBeInstanceOf(Error);
+    expect((blank as Error).message).toBe('API 400: nope');
+  });
+
+  it('the 503 bridge_unavailable branch wins even when a hint is present', async () => {
+    // A hint does not downgrade the bridge-down signal: the UI must still route this
+    // to the bridge-unavailable surface, not the per-export actionable one.
+    stubFetch({ code: 'bridge_unavailable', hint: 'npm i -g wicked-interactive' }, 503);
+    const err = await postExport(PROJECT, DOC, 3, 'pptx').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BridgeUnavailableError);
+    expect(err).not.toBeInstanceOf(ServiceHintError);
   });
 });
 
