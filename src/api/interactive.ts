@@ -291,6 +291,17 @@ export interface DemoRecording {
 
 // ── Demo wrappers ─────────────────────────────────────────────────────────────
 
+/**
+ * The demos in a project — `GET /api/docs` narrowed to `kind: "demo"`.
+ *
+ * The registry is ONE list (a demo is a doc whose manifest says so, §4.5), so this is a
+ * filter over the existing endpoint rather than a second route: a bridge that only ever
+ * served documents still answers, and Video mode shows an empty picker instead of a 404.
+ */
+export function listDemos(projectId: string): Promise<DocSummary[]> {
+  return listDocs(projectId).then((docs) => docs.filter((d) => d.kind === 'demo'));
+}
+
 /** `GET /d/:demoId/api/demo/spec` — the spec the agent authored (steps + target URL). */
 export function getDemoSpec(projectId: string, demoId: string): Promise<DemoSpec> {
   return iFetch<DemoSpec>(`${docBase(projectId, demoId)}/api/demo/spec`);

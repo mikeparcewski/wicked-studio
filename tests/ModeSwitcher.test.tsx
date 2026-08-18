@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MODES } from '../src/hooks/useRoute.js';
 import { MODE_SPECS, ModeSwitcher } from '../src/components/ModeSwitcher.js';
-import { ModePlaceholder } from '../src/components/ModePlaceholder.js';
 
 afterEach(cleanup);
 
@@ -28,43 +27,21 @@ describe('ModeSwitcher (DES-MERGE-001 §1.3)', () => {
     expect(onSelect).toHaveBeenCalledWith('build');
   });
 
-  it('DISABLES an unavailable mode instead of hiding it, and names the enabling action', () => {
-    render(<ModeSwitcher mode="chat" onSelect={() => {}} />);
-    for (const m of MODES) {
-      const tab = screen.getByTestId(`mode-tab-${m}`);
-      // Rule 3: never hidden — every mode is on screen whether or not it is available.
-      expect(tab).toBeInTheDocument();
-      if (MODE_SPECS[m].available) continue;
-      expect(tab).toBeDisabled();
-      expect(tab).toHaveAttribute('title', expect.stringMatching(/install|connect|create/i));
-    }
-  });
-
-  it('does not fire onSelect for a disabled mode', () => {
+  it('every mode is a live tab — slice 13 retired the disabled/placeholder path', () => {
     const onSelect = vi.fn();
     render(<ModeSwitcher mode="chat" onSelect={onSelect} />);
+    for (const m of MODES) {
+      const tab = screen.getByTestId(`mode-tab-${m}`);
+      // Rule 3 was never "hide it": every mode is on screen, and now every one of them
+      // has a real surface behind it (Video landed in slice 13). A mode that genuinely
+      // cannot open is slice 17's preflight gate — which knows what is installed.
+      expect(tab).toBeInTheDocument();
+      expect(tab).toBeEnabled();
+      // §3.3: the tooltip names what the mode IS, with its subject — never "coming soon".
+      expect(tab).toHaveAttribute('title', MODE_SPECS[m].summary);
+      expect(MODE_SPECS[m].summary).not.toMatch(/coming soon|not connected/i);
+    }
     fireEvent.click(screen.getByTestId('mode-tab-video'));
-    expect(onSelect).not.toHaveBeenCalled();
-  });
-});
-
-describe('ModePlaceholder (§3.3 — every state names a subject)', () => {
-  // Document left the placeholder in slice 8 (§6.3) — Video is the only mode still on it.
-  it('states what the mode is and the one action that enables it', () => {
-    render(<ModePlaceholder mode="video" />);
-    const card = screen.getByTestId('mode-placeholder-video');
-    expect(card).toHaveTextContent(/storyboard/i);
-    expect(screen.getByTestId('mode-enabling-action-video')).toHaveTextContent(/install/i);
-  });
-
-  it('carries the SAME enabling action as the disabled tab tooltip — one source of truth', () => {
-    render(<ModePlaceholder mode="video" />);
-    expect(screen.getByTestId('mode-enabling-action-video')).toHaveTextContent(MODE_SPECS.video.enables);
-  });
-
-  it('renders no spinner and no subject-less status', () => {
-    const { container } = render(<ModePlaceholder mode="video" />);
-    expect(container.querySelector('[class*="spin"], [class*="animate-"]')).toBeNull();
-    expect(container.textContent).not.toMatch(/^\s*(working|loading)…?\s*$/i);
+    expect(onSelect).toHaveBeenCalledWith('video');
   });
 });
