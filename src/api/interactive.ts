@@ -254,6 +254,69 @@ export function postEvent(projectId: string, evt: InteractiveEvent): Promise<Eve
   );
 }
 
+// ── Demo types (§4.5, §6.4 slice 13) ────────────────────────────────────────
+
+/** One chapter of a demo spec — the agent authors the spec; the service executes it. */
+export interface DemoStep {
+  /** 0-based position within the spec. */
+  index: number;
+  title: string;
+  /** Seconds into the recording — used to seek the player when a chapter is clicked. */
+  timestamp: number;
+  /** Bridge-relative thumbnail URL. Not always present; absent for unrecorded steps. */
+  thumbnail?: string;
+}
+
+export interface DemoSpec {
+  steps: DemoStep[];
+  target_url?: string;
+}
+
+/**
+ * The recording state for a demo at its head version.
+ *
+ * - `video_url` or `gif_url` present → the recording exists; use `interactiveUrl` to resolve.
+ * - Neither present AND `ffmpeg_absent` false/absent → spec is ready but never recorded.
+ * - `ffmpeg_absent` true → recording was attempted; ffmpeg was missing. `ffmpeg_hint` names
+ *   the install command verbatim (§3.3 actionable: show it, never paraphrase it).
+ */
+export interface DemoRecording {
+  version: number;
+  video_url?: string;
+  gif_url?: string;
+  poster_url?: string;
+  ffmpeg_absent?: boolean;
+  ffmpeg_hint?: string;
+}
+
+// ── Demo wrappers ─────────────────────────────────────────────────────────────
+
+/** `GET /d/:demoId/api/demo/spec` — the spec the agent authored (steps + target URL). */
+export function getDemoSpec(projectId: string, demoId: string): Promise<DemoSpec> {
+  return iFetch<DemoSpec>(`${docBase(projectId, demoId)}/api/demo/spec`);
+}
+
+/**
+ * `GET /d/:demoId/api/demo/recordings` — the latest recording state.
+ * Returns `{ ffmpeg_absent: true, ffmpeg_hint }` when ffmpeg is missing (§4.5):
+ * a missing ffmpeg must not abort the version landing; the hint is shown verbatim.
+ */
+export function getLatestRecording(projectId: string, demoId: string): Promise<DemoRecording> {
+  return iFetch<DemoRecording>(`${docBase(projectId, demoId)}/api/demo/recordings`);
+}
+
+/**
+ * `POST /d/:demoId/api/demo/record` — queue a new recording run.
+ * Slice 14 wires the thread integration; this wrapper is what slice 13 calls to make
+ * the Record button actionable (§3.3: subject + action, never blank).
+ */
+export function requestRecord(projectId: string, demoId: string): Promise<{ queued: boolean }> {
+  return iFetch<{ queued: boolean }>(
+    `${docBase(projectId, demoId)}/api/demo/record`,
+    jsonPost({}),
+  );
+}
+
 /**
  * The INJECT wire (§2.2 case 2, §7.7): one `chat.posted` carrying the anchor id into the
  * live agent's session. Both authors of a user message use it — the composer's steer and
