@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# The same-origin build the slice-8 canvas gate serves (e2e/studio_standalone_test.py §10).
+dist-sameorigin/
 coverage/
 .astro/
 playwright-report/
