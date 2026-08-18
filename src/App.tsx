@@ -24,7 +24,7 @@ import { WorkPage } from './components/WorkPage.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { useLegacyRedirect } from './hooks/useLegacyRedirect.js';
-import { modePath, useRoute, type Mode } from './hooks/useRoute.js';
+import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useGateStore } from './store/gates.js';
 import { useElicitationStore } from './store/elicitations.js';
@@ -81,7 +81,7 @@ function useKillShortcut(
 }
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, navigate } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, navigate, search } = useRoute();
   const { runs, refresh } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestElicitation = useElicitationStore((s) => s.ingest);
@@ -254,7 +254,18 @@ export function App(): React.ReactElement {
    * so filtering here first would hide a run the user had just launched.
    */
   function renderModeSurface(m: Mode, pid: string): React.ReactElement {
-    if (m === 'document') return <DocumentCanvas projectId={pid} docId={artifactId} navigate={navigate} />;
+    // The document's VERSION rides in the query (`?v=N`, slice 9) — the artifact is the
+    // doc, the version is a lens on it — so the strip's selection is a real navigation.
+    if (m === 'document') {
+      return (
+        <DocumentCanvas
+          projectId={pid}
+          docId={artifactId}
+          version={routedVersion(search)}
+          navigate={navigate}
+        />
+      );
+    }
     if (m === 'video') return <ModePlaceholder mode={m} />;
     if (m === 'chat' && !artifactId) return groupChatSurface(null);
     return artifactId ? runSurface() : dashboardSurface();

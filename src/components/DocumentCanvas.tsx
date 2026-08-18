@@ -5,8 +5,9 @@ import {
   interactiveUrl,
   listDocs,
 } from '../api/interactive.js';
-import type { DocSummary } from '../api/interactive.js';
-import { modePath, type Navigate } from '../hooks/useRoute.js';
+import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
+import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
+import { VersionStrip } from './VersionStrip.js';
 
 // The Document-mode canvas (DES-MERGE-001 §1.3, §6.3 slice 8). Replaces the slice-4
 // placeholder: with a doc in the route we frame it, without one we let the user pick.
@@ -171,31 +172,54 @@ function DocPicker({ projectId, navigate }: { projectId: string; navigate: Navig
 
 // ── Doc frame — the canvas itself ───────────────────────────────────────────
 
-function DocFrame({ projectId, docId }: { projectId: string; docId: string }): React.ReactElement {
+/** The version the route asks for, narrowed to one the manifest actually has (§4.2:
+ *  the manifest is authoritative). An unknown `?v` — a stale bookmark, a doc rebuilt
+ *  elsewhere — resolves to the head rather than framing a 404. */
+function resolveVersion(manifest: VersionManifest, routed: number | null): number {
+  return routed !== null && manifest.versions.some((v) => v.version === routed)
+    ? routed
+    : manifest.head;
+}
+
+function DocFrame({
+  projectId, docId, version, navigate,
+}: {
+  projectId: string; docId: string; version: number | null; navigate: Navigate;
+}): React.ReactElement {
   const [manifest, failure, retry] = useLoad(
     () => getVersions(projectId, docId), [projectId, docId],
   );
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => { setLoaded(false); }, [projectId, docId]);
+  useEffect(() => { setLoaded(false); }, [projectId, docId, version]);
 
   const subject = `“${docId}”`;
   if (failure) return <Failed subject={subject} failure={failure} onRetry={retry} />;
   if (manifest === null) return <Loading subject={subject} />;
 
-  // Version-addressed: slice 9's VersionStrip swaps this number, nothing else.
+  const shown = resolveVersion(manifest, version);
+  // Version-addressed: the VersionStrip swaps this number through the route, nothing else.
   const src = interactiveUrl(
     projectId,
-    `/d/${encodeURIComponent(docId)}/doc/${manifest.head}`,
+    `/d/${encodeURIComponent(docId)}/doc/${shown}`,
   );
 
+  // A fork is committed by the service, so the strip re-reads the manifest (`retry`
+  // is that same one load) and routes to the version the service reports — the UI
+  // never invents the new version number or its parent.
+  const onForked = (result: ForkResult): void => {
+    retry();
+    navigate(versionPath(projectId, docId, result.version));
+  };
+
   return (
-    <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+    <>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
       <iframe
         data-testid="doc-canvas"
         data-doc-id={docId}
-        data-version={manifest.head}
+        data-version={shown}
         src={src}
-        title={`Document ${docId}, version ${manifest.head}`}
+        title={`Document ${docId}, version ${shown}`}
         onLoad={() => setLoaded(true)}
         // §5.5 status quo: `allow-scripts` because documents ARE interactive HTML, and
         // `allow-same-origin` only until the slice 11+12 instrument bridge replaces the
@@ -210,7 +234,16 @@ function DocFrame({ projectId, docId }: { projectId: string; docId: string }): R
           <Loading subject={subject} />
         </div>
       )}
-    </div>
+      </div>
+      <VersionStrip
+        projectId={projectId}
+        docId={docId}
+        manifest={manifest}
+        selected={shown}
+        navigate={navigate}
+        onForked={onForked}
+      />
+    </>
   );
 }
 
@@ -218,15 +251,27 @@ export interface DocumentCanvasProps {
   projectId: string;
   /** `null` on `/p/:projectId/document` — no doc chosen yet, so the picker shows. */
   docId: string | null;
+  /** The routed `?v=N` (slice 9); `null` addresses the manifest head. */
+  version?: number | null;
   navigate: Navigate;
 }
 
-export function DocumentCanvas({ projectId, docId, navigate }: DocumentCanvasProps): React.ReactElement {
+export function DocumentCanvas({
+  projectId, docId, version = null, navigate,
+}: DocumentCanvasProps): React.ReactElement {
   return (
     <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
       {docId === null
         ? <DocPicker projectId={projectId} navigate={navigate} />
-        : <DocFrame key={`${projectId}/${docId}`} projectId={projectId} docId={docId} />}
+        : (
+          <DocFrame
+            key={`${projectId}/${docId}`}
+            projectId={projectId}
+            docId={docId}
+            version={version}
+            navigate={navigate}
+          />
+        )}
     </div>
   );
 }
