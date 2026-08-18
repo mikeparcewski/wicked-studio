@@ -81,6 +81,30 @@ export function modePath(projectId: string, mode: Mode, artifactId?: string | nu
   return artifactId ? `${base}/${encodeURIComponent(artifactId)}` : base;
 }
 
+/**
+ * Where a document version lives (DES-MERGE-001 §4.2, slice 9): `?v=N` on the doc
+ * route. A query param rather than a fifth path segment — the version is a LENS on
+ * one artifact, not a different artifact — and it is still a real navigation, so a
+ * selected version is deep-linkable and Back returns to the previously viewed one.
+ * `null` addresses the manifest head, i.e. the bare doc route.
+ */
+export function versionPath(projectId: string, docId: string, version: number | null): string {
+  const base = modePath(projectId, 'document', docId);
+  return version === null ? base : `${base}?v=${version}`;
+}
+
+/**
+ * The routed version, read from a `location.search` string. Anything that is not a
+ * positive integer is not a version and resolves to the head — a mangled bookmark
+ * should show the document, not an error about its URL.
+ */
+export function routedVersion(search: string): number | null {
+  const raw = new URLSearchParams(search).get('v');
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 function parse(pathname: string): Route {
   const [, first = '', second = '', third = '', fourth = ''] = pathname.split('/');
   // `/` is the orchestrator board (DES-MERGE-001 §1.5, slice 5). The flat run list it
