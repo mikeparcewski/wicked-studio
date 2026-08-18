@@ -840,8 +840,13 @@ function RunChat({
           The timeline below renders only the phases that have entered the conversation. */}
       <ProcessStepper runId={session.id} units={ordered} executingUnitOrd={executingUnitOrd} />
 
-      {/* Message thread */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-6 max-w-3xl w-full mx-auto">
+      {/* Message thread. `data-testid="thread"` + `data-message-id` are the contract the
+          version → message cross-link resolves against (DES-MERGE-001 §7.6); the strip
+          addresses the thread through the DOM because they are sibling surfaces. */}
+      <div
+        data-testid="thread"
+        className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-6 max-w-3xl w-full mx-auto"
+      >
         {/* An open MCP elicitation suspends the agent's turn, so it leads the stream (DES-002).
             `key` is REQUIRED: React reuses the instance across prop changes, so without it a
             half-typed answer to elicitation A survives into B (v0.24 F3). */}
@@ -868,7 +873,7 @@ function RunChat({
           const stageBadge = STAGE_BADGE[unit.stage] ?? { bg: 'rgba(230,237,243,0.08)', color: 'rgba(230,237,243,0.5)' };
           const gateBeforeThis = session.status === 'awaiting_human' && gate?.ord === unit.ord;
           const unitEl = (
-            <div key={unit.id} className="flex flex-col gap-2">
+            <div key={unit.id} data-message-id={unit.id} className="flex flex-col gap-2">
               {/* Council routing pill */}
               {unit.routing !== null && unit.routing.method === 'council' && (
                 <div

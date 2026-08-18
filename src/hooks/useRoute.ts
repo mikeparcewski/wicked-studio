@@ -81,6 +81,30 @@ export function modePath(projectId: string, mode: Mode, artifactId?: string | nu
   return artifactId ? `${base}/${encodeURIComponent(artifactId)}` : base;
 }
 
+/**
+ * Where a document version lives (DES-MERGE-001 §4.2, slice 9): `?v=N` on the doc
+ * route. A query param rather than a fifth path segment — the version is a LENS on
+ * one artifact, not a different artifact — and it is still a real navigation, so a
+ * selected version is deep-linkable and Back returns to the previously viewed one.
+ * `null` addresses the manifest head, i.e. the bare doc route.
+ */
+export function versionPath(projectId: string, docId: string, version: number | null): string {
+  const base = modePath(projectId, 'document', docId);
+  return version === null ? base : `${base}?v=${version}`;
+}
+
+/**
+ * The routed version, read from a `location.search` string. Anything that is not a
+ * positive integer is not a version and resolves to the head — a mangled bookmark
+ * should show the document, not an error about its URL.
+ */
+export function routedVersion(search: string): number | null {
+  const raw = new URLSearchParams(search).get('v');
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 function parse(pathname: string): Route {
   const [, first = '', second = '', third = '', fourth = ''] = pathname.split('/');
   // `/` is the orchestrator board (DES-MERGE-001 §1.5, slice 5). The flat run list it
@@ -133,11 +157,19 @@ export type Navigate = (path: string, opts?: { replace?: boolean }) => void;
 export function useRoute(): Route & {
   navigate: Navigate;
   panelPath: (p: Panel) => string;
+  /** The current URL search string, e.g. `"?v=2"`. Slice 9 uses `?v=N` to
+   *  address document versions; both pathname AND search update on navigate so
+   *  components reading either field re-render on every navigation. */
+  search: string;
 } {
   const [pathname, setPathname] = useState(() => window.location.pathname);
+  const [search, setSearch] = useState(() => window.location.search);
 
   useEffect(() => {
-    const handler = () => setPathname(window.location.pathname);
+    const handler = (): void => {
+      setPathname(window.location.pathname);
+      setSearch(window.location.search);
+    };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
   }, []);
@@ -145,13 +177,15 @@ export function useRoute(): Route & {
   const navigate = useCallback<Navigate>((path, opts) => {
     if (opts?.replace) history.replaceState(null, '', path);
     else history.pushState(null, '', path);
-    // A path may carry a hash (the board's gate deep-link ends `#gate`, §6.2 slice 7)
-    // or a query. The parse below is pathname-only, so keep the route state that way —
-    // otherwise `#gate` would ride along as part of the artifact id.
-    setPathname(new URL(path, window.location.origin).pathname);
+    // Parse pathname-only for the panel/mode router (a hash like `#gate` must
+    // not ride into the artifact id), but also capture the search string so
+    // components keyed on ?v=N re-render on version selection (slice 9).
+    const url = new URL(path, window.location.origin);
+    setPathname(url.pathname);
+    setSearch(url.search);
   }, []);
 
   const panelPath = useCallback((p: Panel) => (p === 'home' ? '/' : `/${p}`), []);
 
-  return { ...parse(pathname), navigate, panelPath };
+  return { ...parse(pathname), navigate, panelPath, search };
 }

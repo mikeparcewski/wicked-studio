@@ -129,6 +129,68 @@ describe('DocumentCanvas — the frame (§5.3, §6.3)', () => {
   });
 });
 
+describe('DocumentCanvas — the routed version drives the frame (§4.2, slice 9)', () => {
+  it('AC: with ?v=1 routed, the frame src is the v1 URL and the strip highlights v1', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(<DocumentCanvas projectId={PROJECT} docId={DOC} version={1} navigate={() => {}} />);
+
+    const frame = await screen.findByTestId('doc-canvas');
+    expect(frame.getAttribute('src')).toMatch(/\/doc\/1$/);
+    expect(frame).toHaveAttribute('data-version', '1');
+    expect(screen.getAllByTestId('version-entry')[0]).toHaveAttribute('data-selected', 'true');
+  });
+
+  it('no routed version means the manifest HEAD — the strip renders either way', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(<DocumentCanvas projectId={PROJECT} docId={DOC} version={null} navigate={() => {}} />);
+
+    expect((await screen.findByTestId('doc-canvas')).getAttribute('src')).toMatch(/\/doc\/3$/);
+    expect(screen.getAllByTestId('version-entry')).toHaveLength(3);
+  });
+
+  it('a ?v the manifest does not know resolves to the head, not a framed 404', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(<DocumentCanvas projectId={PROJECT} docId={DOC} version={99} navigate={() => {}} />);
+
+    expect((await screen.findByTestId('doc-canvas')).getAttribute('src')).toMatch(/\/doc\/3$/);
+  });
+
+  it('selecting a version in the strip navigates — the frame follows the ROUTE', async () => {
+    const navigate = vi.fn();
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(<DocumentCanvas projectId={PROJECT} docId={DOC} version={3} navigate={navigate} />);
+
+    await screen.findByTestId('doc-canvas');
+    await userEvent.click(screen.getAllByTestId('version-select')[0]!);
+    expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/${DOC}?v=1`);
+  });
+
+  it('a fork re-reads the manifest and routes to the version the SERVICE reported', async () => {
+    const forked = {
+      head: 4,
+      versions: [...MANIFEST.versions, {
+        version: 4, parent: 1, feedback_file: null, html_file: 'v4.html',
+        created_at: '2026-08-18T10:00:00Z',
+      }],
+    };
+    let reads = 0;
+    const navigate = vi.fn();
+    stubFetch({
+      '/api/versions': { get body() { reads += 1; return reads === 1 ? MANIFEST : forked; } },
+      '/api/fork': { body: { version: 4, parent: 1 } },
+    });
+    render(<DocumentCanvas projectId={PROJECT} docId={DOC} version={null} navigate={navigate} />);
+
+    await screen.findByTestId('doc-canvas');
+    await userEvent.click(screen.getAllByTestId('version-fork')[0]!);
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/${DOC}?v=4`));
+    // The manifest is re-read rather than patched locally (§4.2: the service is authority).
+    await waitFor(() => expect(screen.getAllByTestId('version-entry')).toHaveLength(4));
+    expect(screen.getByTestId('version-lineage')).toHaveTextContent('continues from v1');
+  });
+});
+
 describe('DocumentCanvas — bridge_unavailable (§7.12, §3.3)', () => {
   it('AC: surfaces the 503 hint VERBATIM, with its named command intact', async () => {
     stubFetch({ '/api/versions': BRIDGE_DOWN });

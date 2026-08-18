@@ -39,6 +39,10 @@ export interface VersionEntry {
   feedback_file: string | null;
   html_file: string;
   created_at: string;
+  /** Written by the bridge at commit when a `sourceMessageId` was supplied with the
+   *  generation or fork request (§7.6). Null on pre-merge documents; the scroll
+   *  affordance disables rather than guessing which message produced the version. */
+  meta?: { sourceMessageId?: string | null };
 }
 
 /** `GET /d/:docId/api/versions` — the raw `versions.json` manifest. */
