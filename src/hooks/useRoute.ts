@@ -133,11 +133,19 @@ export type Navigate = (path: string, opts?: { replace?: boolean }) => void;
 export function useRoute(): Route & {
   navigate: Navigate;
   panelPath: (p: Panel) => string;
+  /** The current URL search string, e.g. `"?v=2"`. Slice 9 uses `?v=N` to
+   *  address document versions; both pathname AND search update on navigate so
+   *  components reading either field re-render on every navigation. */
+  search: string;
 } {
   const [pathname, setPathname] = useState(() => window.location.pathname);
+  const [search, setSearch] = useState(() => window.location.search);
 
   useEffect(() => {
-    const handler = () => setPathname(window.location.pathname);
+    const handler = (): void => {
+      setPathname(window.location.pathname);
+      setSearch(window.location.search);
+    };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
   }, []);
@@ -145,13 +153,15 @@ export function useRoute(): Route & {
   const navigate = useCallback<Navigate>((path, opts) => {
     if (opts?.replace) history.replaceState(null, '', path);
     else history.pushState(null, '', path);
-    // A path may carry a hash (the board's gate deep-link ends `#gate`, §6.2 slice 7)
-    // or a query. The parse below is pathname-only, so keep the route state that way —
-    // otherwise `#gate` would ride along as part of the artifact id.
-    setPathname(new URL(path, window.location.origin).pathname);
+    // Parse pathname-only for the panel/mode router (a hash like `#gate` must
+    // not ride into the artifact id), but also capture the search string so
+    // components keyed on ?v=N re-render on version selection (slice 9).
+    const url = new URL(path, window.location.origin);
+    setPathname(url.pathname);
+    setSearch(url.search);
   }, []);
 
   const panelPath = useCallback((p: Panel) => (p === 'home' ? '/' : `/${p}`), []);
 
-  return { ...parse(pathname), navigate, panelPath };
+  return { ...parse(pathname), navigate, panelPath, search };
 }
