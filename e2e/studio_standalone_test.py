@@ -80,7 +80,14 @@ What "independent" means here, and what this script proves end-to-end:
      recording bytes fetched through the proxy, and the ffmpeg-absent demo shows the
      service's install command VERBATIM while still rendering its full storyboard —
      degradation, not a crash (§4.5).
- 16. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
+ 16. (DES-MERGE-001 slice 15) exports are thread artifacts: the version strip offers
+     all three formats for the version it has SELECTED — v3, while the head is the v4
+     §13 forked — a PDF export lands in the transcript as an ordinary downloadable
+     message and really downloads, named `<doc-slug>_v3.pdf`, from the page's own
+     origin; and a PPTX export with python-pptx absent renders the service's 400 as an
+     actionable message carrying the install command verbatim, with the document still
+     framed at v3 and its composer still taking input (§4.4).
+ 17. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
      ranked: in one DOM snapshot an executing card carries the breathing 2px
      `live-edge` element while a gate-waiting card carries a treatment that is
      present at the same time and different in computed pixels (wider, solid,
@@ -1008,6 +1015,13 @@ try:
     VERSIONS_RE = re.compile(r"^/d/([^/]+)/api/versions$")
     RENDER_RE = re.compile(r"^/d/([^/]+)/doc/(\d+)$")
     FORK_RE = re.compile(r"^/d/([^/]+)/api/fork$")
+    # Slice 15 (§4.4): all three exports are the SERVICE's, and PPTX's python-pptx is a
+    # LAZY dependency — absent on this box, as on most — so it answers a clean 400 naming
+    # the command that fixes it. HTML and PDF depend on nothing optional and still render.
+    EXPORT_RE = re.compile(r"^/d/([^/]+)/api/export$")
+    DOWNLOAD_RE = re.compile(r"^/d/([^/]+)/download/(.+)$")
+    PPTX_HINT = "pip install python-pptx (PPTX export needs it; HTML and PDF do not)"
+    export_requests: list[dict] = []
     WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
     class DocFixtureHandler(SimpleHTTPRequestHandler):
@@ -1111,6 +1125,14 @@ try:
                                 .replace("__V__", m.group(2)))
                 self._send(200, html.encode(), "text/html; charset=utf-8")
                 return True
+            m = DOWNLOAD_RE.match(rest)
+            if m:
+                # Deliberately NO Content-Disposition. The name the browser saves under has
+                # to come from the SPA's own `download` attribute (§4.4's doc-slug naming),
+                # or the AC would be asserting this fixture's header instead of the client.
+                self._send(200, f"%PDF-1.4 {urllib.parse.unquote(m.group(2))}".encode(),
+                           "application/octet-stream")
+                return True
             return False
 
         def do_GET(self):  # noqa: N802 (stdlib naming)
@@ -1170,6 +1192,22 @@ try:
             return self._json(200, {"name": slug, "head": 1, "kind": kind,
                                     "generating": True, "project_id": body.get("project")})
 
+        def _export(self, name: str) -> None:
+            """`POST /d/:docId/api/export` — render ONE version in ONE format (§4.4).
+            `downloadBase(dir, version)`'s naming is the service's: doc-slug, never
+            `export_v3.*`."""
+            body = self._body()
+            fmt, version = str(body.get("format") or ""), body.get("version")
+            export_requests.append({"doc": name, "format": fmt, "version": version})
+            if fmt == "pptx":
+                # A clean 400 with the install hint — not a 500, and not the install gate
+                # that blocks ordinary documents. The document is untouched.
+                return self._json(400, {"error": "pptx export unavailable: python-pptx is not importable",
+                                        "hint": PPTX_HINT})
+            file = f"{name}_v{version}.{fmt}"
+            return self._json(200, {"format": fmt, "path": f"/exports/{file}", "file": file,
+                                    "download": f"/d/{name}/download/{file}"})
+
         def _emit(self) -> None:
             """`POST /api/events` — the GENERATING/GATED composer's wire (§2.2 cases 2-3)
             and both of the feedback batch's writes (§7.7)."""
@@ -1221,6 +1259,9 @@ try:
                     return self._json(200, {"queued": True})
                 if fork:
                     return self._fork(urllib.parse.unquote(fork.group(1)))
+                exporting = EXPORT_RE.match(rest)
+                if exporting:
+                    return self._export(urllib.parse.unquote(exporting.group(1)))
                 if rest == "/api/docs":
                     return self._create_doc(project)
                 if rest == "/api/events":
@@ -2188,13 +2229,134 @@ try:
                          "slice14-step-comment.png", "slice14-respec.png",
                          "slice14-rerecord.png")],
     }
-    docd.shutdown()  # last section on the same-origin rig
-
     if not report["steps"]["video_record"]["ok"]:
         fail("video_record_verdict",
              "slice-14 record/re-record assertions did not all hold — see video_record")
 
-    # ── 18. Operator UX directive: the live edge on the board ──────────────────
+    # ── 18. Slice 15 (DES-MERGE-001 §4.4, §6.4): exports as thread artifacts ──
+    # Same same-origin rig; the fake bridge now renders exports and serves them back
+    # through the proxy. Two claims, and the second is the one that decides whether the
+    # merged app is safe to put in front of someone:
+    #
+    #   · a PDF export from the version strip yields a real DOWNLOAD, named
+    #     `<doc-slug>_v<N>.pdf` for the version the strip has selected — which is NOT the
+    #     head here, because §13 forked this document to v4, so "export what is shown"
+    #     and "export the latest" cannot pass for each other;
+    #   · a PPTX export with python-pptx absent renders the service's 400 as an
+    #     ACTIONABLE message carrying the install command verbatim, and the document
+    #     stays usable — the frame is still live and the composer still takes input.
+    #
+    # The download is asserted through the browser's own download event, on the PAGE's
+    # origin: §5.3's "no second origin" has to hold for artifacts too.
+    EXPORT_VERSION = 3
+    EXPORT_FILE = f"{STRIP_DOC}_v{EXPORT_VERSION}.pdf"
+    IN_FLIGHT = f"Exporting “{STRIP_DOC}” v{EXPORT_VERSION} as PDF"
+    exports_before = len(export_requests)
+    export_console: list[str] = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(accept_downloads=True)
+        # This section DRIVES a 400 (§4.4's pptx refusal) and chromium logs every failed
+        # fetch at error level. The claim under test is that the APP turns that 400 into an
+        # actionable message — asserted directly, below — so the browser's own network log
+        # is filtered here in the same spirit as the fonts CDN. Every other error counts.
+        page.on("console", lambda m: export_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text
+                and "status of 400" not in m.text else None)
+        page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document/{STRIP_DOC}?v={EXPORT_VERSION}",
+                  wait_until="domcontentloaded")
+        menu = page.locator('[data-testid="export-menu"]')
+        menu.wait_for(timeout=30000)
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
+        menu_version = menu.get_attribute("data-version")
+        offered = page.locator('[data-testid="export-format"]')
+        offered_formats = [offered.nth(i).get_attribute("data-format") for i in range(offered.count())]
+
+        # ── AC: a PDF export yields a download named <doc-slug>_v<N>.pdf ───────────
+        page.click('[data-testid="export-menu"] [data-format="pdf"]')
+        link = page.locator('[data-testid="doc-artifact-download"]').last
+        link.wait_for(timeout=30000)
+        # The in-flight line stays in the transcript, so it is read back rather than
+        # raced: §3.3 informative means it named its format and its version, not "…".
+        thread_text = page.evaluate(
+            """() => document.querySelector('[data-testid="thread"]')?.innerText ?? ''""")
+        download_attr = link.get_attribute("download")
+        # RESOLVED, not the attribute: §5.3's "no second origin" is a claim about where the
+        # browser actually goes for the bytes, and only the resolved href says that.
+        download_href = link.evaluate("el => el.href")
+        with page.expect_download() as pending:
+            link.click()
+        suggested = pending.value.suggested_filename
+        page.screenshot(path=str(SHOTS / "slice15-export-download.png"), full_page=True)
+
+        # ── AC: PPTX with python-pptx absent — actionable hint, document still usable ──
+        page.click('[data-testid="export-menu"] [data-format="pptx"]')
+        actionable = page.locator('[data-testid="doc-actionable"]')
+        actionable.wait_for(timeout=30000)
+        hint_text = page.locator('[data-testid="doc-actionable-hint"]').inner_text()
+        retry_offered = page.locator('[data-testid="doc-actionable-retry"]').is_visible()
+        # "Leaves the doc usable" is not a claim about the absence of a crash: the frame is
+        # still rendering the version that was selected, and the composer still takes input.
+        canvas_after = page.locator('[data-testid="doc-canvas"]').get_attribute("data-version")
+        frame_after = page.frame_locator('[data-testid="doc-canvas"]').locator(
+            "[data-wid='h1']").inner_text()
+        page.fill('[data-testid="doc-composer"]', "and now make the intro punchier")
+        composer_after = page.input_value('[data-testid="doc-composer"]')
+        page.screenshot(path=str(SHOTS / "slice15-pptx-absent.png"), full_page=True)
+        browser.close()
+
+    docd.shutdown()  # last section on the same-origin rig
+
+    new_exports = export_requests[exports_before:]
+    expected_href = (f"/api/v1/projects/{urllib.parse.quote(doc_project)}"
+                     f"/interactive/d/{STRIP_DOC}/download/{EXPORT_FILE}")
+    report["steps"]["exports"] = {
+        "ok": all([
+            # All three formats, per version, from the surface that owns the selection.
+            offered_formats == ["html", "pdf", "pptx"],
+            menu_version == str(EXPORT_VERSION),
+            # The request named the SELECTED version — v4 exists and is the head.
+            new_exports == [{"doc": STRIP_DOC, "format": "pdf", "version": EXPORT_VERSION},
+                            {"doc": STRIP_DOC, "format": "pptx", "version": EXPORT_VERSION}],
+            # The artifact: in the thread, named, and downloadable on the page's origin.
+            IN_FLIGHT in thread_text,
+            EXPORT_FILE in thread_text,
+            download_attr == EXPORT_FILE,
+            download_href == f"{DOC_ORIGIN}{expected_href}",
+            suggested == EXPORT_FILE,
+            # The refusal: the service's command, verbatim, with the retry beside it.
+            hint_text.strip() == PPTX_HINT,
+            retry_offered,
+            # …and the document did not go anywhere.
+            canvas_after == str(EXPORT_VERSION),
+            f"version {EXPORT_VERSION}" in frame_after,
+            composer_after == "and now make the intro punchier",
+            not export_console,
+        ]),
+        "doc": STRIP_DOC,
+        "exported_version": EXPORT_VERSION,
+        "head_version_at_the_time": 4,
+        "formats_offered": offered_formats,
+        "requests_seen_by_bridge": new_exports,
+        "in_flight_line_in_thread": IN_FLIGHT in thread_text,
+        "download_attribute": download_attr,
+        "download_href": download_href,
+        "downloaded_filename": suggested,
+        "pptx_hint_rendered": hint_text,
+        "pptx_hint_expected": PPTX_HINT,
+        "pptx_retry_offered": retry_offered,
+        "doc_still_framed_at": canvas_after,
+        "doc_frame_heading": frame_after,
+        "composer_still_accepts_input": composer_after,
+        "console_errors": export_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice15-export-download.png", "slice15-pptx-absent.png")],
+    }
+    if not report["steps"]["exports"]["ok"]:
+        fail("exports_verdict", "slice-15 export assertions did not all hold — see exports")
+
+    # ── 19. Operator UX directive: the live edge on the board ──────────────────
     # The ACTIVE-WORK signal is a breathing 2px strip along the leading edge of the
     # element doing work, and the thing that has to hold is the RANKING: a busy card
     # must be visible without out-shouting a card that needs a human. So both states
