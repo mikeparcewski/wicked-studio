@@ -23,6 +23,14 @@ vi.mock('../src/api/interactive.js', () => ({
   createDoc: (...a: unknown[]) => createDoc(...a),
   postFork: (...a: unknown[]) => postFork(...a),
   postEvent: (...a: unknown[]) => postEvent(...a),
+  // The real wrapper, mirrored: `injectDocMessage` IS one `postEvent` (slices 11+12
+  // shared the steer wire with the feedback batch), so slice 10's assertions about the
+  // emitted event stay assertions about the emitted event.
+  injectDocMessage: (p: string, d: string, text: string, id: string) =>
+    postEvent(p, {
+      event_type: 'wicked.interactive.chat.posted',
+      payload: { role: 'user', text, document_id: d, source_message_id: id },
+    }),
   getVersions: (...a: unknown[]) => getVersions(...a),
   interactiveUrl: (p: string, path: string) => `/api/v1/projects/${p}/interactive${path}`,
 }));

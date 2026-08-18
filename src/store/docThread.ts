@@ -16,8 +16,20 @@ import type { CoreEvent } from '../api/types.js';
 
 // ── Transcript ───────────────────────────────────────────────────────────────
 
+/**
+ * One targeted comment from the point-and-comment overlay (§4.3, slices 11+12). `wid`
+ * is the document's own stable anchor (INV-1), which is what makes the item deep-linkable
+ * back to its element for as long as the element exists.
+ */
+export interface FeedbackItem { wid: string; text: string }
+
 export type DocMsg =
-  | { kind: 'user';      id: string; text: string; version?: number }
+  // `items` is set only for a submitted feedback batch: ONE message, N targets (§4.3 —
+  // sending each comment separately would produce N versions and N runs). `notRecorded`
+  // is §7.7's failure shape: the bus event landed and the document still updates, but the
+  // inject that puts this message in the run did not — retryable, never silent.
+  | { kind: 'user';      id: string; text: string; version?: number;
+      items?: FeedbackItem[]; notRecorded?: boolean }
   | { kind: 'narration'; id: string; text: string }
   | { kind: 'agent';     id: string; author: string; text: string; href?: string }
   | { kind: 'verdict';   id: string; author: string; text: string }
@@ -85,7 +97,9 @@ interface DocThreadStore {
   /** Fold one CoreEvent — every non-interactive frame is ignored. */
   ingest: (event: CoreEvent) => void;
   /** Append the user's message and make it the pending version anchor. */
-  addUserMsg: (key: string, id: string, text: string) => void;
+  addUserMsg: (key: string, id: string, text: string, items?: FeedbackItem[]) => void;
+  /** Flag/clear §7.7's "not recorded in the run" chip on one already-rendered message. */
+  markNotRecorded: (key: string, id: string, notRecorded: boolean) => void;
   /** Append a client-authored informative line (§3.3) — an action the user took. */
   addNarration: (key: string, text: string) => void;
   /** The version divider a fork+inject continuation renders behind (§7.10). */
@@ -210,10 +224,19 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
     });
   },
 
-  addUserMsg: (key, id, text) =>
+  addUserMsg: (key, id, text, items) =>
     set((s) => ({
-      messages: append(s.messages, key, { kind: 'user', id, text }),
+      messages: append(s.messages, key, { kind: 'user', id, text, ...(items ? { items } : {}) }),
       anchor: { ...s.anchor, [key]: id },
+    })),
+
+  markNotRecorded: (key, id, notRecorded) =>
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [key]: (s.messages[key] ?? []).map((m) =>
+          m.kind === 'user' && m.id === id ? { ...m, notRecorded } : m),
+      },
     })),
 
   addNarration: (key, text) =>
