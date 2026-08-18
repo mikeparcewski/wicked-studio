@@ -1696,7 +1696,8 @@ try:
         page.screenshot(path=str(SHOTS / "slice12-not-recorded-chip.png"), full_page=True)
         browser.close()
 
-    docd.shutdown()
+    # NB: the fixture server stays up — §16 (Video mode) is the last section on this rig
+    # and shuts it down there.
 
     feedback_events = [e for e in emitted_events if e.get("event_type") == FEEDBACK_EVENT]
     batch_event = (feedback_events[0].get("payload") or {}) if feedback_events else {}
@@ -1804,6 +1805,11 @@ try:
         player_kind = player.get_attribute("data-player-kind")
         # The player renders the SERVICE's bytes, through the proxy, on the page's origin.
         gif_src = page.locator('[data-testid="demo-gif"]').get_attribute("src")
+        # Decoded, not merely requested: the assertion is that the SERVICE's bytes came
+        # back through the proxy and are renderable, so wait for the decode before asking.
+        page.wait_for_function(
+            """() => { const el = document.querySelector('[data-testid="demo-gif"]');
+                       return !!el && el.complete && el.naturalWidth > 0; }""", timeout=30000)
         gif_loaded = page.locator('[data-testid="demo-gif"]').evaluate("el => el.naturalWidth > 0")
         page.screenshot(path=str(SHOTS / "slice13-storyboard.png"), full_page=True)
 
@@ -1894,6 +1900,8 @@ try:
                         ("slice13-demo-picker.png", "slice13-storyboard.png",
                          "slice13-chapter-seek.png", "slice13-ffmpeg-absent.png")],
     }
+    docd.shutdown()  # last section on the same-origin rig
+
     if not report["steps"]["video_storyboard"]["ok"]:
         fail("video_storyboard_verdict",
              "slice-13 Video-mode assertions did not all hold — see video_storyboard")
