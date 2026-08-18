@@ -91,8 +91,12 @@ describe('HomeBoard — live activity (slice 6)', () => {
 
     push({ type: 'unitOutputDelta', session: 'run-b', ord: 0, text: 'Writing the acceptance criteria for AC-3\n' } as CoreEvent);
 
-    expect(within(card('p-b')).getByTestId('live-line'))
-      .toHaveTextContent('build — Writing the acceptance criteria for AC-3');
+    // The AC is "within 2s", not "synchronously": on a loaded runner the store->card
+    // flush can land a beat after act() returns, so wait for it the way a user would.
+    await vi.waitFor(() => {
+      expect(within(card('p-b')).getByTestId('live-line'))
+        .toHaveTextContent('build — Writing the acceptance criteria for AC-3');
+    });
     // The AC's other half: the card the user was NOT looking at is unchanged.
     expect(within(card('p-a')).getByTestId('live-line').textContent).toBe(before);
   });
