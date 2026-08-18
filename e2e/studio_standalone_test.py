@@ -1781,7 +1781,11 @@ try:
         page.on("request", lambda r: demo_requests.append(r.url))
 
         # ── AC: the picker lists demos, most-recent first, and navigates ───────────
-        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video", wait_until="networkidle")
+        # `domcontentloaded`, not `networkidle`: the shell holds a live /ws and the mode
+        # surface's own loads are what the locator waits below are for — idling the
+        # network is neither necessary here nor something a live socket guarantees.
+        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video", wait_until="domcontentloaded")
+        page.locator('[data-testid="mode-switcher"]').wait_for(timeout=30000)
         page.add_style_tag(content=HIDE_GATE_TOASTS)
         demo_rows = page.locator('[data-testid="demo-picker-row"]')
         demo_rows.first.wait_for(timeout=30000)
@@ -1816,7 +1820,7 @@ try:
         page.screenshot(path=str(SHOTS / "slice13-chapter-seek.png"), full_page=True)
 
         # ── AC (§4.5): a missing ffmpeg is ACTIONABLE, and the storyboard still renders ──
-        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video/{FFMPEG_DEMO}", wait_until="networkidle")
+        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video/{FFMPEG_DEMO}", wait_until="domcontentloaded")
         page.add_style_tag(content=HIDE_GATE_TOASTS)
         hint_el = page.locator('[data-testid="demo-ffmpeg-hint"]')
         hint_el.wait_for(timeout=30000)

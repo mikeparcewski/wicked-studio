@@ -104,8 +104,9 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
             No demos in this project yet
           </h2>
           <p style={{ fontSize: '13px', color: S.muted, margin: 0, lineHeight: 1.5 }}>
-            Ask for one in the thread — “record a walkthrough of the checkout flow” — and the
-            agent writes the steps. They appear here as a storyboard, ready to record.
+            A demo is a set of steps the agent authors and the service records. Ask for a
+            walkthrough in the thread — “a demo of the checkout flow” — and it appears here as
+            a storyboard with its player as soon as the spec exists.
           </p>
         </div>
       </div>
