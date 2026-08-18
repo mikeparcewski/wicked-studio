@@ -1,18 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { listDocs, type DocSummary } from '../api/interactive.js';
 import type { Project, ProjectMember, SessionView } from '../api/types.js';
 
 /**
- * The orchestrator board's data model (DES-MERGE-001 §1.4, slice 5).
+ * The orchestrator board's data model (DES-MERGE-001 §1.4).
  *
- * STATIC by design: everything here comes from the REST surface on load — `GET
- * /projects`, `GET /runs` (owned by `useRuns`, passed in), each project's members,
- * and the interactive `listDocs` for projects bound to an interactive root. The
- * board goes live in slice 6; no WS subscription belongs in this file.
+ * The REST half: `GET /projects`, `GET /runs` (owned by `useRuns`, passed in),
+ * each project's members, and the interactive `listDocs` for projects bound to an
+ * interactive root. The LIVE half is not here and must not move here — narration
+ * and doc status come from the shared runtime store, which the cards subscribe to
+ * directly (§3.5: one socket, one store, no polling).
  *
  * Runs are joined to projects through MEMBERSHIP (`crew.run` / `crew.chat` refs) —
  * `AgentSession` carries no project id, so this is the only binding that exists.
+ * Memberships are re-read when a run the board has never placed shows up in the
+ * run list (slice 6): a run launched from a card's quick action, or by any other
+ * client, must land on its project's card without a reload.
  */
 
 /** Attention buckets, most-urgent first — §1.4's sort key, spelled once. */
@@ -98,19 +102,21 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
   const [bindings, setBindings] = useState<Record<string, Bindings>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const repoNames = useRef<Map<string, string>>(new Map());
+  /** Run ids the board has already tried to place — one re-read per run, ever. */
+  const placed = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       let active: Project[];
-      let repoNames: Map<string, string>;
       try {
         const [{ projects: all }, repos] = await Promise.all([
           api.listProjects(),
           api.listRepos().then((r) => r.repos).catch(() => []),
         ]);
         active = all.filter((p) => p.status === 'active');
-        repoNames = new Map(repos.map((r) => [r.id, r.name]));
+        repoNames.current = new Map(repos.map((r) => [r.id, r.name]));
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e));
@@ -124,12 +130,34 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
       setProjects(active);
       setLoading(false);
       const entries = await Promise.all(
-        active.map(async (p) => [p.id, await loadBindings(p, repoNames)] as const),
+        active.map(async (p) => [p.id, await loadBindings(p, repoNames.current)] as const),
       );
       if (!cancelled) setBindings(Object.fromEntries(entries));
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // A run the board cannot place yet (launched from a quick action, or by another
+  // client) means the membership snapshot is stale — re-read it. Guarded per run id,
+  // so the unfiled runs that legitimately belong to no project cost exactly one pass
+  // each rather than one per `GET /runs` reconcile.
+  useEffect(() => {
+    // Nothing is "unplaced" until the first membership read has landed — without this
+    // the initial run list would fan out a second, identical read behind the first.
+    if (projects.length === 0 || Object.keys(bindings).length === 0) return;
+    const known = new Set(Object.values(bindings).flatMap((b) => [...b.runIds]));
+    const unplaced = runs.filter((v) => !known.has(v.session.id) && !placed.current.has(v.session.id));
+    if (unplaced.length === 0) return;
+    for (const v of unplaced) placed.current.add(v.session.id);
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        projects.map(async (p) => [p.id, await loadBindings(p, repoNames.current)] as const),
+      );
+      if (!cancelled) setBindings(Object.fromEntries(entries));
+    })();
+    return () => { cancelled = true; };
+  }, [runs, projects, bindings]);
 
   const items = useMemo(
     () =>

@@ -3,7 +3,10 @@ import { useRuntimeStore, outputKey } from '../src/store/runtime.js';
 import type { CoreEvent } from '../src/api/types.js';
 
 const reset = (): void =>
-  useRuntimeStore.setState({ outputs: {}, logs: {}, executorTypes: {}, terminalIds: {}, councilStatus: {}, seq: 0 });
+  useRuntimeStore.setState({
+    outputs: {}, logs: {}, executorTypes: {}, terminalIds: {}, councilStatus: {},
+    deltaSeq: {}, docActivity: {}, seq: 0,
+  });
 const delta = (session: string, ord: number, chunk: string): CoreEvent =>
   ({ type: 'cliOutputDelta', session, ord, chunk } as CoreEvent);
 
@@ -131,6 +134,76 @@ describe('runtime store (§11.4 — live output + per-run event log)', () => {
       expect(buf).toHaveLength(200_000);
       expect(buf.endsWith('-TAIL')).toBe(true);
       expect(buf).not.toContain('HEAD-');
+    });
+  });
+
+  // The board's headline has to know whether the newest thing it knows about a run is a
+  // structured frame or scraped text; deltas are not logged, so the store records their
+  // arrival seq (DES-MERGE-001 §3.4(b) rule 1).
+  it('records the arrival seq of the newest delta per run', () => {
+    const ingest = useRuntimeStore.getState().ingest;
+    ingest({ type: 'unitExecuting', session: 'run-1', ord: 0 } as CoreEvent);
+    ingest(delta('run-1', 0, 'x'));
+    ingest({ type: 'unitExecuting', session: 'run-2', ord: 0 } as CoreEvent);
+    const { deltaSeq, logs } = useRuntimeStore.getState();
+    expect(deltaSeq['run-1']).toBeGreaterThan(logs['run-1']?.[0]?.seq ?? 0);
+    expect(deltaSeq['run-2']).toBeUndefined();
+    useRuntimeStore.getState().clear('run-1');
+    expect(useRuntimeStore.getState().deltaSeq['run-1']).toBeUndefined();
+  });
+
+  // Slice 3 relays interactive's bus frames onto the SAME /ws stream inside an
+  // `{type:'interactiveEvent', event}` envelope (§5.4). They are project-scoped, so they
+  // are folded before the run guard, and read defensively across a seam this repo
+  // does not own.
+  describe('relayed interactive frames (§5.4)', () => {
+    const posted = (payload: Record<string, unknown>): CoreEvent =>
+      ({
+        type: 'interactiveEvent',
+        event: { event_type: 'wicked.interactive.status.posted', payload },
+      } as CoreEvent);
+
+    it('folds status.posted into per-project doc activity', () => {
+      useRuntimeStore.getState().ingest(posted({
+        project_id: 'p-1',
+        document_id: 'launch-deck',
+        message: 'Rewriting slide 3 — tightening the headline',
+      }));
+      expect(useRuntimeStore.getState().docActivity['p-1']).toMatchObject({
+        docId: 'launch-deck',
+        message: 'Rewriting slide 3 — tightening the headline',
+      });
+      expect(useRuntimeStore.getState().docActivity['p-1']?.at).toBeGreaterThan(0);
+    });
+
+    it('accepts the alternate field spellings and a doc-less status', () => {
+      useRuntimeStore.getState().ingest({
+        type: 'interactiveEvent',
+        event: { type: 'wicked.interactive.status.posted', payload: { project: 'p-2', status: 'Learning the theme' } },
+      } as CoreEvent);
+      expect(useRuntimeStore.getState().docActivity['p-2']).toMatchObject({
+        docId: null,
+        message: 'Learning the theme',
+      });
+    });
+
+    it('drops frames with no project, no message, or another event type', () => {
+      const ingest = useRuntimeStore.getState().ingest;
+      ingest(posted({ document_id: 'd', message: 'no project' }));
+      ingest(posted({ project_id: 'p-3', message: '   ' }));
+      ingest({ type: 'interactiveEvent', event: { event_type: 'wicked.interactive.doc.created', payload: { project_id: 'p-3' } } } as CoreEvent);
+      ingest({ type: 'interactiveEvent' } as CoreEvent);
+      ingest({ type: 'interactiveEvent', event: 'not an object' } as CoreEvent);
+      expect(Object.keys(useRuntimeStore.getState().docActivity)).toHaveLength(0);
+      // …and none of them landed in a run log either (they carry no run).
+      expect(Object.keys(useRuntimeStore.getState().logs)).toHaveLength(0);
+    });
+
+    it('keeps only the newest status per project', () => {
+      const ingest = useRuntimeStore.getState().ingest;
+      ingest(posted({ project_id: 'p-4', message: 'first' }));
+      ingest(posted({ project_id: 'p-4', message: 'second' }));
+      expect(useRuntimeStore.getState().docActivity['p-4']?.message).toBe('second');
     });
   });
 

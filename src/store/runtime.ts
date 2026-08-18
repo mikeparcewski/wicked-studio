@@ -168,9 +168,83 @@ export interface FailedSeat {
   why: string;
 }
 
+/**
+ * One interactive doc-status line, keyed by the project that owns the document
+ * (DES-MERGE-001 §1.4 live activity, §5.4 one stream).
+ *
+ * The board renders this as a single informative line on the owning project's
+ * card, and dates that document's tile from `at` — a `status.posted` IS the
+ * document changing, which is the only "updated at" signal the board gets
+ * between `listDocs` calls.
+ */
+export interface DocActivity {
+  /** The doc the status is about, when the frame named one (`document_id`). */
+  docId: string | null;
+  /** The agent's own words — informative, never filler (§3.3). */
+  message: string;
+  /** Arrival time (epoch millis). */
+  at: number;
+}
+
+/** The one relayed interactive event the board reads (§3.4(b) rule 1). */
+const STATUS_POSTED = 'wicked.interactive.status.posted';
+
+/** First non-empty string among the candidate keys of an untyped bag. */
+function pick(bag: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = bag[key];
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+  }
+  return null;
+}
+
+/**
+ * A `wicked.interactive.status.posted` frame reduced to the line the board shows,
+ * or `null` for every other frame.
+ *
+ * Crew relays interactive's bus frames onto `/ws` inside slice 3's envelope,
+ * `{type:'interactiveEvent', event}` — a foreign vocabulary crossing a seam this
+ * repo does not own, so the payload is read DEFENSIVELY (both spellings of each
+ * field, no throw on a shape that does not match). A frame that names no project
+ * or carries no message is dropped rather than rendered as an empty status.
+ */
+export function docActivityOf(frame: CoreEvent): { projectId: string; activity: DocActivity } | null {
+  if (frame.type !== 'interactiveEvent' || typeof frame.event !== 'object' || frame.event === null) {
+    return null;
+  }
+  const event = frame.event as Record<string, unknown>;
+  if (pick(event, 'event_type', 'type') !== STATUS_POSTED) return null;
+  const payload =
+    typeof event.payload === 'object' && event.payload !== null
+      ? (event.payload as Record<string, unknown>)
+      : {};
+  const projectId = pick(payload, 'project_id', 'project') ?? pick(event, 'project_id', 'project');
+  const message = pick(payload, 'message', 'status', 'text');
+  if (projectId === null || message === null) return null;
+  return {
+    projectId,
+    activity: {
+      docId: pick(payload, 'document_id', 'doc_id', 'document'),
+      message,
+      at: Date.now(),
+    },
+  };
+}
+
 interface RuntimeStore {
   /** Accumulated live CLI output, keyed `<run>:u<ord>` (§11.4). */
   outputs: Record<string, string>;
+  /**
+   * Arrival `seq` of the newest output delta per run.
+   *
+   * Deltas stream into `outputs` and are deliberately NOT logged, so nothing else
+   * orders scraped text against the structured frames in `logs`. The board's
+   * headline needs exactly that comparison — §3.4(b) rule 1 lets a phase
+   * transition win over the delta buffer only when it is the newer of the two.
+   */
+  deltaSeq: Record<string, number>;
+  /** Newest relayed interactive doc status per project id (§5.4). */
+  docActivity: Record<string, DocActivity>;
   /** Live council deliberation per unit, keyed `<session>:<ord>`. */
   councilStatus: Record<string, CouncilStatus>;
   /** Structured assumptions per run (assumptionRecorded events, arrival order). */
@@ -205,6 +279,8 @@ interface RuntimeStore {
 
 export const useRuntimeStore = create<RuntimeStore>((set) => ({
   outputs: {},
+  deltaSeq: {},
+  docActivity: {},
   councilStatus: {},
   assumptions: {},
   logs: {},
@@ -213,6 +289,14 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
   seq: 0,
 
   ingest: (event) => {
+    // Relayed interactive frames are PROJECT-scoped, not run-scoped, so they are
+    // folded before the run guard below drops everything without a `session`.
+    const doc = docActivityOf(event);
+    if (doc !== null) {
+      set((s) => ({ seq: s.seq + 1, docActivity: { ...s.docActivity, [doc.projectId]: doc.activity } }));
+      return;
+    }
+
     const session = typeof event.session === 'string' ? event.session : undefined;
     // Frames with no run scope (heartbeat, repoRegistered, terminal*) aren't run-owned.
     if (session === undefined) return;
@@ -228,7 +312,11 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
         const prev = s.outputs[key] ?? '';
         let combined = prev + deltaText;
         if (combined.length > OUTPUT_CAP) combined = combined.slice(combined.length - OUTPUT_CAP);
-        return { seq, outputs: { ...s.outputs, [key]: combined } };
+        return {
+          seq,
+          outputs: { ...s.outputs, [key]: combined },
+          deltaSeq: { ...s.deltaSeq, [session]: seq },
+        };
       }
 
       // Heartbeats would flood the log and carry no run detail.
@@ -427,6 +515,8 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       }
       const logs = { ...s.logs };
       delete logs[session];
-      return { outputs, councilStatus, assumptions, executorTypes, terminalIds, logs };
+      const deltaSeq = { ...s.deltaSeq };
+      delete deltaSeq[session];
+      return { outputs, deltaSeq, councilStatus, assumptions, executorTypes, terminalIds, logs };
     }),
 }));

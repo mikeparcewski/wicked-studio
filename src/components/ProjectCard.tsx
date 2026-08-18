@@ -1,28 +1,38 @@
+import type { SessionView } from '../api/types.js';
+import { isLive, useRunHeadline } from '../hooks/useBoardHeadline.js';
 import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import type { Attention, BoardProject } from '../hooks/useBoardModel.js';
 import { useGateStore } from '../store/gates.js';
+import { useRuntimeStore } from '../store/runtime.js';
 import { STATUS_STYLE } from './RunCard.js';
 
 /**
- * One orchestrator-board card (DES-MERGE-001 §1.4). All four regions are ALWAYS
+ * One orchestrator-board card (DES-MERGE-001 §1.4). All regions are ALWAYS
  * present; an empty region renders an invitation, never a blank. The height is
  * FIXED (`CARD_H`) so the board stays legible at 20+ cards — nothing here may grow
  * with the run or doc count, which is why every list is capped with an overflow
  * count instead of scrolling.
+ *
+ * Live activity and the run chips subscribe to the SHARED runtime + gate stores
+ * (slice 6) — the same stores the run view reads, fed by the app's ONE `/ws`
+ * subscription (§3.5). A card therefore updates in place while the user is looking
+ * at a different card, with no second socket and no polling anywhere on this route.
  */
 
 /**
  * Fixed card height in px — the board's windowing math depends on it.
  *
- * Sized by the TALLEST variant, the empty card: header + two regions + the 2×2
+ * Sized by the TALLEST variant, the empty card: header + three regions + the 2×2
  * quick-action grid. The actions are bottom-anchored (`marginTop: auto`) inside an
  * `overflow: hidden` box, so a height that merely fits would clip the primary
  * affordance the moment a font metric moved. This carries ~16px of slack.
  */
-export const CARD_H = 280;
+export const CARD_H = 352;
 
 const MAX_TILES = 3;
 const MAX_CHIPS = 2;
+/** Live lines per card. Fixed height, so extra runs report as a count, not a list. */
+const MAX_LINES = 2;
 
 const S = {
   border: 'rgba(230,237,243,0.1)',
@@ -74,6 +84,14 @@ const CSS = {
     background: 'rgba(230,237,243,0.05)', border: `1px solid ${S.border}`,
     borderRadius: '6px', color: S.ink,
   },
+  line: {
+    display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 2px',
+    fontSize: '11px', color: S.muted,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  pulse: {
+    width: '5px', height: '5px', borderRadius: '50%', background: '#79c0ff', flexShrink: 0,
+  },
 } as const satisfies Record<string, React.CSSProperties>;
 
 /** Coarse, honest relative time — the board never needs second precision. */
@@ -102,9 +120,12 @@ function Invitation({ text }: { text: string }): React.ReactElement {
  * A doc tile is a PLACEHOLDER — title, kind glyph, updated-at (§7.5). Live-rendered
  * thumbnails were explicitly deferred: 20 cards × 3 iframes is a browser's worth of
  * documents to keep mounted for a surface the user is only scanning.
+ *
+ * `when` is epoch millis (NaN = never edited): a relayed `status.posted` for this
+ * doc dates the tile from the frame, because between `listDocs` calls that event IS
+ * the document changing.
  */
-function DocTile({ name, kind, updatedAt }: { name: string; kind: string; updatedAt: string | null }): React.ReactElement {
-  const when = updatedAt === null ? NaN : Date.parse(updatedAt);
+function DocTile({ name, kind, when }: { name: string; kind: string; when: number }): React.ReactElement {
   return (
     <div data-testid="doc-tile" data-doc-kind={kind} style={CSS.tile}>
       <p style={CSS.tileName}>
@@ -118,6 +139,26 @@ function DocTile({ name, kind, updatedAt }: { name: string; kind: string; update
   );
 }
 
+/**
+ * One run's newest narration line (§1.4 live activity, derived per §3.4(b)). One
+ * line, ellipsised, never scrolling — the card is scanned, not watched; the thread
+ * is where a user goes to watch.
+ */
+function LiveLine({ view }: { view: SessionView }): React.ReactElement {
+  const headline = useRunHeadline(view);
+  return (
+    <p
+      data-testid="live-line"
+      data-run-id={view.session.id}
+      title={headline}
+      style={CSS.line}
+    >
+      <span aria-hidden style={CSS.pulse} />
+      {headline}
+    </p>
+  );
+}
+
 interface Props {
   item: BoardProject;
   navigate: Navigate;
@@ -126,6 +167,9 @@ interface Props {
 export function ProjectCard({ item, navigate }: Props): React.ReactElement {
   const { project, repo, runs, docs, attention } = item;
   const gates = useGateStore((s) => s.gates);
+  // Relayed interactive status for THIS project — one line, plus the tile date it implies.
+  const activity = useRuntimeStore((s) => s.docActivity[project.id]);
+  const live = runs.filter(isLive);
   const empty = runs.length === 0 && docs.length === 0;
 
   /** Every affordance on the card is a real link — deep-linkable, middle-clickable. */
@@ -152,11 +196,45 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
         {docs.length === 0 ? <Invitation text="No documents yet." /> : (
           <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
             {docs.slice(0, MAX_TILES).map((d) => (
-              <DocTile key={d.name} name={d.name} kind={d.kind} updatedAt={d.updated_at} />
+              <DocTile
+                key={d.name}
+                name={d.name}
+                kind={d.kind}
+                when={
+                  activity !== undefined && activity.docId === d.name
+                    ? activity.at
+                    : d.updated_at === null ? NaN : Date.parse(d.updated_at)
+                }
+              />
             ))}
             {docs.length > MAX_TILES && (
               <span data-testid="doc-overflow" style={{ alignSelf: 'center', fontSize: '11px', color: S.muted, flexShrink: 0 }}>
                 {docs.length - MAX_TILES} more
+              </span>
+            )}
+          </div>
+        )}
+      </Region>
+
+      {/* Live activity — the newest narration line per in-flight run (§1.4, §3.4(b)),
+          plus the newest relayed doc status. Both arrive on the shared `/ws` stream. */}
+      <Region title="Live activity">
+        {live.length === 0 && activity === undefined ? (
+          <Invitation text="Nothing running." />
+        ) : (
+          <div data-testid="live-activity">
+            {live.slice(0, MAX_LINES).map((v) => (
+              <LiveLine key={v.session.id} view={v} />
+            ))}
+            {activity !== undefined && (
+              <p data-testid="doc-activity" title={activity.message} style={CSS.line}>
+                <span aria-hidden style={{ flexShrink: 0 }}>▤</span>
+                {activity.message}
+              </p>
+            )}
+            {live.length > MAX_LINES && (
+              <span data-testid="live-overflow" style={{ fontSize: '11px', color: S.muted }}>
+                {live.length - MAX_LINES} more running
               </span>
             )}
           </div>

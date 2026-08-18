@@ -22,3 +22,16 @@ if (!('localStorage' in window) || window.localStorage == null) {
     },
   });
 }
+
+// jsdom implements no canvas backend; components that probe a 2D context (and any
+// dependency that measures text through one) throw "Not implemented" on CI where the
+// optional native canvas package is absent. Stub only when missing, same policy as above.
+if (typeof window.HTMLCanvasElement.prototype.getContext !== 'function' ||
+    (() => { try { return document.createElement('canvas').getContext('2d') == null; } catch { return true; } })()) {
+  window.HTMLCanvasElement.prototype.getContext = (() => ({
+    measureText: (t: string) => ({ width: String(t).length * 7 }),
+    fillText: () => {}, clearRect: () => {}, fillRect: () => {},
+    beginPath: () => {}, moveTo: () => {}, lineTo: () => {}, stroke: () => {},
+    save: () => {}, restore: () => {}, scale: () => {}, translate: () => {},
+  })) as unknown as typeof window.HTMLCanvasElement.prototype.getContext;
+}
