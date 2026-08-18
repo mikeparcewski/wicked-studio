@@ -4,6 +4,7 @@ import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import type { Attention, BoardProject } from '../hooks/useBoardModel.js';
 import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore } from '../store/runtime.js';
+import { ExportMenu } from './ExportMenu.js';
 import { GateChip } from './GateChip.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
 import { STATUS_STYLE } from './RunCard.js';
@@ -121,7 +122,9 @@ function Invitation({ text }: { text: string }): React.ReactElement {
 }
 
 /**
- * A doc tile is a PLACEHOLDER — title, kind glyph, updated-at (§7.5). Live-rendered
+ * A doc tile is a PLACEHOLDER — title, kind glyph, updated-at (§7.5) — plus §4.4's quick
+ * action: exporting is the one thing worth doing to a document without opening it, and it
+ * belongs to the DOCUMENT rather than to the project, so it lives on the tile. Live-rendered
  * thumbnails were explicitly deferred: 20 cards × 3 iframes is a browser's worth of
  * documents to keep mounted for a surface the user is only scanning.
  *
@@ -129,7 +132,9 @@ function Invitation({ text }: { text: string }): React.ReactElement {
  * doc dates the tile from the frame, because between `listDocs` calls that event IS
  * the document changing.
  */
-function DocTile({ name, kind, when }: { name: string; kind: string; when: number }): React.ReactElement {
+function DocTile({ projectId, name, kind, head, when }: {
+  projectId: string; name: string; kind: string; head: number; when: number;
+}): React.ReactElement {
   return (
     <div data-testid="doc-tile" data-doc-kind={kind} style={CSS.tile}>
       <p style={CSS.tileName}>
@@ -139,6 +144,8 @@ function DocTile({ name, kind, when }: { name: string; kind: string; when: numbe
       <p style={{ fontSize: '10px', color: S.faint, margin: '2px 0 0', fontFamily: 'monospace' }}>
         {Number.isNaN(when) ? 'not yet edited' : `${ago(when)} ago`}
       </p>
+      {/* The card exports the HEAD — the only version a surface that shows none can mean. */}
+      <ExportMenu projectId={projectId} docId={name} version={head} compact />
     </div>
   );
 }
@@ -208,8 +215,10 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
             {docs.slice(0, MAX_TILES).map((d) => (
               <DocTile
                 key={d.name}
+                projectId={project.id}
                 name={d.name}
                 kind={d.kind}
+                head={d.head}
                 when={
                   activity !== undefined && activity.docId === d.name
                     ? activity.at

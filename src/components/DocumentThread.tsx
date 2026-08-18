@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createDoc, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
 import { DemoWizard } from './DemoWizard.js';
 import { recordFromThread } from '../interactive/demoWire.js';
+import { runExport } from '../interactive/exportWire.js';
 import { retryBatchInject } from '../interactive/feedbackBatch.js';
 import { scrollToWid } from '../interactive/widScroller.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
@@ -108,6 +109,9 @@ function Bubble({ msg, projectId, docId }: { msg: DocMsg; projectId: string; doc
       </div>
     );
   }
+  if (msg.kind === 'actionable') {
+    return <ActionableCard msg={msg} projectId={projectId} docId={docId} />;
+  }
   if (msg.kind === 'agent' || msg.kind === 'verdict') {
     return (
       <div className="self-start max-w-[90%] flex flex-col gap-1" data-testid={`doc-${msg.kind}`}>
@@ -118,14 +122,17 @@ function Bubble({ msg, projectId, docId }: { msg: DocMsg; projectId: string; doc
              style={{ background: S.card, border: `1px solid ${S.border}`, color: S.ink }}>
           {msg.text}
           {msg.kind === 'agent' && msg.href !== undefined && (
+            // Served THROUGH the proxy, on the page's own origin (§5.3) — there is no
+            // second origin to download from. `download` names the file the service named
+            // (§4.4's doc-slug naming), so what lands on disk is what the message says.
             <a
               data-testid="doc-artifact-download"
               href={interactiveUrl(projectId, msg.href)}
-              download
+              download={msg.file ?? true}
               className="block mt-2 text-xs font-mono underline"
               style={{ color: S.accent }}
             >
-              Download
+              Download {msg.file ?? ''}
             </a>
           )}
         </div>
@@ -133,6 +140,51 @@ function Bubble({ msg, projectId, docId }: { msg: DocMsg; projectId: string; doc
     );
   }
   return null;
+}
+
+/**
+ * §3.3's ACTIONABLE kind, rendered: what happened, the service's own fix NAMED verbatim,
+ * and the control that runs it again — all in the same block. Both halves are mandatory
+ * on purpose: a hint with no button is a dead end, and a button with no command is a
+ * retry that fails identically. §4.4's PPTX case is what this exists for — python-pptx
+ * absent is a stated install command and a document that never stopped being usable.
+ */
+function ActionableCard({
+  msg, projectId, docId,
+}: {
+  msg: Extract<DocMsg, { kind: 'actionable' }>; projectId: string; docId: string | null;
+}): React.ReactElement {
+  const [busy, setBusy] = useState(false);
+  const retry = msg.retry;
+  return (
+    <div
+      data-testid="doc-actionable"
+      className="rounded-xl px-3.5 py-3 flex flex-col gap-2"
+      style={{ background: 'rgba(255,218,25,0.06)', border: '1px solid rgba(255,218,25,0.2)' }}
+    >
+      <p className="text-sm leading-relaxed" style={{ color: S.ink, margin: 0 }}>{msg.text}</p>
+      <code data-testid="doc-actionable-hint" className="text-[11px] font-mono whitespace-pre-wrap"
+            style={{ color: S.accent }}>
+        {msg.hint}
+      </code>
+      {retry !== undefined && docId !== null && (
+        <button
+          type="button"
+          data-testid="doc-actionable-retry"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void runExport({ projectId, docId, version: retry.version, format: retry.format })
+              .finally(() => setBusy(false));
+          }}
+          className="self-start rounded-lg px-2.5 py-1 text-xs font-medium disabled:opacity-40"
+          style={{ background: S.accent, color: '#0d1117', border: 'none', cursor: 'pointer' }}
+        >
+          {busy ? 'Exporting…' : `Export ${retry.format.toUpperCase()} again`}
+        </button>
+      )}
+    </div>
+  );
 }
 
 /**

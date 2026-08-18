@@ -150,6 +150,22 @@ export class BridgeUnavailableError extends Error {
   }
 }
 
+/**
+ * A 4xx the service answered with a NAMED fix. §4.4's lazy dependency is the case this
+ * exists for: a PPTX export on a box without python-pptx is a clean 400 carrying its
+ * install command — never a crash, and never the install gate that blocks ordinary
+ * documents. `hint` is carried verbatim so the UI renders an *actionable* message rather
+ * than a bare failure (§3.3), exactly as `BridgeUnavailableError` does for the 503.
+ */
+export class ServiceHintError extends Error {
+  readonly hint: string;
+  constructor(message: string, hint: string) {
+    super(message);
+    this.name = 'ServiceHintError';
+    this.hint = hint;
+  }
+}
+
 // ── URL resolution ──────────────────────────────────────────────────────────
 
 /** The proxy mount for one project: `<apiBase>/projects/:projectId/interactive`. */
@@ -197,6 +213,10 @@ async function iFetch<T>(url: string, init?: RequestInit): Promise<T> {
     const raw = body?.error ?? body?.message ?? text;
     const msg = (typeof raw === 'string' ? raw : JSON.stringify(raw))
       || res.statusText || String(res.status);
+    // A refusal that NAMED its fix keeps that name typed all the way to the surface.
+    if (typeof body?.hint === 'string' && body.hint.trim() !== '') {
+      throw new ServiceHintError(`API ${res.status}: ${msg}`, body.hint.trim());
+    }
     throw new Error(`API ${res.status}: ${msg}`);
   }
   return res.json() as Promise<T>;

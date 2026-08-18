@@ -12,6 +12,7 @@
 
 import { create } from 'zustand';
 import { isFiller } from './narration.js';
+import type { ExportFormat } from '../api/interactive.js';
 import type { CoreEvent } from '../api/types.js';
 
 // ── Transcript ───────────────────────────────────────────────────────────────
@@ -23,6 +24,9 @@ import type { CoreEvent } from '../api/types.js';
  */
 export interface FeedbackItem { wid: string; text: string }
 
+/** What a failed export offers to run again — the same format, at the same version. */
+export interface ExportRetry { format: ExportFormat; version: number }
+
 export type DocMsg =
   // `items` is set only for a submitted feedback batch: ONE message, N targets (§4.3 —
   // sending each comment separately would produce N versions and N runs). `notRecorded`
@@ -31,7 +35,12 @@ export type DocMsg =
   | { kind: 'user';      id: string; text: string; version?: number;
       items?: FeedbackItem[]; notRecorded?: boolean }
   | { kind: 'narration'; id: string; text: string }
-  | { kind: 'agent';     id: string; author: string; text: string; href?: string }
+  // `href` + `file` make an agent message DOWNLOADABLE (§4.4): an export is an ordinary
+  // message from the service, carrying its artifact — never a toast, never a second origin.
+  | { kind: 'agent';     id: string; author: string; text: string; href?: string; file?: string }
+  // §3.3's actionable kind: what happened, the fix NAMED verbatim, and — where the action
+  // repeats — what to retry. An error with no next action is banned, so `hint` is required.
+  | { kind: 'actionable'; id: string; text: string; hint: string; retry?: ExportRetry }
   | { kind: 'verdict';   id: string; author: string; text: string }
   | { kind: 'gate';      id: string; requestId: string; question: string; options: string[] }
   | { kind: 'divider';   id: string; version: number };
@@ -109,6 +118,17 @@ interface DocThreadStore {
   markNotRecorded: (key: string, id: string, notRecorded: boolean) => void;
   /** Append a client-authored informative line (§3.3) — an action the user took. */
   addNarration: (key: string, text: string) => void;
+  /**
+   * Append a service-authored agent message, optionally carrying a downloadable artifact.
+   * The export wire (§4.4, slice 15) adds the finished export from the HTTP response it
+   * already has, so the download is offered the moment it exists rather than whenever the
+   * bus echo arrives. `ingest`'s EXPORTED handler deduplicates on `href`, so the echo that
+   * follows never doubles the entry.
+   */
+  addAgentMsg: (key: string, author: string, text: string,
+                artifact?: { href: string; file?: string }) => void;
+  /** Append an §3.3 ACTIONABLE line — a failure that names its fix, and what to retry. */
+  addActionable: (key: string, text: string, hint: string, retry?: ExportRetry) => void;
   /** The version divider a fork+inject continuation renders behind (§7.10). */
   addDivider: (key: string, version: number) => void;
   setGenState: (key: string, state: GenState) => void;
@@ -190,15 +210,20 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
 
       // An export is a completed artifact, so it lands IN the thread with its download
       // (§4.4's merged-UI change — studio's `downloadRunEvidence` pattern), not a toast.
+      // ExportMenu adds the message immediately from the HTTP response; this WS echo
+      // deduplicates on `href` so the same download never appears twice.
       if (type === EXPORTED) {
         const format = pick(payload, 'format') ?? 'file';
         const file = pick(payload, 'file') ?? format;
         const href = pick(payload, 'download');
+        if (href !== null && (messages[key] ?? []).some(
+          (m) => m.kind === 'agent' && m.href === href,
+        )) return s;
         return {
           messages: append(messages, key, {
             kind: 'agent', id: nextMsgId(), author: 'export',
             text: `${format.toUpperCase()} export ready — ${file}`,
-            ...(href === null ? {} : { href }),
+            ...(href === null ? {} : { href, file }),
           }),
         };
       }
@@ -252,6 +277,23 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
 
   addNarration: (key, text) =>
     set((s) => ({ messages: append(s.messages, key, { kind: 'narration', id: nextMsgId(), text }) })),
+
+  addAgentMsg: (key, author, text, artifact) =>
+    set((s) => ({
+      messages: append(s.messages, key, {
+        kind: 'agent', id: nextMsgId(), author, text,
+        ...(artifact === undefined ? {} : { href: artifact.href }),
+        ...(artifact?.file === undefined ? {} : { file: artifact.file }),
+      }),
+    })),
+
+  addActionable: (key, text, hint, retry) =>
+    set((s) => ({
+      messages: append(s.messages, key, {
+        kind: 'actionable', id: nextMsgId(), text, hint,
+        ...(retry === undefined ? {} : { retry }),
+      }),
+    })),
 
   addDivider: (key, version) =>
     set((s) => ({ messages: append(s.messages, key, { kind: 'divider', id: nextMsgId(), version }) })),

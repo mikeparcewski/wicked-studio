@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { postFork } from '../api/interactive.js';
 import type { ForkResult, VersionEntry, VersionManifest } from '../api/interactive.js';
 import { versionPath, type Navigate } from '../hooks/useRoute.js';
+import { ExportMenu } from './ExportMenu.js';
 import { scrollThreadToMessage } from './threadAnchor.js';
 
 // The rewind / compare / fork surface (DES-MERGE-001 §4.2, §6.3 slice 9). The version
@@ -111,9 +112,13 @@ export function VersionStrip({
       data-testid="version-strip"
       style={{
         alignItems: 'stretch', background: S.bar, borderTop: `1px solid ${S.border}`,
-        display: 'flex', flexShrink: 0, gap: '8px', overflowX: 'auto', padding: '10px 12px',
+        display: 'flex', flexShrink: 0, gap: '8px', padding: '10px 12px',
       }}
     >
+      {/* The versions scroll; the export control does NOT — a doc with 20 versions must
+          not push its own export off the right edge of the surface that addresses it. */}
+      <div style={{ alignItems: 'stretch', display: 'flex', flex: 1, gap: '8px',
+                    minWidth: 0, overflowX: 'auto' }}>
       <span style={{
         alignSelf: 'center', color: S.faint, flexShrink: 0, fontSize: '10px', fontWeight: 600,
         letterSpacing: '0.06em', paddingRight: '2px', textTransform: 'uppercase',
@@ -203,6 +208,12 @@ export function VersionStrip({
           Fork failed: {error} — the document is unchanged; try again.
         </span>
       )}
+      </div>
+
+      {/* §4.4: export is PER-VERSION, so it belongs to the surface that owns which version
+          is addressed. The selection is the subject — exporting "the document" would be
+          exporting whichever version happened to be head when the button was pressed. */}
+      <ExportMenu projectId={projectId} docId={docId} version={selected} />
     </div>
   );
 }
