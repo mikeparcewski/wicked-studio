@@ -145,7 +145,10 @@ export function useRoute(): Route & {
   const navigate = useCallback<Navigate>((path, opts) => {
     if (opts?.replace) history.replaceState(null, '', path);
     else history.pushState(null, '', path);
-    setPathname(path);
+    // A path may carry a hash (the board's gate deep-link ends `#gate`, §6.2 slice 7)
+    // or a query. The parse below is pathname-only, so keep the route state that way —
+    // otherwise `#gate` would ride along as part of the artifact id.
+    setPathname(new URL(path, window.location.origin).pathname);
   }, []);
 
   const panelPath = useCallback((p: Panel) => (p === 'home' ? '/' : `/${p}`), []);

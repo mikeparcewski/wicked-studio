@@ -395,8 +395,11 @@ export function App(): React.ReactElement {
         <RightPanel view={selected} />
       )}
 
-      {/* Gate toasts — always mounted, renders above everything; scoped to the current run */}
-      <GateNotifications onSelect={selectRun} runId={runId} />
+      {/* Gate toasts — renders above everything; scoped to the current run. NOT on the
+          orchestrator board: there every waiting gate is already an answerable chip on
+          its project's card, sorted to the front (§1.4, slice 7), and the unscoped stack
+          would both duplicate those chips and physically cover the cards holding them. */}
+      {panel !== 'home' && <GateNotifications onSelect={selectRun} runId={runId} />}
 
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (

@@ -4,6 +4,7 @@ import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import type { Attention, BoardProject } from '../hooks/useBoardModel.js';
 import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore } from '../store/runtime.js';
+import { GateChip } from './GateChip.js';
 import { STATUS_STYLE } from './RunCard.js';
 
 /**
@@ -251,27 +252,33 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
               const phase = units[session.unit_ix]?.stage ?? units[units.length - 1]?.stage ?? 'planning';
               const waiting = session.status === 'awaiting_human';
               return (
-                <a
-                  key={session.id}
-                  {...link(modePath(project.id, 'build', session.id))}
-                  data-testid="run-chip"
-                  data-run-id={session.id}
-                  data-status={session.status}
-                  style={{
-                    ...CSS.chip,
-                    border: `1px solid ${waiting ? 'rgba(255,218,25,0.3)' : S.border}`,
-                    background: waiting ? 'rgba(255,218,25,0.1)' : 'transparent',
-                  }}
-                >
-                  <span style={{ color: style?.color ?? S.faint }}>{phase}</span>
-                  {waiting && <span style={{ color: S.accent, fontWeight: 700 }}>gate</span>}
-                  {/* Elapsed exists only where the wire carries a timestamp: `AgentSession`
-                      has no `started_at`, so a gate's daemon-cached `receivedAt` is the one
-                      honest clock on this surface. */}
-                  <span style={{ marginLeft: 'auto' }}>
-                    {waiting ? (gate ? `waiting ${ago(gate.receivedAt)}` : 'needs you') : style?.label ?? session.status}
-                  </span>
-                </a>
+                // A waiting gate is ANSWERABLE, not a badge (§1.4) — so the row is a row:
+                // the run link, and beside it a chip carrying its own controls. Nesting
+                // buttons inside the link would be neither valid nor operable.
+                <div key={session.id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <a
+                    {...link(modePath(project.id, 'build', session.id))}
+                    data-testid="run-chip"
+                    data-run-id={session.id}
+                    data-status={session.status}
+                    style={{
+                      ...CSS.chip, flex: 1, minWidth: 0, overflow: 'hidden',
+                      border: `1px solid ${waiting ? 'rgba(255,218,25,0.3)' : S.border}`,
+                      background: waiting ? 'rgba(255,218,25,0.1)' : 'transparent',
+                    }}
+                  >
+                    <span style={{ color: style?.color ?? S.faint }}>{phase}</span>
+                    {/* Elapsed exists only where the wire carries a timestamp: `AgentSession`
+                        has no `started_at`, so a gate's daemon-cached `receivedAt` is the one
+                        honest clock on this surface. */}
+                    <span style={{ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {waiting ? (gate ? `waiting ${ago(gate.receivedAt)}` : 'needs you') : style?.label ?? session.status}
+                    </span>
+                  </a>
+                  {waiting && (
+                    <GateChip runId={session.id} projectId={project.id} gate={gate} navigate={navigate} />
+                  )}
+                </div>
               );
             })}
             {runs.length > MAX_CHIPS && (

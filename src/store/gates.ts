@@ -15,6 +15,48 @@ export interface OpenGate {
   /** From the daemon cache on late join; live events default to `open`. */
   lifecycle: string;
   receivedAt: number;
+  /**
+   * The answers the gate's payload ENUMERATES, when it names any.
+   *
+   * `undefined` = the payload names none, i.e. the plain workflow gate, whose
+   * answers are the two the daemon's `POST /runs/:id/gate` always accepts;
+   * `null` = the payload demands free text (the `options: string[] | null`
+   * vocabulary `ElicitationInfo` already uses on this wire).
+   */
+  choices?: string[] | null;
+}
+
+/**
+ * The answer shape a gate payload names, read defensively off an untyped bag.
+ *
+ * Crew's gate payload is prompt-only today, so this reads `undefined` for every
+ * gate the daemon currently sends — deliberately. The prompt TEXT is never
+ * parsed: a heuristic over prose would sooner or later call a real workflow gate
+ * complex because its explanation happened to list three things, and §7.11's
+ * escape hatch is an additive payload field, not a better regex.
+ */
+export function choicesOf(bag: Record<string, unknown>): string[] | null | undefined {
+  for (const key of ['choices', 'options']) {
+    const value = bag[key];
+    if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
+    if (value === null) return null;
+  }
+  return bag.freeText === true ? null : undefined;
+}
+
+/**
+ * §7.11's simple-vs-complex heuristic — client-side, testable, spelled once: a
+ * gate is SIMPLE iff its payload offers ≤2 choices and requires no free text.
+ * Everything else is complex and belongs in the thread, where the full gate card
+ * (steer text, coverage stats, the why-this-fired footnote) already lives.
+ *
+ * No cached gate (`undefined`, the daemon-restarted case of §3.3) is simple: the
+ * prompt is what was lost, not the two answers the endpoint still accepts.
+ */
+export function isSimpleGate(gate: OpenGate | undefined): boolean {
+  if (gate === undefined) return true;
+  if (gate.choices === null) return false;
+  return (gate.choices ?? ['approve', 'reject']).length <= 2;
 }
 
 interface GateStore {
@@ -50,6 +92,7 @@ export const useGateStore = create<GateStore>((set) => ({
       switch (event.type) {
         case 'awaitingHuman': {
           if (typeof event.ord === 'number' && typeof event.prompt === 'string') {
+            const choices = choicesOf(event as unknown as Record<string, unknown>);
             return {
               gates: {
                 ...s.gates,
@@ -59,6 +102,8 @@ export const useGateStore = create<GateStore>((set) => ({
                   prompt: event.prompt,
                   lifecycle: 'open',
                   receivedAt: Date.now(),
+                  // Omitted rather than set to `undefined`: `exactOptionalPropertyTypes`.
+                  ...(choices !== undefined ? { choices } : {}),
                 },
               },
             };
