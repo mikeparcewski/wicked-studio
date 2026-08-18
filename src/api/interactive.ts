@@ -88,6 +88,9 @@ export interface CreateDocBody {
   /** Crew project binding. Registration is the authority: a doc that cannot be
    *  filed is a loud error with no doc created (DES-PROJECT-001 §2.3). */
   project?: string;
+  /** The thread message this generation came from (§7.6). The bridge writes it into
+   *  the version's `meta.sourceMessageId` at commit; the client only supplies it. */
+  source_message_id?: string;
 }
 
 export interface CreateDocResult {
@@ -202,9 +205,22 @@ export function createDoc(projectId: string, body: CreateDocBody): Promise<Creat
   return iFetch<CreateDocResult>(`${interactiveBase(projectId)}/api/docs`, jsonPost(body));
 }
 
-/** `POST /d/:docId/api/fork` — branch a new version off `version`. */
-export function postFork(projectId: string, docId: string, version: number): Promise<ForkResult> {
-  return iFetch<ForkResult>(`${docBase(projectId, docId)}/api/fork`, jsonPost({ from: version }));
+/**
+ * `POST /d/:docId/api/fork` — branch a new version off `version`. `sourceMessageId`
+ * (§7.6) is the thread message the branch came from, carried for the manifest's
+ * `meta`; it is omitted entirely when the fork had no message behind it (the strip's
+ * own Fork button), rather than sent as null.
+ */
+export function postFork(
+  projectId: string,
+  docId: string,
+  version: number,
+  sourceMessageId?: string,
+): Promise<ForkResult> {
+  return iFetch<ForkResult>(
+    `${docBase(projectId, docId)}/api/fork`,
+    jsonPost({ from: version, ...(sourceMessageId ? { source_message_id: sourceMessageId } : {}) }),
+  );
 }
 
 /** `POST /d/:docId/api/export` — renders the artifact and returns its download URL. */
