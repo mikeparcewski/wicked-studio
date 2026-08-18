@@ -38,9 +38,9 @@ function stubFetch(routes: Record<string, Reply>): string[] {
   const seen: string[] = [];
   vi.stubGlobal('fetch', vi.fn((url: string) => {
     seen.push(url);
-    const key = Object.keys(routes).find((k) => url.includes(k));
-    if (key === undefined) return Promise.reject(new Error(`unrouted fetch: ${url}`));
-    const { status = 200, body } = routes[key];
+    const hit = Object.entries(routes).find(([k]) => url.includes(k));
+    if (hit === undefined) return Promise.reject(new Error(`unrouted fetch: ${url}`));
+    const { status = 200, body } = hit[1];
     return Promise.resolve({
       ok: status >= 200 && status < 300,
       status,
@@ -206,7 +206,7 @@ describe('DocumentCanvas — the picker (§6.3: no :docId in the route)', () => 
     render(<DocumentCanvas projectId={PROJECT} docId={null} navigate={navigate} />);
 
     await screen.findByTestId('doc-picker');
-    await userEvent.click(screen.getAllByTestId('doc-picker-row')[0]);
+    await userEvent.click(screen.getAllByTestId('doc-picker-row')[0]!);
     expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/launch-deck`);
   });
 

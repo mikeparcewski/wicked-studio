@@ -41,6 +41,11 @@ What "independent" means here, and what this script proves end-to-end:
      (§7.11) is approved inline and the run advances on the same page with no
      navigation, while a COMPLEX one deep-links to the thread with the gate message
      scrolled into view and focused
+ 11. (DES-MERGE-001 slice 8) Document mode renders the canvas: a seeded doc frames
+     with a non-empty contentDocument, the frame carries the §5.5 sandbox, its
+     request shares the PAGE's origin, the picker orders most-recent-first and
+     navigates, and a bridge_unavailable 503 shows its hint verbatim. This one
+     section runs against a SECOND, same-origin build (see §12 in the body).
 
 The daemon is the ONE thing this repo cannot supply. Point CREW_CLI at a built
 crew CLI entry (`.../packages/crew/dist/cli/index.js`); it defaults to the sibling
@@ -53,12 +58,14 @@ studio itself unless SKIP_STUDIO_BUILD=1 (in which case dist/ must already be
 baked for CREW_PORT).
 
 Env knobs: CREW_CLI, CREW_PORT (default 7901), STUDIO_PORT (default 4310),
-SKIP_STUDIO_BUILD.
+DOC_PORT (default 4320, the same-origin rig for §10), SKIP_STUDIO_BUILD.
 
 Prints a JSON report to stdout (exit 0/1); screenshots land in e2e/shots/.
 Operator-run smoke — though it spends no tokens (stub engine, no real CLI seats).
 """
 
+import base64
+import hashlib
 import json
 import os
 import re
@@ -78,6 +85,7 @@ REPO = Path(__file__).resolve().parent.parent
 SHOTS = REPO / "e2e" / "shots"
 CREW_PORT = int(os.environ.get("CREW_PORT", "7901"))
 STUDIO_PORT = int(os.environ.get("STUDIO_PORT", "4310"))
+DOC_PORT = int(os.environ.get("DOC_PORT", "4320"))
 CREW_CLI = Path(
     os.environ.get(
         "CREW_CLI",
@@ -86,6 +94,7 @@ CREW_CLI = Path(
 )
 CREW_ORIGIN = f"http://127.0.0.1:{CREW_PORT}"
 STUDIO_ORIGIN = f"http://127.0.0.1:{STUDIO_PORT}"
+DOC_ORIGIN = f"http://127.0.0.1:{DOC_PORT}"
 API = f"{CREW_ORIGIN}/api/v1"
 NPM = "npm.cmd" if os.name == "nt" else "npm"
 
@@ -304,8 +313,9 @@ try:
         page = browser.new_page()
 
         # Land on a mode whose surface makes no API calls, so this section asserts the
-        # SHELL rather than whatever a live surface happens to be doing.
-        page.goto(f"{STUDIO_ORIGIN}/p/{project_id}/document", wait_until="networkidle")
+        # SHELL rather than whatever a live surface happens to be doing. Document became
+        # a live surface in slice 8 (§10 below owns it), so Video is that mode now.
+        page.goto(f"{STUDIO_ORIGIN}/p/{project_id}/video", wait_until="networkidle")
         switcher = page.locator('[data-testid="mode-switcher"]')
         switcher.wait_for(timeout=30000)
         tabs = switcher.locator('[role="tab"]')
@@ -321,14 +331,14 @@ try:
         )
         # The deep-linked unavailable mode still states what it is and how to enable it
         # (§3.3: no bare spinner, every state names a subject).
-        placeholder_ok = page.locator('[data-testid="mode-enabling-action-document"]').is_visible()
+        placeholder_ok = page.locator('[data-testid="mode-enabling-action-video"]').is_visible()
         page.screenshot(path=str(SHOTS / "slice4-mode-switcher.png"), full_page=True)
 
         # AC: clicking Build changes the URL, and the back button returns.
         page.locator('[data-testid="mode-tab-build"]').click()
         build_url_ok = wait_for_path(page, f"/p/{project_id}/build")
         page.go_back()
-        back_ok = wait_for_path(page, f"/p/{project_id}/document")
+        back_ok = wait_for_path(page, f"/p/{project_id}/video")
 
         # AC: a legacy bookmark lands on the new shape with the run open.
         page.goto(f"{STUDIO_ORIGIN}/runs/{run_id}", wait_until="networkidle")
@@ -821,6 +831,246 @@ try:
     }
     if not report["steps"]["gate_chips"]["ok"]:
         fail("gate_chips_verdict", "slice-7 gate-chip assertions did not all hold — see gate_chips")
+
+    # ── 12. Slice 8 (DES-MERGE-001 §6.3): the Document-mode canvas ────────────
+    # This slice's AC is an ORIGIN claim — "the frame's request URL shares the page's
+    # origin" — and the cross-origin rig above cannot express it: that dist has
+    # VITE_API_HOST baked, so `apiBase()` points at the daemon (:7901) while the page is
+    # served from :4310. So this section stands up the PRODUCTION posture §5.3 describes:
+    # a second build with NO VITE_API_HOST (so `apiBase()` derives from window.location)
+    # served from ONE origin that also answers the project-scoped interactive paths with a
+    # FAKE BRIDGE — fixture docs, fixture manifests, a fixture rendered document, and a
+    # `bridge_unavailable` project — and forwards every other /api/v1 call to the REAL
+    # daemon. Nothing about the merged crew proxy is stubbed away except the bridge itself.
+    same_origin_dist = REPO / "dist-sameorigin"
+    if os.environ.get("SKIP_STUDIO_BUILD") == "1":
+        if not (same_origin_dist / "index.html").is_file():
+            fail("doc_canvas_build",
+                 f"SKIP_STUDIO_BUILD=1 but {same_origin_dist}/index.html is missing — "
+                 "build it with `npx vite build --outDir dist-sameorigin` (no VITE_API_HOST)")
+    else:
+        env = dict(os.environ, VITE_API_HOST="")  # empty ⇒ the resolver falls back to window.location
+        r = subprocess.run(
+            [NPM, "exec", "--", "vite", "build", "--outDir", "dist-sameorigin", "--emptyOutDir"],
+            cwd=REPO, env=env, capture_output=True, text=True, timeout=600,
+        )
+        if r.returncode != 0:
+            fail("doc_canvas_build", f"same-origin vite build failed:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}")
+
+    doc_project = new_project(f"doc-canvas-{tag}")
+    down_project = new_project(f"doc-bridge-down-{tag}")
+
+    # Deliberately NOT in recency order — the picker must sort, not echo (§6.3).
+    FIXTURE_DOCS = [
+        {"name": "stale-brief", "kind": "doc", "head": 1, "versions": 1, "updated_at": "2026-08-10T08:00:00Z"},
+        {"name": "launch-deck", "kind": "doc", "head": 2, "versions": 2, "updated_at": "2026-08-18T11:30:00Z"},
+        {"name": "q3-report", "kind": "doc", "head": 1, "versions": 1, "updated_at": "2026-08-17T16:00:00Z"},
+    ]
+    BRIDGE_DOWN_HINT = ("run `npx wicked-interactive serve` in this project's root — "
+                        "the bridge could not be started")
+    # `data-wid` anchors are what core/instrument.js injects (§5.5) — the fixture carries
+    # them so slice 11+12 inherits a document shaped like the real thing.
+    DOC_HTML = (
+        "<!doctype html><html><head><meta charset='utf-8'><title>__DOC__ v__V__</title></head>"
+        "<body style='font-family:system-ui;padding:24px;background:#fff;color:#111'>"
+        "<h1 data-wid='h1'>__DOC__ — version __V__</h1>"
+        "<p data-wid='p1'>Seeded fixture document, served by the fake interactive bridge.</p>"
+        "<script>document.body.setAttribute('data-scripts-ran','1');</script>"
+        "</body></html>"
+    )
+    INTERACTIVE_RE = re.compile(r"^/api/v1/projects/([^/]+)/interactive(/.*)$")
+    VERSIONS_RE = re.compile(r"^/d/([^/]+)/api/versions$")
+    RENDER_RE = re.compile(r"^/d/([^/]+)/doc/(\d+)$")
+    WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+    class DocFixtureHandler(SimpleHTTPRequestHandler):
+        """SPA + fake bridge + daemon passthrough, all on ONE origin."""
+
+        def log_message(self, *_args):  # keep stdout JSON-clean
+            pass
+
+        def _send(self, status: int, body: bytes, ctype: str) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _json(self, status: int, payload) -> None:
+            self._send(status, json.dumps(payload).encode(), "application/json")
+
+        def _ws_idle(self) -> None:
+            """Accept the SPA's /ws upgrade and hold it open. This section asserts that
+            the canvas produces NO console errors, and a refused handshake is one."""
+            key = self.headers.get("Sec-WebSocket-Key", "")
+            accept = base64.b64encode(hashlib.sha1((key + WS_GUID).encode()).digest()).decode()
+            self.wfile.write(
+                ("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                 f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n").encode())
+            self.wfile.flush()
+            try:
+                while self.rfile.read(1):
+                    pass
+            except OSError:
+                pass
+            self.close_connection = True
+
+        def _proxy(self) -> None:
+            """Everything the fake bridge does not own is the REAL daemon's."""
+            length = int(self.headers.get("Content-Length") or 0)
+            req = urllib.request.Request(
+                CREW_ORIGIN + self.path, data=self.rfile.read(length) if length else None,
+                method=self.command)
+            if self.headers.get("Content-Type"):
+                req.add_header("Content-Type", self.headers["Content-Type"])
+            try:
+                with urllib.request.urlopen(req, timeout=30) as res:
+                    self._send(res.status, res.read(),
+                               res.headers.get("Content-Type", "application/json"))
+            except urllib.error.HTTPError as e:
+                self._send(e.code, e.read(), e.headers.get("Content-Type", "application/json"))
+            except Exception as e:  # noqa: BLE001 — surface it as a body, not a traceback
+                self._json(502, {"error": str(e)})
+
+        def _bridge(self, project: str, rest: str) -> bool:
+            # §7.12: a project whose bridge cannot start answers 503 with a NAMED command.
+            if project == down_project:
+                self._json(503, {"code": "bridge_unavailable", "hint": BRIDGE_DOWN_HINT})
+                return True
+            if rest == "/api/docs":
+                self._json(200, FIXTURE_DOCS)
+                return True
+            m = VERSIONS_RE.match(rest)
+            if m:
+                name = urllib.parse.unquote(m.group(1))
+                head = next((d["head"] for d in FIXTURE_DOCS if d["name"] == name), None)
+                if head is None:
+                    self._json(404, {"error": f"no such doc: {name}"})
+                else:
+                    self._json(200, {"head": head, "kind": "doc", "versions": [
+                        {"version": v, "parent": v - 1 or None, "feedback_file": None,
+                         "html_file": f"v{v}.html", "created_at": "2026-08-18T11:30:00Z"}
+                        for v in range(1, head + 1)]})
+                return True
+            m = RENDER_RE.match(rest)
+            if m:
+                html = (DOC_HTML.replace("__DOC__", urllib.parse.unquote(m.group(1)))
+                                .replace("__V__", m.group(2)))
+                self._send(200, html.encode(), "text/html; charset=utf-8")
+                return True
+            return False
+
+        def do_GET(self):  # noqa: N802 (stdlib naming)
+            if self.headers.get("Upgrade", "").lower() == "websocket":
+                return self._ws_idle()
+            path = urllib.parse.urlparse(self.path).path
+            m = INTERACTIVE_RE.match(path)
+            if m and self._bridge(urllib.parse.unquote(m.group(1)), m.group(2)):
+                return None
+            if path.startswith("/api/v1/"):
+                return self._proxy()
+            if not Path(self.translate_path(self.path)).is_file():
+                self.path = "/index.html"  # client-side routes resolve to the shell
+            return super().do_GET()
+
+        def do_POST(self):  # noqa: N802
+            return self._proxy()
+
+    docd = ThreadingHTTPServer(
+        ("127.0.0.1", DOC_PORT), partial(DocFixtureHandler, directory=str(same_origin_dist)))
+    threading.Thread(target=docd.serve_forever, daemon=True).start()
+
+    doc_console: list[str] = []
+    doc_requests: list[str] = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        # The fonts in index.html are a third-party CDN; a sandboxed/offline runner's
+        # failure to reach them is not this slice's surface. Everything else counts.
+        page.on("console", lambda m: doc_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text else None)
+        page.on("request", lambda r: doc_requests.append(r.url))
+
+        # ── AC: the picker (no :docId) lists docs MOST-RECENT FIRST and navigates ──
+        page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document", wait_until="networkidle")
+        rows = page.locator('[data-testid="doc-picker-row"]')
+        rows.first.wait_for(timeout=30000)
+        picker_order = [rows.nth(i).get_attribute("data-doc-id") for i in range(rows.count())]
+        page.screenshot(path=str(SHOTS / "slice8-doc-picker.png"), full_page=True)
+        rows.first.click()
+        picker_nav_ok = wait_for_path(page, f"/p/{doc_project}/document/launch-deck")
+
+        # ── AC: the seeded doc renders, with a non-empty contentDocument ───────────
+        frame = page.locator('[data-testid="doc-canvas"]')
+        frame.wait_for(timeout=30000)
+        page.frame_locator('[data-testid="doc-canvas"]').locator("[data-wid='h1']").wait_for(timeout=30000)
+        sandbox = frame.get_attribute("sandbox")
+        frame_src = frame.get_attribute("src")
+        content_text = frame.evaluate(
+            "el => (el.contentDocument && el.contentDocument.body.innerText || '').trim()")
+        scripts_ran = frame.evaluate(
+            "el => !!el.contentDocument && el.contentDocument.body.dataset.scriptsRan === '1'")
+        page.screenshot(path=str(SHOTS / "slice8-doc-canvas.png"), full_page=True)
+
+        # ── AC: the frame's REQUEST url shares the page's origin ───────────────────
+        page_origin = "{u.scheme}://{u.netloc}".format(u=urllib.parse.urlparse(page.url))
+        rendered = [u for u in doc_requests if "/interactive/d/" in u and "/doc/" in u]
+        frame_request_origins = sorted({
+            "{u.scheme}://{u.netloc}".format(u=urllib.parse.urlparse(u)) for u in rendered})
+
+        # AC: "no console errors" is a claim about the WORKING canvas — snapshot it before
+        # the deliberate 503 below, whose failed request chromium logs as a console error.
+        canvas_console = list(doc_console)
+
+        # ── AC (§7.12): a bridge that cannot start shows its hint VERBATIM ─────────
+        page.goto(f"{DOC_ORIGIN}/p/{down_project}/document/launch-deck", wait_until="networkidle")
+        hint_el = page.locator('[data-testid="doc-bridge-hint"]')
+        hint_el.wait_for(timeout=30000)
+        hint_text = hint_el.inner_text()
+        retry_visible = page.locator('[data-testid="doc-canvas-retry"]').is_visible()
+        no_frame_on_failure = page.locator('[data-testid="doc-canvas"]').count() == 0
+        page.screenshot(path=str(SHOTS / "slice8-bridge-unavailable.png"), full_page=True)
+        browser.close()
+
+    docd.shutdown()
+
+    report["steps"]["doc_canvas"] = {
+        "ok": all([
+            picker_order == ["launch-deck", "q3-report", "stale-brief"],
+            picker_nav_ok,
+            sandbox == "allow-scripts allow-same-origin",
+            len(content_text) > 0,
+            scripts_ran,
+            frame_src is not None and frame_src.endswith("/doc/2"),
+            frame_request_origins == [page_origin],
+            BRIDGE_DOWN_HINT in hint_text,
+            retry_visible, no_frame_on_failure,
+            not canvas_console,
+        ]),
+        "same_origin_rig": {"origin": DOC_ORIGIN, "dist": str(same_origin_dist),
+                            "vite_api_host": "", "fake_bridge": True},
+        "project_id": doc_project,
+        "picker_order_most_recent_first": picker_order,
+        "picker_navigated_to_doc": picker_nav_ok,
+        "frame_src": frame_src,
+        "frame_sandbox": sandbox,
+        "frame_content_document_text": content_text[:120],
+        "frame_scripts_executed": scripts_ran,
+        "page_origin": page_origin,
+        "frame_request_origins": frame_request_origins,
+        "frame_requests": rendered[:5],
+        "bridge_unavailable_hint_verbatim": BRIDGE_DOWN_HINT in hint_text,
+        "bridge_unavailable_hint_rendered": hint_text,
+        "bridge_unavailable_offers_retry": retry_visible,
+        "bridge_unavailable_shows_no_frame": no_frame_on_failure,
+        "console_errors_rendering_canvas": canvas_console[:10],
+        "console_errors_including_seeded_503": doc_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice8-doc-picker.png", "slice8-doc-canvas.png",
+                         "slice8-bridge-unavailable.png")],
+    }
+    if not report["steps"]["doc_canvas"]["ok"]:
+        fail("doc_canvas_verdict", "slice-8 document-canvas assertions did not all hold — see doc_canvas")
 
     report["ok"] = True
     print(json.dumps(report, indent=2))
