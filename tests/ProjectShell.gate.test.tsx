@@ -90,8 +90,11 @@ describe('a missing HARD dependency (§5.6)', () => {
     for (const mode of ['document', 'video']) {
       const tab = screen.getByTestId(`mode-tab-${mode}`);
       expect(tab).toHaveAttribute('data-unavailable', 'true');
-      expect(tab).toHaveAttribute('aria-disabled', 'true');
       expect(tab.getAttribute('title')).toContain(GARDEN_HINT);
+      // Unavailable, never inert: the gate it routes to is where the escape hatch is,
+      // so an `aria-disabled` here would lock assistive-tech users out of it (§4.9).
+      expect(tab).not.toHaveAttribute('aria-disabled');
+      expect(tab).toBeEnabled();
     }
     for (const mode of ['chat', 'build']) {
       expect(screen.getByTestId(`mode-tab-${mode}`)).not.toHaveAttribute('data-unavailable');

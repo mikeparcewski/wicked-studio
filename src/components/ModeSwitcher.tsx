@@ -53,9 +53,13 @@ interface Props {
   /**
    * Per mode, the ONE action that would enable it — from the merged readiness model
    * (slice 17). A mode with an action here reads as unavailable and states that action
-   * in its title (§1.3 rule 3); it stays clickable, because the surface it routes to is
-   * where the install command and the "Continue anyway" escape live (§4.9). Hiding it,
-   * or making it inert, would teach the user the feature does not exist.
+   * in its title (§1.3 rule 3).
+   *
+   * It stays ACTIONABLE, and deliberately carries no `aria-disabled`: the surface it
+   * routes to is where the install command and the "Continue anyway" escape live (§4.9,
+   * interactive #159), so the mode is never truly un-enterable and marking it disabled
+   * would be a lie that costs assistive-tech users the escape hatch. Unavailable here
+   * means "greyed, and it tells you why" — never hidden, never inert (§1.3 rule 3).
    */
   unavailable?: Partial<Record<Mode, string | null>>;
 }
@@ -87,7 +91,6 @@ export function ModeSwitcher({ mode, onSelect, unavailable }: Props): React.Reac
             type="button"
             role="tab"
             aria-selected={active}
-            aria-disabled={action !== null}
             data-testid={`mode-tab-${m}`}
             data-mode={m}
             data-unavailable={action !== null ? 'true' : undefined}
