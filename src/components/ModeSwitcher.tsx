@@ -20,9 +20,9 @@ export interface ModeSpec {
  * placeholder they fed: every mode now has a real surface, and each one states its own
  * missing dependency where that dependency actually bites (a missing ffmpeg leaves the
  * storyboard standing with the install command beside the player, §4.5) rather than
- * greying out the whole verb. §1.3 rule 3 still stands for a mode that genuinely cannot
- * open — that is slice 17's preflight gate, which knows what is installed; this switcher
- * never did.
+ * greying out the whole verb. §1.3 rule 3 stands for a mode that genuinely cannot open,
+ * and slice 17's merged preflight is what finally knows: `unavailable` below is that
+ * model's word, never an ad-hoc check made here.
  */
 export const MODE_SPECS: Record<Mode, ModeSpec> = {
   chat: {
@@ -50,6 +50,18 @@ export const MODE_SPECS: Record<Mode, ModeSpec> = {
 interface Props {
   mode: Mode;
   onSelect: (mode: Mode) => void;
+  /**
+   * Per mode, the ONE action that would enable it — from the merged readiness model
+   * (slice 17). A mode with an action here reads as unavailable and states that action
+   * in its title (§1.3 rule 3).
+   *
+   * It stays ACTIONABLE, and deliberately carries no `aria-disabled`: the surface it
+   * routes to is where the install command and the "Continue anyway" escape live (§4.9,
+   * interactive #159), so the mode is never truly un-enterable and marking it disabled
+   * would be a lie that costs assistive-tech users the escape hatch. Unavailable here
+   * means "greyed, and it tells you why" — never hidden, never inert (§1.3 rule 3).
+   */
+  unavailable?: Partial<Record<Mode, string | null>>;
 }
 
 /**
@@ -58,7 +70,7 @@ interface Props {
  * Each mode is a verb on the current project, not a document type, and each is
  * peer-level: Document is deliberately NOT a tab under Build (§1.3 rule 4).
  */
-export function ModeSwitcher({ mode, onSelect }: Props): React.ReactElement {
+export function ModeSwitcher({ mode, onSelect, unavailable }: Props): React.ReactElement {
   return (
     <div
       role="tablist"
@@ -72,6 +84,7 @@ export function ModeSwitcher({ mode, onSelect }: Props): React.ReactElement {
       {MODES.map((m) => {
         const spec = MODE_SPECS[m];
         const active = m === mode;
+        const action = unavailable?.[m] ?? null;
         return (
           <button
             key={m}
@@ -80,7 +93,11 @@ export function ModeSwitcher({ mode, onSelect }: Props): React.ReactElement {
             aria-selected={active}
             data-testid={`mode-tab-${m}`}
             data-mode={m}
-            title={spec.summary}
+            data-unavailable={action !== null ? 'true' : undefined}
+            // §1.3 rule 3: a mode that cannot open states the one action that enables it —
+            // on its own line, under what the mode IS. Replacing the summary would answer
+            // "how do I turn this on" to a user who is still asking "what is this".
+            title={action !== null ? `${spec.summary}\n${spec.label} ${action}` : spec.summary}
             onClick={() => onSelect(m)}
             style={{
               background: 'transparent',
@@ -90,6 +107,7 @@ export function ModeSwitcher({ mode, onSelect }: Props): React.ReactElement {
               cursor: 'pointer',
               fontSize: '13px',
               fontWeight: active ? 700 : 500,
+              opacity: action !== null && !active ? 0.45 : 1,
               padding: '10px 14px',
             }}
           >

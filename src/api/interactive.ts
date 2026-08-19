@@ -392,6 +392,22 @@ export interface DemoRecording {
   ffmpeg_hint?: string;
 }
 
+// ── Preflight (§5.6, §4.9, slice 17) ─────────────────────────────────────────
+
+/**
+ * `GET /api/preflight` — the bridge's own dependency check, proxied like everything
+ * else (§5.6). The body is returned RAW: the service owns the dependency vocabulary
+ * (which deps exist, what installs each one), so studio reads it tolerantly in
+ * `normalizeDeps` rather than pinning a shape the service is free to extend.
+ *
+ * Rejects with `BridgeUnavailableError` when the bridge itself could not be started
+ * (the 503 of §7.12). A dependency that is merely MISSING is reported in the body —
+ * the service answered, it just answered with bad news.
+ */
+export function getPreflight(projectId: string): Promise<unknown> {
+  return iFetch<unknown>(`${interactiveBase(projectId)}/api/preflight`);
+}
+
 // ── Demo wrappers ─────────────────────────────────────────────────────────────
 
 /**

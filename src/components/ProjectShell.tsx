@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { modePath, rememberMode, type Mode, type Navigate } from '../hooks/useRoute.js';
+import { usePreflight } from '../hooks/usePreflight.js';
+import { MODES, modePath, rememberMode, type Mode, type Navigate } from '../hooks/useRoute.js';
+import { useConnectionStore } from '../store/connection.js';
 import { useProjectsStore } from '../store/projects.js';
+import {
+  enablingAction, gateForMode, useProjectReadiness, useReadinessStore,
+} from '../store/readiness.js';
+import { InstallGate } from './InstallGate.js';
 import { ModeSwitcher } from './ModeSwitcher.js';
 
 const S = {
@@ -26,6 +32,12 @@ interface Props {
  * The switcher lives OUTSIDE the surface, so switching modes re-renders the surface
  * without tearing down the shell, and each mode returns to the artifact it was last
  * showing — §1.3 rule 1, "switching modes never resets the conversation".
+ *
+ * It is also where the merged preflight runs (slice 17): once per project, whatever mode
+ * the user landed in, because the SWITCHER has to reflect readiness (§1.3 rule 3) and
+ * because the request itself is what starts a cold bridge (§5.6). What the model blocks
+ * it blocks HERE, in front of the surface — the surface never mounts, so a gated mode
+ * issues no doomed requests — and only for Document and Video.
  */
 export function ProjectShell({ projectId, mode, artifactId, navigate, children }: Props): React.ReactElement {
   const projects = useProjectsStore((s) => s.projects);
@@ -49,6 +61,20 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
 
   const name = projects.find((p) => p.id === projectId)?.name ?? projectId;
 
+  // ── The merged readiness model (§5.6, slice 17) ───────────────────────────
+  usePreflight(projectId);
+  const readiness = useProjectReadiness(projectId);
+  // Leg one of the fold: with the daemon unreachable there IS no preflight answer, so
+  // the model claims nothing and `ConnectionStatus` keeps owning that failure.
+  const crewReachable = useConnectionStore((s) => s.status === 'connected');
+  const continueAnyway = useReadinessStore((s) => s.continueAnyway);
+  const recheck = useReadinessStore((s) => s.recheck);
+
+  const blockers = gateForMode(mode, readiness, crewReachable);
+  const unavailable = Object.fromEntries(
+    MODES.map((m) => [m, enablingAction(m, readiness, crewReachable)]),
+  ) as Partial<Record<Mode, string | null>>;
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden" data-testid="project-shell" data-project-id={projectId}>
       <header
@@ -70,10 +96,19 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
         </h1>
       </header>
 
-      <ModeSwitcher mode={mode} onSelect={onSelectMode} />
+      <ModeSwitcher mode={mode} onSelect={onSelectMode} unavailable={unavailable} />
 
       <div className="flex flex-1 overflow-hidden" data-testid="mode-surface" data-mode={mode}>
-        {children}
+        {blockers.length > 0
+          ? (
+            <InstallGate
+              mode={mode}
+              blockers={blockers}
+              onContinue={() => continueAnyway(projectId)}
+              onRecheck={recheck}
+            />
+          )
+          : children}
       </div>
     </div>
   );
