@@ -91,8 +91,10 @@ export function ModeSwitcher({ mode, onSelect, unavailable }: Props): React.Reac
             data-testid={`mode-tab-${m}`}
             data-mode={m}
             data-unavailable={action !== null ? 'true' : undefined}
-            // §1.3 rule 3: a mode that cannot open states the one action that enables it.
-            title={action !== null ? `${spec.label} ${action}` : spec.summary}
+            // §1.3 rule 3: a mode that cannot open states the one action that enables it —
+            // on its own line, under what the mode IS. Replacing the summary would answer
+            // "how do I turn this on" to a user who is still asking "what is this".
+            title={action !== null ? `${spec.summary}\n${spec.label} ${action}` : spec.summary}
             onClick={() => onSelect(m)}
             style={{
               background: 'transparent',

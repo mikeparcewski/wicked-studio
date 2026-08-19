@@ -97,7 +97,15 @@ What "independent" means here, and what this script proves end-to-end:
      attaching a local folder shows it as a context chip while no
      `multipart/form-data` body leaves the page — the one request that does
      carries the PATH as JSON, because the service reads it in place (§4.9).
- 18. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
+ 18. (DES-MERGE-001 slice 17) the merged preflight / install gate on that same rig,
+     proven by the DIFFERENCE between two projects the fixture bridge answers
+     differently: with garden (HARD) absent the Document tab states the one action
+     that enables it, the gate blocks the mode with the SERVICE's install command
+     verbatim, the blocked surface issues no document requests, Chat and Build are
+     untouched, and "Continue anyway" opens the real surface and keeps it open across
+     a mode round-trip; with ONLY ffmpeg (OPTIONAL) absent there is no gate anywhere
+     and the document opens normally — degradation belongs at point-of-use (§5.6, §4.9).
+ 19. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
      ranked: in one DOM snapshot an executing card carries the breathing 2px
      `live-edge` element while a gate-waiting card carries a treatment that is
      present at the same time and different in computed pixels (wider, solid,
@@ -932,6 +940,11 @@ try:
     doc_project = new_project(f"doc-canvas-{tag}")
     down_project = new_project(f"doc-bridge-down-{tag}")
     demo_project = new_project(f"demo-video-{tag}")  # §16's subject (slice 13)
+    # Slice 17's two subjects (§5.6): one box without the HARD dependency, one missing
+    # ONLY an optional one. Same fixture bridge, different preflight answer — which is the
+    # whole claim, since studio must gate on one and not the other.
+    gate_project = new_project(f"install-gate-{tag}")
+    ffmpeg_only_project = new_project(f"ffmpeg-only-{tag}")
 
     # Deliberately NOT in recency order — the picker must sort, not echo (§6.3).
     FIXTURE_DOCS = [
@@ -1031,6 +1044,18 @@ try:
     EXPORT_RE = re.compile(r"^/d/([^/]+)/api/export$")
     DOWNLOAD_RE = re.compile(r"^/d/([^/]+)/download/(.+)$")
     PPTX_HINT = "pip install python-pptx (PPTX export needs it; HTML and PDF do not)"
+    # Slice 17 (§5.6, §4.9): `/api/preflight` is the SERVICE's dependency report — it says
+    # what is present and what installs each absence, and studio decides what that blocks.
+    # `garden` is the hard one (Document and Video author through it); ffmpeg and
+    # python-pptx are optional and bite at point-of-use, which §17 and §19 already prove.
+    GARDEN_HINT = "npm i -g wicked-garden (Document and Video author through it)"
+    PREFLIGHT_GREEN = {"deps": {"garden": {"ok": True}, "ffmpeg": {"ok": True},
+                                "python-pptx": {"ok": True}}}
+    PREFLIGHT_NO_GARDEN = {"deps": {"garden": {"ok": False, "install": GARDEN_HINT},
+                                    "ffmpeg": {"ok": True}, "python-pptx": {"ok": True}}}
+    PREFLIGHT_NO_FFMPEG = {"deps": {"garden": {"ok": True},
+                                    "ffmpeg": {"ok": False, "install": FFMPEG_HINT},
+                                    "python-pptx": {"ok": True}}}
     export_requests: list[dict] = []
     # Slice 16 (§4.6, §4.9): the theme library, the learn endpoint, and sources attach.
     # THE SSRF GUARD LIVES HERE, in the service, and nowhere else — this fixture refuses
@@ -1105,6 +1130,13 @@ try:
             # §7.12: a project whose bridge cannot start answers 503 with a NAMED command.
             if project == down_project:
                 self._json(503, {"code": "bridge_unavailable", "hint": BRIDGE_DOWN_HINT})
+                return True
+            if rest == "/api/preflight":
+                # The service reports; studio classifies and gates (slice 17). A bridge
+                # that could not start never reaches here — that is the 503 above.
+                self._json(200, PREFLIGHT_NO_GARDEN if project == gate_project
+                           else PREFLIGHT_NO_FFMPEG if project == ffmpeg_only_project
+                           else PREFLIGHT_GREEN)
                 return True
             if rest == "/api/docs":
                 # ONE registry (§4.5): the demo project's rows carry documents too, and
@@ -2503,6 +2535,159 @@ try:
         page.screenshot(path=str(SHOTS / "slice16-source-chip.png"), full_page=True)
         browser.close()
 
+    # ── 20. Slice 17 (DES-MERGE-001 §5.6, §4.9, §1.3 rule 3): the merged install gate ──
+    # Two projects, two preflight answers off the SAME fixture bridge, and the whole slice
+    # is the difference between them:
+    #
+    #   · garden absent (HARD) — the gate blocks Document, names the service's install
+    #     command VERBATIM, leaves Chat and Build untouched, and "Continue anyway" hands
+    #     the surface over (§4.9, interactive #159);
+    #   · ffmpeg absent and nothing else (OPTIONAL) — no gate at all, and Document opens
+    #     normally. A missing ffmpeg bites at point-of-use (§16 proved that), so gating
+    #     the door on it would hide three working features behind one absent one.
+    #
+    # The gated mode is also asserted to have issued NO document requests: the gate stands
+    # in FRONT of the surface, so a blocked mode does not go asking the service for work
+    # it cannot do.
+    gate_console: list[str] = []
+    gate_requests: list[str] = []
+    DOC_REQ = f"/api/v1/projects/{urllib.parse.quote(gate_project)}/interactive/api/docs"
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.on("console", lambda m: gate_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text else None)
+        page.on("request", lambda r: gate_requests.append(r.url))
+
+        # ── AC: the switcher reflects readiness — from Chat, which is NOT gated ────
+        page.goto(f"{DOC_ORIGIN}/p/{gate_project}/chat", wait_until="domcontentloaded")
+        page.locator('[data-testid="mode-switcher"]').wait_for(timeout=30000)
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
+        # The tab states the ONE action that enables it (§1.3 rule 3) — the command the
+        # SERVICE named, not studio's paraphrase of it.
+        unavailable_ok, unavailable_ms = within(
+            page,
+            """() => document.querySelector('[data-testid="mode-tab-document"]')
+                 ?.dataset.unavailable === 'true'""",
+            budget_ms=30000,
+        )
+        tab_titles = {m: page.locator(f'[data-testid="mode-tab-{m}"]').get_attribute("title") or ""
+                      for m in ("chat", "build", "document", "video")}
+        tab_unavailable = {m: page.locator(f'[data-testid="mode-tab-{m}"]').get_attribute("data-unavailable")
+                           for m in ("chat", "build", "document", "video")}
+        # …and Chat itself is open for business: the gate never touches it (§1.3).
+        chat_open = page.locator('[data-testid="mode-surface"]').get_attribute("data-mode")
+        chat_gated = page.locator('[data-testid="install-gate"]').count()
+        page.screenshot(path=str(SHOTS / "slice17-switcher-readiness.png"), full_page=True)
+
+        # ── AC: with garden missing, the gate BLOCKS Document with the named command ──
+        # Clicked, not deep-linked: an unavailable tab still routes, because the surface it
+        # routes to is where the command and the escape hatch live.
+        requests_before_gate = len(gate_requests)
+        page.click('[data-testid="mode-tab-document"]')
+        gate = page.locator('[data-testid="install-gate"]')
+        gate.wait_for(timeout=30000)
+        gate_routed = wait_for_path(page, f"/p/{gate_project}/document")
+        gate_mode = gate.get_attribute("data-mode")
+        gate_dep = page.locator('[data-testid="install-gate-dep"]').get_attribute("data-dep")
+        gate_command = page.locator('[data-testid="install-gate-command"]').inner_text()
+        gate_text = gate.inner_text()
+        # The blocked surface never mounted, so it asked the service for nothing.
+        doc_requests_while_gated = [u for u in gate_requests[requests_before_gate:] if DOC_REQ in u]
+        canvas_while_gated = page.locator('[data-testid="doc-canvas"], [data-testid="doc-picker"]').count()
+        page.screenshot(path=str(SHOTS / "slice17-gate-blocks-document.png"), full_page=True)
+
+        # ── AC: Build is reachable from behind the gate — the gate is Document/Video's ──
+        page.click('[data-testid="mode-tab-build"]')
+        build_gated = page.locator('[data-testid="install-gate"]').count()
+        page.click('[data-testid="mode-tab-document"]')
+        gate.wait_for(timeout=30000)
+
+        # ── AC: "Continue anyway" works — the surface opens, for the session ───────
+        page.click('[data-testid="install-gate-continue"]')
+        picker = page.locator('[data-testid="doc-picker"]')
+        picker.wait_for(timeout=30000)
+        continued_docs = picker.locator('[data-testid="doc-picker-row"]').count()
+        continued_gate = page.locator('[data-testid="install-gate"]').count()
+        continued_tab = page.locator('[data-testid="mode-tab-document"]').get_attribute("data-unavailable")
+        page.screenshot(path=str(SHOTS / "slice17-continue-anyway.png"), full_page=True)
+        # …and it holds across a mode round-trip: the escape is the session's, not the view's.
+        page.click('[data-testid="mode-tab-chat"]')
+        page.click('[data-testid="mode-tab-document"]')
+        picker.wait_for(timeout=30000)
+        gate_after_roundtrip = page.locator('[data-testid="install-gate"]').count()
+
+        # ── AC: with ONLY ffmpeg missing, no gate — Document opens normally ────────
+        page.goto(f"{DOC_ORIGIN}/p/{ffmpeg_only_project}/document/{STRIP_DOC}",
+                  wait_until="domcontentloaded")
+        canvas = page.locator('[data-testid="doc-canvas"]')
+        canvas.wait_for(timeout=30000)
+        ffmpeg_canvas_doc = canvas.get_attribute("data-doc-id")
+        ffmpeg_gate = page.locator('[data-testid="install-gate"]').count()
+        ffmpeg_tabs = {m: page.locator(f'[data-testid="mode-tab-{m}"]').get_attribute("data-unavailable")
+                       for m in ("document", "video")}
+        ffmpeg_titles = {m: page.locator(f'[data-testid="mode-tab-{m}"]').get_attribute("title") or ""
+                         for m in ("document", "video")}
+        page.screenshot(path=str(SHOTS / "slice17-ffmpeg-only-opens.png"), full_page=True)
+        browser.close()
+
+    report["steps"]["install_gate"] = {
+        "ok": all([
+            # The switcher reads the merged model: Document and Video state the enabling
+            # action, Chat and Build never do, and Chat stays open.
+            unavailable_ok,
+            tab_unavailable["document"] == "true", tab_unavailable["video"] == "true",
+            tab_unavailable["chat"] is None, tab_unavailable["build"] is None,
+            GARDEN_HINT in tab_titles["document"], GARDEN_HINT in tab_titles["video"],
+            GARDEN_HINT not in tab_titles["chat"], GARDEN_HINT not in tab_titles["build"],
+            chat_open == "chat", chat_gated == 0,
+            # The gate: the missing subject and the SERVICE's command, verbatim.
+            gate_routed, gate_mode == "document", gate_dep == "garden",
+            gate_command.strip() == GARDEN_HINT, GARDEN_HINT in gate_text,
+            # …in front of the surface, which therefore asked for nothing.
+            doc_requests_while_gated == [], canvas_while_gated == 0,
+            build_gated == 0,
+            # Continue anyway: the real surface, and it stays open for the session.
+            continued_gate == 0, continued_tab is None, continued_docs == len(FIXTURE_DOCS),
+            gate_after_roundtrip == 0,
+            # Only-ffmpeg-missing: no gate anywhere, and the document opens.
+            ffmpeg_gate == 0, ffmpeg_canvas_doc == STRIP_DOC,
+            ffmpeg_tabs["document"] is None, ffmpeg_tabs["video"] is None,
+            FFMPEG_HINT not in ffmpeg_titles["document"],
+            FFMPEG_HINT not in ffmpeg_titles["video"],
+            not gate_console,
+        ]),
+        "hard_dep_project": gate_project,
+        "optional_dep_project": ffmpeg_only_project,
+        "preflight_hard_missing": PREFLIGHT_NO_GARDEN,
+        "preflight_optional_missing": PREFLIGHT_NO_FFMPEG,
+        "install_command_expected": GARDEN_HINT,
+        "install_command_rendered": gate_command,
+        "gate_blocked_mode": gate_mode,
+        "gate_dep": gate_dep,
+        "unavailable_tab_ms": unavailable_ms,
+        "mode_tab_unavailable": tab_unavailable,
+        "mode_tab_titles": tab_titles,
+        "chat_surface_mode": chat_open,
+        "install_gates_on_chat_and_build": [chat_gated, build_gated],
+        "doc_requests_while_gated": doc_requests_while_gated,
+        "doc_surfaces_while_gated": canvas_while_gated,
+        "docs_after_continue_anyway": continued_docs,
+        "gate_after_continue_anyway": continued_gate,
+        "gate_after_mode_roundtrip": gate_after_roundtrip,
+        "ffmpeg_only_gate_count": ffmpeg_gate,
+        "ffmpeg_only_canvas_doc": ffmpeg_canvas_doc,
+        "ffmpeg_only_mode_tabs": ffmpeg_tabs,
+        "console_errors": gate_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice17-switcher-readiness.png", "slice17-gate-blocks-document.png",
+                         "slice17-continue-anyway.png", "slice17-ffmpeg-only-opens.png")],
+    }
+    if not report["steps"]["install_gate"]["ok"]:
+        fail("install_gate_verdict",
+             "slice-17 install-gate assertions did not all hold — see install_gate")
+
     docd.shutdown()  # last section on the same-origin rig
 
     # What the browser did, and did not, put on the wire.
@@ -2559,7 +2744,7 @@ try:
         fail("themes_and_sources_verdict",
              "slice-16 theme/sources assertions did not all hold — see themes_and_sources")
 
-    # ── 20. Operator UX directive: the live edge on the board ──────────────────
+    # ── 21. Operator UX directive: the live edge on the board ──────────────────
     # The ACTIVE-WORK signal is a breathing 2px strip along the leading edge of the
     # element doing work, and the thing that has to hold is the RANKING: a busy card
     # must be visible without out-shouting a card that needs a human. So both states
