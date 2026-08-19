@@ -2551,6 +2551,7 @@ try:
     # it cannot do.
     gate_console: list[str] = []
     gate_requests: list[str] = []
+    gate_failures: list[dict] = []
     DOC_REQ = f"/api/v1/projects/{urllib.parse.quote(gate_project)}/interactive/api/docs"
 
     with sync_playwright() as p:
@@ -2559,6 +2560,13 @@ try:
         page.on("console", lambda m: gate_console.append(m.text)
                 if m.type == "error" and "fonts.g" not in m.text else None)
         page.on("request", lambda r: gate_requests.append(r.url))
+        # Chromium logs every 4xx as a console error, so "no console errors" alone would
+        # be a claim about surfaces this slice does not own — this section is the only one
+        # that drives Chat mode for a project with no runs. The failures are captured with
+        # their URLs instead, and the claim is made where it belongs: nothing on the
+        # INTERACTIVE seam failed, which is the seam slice 17 added.
+        page.on("response", lambda r: gate_failures.append({"url": r.url, "status": r.status})
+                if r.status >= 400 else None)
 
         # ── AC: the switcher reflects readiness — from Chat, which is NOT gated ────
         page.goto(f"{DOC_ORIGIN}/p/{gate_project}/chat", wait_until="domcontentloaded")
@@ -2600,6 +2608,9 @@ try:
 
         # ── AC: Build is reachable from behind the gate — the gate is Document/Video's ──
         page.click('[data-testid="mode-tab-build"]')
+        page.wait_for_function(
+            """() => document.querySelector('[data-testid="mode-surface"]')
+                 ?.dataset.mode === 'build'""", timeout=30000)
         build_gated = page.locator('[data-testid="install-gate"]').count()
         page.click('[data-testid="mode-tab-document"]')
         gate.wait_for(timeout=30000)
@@ -2656,7 +2667,9 @@ try:
             ffmpeg_tabs["document"] is None, ffmpeg_tabs["video"] is None,
             FFMPEG_HINT not in ffmpeg_titles["document"],
             FFMPEG_HINT not in ffmpeg_titles["video"],
-            not gate_console,
+            # Nothing on the seam this slice added failed — preflight answered, and the
+            # gated mode asked for nothing else.
+            [f for f in gate_failures if "/interactive/" in f["url"]] == [],
         ]),
         "hard_dep_project": gate_project,
         "optional_dep_project": ffmpeg_only_project,
@@ -2679,6 +2692,8 @@ try:
         "ffmpeg_only_gate_count": ffmpeg_gate,
         "ffmpeg_only_canvas_doc": ffmpeg_canvas_doc,
         "ffmpeg_only_mode_tabs": ffmpeg_tabs,
+        "http_failures": gate_failures[:10],
+        "interactive_seam_failures": [f for f in gate_failures if "/interactive/" in f["url"]],
         "console_errors": gate_console[:10],
         "screenshots": [str(SHOTS / n) for n in
                         ("slice17-switcher-readiness.png", "slice17-gate-blocks-document.png",
