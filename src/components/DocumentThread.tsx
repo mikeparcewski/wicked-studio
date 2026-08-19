@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDoc, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
+import { ComposerContext } from './ComposerContext.js';
 import { DemoWizard } from './DemoWizard.js';
 import { recordFromThread } from '../interactive/demoWire.js';
 import { runExport } from '../interactive/exportWire.js';
 import { retryBatchInject } from '../interactive/feedbackBatch.js';
 import { scrollToWid } from '../interactive/widScroller.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
+import { contextKey, useDocContextStore } from '../store/docContext.js';
 import { nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState } from '../store/docThread.js';
 
 // Document mode's half of the ONE conversation (DES-MERGE-001 §2, §6.3 slice 10).
@@ -309,6 +311,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const streamed = useDocThreadStore((s) => (key === null ? undefined : s.genState[key]));
   // A document that exists with nothing in flight IS case 4: complete, and editable (§7.10).
   const state: GenState = docId === null ? 'idle' : streamed ?? 'terminal';
+  // §4.6: a picked theme is composer CONTEXT, so it rides with whatever the next submit
+  // turns out to be — the create body in case 1, the injected message in cases 2-4. It is
+  // never a separate action, because applying a theme is something a GENERATION does.
+  const theme = useDocContextStore((s) => s.theme[contextKey(projectId, docId)]);
 
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -347,6 +353,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         const created = await createDoc(projectId, {
           name: docName(body), kind: 'source', brief: body, project: projectId,
           source_message_id: msgId,
+          ...(theme === undefined ? {} : { theme_id: theme }),
         });
         const opened = threadKey(projectId, created.name);
         store.addUserMsg(opened, msgId, body);
@@ -366,7 +373,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         store.addDivider(key, forked.version);
         store.addUserMsg(key, msgId, body);
         store.setGenState(key, 'generating');
-        await injectDocMessage(projectId, docId, body, msgId);
+        await injectDocMessage(projectId, docId, body, msgId, theme);
         setText('');
         navigate(versionPath(projectId, docId, forked.version));
         return;
@@ -381,7 +388,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         });
         store.setGenState(key, 'generating');
       } else {
-        await injectDocMessage(projectId, docId, body, msgId);
+        await injectDocMessage(projectId, docId, body, msgId, theme);
       }
       setText('');
     } catch (e: unknown) {
@@ -468,6 +475,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             record this demo
           </button>
         )}
+        {/* §4.6/§4.9: what the next generation is MADE OF — the learned theme in effect and
+            the folders the service reads in place — stated where the message is composed.
+            Document mode only: a demo's look comes from the site it records (§4.5). */}
+        {mode === 'document' && <ComposerContext projectId={projectId} docId={docId} />}
         {state === 'generating' && (
           <span
             data-testid="steering-chip"

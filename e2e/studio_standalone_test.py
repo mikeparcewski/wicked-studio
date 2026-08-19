@@ -87,7 +87,17 @@ What "independent" means here, and what this script proves end-to-end:
      origin; and a PPTX export with python-pptx absent renders the service's 400 as an
      actionable message carrying the install command verbatim, with the document still
      framed at v3 and its composer still taking input (§4.4).
- 17. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
+ 17. (DES-MERGE-001 slice 16) learn-a-theme and sources attach on that same rig,
+     where two of the three claims are about what the browser does NOT do: the
+     theme library lists learned themes and picking one is a composer chip;
+     submitting `http://169.254.169.254/` shows the SERVICE's stated refusal
+     verbatim with a next action beside it while `page.on('request')` sees NO
+     request to that address from the SPA (the SSRF guard is in the bridge, where
+     §4.6 puts it, and the client never resolves or pre-judges a host); and
+     attaching a local folder shows it as a context chip while no
+     `multipart/form-data` body leaves the page — the one request that does
+     carries the PATH as JSON, because the service reads it in place (§4.9).
+ 18. (operator UX directive) the LIVE EDGE is the active-work signal, and it is
      ranked: in one DOM snapshot an executing card carries the breathing 2px
      `live-edge` element while a gate-waiting card carries a treatment that is
      present at the same time and different in computed pixels (wider, solid,
@@ -1022,6 +1032,24 @@ try:
     DOWNLOAD_RE = re.compile(r"^/d/([^/]+)/download/(.+)$")
     PPTX_HINT = "pip install python-pptx (PPTX export needs it; HTML and PDF do not)"
     export_requests: list[dict] = []
+    # Slice 16 (§4.6, §4.9): the theme library, the learn endpoint, and sources attach.
+    # THE SSRF GUARD LIVES HERE, in the service, and nowhere else — this fixture refuses
+    # exactly as the real one does (resolve the host, reject link-local/loopback/private,
+    # state the reason) and NEVER fetches the target. The client's only job is to show the
+    # refusal, which is what §19 asserts; a client that pre-rejected the address would be
+    # answering with its own opinion and this AC would pass without the guard existing.
+    THEME_LEARN = "/api/theme/learn"
+    SOURCES_RE = re.compile(r"^/d/([^/]+)/api/sources$")
+    BLOCKED_HOST_RE = re.compile(r"^(127\.|169\.254\.|10\.|192\.168\.|localhost$|\[?::1)")
+    SSRF_REASON = ("refused http://169.254.169.254/: the host resolves to 169.254.169.254, "
+                   "a link-local address — a theme source must be publicly reachable")
+    FIXTURE_THEMES = [
+        {"name": "stripe-ish", "source": "url", "learned_at": "2026-08-18T09:00:00Z"},
+        {"name": "brand-deck", "source": "pdf", "learned_at": "2026-08-17T09:00:00Z"},
+        {"name": "corporate"},  # a built-in: learned from nothing, so no source
+    ]
+    learn_requests: list[dict] = []
+    source_requests: list[dict] = []
     WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
     class DocFixtureHandler(SimpleHTTPRequestHandler):
@@ -1083,6 +1111,10 @@ try:
                 # Video mode is what narrows them to `kind: "demo"`.
                 self._json(200, FIXTURE_DOCS + FIXTURE_DEMOS
                            if project == demo_project else FIXTURE_DOCS)
+                return True
+            if rest == "/api/themes":
+                # The envelope shape (§4.6's library = built-ins + everything learned).
+                self._json(200, {"themes": FIXTURE_THEMES})
                 return True
             m = DEMO_SPEC_RE.match(rest)
             if m:
@@ -1208,6 +1240,37 @@ try:
             return self._json(200, {"format": fmt, "path": f"/exports/{file}", "file": file,
                                     "download": f"/d/{name}/download/{file}"})
 
+        def _learn(self) -> None:
+            """`POST /api/theme/learn` — §4.6's guard, server-side, exactly where the
+            design puts it: http(s) only, resolve the host, reject loopback/link-local/
+            private, and REFUSE WITH A REASON. Nothing is fetched on the refusal path —
+            the address is never contacted by anyone, client or service."""
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}"
+            body = json.loads(raw)
+            learn_requests.append({"body": body, "raw": raw.decode("utf-8", "replace"),
+                                   "content_type": self.headers.get("Content-Type", "")})
+            if body.get("kind") == "url":
+                host = urllib.parse.urlparse(str(body.get("url") or "")).hostname or ""
+                if BLOCKED_HOST_RE.match(host):
+                    return self._json(400, {"error": SSRF_REASON})
+                slug = re.sub(r"[^a-z0-9]+", "-", host.lower()).strip("-") or "theme"
+                return self._json(200, {"theme_id": slug, "status": "queued",
+                                        "message": f"Capturing {body.get('url')} in a headless "
+                                                   "browser — the agent reads the design back."})
+            stem = Path(str(body.get("path") or "theme")).stem
+            return self._json(200, {"theme_id": stem, "status": "queued"})
+
+        def _attach_source(self, name: str) -> None:
+            """`POST /d/:docId/api/sources` — the service reads the path IN PLACE (§4.9).
+            The raw body is retained verbatim so §19 can assert what the browser sent: a
+            JSON path, never a multipart part with bytes in it."""
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}"
+            source_requests.append({"doc": name, "raw": raw.decode("utf-8", "replace"),
+                                    "content_type": self.headers.get("Content-Type", "")})
+            path = json.loads(raw).get("path")
+            return self._json(200, {"path": path, "note": "", "status": "indexing",
+                                    "added_at": "2026-08-18T15:00:00Z", "indexed_at": None})
+
         def _emit(self) -> None:
             """`POST /api/events` — the GENERATING/GATED composer's wire (§2.2 cases 2-3)
             and both of the feedback batch's writes (§7.7)."""
@@ -1262,6 +1325,11 @@ try:
                 exporting = EXPORT_RE.match(rest)
                 if exporting:
                     return self._export(urllib.parse.unquote(exporting.group(1)))
+                if rest == THEME_LEARN:
+                    return self._learn()
+                sources = SOURCES_RE.match(rest)
+                if sources:
+                    return self._attach_source(urllib.parse.unquote(sources.group(1)))
                 if rest == "/api/docs":
                     return self._create_doc(project)
                 if rest == "/api/events":
@@ -2306,8 +2374,6 @@ try:
         page.screenshot(path=str(SHOTS / "slice15-pptx-absent.png"), full_page=True)
         browser.close()
 
-    docd.shutdown()  # last section on the same-origin rig
-
     new_exports = export_requests[exports_before:]
     expected_href = (f"/api/v1/projects/{urllib.parse.quote(doc_project)}"
                      f"/interactive/d/{STRIP_DOC}/download/{EXPORT_FILE}")
@@ -2356,7 +2422,144 @@ try:
     if not report["steps"]["exports"]["ok"]:
         fail("exports_verdict", "slice-15 export assertions did not all hold — see exports")
 
-    # ── 19. Operator UX directive: the live edge on the board ──────────────────
+    # ── 19. Slice 16 (DES-MERGE-001 §4.6, §4.9, §6.4): themes + sources attach ──
+    # Still the same-origin rig. Three claims, and two of them are about what the browser
+    # does NOT do — which is why this section watches `page.on("request")` rather than
+    # reading the DOM for reassurance:
+    #
+    #   · SSRF: submitting `http://169.254.169.254/` shows the SERVICE's stated reason,
+    #     verbatim, with a next action beside it — and the SPA makes NO request to that
+    #     address. The guard is in the fixture bridge where the real one lives (§4.6);
+    #     the client never resolves, never fetches, and never pre-judges the host, so a
+    #     regression that moved the guard client-side would fail the request assertion
+    #     rather than quietly pass the DOM one.
+    #   · Sources: attaching a local folder shows it as a context chip and UPLOADS
+    #     NOTHING — no `multipart/form-data` body leaves the page, and the one request
+    #     that does carries the PATH as JSON (§4.9's "read in place" guarantee, which is
+    #     what "it uses your actual numbers" rests on).
+    #   · The library: learned themes list and picking one is a chip on the composer.
+    SSRF_TARGET = "http://169.254.169.254/"
+    SOURCE_PATH = "/Users/operator/finance/q3-actuals"
+    learn_console: list[str] = []
+    spa_requests: list[dict] = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        # Same filter policy as §18: this section DRIVES a 400 (the guard's refusal) and
+        # chromium logs every failed fetch at error level. The claim is that the app turns
+        # that 400 into an actionable message — asserted directly below.
+        page.on("console", lambda m: learn_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text
+                and "status of 400" not in m.text else None)
+        page.on("request", lambda r: spa_requests.append({
+            "url": r.url, "method": r.method,
+            "content_type": (r.headers.get("content-type") or ""),
+            "post_data": (r.post_data or ""),
+        }))
+
+        page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document/{STRIP_DOC}",
+                  wait_until="domcontentloaded")
+        page.locator('[data-testid="thread-context"]').wait_for(timeout=30000)
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
+
+        # ── AC: the theme library lists themes, and picking one is a composer chip ──
+        page.click('[data-testid="context-library"]')
+        page.locator('[data-testid="theme-row"]').first.wait_for(timeout=30000)
+        rows = page.locator('[data-testid="theme-row"]')
+        library_themes = [rows.nth(i).get_attribute("data-theme") for i in range(rows.count())]
+        page.click('[data-testid="theme-row"][data-theme="stripe-ish"]')
+        theme_chip = page.locator('[data-testid="context-chip"][data-chip-kind="theme"]')
+        theme_chip.wait_for(timeout=10000)
+        theme_chip_value = theme_chip.get_attribute("data-chip-value")
+        page.screenshot(path=str(SHOTS / "slice16-theme-chip.png"), full_page=True)
+
+        # ── AC: the SSRF refusal is the service's, shown verbatim, with no outbound req ──
+        page.click('[data-testid="context-learn"]')
+        page.fill('[data-testid="learn-input"]', SSRF_TARGET)
+        page.click('[data-testid="learn-submit"]')
+        refusal = page.locator('[data-testid="doc-actionable"]').last
+        refusal.wait_for(timeout=30000)
+        refusal_text = refusal.inner_text()
+        refusal_hint = page.locator('[data-testid="doc-actionable-hint"]').last.inner_text()
+        # The ask stays in the transcript (§2.3): a refused theme is still a record of
+        # what was tried and why it did not happen.
+        thread_text = page.evaluate(
+            """() => document.querySelector('[data-testid="thread"]')?.innerText ?? ''""")
+        page.screenshot(path=str(SHOTS / "slice16-ssrf-refused.png"), full_page=True)
+
+        # ── AC: attaching a folder shows the chip and uploads nothing ──────────────
+        page.click('[data-testid="context-sources"]')
+        page.fill('[data-testid="source-input"]', SOURCE_PATH)
+        page.click('[data-testid="source-attach"]')
+        source_chip = page.locator('[data-testid="context-chip"][data-chip-kind="source"]')
+        source_chip.wait_for(timeout=30000)
+        source_chip_value = source_chip.get_attribute("data-chip-value")
+        source_thread_text = page.evaluate(
+            """() => document.querySelector('[data-testid="thread"]')?.innerText ?? ''""")
+        # The document is untouched by either action — the composer still takes input.
+        page.fill('[data-testid="doc-composer"]', "now apply that theme to the summary")
+        composer_after = page.input_value('[data-testid="doc-composer"]')
+        page.screenshot(path=str(SHOTS / "slice16-source-chip.png"), full_page=True)
+        browser.close()
+
+    docd.shutdown()  # last section on the same-origin rig
+
+    # What the browser did, and did not, put on the wire.
+    ssrf_outbound = [r for r in spa_requests if "169.254.169.254" in r["url"]]
+    multipart = [r for r in spa_requests
+                 if "multipart" in r["content_type"].lower()
+                 or "multipart/form-data" in r["post_data"][:200].lower()]
+    learn_sent = learn_requests[-1] if learn_requests else None
+    source_sent = source_requests[-1] if source_requests else None
+    report["steps"]["themes_and_sources"] = {
+        "ok": all([
+            # The library, and the pick that becomes context for the next generation.
+            library_themes == ["stripe-ish", "brand-deck", "corporate"],
+            theme_chip_value == "stripe-ish",
+            # The SSRF refusal: the SERVICE's sentence, verbatim, with a next action.
+            SSRF_REASON in refusal_text,
+            refusal_hint.strip() != "",
+            SSRF_TARGET in thread_text,
+            # …and the SPA never went near the address. This is the whole claim.
+            ssrf_outbound == [],
+            learn_sent is not None and learn_sent["body"] == {"kind": "url", "url": SSRF_TARGET},
+            learn_sent is not None and "json" in learn_sent["content_type"],
+            # Sources: a chip for the path, and NOTHING uploaded from the page.
+            source_chip_value == SOURCE_PATH,
+            SOURCE_PATH in source_thread_text,
+            multipart == [],
+            source_sent is not None and json.loads(source_sent["raw"]) == {"path": SOURCE_PATH},
+            source_sent is not None and "json" in source_sent["content_type"],
+            source_sent is not None and len(source_sent["raw"]) < len(SOURCE_PATH) + 32,
+            # Neither action disturbed the document.
+            composer_after == "now apply that theme to the summary",
+            not learn_console,
+        ]),
+        "library_themes": library_themes,
+        "picked_theme_chip": theme_chip_value,
+        "ssrf_target": SSRF_TARGET,
+        "ssrf_reason_expected": SSRF_REASON,
+        "ssrf_reason_rendered": refusal_text,
+        "ssrf_next_action_rendered": refusal_hint,
+        "spa_requests_to_the_target": ssrf_outbound,
+        "learn_request_seen_by_bridge": learn_sent,
+        "source_path": SOURCE_PATH,
+        "source_chip": source_chip_value,
+        "source_request_seen_by_bridge": source_sent,
+        "multipart_bodies_that_left_the_page": multipart,
+        "spa_request_count": len(spa_requests),
+        "composer_still_accepts_input": composer_after,
+        "console_errors": learn_console[:10],
+        "screenshots": [str(SHOTS / n) for n in
+                        ("slice16-theme-chip.png", "slice16-ssrf-refused.png",
+                         "slice16-source-chip.png")],
+    }
+    if not report["steps"]["themes_and_sources"]["ok"]:
+        fail("themes_and_sources_verdict",
+             "slice-16 theme/sources assertions did not all hold — see themes_and_sources")
+
+    # ── 20. Operator UX directive: the live edge on the board ──────────────────
     # The ACTIVE-WORK signal is a breathing 2px strip along the leading edge of the
     # element doing work, and the thing that has to hold is the RANKING: a busy card
     # must be visible without out-shouting a card that needs a human. So both states
