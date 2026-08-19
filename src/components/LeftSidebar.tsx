@@ -317,7 +317,7 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
             className="flex-1 text-left text-sm font-semibold font-mono truncate transition-opacity hover:opacity-70"
             style={{ color: S.ink, background: 'transparent' }}
           >
-            wicked-crew studio
+            wicked-studio
           </button>
         )}
         <button
