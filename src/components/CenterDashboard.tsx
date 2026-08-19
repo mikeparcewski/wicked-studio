@@ -925,7 +925,7 @@ export function CenterDashboard({
         >
           <div>
             <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#e6edf3', margin: 0, ...mono }}>
-              wicked-crew studio
+              wicked-studio
             </h1>
             <p style={{ fontSize: '11px', color: 'rgba(230,237,243,0.38)', margin: '4px 0 0', ...mono }}>
               cross-session control
