@@ -6,9 +6,13 @@ import { lastMode } from '../src/hooks/useRoute.js';
 
 vi.mock('../src/api/client.js', () => ({
   api: { listProjects: () => Promise.resolve({ projects: [] }) },
+  // The shell runs the merged preflight for every project it opens (slice 17); these
+  // cases are about the SHELL, so the probe answers nothing and nothing is gated.
+  apiBase: () => '/api/v1',
 }));
 
 beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('no preflight in this suite'))));
   useProjectsStore.setState({
     projects: [{
       id: 'proj-1', name: 'Merge the skins', description: null, status: 'active',
