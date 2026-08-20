@@ -1079,7 +1079,7 @@ export function CenterDashboard({
                   margin: '0 0 4px',
                 }}
               >
-                Campaign DAG
+                Campaigns are coming
               </p>
               <p
                 style={{
@@ -1090,7 +1090,7 @@ export function CenterDashboard({
                   lineHeight: 1.5,
                 }}
               >
-                Pending core&apos;s Campaign primitive + RunFinished events (§4.3).
+                Group related runs into one effort and track its progress here.
               </p>
             </div>
           </div>
