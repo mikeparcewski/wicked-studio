@@ -412,11 +412,12 @@ with sync_playwright() as p:
     mounted = page.locator('[data-testid="project-card"]').count()
     invariants_ok = board_h <= 900 and doc_h <= 900 + 1 and 0 < mounted < total
 
-    # Assertion 1's second half: legacy-spike's card carries the verdict. It sits
-    # deep in the quiet grid, so scroll it into the window first.
-    page.evaluate(
-        """() => { const b = document.querySelector('[data-testid="project-board"]');
-                   b.scrollTop = b.scrollHeight; }""")
+    # Assertion 1's second half: legacy-spike's card carries the verdict. Its
+    # epsilon score (≈3e-13, still > the clones' 0) puts it in the quiet band's
+    # FIRST row, so at scrollTop 0 it is co-mounted with the whole NEEDS YOU band
+    # — no scrolling. (Scrolling to the bottom here would race: once the scroll
+    # event's re-render lands, the quiet window moves past row 0 and unmounts the
+    # very card under assertion.)
     legacy_card_ok = settled(
         """() => { const c = document.querySelector(
                      '[data-testid="project-card"][data-project-id="legacy-spike"]');
