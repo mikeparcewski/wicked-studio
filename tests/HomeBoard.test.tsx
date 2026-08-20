@@ -73,7 +73,9 @@ describe('HomeBoard — the orchestrator board', () => {
   it('sorts by attention: gate-waiting before running before empty', async () => {
     projects = [
       project({ id: 'p-quiet', name: 'Quiet' }),
-      project({ id: 'p-run', name: 'Running' }),
+      // Under decay (DES-UXFIX-001 §2.1.3) a live run's clock is what ranks it, so
+      // the fixture is honest about it: a project executing NOW was touched now.
+      project({ id: 'p-run', name: 'Running', updated_at: Date.now() }),
       project({ id: 'p-gate', name: 'Gated' }),
     ];
     members = {
