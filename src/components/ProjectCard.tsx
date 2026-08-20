@@ -176,7 +176,7 @@ interface Props {
 }
 
 export function ProjectCard({ item, navigate }: Props): React.ReactElement {
-  const { project, repo, runs, docs, attention } = item;
+  const { project, repo, runs, docs, attention, band, score, signal } = item;
   const gates = useGateStore((s) => s.gates);
   // Relayed interactive status for THIS project — one line, plus the tile date it implies.
   const activity = useRuntimeStore((s) => s.docActivity[project.id]);
@@ -190,7 +190,17 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
   });
 
   return (
-    <section data-testid="project-card" data-project-id={project.id} data-attention={attention} style={CSS.card}>
+    <section
+      data-testid="project-card"
+      data-project-id={project.id}
+      data-attention={attention}
+      // The decay verdict, readable off the DOM (DES-UXFIX-001 slice-1 AC): which
+      // band this card sorted into, the score that put it there, and the top signal.
+      data-band={band}
+      data-score={score.toFixed(2)}
+      {...(signal !== null ? { 'data-signal': signal.kind } : {})}
+      style={CSS.card}
+    >
       {/* The card's own state signal, read from the RUNS rather than from `attention`:
           a project bucketed as `failing` can still have something executing on it, and
           the edge answers "is work moving here", not "which bucket did this sort into". */}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { DocSummary } from '../src/api/interactive.js';
 import type { CoreEvent, Project, ProjectMember, SessionStatus, SessionView } from '../src/api/types.js';
 import { useRuntimeStore } from '../src/store/runtime.js';
@@ -62,10 +62,21 @@ const push = (event: CoreEvent): void => {
   act(() => { useRuntimeStore.getState().ingest(event); });
 };
 
+/** Slice 1 bands: quiet projects mount as cards only once QUIET is expanded, so
+ *  "all cards mounted" is band-aware — expand the quiet band when it is there. */
+async function expandQuiet(): Promise<void> {
+  const toggle = screen.queryByTestId('band-quiet-toggle');
+  if (toggle !== null) fireEvent.click(toggle);
+  return Promise.resolve();
+}
+
 async function board(runs: SessionView[]): Promise<void> {
   render(<HomeBoard runs={runs} navigate={() => {}} />);
   await vi.waitFor(() => {
     expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', String(projects.length));
+  });
+  await expandQuiet();
+  await vi.waitFor(() => {
     expect(screen.getAllByTestId('project-card')).toHaveLength(projects.length);
   });
 }
@@ -130,6 +141,8 @@ describe('HomeBoard — live activity (slice 6)', () => {
     const { rerender } = render(
       <HomeBoard runs={[running('run-a', 'completed'), running('run-b', 'completed')]} navigate={() => {}} />,
     );
+    await vi.waitFor(() => expect(screen.queryByTestId('band-quiet-toggle')).not.toBeNull());
+    await expandQuiet();
     await vi.waitFor(() => expect(cardIds()).toEqual(['p-a', 'p-b']));
     const untouched = card('p-a');
 
@@ -140,6 +153,10 @@ describe('HomeBoard — live activity (slice 6)', () => {
 
     await vi.waitFor(() => expect(cardIds()).toEqual(['p-b', 'p-a']));
     expect(card('p-b')).toHaveAttribute('data-attention', 'gate');
+    // Slice 1 strengthens the claim: the gated card did not just sort first, it
+    // moved INTO the NEEDS YOU band (a gate never decays, so it always leads).
+    expect(within(screen.getByTestId('band-needs-you')).getByTestId('project-card'))
+      .toHaveAttribute('data-project-id', 'p-b');
     // Keyed by project id, so the card that did not change is MOVED, not rebuilt —
     // which is what keeps a re-sort from throwing away the unaffected cards' state.
     expect(card('p-a')).toBe(untouched);
@@ -184,6 +201,9 @@ describe('HomeBoard — live activity (slice 6)', () => {
   it('picks up a run attached after first paint — no reload to see a launched run', async () => {
     projects = [project('p-a', 'Ay')];
     const { rerender } = render(<HomeBoard runs={[]} navigate={() => {}} />);
+    // A run-less project is quiet by construction (slice 1) — expand to its card.
+    await vi.waitFor(() => expect(screen.queryByTestId('band-quiet-toggle')).not.toBeNull());
+    await expandQuiet();
     await vi.waitFor(() => expect(card('p-a')).toHaveTextContent('No runs yet.'));
 
     // The run is launched and filed while the user sits on the board.

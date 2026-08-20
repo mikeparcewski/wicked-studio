@@ -1,40 +1,97 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionView } from '../api/types.js';
-import { useBoardModel } from '../hooks/useBoardModel.js';
+import { windowRows } from '../board/boardWindow.js';
+import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import type { Navigate } from '../hooks/useRoute.js';
-import { CARD_H, ProjectCard } from './ProjectCard.js';
+import { modePath } from '../hooks/useRoute.js';
+import { ago, CARD_H, ProjectCard } from './ProjectCard.js';
 
 /**
- * The orchestrator home board (DES-MERGE-001 §1.2/§1.4, slice 5) — the route `/`.
+ * The orchestrator home board (DES-MERGE-001 §1.2/§1.4; bands per DES-UXFIX-001
+ * §2.1.4, slice 1) — the route `/`.
  *
- * A wall of what is happening across many unrelated projects at once, sorted by
- * attention needed rather than recency. "Many projects at once is the default case"
- * (§1.4), so the grid is WINDOWED: cards are a fixed height, and only the rows the
- * viewport can show (plus one row of overscan) are mounted. Twenty projects mount a
- * dozen cards, not twenty, and the container never grows past the viewport.
+ * A wall of what is happening across many unrelated projects at once, in TWO
+ * bands read off each project's decayed attention score (§2.1.3):
  *
- * Static in this slice: the model reads REST on load. Live card updates are slice 6.
+ *   NEEDS YOU — score at or above the triage threshold, score-ordered. Full
+ *   cards. This is what a returning operator scans first.
+ *   QUIET (N) — the calm majority, collapsed to a header + a preview strip of
+ *   one-line chips; expandable into a second windowed grid of full cards.
+ *
+ * "Many projects at once is the default case" (§1.4), so both grids are
+ * WINDOWED against the ONE shared scroller (`boardWindow.ts`): cards are a
+ * fixed height, only the rows the viewport can show (plus overscan) are
+ * mounted, and the container never grows past the viewport.
  */
 
 const GAP = 14;
 /** Below this the grid drops a column rather than squeezing a card unreadable. */
 const MIN_COL = 320;
-/** One row above and below the viewport, so a scroll never shows a gap. */
-const OVERSCAN = 1;
 /** Used when the container has not been measured yet (first paint, jsdom). */
 const FALLBACK_W = 1200;
 const FALLBACK_H = 900;
+/** Nominal height of a band's header row — only windowing precision, not layout:
+ *  an error here is absorbed by the grids' overscan row. */
+const BAND_H = 34;
+/** Collapsed QUIET shows at most this many one-line chips (D5). */
+const QUIET_PREVIEW = 6;
 
 const S = {
   ink:    '#e6edf3',
   muted:  'rgba(230,237,243,0.55)',
   faint:  'rgba(230,237,243,0.3)',
   red:    '#f85149',
+  accent: '#ffda19',
+  border: 'rgba(230,237,243,0.1)',
 };
+
+const CSS = {
+  bandLabel: {
+    fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+    margin: '0 0 10px',
+  },
+  toggle: {
+    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+    fontSize: '11px', fontFamily: 'monospace', color: S.muted,
+  },
+  chip: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none',
+    fontSize: '11px', color: S.muted, border: `1px solid ${S.border}`, borderRadius: '6px',
+    padding: '4px 10px', whiteSpace: 'nowrap',
+  },
+} as const satisfies Record<string, React.CSSProperties>;
 
 interface Props {
   runs: SessionView[];
   navigate: Navigate;
+}
+
+/** One band's windowed grid — same math as the pre-band board, used twice (D6). */
+function BandGrid({ items, columns, rowH, firstRow, lastRow, navigate }: {
+  items: BoardProject[];
+  columns: number;
+  rowH: number;
+  firstRow: number;
+  lastRow: number;
+  navigate: Navigate;
+}): React.ReactElement {
+  const rows = Math.ceil(items.length / columns);
+  const visible = lastRow < firstRow ? [] : items.slice(firstRow * columns, (lastRow + 1) * columns);
+  return (
+    <div style={{ position: 'relative', height: `${rows * rowH}px` }}>
+      <div
+        style={{
+          position: 'absolute', top: `${firstRow * rowH}px`, left: 0, right: 0,
+          display: 'grid', gap: `${GAP}px`,
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        }}
+      >
+        {visible.map((item) => (
+          <ProjectCard key={item.project.id} item={item} navigate={navigate} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
@@ -42,6 +99,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
   const scroller = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [scrollTop, setScrollTop] = useState(0);
+  const [quietOpen, setQuietOpen] = useState(false);
 
   useEffect(() => {
     const el = scroller.current;
@@ -56,13 +114,37 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
     setScrollTop(e.currentTarget.scrollTop);
   }, []);
 
+  const needsYou = items.filter((i) => i.band === 'needs-you');
+  const quiet = items.filter((i) => i.band === 'quiet');
+
   const columns = Math.max(1, Math.floor((box.w || FALLBACK_W) / (MIN_COL + GAP)));
   const rowH = CARD_H + GAP;
-  const rows = Math.ceil(items.length / columns);
   const viewH = box.h || FALLBACK_H;
-  const firstRow = Math.max(0, Math.floor(scrollTop / rowH) - OVERSCAN);
-  const lastRow = Math.min(rows - 1, Math.ceil((scrollTop + viewH) / rowH) + OVERSCAN);
-  const visible = items.slice(firstRow * columns, (lastRow + 1) * columns);
+
+  // Each band's own top inside the shared scroller (D6). Coarse is fine: any
+  // header-height error is smaller than the overscan row that absorbs it.
+  const needsTop = BAND_H;
+  const needsH = needsYou.length === 0 ? BAND_H : Math.ceil(needsYou.length / columns) * rowH;
+  const quietGridTop = needsTop + needsH + BAND_H;
+
+  const needsWin = windowRows(needsYou.length, columns, rowH, scrollTop, viewH, needsTop);
+  const quietWin = quietOpen
+    ? windowRows(quiet.length, columns, rowH, scrollTop, viewH, quietGridTop)
+    : null;
+
+  const mounted =
+    (needsWin.lastRow < needsWin.firstRow
+      ? 0
+      : Math.min(needsYou.length, (needsWin.lastRow + 1) * columns) - needsWin.firstRow * columns) +
+    (quietWin === null || quietWin.lastRow < quietWin.firstRow
+      ? 0
+      : Math.min(quiet.length, (quietWin.lastRow + 1) * columns) - quietWin.firstRow * columns);
+
+  /** Every affordance is a real link — deep-linkable, middle-clickable. */
+  const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
+    href: path,
+    onClick: (e) => { e.preventDefault(); navigate(path); },
+  });
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -92,7 +174,9 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
         onScroll={onScroll}
         data-testid="project-board"
         data-total={items.length}
-        data-rendered={visible.length}
+        data-needs-you={needsYou.length}
+        data-quiet={quiet.length}
+        data-rendered={mounted}
         style={{ flex: 1, overflowY: 'auto', padding: '0 24px 24px' }}
       >
         {loading && (
@@ -114,20 +198,80 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
             </a>
           </div>
         )}
+
         {items.length > 0 && (
-          <div style={{ position: 'relative', height: `${rows * rowH}px` }}>
-            <div
-              style={{
-                position: 'absolute', top: `${firstRow * rowH}px`, left: 0, right: 0,
-                display: 'grid', gap: `${GAP}px`,
-                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-              }}
-            >
-              {visible.map((item) => (
-                <ProjectCard key={item.project.id} item={item} navigate={navigate} />
-              ))}
+          <section data-testid="band-needs-you" data-count={needsYou.length}>
+            <p style={{ ...CSS.bandLabel, color: S.accent }}>Needs you</p>
+            {needsYou.length === 0 ? (
+              // The all-quiet state (§3.1): calm is one line, not a wall of absence.
+              <p data-testid="board-all-quiet" style={{ fontSize: '12px', color: S.muted, margin: '0 0 6px' }}>
+                Nothing needs you right now.
+              </p>
+            ) : (
+              <BandGrid
+                items={needsYou}
+                columns={columns}
+                rowH={rowH}
+                firstRow={needsWin.firstRow}
+                lastRow={needsWin.lastRow}
+                navigate={navigate}
+              />
+            )}
+          </section>
+        )}
+
+        {quiet.length > 0 && (
+          <section
+            data-testid="band-quiet"
+            data-count={quiet.length}
+            data-expanded={quietOpen}
+            style={{ marginTop: '18px' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+              <p style={{ ...CSS.bandLabel, color: S.faint, margin: 0 }}>Quiet ({quiet.length})</p>
+              <button
+                type="button"
+                data-testid="band-quiet-toggle"
+                onClick={() => setQuietOpen((v) => !v)}
+                style={CSS.toggle}
+              >
+                {quietOpen ? '[ collapse ▴ ]' : '[ expand ▾ ]'}
+              </button>
             </div>
-          </div>
+            {quietOpen && quietWin !== null ? (
+              <div style={{ marginTop: '10px' }}>
+                <BandGrid
+                  items={quiet}
+                  columns={columns}
+                  rowH={rowH}
+                  firstRow={quietWin.firstRow}
+                  lastRow={quietWin.lastRow}
+                  navigate={navigate}
+                />
+              </div>
+            ) : (
+              // The §2.1.4 wireframe's own representation of the calm majority:
+              // one demoted line per project, capped — never a grid of absence.
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
+                {quiet.slice(0, QUIET_PREVIEW).map((i) => (
+                  <a
+                    key={i.project.id}
+                    {...link(modePath(i.project.id, 'build'))}
+                    data-testid="quiet-chip"
+                    data-project-id={i.project.id}
+                    data-score={i.score.toFixed(2)}
+                    style={CSS.chip}
+                  >
+                    <span aria-hidden style={{ color: S.faint }}>○</span>
+                    {i.project.name}
+                    <span style={{ color: S.faint }}>
+                      · {ago(i.signal?.at ?? i.project.updated_at)}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </section>
         )}
       </div>
     </div>

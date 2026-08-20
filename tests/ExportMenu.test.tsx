@@ -75,6 +75,10 @@ function card(): void {
     runs: [],
     docs: [{ name: DOC, kind: 'doc' as const, head: 3, versions: 3, updated_at: '2026-08-18T11:30:00Z' }],
     attention: 'drafts' as const,
+    // Slice-1 score fields — the export path never reads them, they just render.
+    score: 0,
+    band: 'quiet' as const,
+    signal: null,
   } as unknown as BoardProject;
   render(<ProjectCard item={item} navigate={() => {}} />);
 }
