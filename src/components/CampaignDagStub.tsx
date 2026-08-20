@@ -14,10 +14,9 @@ export function CampaignDagStub(): React.ReactElement {
       className="rounded-lg p-4 text-xs"
       style={{ border: '1px dashed rgba(230,237,243,0.15)', background: '#161c26', color: 'rgba(230,237,243,0.4)' }}
     >
-      <p className="font-semibold" style={{ color: 'rgba(230,237,243,0.6)' }}>Campaign DAG — engine-real, not wired</p>
+      <p className="font-semibold" style={{ color: 'rgba(230,237,243,0.6)' }}>Campaigns are coming</p>
       <p className="mt-1">
-        Pending core&apos;s <code className="font-mono">Campaign</code> primitive + <code className="font-mono">RunFinished</code> /{' '}
-        <code className="font-mono">Campaign*</code> events (§4.3). Attaches to this same event stream when they land.
+        Group related runs into one effort and track its progress here.
       </p>
     </div>
   );

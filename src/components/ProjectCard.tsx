@@ -205,7 +205,7 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
           style={{ width: '8px', height: '8px', borderRadius: '50%', background: DOT[attention], flexShrink: 0 }}
         />
         <a {...link(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>
-        <span data-testid="project-repo" style={CSS.repo}>{repo ?? 'no repo'}</span>
+        {repo != null && <span data-testid="project-repo" style={CSS.repo}>{repo}</span>}
       </div>
 
       {/* Documents — placeholder tiles only (§7.5), capped so the card cannot grow */}
