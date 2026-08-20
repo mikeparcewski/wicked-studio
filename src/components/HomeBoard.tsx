@@ -4,7 +4,7 @@ import { windowRows } from '../board/boardWindow.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { modePath } from '../hooks/useRoute.js';
-import { ago, CARD_H, ProjectCard } from './ProjectCard.js';
+import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 
 /**
  * The orchestrator home board (DES-MERGE-001 §1.2/§1.4; bands per DES-UXFIX-001
@@ -119,18 +119,21 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
   const quiet = items.filter((i) => i.band === 'quiet');
 
   const columns = Math.max(1, Math.floor((box.w || FALLBACK_W) / (MIN_COL + GAP)));
-  const rowH = CARD_H + GAP;
+  // Each band windows over its OWN variant's fixed height (DES-UXFIX-001 §2.1.1,
+  // slice 2): NEEDS YOU mounts rich ACTIVE cards, QUIET mounts one-line cards.
+  const activeRowH = ACTIVE_CARD_H + GAP;
+  const quietRowH = QUIET_CARD_H + GAP;
   const viewH = box.h || FALLBACK_H;
 
   // Each band's own top inside the shared scroller (D6). Coarse is fine: any
   // header-height error is smaller than the overscan row that absorbs it.
   const needsTop = BAND_H;
-  const needsH = needsYou.length === 0 ? BAND_H : Math.ceil(needsYou.length / columns) * rowH;
+  const needsH = needsYou.length === 0 ? BAND_H : Math.ceil(needsYou.length / columns) * activeRowH;
   const quietGridTop = needsTop + needsH + BAND_H;
 
-  const needsWin = windowRows(needsYou.length, columns, rowH, scrollTop, viewH, needsTop);
+  const needsWin = windowRows(needsYou.length, columns, activeRowH, scrollTop, viewH, needsTop);
   const quietWin = quietOpen
-    ? windowRows(quiet.length, columns, rowH, scrollTop, viewH, quietGridTop)
+    ? windowRows(quiet.length, columns, quietRowH, scrollTop, viewH, quietGridTop)
     : null;
 
   const mounted =
@@ -212,7 +215,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
               <BandGrid
                 items={needsYou}
                 columns={columns}
-                rowH={rowH}
+                rowH={activeRowH}
                 firstRow={needsWin.firstRow}
                 lastRow={needsWin.lastRow}
                 navigate={navigate}
@@ -244,7 +247,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
                 <BandGrid
                   items={quiet}
                   columns={columns}
-                  rowH={rowH}
+                  rowH={quietRowH}
                   firstRow={quietWin.firstRow}
                   lastRow={quietWin.lastRow}
                   navigate={navigate}

@@ -1,20 +1,30 @@
 import type { SessionView } from '../api/types.js';
+import type { SignalKind } from '../board/boardAttention.js';
 import { isLive, useRunHeadline } from '../hooks/useBoardHeadline.js';
-import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
+import { modePath, MODES, type Navigate } from '../hooks/useRoute.js';
 import type { Attention, BoardProject } from '../hooks/useBoardModel.js';
 import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { ExportMenu } from './ExportMenu.js';
 import { GateChip } from './GateChip.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
+import { MODE_SPECS } from './ModeSwitcher.js';
 import { STATUS_STYLE } from './RunCard.js';
 
 /**
- * One orchestrator-board card (DES-MERGE-001 §1.4). All regions are ALWAYS
- * present; an empty region renders an invitation, never a blank. The height is
- * FIXED (`CARD_H`) so the board stays legible at 20+ cards — nothing here may grow
- * with the run or doc count, which is why every list is capped with an overflow
- * count instead of scrolling.
+ * One orchestrator-board card, in TWO variants chosen by the decayed attention
+ * band (DES-UXFIX-001 §2.1.1, slice 2):
+ *
+ *   ACTIVE (band `needs-you`) — rich: header + attention pill, live headline,
+ *   answerable run/gate chips, doc tiles. A region with no content is OMITTED,
+ *   never filled with a "nothing" line — the empty-state budget (§2.1.2, F1).
+ *   QUIET (band `quiet`) — calm, not empty: ONE line of absence
+ *   (`quiet-summary`) plus a compact action row. A brand-new empty project's
+ *   one line is the first-run invitation instead (§2.1.2's single exception).
+ *
+ * Heights stay FIXED per variant so each band's windowing math holds — nothing
+ * here may grow with the run or doc count, which is why every list is capped
+ * with an overflow count instead of scrolling.
  *
  * Live activity and the run chips subscribe to the SHARED runtime + gate stores
  * (slice 6) — the same stores the run view reads, fed by the app's ONE `/ws`
@@ -22,15 +32,15 @@ import { STATUS_STYLE } from './RunCard.js';
  * at a different card, with no second socket and no polling anywhere on this route.
  */
 
-/**
- * Fixed card height in px — the board's windowing math depends on it.
- *
- * Sized by the TALLEST variant, the empty card: header + three regions + the 2×2
- * quick-action grid. The actions are bottom-anchored (`marginTop: auto`) inside an
- * `overflow: hidden` box, so a height that merely fits would clip the primary
- * affordance the moment a font metric moved. This carries ~16px of slack.
- */
-export const CARD_H = 352;
+/** Fixed ACTIVE-card height in px — the NEEDS YOU band's windowing depends on it.
+ *  Sized by the fullest card the caps allow (2 live lines + doc activity + 2 run
+ *  chips + a tile row + the action row), so the bottom-anchored actions inside
+ *  `overflow: hidden` are never clipped. */
+export const ACTIVE_CARD_H = 330;
+
+/** Fixed QUIET-card height in px — one summary line plus the action row, with
+ *  room for the first-run 2×2 sublabelled grid (§2.2) in the same slot. */
+export const QUIET_CARD_H = 104;
 
 const MAX_TILES = 3;
 const MAX_CHIPS = 2;
@@ -53,28 +63,29 @@ const DOT: Record<Attention, string> = {
   quiet:   'rgba(230,237,243,0.2)',
 };
 
-const ACTIONS: { mode: Mode; label: string; glyph: string }[] = [
-  { mode: 'chat',     label: 'New chat',    glyph: '💬' },
-  { mode: 'build',    label: 'Do work',     glyph: '⚙' },
-  { mode: 'document', label: 'New doc',     glyph: '▤' },
-  { mode: 'video',    label: 'Record demo', glyph: '▶' },
-];
+/** The pill's word for the signal that put the card in NEEDS YOU — user words
+ *  (V3: an executing run reads "working", never a scheduler word). */
+const PILL: Record<SignalKind, string> = {
+  gate: 'gate',
+  failing: 'failed',
+  running: 'working',
+  drafts: 'draft',
+};
 
 const CSS = {
   card: {
-    height: `${CARD_H}px`, boxSizing: 'border-box', overflow: 'hidden', background: '#161b22',
+    boxSizing: 'border-box', overflow: 'hidden', background: '#161b22',
     border: `1px solid ${S.border}`, borderRadius: '10px', padding: '14px',
     display: 'flex', flexDirection: 'column',
     // Anchors the live edge, and the radius above clips its ends (see LiveEdge).
     position: 'relative',
   },
-  header: { display: 'flex', alignItems: 'center', gap: '8px' },
+  header: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 },
   name: {
     fontSize: '13px', fontWeight: 700, color: S.ink, textDecoration: 'none',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
-  repo: { marginLeft: 'auto', fontSize: '10px', fontFamily: 'monospace', color: S.faint, flexShrink: 0 },
-  label: { fontSize: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: S.faint },
+  repo: { fontSize: '10px', fontFamily: 'monospace', color: S.faint, flexShrink: 0 },
   tile: {
     flex: 1, minWidth: 0, background: 'rgba(230,237,243,0.04)',
     border: `1px solid ${S.border}`, borderRadius: '6px', padding: '5px 7px',
@@ -85,9 +96,10 @@ const CSS = {
     fontSize: '11px', fontFamily: 'monospace', color: S.muted, borderRadius: '5px', padding: '3px 7px',
   },
   quick: {
-    display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none',
+    display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none',
     background: 'rgba(230,237,243,0.05)', border: `1px solid ${S.border}`,
-    borderRadius: '6px', color: S.ink,
+    borderRadius: '6px', color: S.ink, fontSize: '11px',
+    overflow: 'hidden', whiteSpace: 'nowrap', minWidth: 0,
   },
   line: {
     display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 2px',
@@ -108,17 +120,59 @@ export function ago(from: number, now: number = Date.now()): string {
   return `${Math.floor(secs / 86400)}d`;
 }
 
-function Region({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
+type Link = (path: string) => { href: string; onClick: (e: React.MouseEvent) => void };
+
+/**
+ * The four quick actions, relabelled to the mode spine (§2.2, V9/V10/V23): each
+ * action IS a mode the user can already see in the switcher, with the switcher's
+ * glyph, so the verbs are differentiable (F2) — no more "New chat" vs "Do work".
+ * `detail` (the first-run card) lays them out 2×2 with the sublabel visible;
+ * elsewhere the sublabel survives on hover via `title`.
+ */
+function QuickActions({ projectId, link, detail }: {
+  projectId: string;
+  link: Link;
+  detail: boolean;
+}): React.ReactElement {
   return (
-    <div style={{ marginTop: '10px', minHeight: '46px' }}>
-      <p style={{ ...CSS.label, margin: '0 0 4px' }}>{title}</p>
-      {children}
+    <div
+      data-testid="quick-actions"
+      data-detail={detail ? 'true' : undefined}
+      style={{
+        marginTop: 'auto', display: 'grid', gap: detail ? '4px' : '6px',
+        gridTemplateColumns: detail ? '1fr 1fr' : 'repeat(4, minmax(0,1fr))',
+      }}
+    >
+      {MODES.map((m) => {
+        const spec = MODE_SPECS[m];
+        return (
+          <a
+            key={m}
+            {...link(modePath(projectId, m))}
+            data-testid="quick-action"
+            data-mode={m}
+            title={`${spec.label} — ${spec.sublabel}`}
+            style={{
+              ...CSS.quick,
+              justifyContent: detail ? 'flex-start' : 'center',
+              padding: detail ? '4px 8px' : '5px 8px',
+            }}
+          >
+            <span aria-hidden style={{ flexShrink: 0 }}>{spec.glyph}</span>
+            <span style={{ fontWeight: 600, flexShrink: 0 }}>{spec.label}</span>
+            {detail && (
+              <span
+                data-testid="quick-action-sublabel"
+                style={{ color: S.faint, fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              >
+                {spec.sublabel}
+              </span>
+            )}
+          </a>
+        );
+      })}
     </div>
   );
-}
-
-function Invitation({ text }: { text: string }): React.ReactElement {
-  return <p style={{ fontSize: '11px', color: S.faint, margin: 0 }}>{text}</p>;
 }
 
 /**
@@ -182,170 +236,203 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
   const activity = useRuntimeStore((s) => s.docActivity[project.id]);
   const live = runs.filter(isLive);
   const empty = runs.length === 0 && docs.length === 0;
+  const quiet = band === 'quiet';
 
   /** Every affordance on the card is a real link — deep-linkable, middle-clickable. */
-  const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
+  const link: Link = (path) => ({
     href: path,
     onClick: (e) => { e.preventDefault(); navigate(path); },
   });
 
+  const cardData = {
+    'data-testid': 'project-card',
+    'data-project-id': project.id,
+    'data-attention': attention,
+    // The decay verdict, readable off the DOM (slice-1 AC): which band this card
+    // sorted into, the score that put it there, the top signal — and, new in
+    // slice 2, the variant the band chose.
+    'data-band': band,
+    'data-variant': quiet ? 'quiet' : 'active',
+    'data-score': score.toFixed(2),
+    ...(signal !== null ? { 'data-signal': signal.kind } : {}),
+  } as const;
+
+  // The dot stays for colour continuity with the sort bucket; on an ACTIVE card
+  // the pill beside the repo is what names the signal.
+  const dot = (
+    <span
+      data-testid="project-status-dot"
+      aria-hidden
+      style={{ width: '8px', height: '8px', borderRadius: '50%', background: DOT[attention], flexShrink: 0 }}
+    />
+  );
+  const name = <a {...link(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>;
+  const repoTag = repo != null
+    ? <span data-testid="project-repo" style={CSS.repo}>{repo}</span>
+    : null;
+
+  // ── QUIET (§2.1.1): calm is ONE line, not three announcements of absence ──
+  if (quiet) {
+    return (
+      <section {...cardData} style={{ ...CSS.card, height: `${QUIET_CARD_H}px` }}>
+        <LiveEdge state={edgeStateOf(runs.map((v) => v.session.status))} />
+        <div style={CSS.header}>
+          {dot}
+          {name}
+          {repoTag}
+          {/* The empty-state budget (§2.1.2): the ONE line of absence. A brand-new
+              empty project gets the first-run invitation instead — the sole
+              exception, and it is still one line. */}
+          {empty ? (
+            <a
+              {...link(modePath(project.id, 'chat'))}
+              data-testid="quiet-summary"
+              data-invitation="true"
+              style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '11px', color: S.ink, textDecoration: 'none' }}
+            >
+              Start by describing what you want →
+            </a>
+          ) : (
+            <p
+              data-testid="quiet-summary"
+              style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '11px', color: S.faint, margin: 0 }}
+            >
+              Quiet — last active {ago(signal?.at ?? project.updated_at)} ago
+            </p>
+          )}
+        </div>
+        {/* Compact on a quiet card — a calm board is scanned, not operated (W2);
+            the first-run card is where the sublabelled grid teaches (W1). */}
+        <QuickActions projectId={project.id} link={link} detail={empty} />
+      </section>
+    );
+  }
+
+  // ── ACTIVE (§2.1.1): rich, but a region with no content is OMITTED (F1) ──
   return (
-    <section
-      data-testid="project-card"
-      data-project-id={project.id}
-      data-attention={attention}
-      // The decay verdict, readable off the DOM (DES-UXFIX-001 slice-1 AC): which
-      // band this card sorted into, the score that put it there, and the top signal.
-      data-band={band}
-      data-score={score.toFixed(2)}
-      {...(signal !== null ? { 'data-signal': signal.kind } : {})}
-      style={CSS.card}
-    >
+    <section {...cardData} style={{ ...CSS.card, height: `${ACTIVE_CARD_H}px` }}>
       {/* The card's own state signal, read from the RUNS rather than from `attention`:
           a project bucketed as `failing` can still have something executing on it, and
           the edge answers "is work moving here", not "which bucket did this sort into". */}
       <LiveEdge state={edgeStateOf(runs.map((v) => v.session.status))} />
 
-      {/* Header — name, repo binding, status dot. The dot stays for colour continuity
-          with the sort bucket; it is no longer the thing that catches the eye. */}
+      {/* Header — name, repo binding, and the pill naming why this card needs you. */}
       <div style={CSS.header}>
-        <span
-          data-testid="project-status-dot"
-          aria-hidden
-          style={{ width: '8px', height: '8px', borderRadius: '50%', background: DOT[attention], flexShrink: 0 }}
-        />
-        <a {...link(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>
-        {repo != null && <span data-testid="project-repo" style={CSS.repo}>{repo}</span>}
-      </div>
-
-      {/* Documents — placeholder tiles only (§7.5), capped so the card cannot grow */}
-      <Region title="Documents">
-        {docs.length === 0 ? <Invitation text="No documents yet." /> : (
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
-            {docs.slice(0, MAX_TILES).map((d) => (
-              <DocTile
-                key={d.name}
-                projectId={project.id}
-                name={d.name}
-                kind={d.kind}
-                head={d.head}
-                when={
-                  activity !== undefined && activity.docId === d.name
-                    ? activity.at
-                    : d.updated_at === null ? NaN : Date.parse(d.updated_at)
-                }
-              />
-            ))}
-            {docs.length > MAX_TILES && (
-              <span data-testid="doc-overflow" style={{ alignSelf: 'center', fontSize: '11px', color: S.muted, flexShrink: 0 }}>
-                {docs.length - MAX_TILES} more
-              </span>
-            )}
-          </div>
+        {dot}
+        {name}
+        {repoTag}
+        {signal !== null && (
+          <span
+            data-testid="attention-pill"
+            data-kind={signal.kind}
+            style={{
+              marginLeft: 'auto', flexShrink: 0, fontSize: '10px', fontWeight: 700,
+              letterSpacing: '0.06em', textTransform: 'uppercase', color: DOT[attention],
+              border: `1px solid ${S.border}`, borderRadius: '999px', padding: '1px 8px',
+            }}
+          >
+            {PILL[signal.kind]}
+          </span>
         )}
-      </Region>
+      </div>
 
       {/* Live activity — the newest narration line per in-flight run (§1.4, §3.4(b)),
           plus the newest relayed doc status. Both arrive on the shared `/ws` stream. */}
-      <Region title="Live activity">
-        {live.length === 0 && activity === undefined ? (
-          <Invitation text="Nothing running." />
-        ) : (
-          <div data-testid="live-activity">
-            {live.slice(0, MAX_LINES).map((v) => (
-              <LiveLine key={v.session.id} view={v} />
-            ))}
-            {activity !== undefined && (
-              <p data-testid="doc-activity" title={activity.message} style={CSS.line}>
-                <span aria-hidden style={{ flexShrink: 0 }}>▤</span>
-                {activity.message}
-              </p>
-            )}
-            {live.length > MAX_LINES && (
-              <span data-testid="live-overflow" style={{ fontSize: '11px', color: S.muted }}>
-                {live.length - MAX_LINES} more running
-              </span>
-            )}
-          </div>
-        )}
-      </Region>
+      {(live.length > 0 || activity !== undefined) && (
+        <div data-testid="live-activity" style={{ marginTop: '10px' }}>
+          {live.slice(0, MAX_LINES).map((v) => (
+            <LiveLine key={v.session.id} view={v} />
+          ))}
+          {activity !== undefined && (
+            <p data-testid="doc-activity" title={activity.message} style={CSS.line}>
+              <span aria-hidden style={{ flexShrink: 0 }}>▤</span>
+              {activity.message}
+            </p>
+          )}
+          {live.length > MAX_LINES && (
+            <span data-testid="live-overflow" style={{ fontSize: '11px', color: S.muted }}>
+              {live.length - MAX_LINES} more running
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Crew runs — phase, gate state, elapsed */}
-      <Region title="Crew runs">
-        {runs.length === 0 ? <Invitation text="No runs yet." /> : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {runs.slice(0, MAX_CHIPS).map(({ session, units }) => {
-              const style = STATUS_STYLE[session.status];
-              const gate = gates[session.id];
-              const phase = units[session.unit_ix]?.stage ?? units[units.length - 1]?.stage ?? 'planning';
-              const waiting = session.status === 'awaiting_human';
-              return (
-                // A waiting gate is ANSWERABLE, not a badge (§1.4) — so the row is a row:
-                // the run link, and beside it a chip carrying its own controls. Nesting
-                // buttons inside the link would be neither valid nor operable.
-                <div key={session.id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <a
-                    {...link(modePath(project.id, 'build', session.id))}
-                    data-testid="run-chip"
-                    data-run-id={session.id}
-                    data-status={session.status}
-                    style={{
-                      ...CSS.chip, flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative',
-                      // Clears the strip so a phase label never sits on top of it.
-                      paddingLeft: '10px',
-                      border: `1px solid ${waiting ? 'rgba(255,218,25,0.3)' : S.border}`,
-                      background: waiting ? 'rgba(255,218,25,0.1)' : 'transparent',
-                    }}
-                  >
-                    <LiveEdge state={edgeStateOf([session.status])} />
-                    <span style={{ color: style?.color ?? S.faint }}>{phase}</span>
-                    {/* Elapsed exists only where the wire carries a timestamp: `AgentSession`
-                        has no `started_at`, so a gate's daemon-cached `receivedAt` is the one
-                        honest clock on this surface. */}
-                    <span style={{ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {waiting ? (gate ? `waiting ${ago(gate.receivedAt)}` : 'needs you') : style?.label ?? session.status}
-                    </span>
-                  </a>
-                  {waiting && (
-                    <GateChip runId={session.id} projectId={project.id} gate={gate} navigate={navigate} />
-                  )}
-                </div>
-              );
-            })}
-            {runs.length > MAX_CHIPS && (
-              <span data-testid="run-overflow" style={{ fontSize: '11px', color: S.muted }}>
-                {runs.length - MAX_CHIPS} more
-              </span>
-            )}
-          </div>
-        )}
-      </Region>
+      {runs.length > 0 && (
+        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {runs.slice(0, MAX_CHIPS).map(({ session, units }) => {
+            const style = STATUS_STYLE[session.status];
+            const gate = gates[session.id];
+            const phase = units[session.unit_ix]?.stage ?? units[units.length - 1]?.stage ?? 'planning';
+            const waiting = session.status === 'awaiting_human';
+            return (
+              // A waiting gate is ANSWERABLE, not a badge (§1.4) — so the row is a row:
+              // the run link, and beside it a chip carrying its own controls. Nesting
+              // buttons inside the link would be neither valid nor operable.
+              <div key={session.id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <a
+                  {...link(modePath(project.id, 'build', session.id))}
+                  data-testid="run-chip"
+                  data-run-id={session.id}
+                  data-status={session.status}
+                  style={{
+                    ...CSS.chip, flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative',
+                    // Clears the strip so a phase label never sits on top of it.
+                    paddingLeft: '10px',
+                    border: `1px solid ${waiting ? 'rgba(255,218,25,0.3)' : S.border}`,
+                    background: waiting ? 'rgba(255,218,25,0.1)' : 'transparent',
+                  }}
+                >
+                  <LiveEdge state={edgeStateOf([session.status])} />
+                  <span style={{ color: style?.color ?? S.faint }}>{phase}</span>
+                  {/* Elapsed exists only where the wire carries a timestamp: `AgentSession`
+                      has no `started_at`, so a gate's daemon-cached `receivedAt` is the one
+                      honest clock on this surface. */}
+                  <span style={{ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {waiting ? (gate ? `waiting ${ago(gate.receivedAt)}` : 'needs you') : style?.label ?? session.status}
+                  </span>
+                </a>
+                {waiting && (
+                  <GateChip runId={session.id} projectId={project.id} gate={gate} navigate={navigate} />
+                )}
+              </div>
+            );
+          })}
+          {runs.length > MAX_CHIPS && (
+            <span data-testid="run-overflow" style={{ fontSize: '11px', color: S.muted }}>
+              {runs.length - MAX_CHIPS} more
+            </span>
+          )}
+        </div>
+      )}
 
-      {/* Quick actions — large when the card IS the empty state (§1.4) */}
-      {empty && <p style={{ ...CSS.label, margin: '10px 0 0' }}>Start here</p>}
-      <div
-        data-testid="quick-actions"
-        style={{
-          marginTop: 'auto', paddingTop: empty ? '4px' : '10px', display: 'grid', gap: '6px',
-          gridTemplateColumns: empty ? '1fr 1fr' : 'repeat(4, minmax(0,1fr))',
-        }}
-      >
-        {ACTIONS.map((a) => (
-          <a
-            key={a.mode}
-            {...link(modePath(project.id, a.mode))}
-            data-testid="quick-action"
-            data-mode={a.mode}
-            style={{
-              ...CSS.quick, justifyContent: empty ? 'flex-start' : 'center',
-              padding: empty ? '10px 12px' : '6px 8px',
-              fontSize: empty ? '12px' : '11px', fontWeight: empty ? 600 : 400,
-            }}
-          >
-            <span aria-hidden>{a.glyph}</span> {a.label}
-          </a>
-        ))}
-      </div>
+      {/* Documents — placeholder tiles only (§7.5), capped so the card cannot grow.
+          No docs ⇒ no region: omitted, never "No documents yet" (§2.1.2). */}
+      {docs.length > 0 && (
+        <div style={{ marginTop: '10px', display: 'flex', gap: '6px', alignItems: 'stretch' }}>
+          {docs.slice(0, MAX_TILES).map((d) => (
+            <DocTile
+              key={d.name}
+              projectId={project.id}
+              name={d.name}
+              kind={d.kind}
+              head={d.head}
+              when={
+                activity !== undefined && activity.docId === d.name
+                  ? activity.at
+                  : d.updated_at === null ? NaN : Date.parse(d.updated_at)
+              }
+            />
+          ))}
+          {docs.length > MAX_TILES && (
+            <span data-testid="doc-overflow" style={{ alignSelf: 'center', fontSize: '11px', color: S.muted, flexShrink: 0 }}>
+              {docs.length - MAX_TILES} more
+            </span>
+          )}
+        </div>
+      )}
+
+      <QuickActions projectId={project.id} link={link} detail={false} />
     </section>
   );
 }

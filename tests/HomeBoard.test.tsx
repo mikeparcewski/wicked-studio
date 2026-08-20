@@ -107,13 +107,14 @@ describe('HomeBoard — the orchestrator board', () => {
     expect(first).toHaveTextContent('gate');
   });
 
-  it('a project with nothing in it renders the four quick actions — the card IS the empty state', async () => {
+  it('a brand-new project is ONE invitation line + four differentiated actions (slice 2)', async () => {
     projects = [project({ id: 'p-empty', name: 'Empty' })];
     await boardWith();
     // An empty project is quiet by construction now (slice 1) — expand to reach its card.
     await expandQuiet();
 
     const card = await screen.findByTestId('project-card');
+    expect(card).toHaveAttribute('data-variant', 'quiet');
     const actions = within(card).getAllByTestId('quick-action');
     expect(actions).toHaveLength(4);
     expect(actions.map((a) => a.getAttribute('data-mode'))).toEqual(['chat', 'build', 'document', 'video']);
@@ -121,9 +122,20 @@ describe('HomeBoard — the orchestrator board', () => {
     expect(actions.map((a) => a.getAttribute('href'))).toEqual([
       '/p/p-empty/chat', '/p/p-empty/build', '/p/p-empty/document', '/p/p-empty/video',
     ]);
-    // Never a dead tile: the empty regions invite rather than showing nothing.
-    expect(card).toHaveTextContent('No documents yet');
-    expect(card).toHaveTextContent('No runs yet');
+    // The empty-state budget (§2.1.2): ONE line — the first-run invitation — and
+    // never a region of "nothing".
+    const summaries = within(card).getAllByTestId('quiet-summary');
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toHaveTextContent('Start by describing what you want');
+    expect(card).not.toHaveTextContent('No documents yet');
+    expect(card).not.toHaveTextContent('Nothing running');
+    expect(card).not.toHaveTextContent('No runs yet');
+    // First-run is where the sublabels teach what each verb PRODUCES (§2.2, F2).
+    const sublabels = within(card).getAllByTestId('quick-action-sublabel');
+    expect(sublabels.map((s) => s.textContent)).toEqual([
+      'think out loud with an agent', 'ship code, with checks',
+      'a deck, page, or report', 'record a demo',
+    ]);
   });
 
   it('a quick action navigates into the project shell', async () => {
@@ -134,12 +146,15 @@ describe('HomeBoard — the orchestrator board', () => {
     await expandQuiet();
 
     const card = await screen.findByTestId('project-card');
-    await user.click(within(card).getByText(/Do work/));
+    await user.click(within(card).getByText('Build'));
     expect(navigate).toHaveBeenCalledWith('/p/p-1/build');
   });
 
   it('doc tiles are PLACEHOLDERS — title, kind glyph, updated-at, never an iframe (§7.5)', async () => {
-    projects = [project({ id: 'p-docs', name: 'Docs', interactiveRoot: '/tmp/wi' })];
+    // Tiles live on the ACTIVE variant (slice 2): a live run puts the card in
+    // NEEDS YOU, and the docs it carries render as placeholder tiles there.
+    projects = [project({ id: 'p-docs', name: 'Docs', interactiveRoot: '/tmp/wi', updated_at: Date.now() })];
+    members = { 'p-docs': [member('p-docs', 'crew.run', 'run-docs')] };
     docs = {
       'p-docs': [
         { name: 'launch-deck', kind: 'doc', head: 2, versions: 2, updated_at: new Date(Date.now() - 3600_000).toISOString() },
@@ -148,12 +163,11 @@ describe('HomeBoard — the orchestrator board', () => {
         { name: 'overflow-one', kind: 'doc', head: 1, versions: 1, updated_at: null },
       ],
     };
-    await boardWith();
-    // Docs alone are a drafts nudge, never a demand (D2) — the card lives in QUIET.
-    await expandQuiet();
+    await boardWith([makeView({ id: 'run-docs', status: 'executing' })]);
 
     const card = await screen.findByTestId('project-card');
     await vi.waitFor(() => expect(within(card).getAllByTestId('doc-tile')).toHaveLength(3));
+    expect(card).toHaveAttribute('data-variant', 'active');
     expect(within(card).getByTestId('doc-overflow')).toHaveTextContent('1 more');
     expect(card).toHaveTextContent('launch-deck');
     expect(card).toHaveTextContent('1h ago');
@@ -167,8 +181,11 @@ describe('HomeBoard — the orchestrator board', () => {
     await expandQuiet();
 
     const card = await screen.findByTestId('project-card');
-    expect(card).toHaveTextContent('No documents yet');
     expect(within(card).queryByTestId('doc-tile')).toBeNull();
+    expect(card).not.toHaveTextContent('never-shown');
+    // Slice 2: absence is the one quiet line, never a "No documents yet" region.
+    expect(within(card).getAllByTestId('quiet-summary')).toHaveLength(1);
+    expect(card).not.toHaveTextContent('No documents yet');
   });
 
   it('windows the grid: what is mounted is bounded by the viewport, not by the project count', async () => {
@@ -179,8 +196,8 @@ describe('HomeBoard — the orchestrator board', () => {
     };
 
     // Twenty quiet projects mount as CHIPS while collapsed (a capped preview strip),
-    // and as a WINDOWED grid once expanded — the intent (mounted bounded by the
-    // viewport, not the project count) holds across both bands (D6).
+    // and as a WINDOWED grid once expanded. Slice-2 quiet cards are one line tall,
+    // so 20 may genuinely fit the viewport — the invariant is about the CEILING.
     seed(20);
     await boardWith();
     expect(screen.getAllByTestId('quiet-chip').length).toBeLessThan(20);
@@ -188,16 +205,18 @@ describe('HomeBoard — the orchestrator board', () => {
     const at20 = screen.getAllByTestId('project-card').length;
     expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', '20');
     expect(at20).toBeGreaterThan(0);
-    expect(at20).toBeLessThan(20);
+    expect(at20).toBeLessThanOrEqual(20);
     cleanup();
 
-    // Tripling the board does NOT triple what is mounted — that is the whole point of
-    // windowing, and it is what keeps 20+ cards legible (§1.4).
+    // Tripling the board does NOT triple what is mounted — what mounts is bounded
+    // by the viewport's row capacity (plus overscan), never by the project count.
+    // That is the whole point of windowing; it keeps 20+ cards legible (§1.4).
     seed(60);
     await boardWith();
     await expandQuiet();
     expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', '60');
-    expect(screen.getAllByTestId('project-card')).toHaveLength(at20);
+    const at60 = screen.getAllByTestId('project-card').length;
+    expect(at60).toBeLessThan(30);
   });
 
   it('states what is missing rather than showing a blank board', async () => {
