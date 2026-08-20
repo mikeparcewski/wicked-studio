@@ -112,6 +112,13 @@ What "independent" means here, and what this script proves end-to-end:
      accent-coloured, unanimated), the run chip inside the executing card carries
      the same edge, and under prefers-reduced-motion the animation is replaced by
      a wider solid edge rather than dropped.
+ 20. (DES-UXFIX-001 slice 1) the board renders NEEDS YOU / QUIET bands off the
+     decayed attention score. The board sections above expand the QUIET band
+     wherever they assert a quiet project's card (a run-less project is quiet by
+     construction now); the slice's own W2 messy-reality gate — an 8-day failure
+     demoted, a live run leading, the "Not in a project" shelf last/collapsed/
+     absent-when-empty — runs against a deterministic fixture rig in
+     e2e/uxfix_slice1_test.py, which needs no crew daemon at all.
 
 The daemon is the ONE thing this repo cannot supply. Point CREW_CLI at a built
 crew CLI entry (`.../packages/crew/dist/cli/index.js`); it defaults to the sibling
@@ -516,6 +523,10 @@ try:
         gate_chip_ok = "gate" in first_card.inner_text().lower()
 
         # AC: the empty project's card shows the four quick actions, each pre-bound to it.
+        # Slice 1 (DES-UXFIX-001): a run-less project is QUIET by construction, and its
+        # card mounts only once the band expands. The claim under test is unchanged.
+        page.locator('[data-testid="band-quiet-toggle"]').wait_for(timeout=30000)
+        page.locator('[data-testid="band-quiet-toggle"]').click()
         empty_card = page.locator(f'[data-testid="project-card"][data-project-id="{empty_project}"]')
         empty_card.wait_for(timeout=30000)
         actions = empty_card.locator('[data-testid="quick-action"]')
@@ -540,6 +551,9 @@ try:
             page,
             """() => Number(document.querySelector('[data-testid="project-board"]')?.dataset.total || 0) >= 20""",
         )
+        # Slice 1: mounted-bounded is a claim about CARDS — expand QUIET (the reload
+        # collapsed it again) so the bulk projects are in a grid, then count.
+        page.locator('[data-testid="band-quiet-toggle"]').click()
         total = int(board.get_attribute("data-total") or 0)
         rendered = page.locator('[data-testid="project-card"]').count()
         board_box = board.bounding_box() or {"height": 1e9}
@@ -648,6 +662,12 @@ try:
         # every assertion below is provably about THIS page load.
         page.evaluate("() => { window.__slice6 = 'same page'; }")
 
+        # Slice 1 (DES-UXFIX-001): live_b starts run-less, i.e. QUIET — expand the
+        # band so its card mounts. A toggle click is not a navigation; the sentinel
+        # set above survives it, which `same_page` still proves at the end.
+        page.locator('[data-testid="band-quiet-toggle"]').wait_for(timeout=30000)
+        page.locator('[data-testid="band-quiet-toggle"]').click()
+
         both_visible = settled(
             page,
             """ids => ids.every(id => document.querySelector(
@@ -682,6 +702,13 @@ try:
         )
         a_after_gate = page.evaluate(CARD_INDEX, live_a)
         b_after_gate = page.evaluate(CARD_INDEX, live_b)
+        # Slice 1 strengthens the claim: the gated card did not just sort first — it
+        # moved INTO the NEEDS YOU band (DES-UXFIX-001 §5.5: a gate never decays).
+        b_in_needs_you = page.evaluate(
+            """id => !!document.querySelector(
+                 `[data-testid="band-needs-you"] [data-testid="project-card"][data-project-id="${id}"]`)""",
+            live_b,
+        )
         page.screenshot(path=str(SHOTS / "slice6-board-gate-resort.png"), full_page=True)
 
         # ── AC: a delta for B updates B's headline within 2 s; A is unchanged ──
@@ -750,9 +777,11 @@ try:
     report["steps"]["board_live"] = {
         "ok": all([
             both_visible, chip_ok, resorted, b_after_gate < a_after_gate, b_before > a_before,
+            b_in_needs_you,
             headline_ok, a_untouched, doc_ok, same_page, one_socket,
             board_scroll_before == board_scroll_after, not clipped,
         ]),
+        "gated_card_in_needs_you_band": b_in_needs_you,
         "project_a": live_a,
         "project_b": live_b,
         "run_b": rb,
@@ -810,6 +839,12 @@ try:
         page.wait_for_function("() => typeof window.__pushFrame === 'function'", timeout=30000)
         # Same sentinel discipline as slice 6: any navigation or reload wipes it.
         page.evaluate("() => { window.__slice7 = 'same page'; }")
+
+        # Slice 1: keep quiet cards reachable for the whole flow — an approved run
+        # eventually completes and its project demotes out of the live band; with
+        # QUIET expanded, its chip stays queryable instead of unmounting mid-poll.
+        if page.locator('[data-testid="band-quiet-toggle"]').count() > 0:
+            page.locator('[data-testid="band-quiet-toggle"]').click()
 
         # ── AC: a simple gate is answered ON the board, and the run advances there ─
         approve = page.locator(f'[data-testid="gate-approve-{simple_run}"]')
