@@ -15,6 +15,11 @@ describe('copy triage — internal vocabulary stays internal', () => {
     expect(text).toMatch(/Campaigns are coming/);
   });
 
+  it('no spec citations in the Build dashboard source', async () => {
+    const src = (await import('node:fs')).readFileSync('src/components/CenterDashboard.tsx', 'utf8');
+    expect(src).not.toMatch(/Campaign primitive|RunFinished|§4\.3/);
+  });
+
   it('no user-visible "warm seat" phrasing in the chat composer', async () => {
     const src = (await import('node:fs')).readFileSync('src/components/GroupChat.tsx', 'utf8');
     const placeholders = src.match(/placeholder="[^"]*"/g) ?? [];
