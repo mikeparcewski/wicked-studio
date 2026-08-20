@@ -64,7 +64,9 @@ function strip(selected = 3): void {
   );
 }
 
-/** One board card carrying one document — §1.4's card, at the tile that owns the export. */
+/** One board card carrying one document — §1.4's card, at the tile that owns the export.
+ *  Doc tiles are ACTIVE-variant furniture (DES-UXFIX-001 §2.1.1, slice 2): a quiet
+ *  card is one line and no tiles, so this card is pinned into NEEDS YOU. */
 function card(): void {
   const item = {
     project: {
@@ -75,10 +77,9 @@ function card(): void {
     runs: [],
     docs: [{ name: DOC, kind: 'doc' as const, head: 3, versions: 3, updated_at: '2026-08-18T11:30:00Z' }],
     attention: 'drafts' as const,
-    // Slice-1 score fields — the export path never reads them, they just render.
-    score: 0,
-    band: 'quiet' as const,
-    signal: null,
+    score: 40,
+    band: 'needs-you' as const,
+    signal: { kind: 'running' as const, at: Date.now() },
   } as unknown as BoardProject;
   render(<ProjectCard item={item} navigate={() => {}} />);
 }

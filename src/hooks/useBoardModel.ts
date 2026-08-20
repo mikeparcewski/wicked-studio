@@ -92,7 +92,10 @@ export function deriveAttention(runs: SessionView[], docs: DocSummary[]): Attent
  *
  *   gate    → the gate store's `receivedAt` (server ISO on reconcile, arrival live)
  *   failing → the run's durable-log tail `ts` (backfilled once per run id, capped)
- *   running → the newest structured frame the runtime store has logged for the run
+ *   running → the newest structured frame the runtime store has logged for the run,
+ *             or a relayed interactive `status.posted` (a document being edited NOW
+ *             is live work — it is what puts the doc-activity line on an ACTIVE
+ *             card now that a quiet card renders no activity at all, slice 2)
  *   drafts  → the newest doc's `updated_at`
  *   any     → `project.updated_at`
  */
@@ -103,9 +106,11 @@ function signalsOf(
   gates: Record<string, OpenGate>,
   logTail: (runId: string) => number | undefined,
   failedAt: Record<string, number>,
+  activityAt: number | undefined,
 ): Signal[] {
   const fallback = project.updated_at;
   const signals: Signal[] = [];
+  if (activityAt !== undefined) signals.push({ kind: 'running', at: activityAt });
   for (const v of runs) {
     const id = v.session.id;
     const status = v.session.status;
@@ -171,6 +176,10 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
    *  cannot otherwise know, and the one F3 is about (D3 step 2). */
   const [failedAt, setFailedAt] = useState<Record<string, number>>({});
   const gates = useGateStore((s) => s.gates);
+  // Relayed doc statuses (slice 6) — REACTIVE, unlike `logs`: a `status.posted`
+  // is rare (one per doc edit, not one per streamed frame) and it must be able
+  // to promote its project into NEEDS YOU without waiting for the next tick.
+  const docActivity = useRuntimeStore((s) => s.docActivity);
   const repoNames = useRef<Map<string, string>>(new Map());
   /** Run ids the board has already tried to place — one re-read per run, ever. */
   const placed = useRef<Set<string>>(new Set());
@@ -283,7 +292,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
           const b = bindings[project.id] ?? EMPTY;
           const mine = runs.filter((v) => b.runIds.has(v.session.id));
           const { score, signal } = topSignal(
-            signalsOf(project, mine, b.docs, gates, logTail, failedAt),
+            signalsOf(project, mine, b.docs, gates, logTail, failedAt, docActivity[project.id]?.at),
             now,
           );
           return {
@@ -299,7 +308,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
           ),
         );
     },
-    [projects, bindings, runs, gates, failedAt, now],
+    [projects, bindings, runs, gates, docActivity, failedAt, now],
   );
 
   // The unfiled set (F5): what the run list holds that no membership claims. Held

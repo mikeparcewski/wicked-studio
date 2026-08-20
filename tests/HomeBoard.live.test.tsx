@@ -90,7 +90,9 @@ describe('HomeBoard — live activity (slice 6)', () => {
   });
 
   it('a unitOutputDelta for B updates B\'s headline in place and leaves A untouched', async () => {
-    projects = [project('p-a', 'Ay'), project('p-b', 'Bee')];
+    // Fresh `updated_at`: an executing run's clock is what ranks it (slice 1), and
+    // the ACTIVE variant with the live line is what a NEEDS YOU card is (slice 2).
+    projects = [project('p-a', 'Ay', { updated_at: Date.now() }), project('p-b', 'Bee', { updated_at: Date.now() })];
     members = { 'p-a': [member('p-a', 'run-a')], 'p-b': [member('p-b', 'run-b')] };
     await board([running('run-a'), running('run-b')]);
 
@@ -113,7 +115,7 @@ describe('HomeBoard — live activity (slice 6)', () => {
   });
 
   it('keeps streaming: the newest line replaces the previous one, no scroll, no dump', async () => {
-    projects = [project('p-b', 'Bee')];
+    projects = [project('p-b', 'Bee', { updated_at: Date.now() })];
     members = { 'p-b': [member('p-b', 'run-b')] };
     await board([running('run-b')]);
 
@@ -125,13 +127,16 @@ describe('HomeBoard — live activity (slice 6)', () => {
     expect(line.textContent).not.toContain('Reading src/App.tsx');
   });
 
-  it('a terminal run has no live line — the region invites instead of narrating a finished run', async () => {
+  it('a terminal run has no live line — the card is the QUIET one-liner, not "Nothing running"', async () => {
     projects = [project('p-done', 'Done')];
     members = { 'p-done': [member('p-done', 'run-done')] };
     await board([running('run-done', 'completed')]);
 
     expect(within(card('p-done')).queryByTestId('live-line')).toBeNull();
-    expect(card('p-done')).toHaveTextContent('Nothing running.');
+    // Slice 2's empty-state budget: absence is the ONE quiet-summary line.
+    expect(card('p-done')).toHaveAttribute('data-variant', 'quiet');
+    expect(within(card('p-done')).getAllByTestId('quiet-summary')).toHaveLength(1);
+    expect(card('p-done')).not.toHaveTextContent('Nothing running');
   });
 
   it('a gate arrival re-sorts the board without remounting the unaffected card', async () => {
@@ -162,11 +167,14 @@ describe('HomeBoard — live activity (slice 6)', () => {
     expect(card('p-a')).toBe(untouched);
   });
 
-  it('a relayed status.posted adds a doc line and dates that doc\'s tile', async () => {
+  it('a relayed status.posted promotes the card to ACTIVE, adds a doc line and dates the tile', async () => {
     projects = [project('p-doc', 'Docs', { interactiveRoot: '/tmp/wi' })];
     docs = { 'p-doc': [{ name: 'launch-deck', kind: 'doc', head: 1, versions: 1, updated_at: null }] };
     await board([]);
-    await vi.waitFor(() => expect(screen.getByTestId('doc-tile')).toHaveTextContent('not yet edited'));
+    // Docs alone are a drafts nudge (D2): the card idles as the QUIET one-liner,
+    // whose budget shows no tiles and no activity region (slice 2).
+    expect(card('p-doc')).toHaveAttribute('data-variant', 'quiet');
+    expect(within(card('p-doc')).queryByTestId('doc-tile')).toBeNull();
 
     push({
       type: 'interactiveEvent',
@@ -180,6 +188,11 @@ describe('HomeBoard — live activity (slice 6)', () => {
       },
     } as CoreEvent);
 
+    // A doc being edited NOW is live work: the signal promotes the project into
+    // NEEDS YOU, where the ACTIVE card carries the activity line and the tile.
+    await vi.waitFor(() => {
+      expect(card('p-doc')).toHaveAttribute('data-variant', 'active');
+    });
     expect(within(card('p-doc')).getByTestId('doc-activity'))
       .toHaveTextContent('Rewriting slide 3 — tightening the headline');
     expect(screen.getByTestId('doc-tile')).toHaveTextContent('0s ago');
@@ -199,12 +212,14 @@ describe('HomeBoard — live activity (slice 6)', () => {
   });
 
   it('picks up a run attached after first paint — no reload to see a launched run', async () => {
-    projects = [project('p-a', 'Ay')];
+    projects = [project('p-a', 'Ay', { updated_at: Date.now() })];
     const { rerender } = render(<HomeBoard runs={[]} navigate={() => {}} />);
-    // A run-less project is quiet by construction (slice 1) — expand to its card.
+    // A run-less project is quiet by construction (slice 1) — expand to its card,
+    // which is the one-line QUIET variant (slice 2), never "No runs yet".
     await vi.waitFor(() => expect(screen.queryByTestId('band-quiet-toggle')).not.toBeNull());
     await expandQuiet();
-    await vi.waitFor(() => expect(card('p-a')).toHaveTextContent('No runs yet.'));
+    await vi.waitFor(() => expect(within(card('p-a')).getAllByTestId('quiet-summary')).toHaveLength(1));
+    expect(card('p-a')).not.toHaveTextContent('No runs yet');
 
     // The run is launched and filed while the user sits on the board.
     members = { 'p-a': [member('p-a', 'run-new')] };
