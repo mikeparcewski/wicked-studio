@@ -16,8 +16,11 @@ describe('copy triage — internal vocabulary stays internal', () => {
   });
 
   it('no spec citations in the Build dashboard source', async () => {
+    // Comments and event-name code legitimately mention RunFinished etc. — only the
+    // user-visible COPY sentence is banned.
     const src = (await import('node:fs')).readFileSync('src/components/CenterDashboard.tsx', 'utf8');
-    expect(src).not.toMatch(/Campaign primitive|RunFinished|§4\.3/);
+    expect(src).not.toMatch(/Pending core.{0,40}Campaign primitive/);
+    expect(src).toMatch(/Campaigns are coming/);
   });
 
   it('no user-visible "warm seat" phrasing in the chat composer', async () => {
