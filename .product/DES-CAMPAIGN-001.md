@@ -1,6 +1,6 @@
 # DES-CAMPAIGN-001 — campaign grouping on the orchestrator board
 
-**Status:** DRAFT — §0–§3 complete
+**Status:** DRAFT — complete, ready for review
 **Date:** 2026-08-20
 **Issue:** mikeparcewski/wicked-studio#27
 **Scope:** Design only. No implementation.
@@ -567,3 +567,291 @@ a campaign card turns yellow.
 These slot into the existing `Panel` union (`'campaigns' | 'campaign-detail'`) with the same
 parse shape `repos` / `repo-detail` already use in `src/hooks/useRoute.ts`. No change to the
 `/p/:projectId/:mode` parse, which runs ahead of the panel parse and is untouched.
+
+---
+
+## 4 Insight surface
+
+### 4.1 The endpoints
+
+| Method | Path | Returns | Called by |
+|---|---|---|---|
+| `GET` | `/api/v1/campaigns` | `{ campaigns: CampaignSummary[] }` — newest-updated first, **always 200**, `[]` on an empty store (§1.5 rule 2) | the board, on `useRuns`' existing debounced tick; also the §1.5 support probe |
+| `GET` | `/api/v1/campaigns/:id` | `CampaignDetail` — 404 on an unknown label | `/campaigns/:id` |
+| `PUT` | `/api/v1/campaigns/:id` | `{ campaign: Campaign }` — sets `title` / `expected`; 404 on an unknown label (metadata never *creates* a campaign; only a run does) | the detail page's editor |
+| `PUT` | `/api/v1/campaigns/:id/runs` | `{ campaign: Campaign; filed: number }` — files existing runs; 404 if any run id is unknown, nothing filed | `/runs` multi-select, detail page |
+
+No `POST /campaigns` and no `DELETE`. A campaign is minted by its first run and has no
+independent existence; a campaign with no runs is not a thing this system needs to represent.
+(Un-filing is `PUT /campaigns/<other>/runs`, or — deliberately absent in v1 — nothing. §6.)
+
+### 4.2 The split: what crew answers vs what studio derives
+
+The division is not "server does data, client does display". It follows one rule:
+
+> **Crew owns the join and everything that depends on runs the client cannot see. Studio owns
+> everything derived from the live run list it already holds.**
+
+**Crew answers, and studio must not recompute:**
+
+- **The join itself** (`runIds`, `projectIds`) — crew is the only holder. `projectIds` comes from
+  the membership index crew already maintains, so it costs a map lookup per run.
+- **`counts`** — computed server-side over the **full filed set, including archived runs**. This
+  is the one that looks like it should be client-side and must not be. `GET /runs` excludes
+  archived runs by default (`crew#265`), so a client-derived `landed` would *drop* every landed
+  run the operator wrote off — and a long campaign is exactly the thing whose early runs get
+  archived. The number would shrink as the effort progressed. Remembering what the run list
+  forgets is the campaign's entire job; delegating it to the run list defeats it.
+- **`prs`** — see §4.3; it needs stored unit output the board would otherwise fetch N times.
+
+**Studio derives, and crew must not send:**
+
+- **Live run status, narration, and gate state.** All three are already live client-side: the
+  board holds `SessionView[]` and the shared runtime + gate stores hold the rest. A server-side
+  copy would be a second source of truth for a value the same page is already rendering from the
+  first, and the two would visibly disagree in the ~400 ms between a frame and a refetch.
+- **Attention/sort position of a campaign card** — a pure function of the statuses studio holds,
+  identical in spirit to `deriveAttention`.
+- **The rendered progress string and bar** — `counts` + `expected` in, `"15 of 18 landed"` out.
+  The denominator choice (§3.3) is a display rule and belongs where the display is.
+
+`CampaignDetail.runs[].status` is a deliberate exception, and labelled as one in the type: it is
+a **snapshot**, present so the detail page can render a row for an archived run the client's list
+does not contain. Live rows on that page still read the run list. Where both exist, the run list
+wins.
+
+### 4.3 PR links
+
+The deliver phase prints the PR URL as the last line of the `deliver` unit's stored output
+(`crew#293`). Crew resolves it; studio never does.
+
+ASSUMPTION[external-transform] library=gh (GitHub CLI) transform=`gh pr create --head <branch> --fill` prints the created pull request's HTML URL as the last line of stdout, which crew's deliver script captures with `| tail -1` confidence=known :: crew reads the last line of the deliver unit's stored output and accepts it as `CampaignPr.url` ONLY if it parses as an absolute `https://` URL whose path contains `/pull/<n>`; anything else (a gh hint line, an auth warning, a changed output format in a future gh release) yields no `prs` entry, so the card renders "landed, no PR link" rather than a wrong link. The URL is stored verbatim — never normalized, rewritten, or reconstructed from parts.
+
+Cost control, because the board calls the list endpoint on a debounced lifecycle tick:
+
+- **Resolved once, cached forever.** A terminal run's PR URL never changes. Crew resolves it on
+  the first `GET /campaigns*` *after* the run reaches a terminal status and writes the result
+  (URL, or a sentinel meaning "resolved to nothing") into the campaign store beside the join.
+  Subsequent reads are a map lookup.
+- **Never resolved for a non-terminal run** — the deliver phase has not run yet, so a read would
+  cost I/O to learn nothing.
+- **Capped at the newest 20 per campaign**, with `prsTruncated: true` when the cap bites. The cap
+  is *reported*, not silent: a surface that says "all 24 ›" while holding 20 is lying about what
+  the link opens.
+
+### 4.4 The detail page
+
+`/campaigns/:id` is where the campaign stops being a summary. One row per run: status, project,
+problem line, the live narration line for runs that are in flight, the PR link for runs that
+landed, and an `archived` marker for runs the board cannot show. Plus the two write affordances
+— the `title`/`expected` editor (`PUT /campaigns/:id`) and file-existing-runs
+(`PUT /campaigns/:id/runs`).
+
+It is deliberately a **table, not a graph**. There is no dependency information in this model to
+draw edges from (§1.2), and drawing a plausible-looking DAG from launch order would be inventing
+structure the system does not have. `CampaignDagStub` stays a stub for exactly that reason (§6).
+
+---
+
+## 5 Slice plan
+
+### 5.0 Ground rules and release sequencing
+
+Inherits DES-MERGE-001 §6.0 verbatim, with the LOC budget tightened: **≤300 LOC of production
+diff per slice** (tests excluded from the count, never from the PR), each slice independently
+mergeable and revertable, acceptance criteria written as Playwright assertions against
+`data-testid` selectors in `e2e/studio_standalone_test.py`, and every slice's AC includes
+DES-MERGE-001 §3.7's heuristic where a working state is visible. Merge protocol per the
+ecosystem CLAUDE.md: branch, open PR, wait 6–8 minutes for the bots and CI, address comments,
+then merge.
+
+**The contract lands before its consumers.** Non-negotiable ordering:
+
+```
+1. api-types 0.7.0 cut + published        (wicked-crew/packages/crew-api-types)
+      ├── campaign? on LaunchRunBody
+      ├── Campaign, CampaignSummary, CampaignCounts, CampaignPr,
+      │   CampaignDetail, CampaignRun, UpdateCampaignBody, AttachCampaignRunsBody
+      └── deliver?: 'pr' folded in (its own NOTE says to fold it when 0.7.0 cuts)
+                    │
+2. crew depends on ^0.7.0 ──────────► slice 1 (crew: store + routes)
+                    │
+3. studio bumps ^0.5.1 → ^0.7.0 ────► slices 2, 3, 4 (studio)
+```
+
+Slice 1's PR contains **both** the api-types cut and the crew implementation, in that commit
+order, because `tests/wire-contract.test.ts` proves at compile time that every body the published
+contract lets a client send is a body crew's zod schemas accept — the two must move together or
+that guard fails. The publish (`release-api-types.yml`) fires on the tag, before studio's bump.
+
+Studio's `^0.5.1 → ^0.7.0` bump rides **slice 2** — the first studio slice that needs the new
+types. Slices 3 and 4 need no further bump.
+
+### 5.1 Slice 1 — the contract, crew's campaign store, and the read surface
+
+*(`wicked-crew`; ~275 LOC production)*
+
+- **api-types 0.7.0** as listed in §5.0 (~90 LOC, all declarations).
+- `src/campaigns/store.ts` — `CampaignStore`: durable JSON at `~/.wicked-crew/campaigns.json`
+  (`WICKED_CREW_CAMPAIGNS` override), atomic write (tmp + rename), tolerant per-row read, modelled
+  directly on `ProjectSettingsStore`. Holds `{ id, title, expected, created_at, updated_at,
+  runs: { runId: { filed_at, prUrl? } } }`. (~90)
+- `LaunchSchema` gains `campaign: z.string().regex(LABEL).optional()`; the post-commit block
+  beside the existing `projects.index.set(...)` files the run and adds `campaign` to the
+  `run.launched` audit detail. (~15)
+- `src/api/campaign-routes.ts` — the four routes of §4.1, `counts` computed over the full filed
+  set from `sessions_detail`, `projectIds` from the membership index, and the lazy-once PR
+  resolution of §4.3. (~80)
+
+**AC** (HTTP-level, in the standalone harness — no UI yet):
+
+1. Launch two runs with `campaign: "DES-X"` → `GET /campaigns` returns one row with
+   `counts.filed === 2` and both run ids in `runIds`.
+2. `campaign: "DES X!"` → **400**, and `GET /runs` proves no run was launched.
+3. Two runs in `DES-X` filed into *different* projects → that row's `projectIds` has both, in
+   first-seen order.
+4. `PUT /campaigns/DES-X { expected: 18 }` → the row reports `expected: 18`; **restart the
+   daemon** → it still does (durability, not just in-memory state).
+5. `PUT /campaigns/DES-X/runs { runIds: [<existing run>, "nope"] }` → **404**, and
+   `counts.filed` is unchanged (all-or-nothing).
+6. `GET /campaigns` on a daemon with an empty store → **`200 { campaigns: [] }`**, never 404 —
+   the discriminator §1.5's probe depends on.
+7. Archive a landed run (`POST /runs/:id/archive`) → it disappears from `GET /runs` but
+   `counts.landed` and `counts.archived` both still count it (§4.2's whole argument).
+8. A run whose deliver phase printed a PR URL → `prs[0].url` is that line verbatim; a run whose
+   last output line is not a `/pull/<n>` URL → no `prs` entry (§4.3).
+
+### 5.2 Slice 2 — launch threading in studio
+
+*(`wicked-studio`; ~170 LOC production)*
+
+- `package.json`: `wicked-crew-api-types` `^0.5.1 → ^0.7.0`.
+- `src/api/client.ts`: `listCampaigns`, `getCampaign`, `updateCampaign`, `attachCampaignRuns`.
+  (~35)
+- `src/store/campaigns.ts`: the support probe (§1.5) plus the campaign list, refetched on the
+  same tick as `useRuns`. Three states — `unknown | supported | unsupported` — never a boolean,
+  so "not probed yet" cannot render as "not supported". (~60)
+- `src/components/ChatInput.tsx`: the Campaign combobox of §2.2 — datalist over known ids,
+  empty by default, pre-filled from `?campaign=`, absent when unsupported, omitted from the body
+  when blank. (~75)
+
+**AC:**
+
+1. Against a daemon that 404s `/campaigns`, the launch form renders **no** campaign field
+   (`campaign-field` absent, not disabled) and a launch still succeeds.
+2. Against a supporting daemon, the field renders; the datalist offers a label created by an
+   earlier run.
+3. Typing `DES-X` and launching → `GET /campaigns` files that run under `DES-X`.
+4. Submitting with the field blank sends **no** `campaign` key (asserted on the request body,
+   not the outcome) and the launch succeeds.
+5. Navigating to `/p/<id>/build?campaign=DES-X` pre-fills the field with `DES-X`.
+6. §3.7: with the field focused and empty, the form still states what it will launch and offers
+   the control that launches it.
+
+### 5.3 Slice 3 — the campaign band on the board
+
+*(`wicked-studio`; ~280 LOC production)*
+
+- `src/hooks/useCampaignModel.ts`: join `CampaignSummary[]` to the board's live `SessionView[]`,
+  derive attention, select the runs each card renders. (~85)
+- `src/components/CampaignCard.tsx`: §3.3's anatomy at a fixed 148 px, reusing `useRunHeadline`,
+  `GateChip`, and `LiveEdge`. (~145)
+- `src/components/CampaignBand.tsx`: the collapsible fixed-height row, 4 rendered + `N more ›`,
+  hidden entirely at zero active campaigns, collapsed state in `localStorage`. (~50)
+- `HomeBoard.tsx`: mount the band above the grid scroller. (~5 — the grid's windowing math is
+  deliberately untouched.)
+
+**AC:**
+
+1. One campaign of three runs (1 landed, 1 gate-waiting, 1 executing) with `expected: 3` →
+   `campaign-card` renders above `project-board` showing **"1 of 3 landed"**.
+2. With `expected` cleared → the same card reads **"1 of 3 landed so far"** (§3.3's denominator
+   honesty — two different strings, asserted separately).
+3. **Live, on one socket:** while the page sits on `/` and never reloads, a `unitOutputDelta`
+   for the executing run updates that card's headline within 2 s, and the project card below is
+   untouched (the slice-6 assertion shape, applied to the band).
+4. The gate-waiting run's chip is **answerable inline** — approve with no navigation, and the
+   card's counts move on the next tick.
+5. A campaign whose runs span two projects renders **once** with both project chips, and each
+   project's own card still shows its run chip (§3.4's deliberate duplication, asserted from
+   both sides).
+6. **The 20-card budget holds:** with 20 projects *and* an active campaign band,
+   `project-board`'s `data-rendered` is unchanged from the slice-5 assertion and the board stays
+   inside the viewport.
+7. Zero active campaigns → no `campaign-band` element at all.
+8. §3.7: every state of the card answers "what is it doing, and what can I do?" — no bare count
+   without a subject, no gate without a control.
+
+### 5.4 Slice 4 — `/campaigns`, `/campaigns/:id`, and filing existing runs
+
+*(`wicked-studio`; ~255 LOC production)*
+
+- `useRoute.ts`: `'campaigns' | 'campaign-detail'` on the `Panel` union + parse. (~15)
+- `src/components/CampaignsPage.tsx`: every campaign, active and finished. (~70)
+- `src/components/CampaignDetailPage.tsx`: §4.4's table + the `title`/`expected` editor + the
+  file-existing-runs control. (~140)
+- `RunList.tsx`: a multi-select → "File into campaign…". (~25)
+- `InsightRail.tsx` / `CampaignDagStub.tsx`: correct the stub's now-false claim that core has no
+  campaign primitive, and point it at `/campaigns/:id`. It stays a stub (§6). (~5)
+
+**AC:**
+
+1. `/campaigns` lists a finished campaign that the band correctly omits (the escape hatch does
+   what it exists for).
+2. `/campaigns/:id` shows one row per run including an **archived** run marked as such, with the
+   PR link on the landed row.
+3. Setting `expected` in the editor changes the band's card string on the next tick, with no
+   reload.
+4. Selecting two runs on `/runs` and filing them into `DES-X` moves `counts.filed` by two, and
+   the band's card reflects it.
+5. A campaign id that does not exist → the page states that in words and offers `/campaigns`,
+   not a spinner (§3.7).
+
+### 5.5 Sequencing notes
+
+- **Slice 1 is a hard prerequisite for 2–4** and is the only cross-repo one. It is also entirely
+  invisible to users, so it can land and bake while studio work is written against it.
+- **Slices 3 and 4 are independent after slice 2** and can proceed in parallel by different
+  authors: 3 touches the board, 4 touches routes and pages.
+- **No slice is irreversible.** Reverting slice 3 leaves labels being recorded and readable at
+  `/campaigns`; reverting slice 1 leaves the daemon rejecting an unknown field, which slice 2's
+  probe already handles as "unsupported". There is no state in this plan where a revert loses an
+  operator's data — the store file survives every revert and is re-read by the next install.
+
+---
+
+## 6 Out of scope (named so they aren't assumed)
+
+**Authoring a core campaign DAG from studio.** Dependency edges, `max_concurrency`,
+`FailurePolicy`, campaign-level pause/cancel/retry — all of core's DES-CAMPAIGN-001. It needs
+the napi binding that does not exist (§1.1). The forward path is §1.3: when it lands, the
+scheduler writes the same `campaign` label onto the runs it dispatches, and this surface renders
+them with no change.
+
+**The campaign DAG visualization.** `CampaignDagStub` stays a stub. Slice 4 corrects its stale
+comment and links it to the detail table; it does not draw a graph. There is no edge data in
+this model, and inferring one from launch order would be inventing structure the system does not
+have (§4.4).
+
+**Retro-editing a campaign's history.** Un-filing a run, deleting a campaign, merging two
+campaigns after a typo fork (§1.2). Filing a run into a *different* campaign already overwrites
+the label, which covers the typo case at the cost of a manual pass; the rest waits for a real
+operator ask.
+
+**Multi-campaign runs.** A run belongs to at most one campaign (§2.3). "n of m landed" has no
+meaning if a run can sit in two denominators.
+
+**Campaign-level governance.** Campaign gates, a campaign acceptance verdict, a campaign-scoped
+evidence bundle. Governance is a property of a *run* in this platform, and re-deriving "done"
+for an effort from its runs' evidence is a wicked-crew acceptance-gate question, not a board
+question.
+
+**Nested campaigns / campaigns of campaigns.** One level. An effort large enough to need two is
+an effort that needs the DAG.
+
+**Cross-daemon campaigns.** The store is one daemon's file. A campaign whose runs live on two
+daemons is part of the remote-runner story (DES-MERGE-001 §7.9), not this one.
+
+**Campaign-scoped narration or transcript.** The band shows per-run headlines from the existing
+store (§2.4). A merged campaign-wide transcript is the surface that would earn a `campaign` tag
+on `/ws` frames; §2.4 names the condition.
