@@ -63,6 +63,11 @@ async function boardWith(runs = [] as ReturnType<typeof makeView>[]): Promise<vo
   });
 }
 
+/** Slice 1 bands: a quiet project's CARD mounts only once QUIET is expanded. */
+async function expandQuiet(): Promise<void> {
+  await userEvent.setup().click(await screen.findByTestId('band-quiet-toggle'));
+}
+
 describe('HomeBoard — the orchestrator board', () => {
   beforeEach(() => {
     projects = [];
@@ -73,7 +78,9 @@ describe('HomeBoard — the orchestrator board', () => {
   it('sorts by attention: gate-waiting before running before empty', async () => {
     projects = [
       project({ id: 'p-quiet', name: 'Quiet' }),
-      project({ id: 'p-run', name: 'Running' }),
+      // Under decay (DES-UXFIX-001 §2.1.3) a live run's clock is what ranks it, so
+      // the fixture is honest about it: a project executing NOW was touched now.
+      project({ id: 'p-run', name: 'Running', updated_at: Date.now() }),
       project({ id: 'p-gate', name: 'Gated' }),
     ];
     members = {
@@ -85,19 +92,26 @@ describe('HomeBoard — the orchestrator board', () => {
       makeView({ id: 'run-gate', status: 'awaiting_human' }),
     ]);
 
+    // Slice 1 bands: the projects that need a human are CARDS inside NEEDS YOU,
+    // score-ordered; the quiet one is a one-line preview chip, not a card.
     await vi.waitFor(() => {
-      const cards = screen.getAllByTestId('project-card');
-      expect(cards.map((c) => c.getAttribute('data-project-id'))).toEqual(['p-gate', 'p-run', 'p-quiet']);
+      const band = screen.getByTestId('band-needs-you');
+      const cards = within(band).getAllByTestId('project-card');
+      expect(cards.map((c) => c.getAttribute('data-project-id'))).toEqual(['p-gate', 'p-run']);
     });
+    expect(screen.getByTestId('quiet-chip')).toHaveAttribute('data-project-id', 'p-quiet');
     // AC: the first card IS the gate-waiting one, and says so.
     const first = screen.getAllByTestId('project-card')[0];
     expect(first).toHaveAttribute('data-attention', 'gate');
+    expect(first).toHaveAttribute('data-band', 'needs-you');
     expect(first).toHaveTextContent('gate');
   });
 
   it('a project with nothing in it renders the four quick actions — the card IS the empty state', async () => {
     projects = [project({ id: 'p-empty', name: 'Empty' })];
     await boardWith();
+    // An empty project is quiet by construction now (slice 1) — expand to reach its card.
+    await expandQuiet();
 
     const card = await screen.findByTestId('project-card');
     const actions = within(card).getAllByTestId('quick-action');
@@ -117,6 +131,7 @@ describe('HomeBoard — the orchestrator board', () => {
     const navigate = vi.fn();
     projects = [project({ id: 'p-1', name: 'One' })];
     render(<HomeBoard runs={[]} navigate={navigate} />);
+    await expandQuiet();
 
     const card = await screen.findByTestId('project-card');
     await user.click(within(card).getByText(/Do work/));
@@ -134,6 +149,8 @@ describe('HomeBoard — the orchestrator board', () => {
       ],
     };
     await boardWith();
+    // Docs alone are a drafts nudge, never a demand (D2) — the card lives in QUIET.
+    await expandQuiet();
 
     const card = await screen.findByTestId('project-card');
     await vi.waitFor(() => expect(within(card).getAllByTestId('doc-tile')).toHaveLength(3));
@@ -147,6 +164,7 @@ describe('HomeBoard — the orchestrator board', () => {
     projects = [project({ id: 'p-none', name: 'None' })];
     docs = { 'p-none': [{ name: 'never-shown', kind: 'doc', head: 1, versions: 1, updated_at: null }] };
     await boardWith();
+    await expandQuiet();
 
     const card = await screen.findByTestId('project-card');
     expect(card).toHaveTextContent('No documents yet');
@@ -160,8 +178,13 @@ describe('HomeBoard — the orchestrator board', () => {
       );
     };
 
+    // Twenty quiet projects mount as CHIPS while collapsed (a capped preview strip),
+    // and as a WINDOWED grid once expanded — the intent (mounted bounded by the
+    // viewport, not the project count) holds across both bands (D6).
     seed(20);
     await boardWith();
+    expect(screen.getAllByTestId('quiet-chip').length).toBeLessThan(20);
+    await expandQuiet();
     const at20 = screen.getAllByTestId('project-card').length;
     expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', '20');
     expect(at20).toBeGreaterThan(0);
@@ -172,6 +195,7 @@ describe('HomeBoard — the orchestrator board', () => {
     // windowing, and it is what keeps 20+ cards legible (§1.4).
     seed(60);
     await boardWith();
+    await expandQuiet();
     expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', '60');
     expect(screen.getAllByTestId('project-card')).toHaveLength(at20);
   });

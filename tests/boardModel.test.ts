@@ -4,9 +4,7 @@ import type { Project, SessionView } from '../src/api/types.js';
 import {
   deriveAttention,
   interactiveRootOf,
-  sortByAttention,
   type Attention,
-  type BoardProject,
 } from '../src/hooks/useBoardModel.js';
 import { ago } from '../src/components/ProjectCard.js';
 import { makeView } from './factories.js';
@@ -25,10 +23,6 @@ function project(over: Partial<Project> & { id: string }): Project {
   };
 }
 
-function item(id: string, attention: Attention, updated_at = 1, name = id): BoardProject {
-  return { project: project({ id, name, updated_at }), repo: null, runs: [], docs: [], attention };
-}
-
 describe('deriveAttention (DES-MERGE-001 §1.4 sort key)', () => {
   const cases: [string, SessionView[], DocSummary[], Attention][] = [
     ['a waiting gate outranks everything', [makeView({ id: 'r1', status: 'executing' }), makeView({ id: 'r2', status: 'awaiting_human' })], [doc], 'gate'],
@@ -44,33 +38,9 @@ describe('deriveAttention (DES-MERGE-001 §1.4 sort key)', () => {
   }
 });
 
-describe('sortByAttention', () => {
-  it('orders gate > failing > running > drafts > quiet', () => {
-    const sorted = sortByAttention([
-      item('quiet', 'quiet'),
-      item('drafts', 'drafts'),
-      item('running', 'running'),
-      item('failing', 'failing'),
-      item('gate', 'gate'),
-    ]);
-    expect(sorted.map((i) => i.project.id)).toEqual(['gate', 'failing', 'running', 'drafts', 'quiet']);
-  });
-
-  it('breaks ties on recency, then name — never on list position', () => {
-    const sorted = sortByAttention([
-      item('old', 'quiet', 10, 'zulu'),
-      item('new', 'quiet', 20, 'alpha'),
-      item('same-b', 'quiet', 20, 'bravo'),
-    ]);
-    expect(sorted.map((i) => i.project.id)).toEqual(['new', 'same-b', 'old']);
-  });
-
-  it('does not mutate its input', () => {
-    const input = [item('quiet', 'quiet'), item('gate', 'gate')];
-    sortByAttention(input);
-    expect(input.map((i) => i.project.id)).toEqual(['quiet', 'gate']);
-  });
-});
+// The fixed-bucket `sortByAttention` is gone (DES-UXFIX-001 slice 1): ordering is
+// the decayed-score comparator, pinned in `boardAttention.test.ts`. The bucket
+// itself survives above as a labelling concern (D8), tests kept as-is.
 
 describe('interactiveRootOf', () => {
   it('reads either spelling of the forward-additive project setting', () => {

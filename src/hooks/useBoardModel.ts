@@ -2,9 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { listDocs, type DocSummary } from '../api/interactive.js';
 import type { Project, ProjectMember, SessionView } from '../api/types.js';
+import {
+  bandOf,
+  compareScored,
+  topSignal,
+  type Band,
+  type Signal,
+} from '../board/boardAttention.js';
+import { useGateStore, type OpenGate } from '../store/gates.js';
+import { useRuntimeStore } from '../store/runtime.js';
 
 /**
- * The orchestrator board's data model (DES-MERGE-001 §1.4).
+ * The orchestrator board's data model (DES-MERGE-001 §1.4; sort + bands per
+ * DES-UXFIX-001 §2.1.3–§2.1.4, slice 1).
  *
  * The REST half: `GET /projects`, `GET /runs` (owned by `useRuns`, passed in),
  * each project's members, and the interactive `listDocs` for projects bound to an
@@ -17,18 +27,29 @@ import type { Project, ProjectMember, SessionView } from '../api/types.js';
  * Memberships are re-read when a run the board has never placed shows up in the
  * run list (slice 6): a run launched from a card's quick action, or by any other
  * client, must land on its project's card without a reload.
+ *
+ * Ordering is by DECAYED attention score (`boardAttention.ts`), not by a fixed
+ * bucket — the F3 fix: a failure from last week no longer outranks a run that is
+ * executing now. `deriveAttention`'s bucket survives as a LABELLING concern (the
+ * status dot, `data-attention`); it is no longer the sort key.
  */
 
-/** Attention buckets, most-urgent first — §1.4's sort key, spelled once. */
+/** Attention buckets — §1.4's vocabulary, kept for the card's dot + label (D8). */
 export type Attention = 'gate' | 'failing' | 'running' | 'drafts' | 'quiet';
-
-const ORDER: readonly Attention[] = ['gate', 'failing', 'running', 'drafts', 'quiet'];
 
 /** Statuses that mean the run is moving under its own power. */
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
 
 /** Membership kinds that make a run/thread a member of a project. */
 const RUN_KINDS: ReadonlySet<string> = new Set(['crew.run', 'crew.chat']);
+
+/** How often decayed scores are re-read (D7). Coarse on purpose: slow enough that
+ *  the board never reorders under a cursor, fast enough that a demotion point is
+ *  honoured without waiting for unrelated data to arrive. */
+const TICK_MS = 60_000;
+
+/** At most this many `runEvents` backfills per board load (D3 step 2 / R2). */
+const MAX_BACKFILL = 12;
 
 export interface BoardProject {
   project: Project;
@@ -37,6 +58,11 @@ export interface BoardProject {
   runs: SessionView[];
   docs: DocSummary[];
   attention: Attention;
+  /** Decayed attention (§2.1.3): the max over the project's signals at the last tick. */
+  score: number;
+  band: Band;
+  /** The signal that set the score — `null` when the project has none at all. */
+  signal: Signal | null;
 }
 
 /**
@@ -49,7 +75,7 @@ export function interactiveRootOf(p: Project): string | null {
   return typeof v === 'string' && v.trim() !== '' ? v : null;
 }
 
-/** §1.4's sort key. Gate-waiting first; ties break newest-updated, then by name. */
+/** §1.4's bucket, demoted from sort key to label (D8): what the dot means. */
 export function deriveAttention(runs: SessionView[], docs: DocSummary[]): Attention {
   if (runs.some((v) => v.session.status === 'awaiting_human')) return 'gate';
   if (runs.some((v) => v.session.status === 'failed')) return 'failing';
@@ -58,13 +84,47 @@ export function deriveAttention(runs: SessionView[], docs: DocSummary[]): Attent
   return 'quiet';
 }
 
-export function sortByAttention(items: BoardProject[]): BoardProject[] {
-  return [...items].sort(
-    (a, b) =>
-      ORDER.indexOf(a.attention) - ORDER.indexOf(b.attention) ||
-      b.project.updated_at - a.project.updated_at ||
-      a.project.name.localeCompare(b.project.name),
-  );
+/**
+ * The D3 source ladder: each signal is stamped with the most honest clock the
+ * client can already reach, degrading source by source down to the project's
+ * own `updated_at`. `AgentSession` carries no timestamps, so the ladder is the
+ * whole reason the decay arithmetic has something true to decay FROM.
+ *
+ *   gate    → the gate store's `receivedAt` (server ISO on reconcile, arrival live)
+ *   failing → the run's durable-log tail `ts` (backfilled once per run id, capped)
+ *   running → the newest structured frame the runtime store has logged for the run
+ *   drafts  → the newest doc's `updated_at`
+ *   any     → `project.updated_at`
+ */
+function signalsOf(
+  project: Project,
+  runs: SessionView[],
+  docs: DocSummary[],
+  gates: Record<string, OpenGate>,
+  logTail: (runId: string) => number | undefined,
+  failedAt: Record<string, number>,
+): Signal[] {
+  const fallback = project.updated_at;
+  const signals: Signal[] = [];
+  for (const v of runs) {
+    const id = v.session.id;
+    const status = v.session.status;
+    if (status === 'awaiting_human') {
+      signals.push({ kind: 'gate', at: gates[id]?.receivedAt ?? fallback, runId: id });
+    } else if (status === 'failed') {
+      signals.push({ kind: 'failing', at: failedAt[id] ?? fallback, runId: id });
+    } else if (ACTIVE.has(status)) {
+      signals.push({ kind: 'running', at: logTail(id) ?? fallback, runId: id });
+    }
+  }
+  if (docs.length > 0) {
+    const newest = docs.reduce((acc, d) => {
+      const t = d.updated_at === null ? NaN : Date.parse(d.updated_at);
+      return Number.isNaN(t) ? acc : Math.max(acc, t);
+    }, -Infinity);
+    signals.push({ kind: 'drafts', at: Number.isFinite(newest) ? newest : fallback });
+  }
+  return signals;
 }
 
 /** Everything about a project that the run list itself cannot answer. */
@@ -92,7 +152,10 @@ async function loadBindings(p: Project, repoNames: Map<string, string>): Promise
 }
 
 export interface BoardModel {
+  /** Score-ordered board cards. */
   items: BoardProject[];
+  /** Runs no non-default project claims — the "Not in a project" shelf (D4). */
+  unfiled: SessionView[];
   loading: boolean;
   error: string | null;
 }
@@ -102,9 +165,28 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
   const [bindings, setBindings] = useState<Record<string, Bindings>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** The decay clock (D7): scores are recomputed on this coarse tick. */
+  const [now, setNow] = useState(() => Date.now());
+  /** Backfilled durable-log tail per FAILED run id — the one age the client
+   *  cannot otherwise know, and the one F3 is about (D3 step 2). */
+  const [failedAt, setFailedAt] = useState<Record<string, number>>({});
+  const gates = useGateStore((s) => s.gates);
   const repoNames = useRef<Map<string, string>>(new Map());
   /** Run ids the board has already tried to place — one re-read per run, ever. */
   const placed = useRef<Set<string>>(new Set());
+  /** Run ids whose event tail has been asked for — once per run id, ever (R2). */
+  const backfilled = useRef<Set<string>>(new Set());
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), TICK_MS);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,7 +197,11 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
           api.listProjects(),
           api.listRepos().then((r) => r.repos).catch(() => []),
         ]);
-        active = all.filter((p) => p.status === 'active');
+        // The synthesized "Unfiled" bucket is NOT a project and never renders as a
+        // card (F5, D4) — the same exclusion `useLegacyRedirect` applies, for the
+        // same reason: a hit there means *no project*. Its runs surface through
+        // `unfiled` below, as the last, collapsed shelf.
+        active = all.filter((p) => p.status === 'active' && p.id !== 'default');
         repoNames.current = new Map(repos.map((r) => [r.id, r.name]));
       } catch (e) {
         if (!cancelled) {
@@ -159,17 +245,71 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     return () => { cancelled = true; };
   }, [runs, projects, bindings]);
 
+  // D3 step 2: a FAILED run's age lives only in its durable event log, so it is
+  // fetched — after first paint, once per run id ever, capped per board load, and
+  // failure-tolerant (a failed fetch is a miss, never an error: the fallback clock
+  // stands). Without this, a recently-touched project with a week-old failure
+  // would read as fresh (R3).
+  useEffect(() => {
+    if (loading) return;
+    for (const v of runs) {
+      if (v.session.status !== 'failed' || backfilled.current.has(v.session.id)) continue;
+      if (backfilled.current.size >= MAX_BACKFILL) break;
+      const id = v.session.id;
+      backfilled.current.add(id);
+      void api.getRunEvents(id)
+        .then(({ events }) => {
+          const ts = events[events.length - 1]?.ts;
+          if (mounted.current && typeof ts === 'number') {
+            setFailedAt((m) => ({ ...m, [id]: ts }));
+          }
+        })
+        .catch(() => { /* no durable log — the fallback clock stands */ });
+    }
+  }, [runs, loading]);
+
   const items = useMemo(
-    () =>
-      sortByAttention(
-        projects.map((project) => {
+    () => {
+      // Live-frame clocks are read NON-reactively: the tick and every run/binding/
+      // gate change already recompute this memo, and subscribing to `logs` would
+      // re-render the whole board once per streamed frame.
+      const logs = useRuntimeStore.getState().logs;
+      const logTail = (id: string): number | undefined => {
+        const log = logs[id];
+        return log !== undefined && log.length > 0 ? log[log.length - 1]?.ts : undefined;
+      };
+      return projects
+        .map((project): BoardProject => {
           const b = bindings[project.id] ?? EMPTY;
           const mine = runs.filter((v) => b.runIds.has(v.session.id));
-          return { project, repo: b.repo, runs: mine, docs: b.docs, attention: deriveAttention(mine, b.docs) };
-        }),
-      ),
-    [projects, bindings, runs],
+          const { score, signal } = topSignal(
+            signalsOf(project, mine, b.docs, gates, logTail, failedAt),
+            now,
+          );
+          return {
+            project, repo: b.repo, runs: mine, docs: b.docs,
+            attention: deriveAttention(mine, b.docs),
+            score, band: bandOf(score), signal,
+          };
+        })
+        .sort((a, b) =>
+          compareScored(
+            { score: a.score, at: a.signal?.at ?? a.project.updated_at, name: a.project.name },
+            { score: b.score, at: b.signal?.at ?? b.project.updated_at, name: b.project.name },
+          ),
+        );
+    },
+    [projects, bindings, runs, gates, failedAt, now],
   );
 
-  return { items, loading, error };
+  // The unfiled set (F5): what the run list holds that no membership claims. Held
+  // back until the first membership read lands — before that, EVERY run would look
+  // unfiled and the shelf would flash into existence on each load.
+  const unfiled = useMemo(() => {
+    if (loading || (projects.length > 0 && Object.keys(bindings).length === 0)) return [];
+    const known = new Set(Object.values(bindings).flatMap((b) => [...b.runIds]));
+    return runs.filter((v) => !known.has(v.session.id));
+  }, [runs, projects, bindings, loading]);
+
+  return { items, unfiled, loading, error };
 }

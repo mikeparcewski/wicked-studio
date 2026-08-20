@@ -28,6 +28,8 @@ function project(id: string): Project {
 }
 
 function card(id: string, statuses: SessionStatus[], attention: BoardProject['attention']): BoardProject {
+  // The edge is derived from run STATUS, not from the score — the slice-1 fields
+  // only need to typecheck here, so a neutral score/band/signal is enough.
   return {
     project: project(id),
     repo: null,
@@ -36,6 +38,9 @@ function card(id: string, statuses: SessionStatus[], attention: BoardProject['at
     ),
     docs: [],
     attention,
+    score: attention === 'quiet' ? 0 : 100,
+    band: attention === 'quiet' ? 'quiet' : 'needs-you',
+    signal: null,
   };
 }
 
