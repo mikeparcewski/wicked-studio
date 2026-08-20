@@ -108,7 +108,8 @@ describe('HomeBoard — the orchestrator board', () => {
   });
 
   it('a brand-new project is ONE invitation line + four differentiated actions (slice 2)', async () => {
-    projects = [project({ id: 'p-empty', name: 'Empty' })];
+    // "Just created" is literal (§2.1.2): the invitation needs a fresh created_at.
+    projects = [project({ id: 'p-empty', name: 'Empty', created_at: Date.now() })];
     await boardWith();
     // An empty project is quiet by construction now (slice 1) — expand to reach its card.
     await expandQuiet();

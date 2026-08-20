@@ -32,15 +32,24 @@ import { STATUS_STYLE } from './RunCard.js';
  * at a different card, with no second socket and no polling anywhere on this route.
  */
 
-/** Fixed ACTIVE-card height in px — the NEEDS YOU band's windowing depends on it.
+/** ACTIVE-card slot height in px — the NEEDS YOU band's windowing depends on it.
  *  Sized by the fullest card the caps allow (2 live lines + doc activity + 2 run
  *  chips + a tile row + the action row), so the bottom-anchored actions inside
- *  `overflow: hidden` are never clipped. */
+ *  `overflow: hidden` are never clipped. The card itself sizes to content and
+ *  treats this as a `maxHeight`, so a light card is short, not hollow — the
+ *  SLOT stays fixed for the windowing math, the pixels do not. */
 export const ACTIVE_CARD_H = 330;
 
-/** Fixed QUIET-card height in px — one summary line plus the action row, with
- *  room for the first-run 2×2 sublabelled grid (§2.2) in the same slot. */
-export const QUIET_CARD_H = 104;
+/** QUIET-card slot height in px — one summary line plus the action row, with
+ *  room for the first-run 2×2 sublabelled grid (§2.2) in the same slot. Also a
+ *  `maxHeight`: a compact quiet card renders at its natural ~one-line height. */
+export const QUIET_CARD_H = 112;
+
+/** How recently a project must have been created for its empty card to read as
+ *  "a genuinely brand-new project a user just created" (§2.1.2) and show the
+ *  first-run invitation. An empty project OLDER than this is debris, not a
+ *  beginning — it gets the plain quiet line so the eye can skip it (W2). */
+export const FIRST_RUN_MS = 24 * 3_600_000;
 
 const MAX_TILES = 3;
 const MAX_CHIPS = 2;
@@ -236,6 +245,8 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
   const activity = useRuntimeStore((s) => s.docActivity[project.id]);
   const live = runs.filter(isLive);
   const empty = runs.length === 0 && docs.length === 0;
+  /** The §2.1.2 exception: empty AND just created — not merely empty. */
+  const firstRun = empty && Date.now() - project.created_at < FIRST_RUN_MS;
   const quiet = band === 'quiet';
 
   /** Every affordance on the card is a real link — deep-linkable, middle-clickable. */
@@ -274,7 +285,7 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
   // ── QUIET (§2.1.1): calm is ONE line, not three announcements of absence ──
   if (quiet) {
     return (
-      <section {...cardData} style={{ ...CSS.card, height: `${QUIET_CARD_H}px` }}>
+      <section {...cardData} style={{ ...CSS.card, maxHeight: `${QUIET_CARD_H}px` }}>
         <LiveEdge state={edgeStateOf(runs.map((v) => v.session.status))} />
         <div style={CSS.header}>
           {dot}
@@ -283,12 +294,13 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
           {/* The empty-state budget (§2.1.2): the ONE line of absence. A brand-new
               empty project gets the first-run invitation instead — the sole
               exception, and it is still one line. */}
-          {empty ? (
+          {firstRun ? (
             <a
               {...link(modePath(project.id, 'chat'))}
               data-testid="quiet-summary"
               data-invitation="true"
-              style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '11px', color: S.ink, textDecoration: 'none' }}
+              // EC1: the ONE obvious next action — the brightest thing on the card.
+              style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '11px', fontWeight: 600, color: S.accent, textDecoration: 'none' }}
             >
               Start by describing what you want →
             </a>
@@ -303,14 +315,14 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
         </div>
         {/* Compact on a quiet card — a calm board is scanned, not operated (W2);
             the first-run card is where the sublabelled grid teaches (W1). */}
-        <QuickActions projectId={project.id} link={link} detail={empty} />
+        <QuickActions projectId={project.id} link={link} detail={firstRun} />
       </section>
     );
   }
 
   // ── ACTIVE (§2.1.1): rich, but a region with no content is OMITTED (F1) ──
   return (
-    <section {...cardData} style={{ ...CSS.card, height: `${ACTIVE_CARD_H}px` }}>
+    <section {...cardData} style={{ ...CSS.card, maxHeight: `${ACTIVE_CARD_H}px` }}>
       {/* The card's own state signal, read from the RUNS rather than from `attention`:
           a project bucketed as `failing` can still have something executing on it, and
           the edge answers "is work moving here", not "which bucket did this sort into". */}

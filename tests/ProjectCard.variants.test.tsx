@@ -26,10 +26,12 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-function project(id: string): Project {
+const THREE_DAYS = 3 * 86_400_000;
+
+function project(id: string, created_at: number = Date.now() - THREE_DAYS): Project {
   return {
     id, name: id, description: null, status: 'active', scope: `project:${id}`,
-    created_at: 1, updated_at: Date.now() - 3 * 86_400_000,
+    created_at, updated_at: Date.now() - THREE_DAYS,
   };
 }
 
@@ -64,7 +66,7 @@ describe('the QUIET variant — calm is one line, not a wall of absence (F1)', (
       />,
     );
     expect(card()).toHaveAttribute('data-variant', 'quiet');
-    expect(card().style.height).toBe(`${QUIET_CARD_H}px`);
+    expect(card().style.maxHeight).toBe(`${QUIET_CARD_H}px`);
     const summaries = within(card()).getAllByTestId('quiet-summary');
     expect(summaries).toHaveLength(1);
     expect(summaries[0]).toHaveTextContent(/Quiet — last active \d+[smhd] ago/);
@@ -87,8 +89,17 @@ describe('the QUIET variant — calm is one line, not a wall of absence (F1)', (
     for (const s of BANNED) expect(card()).not.toHaveTextContent(s);
   });
 
+  it('an OLD empty project is debris, not a beginning — plain quiet line, no invitation (W2)', () => {
+    render(<ProjectCard item={item('abandoned')} navigate={() => {}} />);
+    const summaries = within(card()).getAllByTestId('quiet-summary');
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toHaveTextContent(/Quiet — last active \d+[smhd] ago/);
+    expect(card()).not.toHaveTextContent('Start by describing what you want');
+    expect(within(card()).getByTestId('quick-actions')).not.toHaveAttribute('data-detail');
+  });
+
   it('a brand-new empty project gets the first-run invitation as its one line (§2.1.2)', () => {
-    render(<ProjectCard item={item('scratch')} navigate={() => {}} />);
+    render(<ProjectCard item={item('scratch', { project: project('scratch', Date.now()) })} navigate={() => {}} />);
     const summaries = within(card()).getAllByTestId('quiet-summary');
     expect(summaries).toHaveLength(1);
     expect(summaries[0]).toHaveTextContent('Start by describing what you want');
@@ -115,7 +126,7 @@ describe('the quick actions — the mode spine, differentiated (F2, §2.2)', () 
   });
 
   it('first-run shows each verb\'s sublabel; elsewhere it survives as hover title', () => {
-    render(<ProjectCard item={item('scratch')} navigate={() => {}} />);
+    render(<ProjectCard item={item('scratch', { project: project('scratch', Date.now()) })} navigate={() => {}} />);
     const sublabels = within(card()).getAllByTestId('quick-action-sublabel');
     expect(sublabels.map((s) => s.textContent)).toEqual(MODES.map((m) => MODE_SPECS[m].sublabel));
     cleanup();
@@ -146,7 +157,7 @@ describe('the ACTIVE variant — rich, but an empty region is OMITTED (§2.1.1)'
       />,
     );
     expect(card()).toHaveAttribute('data-variant', 'active');
-    expect(card().style.height).toBe(`${ACTIVE_CARD_H}px`);
+    expect(card().style.maxHeight).toBe(`${ACTIVE_CARD_H}px`);
     // Omitted, not narrated: no tile, no absence line, no quiet summary.
     expect(within(card()).queryByTestId('doc-tile')).toBeNull();
     expect(within(card()).queryByTestId('quiet-summary')).toBeNull();
