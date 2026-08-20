@@ -158,7 +158,7 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
           chatIdRef.current = stored;
           setOpenError(
             `Could not reach the daemon to check the previous chat (${probe.error}). Keeping it — ` +
-              `reload to retry, or End chat to release its seats.`,
+              `reload to retry, or End chat to disconnect the agents.`,
           );
           return;
         }
@@ -344,7 +344,7 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
           type="button"
           onClick={() => void endChat()}
           className="text-[11px] font-mono px-2.5 py-1 rounded-lg"
-          style={{ background: 'rgba(248,81,73,0.12)', color: '#f85149', border: '1px solid rgba(248,81,73,0.25)' }}
+          style={{ background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.65)', border: '1px solid rgba(230,237,243,0.18)' }}
         >
           End chat
         </button>
@@ -403,7 +403,7 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
               }
             }}
             rows={2}
-            placeholder="Message every warm seat… (Enter to send, Shift+Enter for newline)"
+            placeholder="Message the agents… (Enter to send, Shift+Enter for newline)"
             className="flex-1 rounded-xl px-4 py-2 text-[13px] font-mono outline-none resize-none"
             style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.12)' }}
           />

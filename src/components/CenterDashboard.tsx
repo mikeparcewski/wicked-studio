@@ -91,10 +91,16 @@ function truncate(s: string, n: number): string {
 }
 
 function sessionLabel(v: SessionView): string {
+  // Copy triage (operator audit): a raw prompt excerpt is a poor primary label. Prefer
+  // what the run IS — workflow + repo — and fall back to the prompt only when that is
+  // all we have. The short id stays in the row's existing secondary slot.
+  const wf = v.session.workflow_id;
+  const repo = v.session.repo_ref;
+  if (wf.length > 0 && wf !== 'chat') {
+    return repo != null && repo.length > 0 ? `${wf} · ${repo}` : wf;
+  }
   const prob = v.session.problem;
-  return prob.length > 0
-    ? truncate(prob, 32)
-    : v.session.id.slice(0, 8);
+  return prob.length > 0 ? truncate(prob, 32) : v.session.id.slice(0, 8);
 }
 
 function formatCost(usd: number): string {
@@ -925,10 +931,10 @@ export function CenterDashboard({
         >
           <div>
             <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#e6edf3', margin: 0, ...mono }}>
-              wicked-studio
+              Build
             </h1>
             <p style={{ fontSize: '11px', color: 'rgba(230,237,243,0.38)', margin: '4px 0 0', ...mono }}>
-              cross-session control
+              governed runs — gates, evidence, verified work
             </p>
           </div>
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
