@@ -104,10 +104,10 @@ const needsYouIds = (): (string | null)[] =>
   [...screen.getByTestId('band-needs-you').querySelectorAll('[data-testid="project-card"]')]
     .map((c) => c.getAttribute('data-project-id'));
 
-async function board(runs: SessionView[]): Promise<void> {
+async function board(runs: SessionView[], expectedTotal = projects.length): Promise<void> {
   render(<HomeBoard runs={runs} navigate={() => {}} />);
   await vi.waitFor(() => {
-    expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', String(projects.length));
+    expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', String(expectedTotal));
   });
 }
 
@@ -233,6 +233,49 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
     expect(screen.getByTestId('board-all-quiet')).toHaveTextContent('Nothing needs you right now.');
     expect(screen.getByTestId('band-needs-you').querySelectorAll('[data-testid="project-card"]')).toHaveLength(0);
     expect(screen.getAllByTestId('quiet-chip')).toHaveLength(2);
+  });
+
+  it('the synthesized "default" project never renders — as a card, a chip, or a count (F5)', async () => {
+    const now = Date.now();
+    projects = [
+      project('default', now, { name: 'Unfiled', scope: '' }),
+      project('real-work', now - 3 * DAY),
+    ];
+    // `data-total` means non-default projects (unchanged meaning) — 1, not 2.
+    await board([], 1);
+    fireEvent.click(screen.getByTestId('band-quiet-toggle'));
+    expect(document.querySelector('[data-project-id="default"]')).toBeNull();
+    // V18: the word "Unfiled" appears nowhere on this surface.
+    expect(screen.queryByText(/Unfiled/)).toBeNull();
+  });
+
+  it('the shelf is absent with nothing unfiled, and last + collapsed with one orphan run', async () => {
+    const now = Date.now();
+    projects = [project('filed', now)];
+    members = { filed: [member('filed', 'r-filed')] };
+
+    // Every run claimed ⇒ no shelf in the DOM at all.
+    await board([makeView({ id: 'r-filed', status: 'executing' })]);
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-project-id="filed"]')).not.toBeNull();
+    });
+    expect(screen.queryByTestId('band-not-in-project')).toBeNull();
+    cleanup();
+
+    // One orphan ⇒ the shelf exists: LAST in document order, collapsed, counted.
+    await board([
+      makeView({ id: 'r-filed', status: 'executing' }),
+      makeView({ id: 'r-orphan', status: 'executing', problem: 'stranded work' }),
+    ]);
+    const shelf = await screen.findByTestId('band-not-in-project');
+    expect(shelf).toHaveAttribute('data-count', '1');
+    expect(shelf).toHaveAttribute('data-expanded', 'false');
+    expect(screen.queryByTestId('unfiled-run')).toBeNull();
+    const boardEl = screen.getByTestId('project-board');
+    expect(boardEl.lastElementChild).toBe(shelf);
+
+    fireEvent.click(screen.getByTestId('band-not-in-project-toggle'));
+    expect(screen.getByTestId('unfiled-run')).toHaveAttribute('data-run-id', 'r-orphan');
   });
 
   it('the 60s tick demotes a running project silent for a half-life — no new data needed', async () => {

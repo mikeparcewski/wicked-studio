@@ -95,11 +95,12 @@ function BandGrid({ items, columns, rowH, firstRow, lastRow, navigate }: {
 }
 
 export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
-  const { items, loading, error } = useBoardModel(runs);
+  const { items, unfiled, loading, error } = useBoardModel(runs);
   const scroller = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [scrollTop, setScrollTop] = useState(0);
   const [quietOpen, setQuietOpen] = useState(false);
+  const [shelfOpen, setShelfOpen] = useState(false);
 
   useEffect(() => {
     const el = scroller.current;
@@ -267,6 +268,48 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
                     <span style={{ color: S.faint }}>
                       · {ago(i.signal?.at ?? i.project.updated_at)}
                     </span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* The ex-"Unfiled" shelf (F5, V18): LAST, collapsed, and absent entirely
+            when nothing is unfiled — it can never lead, or even appear above, a
+            real project. The word "Unfiled" appears nowhere. */}
+        {unfiled.length > 0 && (
+          <section
+            data-testid="band-not-in-project"
+            data-count={unfiled.length}
+            data-expanded={shelfOpen}
+            style={{ marginTop: '18px' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+              <p style={{ ...CSS.bandLabel, color: S.faint, margin: 0 }}>
+                Not in a project ({unfiled.length})
+              </p>
+              <button
+                type="button"
+                data-testid="band-not-in-project-toggle"
+                onClick={() => setShelfOpen((v) => !v)}
+                style={CSS.toggle}
+              >
+                {shelfOpen ? '[ collapse ▴ ]' : '[ expand ▾ ]'}
+              </button>
+            </div>
+            {shelfOpen && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                {unfiled.map((v) => (
+                  <a
+                    key={v.session.id}
+                    {...link(`/runs/${v.session.id}`)}
+                    data-testid="unfiled-run"
+                    data-run-id={v.session.id}
+                    style={{ ...CSS.chip, alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  >
+                    {v.session.problem}
+                    <span style={{ color: S.faint }}>· {v.session.status}</span>
                   </a>
                 ))}
               </div>

@@ -154,6 +154,8 @@ async function loadBindings(p: Project, repoNames: Map<string, string>): Promise
 export interface BoardModel {
   /** Score-ordered board cards. */
   items: BoardProject[];
+  /** Runs no non-default project claims — the "Not in a project" shelf (D4). */
+  unfiled: SessionView[];
   loading: boolean;
   error: string | null;
 }
@@ -195,7 +197,11 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
           api.listProjects(),
           api.listRepos().then((r) => r.repos).catch(() => []),
         ]);
-        active = all.filter((p) => p.status === 'active');
+        // The synthesized "Unfiled" bucket is NOT a project and never renders as a
+        // card (F5, D4) — the same exclusion `useLegacyRedirect` applies, for the
+        // same reason: a hit there means *no project*. Its runs surface through
+        // `unfiled` below, as the last, collapsed shelf.
+        active = all.filter((p) => p.status === 'active' && p.id !== 'default');
         repoNames.current = new Map(repos.map((r) => [r.id, r.name]));
       } catch (e) {
         if (!cancelled) {
@@ -296,5 +302,14 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     [projects, bindings, runs, gates, failedAt, now],
   );
 
-  return { items, loading, error };
+  // The unfiled set (F5): what the run list holds that no membership claims. Held
+  // back until the first membership read lands — before that, EVERY run would look
+  // unfiled and the shelf would flash into existence on each load.
+  const unfiled = useMemo(() => {
+    if (loading || (projects.length > 0 && Object.keys(bindings).length === 0)) return [];
+    const known = new Set(Object.values(bindings).flatMap((b) => [...b.runIds]));
+    return runs.filter((v) => !known.has(v.session.id));
+  }, [runs, projects, bindings, loading]);
+
+  return { items, unfiled, loading, error };
 }
