@@ -5,8 +5,11 @@ import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { lastMode, modePath } from '../hooks/useRoute.js';
 import { AppChrome } from './AppChrome.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
+import { NewProjectModal } from './NewProjectModal.js';
 import { NotificationBell } from './NotificationBell.js';
 import { ATTENTION_DOT } from './ProjectCard.js';
+import { RunsSection } from './RunsSection.js';
+import { SettingsRailSection } from './SettingsRailSection.js';
 
 /**
  * The rail, consolidated to TWO taxonomies (DES-UXFIX-001 §2.3, slice 3 — F4):
@@ -31,6 +34,9 @@ import { ATTENTION_DOT } from './ProjectCard.js';
 interface Props {
   runs: SessionView[];
   navigate: (path: string) => void;
+  /** DES-FEEDBACK-001 §1.4: where a runs-section row navigates — the caller's
+   *  same routing as `selectRun`. Defaults to the flat `/runs/:id` route. */
+  runPath?: (id: string) => string;
   /** DES-FEEDBACK-001 §7.3: Document/Video are canvas-first, so entering them
    *  auto-collapses the rail to its icon state; leaving restores what the user had.
    *  Hover-peek still works, and the expand control stays live — auto, not locked. */
@@ -61,14 +67,6 @@ const COLLAPSED_MAX = 12;
 
 // ── Inline SVG icons ──────────────────────────────────────────────────────────
 
-function IconPlus(): React.ReactElement {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M19 11h-6V5a1 1 0 0 0-2 0v6H5a1 1 0 0 0 0 2h6v6a1 1 0 0 0 2 0v-6h6a1 1 0 0 0 0-2z" />
-    </svg>
-  );
-}
-
 function IconSearch(): React.ReactElement {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
@@ -80,14 +78,13 @@ function IconSearch(): React.ReactElement {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-/** One creation verb: a faint "+" (create, unless the glyph already is one),
- *  the spine glyph, the mode's own word. `hint` (the MODE_SPECS sublabel)
- *  teaches what the verb produces, on hover. */
+/** One QUICK action: the spine glyph and the mode's own word, each on its own
+ *  line (DES-FEEDBACK-001 §1.2 — the `+` glyphs are GONE, EC20). `hint` (the
+ *  MODE_SPECS sublabel) teaches what the verb produces, on hover. */
 function ActionLink({
   glyph,
   label,
   hint,
-  plus,
   testId,
   onClick,
   collapsed,
@@ -95,7 +92,6 @@ function ActionLink({
   glyph: React.ReactNode;
   label: string;
   hint?: string;
-  plus?: boolean;
   testId?: string;
   onClick: () => void;
   collapsed: boolean;
@@ -112,7 +108,6 @@ function ActionLink({
       }`}
       style={{ color: S.accent, background: 'transparent' }}
     >
-      {plus === true && !collapsed && <span aria-hidden style={{ color: S.faint, fontWeight: 400 }}>+</span>}
       <span aria-hidden>{glyph}</span>
       {!collapsed && <span>{label}</span>}
     </button>
@@ -207,9 +202,14 @@ function ProjectRow({ item, onOpen }: { item: BoardProject; onOpen: () => void }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function LeftSidebar({ runs, navigate, immersive = false }: Props): React.ReactElement {
+const flatRunPath = (id: string): string => `/runs/${encodeURIComponent(id)}`;
+
+export function LeftSidebar({ runs, navigate, runPath = flatRunPath, immersive = false }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
+  // DES-FEEDBACK-001 §1.3: the QUICK section's Project action opens the
+  // new-project modal — an overlay, not a route.
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   // §7.3 auto-collapse: entering an immersive mode stashes the user's state and
   // collapses; leaving restores it. `null` = nothing stashed. The user can still
   // re-expand mid-mode — this fires only on the transition, never per render.
@@ -285,16 +285,33 @@ export function LeftSidebar({ runs, navigate, immersive = false }: Props): React
         <NotificationBell navigate={navigate} collapsed={!isExpanded} />
       </div>
 
-      {/* Creation verbs — ONE compact row in the mode spine's words (§2.3, V9/V10):
-          Build and Chat are the switcher's verbs with the switcher's glyphs, so
-          they are differentiable (F2); Repository keeps its plus. */}
+      {/* QUICK — the creation verbs, VERTICAL under one section header
+          (DES-FEEDBACK-001 §1.2): Project first (opens the new-project flow),
+          then the mode spine's own words. No `+` glyphs anywhere (EC20). */}
+      {isExpanded && (
+        <div
+          data-testid="rail-quick"
+          className="px-4 pt-2 select-none"
+          style={{
+            fontSize: 'var(--text-2xs)',
+            fontWeight: 'var(--weight-medium)',
+            fontFamily: 'var(--font-sans)',
+            color: S.faint,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+          }}
+        >
+          QUICK
+        </div>
+      )}
       <div
         data-testid="rail-actions"
-        className={`flex ${!isExpanded ? 'flex-col px-2 items-center gap-2 mt-1' : 'flex-wrap items-center px-4 pt-1 pb-1 gap-x-3 gap-y-0.5'}`}
+        className={`flex ${!isExpanded ? 'flex-col px-2 items-center gap-2 mt-1' : 'flex-col items-start px-4 pt-0.5 pb-1 gap-0.5'}`}
       >
-        <ActionLink glyph={MODE_SPECS.build.glyph} label="Build" hint={MODE_SPECS.build.sublabel} plus testId="new-run" onClick={() => navigate('/runs/new')} collapsed={!isExpanded} />
-        <ActionLink glyph={MODE_SPECS.chat.glyph} label="Chat" hint={MODE_SPECS.chat.sublabel} plus onClick={() => navigate('/chat/new')} collapsed={!isExpanded} />
-        <ActionLink glyph={<IconPlus />} label="Repository" onClick={() => navigate('/repos/new')} collapsed={!isExpanded} />
+        <ActionLink glyph="◻" label="Project" hint="start a new project" testId="new-project" onClick={() => setNewProjectOpen(true)} collapsed={!isExpanded} />
+        <ActionLink glyph={MODE_SPECS.build.glyph} label="Build" hint={MODE_SPECS.build.sublabel} testId="new-run" onClick={() => navigate('/runs/new')} collapsed={!isExpanded} />
+        <ActionLink glyph={MODE_SPECS.chat.glyph} label="Chat" hint={MODE_SPECS.chat.sublabel} onClick={() => navigate('/chat/new')} collapsed={!isExpanded} />
+        <ActionLink glyph="⬡" label="Repository" onClick={() => navigate('/repos/new')} collapsed={!isExpanded} />
       </div>
 
       {/* Scrollable content */}
@@ -315,6 +332,12 @@ export function LeftSidebar({ runs, navigate, immersive = false }: Props): React
                 />
               </div>
             )}
+
+            {/* ── Runs — the recent 5 inline, below QUICK (DES-FEEDBACK-001 §1.4),
+                   active before terminal, with the ONE "All runs ›" escape hatch
+                   riding at the section's bottom. Same `runs` prop — no new fetch. ── */}
+            <SectionLabel label="Runs" />
+            <RunsSection runs={runs} runPath={runPath} navigate={navigate} />
 
             {/* ── Taxonomy 1: Projects — the board's axis, attention-ordered ── */}
             <div data-testid="rail-section-projects">
@@ -377,20 +400,6 @@ export function LeftSidebar({ runs, navigate, immersive = false }: Props): React
               )}
             </div>
 
-            {/* ── The ONE escape hatch to the flat cross-project run lists (§2.3):
-                   Chats and Work are not rail taxonomies any more — a run lives
-                   under its project, and the power-user lists live behind this. ── */}
-            <div className="px-3 pt-3 pb-1">
-              <a
-                href="/runs"
-                data-testid="rail-all-runs"
-                onClick={(e) => { e.preventDefault(); navigate('/runs'); }}
-                className="text-[11px] font-mono transition-opacity hover:opacity-80"
-                style={{ color: S.link, textDecoration: 'none' }}
-              >
-                All runs ›
-              </a>
-            </div>
           </>
         ) : (
           /* Not expanded: attention dots for the top projects — same axis, same
@@ -418,6 +427,15 @@ export function LeftSidebar({ runs, navigate, immersive = false }: Props): React
         )}
       </div>
 
+      {/* ── Settings — the expand/collapse section at the rail's bottom
+             (DES-FEEDBACK-001 §1.2, §4.4): the retired AppChrome dropdown's
+             entries as an in-rail shortcut list, collapsed by default. ── */}
+      {isExpanded && <SettingsRailSection navigate={navigate} />}
+
+      {/* The new-project flow (§1.3), opened from QUICK's Project action. */}
+      {newProjectOpen && (
+        <NewProjectModal navigate={navigate} onClose={() => setNewProjectOpen(false)} />
+      )}
     </div>
   );
 }
