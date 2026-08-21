@@ -27,18 +27,26 @@ import { nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState } f
 // There is no dead composer state and no synthetic liveness: no whimsy filler (filtered in
 // the store, §3.2), no `status.requested` heartbeat (never emitted at all).
 
+// DES-VISION-001 §5.5 token usage: the thread sits on --surface-base; agent
+// bubbles on --surface-card, user messages transparent with a hairline (the
+// same pair Chat wears, §5.3 — one language across modes). Cross-links and
+// primary actions speak the brand accent; live/steering state speaks the §2.6
+// run-emerald; gates and actionables the gate-amber; failures the fail-red.
+// Version tags are history, so they read --status-done (§5.5, mirrored by
+// Video's "recording complete" tag).
 const S = {
-  panel:  '#161b22',
-  border: 'rgba(230,237,243,0.1)',
-  ink:    '#e6edf3',
-  muted:  'rgba(230,237,243,0.55)',
-  faint:  'rgba(230,237,243,0.35)',
-  accent: '#ffda19',
-  user:   '#224a5e',
-  card:   '#1b222e',
-  footer: '#161c26',
-  live:   '#79c0ff',
-  danger: '#f85149',
+  panel:  'var(--surface-base)',
+  border: 'var(--surface-raised)',
+  ink:    'var(--ink-high)',
+  body:   'var(--ink-body)',
+  muted:  'var(--ink-muted)',
+  faint:  'var(--ink-dim)',
+  accent: 'var(--accent)',
+  card:   'var(--surface-card)',
+  footer: 'var(--surface-rail)',
+  live:   'var(--status-run)',
+  danger: 'var(--status-fail)',
+  done:   'var(--status-done)',
 };
 
 /** What the composer says it will do — the affordance, in words (§2.2, §3.3). */
@@ -66,12 +74,16 @@ function Bubble({
           data-message-id={msg.id}
           data-version={msg.version === undefined ? undefined : String(msg.version)}
           data-items={msg.items === undefined ? undefined : String(msg.items.length)}
+          // §5.3's user-message rule, shared across modes: transparent, a
+          // hairline keeps the bubble shape without claiming a surface.
           className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
-          style={{ background: S.user, color: S.ink, border: `1px solid ${S.border}` }}
+          style={{ background: 'transparent', color: S.ink, border: `1px solid ${S.border}`,
+                   fontFamily: 'var(--font-sans)' }}
         >
           {msg.text}
           {/* §4.3: each batched item DEEP-LINKS back to its element — the frame scrolls
-              it into view over the same protocol that reported its rect. */}
+              it into view over the same protocol that reported its rect. On-accent:
+              a cross-link is an affordance, not a status (§2.5). */}
           {msg.items !== undefined && msg.items.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {msg.items.map((item, i) => (
@@ -83,8 +95,8 @@ function Bubble({
                   title={`Show “${item.wid}” in the document`}
                   onClick={() => scrollToWid(item.wid)}
                   className="rounded-full px-2 py-0.5 text-[10px] font-mono"
-                  style={{ background: 'rgba(255,218,25,0.1)', color: S.accent,
-                           border: '1px solid rgba(255,218,25,0.25)', cursor: 'pointer' }}
+                  style={{ background: 'transparent', color: S.accent,
+                           border: '1px solid var(--accent-subtle)', cursor: 'pointer' }}
                 >
                   {i + 1}. {item.wid}
                 </button>
@@ -99,6 +111,8 @@ function Bubble({
             is TAGGED with it, and the tag cross-links to the strip — the same seam the
             strip's "In thread" crosses the other way. The eye can trace canvas ↔ strip ↔
             thread in both directions. */}
+        {/* §5.5: the version tag is HISTORY — --status-done ink on a
+            --radius-sm badge (Video's "recording complete" tag mirrors it). */}
         {msg.version !== undefined && (
           <button
             type="button"
@@ -106,9 +120,10 @@ function Bubble({
             data-version={String(msg.version)}
             onClick={() => { if (msg.version !== undefined) onShowVersion?.(msg.version); }}
             title={`This message made v${msg.version} — show it on the canvas and the strip`}
-            className="rounded-full px-2 py-0.5 text-[10px] font-mono"
-            style={{ background: 'rgba(255,218,25,0.1)', color: S.accent,
-                     border: '1px solid rgba(255,218,25,0.25)', cursor: 'pointer' }}
+            className="px-2 py-0.5 text-[10px] font-mono"
+            style={{ background: 'transparent', color: S.done,
+                     border: `1px solid ${S.border}`, borderRadius: 'var(--radius-sm)',
+                     cursor: 'pointer' }}
           >
             ▤ v{msg.version} landed
           </button>
@@ -117,8 +132,9 @@ function Bubble({
     );
   }
   if (msg.kind === 'narration') {
+    // Narration is data: the mono, body ink (§2.8); the dot is the run-emerald.
     return (
-      <div className="flex items-start gap-2 text-xs font-mono" data-testid="doc-narration" style={{ color: S.faint }}>
+      <div className="flex items-start gap-2 text-xs font-mono" data-testid="doc-narration" style={{ color: S.body }}>
         <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: S.live }} />
         <span>{msg.text}</span>
       </div>
@@ -145,8 +161,10 @@ function Bubble({
         <span className="text-[10px] font-mono uppercase tracking-wide" style={{ color: S.faint }}>
           {msg.kind === 'verdict' ? `${msg.author} · review` : msg.author}
         </span>
+        {/* Agent prose on --surface-card in the sans — §5.3's bubble pair. */}
         <div className="rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
-             style={{ background: S.card, border: `1px solid ${S.border}`, color: S.ink }}>
+             style={{ background: S.card, border: `1px solid ${S.border}`, color: S.body,
+                      fontFamily: 'var(--font-sans)' }}>
           {msg.text}
           {msg.kind === 'agent' && msg.href !== undefined && (
             // Served THROUGH the proxy, on the page's own origin (§5.3) — there is no
@@ -184,14 +202,18 @@ function ActionableCard({
   const [busy, setBusy] = useState(false);
   const retry = msg.retry;
   return (
+    // Actionable = "this needs you": the §2.6 gate-amber pair, exactly the
+    // GateChip convention — dim for the block, full for the command text.
     <div
       data-testid="doc-actionable"
       className="rounded-xl px-3.5 py-3 flex flex-col gap-2"
-      style={{ background: 'rgba(255,218,25,0.06)', border: '1px solid rgba(255,218,25,0.2)' }}
+      style={{ background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)' }}
     >
-      <p className="text-sm leading-relaxed" style={{ color: S.ink, margin: 0 }}>{msg.text}</p>
+      <p className="text-sm leading-relaxed" style={{ color: S.ink, margin: 0, fontFamily: 'var(--font-sans)' }}>
+        {msg.text}
+      </p>
       <code data-testid="doc-actionable-hint" className="text-[11px] font-mono whitespace-pre-wrap"
-            style={{ color: S.accent }}>
+            style={{ color: 'var(--status-gate)' }}>
         {msg.hint}
       </code>
       {retry !== undefined && docId !== null && (
@@ -205,7 +227,8 @@ function ActionableCard({
               .finally(() => setBusy(false));
           }}
           className="self-start rounded-lg px-2.5 py-1 text-xs font-medium disabled:opacity-40"
-          style={{ background: S.accent, color: '#0d1117', border: 'none', cursor: 'pointer' }}
+          style={{ background: 'var(--status-gate)', color: 'var(--surface-base)',
+                   border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
         >
           {busy ? 'Exporting…' : `Export ${retry.format.toUpperCase()} again`}
         </button>
@@ -238,8 +261,8 @@ function NotRecordedChip({
           .finally(() => setBusy(false));
       }}
       className="mt-2 block rounded-full px-2 py-0.5 text-[10px] font-mono disabled:opacity-40"
-      style={{ background: 'rgba(248,81,73,0.1)', color: S.danger,
-               border: '1px solid rgba(248,81,73,0.3)', cursor: 'pointer' }}
+      style={{ background: 'var(--status-fail-dim)', color: S.danger,
+               border: '1px solid var(--status-fail-dim)', cursor: 'pointer' }}
     >
       {busy ? 'retrying…' : 'not recorded in the run — retry'}
     </button>
@@ -279,13 +302,17 @@ function GateCard({
   }
 
   return (
+    // A gate speaks the §2.6 gate-amber pair (the GateChip convention); the
+    // question itself is prose → sans.
     <div
       data-testid="doc-gate"
       data-request-id={msg.requestId}
       className="rounded-xl px-3.5 py-3 flex flex-col gap-2"
-      style={{ background: 'rgba(255,218,25,0.06)', border: '1px solid rgba(255,218,25,0.2)' }}
+      style={{ background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)' }}
     >
-      <p className="text-sm" style={{ color: S.accent, margin: 0 }}>{msg.question}</p>
+      <p className="text-sm" style={{ color: 'var(--status-gate)', margin: 0, fontFamily: 'var(--font-sans)' }}>
+        {msg.question}
+      </p>
       {msg.options.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {msg.options.map((option) => (
@@ -296,7 +323,8 @@ function GateCard({
               disabled={busy}
               onClick={() => void answer(option)}
               className="rounded-lg px-2.5 py-1 text-xs font-medium disabled:opacity-40"
-              style={{ background: S.accent, color: '#0d1117', border: 'none', cursor: 'pointer' }}
+              style={{ background: 'var(--status-gate)', color: 'var(--surface-base)',
+                       border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
             >
               {option}
             </button>
@@ -443,7 +471,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
       data-testid="thread"
       data-composer-state={state}
       className="flex flex-col shrink-0 relative"
-      style={{ width: '340px', background: S.panel, borderLeft: `1px solid ${S.border}` }}
+      // §5.5: the thread pane sits on --surface-base; prose defaults to the
+      // sans — only data (narration, tags, ids) opts into the mono (§2.8).
+      style={{ width: '340px', background: S.panel, borderLeft: `1px solid ${S.border}`,
+               fontFamily: 'var(--font-sans)' }}
     >
       {wizard !== null && (
         <DemoWizard
@@ -461,7 +492,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
       )}
       <div className="flex-1 overflow-y-auto px-3.5 py-4 flex flex-col gap-3">
         {messages.length === 0 && (
-          <p className="text-xs leading-relaxed" style={{ color: S.muted }}>
+          <p className="leading-relaxed" style={{ color: S.body, fontSize: 'var(--text-sm)' }}>
             {docId === null
               ? mode === 'video'
                 ? 'Describe the demo you want — “a walkthrough of the checkout flow” — and its steps are authored from there, in order.'
@@ -503,8 +534,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
                 .finally(() => setBusy(false));
             }}
             className="self-start rounded-full px-2.5 py-0.5 text-[10px] font-mono disabled:opacity-40"
-            style={{ background: 'rgba(255,218,25,0.1)', color: S.accent,
-                     border: '1px solid rgba(255,218,25,0.25)', cursor: 'pointer' }}
+            style={{ background: 'transparent', color: S.accent,
+                     border: '1px solid var(--accent-subtle)', cursor: 'pointer' }}
           >
             record this demo
           </button>
@@ -517,18 +548,24 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
           <span
             data-testid="steering-chip"
             className="self-start flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-mono"
-            style={{ background: 'rgba(121,192,255,0.08)', color: S.live, border: '1px solid rgba(121,192,255,0.2)' }}
+            style={{ background: 'var(--status-run-dim)', color: S.live,
+                     border: '1px solid var(--status-run-dim)' }}
           >
             <span className="w-1 h-1 rounded-full shrink-0" style={{ background: S.live }} />
             steering the live {mode === 'video' ? 'demo' : 'document'} run
           </span>
         )}
-        <div className="flex items-end gap-2 rounded-2xl px-3 py-2"
-             style={{ background: S.card, border: `1px solid ${S.border}` }}>
+        {/* §5.3's composer contract, worn by every mode: --surface-raised at
+            --radius-xl, the wk-composer focus ring (--accent-dim via
+            :focus-within — never the full accent), an accent-filled submit. */}
+        <div className="wk-composer flex items-end gap-2 px-3 py-2"
+             style={{ background: 'var(--surface-raised)',
+                      border: '1px solid var(--surface-overlay)',
+                      borderRadius: 'var(--radius-xl)' }}>
           <textarea
             data-testid="doc-composer"
             className="flex-1 resize-none text-sm outline-none border-0 bg-transparent leading-6"
-            style={{ color: S.ink, fontFamily: 'inherit', minHeight: '28px' }}
+            style={{ color: S.ink, fontFamily: 'var(--font-sans)', minHeight: '28px' }}
             placeholder={prompt}
             value={text}
             rows={1}
@@ -544,7 +581,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             onClick={() => void submit()}
             disabled={busy || text.trim() === ''}
             className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
-            style={{ background: S.accent, color: '#0d1117', border: 'none', cursor: 'pointer' }}
+            style={{ background: S.accent, color: 'var(--accent-fg)', border: 'none',
+                     cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
           >
             {busy ? '…' : label}
           </button>

@@ -13,22 +13,27 @@ import { EXPORT_FORMATS, runExport } from '../interactive/exportWire.js';
 // here is only what the pressed button owes the finger that pressed it — which format is
 // running, and, on the board where no thread is on screen, the reason it stopped.
 
+// DES-VISION-001 §2.11: semantic tokens only. The RUNNING format speaks the
+// brand accent (an affordance state); the hint below is an actionable install
+// command, so it speaks the §2.6 gate layer in the mono (data, §2.8).
 const S = {
-  border: 'rgba(230,237,243,0.1)',
-  muted:  'rgba(230,237,243,0.55)',
-  faint:  'rgba(230,237,243,0.3)',
-  accent: '#ffda19',
+  border: 'var(--surface-raised)',
+  muted:  'var(--ink-muted)',
+  faint:  'var(--ink-dim)',
+  accent: 'var(--accent)',
+  hint:   'var(--status-gate)',
 };
 
 const BUTTON: React.CSSProperties = {
-  background: 'transparent', border: `1px solid ${S.border}`, borderRadius: '5px',
-  color: S.muted, cursor: 'pointer', fontSize: '10px', lineHeight: 1.6, padding: '1px 6px',
+  background: 'transparent', border: `1px solid ${S.border}`, borderRadius: 'var(--radius-sm)',
+  color: S.muted, cursor: 'pointer', fontSize: 'var(--text-2xs)',
+  fontFamily: 'var(--font-sans)', lineHeight: 1.6, padding: '1px 6px',
 };
 
 /** The tile variant: bare text, because a card is scanned and a box is a claim on the eye. */
 const COMPACT: React.CSSProperties = {
   background: 'none', border: 'none', color: S.muted, cursor: 'pointer',
-  fontFamily: 'monospace', fontSize: '9px', padding: 0,
+  fontFamily: 'var(--font-mono)', fontSize: '9px', padding: 0,
 };
 
 export interface ExportMenuProps {
@@ -64,8 +69,8 @@ export function ExportMenu({ projectId, docId, version, compact = false }: Expor
     >
       <div style={{ alignItems: 'center', display: 'flex', gap: compact ? '7px' : '5px' }}>
         {!compact && (
-          <span style={{ color: S.faint, fontSize: '10px', letterSpacing: '0.06em',
-                         textTransform: 'uppercase' }}>
+          <span style={{ color: S.faint, fontSize: 'var(--text-2xs)', letterSpacing: '0.06em',
+                         fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
             Export v{version}
           </span>
         )}
@@ -92,7 +97,7 @@ export function ExportMenu({ projectId, docId, version, compact = false }: Expor
         <span
           data-testid="export-hint"
           title={hint}
-          style={{ color: S.accent, fontSize: '9px', fontFamily: 'monospace',
+          style={{ color: S.hint, fontSize: '9px', fontFamily: 'var(--font-mono)',
                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         >
           {hint}

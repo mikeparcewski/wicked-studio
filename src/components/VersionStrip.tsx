@@ -28,15 +28,20 @@ import { scrollThreadToMessage } from './threadAnchor.js';
 // labelled by what it does). The canvas toolbar it carries is [Themes] [Export] — the
 // two actions that act on the document at the addressed version (rule 4, V19).
 
+// DES-VISION-001 §5.5 token usage: the strip is --surface-rail; the SELECTION
+// speaks the brand accent (it is the product's own pointer at which version is
+// addressed — an affordance, never a run state), and failures speak the §2.6
+// status layer. Version numbers and stamps are data, so they read in the mono
+// (§2.8); the spine caption is prose, so it reads in the sans.
 const S = {
-  bar:      '#0f1419',
-  border:   'rgba(230,237,243,0.1)',
-  ink:      '#e6edf3',
-  muted:    'rgba(230,237,243,0.55)',
-  faint:    'rgba(230,237,243,0.3)',
-  accent:   '#ffda19',
-  selected: 'rgba(255,218,25,0.1)',
-  danger:   '#f85149',
+  bar:      'var(--surface-rail)',
+  border:   'var(--surface-raised)',
+  ink:      'var(--ink-high)',
+  muted:    'var(--ink-muted)',
+  faint:    'var(--ink-dim)',
+  accent:   'var(--accent)',
+  selected: 'var(--accent-subtle)',
+  danger:   'var(--status-fail)',
 };
 
 /** §7.6: no anchor recorded ⇒ nothing to scroll to, and the reason is the tooltip. */
@@ -71,8 +76,9 @@ function anchorOf(entry: VersionEntry): string | null {
 }
 
 const ACTION: React.CSSProperties = {
-  background: 'transparent', border: `1px solid ${S.border}`, borderRadius: '5px',
-  color: S.muted, cursor: 'pointer', fontSize: '10px', lineHeight: 1.6, padding: '1px 6px',
+  background: 'transparent', border: `1px solid ${S.border}`, borderRadius: 'var(--radius-sm)',
+  color: S.muted, cursor: 'pointer', fontSize: 'var(--text-2xs)',
+  fontFamily: 'var(--font-sans)', lineHeight: 1.6, padding: '1px 6px',
 };
 
 export interface VersionStripProps {
@@ -117,9 +123,11 @@ export function VersionStrip({
   return (
     <div
       data-testid="version-strip"
+      // The spine's drawn connection (DES-UXFIX-001 §2.6) now speaks the brand
+      // accent's subtle tier — connective tissue, not a status signal (§2.5).
       style={{
         alignItems: 'stretch', background: S.bar,
-        borderTop: '2px solid rgba(255,218,25,0.35)',
+        borderTop: '2px solid var(--accent-subtle)',
         display: 'flex', flexShrink: 0, gap: '8px', padding: '10px 12px',
       }}
     >
@@ -128,7 +136,8 @@ export function VersionStrip({
       <div style={{ alignItems: 'stretch', display: 'flex', flex: 1, gap: '8px',
                     minWidth: 0, overflowX: 'auto' }}>
       <span style={{
-        alignSelf: 'center', color: S.faint, flexShrink: 0, fontSize: '10px', fontWeight: 600,
+        alignSelf: 'center', color: S.faint, flexShrink: 0, fontSize: 'var(--text-2xs)',
+        fontWeight: 600, fontFamily: 'var(--font-mono)',
         letterSpacing: '0.06em', paddingRight: '2px', textTransform: 'uppercase',
       }}>
         Versions
@@ -148,8 +157,8 @@ export function VersionStrip({
             style={{
               background: isSelected ? S.selected : 'transparent',
               border: `1px solid ${isSelected ? S.accent : S.border}`,
-              borderRadius: '7px', display: 'flex', flexDirection: 'column', flexShrink: 0,
-              gap: '4px', minWidth: '124px', padding: '6px 9px',
+              borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column',
+              flexShrink: 0, gap: '4px', minWidth: '124px', padding: '6px 9px',
             }}
           >
             <button
@@ -163,18 +172,36 @@ export function VersionStrip({
                 display: 'flex', flexDirection: 'column', gap: '2px', padding: 0, textAlign: 'left',
               }}
             >
+              {/* v-numbers and stamps are data → the mono (§2.8). The SELECTED
+                  entry carries the §5.5 "active version dot": background from
+                  var(--accent) — the one place the wireframe's ● lives. */}
               <span style={{
-                color: isSelected ? S.accent : S.ink, fontSize: '12px', fontWeight: 600,
+                alignItems: 'center', display: 'inline-flex', gap: '5px',
+                color: isSelected ? S.ink : S.muted, fontSize: 'var(--text-xs)',
+                fontWeight: 600, fontFamily: 'var(--font-mono)',
               }}>
+                {isSelected && (
+                  <span
+                    data-testid="version-active-dot"
+                    style={{
+                      background: S.accent, borderRadius: 'var(--radius-full)',
+                      display: 'inline-block', flexShrink: 0, height: '6px', width: '6px',
+                    }}
+                  />
+                )}
                 v{entry.version}
               </span>
-              <span data-testid="version-stamp" style={{ color: S.muted, fontSize: '10px' }}>
+              <span data-testid="version-stamp" style={{
+                color: S.muted, fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+              }}>
                 {stamp(entry.created_at)}
               </span>
             </button>
 
             {branchOf !== null && (
-              <span data-testid="version-lineage" style={{ color: S.accent, fontSize: '10px' }}>
+              <span data-testid="version-lineage" style={{
+                color: S.muted, fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+              }}>
                 continues from v{branchOf}
               </span>
             )}
@@ -211,7 +238,10 @@ export function VersionStrip({
       {error !== null && (
         <span
           data-testid="version-fork-error"
-          style={{ alignSelf: 'center', color: S.danger, fontSize: '11px', paddingLeft: '4px' }}
+          style={{
+            alignSelf: 'center', color: S.danger, fontSize: 'var(--text-xs)',
+            fontFamily: 'var(--font-mono)', paddingLeft: '4px',
+          }}
         >
           Fork failed: {error} — the document is unchanged; try again.
         </span>
@@ -223,8 +253,9 @@ export function VersionStrip({
       <span
         data-testid="version-spine-caption"
         style={{
-          alignSelf: 'center', color: S.faint, flexShrink: 1, fontSize: '10px',
-          lineHeight: 1.3, maxWidth: '210px', minWidth: 0, textAlign: 'right',
+          alignSelf: 'center', color: S.faint, flexShrink: 1, fontSize: 'var(--text-2xs)',
+          fontFamily: 'var(--font-sans)', lineHeight: 1.3, maxWidth: '210px',
+          minWidth: 0, textAlign: 'right',
         }}
       >
         selecting a version scrolls the thread to the message that made it ▸

@@ -262,7 +262,7 @@ with sync_playwright() as p:
     page.locator('[data-testid="theme-row"]').first.wait_for(timeout=30000)
     themes = page.evaluate(
         """expected => {
-             const explain = document.querySelector('[data-testid="themes-explain"]');
+             const explain = document.querySelector('[data-testid="themes-explanation"]');
              const rows = Array.from(document.querySelectorAll('[data-testid="theme-row"]'));
              return {
                explainText: explain ? explain.textContent.trim() : null,

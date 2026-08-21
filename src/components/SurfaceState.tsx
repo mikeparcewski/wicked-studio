@@ -12,17 +12,22 @@ import { BridgeUnavailableError } from '../api/interactive.js';
 // `surface` prefixes every test id (`doc-canvas-error`, `video-canvas-error`), so the two
 // modes stay independently addressable from Playwright.
 
+// The shared style constants under the token contract (DES-VISION-001 §2.11,
+// vision slice 4): both mode surfaces read these, so converting them converts
+// every consumer at a stroke. `accent` deliberately maps to the GATE status
+// token, not the brand accent — everywhere these files use it, it marks an
+// actionable "this needs you" hint (§3.3), which is the §2.6 amber layer.
 export const S = {
-  card:   '#161b22',
-  border: 'rgba(230,237,243,0.1)',
-  ink:    '#e6edf3',
-  muted:  'rgba(230,237,243,0.55)',
-  accent: '#ffda19',
-  label:  'rgba(230,237,243,0.3)',
+  card:   'var(--surface-card)',
+  border: 'var(--surface-raised)',
+  ink:    'var(--ink-high)',
+  muted:  'var(--ink-muted)',
+  accent: 'var(--status-gate)',
+  label:  'var(--ink-dim)',
 };
 
 export const PANEL: React.CSSProperties = {
-  background: S.card, border: `1px solid ${S.border}`, borderRadius: '10px',
+  background: S.card, border: `1px solid ${S.border}`, borderRadius: 'var(--radius-lg)',
   padding: '20px 22px', maxWidth: '640px',
 };
 
@@ -40,7 +45,7 @@ export function Loading({ surface, subject }: { surface: string; subject: string
   return (
     <div
       data-testid={`${surface}-canvas-loading`}
-      style={{ padding: '32px', color: S.muted, fontSize: '13px' }}
+      style={{ padding: '32px', color: S.muted, fontSize: 'var(--text-sm)', fontFamily: 'var(--font-sans)' }}
     >
       Loading {subject}…
     </div>
@@ -58,13 +63,13 @@ export function Failed({
   surface: string; subject: string; failure: Failure; onRetry: () => void;
 }): React.ReactElement {
   return (
-    <div data-testid={`${surface}-canvas-error`} style={{ padding: '32px' }}>
+    <div data-testid={`${surface}-canvas-error`} style={{ padding: '32px', fontFamily: 'var(--font-sans)' }}>
       <div style={PANEL}>
-        <p style={{ fontSize: '13px', color: S.ink, margin: '0 0 10px' }}>Could not load {subject}.</p>
+        <p style={{ fontSize: 'var(--text-sm)', color: S.ink, margin: '0 0 10px' }}>Could not load {subject}.</p>
         <p
           data-testid={failure.hint ? `${surface}-bridge-hint` : `${surface}-error-detail`}
           style={{
-            fontSize: '13px', color: failure.hint ? S.ink : S.muted, margin: '0 0 14px',
+            fontSize: 'var(--text-sm)', color: failure.hint ? S.ink : S.muted, margin: '0 0 14px',
             lineHeight: 1.5, borderLeft: `2px solid ${S.accent}`, paddingLeft: '10px',
           }}
         >
@@ -75,8 +80,8 @@ export function Failed({
           data-testid={`${surface}-canvas-retry`}
           onClick={onRetry}
           style={{
-            background: 'transparent', border: `1px solid ${S.border}`, borderRadius: '6px',
-            color: S.ink, cursor: 'pointer', fontSize: '12px', padding: '6px 12px',
+            background: 'transparent', border: `1px solid ${S.border}`, borderRadius: 'var(--radius-sm)',
+            color: S.ink, cursor: 'pointer', fontSize: 'var(--text-xs)', padding: '6px 12px',
           }}
         >
           Retry

@@ -64,6 +64,16 @@ const TOKEN_CLEAN = [
   'src/components/GroupChat.tsx',
   'src/components/ChatPanel.tsx',
   'src/components/CenterDashboard.tsx',
+  // Vision slice 4 (cont.) — the Document + Video surfaces (§5.5, §5.6),
+  // including the strip toolbar and the shared surface-state constants.
+  'src/components/DocumentCanvas.tsx',
+  'src/components/DocumentThread.tsx',
+  'src/components/VersionStrip.tsx',
+  'src/components/ThemesMenu.tsx',
+  'src/components/ExportMenu.tsx',
+  'src/components/VideoStoryboard.tsx',
+  'src/components/SurfaceState.tsx',
+  'src/components/threadAnchor.ts',
 ];
 
 export default tseslint.config(
