@@ -8,7 +8,6 @@ import { retryBatchInject } from '../interactive/feedbackBatch.js';
 import { scrollToWid } from '../interactive/widScroller.js';
 import { scrollStripToVersion } from './threadAnchor.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
-import { contextKey, useDocContextStore } from '../store/docContext.js';
 import { nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState } from '../store/docThread.js';
 
 // Document mode's half of the ONE conversation (DES-MERGE-001 §2, §6.3 slice 10).
@@ -364,10 +363,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const streamed = useDocThreadStore((s) => (key === null ? undefined : s.genState[key]));
   // A document that exists with nothing in flight IS case 4: complete, and editable (§7.10).
   const state: GenState = docId === null ? 'idle' : streamed ?? 'terminal';
-  // §4.6: a picked theme is composer CONTEXT, so it rides with whatever the next submit
-  // turns out to be — the create body in case 1, the injected message in cases 2-4. It is
-  // never a separate action, because applying a theme is something a GENERATION does.
-  const theme = useDocContextStore((s) => s.theme[contextKey(projectId, docId)]);
+  // NOTE (issue #65): slice 16's picked theme no longer rides here. The `theme_id` it
+  // put on the create body and the injected message was consumed by NOTHING — the theme
+  // registry it named never existed on the bridge. A document's look is learned per-doc
+  // (`requestThemeLearn`) and applied server-side at every version creation.
 
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -406,7 +405,6 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         const created = await createDoc(projectId, {
           name: docName(body), kind: 'source', brief: body, project: projectId,
           source_message_id: msgId,
-          ...(theme === undefined ? {} : { theme_id: theme }),
         });
         const opened = threadKey(projectId, created.name);
         store.addUserMsg(opened, msgId, body);
@@ -426,7 +424,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         store.addDivider(key, forked.version);
         store.addUserMsg(key, msgId, body);
         store.setGenState(key, 'generating');
-        await injectDocMessage(projectId, docId, body, msgId, theme);
+        await injectDocMessage(projectId, docId, body, msgId);
         setText('');
         navigate(versionPath(projectId, docId, forked.version));
         return;
@@ -441,7 +439,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         });
         store.setGenState(key, 'generating');
       } else {
-        await injectDocMessage(projectId, docId, body, msgId, theme);
+        await injectDocMessage(projectId, docId, body, msgId);
       }
       setText('');
     } catch (e: unknown) {

@@ -107,8 +107,10 @@ export interface CreateDocBody {
   /** The thread message this generation came from (§7.6). The bridge writes it into
    *  the version's `meta.sourceMessageId` at commit; the client only supplies it. */
   source_message_id?: string;
-  /** A learned theme to apply to this generation (§4.6, slice 16). */
-  theme_id?: string;
+  // NOTE (issue #65): slice 16's `theme_id` field is GONE — `POST /api/docs` never read
+  // it (server.js consumes name/kind/source_paths/brief/url/style/project only), and the
+  // theme registry it named never existed. A doc's theme is learned per-doc via
+  // `requestThemeLearn` and sticks server-side.
 }
 
 export interface CreateDocResult {
@@ -303,81 +305,58 @@ export function postEvent(projectId: string, evt: InteractiveEvent): Promise<Eve
   );
 }
 
-// ── Theme types (§4.6, §6.4 slice 16) ────────────────────────────────────────
+// ── Theme learn (§4.6) — the CORRECTED wire (issue #65) ──────────────────────
 
 export type LearnKind = 'url' | 'pdf' | 'image';
 
 /**
- * One row of `GET /api/themes` — the library, which is `src/themes/*.json` plus everything
- * the agent has learned (§4.6). `name` is the slug id, exactly as `DocSummary.name` is:
- * one spelling of "the id of a thing in a registry" across the whole seam. It is what
- * `CreateDocBody.theme_id` carries back.
+ * The learn form's shape, client-side. On the wire it becomes the
+ * `wicked.interactive.theme.requested` payload: `url` OR `path` (never both) —
+ * exactly the two fields the bridge's `materializeThemeRequested` reads
+ * (`wicked-interactive/src/service/handlers.js`). `kind` never travels: it only
+ * decides which field the form fills and what the UI says about it.
  */
-export interface ThemeSummary {
-  name: string;
-  /** Absent on the built-in themes, which were not learned from anything. */
-  source?: LearnKind;
-  learned_at?: string;
-}
-
 export interface LearnThemeBody {
   kind: LearnKind;
-  /** Live URL to capture via headless chrome (kind: 'url'). Never fetched by the SPA —
-   *  the bridge proxy owns the SSRF guard (§4.6: reject loopback, private, link-local). */
+  /** Live URL rendered to a PDF via headless chrome (kind: 'url'). Never fetched by the
+   *  SPA — the bridge owns the SSRF guard (theme-grab.js: http(s) only, reject
+   *  loopback/link-local/private, pin resolved addresses). */
   url?: string;
-  /** Absolute path of a local PDF or image (kind: 'pdf' | 'image'). Read server-side;
-   *  the client sends the PATH ONLY — nothing is uploaded from the browser. */
+  /** Absolute path of a local PDF or image (kind: 'pdf' | 'image'). Read server-side in
+   *  place; the client sends the PATH ONLY — nothing is uploaded from the browser. */
   path?: string;
 }
 
-/** The bridge queues immediately and the agent runs async. */
-export interface LearnThemeResult {
-  theme_id: string;
-  status: 'queued';
-  /** An informative message the bridge authored — show it in the thread, never paraphrase. */
-  message?: string;
-}
-
-/** `GET /api/themes` — the theme library (built-ins + everything learned, §4.6). */
-export function listThemes(projectId: string): Promise<ThemeSummary[]> {
-  return iFetch<{ themes: ThemeSummary[] } | ThemeSummary[]>(
-    `${interactiveBase(projectId)}/api/themes`,
-  ).then((r) => (Array.isArray(r) ? r : r.themes));
-}
-
 /**
- * `POST /api/theme/learn { kind, url? | path? }` — submit one source for the agent to learn.
+ * Queue a theme learn for one document — the CORRECTED wire (issue #65).
  *
- * The SSRF guard lives entirely server-side (§4.6: reject loopback/link-local/private, resolve
- * every address and pin the validated IP). The SPA sends the URL to the bridge proxy, NEVER to
- * the target itself — `page.on('request')` in the E2E AC confirms this.
- */
-export function learnTheme(projectId: string, body: LearnThemeBody): Promise<LearnThemeResult> {
-  return iFetch<LearnThemeResult>(
-    `${interactiveBase(projectId)}/api/theme/learn`, jsonPost(body));
-}
-
-/**
- * Full theme data for one learned theme — the palette the mapper consumes.
- * `GET /api/themes/:themeId` — bridge-root-relative, per (§4.6 of DES-MERGE-001).
+ * Slice 16 invented `POST /api/theme/learn` (and a `GET /api/themes` library); the
+ * bridge has NEVER served either (verified against `wicked-interactive/src/service/
+ * server.js` — no theme route exists in its history). The real trigger is the bus,
+ * exactly as `requestRecord`'s corrected demo wire: `wicked.interactive.theme.requested`
+ * is UI-emittable (`events.js` ownership table) and a COMMAND the per-doc workspace
+ * materializes (`materializeThemeRequested`: grab the URL to a PDF — or take the local
+ * file as-is — then announce it via `theme.learned` for the agent to read).
  *
- * The shape is the interactive service's own theme JSON format (src/themes/*.json),
- * which the bridge already reads for `core/theme.js`. The fields here are the
- * minimum the mapper needs; additional fields are tolerated (tolerant reading —
- * DES-VISION-001 §4.4's ASSUMPTION[external-transform]: absent fields are null,
- * and the mapper derives what it can from what is present).
+ * Consequences the caller must design to:
+ *   - the learn is DOC-SCOPED: the learned tokens land at `<doc>/theme/learned.theme.json`
+ *     and every subsequent version of THAT document wears them (theme-source.js). There
+ *     is no cross-doc theme registry, no theme id, and no route that reads a theme back.
+ *   - the ack is an EventAck, not a result: progress and refusals (including the SSRF
+ *     guard's) arrive async as the bridge's own `status.posted` messages in the thread.
  */
-export interface ThemeDetail {
-  name: string;
-  primary?: string;    /* CSS color string — dominant brand color */
-  secondary?: string;  /* CSS color string — secondary brand color, if extracted */
-  background?: string; /* CSS color string — brand background, if extracted */
-  logo_url?: string;   /* URL within the bridge to a logo asset, if found */
-}
-
-/** `GET /api/themes/:themeId` — one learned theme's palette (DES-VISION-001 §4.4). */
-export function getTheme(projectId: string, themeId: string): Promise<ThemeDetail> {
-  return iFetch<ThemeDetail>(`${interactiveBase(projectId)}/api/themes/${encodeURIComponent(themeId)}`);
+export function requestThemeLearn(
+  projectId: string,
+  docId: string,
+  body: LearnThemeBody,
+): Promise<EventAck> {
+  return postEvent(projectId, {
+    event_type: 'wicked.interactive.theme.requested',
+    payload: {
+      document_id: docId,
+      ...(body.kind === 'url' ? { url: body.url } : { path: body.path }),
+    },
+  });
 }
 
 /**
@@ -450,16 +429,13 @@ export function injectDocMessage(
   docId: string,
   text: string,
   sourceMessageId: string,
-  /** The theme the composer had picked when this message was sent (§4.6, slice 16).
-   *  Carried on the message rather than set on the document, because a pick applies to
-   *  the GENERATION the message starts — the same reason `CreateDocBody` carries it. */
-  themeId?: string,
 ): Promise<EventAck> {
+  // NOTE (issue #65): slice 16 also rode a `theme_id` on this payload. Nothing consumed
+  // it — not the bridge, not the assist skill — because the theme registry it named never
+  // existed. The doc's learned theme (requestThemeLearn) is applied server-side at every
+  // version creation, so the message carries no theme field.
   return postEvent(projectId, {
     event_type: 'wicked.interactive.chat.posted',
-    payload: {
-      role: 'user', text, document_id: docId, source_message_id: sourceMessageId,
-      ...(themeId === undefined || themeId === '' ? {} : { theme_id: themeId }),
-    },
+    payload: { role: 'user', text, document_id: docId, source_message_id: sourceMessageId },
   });
 }

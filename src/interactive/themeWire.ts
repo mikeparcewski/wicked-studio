@@ -11,14 +11,27 @@
 //      and no `Blob` in this file and no file input behind it — which is what makes
 //      "it uses your actual numbers" a property rather than a promise.
 //   2. THE SPA NEVER FETCHES THE TARGET. A learn-from-URL submission goes to the bridge
-//      proxy and only there. The SSRF guard stays server-side and untouched (§4.6: http(s)
-//      only, reject metadata/loopback/link-local/private/ULA/CGNAT, resolve every address
+//      proxy and only there. The SSRF guard stays server-side and untouched (theme-grab.js:
+//      http(s) only, reject metadata/loopback/link-local/private, resolve every address
 //      for the host and pin the validated one) — re-implementing any of it here would be a
 //      second, weaker guard that drifts from the real one. So when the service refuses,
 //      the client's whole job is to show the service's OWN reason, verbatim.
+//
+// THE WIRE (corrected, issue #65): slice 16 invented `POST /api/theme/learn`; the real
+// bridge never served it. The real trigger is the bus — `requestThemeLearn` speaks
+// `POST /api/events` with `wicked.interactive.theme.requested {document_id, url|path}`,
+// the one route every other UI-originated intent rides. Two consequences for this module:
+//   - the ack is an EventAck, not a `{theme_id, message}` result: the queue narration is
+//     authored HERE, and the bridge's own progress lines (`status.posted`) land in the
+//     thread when they happen — including the SSRF guard's refusal, which is now ASYNC
+//     (materializeThemeRequested reports it as a status.posted {state:"error"}, never an
+//     HTTP 4xx). The sync catch below covers what CAN refuse synchronously: an unknown
+//     doc (404), a non-emittable type (403), a bridge that could not start (503).
+//   - the learn is DOC-SCOPED: the learned tokens stick to THIS document and every later
+//     version of it wears them (theme-source.js reads <doc>/theme/learned.theme.json).
 
 import {
-  attachSource, learnTheme, ServiceHintError,
+  attachSource, requestThemeLearn, ServiceHintError,
   type LearnKind, type LearnThemeBody, type SourceEntry,
 } from '../api/interactive.js';
 import { nextMsgId, threadKey, useDocThreadStore } from '../store/docThread.js';
@@ -113,7 +126,7 @@ export interface LearnArgs {
 }
 
 export type LearnOutcome =
-  | { ok: true; themeId: string }
+  | { ok: true }
   | { ok: false; reason: string };
 
 /**
@@ -121,6 +134,10 @@ export type LearnOutcome =
  * Never throws: a refusal is a message (§3.3 actionable), because the document is
  * untouched either way and a refused theme is exactly the kind of thing a reader
  * scrolling back needs to find.
+ *
+ * The ack carries no result (see the header): a queued learn is narrated here, and the
+ * bridge's own progress — "Grabbing the page…", the guard's refusal — arrives in this
+ * same thread as the service's `status.posted` lines when it happens.
  */
 export async function learnThemeFromThread(
   { projectId, docId, kind, value }: LearnArgs,
@@ -130,12 +147,10 @@ export async function learnThemeFromThread(
   store.addUserMsg(key, nextMsgId(), learnAsk(kind, value));
   store.addNarration(key, learnSubject(kind, value));
   try {
-    const res = await learnTheme(projectId, learnBody(kind, value));
-    // The bridge's own line wins where it wrote one — it knows what the agent is doing
-    // with this source; we only know that it took it.
-    store.addNarration(key, res.message ?? `Queued “${res.theme_id}” — it joins the theme `
-      + 'library once the agent has read the design.');
-    return { ok: true, themeId: res.theme_id };
+    await requestThemeLearn(projectId, docId, learnBody(kind, value));
+    store.addNarration(key, 'Queued — once the agent has read the design, every new '
+      + 'version of this document wears it. Progress narrates here.');
+    return { ok: true };
   } catch (e: unknown) {
     const reason = serviceReason(e);
     store.addActionable(key, refusalText(value, reason, 'was not learned from'), learnFix(kind, e));

@@ -33,9 +33,12 @@ by DES-FEEDBACK-001 §7.3, which made Document mode canvas-first):
      canvas to that version AND scrolls/focuses the thread message whose id
      the manifest's meta.sourceMessageId names — the id the CLIENT minted at
      submit, echoed back through the fixture's manifest.
-  4. Themes (V19): data-testid="themes-open" reads "Themes", sits on the strip
-     beside Export, and opening it reveals the one-line explanation ("Borrow a
-     look from a site, PDF, or image."); picking one lands the composer chip.
+  4. Themes (V19, corrected by issue #65): data-testid="themes-open" reads
+     "Themes", sits on the strip beside Export, and opening it reveals the
+     one-line explanation ("Borrow a look from a site, PDF, or image.") plus
+     the REAL capability — learn a look for THIS document. Submitting a URL
+     rides the corrected wire (POST /api/events, theme.requested) and lands as
+     a thread message; there is NO theme list, NO picking, NO composer chip.
      NO data-testid and NO copy reading "theme library" anywhere.
 
 Captures (§4.0 contract: 1440x900 viewport, device_scale_factor=1, waits on
@@ -43,6 +46,8 @@ data-testid, never a sleep) into e2e/shots/uxfix/ — gitignored evidence:
   uxfix-6-document.png           the three-pane surface, v1+v2 landed (full page)
   uxfix-6-version-crosslink.png  v1 selected: canvas at v1, its message focused
   uxfix-6-themes.png             the Themes panel open, explaining itself
+  ../vision/theme-wire-fix-themes-menu.png  the same open panel — issue #65's
+                                 corrected-surface evidence, on the vision shelf
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
 SKIP_STUDIO_BUILD=1. Env knobs: W2_PORT (default 4334), SKIP_STUDIO_BUILD.
@@ -119,6 +124,10 @@ with sync_playwright() as p:
     page = ctx.new_page()
     page.on("console", lambda m: console_errors.append(m.text) if m.type == "error" else None)
     net = tap(page)
+    # EVERY request URL, method-agnostic — the SSRF assertion below needs to see a GET
+    # to the target too, which the POST-only tap would miss.
+    all_request_urls: list[str] = []
+    page.on("request", lambda r: all_request_urls.append(r.url))
 
     # ── Scene 0: the doc-less mode — empty state points at the thread (§2.6 rule 5) ─
     page.goto(DOC_URL, wait_until="domcontentloaded")
@@ -272,43 +281,92 @@ with sync_playwright() as p:
         "url": thread_to_strip,
     }
 
-    # ── Scene D: Themes explains itself, and a pick becomes the composer chip ─────
+    # ── Scene D: Themes explains itself and offers the REAL capability (#65) ──────
+    # No list, no picking: the popover is the doc-scoped learn form, and a submit
+    # rides the corrected wire — theme.requested over POST /api/events.
     wake_strip(page)
     page.locator('[data-testid="themes-open"]').click()
     page.locator('[data-testid="themes-panel"]').wait_for(timeout=30000)
-    page.locator('[data-testid="theme-row"]').first.wait_for(timeout=30000)
+    page.locator('[data-testid="themes-input"]').wait_for(timeout=30000)
     themes = page.evaluate(
         """expected => {
              const explain = document.querySelector('[data-testid="themes-explanation"]');
-             const rows = Array.from(document.querySelectorAll('[data-testid="theme-row"]'));
+             const sticks = document.querySelector('[data-testid="themes-sticks"]');
              return {
                explainText: explain ? explain.textContent.trim() : null,
                explainMatches: !!explain && explain.textContent.trim() === expected,
-               rowNames: rows.map(r => r.getAttribute('data-theme')),
+               saysSticks: !!sticks && /sticks to this document/i.test(sticks.textContent),
+               rowCount: document.querySelectorAll('[data-testid="theme-row"]').length,
+               chipCount: document.querySelectorAll('[data-chip-kind="theme"]').length,
              };
            }""",
         EXPLAINER,
     )
     page.screenshot(path=str(SHOTS / "uxfix-6-themes.png"))
+    # Issue #65's corrected-surface evidence, on the vision shelf beside the
+    # /theme-page shot the slice-8 rig captures.
+    VSHOTS = SHOTS.parent / "vision"
+    VSHOTS.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(VSHOTS / "theme-wire-fix-themes-menu.png"))
 
-    wake_strip(page)  # the panel rides the strip — keep it awake for the pick
-    page.locator('[data-testid="theme-row"][data-theme="stripe-ish"]').click()
-    page.locator('[data-testid="context-chip"][data-chip-value="stripe-ish"]').wait_for(timeout=30000)
-    picked = page.evaluate(
+    wake_strip(page)  # the panel rides the strip — keep it awake for the submit
+    page.locator('[data-testid="themes-input"]').fill("https://acme.example/brand")
+    page.locator('[data-testid="themes-submit"]').click()
+    # A queued learn closes the popover (the ack resolved), and the submission is a
+    # MESSAGE (§2.3): the ask lands in the thread verbatim.
+    page.locator('[data-testid="themes-panel"]').wait_for(state="detached", timeout=30000)
+    page.locator('[data-testid="doc-message"]').last.wait_for(timeout=30000)
+    learned = page.evaluate(
         """() => ({
-             chipKind: document.querySelector('[data-testid="context-chip"]')?.getAttribute('data-chip-kind'),
-             buttonNamesPick: (document.querySelector('[data-testid="themes-open"]')?.textContent || '')
-               .includes('stripe-ish'),
+             askInThread: Array.from(document.querySelectorAll('[data-testid="doc-message"]'))
+               .some(m => (m.textContent || '').includes('Learn a theme from https://acme.example/brand')),
+             panelClosed: !document.querySelector('[data-testid="themes-panel"]'),
+             chipCount: document.querySelectorAll('[data-chip-kind="theme"]').length,
            })"""
     )
+    # The ASYNC guard (issue #65): a link-local source is refused by the SERVICE, in
+    # its own status line, arriving over the bus — never an HTTP 4xx on the ack. The
+    # fixture emits exactly the frame materializeThemeRequested writes.
+    wake_strip(page)
+    page.locator('[data-testid="themes-open"]').click()
+    page.locator('[data-testid="themes-input"]').fill("http://169.254.169.254/")
+    page.locator('[data-testid="themes-submit"]').click()
+    page.locator('[data-testid="doc-narration"]', has_text="Couldn't grab that URL") \
+        .first.wait_for(timeout=30000)
+    refusal = page.evaluate(
+        """() => {
+             const lines = Array.from(document.querySelectorAll('[data-testid="doc-narration"]'))
+               .map(n => n.textContent || '');
+             return {
+               serviceRefusal: lines.find(t => t.includes("Couldn't grab that URL")) || null,
+             };
+           }"""
+    )
+    theme_events = [b for (_m, q, b) in net if q.endswith("/api/events")
+                    and (b or {}).get("event_type") == "wicked.interactive.theme.requested"]
+    ssrf_outbound = [u for u in all_request_urls if "169.254.169.254" in u]
     report["steps"]["slice6_themes"] = {
         "ok": all([
             themes["explainMatches"],
-            themes["rowNames"] == ["stripe-ish", "corporate"],
-            picked["chipKind"] == "theme",
-            picked["buttonNamesPick"],
+            themes["saysSticks"],
+            themes["rowCount"] == 0,          # the invented library's rows are gone
+            themes["chipCount"] == 0,
+            learned["askInThread"],
+            learned["panelClosed"],
+            learned["chipCount"] == 0,        # no pick, so no chip — ever
+            len(theme_events) == 2,           # the good learn + the refused one
+            (theme_events[0] or {}).get("payload", {}).get("document_id") not in (None, ""),
+            (theme_events[0] or {}).get("payload", {}).get("url") == "https://acme.example/brand",
+            (theme_events[1] or {}).get("payload", {}).get("url") == "http://169.254.169.254/",
+            # The refusal is the service's own sentence, and the SPA never touched
+            # the target — the guard lives (and refuses) server-side.
+            refusal["serviceRefusal"] is not None,
+            "link-local" in (refusal["serviceRefusal"] or ""),
+            ssrf_outbound == [],
         ]),
-        **themes, **picked,
+        **themes, **learned, **refusal,
+        "theme_event_bodies": theme_events,
+        "spa_requests_to_the_target": ssrf_outbound,
     }
 
     # ── The wire, as the tap saw it: create carried the anchor; fork carried the

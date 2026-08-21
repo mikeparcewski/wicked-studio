@@ -94,16 +94,19 @@ What "independent" means here, and what this script proves end-to-end:
      origin; and a PPTX export with python-pptx absent renders the service's 400 as an
      actionable message carrying the install command verbatim, with the document still
      framed at v3 and its composer still taking input (§4.4).
- 17. (DES-MERGE-001 slice 16) learn-a-theme and sources attach on that same rig,
-     where two of the three claims are about what the browser does NOT do: the
-     theme library lists learned themes and picking one is a composer chip;
-     submitting `http://169.254.169.254/` shows the SERVICE's stated refusal
-     verbatim with a next action beside it while `page.on('request')` sees NO
-     request to that address from the SPA (the SSRF guard is in the bridge, where
-     §4.6 puts it, and the client never resolves or pre-judges a host); and
-     attaching a local folder shows it as a context chip while no
-     `multipart/form-data` body leaves the page — the one request that does
-     carries the PATH as JSON, because the service reads it in place (§4.9).
+ 17. (DES-MERGE-001 slice 16, CORRECTED by issue #65) learn-a-theme and sources
+     attach on that same rig, where two of the claims are about what the browser
+     does NOT do: a learn submission rides ONE UI-emitted
+     `wicked.interactive.theme.requested` bus event carrying {document_id, url}
+     — the invented /api/themes and /api/theme/learn routes are never requested
+     by the page and answer 404 on the fixture exactly as they do on the real
+     bridge; submitting `http://169.254.169.254/` produces NO request to that
+     address from the SPA (the SSRF guard is in the bridge, where §4.6 puts it,
+     refusing ASYNC in its own status line — the client never resolves or
+     pre-judges a host); and attaching a local folder shows it as a context
+     chip while no `multipart/form-data` body leaves the page — the one request
+     that does carries the PATH as JSON, because the service reads it in place
+     (§4.9).
  18. (DES-MERGE-001 slice 17) the merged preflight / install gate on that same rig,
      proven by the DIFFERENCE between two projects the fixture bridge answers
      differently: with garden (HARD) absent the Document tab states the one action
@@ -470,9 +473,11 @@ try:
         run_open = problem[:30] in surface.inner_text()
         page.screenshot(path=str(SHOTS / "slice4-legacy-redirect.png"), full_page=True)
 
-        # AC: /projects/:id keeps working as a bookmark too.
+        # AC: /projects/:id keeps working as a bookmark too — since DES-FEEDBACK-001
+        # slice D (#71) it lands on the PROJECT DASHBOARD (/p/:id), not a mode; the
+        # last-used-mode redirect is gone (useLegacyRedirect.ts).
         page.goto(f"{STUDIO_ORIGIN}/projects/{project_id}", wait_until="networkidle")
-        project_redirect_ok = wait_for_path(page, f"/p/{project_id}/build")
+        project_redirect_ok = wait_for_path(page, f"/p/{project_id}")
 
         browser.close()
 
@@ -905,8 +910,16 @@ try:
         )
         advanced_ok, advance_ms = within(
             page,
+            # Since DES-UXFIX-001 slices 1/2 (post-slice-F) a completed run can demote
+            # its project into the QUIET band, whose one-line card variant renders NO
+            # run chips — so "advanced on the board" is EITHER the chip leaving
+            # awaiting_human OR the chip unmounting with its card demoted to quiet.
+            # (A still-waiting gate is a top signal that keeps the card active, so a
+            # vanished chip cannot hide an unanswered gate.) The REST read below pins
+            # the actual terminal status either way.
             """id => { const chip = document.querySelector(`[data-testid="run-chip"][data-run-id="${id}"]`);
-                       return !!chip && chip.dataset.status !== 'awaiting_human'; }""",
+                       if (chip) return chip.dataset.status !== 'awaiting_human';
+                       return !!document.querySelector('[data-testid="project-card"][data-variant="quiet"]'); }""",
             simple_run,
             budget_ms=20000,  # gate decision → resume → run-list reconcile (400 ms debounce)
         )
@@ -1154,22 +1167,15 @@ try:
                                     "ffmpeg": {"ok": False, "install": FFMPEG_HINT},
                                     "python-pptx": {"ok": True}}}
     export_requests: list[dict] = []
-    # Slice 16 (§4.6, §4.9): the theme library, the learn endpoint, and sources attach.
-    # THE SSRF GUARD LIVES HERE, in the service, and nowhere else — this fixture refuses
-    # exactly as the real one does (resolve the host, reject link-local/loopback/private,
-    # state the reason) and NEVER fetches the target. The client's only job is to show the
-    # refusal, which is what §19 asserts; a client that pre-rejected the address would be
-    # answering with its own opinion and this AC would pass without the guard existing.
-    THEME_LEARN = "/api/theme/learn"
+    # Slice 16, CORRECTED by issue #65: the learn wire is the theme.requested bus
+    # event (recorded in _emit); the invented /api/themes + /api/theme/learn routes
+    # answer 404 here exactly as they do on the real bridge — a fixture serving an
+    # invented route is how the slice-13 demo break was masked. THE SSRF GUARD LIVES
+    # IN THE SERVICE and refuses ASYNC (a status.posted error frame the real bridge's
+    # materializer emits); this rig asserts the sync half — the SPA never contacts
+    # the target — and the refusal rendering is pinned at unit level + slice-6's rig.
+    INVENTED_THEME_RE = re.compile(r"^/api/theme(s(/.*)?|/learn)$")
     SOURCES_RE = re.compile(r"^/d/([^/]+)/api/sources$")
-    BLOCKED_HOST_RE = re.compile(r"^(127\.|169\.254\.|10\.|192\.168\.|localhost$|\[?::1)")
-    SSRF_REASON = ("refused http://169.254.169.254/: the host resolves to 169.254.169.254, "
-                   "a link-local address — a theme source must be publicly reachable")
-    FIXTURE_THEMES = [
-        {"name": "stripe-ish", "source": "url", "learned_at": "2026-08-18T09:00:00Z"},
-        {"name": "brand-deck", "source": "pdf", "learned_at": "2026-08-17T09:00:00Z"},
-        {"name": "corporate"},  # a built-in: learned from nothing, so no source
-    ]
     learn_requests: list[dict] = []
     source_requests: list[dict] = []
     WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -1241,9 +1247,10 @@ try:
                 self._json(200, FIXTURE_DOCS + FIXTURE_DEMOS
                            if project == demo_project else FIXTURE_DOCS)
                 return True
-            if rest == "/api/themes":
-                # The envelope shape (§4.6's library = built-ins + everything learned).
-                self._json(200, {"themes": FIXTURE_THEMES})
+            if INVENTED_THEME_RE.match(rest):
+                # Issue #65: the invented theme routes are 404 — the same answer the
+                # real bridge gives (contract-checked separately).
+                self._json(404, {"error": f"no such route on the bridge: {rest}"})
                 return True
             # §7.2's fix, pinned in the fixture too: the invented demo routes are 404 —
             # the same answer the real bridge gives (contract-checked separately).
@@ -1359,26 +1366,6 @@ try:
             return self._json(200, {"format": fmt, "path": f"/exports/{file}", "file": file,
                                     "download": f"/d/{name}/download/{file}"})
 
-        def _learn(self) -> None:
-            """`POST /api/theme/learn` — §4.6's guard, server-side, exactly where the
-            design puts it: http(s) only, resolve the host, reject loopback/link-local/
-            private, and REFUSE WITH A REASON. Nothing is fetched on the refusal path —
-            the address is never contacted by anyone, client or service."""
-            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}"
-            body = json.loads(raw)
-            learn_requests.append({"body": body, "raw": raw.decode("utf-8", "replace"),
-                                   "content_type": self.headers.get("Content-Type", "")})
-            if body.get("kind") == "url":
-                host = urllib.parse.urlparse(str(body.get("url") or "")).hostname or ""
-                if BLOCKED_HOST_RE.match(host):
-                    return self._json(400, {"error": SSRF_REASON})
-                slug = re.sub(r"[^a-z0-9]+", "-", host.lower()).strip("-") or "theme"
-                return self._json(200, {"theme_id": slug, "status": "queued",
-                                        "message": f"Capturing {body.get('url')} in a headless "
-                                                   "browser — the agent reads the design back."})
-            stem = Path(str(body.get("path") or "theme")).stem
-            return self._json(200, {"theme_id": stem, "status": "queued"})
-
         def _attach_source(self, name: str) -> None:
             """`POST /d/:docId/api/sources` — the service reads the path IN PLACE (§4.9).
             The raw body is retained verbatim so §19 can assert what the browser sent: a
@@ -1400,6 +1387,13 @@ try:
             # bridge's command loop materializes. The fixture records WHICH demo asked.
             if body.get("event_type") == "wicked.interactive.demo.requested":
                 record_requests.append(str((body.get("payload") or {}).get("document_id") or ""))
+            # The CORRECTED learn wire (issue #65): a UI-originated theme.requested is
+            # what queues a theme learn — the same command loop materializes it on the
+            # real bridge (materializeThemeRequested). Recorded so §19 can assert the
+            # payload shape and that the SPA sent the URL here and NOWHERE else.
+            if body.get("event_type") == "wicked.interactive.theme.requested":
+                learn_requests.append({"body": body,
+                                       "content_type": self.headers.get("Content-Type", "")})
             # §7.7: a failing INJECT must not block the batch. One marker phrase fails the
             # `chat.posted` wire while the `feedback.submitted` event that actually drives
             # the document still succeeds — which is exactly the split the chip describes.
@@ -1447,8 +1441,8 @@ try:
                 exporting = EXPORT_RE.match(rest)
                 if exporting:
                     return self._export(urllib.parse.unquote(exporting.group(1)))
-                if rest == THEME_LEARN:
-                    return self._learn()
+                if INVENTED_THEME_RE.match(rest):
+                    return self._json(404, {"error": f"no such route on the bridge: {rest}"})
                 sources = SOURCES_RE.match(rest)
                 if sources:
                     return self._attach_source(urllib.parse.unquote(sources.group(1)))
@@ -2087,6 +2081,11 @@ try:
         page.wait_for_function(
             """() => document.querySelector('[data-testid="version-strip"]')
                  ?.getAttribute('data-hidden') === 'true'""", timeout=10000)
+        # The hide is a CSS transition: data-hidden flips first and opacity ANIMATES
+        # to 0, so wait for the settled style rather than racing the fade.
+        page.wait_for_function(
+            """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]'))
+                 .opacity === '0'""", timeout=10000)
         strip_hidden_css = page.evaluate(
             """() => { const s = getComputedStyle(document.querySelector('[data-testid="version-strip"]'));
                        return { opacity: s.opacity, pointerEvents: s.pointerEvents }; }""")
@@ -2225,7 +2224,17 @@ try:
         drawer_w = page.evaluate(
             """() => document.querySelector('[data-testid="thread-drawer"]')
                  .getBoundingClientRect().width""")
-        reflow_ok = canvas_w_open < canvas_w - 300 and abs(drawer_w - 440) < 2
+        drawer_left = page.evaluate(
+            """() => document.querySelector('[data-testid="thread-drawer"]')
+                 .getBoundingClientRect().left""")
+        canvas_right = page.evaluate(
+            """() => document.querySelector('[data-testid="video-canvas"]')
+                 .getBoundingClientRect().right""")
+        # REFLOW means the canvas shrank and sits BESIDE the drawer, not under it.
+        # (The old `- 300` shrink threshold was calibrated before slice A's rail
+        # widths and missed by <1px; the non-overlap check is the actual claim.)
+        reflow_ok = (canvas_w_open < canvas_w - 200 and abs(drawer_w - 440) < 2
+                     and canvas_right <= drawer_left + 1)
         page.screenshot(path=str(SHOTS / "slice13-storyboard.png"), full_page=True)
 
         # ── AC (§7.3): the strip auto-hides after 3s idle; proximity wakes it ──────
@@ -2235,6 +2244,10 @@ try:
         page.wait_for_function(
             """() => document.querySelector('[data-testid="version-strip"]')
                  ?.getAttribute('data-hidden') === 'true'""", timeout=10000)
+        # The hide is a CSS transition — wait for the settled style, not the fade.
+        page.wait_for_function(
+            """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]'))
+                 .opacity === '0'""", timeout=10000)
         strip_hidden_opacity = page.evaluate(
             """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]')).opacity""")
         page.screenshot(path=str(SHOTS / "slice13-chapter-seek.png"), full_page=True)
@@ -2626,22 +2639,26 @@ try:
     if not report["steps"]["exports"]["ok"]:
         fail("exports_verdict", "slice-15 export assertions did not all hold — see exports")
 
-    # ── 19. Slice 16 (DES-MERGE-001 §4.6, §4.9, §6.4): themes + sources attach ──
-    # Still the same-origin rig. Three claims, and two of them are about what the browser
-    # does NOT do — which is why this section watches `page.on("request")` rather than
-    # reading the DOM for reassurance:
+    # ── 19. Slice 16 (CORRECTED by issue #65) + §4.9: theme learn + sources attach ──
+    # Still the same-origin rig. The claims are mostly about what the browser does NOT
+    # do — which is why this section watches `page.on("request")` rather than reading
+    # the DOM for reassurance:
     #
-    #   · SSRF: submitting `http://169.254.169.254/` shows the SERVICE's stated reason,
-    #     verbatim, with a next action beside it — and the SPA makes NO request to that
-    #     address. The guard is in the fixture bridge where the real one lives (§4.6);
-    #     the client never resolves, never fetches, and never pre-judges the host, so a
-    #     regression that moved the guard client-side would fail the request assertion
-    #     rather than quietly pass the DOM one.
+    #   · THE WIRE: a learn submission rides ONE theme.requested bus event carrying
+    #     {document_id, url} — and the page NEVER requests the invented /api/themes or
+    #     /api/theme/learn paths (they 404 on this fixture exactly as on the real
+    #     bridge, so a client that regressed onto them would break loudly).
+    #   · SSRF: submitting `http://169.254.169.254/` produces NO request to that
+    #     address. The guard is in the bridge where §4.6 puts it, and on the real wire
+    #     it refuses ASYNC in its own status line; the client never resolves, never
+    #     fetches, and never pre-judges the host. (The verbatim rendering of sync
+    #     refusals is pinned in tests/themeWire.test.ts.)
     #   · Sources: attaching a local folder shows it as a context chip and UPLOADS
     #     NOTHING — no `multipart/form-data` body leaves the page, and the one request
     #     that does carries the PATH as JSON (§4.9's "read in place" guarantee, which is
     #     what "it uses your actual numbers" rests on).
-    #   · The library: learned themes list and picking one is a chip on the composer.
+    #   · NO LIBRARY: there is no theme list and no pick anywhere on the surface — the
+    #     "theme library" was the invented half of slice 16.
     SSRF_TARGET = "http://169.254.169.254/"
     SOURCE_PATH = "/Users/operator/finance/q3-actuals"
     learn_console: list[str] = []
@@ -2670,30 +2687,26 @@ try:
         open_thread(page)
         page.locator('[data-testid="thread-context"]').wait_for(timeout=30000)
 
-        # ── AC: the theme library lists themes, and picking one is a composer chip ──
-        page.click('[data-testid="context-library"]')
-        page.locator('[data-testid="theme-row"]').first.wait_for(timeout=30000)
-        rows = page.locator('[data-testid="theme-row"]')
-        library_themes = [rows.nth(i).get_attribute("data-theme") for i in range(rows.count())]
-        page.click('[data-testid="theme-row"][data-theme="stripe-ish"]')
-        theme_chip = page.locator('[data-testid="context-chip"][data-chip-kind="theme"]')
-        theme_chip.wait_for(timeout=10000)
-        theme_chip_value = theme_chip.get_attribute("data-chip-value")
-        page.screenshot(path=str(SHOTS / "slice16-theme-chip.png"), full_page=True)
+        # ── AC: no theme library survives anywhere — no list, no rows, no chip ──────
+        no_library = page.evaluate(
+            """() => ({
+                 rows: document.querySelectorAll('[data-testid="theme-row"]').length,
+                 libraryControl: !!document.querySelector('[data-testid="context-library"]'),
+                 themeChips: document.querySelectorAll('[data-chip-kind="theme"]').length,
+                 libraryCopy: (document.body.innerText || '').toLowerCase().includes('theme library'),
+               })""")
 
-        # ── AC: the SSRF refusal is the service's, shown verbatim, with no outbound req ──
+        # ── AC: a learn submission is ONE theme.requested event; the SSRF target is
+        # never contacted; the ask stays in the transcript (§2.3) ────────────────────
         page.click('[data-testid="context-learn"]')
         page.fill('[data-testid="learn-input"]', SSRF_TARGET)
         page.click('[data-testid="learn-submit"]')
-        refusal = page.locator('[data-testid="doc-actionable"]').last
-        refusal.wait_for(timeout=30000)
-        refusal_text = refusal.inner_text()
-        refusal_hint = page.locator('[data-testid="doc-actionable-hint"]').last.inner_text()
-        # The ask stays in the transcript (§2.3): a refused theme is still a record of
-        # what was tried and why it did not happen.
+        # The queue narration is client-authored on the corrected wire (the ack is an
+        # EventAck); the bridge's own refusal line arrives async over the bus in prod.
+        page.locator('[data-testid="doc-narration"]', has_text="Queued").first.wait_for(timeout=30000)
         thread_text = page.evaluate(
             """() => document.querySelector('[data-testid="thread"]')?.innerText ?? ''""")
-        page.screenshot(path=str(SHOTS / "slice16-ssrf-refused.png"), full_page=True)
+        page.screenshot(path=str(SHOTS / "slice16-theme-learn.png"), full_page=True)
 
         # ── AC: attaching a folder shows the chip and uploads nothing ──────────────
         page.click('[data-testid="context-sources"]')
@@ -2882,24 +2895,33 @@ try:
 
     # What the browser did, and did not, put on the wire.
     ssrf_outbound = [r for r in spa_requests if "169.254.169.254" in r["url"]]
+    invented_theme_requests = [r for r in spa_requests
+                               if "/api/themes" in r["url"] or "/api/theme/learn" in r["url"]]
     multipart = [r for r in spa_requests
                  if "multipart" in r["content_type"].lower()
                  or "multipart/form-data" in r["post_data"][:200].lower()]
     learn_sent = learn_requests[-1] if learn_requests else None
+    learn_payload = ((learn_sent or {}).get("body") or {}).get("payload") or {}
     source_sent = source_requests[-1] if source_requests else None
     report["steps"]["themes_and_sources"] = {
         "ok": all([
-            # The library, and the pick that becomes context for the next generation.
-            library_themes == ["stripe-ish", "brand-deck", "corporate"],
-            theme_chip_value == "stripe-ish",
-            # The SSRF refusal: the SERVICE's sentence, verbatim, with a next action.
-            SSRF_REASON in refusal_text,
-            refusal_hint.strip() != "",
-            SSRF_TARGET in thread_text,
-            # …and the SPA never went near the address. This is the whole claim.
-            ssrf_outbound == [],
-            learn_sent is not None and learn_sent["body"] == {"kind": "url", "url": SSRF_TARGET},
+            # No library anywhere: the invented half of slice 16 is gone (issue #65).
+            no_library["rows"] == 0,
+            not no_library["libraryControl"],
+            no_library["themeChips"] == 0,
+            not no_library["libraryCopy"],
+            # The corrected wire: ONE theme.requested event, doc-scoped, url-carrying —
+            # and the page never touched the invented routes.
+            len(learn_requests) == 1,
+            learn_payload.get("document_id") == STRIP_DOC,
+            learn_payload.get("url") == SSRF_TARGET,
+            "path" not in learn_payload,
             learn_sent is not None and "json" in learn_sent["content_type"],
+            invented_theme_requests == [],
+            # The ask stays in the transcript (§2.3), and the SPA never went near the
+            # address — the guard refuses async, service-side.
+            SSRF_TARGET in thread_text,
+            ssrf_outbound == [],
             # Sources: a chip for the path, and NOTHING uploaded from the page.
             source_chip_value == SOURCE_PATH,
             SOURCE_PATH in source_thread_text,
@@ -2911,14 +2933,11 @@ try:
             composer_after == "now apply that theme to the summary",
             not learn_console,
         ]),
-        "library_themes": library_themes,
-        "picked_theme_chip": theme_chip_value,
+        "no_library": no_library,
         "ssrf_target": SSRF_TARGET,
-        "ssrf_reason_expected": SSRF_REASON,
-        "ssrf_reason_rendered": refusal_text,
-        "ssrf_next_action_rendered": refusal_hint,
         "spa_requests_to_the_target": ssrf_outbound,
-        "learn_request_seen_by_bridge": learn_sent,
+        "invented_theme_requests": invented_theme_requests,
+        "learn_event_seen_by_bridge": learn_sent,
         "source_path": SOURCE_PATH,
         "source_chip": source_chip_value,
         "source_request_seen_by_bridge": source_sent,
@@ -2927,8 +2946,7 @@ try:
         "composer_still_accepts_input": composer_after,
         "console_errors": learn_console[:10],
         "screenshots": [str(SHOTS / n) for n in
-                        ("slice16-theme-chip.png", "slice16-ssrf-refused.png",
-                         "slice16-source-chip.png")],
+                        ("slice16-theme-learn.png", "slice16-source-chip.png")],
     }
     if not report["steps"]["themes_and_sources"]["ok"]:
         fail("themes_and_sources_verdict",

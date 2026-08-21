@@ -1,4 +1,9 @@
-// Learn-a-theme + sources attach, at the WIRE (DES-MERGE-001 §4.6, §4.9, §6.4 slice 16).
+// Learn-a-theme + sources attach, at the WIRE — the theme half CORRECTED by issue #65:
+// the learn submission rides `POST /api/events` with `wicked.interactive.theme.requested
+// {document_id, url|path}` (the bridge's real, uiEmittable command trigger — see
+// materializeThemeRequested in wicked-interactive/src/service/handlers.js). A test that
+// mocks the old invented `/api/theme/learn` route would be the bug reproduced, so every
+// stub here answers the CORRECTED route and nothing else.
 //
 // These tests drive the REAL client (`src/api/interactive.ts`) against a stubbed `fetch`,
 // not a mocked module, because two of the four ACs are claims about what does and does not
@@ -14,7 +19,6 @@ import {
   attachSourceFromThread, learnBody, learnFix, learnReady, learnThemeFromThread,
   refusalText, serviceReason, sourceStatusLine,
 } from '../src/interactive/themeWire.js';
-import { listThemes } from '../src/api/interactive.js';
 import { apiBase } from '../src/api/client.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
 
@@ -25,6 +29,10 @@ const KEY = threadKey(PROJECT, DOC);
 /** The metadata endpoint §6.4's AC names. The guard is server-side; this address must
  *  never appear in a request the SPA itself makes. */
 const METADATA = 'http://169.254.169.254/';
+
+/** The one route a theme learn is allowed to ride (issue #65). */
+const EVENTS_URL = () => `${apiBase()}/projects/${PROJECT}/interactive/api/events`;
+const ACK = { ok: true, event_id: 'evt-1', correlation_id: 'c-1' };
 
 interface Call { url: string; init: RequestInit | undefined }
 
@@ -91,24 +99,33 @@ describe('submission shape per kind (url / pdf / image)', () => {
   });
 
   it.each(['url', 'pdf', 'image'] as const)(
-    '%s: POSTs the kind to the proxied learn endpoint as a JSON body — never a form',
+    '%s: rides POST /api/events as theme.requested {document_id, url|path} — never a form,'
+    + ' never the invented learn route',
     async (kind) => {
-      const calls = stubFetch([{ body: { theme_id: 't1', status: 'queued' } }]);
+      const calls = stubFetch([{ body: ACK }]);
       const value = kind === 'url' ? 'https://stripe.com' : '/brand/guide.pdf';
       await learnThemeFromThread({ projectId: PROJECT, docId: DOC, kind, value });
 
       expect(calls).toHaveLength(1);
       const { url, init } = calls[0]!;
-      expect(url).toBe(`${apiBase()}/projects/${PROJECT}/interactive/api/theme/learn`);
+      expect(url).toBe(EVENTS_URL());
       expect(init?.method).toBe('POST');
       expect(typeof init?.body).toBe('string');
-      expect(JSON.parse(init?.body as string)).toEqual(learnBody(kind, value));
+      // The REAL payload shape (handlers.js reads payload.url / payload.path): the doc
+      // the learn is scoped to, plus exactly one source field. `kind` never travels.
+      expect(JSON.parse(init?.body as string)).toEqual({
+        event_type: 'wicked.interactive.theme.requested',
+        payload: {
+          document_id: DOC,
+          ...(kind === 'url' ? { url: value } : { path: value }),
+        },
+      });
       expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
     },
   );
 
   it('the submission is a MESSAGE, and the learning narrates informatively (§2.3, §3.3)', async () => {
-    stubFetch([{ body: { theme_id: 'stripe', status: 'queued' } }]);
+    stubFetch([{ body: ACK }]);
     await learnThemeFromThread({
       projectId: PROJECT, docId: DOC, kind: 'url', value: 'https://stripe.com',
     });
@@ -120,30 +137,38 @@ describe('submission shape per kind (url / pdf / image)', () => {
     expect(narration[0]!.text).not.toBe('Working…');
   });
 
+  it('the queue narration says the learned look STICKS to this document (issue #65)', async () => {
+    stubFetch([{ body: ACK }]);
+    await learnThemeFromThread({
+      projectId: PROJECT, docId: DOC, kind: 'url', value: 'https://stripe.com',
+    });
+    // The real model: no theme id, no library — the doc wears the learned look.
+    expect(transcript()).toContain('every new version of this document');
+    expect(transcript()).not.toContain('theme library');
+  });
+
   it('the local kinds SAY the no-upload guarantee, as §4.6 requires of the UI', async () => {
-    stubFetch([{ body: { theme_id: 't', status: 'queued' } }]);
+    stubFetch([{ body: ACK }]);
     await learnThemeFromThread({
       projectId: PROJECT, docId: DOC, kind: 'pdf', value: '/brand/guide.pdf',
     });
     expect(transcript()).toContain('not uploaded');
   });
 
-  it("the bridge's own progress line wins over ours when it wrote one", async () => {
-    stubFetch([{ body: { theme_id: 't', status: 'queued', message: 'Reading the palette from 12 captured pages.' } }]);
-    await learnThemeFromThread({
-      projectId: PROJECT, docId: DOC, kind: 'url', value: 'https://stripe.com',
-    });
-    expect(transcript()).toContain('Reading the palette from 12 captured pages.');
-  });
 });
 
 // ── AC: the SSRF refusal is the SERVICE's, surfaced verbatim ─────────────────
 
-describe('SSRF rejection surfacing (§4.6 — the guard stays server-side)', () => {
-  const REASON = 'refused: 169.254.169.254 resolves to a link-local address';
+describe('refusal surfacing (the guard stays server-side; sync refusals verbatim)', () => {
+  // NOTE (issue #65): on the real wire the SSRF guard refuses ASYNC — the bridge takes
+  // the event, then narrates the refusal as its own status.posted line in the thread.
+  // What CAN refuse synchronously is the event route itself (unknown doc → 404,
+  // non-emittable type → 403, bridge down → 503) — and THAT refusal reaches the
+  // transcript verbatim, exactly as the old sync 400 did.
+  const REASON = 'unknown doc';
 
   it('shows the reason VERBATIM and makes no request to the address itself', async () => {
-    const calls = stubFetch([{ body: { error: REASON }, status: 400 }]);
+    const calls = stubFetch([{ body: { error: REASON }, status: 404 }]);
     const outcome = await learnThemeFromThread({
       projectId: PROJECT, docId: DOC, kind: 'url', value: METADATA,
     });
@@ -152,7 +177,7 @@ describe('SSRF rejection surfacing (§4.6 — the guard stays server-side)', () 
     // ONE request, to the bridge proxy — never to the target. This is the unit-level
     // twin of the Playwright `page.on('request')` assertion.
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toBe(`${apiBase()}/projects/${PROJECT}/interactive/api/theme/learn`);
+    expect(calls[0]!.url).toBe(EVENTS_URL());
     for (const call of calls) expect(call.url).not.toContain('169.254.169.254');
 
     const actionable = thread().find((m) => m.kind === 'actionable') as Extract<DocMsg, { kind: 'actionable' }>;
@@ -162,7 +187,7 @@ describe('SSRF rejection surfacing (§4.6 — the guard stays server-side)', () 
     // (and only then); the reason itself is untouched.
     expect(actionable.text).toContain(REASON);
     expect(actionable.text).toBe(`${METADATA} was not learned from: ${REASON}`);
-    expect(actionable.text).not.toContain('API 400');
+    expect(actionable.text).not.toContain('API 404');
   });
 
   it('supplies a subject only when the service reason has not already named one', () => {
@@ -173,7 +198,7 @@ describe('SSRF rejection surfacing (§4.6 — the guard stays server-side)', () 
   });
 
   it('a refusal still carries a next action — §3.3 bans an error without one', async () => {
-    stubFetch([{ body: { error: REASON }, status: 400 }]);
+    stubFetch([{ body: { error: REASON }, status: 404 }]);
     await learnThemeFromThread({ projectId: PROJECT, docId: DOC, kind: 'url', value: METADATA });
     const actionable = thread().find((m) => m.kind === 'actionable') as Extract<DocMsg, { kind: 'actionable' }>;
     expect(actionable.hint.trim()).not.toBe('');
@@ -182,14 +207,14 @@ describe('SSRF rejection surfacing (§4.6 — the guard stays server-side)', () 
 
   it("the service's own named fix wins over ours whenever it gave one", async () => {
     const hint = 'set WI_ALLOW_PRIVATE_THEME_HOSTS=1 to allow this host';
-    stubFetch([{ body: { error: REASON, hint }, status: 400 }]);
+    stubFetch([{ body: { error: REASON, hint }, status: 404 }]);
     await learnThemeFromThread({ projectId: PROJECT, docId: DOC, kind: 'url', value: METADATA });
     const actionable = thread().find((m) => m.kind === 'actionable') as Extract<DocMsg, { kind: 'actionable' }>;
     expect(actionable.hint).toBe(hint);
   });
 
   it('the ask stays in the transcript after a refusal — a rejected theme is a record', async () => {
-    stubFetch([{ body: { error: REASON }, status: 400 }]);
+    stubFetch([{ body: { error: REASON }, status: 404 }]);
     await learnThemeFromThread({ projectId: PROJECT, docId: DOC, kind: 'url', value: METADATA });
     expect(thread()[0]).toMatchObject({ kind: 'user' });
     expect(transcript()).toContain(METADATA);
@@ -259,20 +284,5 @@ describe('sources attach (§4.9 — the service reads it in place)', () => {
   });
 });
 
-// ── The library, as the bridge may spell it ──────────────────────────────────
-
-describe('theme library', () => {
-  it('reads a bare array and a `{themes}` envelope the same way', async () => {
-    const rows = [{ name: 'stripe', source: 'url' as const, learned_at: 'now' }];
-    stubFetch([{ body: rows }]);
-    await expect(listThemes(PROJECT)).resolves.toEqual(rows);
-    stubFetch([{ body: { themes: rows } }]);
-    await expect(listThemes(PROJECT)).resolves.toEqual(rows);
-  });
-
-  it('is fetched through the project-scoped proxy mount — no second origin', async () => {
-    const calls = stubFetch([{ body: [] }]);
-    await listThemes(PROJECT);
-    expect(calls[0]!.url).toBe(`${apiBase()}/projects/${PROJECT}/interactive/api/themes`);
-  });
-});
+// NOTE (issue #65): the 'theme library' describe is gone with the wire it tested —
+// `GET /api/themes` never existed on the real bridge, so there is nothing to read.

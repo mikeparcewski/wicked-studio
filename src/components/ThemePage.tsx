@@ -2,8 +2,10 @@ import { AppearanceSettings } from './AppearanceSettings.js';
 
 /**
  * The dedicated Theme page (/theme) — a first-class home for the appearance
- * customization surface and brand-learn flow (DES-VISION-001 §3–§4), moved off
- * the system/settings page so theming gets the room it deserves.
+ * customization surface (DES-VISION-001 §3), moved off the system/settings
+ * page so theming gets the room it deserves. The brand-learn flow that used
+ * to live here was removed by issue #65: its wires were invented (see the
+ * note in AppearanceSettings).
  */
 export function ThemePage(): React.ReactElement {
   return (

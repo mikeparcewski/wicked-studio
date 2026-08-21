@@ -26,9 +26,11 @@ Lifecycle (§7.5):
 The demo's url points at localhost:3000 which need not be running: the check
 tests ROUTE EXISTENCE, not recording success (§9 names this out of scope).
 
-Known-invented wires OUTSIDE slice F's scope (themes: slice 16; sources attach:
-slice 19) are probed as ADVISORY — reported, not fatal — so the finding is on
-the record without blocking this slice.
+The theme wires are FATAL steps since issue #65 (they were slice F's advisory
+finding): the corrected client speaks `wicked.interactive.theme.requested` over
+POST /api/events, and the invented `GET /api/themes` / `POST /api/theme/learn`
+must stay 404. The remaining known-invented wire OUTSIDE scope (sources attach:
+slice 19) is still probed as ADVISORY — reported, not fatal.
 
 Env knobs:
   WICKED_INTERACTIVE_DIR  the bridge checkout (default: ../wicked-interactive
@@ -96,7 +98,12 @@ def http(method: str, url: str, body: dict | None = None) -> tuple[int, str, str
 # A client that cannot build the URL cannot regress onto it.
 import re  # noqa: E402 (grouped with its one use, harness style)
 
-BANNED_SPELLINGS = re.compile(r"getDemoSpec|getLatestRecording|api/demo/(spec|recordings|record)\b")
+# Issue #65 adds the invented theme spellings: the path literals /api/themes and
+# /api/theme/learn, and the wrappers that built them. (`learnTheme\b` does not match
+# `learnThemeFromThread` — that helper now speaks the corrected event wire.)
+BANNED_SPELLINGS = re.compile(
+    r"getDemoSpec|getLatestRecording|api/demo/(spec|recordings|record)\b"
+    r"|api/themes|api/theme/learn|listThemes|getTheme\b|learnTheme\b")
 spelled: list[str] = []
 for f in sorted((REPO / "src").rglob("*")):
     if f.suffix not in (".ts", ".tsx"):
@@ -190,6 +197,15 @@ try:
          {"event_type": "wicked.interactive.feedback.submitted",
           "payload": {"document_id": DEMO, "version": head, "target": "demo_step",
                       "source_message_id": "m2", "items": [{"wid": "step-0", "comment": "x"}]}}),
+        # The CORRECTED theme wire (issue #65): requestThemeLearn speaks
+        # theme.requested — doc-scoped, url OR path, exactly what
+        # materializeThemeRequested reads. Both source kinds must be routable.
+        ("requestThemeLearn_url",  "POST", "/api/events",
+         {"event_type": "wicked.interactive.theme.requested",
+          "payload": {"document_id": DEMO, "url": "https://example.com"}}),
+        ("requestThemeLearn_path", "POST", "/api/events",
+         {"event_type": "wicked.interactive.theme.requested",
+          "payload": {"document_id": DEMO, "path": "/tmp/brand-guide.pdf"}}),
     ]
     positive_rows = []
     positive_ok = True
@@ -209,6 +225,12 @@ try:
         ("GET",  f"/d/{DEMO}/api/demo/spec"),
         ("GET",  f"/d/{DEMO}/api/demo/recordings"),
         ("POST", f"/d/{DEMO}/api/demo/record"),
+        # Issue #65: the slice-16 theme wires, promoted from advisory to FATAL —
+        # the bridge has no theme registry and no learn endpoint; the real wire
+        # is theme.requested over POST /api/events (asserted above).
+        ("GET",  "/api/themes"),
+        ("GET",  "/api/themes/some-theme"),
+        ("POST", "/api/theme/learn"),
     ]
     invented_rows = []
     invented_ok = True
@@ -239,10 +261,8 @@ try:
         "recording_file_missing": {"status": rec_status, "body": rec_text[:200]},
     }
 
-    # ── Advisory: invented wires OUTSIDE slice F (on the record, not fatal) ─────
+    # ── Advisory: invented wires OUTSIDE this scope (on the record, not fatal) ──
     for name, method, path, body in [
-        ("listThemes (slice 16)",   "GET",  "/api/themes",              None),
-        ("learnTheme (slice 16)",   "POST", "/api/theme/learn",         {"kind": "url", "url": "https://example.com"}),
         ("attachSource (slice 19)", "POST", f"/d/{DEMO}/api/sources",   {"path": "/tmp/x.md"}),
     ]:
         status, _, _ = http(method, f"{base}{path}", body)

@@ -1,23 +1,24 @@
-// The composer's context row — DES-MERGE-001 §4.6, §4.9, §2.3, §6.4 slice 16.
+// The composer's context row — DES-MERGE-001 §4.6, §4.9, §2.3, CORRECTED by issue #65.
 //
-// What is asserted here is the SURFACE half of the slice: a picked theme becomes a chip
-// and that chip rides with the next generation, an attached folder becomes a chip and
-// uploads nothing, and a refusal from the service reaches the transcript with the
-// service's own words in it. The wire half lives in `themeWire.test.ts`.
+// What is asserted here is the SURFACE half: an attached folder becomes a chip and
+// uploads nothing, a learn submission speaks the corrected doc-scoped wire, and a
+// refusal from the service reaches the transcript with the service's own words in it.
+// The wire half lives in `themeWire.test.ts`. The PICKED-THEME chip is gone with the
+// invented library it picked from (no `GET /api/themes`, no `theme_id` — nothing ever
+// consumed either).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ComposerContext } from '../src/components/ComposerContext.js';
 import { DocumentThread } from '../src/components/DocumentThread.js';
-import { contextKey, useDocContextStore } from '../src/store/docContext.js';
+import { useDocContextStore } from '../src/store/docContext.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
 
 const PROJECT = 'proj-abc';
 const DOC = 'q3-report';
 const KEY = threadKey(PROJECT, DOC);
 
-const listThemes = vi.fn();
-const learnTheme = vi.fn();
+const requestThemeLearn = vi.fn();
 const attachSource = vi.fn();
 const createDoc = vi.fn();
 const postEvent = vi.fn();
@@ -31,31 +32,22 @@ vi.mock('../src/api/interactive.js', async (importOriginal) => {
   return {
     ServiceHintError: actual.ServiceHintError,
     BridgeUnavailableError: actual.BridgeUnavailableError,
-    listThemes: (...a: unknown[]) => listThemes(...a),
-    learnTheme: (...a: unknown[]) => learnTheme(...a),
+    requestThemeLearn: (...a: unknown[]) => requestThemeLearn(...a),
     attachSource: (...a: unknown[]) => attachSource(...a),
     createDoc: (...a: unknown[]) => createDoc(...a),
     postEvent: (...a: unknown[]) => postEvent(...a),
     getVersions: (...a: unknown[]) => getVersions(...a),
     postFork: (...a: unknown[]) => postFork(...a),
-    injectDocMessage: (p: string, d: string, text: string, id: string, themeId?: string) =>
+    injectDocMessage: (p: string, d: string, text: string, id: string) =>
       postEvent(p, {
         event_type: 'wicked.interactive.chat.posted',
-        payload: {
-          role: 'user', text, document_id: d, source_message_id: id,
-          ...(themeId === undefined ? {} : { theme_id: themeId }),
-        },
+        payload: { role: 'user', text, document_id: d, source_message_id: id },
       }),
     interactiveUrl: (p: string, path: string) => `/api/v1/projects/${p}/interactive${path}`,
   };
 });
 
 const navigate = vi.fn();
-
-const THEMES = [
-  { name: 'stripe-ish', source: 'url' as const, learned_at: '2026-08-18T10:00:00Z' },
-  { name: 'corporate', learned_at: undefined },
-];
 
 function mountContext(docId: string | null = DOC): ReturnType<typeof render> {
   return render(<ComposerContext projectId={PROJECT} docId={docId} />);
@@ -76,9 +68,8 @@ function chips(): HTMLElement[] {
 beforeEach(() => {
   vi.clearAllMocks();
   useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
-  useDocContextStore.setState({ theme: {}, sources: {} });
-  listThemes.mockResolvedValue(THEMES);
-  learnTheme.mockResolvedValue({ theme_id: 'stripe-ish', status: 'queued' });
+  useDocContextStore.setState({ sources: {} });
+  requestThemeLearn.mockResolvedValue({ ok: true, event_id: 'e1', correlation_id: 'c1' });
   attachSource.mockResolvedValue({
     path: '/Users/me/finance/q3', note: '', status: 'indexing',
     added_at: '2026-08-18T10:00:00Z', indexed_at: null,
@@ -90,79 +81,42 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-// ── AC (DES-UXFIX-001 V19, slice 6): the library pill LEFT this row ──────────
+// ── AC (issue #65): the theme PICK is gone everywhere — there was nothing to pick ──
 
-describe('the theme pick moved to the strip (V19) — the chip stayed here', () => {
-  it('offers NO library pill and no "theme library" spelling — that control is ThemesMenu, on the strip', () => {
+describe('no theme pick survives anywhere (issue #65)', () => {
+  it('offers NO library pill, no "theme library" spelling, and no theme chip', () => {
     const { container } = mountContext();
     expect(screen.queryByTestId('context-library')).toBeNull();
     expect(container.querySelectorAll('[data-testid*="theme-library"]')).toHaveLength(0);
     expect(container.textContent ?? '').not.toMatch(/theme library/i);
-    // Never fetched from here either: the row no longer has a reason to list themes.
-    expect(listThemes).not.toHaveBeenCalled();
+    expect(container.querySelectorAll('[data-chip-kind="theme"]')).toHaveLength(0);
   });
 
-  it('a theme picked on the strip still renders as THIS row’s chip, and the chip clears the pick', async () => {
-    const user = userEvent.setup();
-    useDocContextStore.getState().pickTheme(contextKey(PROJECT, DOC), 'stripe-ish');
-    mountContext();
-
-    await waitFor(() => expect(chips()).toHaveLength(1));
-    expect(chips()[0]).toHaveAttribute('data-chip-kind', 'theme');
-    expect(chips()[0]).toHaveAttribute('data-chip-value', 'stripe-ish');
-    expect(chips()[0]).toHaveTextContent('stripe-ish');
-
-    await user.click(screen.getByTestId('context-chip-remove'));
-    await waitFor(() => expect(chips()).toHaveLength(0));
-    expect(useDocContextStore.getState().theme[contextKey(PROJECT, DOC)]).toBeUndefined();
-  });
-
-  it('with NO document open the row offers nothing — both remaining actions are messages', () => {
+  it('with NO document open the row offers nothing — both actions are messages', () => {
     mountContext(null);
     expect(screen.queryByTestId('context-learn')).toBeNull();
     expect(screen.queryByTestId('context-sources')).toBeNull();
     expect(screen.queryByTestId('context-library')).toBeNull();
   });
-});
 
-// ── AC: the chip rides with the next generation ─────────────────────────────
-
-describe('the picked theme is what the next generation is made with', () => {
-  it('case 1 — the create body carries `theme_id`', async () => {
-    const user = userEvent.setup();
-    useDocContextStore.getState().pickTheme(contextKey(PROJECT, null), 'stripe-ish');
-    mountThread(null);
-
-    await user.type(screen.getByTestId('doc-composer'), 'a deck for the Q3 review');
-    await user.click(screen.getByTestId('doc-composer-submit'));
-
-    await waitFor(() => expect(createDoc).toHaveBeenCalled());
-    expect(createDoc.mock.calls[0]![1]).toMatchObject({ theme_id: 'stripe-ish' });
-  });
-
-  it('case 2 — a steer carries the theme on the injected message', async () => {
-    const user = userEvent.setup();
-    useDocContextStore.getState().pickTheme(contextKey(PROJECT, DOC), 'corporate');
-    useDocThreadStore.getState().setGenState(KEY, 'generating');
-    mountThread(DOC);
-
-    await user.type(screen.getByTestId('doc-composer'), 'make the headings tighter');
-    await user.click(screen.getByTestId('doc-composer-submit'));
-
-    await waitFor(() => expect(postEvent).toHaveBeenCalled());
-    expect(postEvent.mock.calls[0]![1]).toMatchObject({
-      event_type: 'wicked.interactive.chat.posted',
-      payload: { theme_id: 'corporate' },
-    });
-  });
-
-  it('no pick means no `theme_id` — an absent chip sends an absent field, never null', async () => {
+  it('case 1 — the create body carries NO theme field of any spelling', async () => {
     const user = userEvent.setup();
     mountThread(null);
     await user.type(screen.getByTestId('doc-composer'), 'a deck for the Q3 review');
     await user.click(screen.getByTestId('doc-composer-submit'));
     await waitFor(() => expect(createDoc).toHaveBeenCalled());
     expect(createDoc.mock.calls[0]![1]).not.toHaveProperty('theme_id');
+  });
+
+  it('case 2 — a steer carries NO theme field on the injected message', async () => {
+    const user = userEvent.setup();
+    useDocThreadStore.getState().setGenState(KEY, 'generating');
+    mountThread(DOC);
+    await user.type(screen.getByTestId('doc-composer'), 'make the headings tighter');
+    await user.click(screen.getByTestId('doc-composer-submit'));
+    await waitFor(() => expect(postEvent).toHaveBeenCalled());
+    const payload = (postEvent.mock.calls[0]![1] as { payload: Record<string, unknown> }).payload;
+    expect(payload).not.toHaveProperty('theme_id');
   });
 });
 
@@ -225,11 +179,11 @@ describe('attaching a reference folder', () => {
 
 // ── AC: the service's refusal, surfaced verbatim, in the thread ─────────────
 
-describe('learn-a-theme in the thread', () => {
-  const REASON = 'refused: 169.254.169.254 resolves to a link-local address';
+describe('learn-a-theme in the thread (the corrected doc-scoped wire, #65)', () => {
+  const REASON = 'unknown doc';
 
   it('renders the SERVICE reason verbatim as an actionable message', async () => {
-    learnTheme.mockRejectedValue(new Error(`API 400: ${REASON}`));
+    requestThemeLearn.mockRejectedValue(new Error(`API 404: ${REASON}`));
     const user = userEvent.setup();
     mountThread(DOC);
 
@@ -240,8 +194,9 @@ describe('learn-a-theme in the thread', () => {
     const actionable = await screen.findByTestId('doc-actionable');
     expect(actionable).toHaveTextContent(REASON);
     // The SPA submitted to the bridge and nowhere else — the guard is the only thing
-    // that ever resolved that address.
-    expect(learnTheme).toHaveBeenCalledWith(PROJECT, { kind: 'url', url: 'http://169.254.169.254/' });
+    // that ever resolves that address (its refusal narrates async in the thread).
+    expect(requestThemeLearn).toHaveBeenCalledWith(
+      PROJECT, DOC, { kind: 'url', url: 'http://169.254.169.254/' });
     expect(screen.getByTestId('doc-actionable-hint').textContent?.trim()).not.toBe('');
   });
 
@@ -257,8 +212,9 @@ describe('learn-a-theme in the thread', () => {
 
     await user.type(screen.getByTestId('learn-input'), '/brand/guide.pdf');
     await user.click(screen.getByTestId('learn-submit'));
-    await waitFor(() => expect(learnTheme).toHaveBeenCalled());
-    expect(learnTheme).toHaveBeenCalledWith(PROJECT, { kind: 'pdf', path: '/brand/guide.pdf' });
+    await waitFor(() => expect(requestThemeLearn).toHaveBeenCalled());
+    expect(requestThemeLearn).toHaveBeenCalledWith(
+      PROJECT, DOC, { kind: 'pdf', path: '/brand/guide.pdf' });
   });
 
   it('a malformed URL is not submittable, but an address the GUARD owns is', async () => {
