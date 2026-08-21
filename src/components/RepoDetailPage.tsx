@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { CommitCadence } from './CommitCadence.js';
+import { HotspotsView } from './HotspotsView.js';
+import { LanguageBar } from './LanguageBar.js';
 import { RequirementsModal } from './RequirementsModal.js';
 import type { CodeGraphData, GitCommit, GitContributor, RepoEntry, SessionView } from '../api/types.js';
 import { RunLink } from './RunLink.js';
@@ -85,6 +88,26 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
         .sort((a, b) => b.inDeg - a.inDeg)
         .slice(0, 5)
     : [];
+
+  // Language mix (DES-FEEDBACK-001 §3.3): files indexed per language, derived
+  // from the code graph's per-node `lang` — the one language signal this wire
+  // carries (`RepoEntry` has none). No graph ⇒ `null` ⇒ the honest empty state.
+  const langBreakdown: Record<string, number> | null = (() => {
+    if (!graph) return null;
+    const filesByLang = new Map<string, Set<string>>();
+    for (const n of graph.nodes) {
+      if (!n.file || n.file.startsWith('node_modules/')) continue;
+      const lang = (n.lang || 'other').toLowerCase();
+      let files = filesByLang.get(lang);
+      if (files === undefined) {
+        files = new Set<string>();
+        filesByLang.set(lang, files);
+      }
+      files.add(n.file);
+    }
+    if (filesByLang.size === 0) return null;
+    return Object.fromEntries([...filesByLang].map(([lang, files]) => [lang, files.size]));
+  })();
 
   const displayedRuns = expanded ? runs : runs.slice(0, 10);
 
@@ -213,6 +236,11 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
         ))}
       </div>
 
+      {/* Language composition (§3.3) — what this repo is actually built of. */}
+      <Section title="Languages">
+        <LanguageBar breakdown={langBreakdown} />
+      </Section>
+
       {/* Active Now */}
       {active.length > 0 && (
         <Section title="Active Now">
@@ -249,56 +277,33 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
             </Section>
           )}
 
-          {/* Code Hotspots */}
+          {/* Code Hotspots — the inline excerpt (§3.4): the REAL HotspotsView,
+              top 5, surfaced here rather than only behind the modal. The full
+              view (and the CytoGraph) stay behind [Graph ›] / "View all →". */}
           <Section title="Code Hotspots">
             {hotspots.length === 0 ? (
               <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
                 Graph not yet indexed — run onboarding to build it.
               </p>
             ) : (
-              <div className="flex flex-col gap-2">
-                {hotspots.map((node, i) => (
-                  <div
-                    key={node.id}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg"
-                    style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
-                  >
-                    <span
-                      className="text-[10px] font-mono w-4 text-right shrink-0"
-                      style={{ color: 'var(--ink-dim)' }}
-                    >
-                      {i + 1}
-                    </span>
-                    <span
-                      className="flex-1 text-xs font-mono truncate"
-                      style={{ color: 'var(--ink-body)' }}
-                      title={node.file}
-                    >
-                      {node.file}
-                    </span>
-                    <span
-                      className="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded"
-                      style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
-                    >
-                      {node.inDeg} edges
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onOpenGraph()}
-                      className="shrink-0 text-[10px] font-mono hover:underline"
-                      style={{ color: 'var(--ink-dim)' }}
-                    >
-                      → Graph
-                    </button>
-                  </div>
-                ))}
+              <div data-testid="hotspots-excerpt" data-count={hotspots.length}>
+                <div
+                  className="rounded-lg overflow-hidden"
+                  style={{ border: '1px solid var(--surface-raised)' }}
+                >
+                  <HotspotsView
+                    nodes={hotspots}
+                    onSelect={(node) => onOpenGraph(node.name || node.id)}
+                  />
+                </div>
                 <button
                   type="button"
+                  data-testid="hotspots-view-all"
                   onClick={() => onOpenGraph()}
                   className="mt-2 self-start text-xs font-mono hover:underline"
                   style={{ color: 'var(--accent)' }}
                 >
-                  Open full graph →
+                  View all →
                 </button>
               </div>
             )}
@@ -335,6 +340,12 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                 No graph yet — run onboarding to index this repo.
               </p>
             )}
+          </Section>
+
+          {/* Commit cadence (§3.1) — active or stagnant, at the wire's honest
+              resolution (last 20 commits, git relative dates). */}
+          <Section title="Commits (30d)">
+            <CommitCadence commits={commits} />
           </Section>
 
           {/* Git History */}

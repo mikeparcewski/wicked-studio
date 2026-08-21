@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../api/types.js';
 import { windowRows } from '../board/boardWindow.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { modePath } from '../hooks/useRoute.js';
+import { GateLatencyChart } from './GateLatencyChart.js';
 import { LiveFeed } from './LiveFeed.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
+import { ProjectSparkline } from './ProjectSparkline.js';
+import { RunOutcomeBar } from './RunOutcomeBar.js';
+import { TokenBurnSparkline } from './TokenBurnSparkline.js';
 
 /**
  * The orchestrator home board (DES-MERGE-001 §1.2/§1.4; bands per DES-UXFIX-001
@@ -28,6 +32,13 @@ import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js'
  * (left, ~68%) beside the LIVE FEED (right, ~32%) — the one place cross-project
  * narration aggregates — and every color on the surface resolves from a semantic
  * token (§2.11, lint-enforced at ERROR for this file).
+ *
+ * Feedback slice E (DES-FEEDBACK-001 §2): a 64px METRICS BAR sits between the
+ * chrome and the wall — three SVG-first tiles, each answering a §2.1 named
+ * operator question (EC19), all derived from stores the page already holds
+ * (zero new requests). The bar AUGMENTS the wall and the live feed; neither
+ * changes beneath it. The gate-latency tile hides under 900px (§2.2 — the
+ * least critical at a glance; `.wk-metrics-mid` in global.css).
  */
 
 /** Card gap — §1.3's composition (blocks and cards sit 8px apart, `--space-2`). */
@@ -162,9 +173,33 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
     onClick: (e) => { e.preventDefault(); navigate(path); },
   });
 
+  // The run-outcome tile buckets on the one honest per-run clock the board
+  // already fetched — the membership attach times, merged across projects.
+  const attachedAt = useMemo(() => {
+    const merged: Record<string, number> = {};
+    for (const item of items) Object.assign(merged, item.attachedAt);
+    return merged;
+  }, [items]);
+
   return (
-    // §1.3's composition: the status wall (left) beside the live feed (right).
-    <div className="flex flex-1 overflow-hidden" style={{ background: 'var(--surface-base)' }}>
+    // §1.3's composition — with slice E's metrics bar (§2.2) banded above it.
+    <div className="flex flex-1 flex-col overflow-hidden" style={{ background: 'var(--surface-base)' }}>
+      <div
+        data-testid="metrics-bar"
+        style={{
+          height: '64px', flexShrink: 0, display: 'flex', alignItems: 'stretch',
+          background: 'var(--surface-rail)', padding: '0 var(--space-3)',
+        }}
+      >
+        <RunOutcomeBar runs={runs} attachedAt={attachedAt} />
+        {/* Hidden under 900px (§2.2) — the media query lives in global.css. */}
+        <div className="wk-metrics-mid" style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+          <GateLatencyChart />
+        </div>
+        <TokenBurnSparkline />
+      </div>
+
+      <div className="flex min-w-0 flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <header
         style={{
@@ -291,6 +326,9 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
                   >
                     <span aria-hidden style={{ color: 'var(--ink-dim)' }}>○</span>
                     {i.project.name}
+                    {/* Slice E (§2.1): which quiet project is quietly doing work —
+                        7-day activity inline, off the honest attach clock. */}
+                    <ProjectSparkline runs={i.runs} attachedAt={i.attachedAt} />
                     <span style={{ color: 'var(--ink-dim)' }}>
                       · {ago(i.signal?.at ?? i.project.updated_at)}
                     </span>
@@ -348,6 +386,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
       {/* The live feed (§1.3 right column): all projects with moving runs,
           narrating off the SAME runtime store the cards read — zero new sockets. */}
       <LiveFeed items={items} navigate={navigate} />
+      </div>
     </div>
   );
 }

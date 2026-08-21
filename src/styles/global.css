@@ -147,3 +147,10 @@ code, pre, .font-mono {
   .wk-disclose,
   .wk-anchor-flash { animation: none; }
 }
+
+/* Slice-E metrics bar (DES-FEEDBACK-001 §2.2): under 900px the gate-latency
+   tile — the least critical at a glance — hides, and the two remaining tiles
+   share the band. A media query needs CSS, so the rule lives here. */
+@media (max-width: 899px) {
+  .wk-metrics-mid { display: none !important; }
+}

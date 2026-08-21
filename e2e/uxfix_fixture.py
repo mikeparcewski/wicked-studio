@@ -45,6 +45,18 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     step 4; default 4.0s — long enough for the rig to shoot
                     the in-progress state, short enough for one 3s poll).
   reset_learn     — True clears every learned theme, so scenes start clean.
+  repo            — whether GET /repos carries the `studio-api` repo plus its
+                    graph / git-history / contributors routes (slice E's repo
+                    profile visuals; default False). Every field served is on
+                    the REAL crew wire: `RepoEntry` verbatim, graph nodes with
+                    estate's per-node `lang`, git-history commits dated with
+                    git `%ar` RELATIVE strings capped at 20 (routes.ts) —
+                    never an absolute date or a language field the daemon
+                    does not serve.
+  metrics_ws      — /ws drips ONE cliUsage frame per loop tick until the
+                    5-frame burn drains (slice E's token-burn tile; default
+                    False). Same real frame shape as usage_ws; drip-fed so
+                    the cumulative fold has more than one arrival instant.
 
 A rig that never flips them gets the default W2 board.
 """
@@ -83,7 +95,8 @@ def iso(ms: int) -> str:
 # Mutable fixture switches, flipped over POST /__fixture between page loads.
 state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
-         "extra_narration": [], "demo": False, "learn_delay_s": 4.0}
+         "extra_narration": [], "demo": False, "learn_delay_s": 4.0,
+         "repo": False, "metrics_ws": False}
 state_lock = threading.Lock()
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
@@ -313,6 +326,83 @@ def demo_frame(name: str) -> bytes:
     _demo_frames[name] = body
     return body
 
+# ── The slice-E repo profile surface (DES-FEEDBACK-001 §3): one indexed repo ──
+#
+# Behind the `repo` switch. Everything below is the REAL crew wire and nothing
+# more: `RepoEntry` verbatim (routes.ts RepoSchema — no language field, because
+# the daemon serves none); the code graph with estate's per-node `lang` (the
+# ONE language signal on the wire — the language bar derives from it); commits
+# from `git log --pretty=…%ar -n 20` — RELATIVE date strings, 20 max (the
+# cadence chart must live at that resolution, not a fabricated daily history).
+
+REPO_ID = "studio-api"
+REPO_ENTRY = {
+    "id": REPO_ID, "name": "studio-api", "root_path": "/tmp/w2/studio-api",
+    "default_branch": "main", "registered_at": NOW0 - 40 * DAY,
+    "git_url": "https://github.com/example/studio-api.git",
+    "code_graph_db": "/tmp/w2/studio-api/.wicked-estate/code_graph.db",
+}
+
+
+def _graph_node(i: int, name: str, kind: str, file: str, lang: str,
+                in_deg: int, out_deg: int) -> dict:
+    # The estate graph-view node shape crew relays verbatim (routes.ts):
+    # id/name/kind/file/lang/score/inDeg/outDeg.
+    return {"id": f"sym-{i}-{name}", "name": name, "kind": kind, "file": file,
+            "lang": lang, "score": round(0.9 - i * 0.04, 2),
+            "inDeg": in_deg, "outDeg": out_deg}
+
+
+REPO_GRAPH_NODES = [
+    _graph_node(0, "registerRoutes", "function", "src/api/routes.ts", "typescript", 31, 12),
+    _graph_node(1, "SessionStore", "class", "src/store/sessions.ts", "typescript", 24, 6),
+    _graph_node(2, "dispatchUnit", "function", "src/engine/dispatch.ts", "typescript", 19, 9),
+    _graph_node(3, "GateCache", "class", "src/engine/gates.ts", "typescript", 14, 4),
+    _graph_node(4, "wireContract", "interface", "src/api/contract.ts", "typescript", 11, 2),
+    _graph_node(5, "renderBoard", "function", "src/ui/board.ts", "typescript", 8, 7),
+    _graph_node(6, "useRuns", "function", "src/ui/hooks.ts", "typescript", 7, 3),
+    _graph_node(7, "parseArgs", "function", "src/cli/args.ts", "typescript", 5, 1),
+    _graph_node(8, "run_actor", "function", "core/src/actor.rs", "rust", 22, 8),
+    _graph_node(9, "EventLog", "struct", "core/src/event_log.rs", "rust", 16, 3),
+    _graph_node(10, "open_store", "function", "core/src/store.rs", "rust", 9, 5),
+    _graph_node(11, "evidence_check", "function", "scripts/evidence_check.py", "python", 4, 2),
+    _graph_node(12, "bundle_report", "function", "scripts/report.py", "python", 3, 1),
+    _graph_node(13, "legacyShim", "function", "shim/legacy.js", "javascript", 2, 1),
+]
+REPO_GRAPH = {
+    "nodes": REPO_GRAPH_NODES,
+    "edges": [{"src": REPO_GRAPH_NODES[i]["id"], "tgt": REPO_GRAPH_NODES[0]["id"]}
+              for i in range(1, 8)],
+    "stats": {"nodeCount": len(REPO_GRAPH_NODES), "edgeCount": 7,
+              "fileCount": len({n["file"] for n in REPO_GRAPH_NODES})},
+}
+
+# git %ar labels exactly as `git log --pretty=…%ar` prints them — day-or-finer
+# up to 13 days, then git's own week rounding, then months (out of the 30d
+# window on purpose: the cadence caption must count it, not paint it).
+REPO_COMMITS = [
+    ("2 hours ago", "tighten gate cache reconcile"),
+    ("5 hours ago", "fix: unit ordinal drift on redrive"),
+    ("26 hours ago", "routes: repo graph relay"),
+    ("2 days ago", "actor: single-writer store seam"),
+    ("2 days ago", "board: quiet band decay"),
+    ("3 days ago", "cli: args parser hardening"),
+    ("5 days ago", "evidence bundle v2"),
+    ("6 days ago", "event log: seq per envelope"),
+    ("9 days ago", "hooks: debounce runs refresh"),
+    ("11 days ago", "contract: additive frame fields"),
+    ("13 days ago", "dispatch: rework attempts"),
+    ("2 weeks ago", "store: WAL checkpoint tuning"),
+    ("3 weeks ago", "report script: markdown out"),
+    ("4 weeks ago", "shim: legacy import path"),
+    ("2 months ago", "initial carve-out"),
+]
+REPO_CONTRIBUTORS = [
+    {"commits": 42, "name": "Mika Ellis", "email": "mika@example.com"},
+    {"commits": 17, "name": "Ravi Chandra", "email": "ravi@example.com"},
+    {"commits": 6, "name": "Jo Beck", "email": "jo@example.com"},
+]
+
 # The chat surface (slice 4, §2.4): a four-seat roster and instant-warm chat
 # endpoints. Seats warm the moment they are asked — determinism over realism —
 # and the daemon's real semantics are kept where the client depends on them:
@@ -480,9 +570,26 @@ class W2Handler(SimpleHTTPRequestHandler):
         self.wfile.flush()
         with state_lock:
             push_usage = state["usage_ws"]
+            push_metrics = state["metrics_ws"]
         with ws_lock:
             ws_gen[0] += 1
             my_gen = ws_gen[0]
+        # Slice-E burn drip: the REAL cliUsage frame shape (costUsd dollars when
+        # the CLI reports them, null when unknown — the null one must never fold
+        # to $0), one frame per loop tick so the cumulative curve has more than
+        # one arrival instant. Per-connection, never re-armed in the loop.
+        burn_drip = [
+            {"type": "cliUsage", "session": "r-upload", "ord": 0, "attempt": 0,
+             "inputTokens": 21000, "outputTokens": 3000, "costUsd": 0.04},
+            {"type": "cliUsage", "session": "r-smoke1", "ord": 0, "attempt": 0,
+             "inputTokens": 40000, "outputTokens": 9000, "costUsd": 0.11},
+            {"type": "cliUsage", "session": "r-upload", "ord": 0, "attempt": 1,
+             "inputTokens": 18000, "outputTokens": 2500, "costUsd": None},
+            {"type": "cliUsage", "session": "r-smoke2", "ord": 0, "attempt": 0,
+             "inputTokens": 33000, "outputTokens": 7000, "costUsd": 0.09},
+            {"type": "cliUsage", "session": "r-upload", "ord": 0, "attempt": 2,
+             "inputTokens": 52000, "outputTokens": 12000, "costUsd": 0.18},
+        ] if push_metrics else []
         try:
             # Slice-5 switch: the Build stats footer folds cliUsage events, so the
             # frame is pushed ONCE per connection (never in the loop — a repeated
@@ -519,6 +626,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                         "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
                         "text": str(line) + "\n",
                     }))
+                # One burn frame per tick until the slice-E drip drains.
+                if newest and burn_drip:
+                    self.wfile.write(ws_frame(burn_drip.pop(0)))
                 self.wfile.write(ws_frame({
                     "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
                     "text": NARRATION + "\n",
@@ -560,7 +670,29 @@ class W2Handler(SimpleHTTPRequestHandler):
             self._json(200, {"projects": PROJECTS})
             return True
         if path == "/api/v1/repos":
-            self._json(200, {"repos": []})
+            with state_lock:
+                repo_on = state["repo"]
+            self._json(200, {"repos": [REPO_ENTRY] if repo_on else []})
+            return True
+        # The slice-E repo profile reads (all real crew routes, switch-gated).
+        m = re.match(r"^/api/v1/repos/([^/]+)/(graph|git-history|contributors)$", path)
+        if m:
+            rid, leaf = urllib.parse.unquote(m.group(1)), m.group(2)
+            with state_lock:
+                repo_on = state["repo"]
+            if not repo_on or rid != REPO_ID:
+                self._json(404, {"error": f"Repo {rid} not found"})
+                return True
+            if leaf == "graph":
+                self._json(200, {"graph": REPO_GRAPH})
+            elif leaf == "git-history":
+                self._json(200, {"commits": [
+                    {"sha": f"{i:07x}{'0' * 33}", "shortSha": f"{i:07x}",
+                     "message": msg, "author": "Mika Ellis", "date": date}
+                    for i, (date, msg) in enumerate(REPO_COMMITS)
+                ]})
+            else:
+                self._json(200, {"contributors": REPO_CONTRIBUTORS})
             return True
         if path == "/api/v1/roster":
             self._json(200, {"roster": ROSTER})

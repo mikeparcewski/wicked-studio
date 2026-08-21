@@ -41,7 +41,7 @@ function doc(name: string): DocSummary {
 
 function item(id: string, over: Partial<BoardProject> = {}): BoardProject {
   return {
-    project: project(id), repo: null, runs: [], docs: [],
+    project: project(id), repo: null, runs: [], docs: [], attachedAt: {},
     attention: 'quiet', score: 0, band: 'quiet', signal: null,
     ...over,
   };
