@@ -35,6 +35,11 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     frames, so Video mode has a §5.6 surface to render (vision
                     slice 4; default False — the board rigs' doc tiles must not
                     grow a tile they never asserted).
+  appearance      — replaces the settings store's `studio.appearance` wholesale
+                    (a dict; None restores the tokens.css defaults), so the
+                    vision-slice-7 rig can seed a STORED accent/logo/theme
+                    between page loads. GET/PUT /api/v1/settings serve the
+                    store itself (DES-VISION-001 §3.3).
 
 A rig that never flips them gets the default W2 board.
 """
@@ -75,6 +80,28 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False}
 state_lock = threading.Lock()
+
+# ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
+#
+# The daemon's GET/PUT /api/v1/settings surface reduced to what studio speaks:
+# a flat JSON object; PUT merges its body's top-level keys. `studio.appearance`
+# is studio's namespaced key — the App startup reads it and applies it as inline
+# custom-property overrides on <html>, so EVERY rig's page now GETs this route
+# on boot; the defaults below are exactly tokens.css's values, which keeps every
+# pre-slice-7 board pixel-identical. The slice-7 rig overwrites the key between
+# page loads via POST /__fixture {"appearance": {...}} (None restores defaults)
+# and reads back what the page PUT.
+DEFAULT_APPEARANCE = {"accent_h": 258, "accent_s": 72, "accent_l": 62,
+                      "logo_url": None, "theme": "dark"}
+settings_store: dict = {"graphNodeLimit": 150,
+                        "studio.appearance": dict(DEFAULT_APPEARANCE)}
+
+# A custom logo asset for the slice-7 rig (§3.1 / EC16): deliberately NON-SQUARE
+# (2:1) so contain-fit letterboxing — never stretch, never crop — is provable.
+LOGO_TEST_SVG = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 32">'
+                 b'<rect width="64" height="32" rx="6" fill="#0e7490"/>'
+                 b'<circle cx="16" cy="16" r="9" fill="#f8fafc"/>'
+                 b'<rect x="30" y="10" width="26" height="12" rx="3" fill="#f8fafc"/></svg>')
 
 
 def project(pid: str, name: str, updated_at: int, **extra) -> dict:
@@ -409,6 +436,20 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/health":
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong"})
             return True
+        # The settings store (§3.3): every page boot GETs it for studio.appearance.
+        if path == "/api/v1/settings":
+            with state_lock:
+                snapshot = json.loads(json.dumps(settings_store))
+            self._json(200, {"settings": snapshot})
+            return True
+        # The slice-7 rig's custom-logo asset (served same-origin, §3.1).
+        if path == "/__assets/logo-test.svg":
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Content-Length", str(len(LOGO_TEST_SVG)))
+            self.end_headers()
+            self.wfile.write(LOGO_TEST_SVG)
+            return True
         if path == "/api/v1/runs":
             with state_lock:
                 if state["no_runs"]:
@@ -630,6 +671,13 @@ class W2Handler(SimpleHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if path == "/__fixture":
             with state_lock:
+                # `appearance` rides the same control channel but lands in the
+                # settings store: a dict replaces studio.appearance wholesale,
+                # None restores the defaults (vision slice 7).
+                if "appearance" in body:
+                    settings_store["studio.appearance"] = (
+                        dict(DEFAULT_APPEARANCE) if body["appearance"] is None
+                        else body["appearance"])
                 state.update({k: v for k, v in body.items() if k in state})
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})
@@ -649,6 +697,19 @@ class W2Handler(SimpleHTTPRequestHandler):
         parts = path.split("/")
         if len(parts) == 6 and parts[3] == "chats" and parts[5] == "messages":
             return self._json(200, {"seats": []})
+        return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+
+    def do_PUT(self):  # noqa: N802 (stdlib naming)
+        path = urllib.parse.urlparse(self.path).path
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        # PUT /api/v1/settings — merge the body's top-level keys, answer the
+        # merged store (the daemon's contract; studio.appearance replaces whole).
+        if path == "/api/v1/settings":
+            with state_lock:
+                if isinstance(body, dict):
+                    settings_store.update(body)
+                snapshot = json.loads(json.dumps(settings_store))
+            return self._json(200, {"settings": snapshot})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
 
     def do_DELETE(self):  # noqa: N802 (stdlib naming)
