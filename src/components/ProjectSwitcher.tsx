@@ -22,9 +22,18 @@ interface Props {
   onNewProject?: () => void;
   /** §4.3 pre-bound surfaces: render the value, refuse to open. */
   locked?: boolean;
+  /**
+   * Fired when the dropdown OPENS — the lazy-load hook for callers with a
+   * request budget (Chat's zero-requests-on-mount, DES-UXFIX-001 §2.4): the
+   * project list is fetched on this first user action, never on mount.
+   */
+  onOpen?: () => void;
+  /** Open the list ABOVE the field — for fields docked at the viewport bottom
+   *  (Chat's composer), where a downward list would fall below the fold. */
+  dropUp?: boolean;
 }
 
-export function ProjectSwitcher({ current, projects, onSelect, onNewProject, locked = false }: Props): React.ReactElement {
+export function ProjectSwitcher({ current, projects, onSelect, onNewProject, locked = false, onOpen, dropUp = false }: Props): React.ReactElement {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -52,7 +61,11 @@ export function ProjectSwitcher({ current, projects, onSelect, onNewProject, loc
         data-locked={locked ? 'true' : 'false'}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => { if (!locked) setOpen((v) => !v); }}
+        onClick={() => {
+          if (locked) return;
+          if (!open) onOpen?.();
+          setOpen(!open);
+        }}
         className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80"
         style={{
           background: 'var(--surface-raised)', border: '1px solid var(--surface-raised)',
@@ -68,7 +81,7 @@ export function ProjectSwitcher({ current, projects, onSelect, onNewProject, loc
         <div
           role="listbox"
           data-testid="project-switcher-list"
-          className="absolute top-full left-0 mt-1 w-56 rounded-lg py-1 z-50 max-h-64 overflow-y-auto"
+          className={`absolute left-0 w-56 rounded-lg py-1 z-50 max-h-64 overflow-y-auto ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}
           style={{
             background: 'var(--surface-raised)',
             border: '1px solid var(--surface-raised)',

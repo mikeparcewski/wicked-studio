@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
+import type { Project } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { Markdown } from './Markdown.js';
+import { NewProjectModal } from './NewProjectModal.js';
+import { ProjectSwitcher } from './ProjectSwitcher.js';
 
 /**
  * CHAT (crew#165 / core#134): warm persistent CLI sessions + fan-out.
@@ -89,9 +92,21 @@ type Msg = UserMsg | SeatMsg;
 interface Props {
   repoId?: string | null;
   onBack: () => void;
+  /**
+   * The project shell's context (DES-FEEDBACK-001 §4.3/§5.1, slice B): when set,
+   * the chat is FILED into this project at open time (`projectId` on the POST
+   * body) with no switcher UI — the shell already IS the project context, and
+   * resolving its display name would cost a mount request Chat must not make
+   * (DES-UXFIX-001 §2.4). When absent, the create flow renders a ProjectSwitcher
+   * defaulting to Unfiled (§5.2); its project list loads on the dropdown's first
+   * OPEN — a user action — never on mount.
+   */
+  projectId?: string | null;
+  /** App-level route navigation — needed only by the "+ New project" hand-off. */
+  navigate?: (path: string) => void;
 }
 
-export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
+export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props): React.ReactElement {
   const [chatId, setChatId] = useState<string | null>(null);
   const [seats, setSeats] = useState<Record<string, SeatState>>({});
   const [seatErrors, setSeatErrors] = useState<Record<string, string>>({});
@@ -114,6 +129,28 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatIdRef = useRef<string | null>(null);
   chatIdRef.current = chatId;
+
+  // ── Project binding (DES-FEEDBACK-001 §5, slice B) ─────────────────────────
+  // `null` = Unfiled: no `projectId` key in the open body, the backend default.
+  // The list loads on the dropdown's first OPEN (§2.4: zero requests on mount).
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const projectsRequested = useRef(false);
+  const selectedProjectRef = useRef<string | null>(null);
+  selectedProjectRef.current = selectedProjectId;
+
+  function loadProjects(): void {
+    if (projectsRequested.current) return;
+    projectsRequested.current = true;
+    api
+      .listProjects()
+      .then(({ projects: ps }) =>
+        setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at)))
+      .catch(() => {
+        projectsRequested.current = false; // transient — retry on the next open
+      });
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -141,6 +178,9 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
     setSeatErrors({});
     setOpenError(null);
     setEnded(false);
+    // The project selection belongs to the chat being CREATED — a repo switch
+    // starts a new create flow, so the binding resets to Unfiled (§5.1).
+    setSelectedProjectId(null);
     // The id goes too, and it is the one reset that is not cosmetic. Resolving the new repo's chat
     // is ASYNC — a stored id costs a probe round-trip — and until it lands, a `chatId` still holding
     // the PREVIOUS repo's chat is actively wrong in three places: the event-stream guard below would
@@ -302,8 +342,12 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
         ),
       }));
       try {
-        const body: { chatId: string; repoRef?: string; clis?: string[] } = { chatId: id };
+        const body: { chatId: string; repoRef?: string; clis?: string[]; projectId?: string } = { chatId: id };
         if (repoId) body.repoRef = repoId;
+        // §5.1/§4.3: the binding rides the OPEN — shell context wins, then the
+        // switcher's selection; Unfiled omits the key (the backend default).
+        const boundProject = projectId ?? selectedProjectRef.current;
+        if (boundProject) body.projectId = boundProject;
         // 'all' omits `clis` on purpose — the daemon warms its own full roster, exactly
         // as the pre-slice-4 mount did. 'one' names the single default agent; with no
         // roster answer it also omits, and the daemon's roster decides.
@@ -409,6 +453,11 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
   // over a chat that may be about to pop back in would be a lie held for milliseconds.
   const firstRun =
     messages.length === 0 && Object.keys(seats).length === 0 && openError === null && !resolving;
+  // The create-flow project field (§5.2) shows only while the chat is still being
+  // CREATED (binding happens at open time) and only outside the project shell —
+  // in the shell the context IS the project (§4.3) and rides `projectId` silently.
+  const showProjectField = projectId == null && chatId === null && !resolving && !ended;
+  const currentProject = projects.find((p) => p.id === selectedProjectId) ?? null;
 
   return (
     // The surface's own ink (§2.4); labels read in the sans by inheritance —
@@ -502,6 +551,31 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
           --radius-xl; its focus ring is --accent-dim (wk-composer in
           global.css), never the full accent (§5.3 motion: too dominant). */}
       <div className="px-6 py-3 border-t shrink-0" style={{ borderColor: 'var(--surface-raised)' }}>
+        {/* §5.2: the project field sits ABOVE the intent input, Unfiled default. */}
+        {showProjectField && (
+          <div className="flex items-center gap-2 pb-2" data-testid="chat-project-row">
+            <span
+              className="text-[10px] font-mono uppercase tracking-widest"
+              style={{ color: 'var(--ink-dim)' }}
+            >
+              Project
+            </span>
+            <ProjectSwitcher
+              current={currentProject}
+              projects={projects}
+              onSelect={setSelectedProjectId}
+              onNewProject={() => setShowNewProject(true)}
+              onOpen={loadProjects}
+              dropUp
+            />
+          </div>
+        )}
+        {showNewProject && (
+          <NewProjectModal
+            navigate={navigate ?? ((): void => undefined)}
+            onClose={() => setShowNewProject(false)}
+          />
+        )}
         <div className="flex gap-2">
           <textarea
             value={input}

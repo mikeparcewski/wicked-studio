@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { EntityMode, LaunchRunBody, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
+import type { EntityMode, LaunchRunBody, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
 import { ContextPopover } from './ContextPopover.js';
 import type { ConfirmMode } from './ContextPopover.js';
+import { NewProjectModal } from './NewProjectModal.js';
+import { ProjectSwitcher } from './ProjectSwitcher.js';
 import type { RunMode } from './runMode.js';
 
 interface Props {
@@ -37,6 +39,13 @@ interface Props {
    * it just render the warning with no working link.
    */
   navigate?: (path: string) => void;
+  /**
+   * §4.3 pre-bind (DES-FEEDBACK-001, slice B): when set, the launch form's
+   * ProjectSwitcher pre-fills with this project and LOCKS, and every launch
+   * carries `projectId` in the POST body. When absent the field defaults to
+   * Unfiled (§5.1) — NO `projectId` key on the body, the backend default.
+   */
+  lockedProjectId?: string | null;
 }
 
 const INJECT_STATUSES = new Set(['executing', 'distributing', 'planning']);
@@ -88,7 +97,7 @@ function ActivePill({
 // Defense-in-depth denylist: catches system workflows that predate the is_system flag.
 const SYSTEM_WORKFLOW_IDS = new Set(['chat', 'onboarding', 'survey-repo', 'domain-graph-slice', 'memories']);
 
-export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate }: Props): React.ReactElement {
+export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
 
   // ── Steer mode state ───────────────────────────────────────────────────────
@@ -121,6 +130,29 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [confirmMode, setConfirmMode] = useState<ConfirmMode>('none');
   const [beforeOrd, setBeforeOrd] = useState(1);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+
+  // ── Project binding (DES-FEEDBACK-001 §5, slice B) ─────────────────────────
+  // `null` = Unfiled (§5.1): no `projectId` key in the POST body, the backend
+  // default — byte-identical to the pre-slice request. The list loads lazily on
+  // the dropdown's first open (or on mount when pre-bound, to resolve the name).
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const projectsRequested = useRef(false);
+
+  function loadProjects(): void {
+    if (projectsRequested.current) return;
+    projectsRequested.current = true;
+    api
+      .listProjects()
+      .then(({ projects: ps }) =>
+        // Recency-ordered (updated_at desc) — the attention axis's cheap proxy;
+        // the synthesized `default` row is filtered by the switcher itself.
+        setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at)))
+      .catch(() => {
+        projectsRequested.current = false; // transient failure — retry on next open
+      });
+  }
 
   const [submitting, setSubmitting] = useState(false);
   const [elapsedSecs, setElapsedSecs] = useState(0);
@@ -163,6 +195,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       .then(({ workflows: wfs }) => setWorkflows(wfs))
       .catch(() => {});
   }, []);
+
+  // §4.3 pre-bound: resolve the locked project's NAME up front — the field must
+  // show the name, not the id. Unbound forms load nothing until the first open.
+  useEffect(() => {
+    if (lockedProjectId != null) loadProjects();
+    // loadProjects is stable in behaviour (ref-guarded, single-shot).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedProjectId]);
 
   // ── Elapsed-time ticker ────────────────────────────────────────────────────
   useEffect(() => {
@@ -267,6 +307,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (firstRepo) body.repoRef = firstRepo;
     const wf = workflowOverride?.trim() || workflow;
     if (wf) body.workflow = wf;
+    // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
+    // or pre-bound project files the run atomically with the launch.
+    const boundProject = lockedProjectId ?? selectedProjectId;
+    if (boundProject) body.projectId = boundProject;
 
     try {
       const { runId: newRunId } = await api.launchRun(body);
@@ -482,6 +526,18 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const canSubmit = problem.trim().length > 0 && selectedClis.size > 0 && !submitting;
   const showDetection = detectedWorkflow !== null && !workflowDismissed && !workflow && !workflowOverride;
 
+  // The switcher's current binding (§5.2). Pre-bound (§4.3): the project rides
+  // the route, so it shows even before the name resolves — id first, name once
+  // the list lands (fixture/daemon ids are stable slugs, so this never flashes
+  // an unrelated string).
+  const boundProjectId = lockedProjectId ?? selectedProjectId;
+  const currentProject: Project | null =
+    projects.find((p) => p.id === boundProjectId)
+    ?? (lockedProjectId != null
+      ? { id: lockedProjectId, name: lockedProjectId, description: null,
+          status: 'active', scope: `project:${lockedProjectId}`, created_at: 0, updated_at: 0 }
+      : null);
+
   // Seats routed to by this launch that the daemon observed as NOT signed in.
   // Strictly `=== false` — `null`/absent means "unknowable cheaply", not a problem.
   // A warning only: fallbacks exist, so the launch is never blocked on it.
@@ -553,6 +609,34 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             }
       }
     >
+      {/* ── Project binding — the FIRST field of every create flow (§5.2) ──
+          Unfiled by default; pre-bound-and-locked from project context (§4.3). */}
+      <div className="flex items-center gap-2 px-1" data-testid="launch-project-row">
+        <span
+          className="text-[11px] font-mono uppercase tracking-widest"
+          style={{ color: 'var(--ink-dim)' }}
+        >
+          Project
+        </span>
+        <ProjectSwitcher
+          current={currentProject}
+          projects={projects}
+          onSelect={setSelectedProjectId}
+          onNewProject={() => setShowNewProject(true)}
+          onOpen={loadProjects}
+          locked={lockedProjectId != null}
+          // Docked (non-embedded) forms sit at the pane's bottom edge — open up.
+          dropUp={!embedded}
+        />
+      </div>
+
+      {showNewProject && (
+        <NewProjectModal
+          navigate={navigate ?? ((): void => undefined)}
+          onClose={() => setShowNewProject(false)}
+        />
+      )}
+
       {/* Workflow detection hint */}
       {showDetection && (
         <div

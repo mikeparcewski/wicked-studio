@@ -168,7 +168,9 @@ export const api = {
 
   /** A unit's captured transcript (string, or `null`). Pass the unit key (the suffix after `<run>:`). */
   // ── Chat sessions (crew#165): warm seats + group fan-out ─────────────────
-  openChat: (body: { chatId?: string; clis?: string[]; repoRef?: string }) =>
+  /** `projectId` files the chat into a project at open time (`crew.chat`
+   *  membership, DES-PROJECT-001) — omitted = unfiled, the backend default. */
+  openChat: (body: { chatId?: string; clis?: string[]; repoRef?: string; projectId?: string }) =>
     apiFetch<{ chatId: string; seats: { cliKey: string; ok: boolean; error?: string }[] }>(`/chats`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

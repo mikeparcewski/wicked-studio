@@ -235,15 +235,23 @@ export function App(): React.ReactElement {
         onApproveGate={onDashboardApproveGate}
         onRejectGate={onDashboardRejectGate}
         navigate={navigate}
+        projectId={projectId}
       />
     </div>
   );
 
-  const groupChatSurface = (repo: string | null): React.ReactElement => (
+  // In the project shell the new chat is FILED into the project at open time
+  // (DES-FEEDBACK-001 §5.1 — `projectId` on the POST body, never a silent unfiled
+  // thread); outside it, GroupChat renders its own ProjectSwitcher (§5.2).
+  const groupChatSurface = (repo: string | null, pid: string | null = null): React.ReactElement => (
     <div className="flex-1 overflow-hidden">
-      <GroupChat repoId={repo} onBack={onNavigateBack} />
+      <GroupChat repoId={repo} onBack={onNavigateBack} projectId={pid} navigate={navigate} />
     </div>
   );
+
+  // §4.3 pre-bind: `/p/:projectId/build/new` is the launch form LOCKED to the
+  // project; the flat `/runs/new` stays unbound (Unfiled default, §5.1).
+  const launchProjectId = projectId !== null && mode === 'build' && showLaunch ? projectId : null;
 
   const runSurface = (): React.ReactElement => (
     <div className="flex-1 overflow-hidden">
@@ -255,6 +263,7 @@ export function App(): React.ReactElement {
         onRefresh={refresh}
         onKill={onKill}
         navigate={navigate}
+        launchProjectId={launchProjectId}
       />
     </div>
   );
@@ -314,8 +323,9 @@ export function App(): React.ReactElement {
         </VideoStoryboard>
       );
     }
-    if (m === 'chat' && !artifactId) return groupChatSurface(null);
-    return artifactId ? runSurface() : dashboardSurface();
+    if (m === 'chat' && !artifactId) return groupChatSurface(null, pid);
+    // `showLaunch` here is `/p/:pid/build/new` — the §4.3 pre-bound launch form.
+    return artifactId || showLaunch ? runSurface() : dashboardSurface();
   }
 
   // Center panel content based on route

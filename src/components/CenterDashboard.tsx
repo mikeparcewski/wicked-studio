@@ -20,6 +20,7 @@ import { useGateStore } from '../store/gates.js';
 import { useRunEventStore } from '../store/events.js';
 import { useSteeringStore } from '../store/steering.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
+import { modePath } from '../hooks/useRoute.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -30,6 +31,13 @@ interface Props {
   onApproveGate: (runId: string, amend?: string) => void;
   onRejectGate: (runId: string) => void;
   navigate: (path: string) => void;
+  /**
+   * The project shell's context (DES-FEEDBACK-001 §4.3, slice B): when Build is
+   * entered via `/p/:projectId/build`, "+ Build something" opens the launch form
+   * PRE-BOUND to this project (`/p/:projectId/build/new`) instead of the flat
+   * unbound `/runs/new`.
+   */
+  projectId?: string | null;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -765,6 +773,7 @@ export function CenterDashboard({
   onApproveGate,
   onRejectGate,
   navigate,
+  projectId = null,
 }: Props): React.ReactElement {
   const byRun = useRunEventStore((s) => s.byRun);
   const gates = useGateStore((s) => s.gates);
@@ -1074,7 +1083,8 @@ export function CenterDashboard({
           <button
             type="button"
             data-testid="build-something"
-            onClick={() => navigate('/runs/new')}
+            // §4.3: from project context the launch form opens pre-bound and locked.
+            onClick={() => navigate(projectId ? modePath(projectId, 'build', 'new') : '/runs/new')}
             style={{
               background: 'var(--accent)',
               color: 'var(--accent-fg)',

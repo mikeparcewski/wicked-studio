@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { RepoEntry, SessionView } from '../api/types.js';
+import type { Project, RepoEntry, SessionView } from '../api/types.js';
+import { NewProjectModal } from './NewProjectModal.js';
+import { ProjectSwitcher } from './ProjectSwitcher.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -70,6 +72,27 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
   const [registering, setRegistering] = useState(false);
   const nameEditedRef = useRef(false);
 
+  // ── Project binding (DES-FEEDBACK-001 §5, slice B) ──────────────────────────
+  // POST /repos takes no projectId (its schema is strict), so a selected project
+  // binds via POST /projects/:id/members (`crew.repo`) right after registration.
+  // `null` = Unfiled: register exactly as before, attach nothing.
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const projectsRequested = useRef(false);
+
+  function loadProjects(): void {
+    if (projectsRequested.current) return;
+    projectsRequested.current = true;
+    api
+      .listProjects()
+      .then(({ projects: ps }) =>
+        setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at)))
+      .catch(() => {
+        projectsRequested.current = false; // transient — retry on the next open
+      });
+  }
+
   useEffect(() => {
     setLoading(true);
     Promise.all([api.listRepos(), api.listRuns()])
@@ -124,6 +147,18 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
         ? await api.cloneAndRegisterRepo(name, target, checkoutPath.trim() || undefined)
         : await api.registerRepo(name, target);
 
+      // §5.1/§5.2: a selected project binds the repo AT CREATION — the register
+      // route's strict schema carries no projectId, so the binding is the
+      // membership attach. A failed attach surfaces (never a silent unfiled
+      // repo); the registration itself has already succeeded.
+      if (selectedProjectId !== null) {
+        await api.attachProjectMember(selectedProjectId, {
+          kind: 'crew.repo',
+          ref: repo.id,
+          attachedBy: 'studio',
+        });
+      }
+
       setRepos((prev) => [...prev, repo]);
       setShowRegister(false);
       setNewName('');
@@ -131,6 +166,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
       setNewGitUrl('');
       setCheckoutPath('');
       setSourceMode('local');
+      setSelectedProjectId(null);
       nameEditedRef.current = false;
 
       navigate('/repo-detail/' + encodeURIComponent(repo.id));
@@ -202,6 +238,24 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
             className="flex flex-col gap-3 rounded-2xl p-5 mb-5"
             style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
           >
+            {/* §5.2: the project field is the FIRST field — Unfiled by default;
+                a selected project binds the repo at creation via membership. */}
+            <div className="flex items-center gap-2" data-testid="repo-project-row">
+              <span
+                className="text-[10px] font-mono uppercase tracking-widest"
+                style={{ color: 'var(--ink-dim)' }}
+              >
+                Project
+              </span>
+              <ProjectSwitcher
+                current={projects.find((p) => p.id === selectedProjectId) ?? null}
+                projects={projects}
+                onSelect={setSelectedProjectId}
+                onNewProject={() => setShowNewProject(true)}
+                onOpen={loadProjects}
+              />
+            </div>
+
             {/* Source mode toggle — two mutually exclusive options; aria-pressed is correct for a binary toggle */}
             <div role="group" aria-label="Repository source" className="flex gap-1">
               {(['local', 'remote'] as SourceMode[]).map((m) => (
@@ -295,6 +349,10 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                   : 'Register & onboard'}
             </button>
           </div>
+        )}
+
+        {showNewProject && (
+          <NewProjectModal navigate={navigate} onClose={() => setShowNewProject(false)} />
         )}
       </div>
 
