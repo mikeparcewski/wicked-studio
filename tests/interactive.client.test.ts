@@ -13,7 +13,6 @@ import {
   ServiceHintError,
   createDoc,
   getSources,
-  getTheme,
   listDemos,
   getVersions,
   interactiveDocUrl,
@@ -23,6 +22,7 @@ import {
   postExport,
   postFork,
   requestRecord,
+  requestThemeLearn,
 } from '../src/api/interactive.js';
 import { apiBase } from '../src/api/client.js';
 
@@ -86,8 +86,9 @@ describe('interactive URL resolver', () => {
     ['listDemos',  [],                                 () => listDemos(PROJECT)],
     ['requestRecord', { ok: true, event_id: 'e1', correlation_id: 'c1' },
                                                        () => requestRecord(PROJECT, DEMO)],
-    // DES-VISION-001 §4.4's one new wrapper — the palette the brand mapper consumes.
-    ['getTheme',   { name: 'acme' },                   () => getTheme(PROJECT, 'acme')],
+    // The theme surface (corrected wire, issue #65) — same mount, same rules.
+    ['requestThemeLearn', { ok: true, event_id: 'e1', correlation_id: 'c1' },
+       () => requestThemeLearn(PROJECT, DOC, { kind: 'url', url: 'https://acme.example' })],
   ];
 
   describe('prod (same-origin)', () => {
@@ -356,15 +357,27 @@ describe('happy-path shapes', () => {
     }));
   });
 
-  it('getTheme GETs /api/themes/:themeId and tolerates extra fields (DES-VISION-001 §4.4)', async () => {
-    // Tolerant reading: the bridge's theme JSON may carry more than the mapper's
-    // minimum — the wrapper passes the body through untouched.
-    const detail = { name: 'acme', primary: '#0a2a5e', logo_url: '/api/brand/logo.svg', fonts: ['Inter'] };
-    const calls = stubFetch(detail);
-    await expect(getTheme(PROJECT, 'acme')).resolves.toEqual(detail);
-    expect(calls[0]!.init?.method).toBeUndefined(); // a bare GET
+  it('requestThemeLearn speaks the CORRECTED wire: theme.requested over POST /api/events (issue #65)', async () => {
+    // The bridge has no theme route at all — no learn endpoint, no registry. The real
+    // learn trigger is the UI-emittable `wicked.interactive.theme.requested` bus command
+    // (materializeThemeRequested), doc-scoped exactly like demo.requested.
+    const calls = stubFetch({ ok: true, event_id: 'e1', correlation_id: 'c1' });
+    await requestThemeLearn(PROJECT, DOC, { kind: 'url', url: 'https://acme.example' });
+    expect(calls[0]!.init?.method).toBe('POST');
     expect(calls[0]!.url).toBe(
-      `${apiBase()}/projects/${PROJECT}/interactive/api/themes/acme`,
+      `${apiBase()}/projects/${PROJECT}/interactive/api/events`,
     );
+    expect(calls[0]!.init?.body).toBe(JSON.stringify({
+      event_type: 'wicked.interactive.theme.requested',
+      payload: { document_id: DOC, url: 'https://acme.example' },
+    }));
+  });
+
+  it('requestThemeLearn sends `path` (never `url`) for the local kinds — nothing uploads', async () => {
+    const calls = stubFetch({ ok: true, event_id: 'e1', correlation_id: 'c1' });
+    await requestThemeLearn(PROJECT, DOC, { kind: 'pdf', path: '/brand/guide.pdf' });
+    const body = JSON.parse(calls[0]!.init?.body as string);
+    expect(body.payload).toEqual({ document_id: DOC, path: '/brand/guide.pdf' });
+    expect(body.payload).not.toHaveProperty('url');
   });
 });
