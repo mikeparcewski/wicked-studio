@@ -73,13 +73,20 @@ What "independent" means here, and what this script proves end-to-end:
      `feedback.submitted` event and ONE inject; each submitted item deep-links back to
      its element over the protocol; and an inject the bridge refuses leaves the batch
      standing with a retryable "not recorded" chip (§7.7).
- 15. (DES-MERGE-001 slice 13) Video mode on that same rig: the picker lists the
-     registry's DEMOS most-recent-first (and none of its documents), a seeded demo
-     shows N chapter cards matching its spec's N steps in order, clicking chapter 3
-     moves the player to that step's timestamp, the player renders the service's own
-     recording bytes fetched through the proxy, and the ffmpeg-absent demo shows the
-     service's install command VERBATIM while still rendering its full storyboard —
-     degradation, not a crash (§4.5).
+ 15. (DES-FEEDBACK-001 §7.3, slice F) both immersive modes are CANVAS-FIRST on that
+     same rig: the doc-canvas iframe owns >80% of a 1440px viewport with the thread
+     drawer closed (its default on a direct artifact route), the left rail
+     auto-collapses to icons on mode entry and restores on exit, the version strip
+     auto-hides after 3s idle and wakes on bottom proximity, and the thread-toggle
+     opens the drawer at min(440px, 40vw) with the canvas REFLOWING beside it;
+     (§7.4, same slice) Video mode frames the STORYBOARD — the demo's version HTML
+     at the real bridge route /d/:demoId/doc/:version — in a fully sandboxed iframe
+     (chapters render INSIDE the frame), the picker still lists demos
+     most-recent-first, recording rides ONE UI-emitted
+     `wicked.interactive.demo.requested` bus event from the thread, and the
+     invented slice-13 routes (demo/spec, demo/recordings, demo/record) are never
+     requested by the page and answer 404 on the fixture exactly as they do on the
+     real bridge (pinned separately by e2e/interactive_wire_contract_test.py).
  16. (DES-MERGE-001 slice 15) exports are thread artifacts: the version strip offers
      all three formats for the version it has SELECTED — v3, while the head is the v4
      §13 forked — a PDF export lands in the transcript as an ordinary downloadable
@@ -157,6 +164,9 @@ from tempfile import mkdtemp
 
 REPO = Path(__file__).resolve().parent.parent
 SHOTS = REPO / "e2e" / "shots"
+# DES-FEEDBACK-001 §8.3 names its slice-F screenshots into the vision gallery —
+# the same directory every DES-VISION/DES-FEEDBACK named capture lands in.
+VSHOTS = SHOTS / "vision"
 CREW_PORT = int(os.environ.get("CREW_PORT", "7901"))
 STUDIO_PORT = int(os.environ.get("STUDIO_PORT", "4310"))
 DOC_PORT = int(os.environ.get("DOC_PORT", "4320"))
@@ -180,6 +190,30 @@ report: dict = {"ok": False, "steps": {}}
 # `fonts.g` console filter — so the doc sections suppress them rather than fight them.
 # Hiding is display-only: nothing about the asserted behaviour changes.
 HIDE_GATE_TOASTS = '[data-testid="gate-notification"] { display: none !important; }'
+
+def wake_strip(page) -> None:
+    """DES-FEEDBACK-001 §7.3: the version strip auto-hides after 3s idle and wakes on
+    bottom-edge proximity. Rigs park the mouse there before strip interactions so a
+    click never races the hide timer."""
+    vp = page.viewport_size or {"width": 1280, "height": 720}
+    page.mouse.move(vp["width"] // 2, vp["height"] - 60)
+    page.mouse.move(vp["width"] // 2, vp["height"] - 40)
+    page.wait_for_function(
+        """() => { const s = document.querySelector('[data-testid="version-strip"]');
+                   return !!s && s.getAttribute('data-hidden') === 'false'; }""",
+        timeout=10000)
+
+
+def open_thread(page) -> None:
+    """DES-FEEDBACK-001 §7.3: the thread is a drawer, closed by default on artifact
+    routes. Opens it via the strip toggle (waking the strip first) when absent."""
+    if page.locator('[data-testid="thread"]').count() > 0:
+        return
+    if page.locator('[data-testid="version-strip"]').count() > 0:
+        wake_strip(page)
+    page.locator('[data-testid="thread-toggle"]').click()
+    page.locator('[data-testid="thread"]').wait_for(timeout=30000)
+
 
 def fail(step: str, why: str) -> None:
     report["steps"][step] = {"ok": False, "error": why}
@@ -313,6 +347,7 @@ try:
         fail("playwright", "pip install playwright && playwright install chromium")
 
     SHOTS.mkdir(exist_ok=True)
+    VSHOTS.mkdir(parents=True, exist_ok=True)
     ws_frames: list[dict] = []
     ws_urls: list[str] = []
     console_errors: list[str] = []
@@ -443,7 +478,11 @@ try:
 
     report["steps"]["project_shell"] = {
         "ok": all([
-            tab_labels == ["Chat", "Build", "Document", "Video"],
+            # Since DES-VISION-001 slice 3 each tab carries its board glyph before the
+            # label (the §2.5 rule-4 shared glyph set), so the label is the LAST text
+            # line — the same tolerance uxfix_slice2's spine assertion applies.
+            [t.split("\n")[-1].strip() for t in tab_labels]
+                == ["Chat", "Build", "Document", "Video"],
             tabs_live_ok, surface_named_ok, build_url_ok, back_ok, redirect_ok, run_open,
             project_redirect_ok,
         ]),
@@ -1018,18 +1057,41 @@ try:
     # "the new version's spec differs at step 2" has to be read back off the service,
     # not predicted by the client that asked for it.
     demo_specs = {d["name"]: [dict(s) for s in DEMO_STEPS] for d in FIXTURE_DEMOS}
-    DEMO_GIF_PATH = f"/d/{RECORDED_DEMO}/demo/v2.gif"
-    # A real 1×1 GIF: the player must render the SERVICE's bytes, fetched through the
-    # proxy on the page's own origin — not a data: URL the SPA could have invented.
+
+    def storyboard_html(name: str, version: str, steps: list[dict]) -> str:
+        """The DEMO's version HTML, as the real bridge's storyboard() lands it
+        (DES-FEEDBACK-001 §7.4): chapters + the embedded player, ONE artifact the
+        studio frames — chapter navigation lives IN here, never re-drawn outside."""
+        chapters = "".join(
+            f'<li class="ch" data-step="{i}">{i + 1}. {s["title"]}</li>'
+            for i, s in enumerate(steps))
+        return (
+            '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+            "body{margin:0;background:#0b1020;color:#e6e9f5;font:14px system-ui}"
+            ".player{height:52vh;display:flex;align-items:center;justify-content:center;"
+            "background:#141a30;border-bottom:1px solid #26304f}"
+            "ol{display:flex;gap:12px;list-style:none;margin:0;padding:14px;overflow-x:auto}"
+            ".ch{background:#1b2340;border:1px solid #26304f;border-radius:8px;"
+            "padding:10px 12px;white-space:nowrap}"
+            "</style></head>"
+            f'<body data-storyboard="{name}" data-storyboard-version="{version}">'
+            f'<div class="player"><img src="../demo/v2.gif" alt="recording of {name}" '
+            'onerror="this.replaceWith(document.createTextNode(\'recording pending\'))"></div>'
+            f"<ol data-testid=\"storyboard-chapters\">{chapters}</ol>"
+            "</body></html>")
+    # A real 1×1 GIF: the storyboard HTML embeds the SERVICE's bytes, fetched through
+    # the proxy on the page's own origin — not a data: URL the SPA could have invented.
     TINY_GIF = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
     # §4.5: ffmpeg post-processing is best-effort, so the VERSION still landed and the
     # service names the command that fixes it. Studio shows this string verbatim.
     FFMPEG_HINT = ("ffmpeg is not on PATH — install it (macOS: `brew install ffmpeg`, "
                    "Debian/Ubuntu: `sudo apt install ffmpeg`) and record again")
     record_requests: list[str] = []
-    DEMO_SPEC_RE = re.compile(r"^/d/([^/]+)/api/demo/spec$")
-    DEMO_REC_RE = re.compile(r"^/d/([^/]+)/api/demo/recordings$")
-    DEMO_RECORD_RE = re.compile(r"^/d/([^/]+)/api/demo/record$")
+    # DES-FEEDBACK-001 §7.2: the slice-13 fixture IMPLEMENTED these invented routes and
+    # so confirmed a wire the real bridge never served. They now answer 404 exactly as
+    # the real bridge does, and interactive_wire_contract_test.py pins that against the
+    # real service — a fixture can never self-confirm them again.
+    INVENTED_DEMO_RE = re.compile(r"^/d/[^/]+/api/demo/(spec|recordings|record)$")
 
     def seed_versions(name: str) -> list[dict]:
         head = next(d["head"] for d in FIXTURE_DOCS if d["name"] == name)
@@ -1183,28 +1245,14 @@ try:
                 # The envelope shape (§4.6's library = built-ins + everything learned).
                 self._json(200, {"themes": FIXTURE_THEMES})
                 return True
-            m = DEMO_SPEC_RE.match(rest)
-            if m:
-                name = urllib.parse.unquote(m.group(1))
-                with versions_lock:
-                    steps = [dict(s) for s in demo_specs.get(name, [])]
-                self._json(200, {"steps": steps, "target_url": "https://shop.example/"})
+            # §7.2's fix, pinned in the fixture too: the invented demo routes are 404 —
+            # the same answer the real bridge gives (contract-checked separately).
+            if INVENTED_DEMO_RE.match(rest):
+                self._json(404, {"error": f"no such route on the bridge: {rest}"})
                 return True
-            m = DEMO_REC_RE.match(rest)
-            if m:
-                # Three demos, three states: one recorded (gif only — ffmpeg produced no
-                # mp4 on this box either, which is the common case), one whose post-process
-                # found no ffmpeg at all, and one just authored and never recorded. All are
-                # 200s: the VERSION landed regardless (§4.5).
-                name = urllib.parse.unquote(m.group(1))
-                if name == FFMPEG_DEMO:
-                    self._json(200, {"version": 1, "ffmpeg_absent": True, "ffmpeg_hint": FFMPEG_HINT})
-                elif name == RECORDED_DEMO:
-                    self._json(200, {"version": 2, "gif_url": DEMO_GIF_PATH})
-                else:
-                    self._json(200, {"version": 1})
-                return True
-            if rest == DEMO_GIF_PATH:
+            # The recording bytes every storyboard embeds (`../demo/v2.gif` from its
+            # own /doc/<v> URL) — real bytes through the proxy, for ANY demo doc.
+            if re.match(r"^/d/[^/]+/demo/v2\.gif$", rest):
                 self._send(200, TINY_GIF, "image/gif")
                 return True
             m = VERSIONS_RE.match(rest)
@@ -1220,8 +1268,12 @@ try:
                 return True
             m = RENDER_RE.match(rest)
             if m:
-                html = (DOC_HTML.replace("__DOC__", urllib.parse.unquote(m.group(1)))
-                                .replace("__V__", m.group(2)))
+                name, v = urllib.parse.unquote(m.group(1)), m.group(2)
+                # A demo's version HTML IS its storyboard (§7.4) — chapters included.
+                with versions_lock:
+                    steps = [dict(s) for s in demo_specs.get(name, [])] if name in demo_specs else None
+                html = (storyboard_html(name, v, steps) if steps is not None
+                        else DOC_HTML.replace("__DOC__", name).replace("__V__", v))
                 self._send(200, html.encode(), "text/html; charset=utf-8")
                 return True
             m = DOWNLOAD_RE.match(rest)
@@ -1343,6 +1395,11 @@ try:
             and both of the feedback batch's writes (§7.7)."""
             body = self._body()
             emitted_events.append(body)
+            # The CORRECTED record wire (DES-FEEDBACK-001 §7.4): a UI-originated
+            # `demo.requested` is what queues a recording — the same command the real
+            # bridge's command loop materializes. The fixture records WHICH demo asked.
+            if body.get("event_type") == "wicked.interactive.demo.requested":
+                record_requests.append(str((body.get("payload") or {}).get("document_id") or ""))
             # §7.7: a failing INJECT must not block the batch. One marker phrase fails the
             # `chat.posted` wire while the `feedback.submitted` event that actually drives
             # the document still succeeds — which is exactly the split the chip describes.
@@ -1381,12 +1438,10 @@ try:
                 fork = FORK_RE.match(rest)
                 if project == down_project:
                     return self._json(503, {"code": "bridge_unavailable", "hint": BRIDGE_DOWN_HINT})
-                record = DEMO_RECORD_RE.match(rest)
-                if record:
-                    # Slice 13 only has to make the action REAL and say so; the thread
-                    # wiring (and the version it lands) is slice 14's.
-                    record_requests.append(urllib.parse.unquote(record.group(1)))
-                    return self._json(200, {"queued": True})
+                # §7.2: POST /api/demo/record never existed on the bridge — 404, as it
+                # does there. Recording rides the demo.requested bus event (see _emit).
+                if INVENTED_DEMO_RE.match(rest):
+                    return self._json(404, {"error": f"no such route on the bridge: {rest}"})
                 if fork:
                     return self._fork(urllib.parse.unquote(fork.group(1)))
                 exporting = EXPORT_RE.match(rest)
@@ -1543,6 +1598,7 @@ try:
         page.screenshot(path=str(SHOTS / "slice9-version-strip.png"), full_page=True)
 
         # ── AC: selecting v1 changes the frame src to the v1 URL ───────────────────
+        wake_strip(page)  # §7.3: the strip may have auto-hidden while attrs were read
         entries.nth(0).locator('[data-testid="version-select"]').click()
         page.wait_for_function(frame_at % "1", timeout=30000)
         v1_src = page.locator('[data-testid="doc-canvas"]').get_attribute("src")
@@ -1562,6 +1618,7 @@ try:
         back_query = urllib.parse.urlparse(page.url).query
 
         # ── AC: Fork from v1 creates a 4th version whose parent is 1 ───────────────
+        wake_strip(page)
         entries.nth(0).locator('[data-testid="version-fork"]').click()
         page.wait_for_function(
             "() => document.querySelectorAll('[data-testid=\"version-entry\"]').length === 4",
@@ -1835,6 +1892,9 @@ try:
         page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document/{FB_DOC}", wait_until="networkidle")
         page.add_style_tag(content=HIDE_GATE_TOASTS)
         page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
+        # §7.3: the thread is a closed drawer on a direct doc route — this section
+        # asserts the batch lands as a thread MESSAGE, so open it first.
+        open_thread(page)
         doc_frame = page.frame_locator('[data-testid="doc-canvas"]')
         doc_frame.locator("[data-wid='h1']").wait_for(timeout=30000)
         overlay_sandbox = page.locator('[data-testid="doc-canvas"]').get_attribute("sandbox")
@@ -1981,96 +2041,227 @@ try:
         fail("feedback_overlay_verdict",
              "slice-11+12 point-and-comment assertions did not all hold — see feedback_overlay")
 
-    # ── 16. Slice 13 (DES-MERGE-001 §4.5, §6.4): Video mode — storyboard + player ──
-    # Same same-origin rig: the fake bridge now also serves a seeded demo spec, a real
-    # (1×1) GIF, and a demo whose post-process found no ffmpeg. What this proves:
-    #   · the picker lists DEMOS most-recent-first out of the one registry, and does not
-    #     list the documents that sit in the same registry;
-    #   · a seeded demo shows N chapter cards matching its spec's N steps, in spec order;
-    #   · clicking chapter 3 seeks the player to that step's timestamp. The recording here
-    #     is a GIF — the artifact the service produces when ffmpeg made no mp4 — which has
-    #     no timeline to scrub, so the seek is asserted where the surface actually carries
-    #     it (`data-chapter` / `data-position`, the same values a <video> gets written to
-    #     its `currentTime`; that write is pinned in tests/VideoStoryboard.test.tsx);
-    #   · the ffmpeg-absent demo shows the service's install command VERBATIM, still
-    #     renders its full storyboard, and logs no console error — degradation, not a crash.
+    # ── 15b. Slice F (DES-FEEDBACK-001 §7.3): Document mode is CANVAS-FIRST ──
+    # The operator's round-2 words: "the actual document is minimized because of all
+    # the left/right panes." The same same-origin rig, at the §8.0 capture contract
+    # (1440x900), proves the geometry gave the document its pixels back:
+    #   · EC18: with the thread drawer closed (the default on a direct doc route)
+    #     the doc-canvas iframe occupies >80% of the viewport width;
+    #   · the left rail AUTO-COLLAPSED to its icon state on mode entry, and restores
+    #     when the mode is left;
+    #   · the strip auto-hides after 3s idle (opacity 0), wakes on bottom proximity;
+    #   · the thread-toggle opens the drawer at min(440px, 40vw) and the canvas
+    #     REFLOWS — narrower, never covered.
+    # Captures are the two §8.3-named Document shots.
+    cf_console: list[str] = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        page.on("console", lambda m: cf_console.append(m.text)
+                if m.type == "error" and "fonts.g" not in m.text else None)
+        page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document/{STRIP_DOC}",
+                  wait_until="domcontentloaded")
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
+        page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
+        page.locator('[data-testid="doc-canvas-loading"]').wait_for(state="detached", timeout=30000)
+        # Park the mouse mid-canvas: the rail must not be hover-peeked while measured,
+        # and the strip's idle timer must be free to run down.
+        page.mouse.move(720, 320)
+
+        # ── AC (§7.3): the rail auto-collapsed to icons on mode entry ──────────────
+        rail_ok = page.wait_for_function(
+            """() => document.querySelector('[data-testid="left-rail"]')
+                 ?.getBoundingClientRect().width < 80""", timeout=10000) is not None
+        rail_w_immersive = page.evaluate(
+            """() => document.querySelector('[data-testid="left-rail"]').getBoundingClientRect().width""")
+
+        # ── AC (EC18): the canvas owns >80% of the viewport width, thread closed ───
+        drawer_closed_default = page.locator('[data-testid="thread-drawer"]').count() == 0
+        thread_absent_default = page.locator('[data-testid="thread"]').count() == 0
+        doc_canvas_w = page.evaluate(
+            """() => document.querySelector('[data-testid="doc-canvas"]')
+                 .getBoundingClientRect().width""")
+        ec18_doc_ok = drawer_closed_default and doc_canvas_w / 1440 > 0.8
+
+        # ── AC (§7.3): the strip auto-hides after 3s idle; proximity wakes it ──────
+        page.wait_for_function(
+            """() => document.querySelector('[data-testid="version-strip"]')
+                 ?.getAttribute('data-hidden') === 'true'""", timeout=10000)
+        strip_hidden_css = page.evaluate(
+            """() => { const s = getComputedStyle(document.querySelector('[data-testid="version-strip"]'));
+                       return { opacity: s.opacity, pointerEvents: s.pointerEvents }; }""")
+        # The §8.3 shot: canvas full-width, no thread visible, strip auto-hidden.
+        page.screenshot(path=str(VSHOTS / "feedback-F-document-immersive.png"))
+        wake_strip(page)
+        strip_woken_doc = page.locator('[data-testid="version-strip"]').get_attribute("data-hidden")
+
+        # ── AC (§7.3): the toggle opens the drawer; the canvas REFLOWS, not covered ─
+        page.locator('[data-testid="thread-toggle"]').click()
+        page.locator('[data-testid="thread-drawer"]').wait_for(timeout=30000)
+        drawer_geom = page.evaluate(
+            """() => { const c = document.querySelector('[data-testid="doc-canvas"]').getBoundingClientRect();
+                       const d = document.querySelector('[data-testid="thread-drawer"]').getBoundingClientRect();
+                       return { canvasW: c.width, canvasRight: c.right, drawerW: d.width,
+                                drawerLeft: d.left,
+                                threadUp: !!document.querySelector('[data-testid="thread"]') }; }""")
+        reflow_doc_ok = (drawer_geom["threadUp"]
+                         and abs(drawer_geom["drawerW"] - 440) < 2
+                         and drawer_geom["canvasW"] < doc_canvas_w - 300
+                         and drawer_geom["canvasRight"] <= drawer_geom["drawerLeft"] + 1)
+        # The §8.3 shot: thread drawer open at 440px, canvas reflowed.
+        page.screenshot(path=str(VSHOTS / "feedback-F-document-thread-open.png"))
+
+        # ── AC (§7.3): leaving the immersive mode RESTORES the rail ────────────────
+        page.click('[data-testid="mode-switcher"] [data-mode="build"]')
+        rail_restored = page.wait_for_function(
+            """() => document.querySelector('[data-testid="left-rail"]')
+                 ?.getBoundingClientRect().width > 200""", timeout=10000) is not None
+        rail_w_after = page.evaluate(
+            """() => document.querySelector('[data-testid="left-rail"]').getBoundingClientRect().width""")
+        browser.close()
+
+    report["steps"]["document_canvas_first"] = {
+        "ok": all([
+            rail_ok, ec18_doc_ok,
+            thread_absent_default,
+            strip_hidden_css["opacity"] == "0",
+            strip_hidden_css["pointerEvents"] == "none",
+            strip_woken_doc == "false",
+            reflow_doc_ok,
+            rail_restored,
+            not cf_console,
+        ]),
+        "project_id": doc_project,
+        "doc": STRIP_DOC,
+        "rail": {"immersive_width": rail_w_immersive, "restored_width": rail_w_after},
+        "ec18": {"canvas_width": doc_canvas_w, "viewport": 1440,
+                 "ratio": round(doc_canvas_w / 1440, 3),
+                 "thread_closed_by_default": drawer_closed_default},
+        "strip_autohide": {"hidden_css": strip_hidden_css, "woken": strip_woken_doc},
+        "drawer": drawer_geom,
+        "console_errors": cf_console[:10],
+        "screenshots": [str(VSHOTS / n) for n in
+                        ("feedback-F-document-immersive.png",
+                         "feedback-F-document-thread-open.png")],
+    }
+    if not report["steps"]["document_canvas_first"]["ok"]:
+        fail("document_canvas_first_verdict",
+             "slice-F Document canvas-first assertions did not all hold — see document_canvas_first")
+
+    # ── 16. Slice 13, REWIRED by DES-FEEDBACK-001 §7.4 (slice F): Video mode ──
+    # The client-side player is gone — it spoke invented routes (§7.2). What this
+    # section proves on the same same-origin rig:
+    #   · the picker still lists DEMOS most-recent-first out of the one registry;
+    #   · the demo surface frames the STORYBOARD HTML: `demo-player` IS an <iframe>
+    #     whose src is the real bridge route /d/<demo>/doc/<head>, fully sandboxed,
+    #     with the chapters rendered INSIDE the frame (asserted via the frame tree);
+    #   · EC18: with the thread drawer closed (the default) the canvas occupies >80%
+    #     of the 1440px viewport; the strip toggle opens the drawer and the canvas
+    #     REFLOWS (narrower, never covered);
+    #   · §7.3 auto-hide: after 3s without mousemove the strip is opacity:0, and
+    #     bottom-edge proximity wakes it;
+    #   · the INVENTED routes are never requested by the page, and requesting them
+    #     against this fixture 404s exactly as the real bridge does.
     demo_console: list[str] = []
     demo_requests: list[str] = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
         page.on("console", lambda m: demo_console.append(m.text)
                 if m.type == "error" and "fonts.g" not in m.text else None)
         page.on("request", lambda r: demo_requests.append(r.url))
 
         # ── AC: the picker lists demos, most-recent first, and navigates ───────────
-        # `domcontentloaded`, not `networkidle`: the shell holds a live /ws and the mode
-        # surface's own loads are what the locator waits below are for — idling the
-        # network is neither necessary here nor something a live socket guarantees.
         page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video", wait_until="domcontentloaded")
         page.locator('[data-testid="mode-switcher"]').wait_for(timeout=30000)
         page.add_style_tag(content=HIDE_GATE_TOASTS)
         demo_rows = page.locator('[data-testid="demo-picker-row"]')
         demo_rows.first.wait_for(timeout=30000)
         demo_order = [demo_rows.nth(i).get_attribute("data-demo-id") for i in range(demo_rows.count())]
+        # §7.3: on the picker the thread drawer is OPEN — its empty state points there.
+        picker_thread_open = page.locator('[data-testid="thread-drawer"]').count() == 1
         page.screenshot(path=str(SHOTS / "slice13-demo-picker.png"), full_page=True)
         demo_rows.first.click()
         demo_nav_ok = wait_for_path(page, f"/p/{demo_project}/video/{RECORDED_DEMO}")
 
-        # ── AC: N chapter cards, matching the spec's N steps, in spec order ────────
-        cards = page.locator('[data-testid="chapter-card"]')
-        cards.first.wait_for(timeout=30000)
-        card_count = cards.count()
-        card_indexes = [cards.nth(i).get_attribute("data-index") for i in range(card_count)]
-        card_titles = [cards.nth(i).inner_text() for i in range(card_count)]
+        # ── AC (§7.4): demo-player IS an iframe framing the storyboard HTML ────────
+        # Fresh navigation so the drawer default (closed with a demo open) is the
+        # state under measurement — EC18 is a first-visit claim.
+        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video/{RECORDED_DEMO}",
+                  wait_until="domcontentloaded")
+        page.add_style_tag(content=HIDE_GATE_TOASTS)
         player = page.locator('[data-testid="demo-player"]')
-        player_kind = player.get_attribute("data-player-kind")
-        # The player renders the SERVICE's bytes, through the proxy, on the page's origin.
-        gif_src = page.locator('[data-testid="demo-gif"]').get_attribute("src")
-        # Decoded, not merely requested: the assertion is that the SERVICE's bytes came
-        # back through the proxy and are renderable, so wait for the decode before asking.
-        page.wait_for_function(
-            """() => { const el = document.querySelector('[data-testid="demo-gif"]');
-                       return !!el && el.complete && el.naturalWidth > 0; }""", timeout=30000)
-        gif_loaded = page.locator('[data-testid="demo-gif"]').evaluate("el => el.naturalWidth > 0")
+        player.wait_for(timeout=30000)
+        player_tag = player.evaluate("el => el.tagName")
+        player_src = player.get_attribute("src")
+        player_sandbox = player.get_attribute("sandbox")
+        player_version = player.get_attribute("data-version")
+        # The storyboard rendered INSIDE the frame: chapters from the demo's spec.
+        sb_frame = page.frame_locator('[data-testid="demo-player"]')
+        sb_frame.locator(".ch").first.wait_for(timeout=30000)
+        sb_chapters = sb_frame.locator(".ch").count()
+        sb_titles = [sb_frame.locator(".ch").nth(i).inner_text() for i in range(sb_chapters)]
+        # The strip addresses the storyboard's versions; head selected.
+        strip_ok = page.locator(
+            '[data-testid="version-entry"][data-version="2"][data-selected="true"]').count() == 1
+
+        # ── AC (EC18): the canvas owns >80% of the viewport width, thread closed ───
+        drawer_closed = page.locator('[data-testid="thread-drawer"]').count() == 0
+        canvas_w = page.evaluate(
+            """() => document.querySelector('[data-testid="video-canvas"]')
+                 .getBoundingClientRect().width""")
+        viewport_w = 1440
+        ec18_ok = drawer_closed and canvas_w / viewport_w > 0.8
+        page.screenshot(path=str(VSHOTS / "feedback-F-video-iframe.png"))
+
+        # ── AC (§7.3): the strip toggle opens the drawer; the canvas REFLOWS ───────
+        wake_strip(page)
+        page.locator('[data-testid="thread-toggle"]').click()
+        page.locator('[data-testid="thread-drawer"]').wait_for(timeout=30000)
+        thread_up = page.locator('[data-testid="thread"]').is_visible()
+        canvas_w_open = page.evaluate(
+            """() => document.querySelector('[data-testid="video-canvas"]')
+                 .getBoundingClientRect().width""")
+        drawer_w = page.evaluate(
+            """() => document.querySelector('[data-testid="thread-drawer"]')
+                 .getBoundingClientRect().width""")
+        reflow_ok = canvas_w_open < canvas_w - 300 and abs(drawer_w - 440) < 2
         page.screenshot(path=str(SHOTS / "slice13-storyboard.png"), full_page=True)
 
-        # ── AC: clicking chapter 3 seeks the player to that chapter's timestamp ────
-        cards.nth(2).click()
+        # ── AC (§7.3): the strip auto-hides after 3s idle; proximity wakes it ──────
+        page.locator('[data-testid="thread-close"]').click()
+        wake_strip(page)
+        page.mouse.move(720, 300)   # leave the bottom band, then go idle
         page.wait_for_function(
-            """() => document.querySelector('[data-testid="demo-player"]')
-                 ?.getAttribute('data-chapter') === '2'""", timeout=30000)
-        seek_chapter = player.get_attribute("data-chapter")
-        seek_position = player.get_attribute("data-position")
-        seek_selected = cards.nth(2).get_attribute("data-selected")
-        others_unselected = [cards.nth(i).get_attribute("data-selected")
-                             for i in (0, 1, 3, 4)]
+            """() => document.querySelector('[data-testid="version-strip"]')
+                 ?.getAttribute('data-hidden') === 'true'""", timeout=10000)
+        strip_hidden_opacity = page.evaluate(
+            """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]')).opacity""")
         page.screenshot(path=str(SHOTS / "slice13-chapter-seek.png"), full_page=True)
+        wake_strip(page)
+        strip_woken = page.locator('[data-testid="version-strip"]').get_attribute("data-hidden")
 
-        # ── AC (§4.5): a missing ffmpeg is ACTIONABLE, and the storyboard still renders ──
-        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video/{FFMPEG_DEMO}", wait_until="domcontentloaded")
-        page.add_style_tag(content=HIDE_GATE_TOASTS)
-        hint_el = page.locator('[data-testid="demo-ffmpeg-hint"]')
-        hint_el.wait_for(timeout=30000)
-        ffmpeg_hint_text = hint_el.inner_text()
-        ffmpeg_flagged = page.locator('[data-testid="demo-no-recording"]').get_attribute("data-ffmpeg-absent")
-        ffmpeg_cards = page.locator('[data-testid="chapter-card"]').count()
-        # …and the whole app is still standing: mode switcher, thread, no error surface.
-        ffmpeg_shell_ok = (page.locator('[data-testid="mode-switcher"]').is_visible()
-                           and page.locator('[data-testid="thread"]').is_visible()
-                           and page.locator('[data-testid="video-canvas-error"]').count() == 0)
-        # §3.3 wants a control adjacent to the statement, so the record action is real.
-        page.locator('[data-testid="demo-record"]').click()
-        queued_el = page.locator('[data-testid="demo-record-queued"]')
-        queued_el.wait_for(timeout=30000)
-        record_queued_ok = queued_el.is_visible()
-        page.screenshot(path=str(SHOTS / "slice13-ffmpeg-absent.png"), full_page=True)
+        # ── AC (§7.2): the page itself NEVER spoke an invented route ───────────────
+        # Snapshot before the deliberate probe below, which does speak them on purpose.
+        invented_requested = [u for u in demo_requests
+                              if re.search(r"/api/demo/(spec|recordings|record)\b", u)]
+        surface_console = list(demo_console)
+        # …and when ASKED to, the fixture answers 404 exactly as the real bridge does
+        # (the contract-check rig pins the real one; this pins the fixture's honesty).
+        invented_statuses = page.evaluate(
+            """async base => {
+                 const paths = ['/api/demo/spec', '/api/demo/recordings'];
+                 const out = [];
+                 for (const p of paths) out.push((await fetch(base + p)).status);
+                 out.push((await fetch(base + '/api/demo/record', { method: 'POST' })).status);
+                 return out;
+               }""",
+            f"/api/v1/projects/{urllib.parse.quote(demo_project)}/interactive/d/{RECORDED_DEMO}")
         browser.close()
 
-    expected_gif = (f"{DOC_ORIGIN}/api/v1/projects/{urllib.parse.quote(demo_project)}"
-                    f"/interactive{DEMO_GIF_PATH}")
-    # §5.3: every byte the surface pulls — spec, recording, GIF — is on the PAGE's own
-    # origin through crew's proxy. No second origin, and never the bridge's own port.
+    expected_player_src = (f"{DOC_ORIGIN}/api/v1/projects/{urllib.parse.quote(demo_project)}"
+                           f"/interactive/d/{RECORDED_DEMO}/doc/2")
+    # §5.3: every byte the surface pulls is on the PAGE's own origin through the proxy.
     demo_origins = sorted({"{u.scheme}://{u.netloc}".format(u=urllib.parse.urlparse(u))
                            for u in demo_requests if "/interactive/" in u})
     report["steps"]["video_storyboard"] = {
@@ -2078,89 +2269,92 @@ try:
             # Most-recent first, demos only — the documents in the same registry are absent.
             demo_order == [RECORDED_DEMO, "flaky-render", "onboarding-tour"],
             all(d["name"] not in (demo_order or []) for d in FIXTURE_DOCS),
+            picker_thread_open,
             demo_nav_ok,
-            card_count == len(DEMO_STEPS),
-            card_indexes == [str(i) for i in range(len(DEMO_STEPS))],
-            all(step["title"] in title for step, title in zip(DEMO_STEPS, card_titles)),
-            player_kind == "gif",
-            gif_src == expected_gif, gif_loaded,
+            # §7.4: an iframe at the REAL route, sandboxed, head-addressed.
+            player_tag == "IFRAME",
+            player_src == expected_player_src,
+            player_sandbox == "allow-scripts",
+            player_version == "2",
+            # Chapters live INSIDE the storyboard HTML, in spec order.
+            sb_chapters == len(DEMO_STEPS),
+            all(step["title"] in title for step, title in zip(DEMO_STEPS, sb_titles)),
+            strip_ok,
+            # EC18 + reflow + auto-hide.
+            ec18_ok,
+            thread_up, reflow_ok,
+            strip_hidden_opacity == "0",
+            strip_woken == "false",
+            # §7.2: the page itself never spoke an invented route…
+            invented_requested == [],
+            # …and when asked to, the fixture answers 404 exactly as the bridge does.
+            invented_statuses == [404, 404, 404],
             demo_origins == [DOC_ORIGIN],
-            seek_chapter == "2",
-            seek_position == str(DEMO_STEPS[2]["timestamp"]),
-            seek_selected == "true",
-            others_unselected == ["false"] * 4,
-            FFMPEG_HINT in ffmpeg_hint_text,
-            ffmpeg_flagged == "true",
-            ffmpeg_cards == len(DEMO_STEPS),
-            ffmpeg_shell_ok,
-            record_queued_ok, record_requests == [FFMPEG_DEMO],
-            not demo_console,
+            not surface_console,
         ]),
         "project_id": demo_project,
         "picker_order_most_recent_first": demo_order,
+        "picker_thread_drawer_open": picker_thread_open,
         "picker_navigated_to_demo": demo_nav_ok,
-        "chapter_cards": card_count,
-        "spec_steps": len(DEMO_STEPS),
-        "chapter_order": card_indexes,
-        "chapter_titles": card_titles,
-        "player_kind": player_kind,
-        "player_src": gif_src,
-        "player_bytes_decoded": gif_loaded,
+        "player": {"tag": player_tag, "src": player_src, "sandbox": player_sandbox,
+                   "version": player_version},
+        "storyboard_chapters_in_frame": sb_chapters,
+        "storyboard_titles": sb_titles,
+        "strip_head_selected": strip_ok,
+        "ec18": {"canvas_width": canvas_w, "viewport": viewport_w,
+                 "ratio": round(canvas_w / viewport_w, 3), "thread_closed": drawer_closed},
+        "drawer": {"thread_visible": thread_up, "canvas_width_open": canvas_w_open,
+                   "drawer_width": drawer_w, "reflowed": reflow_ok},
+        "strip_autohide": {"hidden_opacity": strip_hidden_opacity, "woken": strip_woken},
+        "invented_route_statuses_on_fixture": invented_statuses,
+        "invented_routes_requested_by_page": invented_requested,
         "interactive_request_origins": demo_origins,
-        "seek_chapter": seek_chapter,
-        "seek_position_seconds": seek_position,
-        "seek_expected_seconds": DEMO_STEPS[2]["timestamp"],
-        "seek_selection": {"clicked": seek_selected, "others": others_unselected},
-        "ffmpeg_hint_verbatim": FFMPEG_HINT in ffmpeg_hint_text,
-        "ffmpeg_hint_rendered": ffmpeg_hint_text,
-        "ffmpeg_storyboard_still_rendered": ffmpeg_cards,
-        "ffmpeg_shell_intact": ffmpeg_shell_ok,
-        "record_action_queued": record_queued_ok,
-        "record_requests_seen_by_bridge": record_requests,
-        "console_errors": demo_console[:10],
-        "screenshots": [str(SHOTS / n) for n in
-                        ("slice13-demo-picker.png", "slice13-storyboard.png",
-                         "slice13-chapter-seek.png", "slice13-ffmpeg-absent.png")],
+        "console_errors": surface_console[:10],
+        "screenshots": [str(SHOTS / "slice13-demo-picker.png"),
+                        str(VSHOTS / "feedback-F-video-iframe.png"),
+                        str(SHOTS / "slice13-storyboard.png"),
+                        str(SHOTS / "slice13-chapter-seek.png")],
     }
     if not report["steps"]["video_storyboard"]["ok"]:
         fail("video_storyboard_verdict",
-             "slice-13 Video-mode assertions did not all hold — see video_storyboard")
+             "slice-F Video-mode assertions did not all hold — see video_storyboard")
 
-    # ── 17. Slice 14 (DES-MERGE-001 §4.5, §6.4): record + re-record from the thread ──
-    # Same same-origin rig, one section later; the fake bridge now holds each demo's SPEC
-    # as state and applies a step diff when feedback names one, so every claim below is
-    # read back off the service rather than predicted by the client that asked for it.
-    #
-    #   · the ordered wizard (§4.1/§4.5): the composer's ask opens it, steps are authored
-    #     in order, and the demo the service creates carries those steps IN THAT ORDER —
-    #     then the surface it lands on is the one that offers to record it (§3.3);
-    #   · commenting on storyboard step 2 and submitting produces a NEW VERSION whose
-    #     spec differs at step 2 and nowhere else, shown as a continuation (§7.10) and
-    #     offering the re-record a new spec needs to become a new video;
-    #   · the recording status is INFORMATIVE — it names the demo and its step — and is
-    #     never a bare `Working…`, asserted with the bridge streaming exactly that (§3.3).
+    # ── 17. Slice 14, REWIRED by DES-FEEDBACK-001 §7.4 (slice F): record from the thread ──
+    # The storyboard's own action bar retired with the client-side player (chapters and
+    # their navigation live in the storyboard HTML now, §9: never re-drawn outside it).
+    # What survives — and is asserted here — is the THREAD as the one record wire:
+    #   · the ordered wizard (§4.1/§4.5) is unchanged: the composer's ask opens it,
+    #     steps are authored in order, the created demo carries them IN THAT ORDER,
+    #     and completion lands on the surface that offers to record it — the thread's
+    #     own `record this demo` affordance, since the thread drawer is already open;
+    #   · clicking it speaks the CORRECTED wire: ONE `wicked.interactive.demo.requested`
+    #     bus event carrying the demo's document_id — never the invented
+    #     POST /api/demo/record — and the ask + an informative narration land in the
+    #     transcript first (§2.3: a recording request is a message);
+    #   · the §3.4 seam holds: a bridge-streamed bare `Working…` never reaches the
+    #     thread, while a line that names its subject does.
+    # Step-targeted feedback's WIRE (one batch, target:"demo_step") is pinned at unit
+    # level (demoWire.test.ts) and its route existence by the contract-check rig.
     WIZARD_ASK = "a walkthrough of the checkout flow"
     WIZARD_DEMO = "a-walkthrough-of-the-checkout-flow"
     WIZARD_STEPS = [("the storefront", "open it"), ("the cart", "add a hoodie to it")]
-    # "Step 2" as the user sees it — the card labelled `2.`, which is spec index 1.
-    COMMENT_INDEX = 1
-    STEP_COMMENT = "Add TWO hoodies to the cart, not one"
     BARE_STATUS = "Working…"
     REAL_RECORD_STATUS = "Step 2 of 5 — Add a hoodie to the cart"
-    STATUS_TEXT = """() => document.querySelector('[data-testid="demo-record-status"]')?.innerText ?? ''"""
+    THREAD_TEXT_17 = """() => document.querySelector('[data-testid="thread"]')?.innerText ?? ''"""
     record_before = list(record_requests)
-    versions_before = len(doc_versions[RECORDED_DEMO])
-    spec_before = [dict(s) for s in demo_specs[RECORDED_DEMO]]
+    events_before = len(emitted_events)
     rec_console: list[str] = []
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
         page.add_init_script(WS_TAP)
         page.on("console", lambda m: rec_console.append(m.text)
                 if m.type == "error" and "fonts.g" not in m.text else None)
 
         # ── AC: the composer's ask opens the ORDERED wizard; nothing is created yet ──
+        # /p/<id>/video has no demo in the route, so the thread drawer is OPEN (§7.3)
+        # and the composer is immediately available — the wizard flow is unchanged.
         page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video", wait_until="domcontentloaded")
         page.locator('[data-testid="thread"]').wait_for(timeout=30000)
         page.add_style_tag(content=HIDE_GATE_TOASTS)
@@ -2195,19 +2389,26 @@ try:
         wizard_nav_ok = wait_for_path(page, f"/p/{demo_project}/video/{WIZARD_DEMO}")
         created_demo = created_docs[-1] if created_docs else {}
 
-        # ── AC: completion lands on the surface that OFFERS to record it ───────────
-        authored = page.locator('[data-testid="chapter-card"]')
-        authored.first.wait_for(timeout=30000)
-        authored_titles = [authored.nth(i).inner_text() for i in range(authored.count())]
-        record_offered = page.locator('[data-testid="demo-record"]').is_visible()
+        # ── AC (§7.4): the created demo frames ITS storyboard; the offer to record
+        #    is the thread's, and the thread (already open) stayed open ─────────────
+        player = page.locator('[data-testid="demo-player"]')
+        player.wait_for(timeout=30000)
+        authored_src = player.get_attribute("src") or ""
+        sb17 = page.frame_locator('[data-testid="demo-player"]')
+        sb17.locator(".ch").first.wait_for(timeout=30000)
+        authored_titles = [sb17.locator(".ch").nth(i).inner_text()
+                           for i in range(sb17.locator(".ch").count())]
+        record_btn = page.locator('[data-testid="thread-record"]')
+        record_offered = record_btn.is_visible()
         page.screenshot(path=str(SHOTS / "slice14-authored-demo.png"), full_page=True)
 
-        # ── AC: recording status is INFORMATIVE, never a bare "Working…" (§3.3) ────
-        page.click('[data-testid="demo-record"]')
-        status_el = page.locator('[data-testid="demo-record-status"]')
-        status_el.wait_for(timeout=30000)
-        status_on_request = page.evaluate(STATUS_TEXT)
-        # The bridge speaks the banned line; the seam is what must refuse to render it.
+        # ── AC: recording is ONE demo.requested event, and the thread narrates it ──
+        record_btn.click()
+        page.locator('[data-testid="steering-chip"]').wait_for(timeout=30000)
+        thread_after_record = page.evaluate(THREAD_TEXT_17)
+        page.screenshot(path=str(SHOTS / "slice14-record-status.png"), full_page=True)
+
+        # ── AC (§3.4): a bare `Working…` never reaches the thread; a real line does ──
         page.evaluate(
             """args => window.__pushFrame({ type: 'interactiveEvent', event: {
                  event_type: 'wicked.interactive.status.posted',
@@ -2215,10 +2416,7 @@ try:
                             state: 'working', message: args.text } } })""",
             {"project": demo_project, "doc": WIZARD_DEMO, "text": BARE_STATUS})
         page.wait_for_timeout(500)
-        status_after_bare = page.evaluate(STATUS_TEXT)
-        bare_in_thread = BARE_STATUS in page.evaluate(
-            """() => document.querySelector('[data-testid="thread"]')?.innerText ?? ''""")
-        # …and a line that DOES name its subject wins over the fallback (§3.4 rule 1).
+        bare_in_thread = BARE_STATUS in page.evaluate(THREAD_TEXT_17)
         page.evaluate(
             """args => window.__pushFrame({ type: 'interactiveEvent', event: {
                  event_type: 'wicked.interactive.status.posted',
@@ -2227,59 +2425,16 @@ try:
             {"project": demo_project, "doc": WIZARD_DEMO, "text": REAL_RECORD_STATUS})
         real_status_ok, real_status_ms = within(
             page,
-            """text => (document.querySelector('[data-testid="demo-record-status"]')?.innerText ?? '')
+            """text => (document.querySelector('[data-testid="thread"]')?.innerText ?? '')
                  .includes(text)""",
             REAL_RECORD_STATUS,
         )
-        page.screenshot(path=str(SHOTS / "slice14-record-status.png"), full_page=True)
-
-        # ── AC: commenting on step 2 produces a new version whose spec differs there ──
-        page.goto(f"{DOC_ORIGIN}/p/{demo_project}/video/{RECORDED_DEMO}", wait_until="domcontentloaded")
-        page.add_style_tag(content=HIDE_GATE_TOASTS)
-        cards = page.locator('[data-testid="chapter-card"]')
-        cards.first.wait_for(timeout=30000)
-        commented_label = cards.nth(COMMENT_INDEX).inner_text()
-        cards.nth(COMMENT_INDEX).click()
-        page.click('[data-testid="step-comment-open"]')
-        page.fill('[data-testid="step-comment-input"]', STEP_COMMENT)
-        page.click('[data-testid="step-comment-add"]')
-        commented_card_marks = cards.nth(COMMENT_INDEX).get_attribute("data-comments")
-        page.screenshot(path=str(SHOTS / "slice14-step-comment.png"), full_page=True)
-        page.click('[data-testid="step-feedback-submit"]')
-
-        # The storyboard re-reads the SERVICE and shows the step that came back (§7.10).
-        spec_shown_ok, spec_shown_ms = within(
-            page,
-            """text => Array.from(document.querySelectorAll('[data-testid="chapter-card"]'))
-                 .some(c => c.innerText.includes(text))""",
-            STEP_COMMENT,
-            budget_ms=15000,
-        )
-        # …as a CONTINUATION: one message with its deep-linkable target, no new thread.
-        batch_msg = page.locator('[data-testid="doc-message"]').last
-        batch_items = batch_msg.get_attribute("data-items")
-        batch_text = batch_msg.inner_text()
-        rerecord_offered = page.locator('[data-testid="demo-rerecord"]').is_visible()
         page.screenshot(path=str(SHOTS / "slice14-respec.png"), full_page=True)
-
-        # ── AC: the offer is real — re-recording goes through the proxied service ──
-        page.click('[data-testid="demo-rerecord"]')
-        rerecord_status_ok, _ = within(
-            page,
-            """demo => (document.querySelector('[data-testid="demo-record-status"]')?.innerText ?? '')
-                 .includes(demo)""",
-            RECORDED_DEMO,
-            budget_ms=15000,
-        )
-        page.screenshot(path=str(SHOTS / "slice14-rerecord.png"), full_page=True)
         browser.close()
 
-    spec_after = demo_specs[RECORDED_DEMO]
-    versions_after = doc_versions[RECORDED_DEMO]
-    new_records = [r for r in record_requests if r not in record_before or record_requests.count(r) > record_before.count(r)]
-    feedback_events = [e for e in emitted_events
-                       if e.get("event_type") == FEEDBACK_EVENT
-                       and (e.get("payload") or {}).get("target") == "demo_step"]
+    new_records = record_requests[len(record_before):]
+    record_events = [e for e in emitted_events[events_before:]
+                     if e.get("event_type") == "wicked.interactive.demo.requested"]
     report["steps"]["video_record"] = {
         "ok": all([
             # The wizard: ordered, and nothing created until it submits.
@@ -2292,33 +2447,24 @@ try:
             [s.get("index") for s in created_demo.get("demo_steps") or []] == [0, 1],
             [s.get("subject") for s in created_demo.get("demo_steps") or []]
                 == [s[0] for s in WIZARD_STEPS],
-            # …and the demo the SERVICE authored carries those steps, in that order.
+            # …and the demo the SERVICE authored carries those steps, in that order,
+            # rendered INSIDE its storyboard HTML (§7.4).
+            authored_src.endswith(f"/d/{WIZARD_DEMO}/doc/1"),
             len(authored_titles) == len(WIZARD_STEPS),
             all(f"{subject} — {action}" in title
                 for (subject, action), title in zip(WIZARD_STEPS, authored_titles)),
             record_offered,
-            # The status: informative, and never the banned line (the slice's AC).
-            WIZARD_DEMO in status_on_request,
-            status_after_bare.strip() != BARE_STATUS,
-            BARE_STATUS not in status_after_bare,
+            # The CORRECTED wire: one demo.requested event naming this demo — and the
+            # invented POST /api/demo/record was never spoken (the fixture 404s it).
+            new_records == [WIZARD_DEMO],
+            len(record_events) == 1,
+            (record_events[0].get("payload") or {}).get("document_id") == WIZARD_DEMO,
+            # The transcript: the ask landed as a message, with an informative narration.
+            f"Record “{WIZARD_DEMO}”." in thread_after_record,
+            f"Recording “{WIZARD_DEMO}”" in thread_after_record,
+            # §3.4's seam: the banned line never renders; the real one does.
             not bare_in_thread,
             real_status_ok,
-            # Step feedback: ONE event, aimed at the step, and a version that landed.
-            len(feedback_events) == 1,
-            [i.get("wid") for i in (feedback_events[0].get("payload") or {}).get("items") or []]
-                == [f"step-{COMMENT_INDEX}"] if feedback_events else False,
-            commented_card_marks == "1",
-            len(versions_after) == versions_before + 1,
-            # The spec differs AT step 2 — and nowhere else.
-            spec_after[COMMENT_INDEX]["title"] == STEP_COMMENT,
-            [s["title"] for i, s in enumerate(spec_after) if i != COMMENT_INDEX]
-                == [s["title"] for i, s in enumerate(spec_before) if i != COMMENT_INDEX],
-            spec_shown_ok,
-            batch_items == "1", STEP_COMMENT in batch_text,
-            # The re-record: offered, and a real request through the proxy.
-            rerecord_offered,
-            WIZARD_DEMO in new_records, RECORDED_DEMO in new_records,
-            rerecord_status_ok,
             not rec_console,
         ]),
         "project_id": demo_project,
@@ -2331,42 +2477,29 @@ try:
             "submitted_steps": created_demo.get("demo_steps"),
             "created_kind": created_demo.get("kind"),
             "navigated": wizard_nav_ok,
+            "storyboard_src": authored_src,
             "storyboard_titles": authored_titles,
-            "offers_record": record_offered,
+            "offers_record_in_thread": record_offered,
+        },
+        "record_wire": {
+            "demo_requested_events": record_events,
+            "record_requests_seen_by_bridge": new_records,
+            "thread_after_record": thread_after_record[-400:],
         },
         "recording_status": {
-            "on_request": status_on_request,
-            "after_bare_working_pushed": status_after_bare,
             "bare_line_reached_the_thread": bare_in_thread,
             "real_streamed_line_won": real_status_ok,
             "real_streamed_line_ms": real_status_ms,
         },
-        "step_feedback": {
-            "commented_card": commented_label,
-            "commented_spec_index": COMMENT_INDEX,
-            "card_marked_pending": commented_card_marks,
-            "events_emitted": len(feedback_events),
-            "event_payload": (feedback_events[0].get("payload") if feedback_events else None),
-            "versions_before": versions_before,
-            "versions_after": len(versions_after),
-            "landed_version": versions_after[-1] if versions_after else None,
-            "spec_before": [s["title"] for s in spec_before],
-            "spec_after": [s["title"] for s in spec_after],
-            "spec_rendered_ms": spec_shown_ms,
-            "thread_message_items": batch_items,
-            "offers_rerecord": rerecord_offered,
-        },
-        "record_requests_seen_by_bridge": record_requests,
         "console_errors": rec_console[:10],
         "screenshots": [str(SHOTS / n) for n in
                         ("slice14-wizard-target.png", "slice14-wizard-steps.png",
                          "slice14-authored-demo.png", "slice14-record-status.png",
-                         "slice14-step-comment.png", "slice14-respec.png",
-                         "slice14-rerecord.png")],
+                         "slice14-respec.png")],
     }
     if not report["steps"]["video_record"]["ok"]:
         fail("video_record_verdict",
-             "slice-14 record/re-record assertions did not all hold — see video_record")
+             "slice-F record-from-thread assertions did not all hold — see video_record")
 
     # ── 18. Slice 15 (DES-MERGE-001 §4.4, §6.4): exports as thread artifacts ──
     # Same same-origin rig; the fake bridge now renders exports and serves them back
@@ -2404,11 +2537,14 @@ try:
         menu = page.locator('[data-testid="export-menu"]')
         menu.wait_for(timeout=30000)
         page.add_style_tag(content=HIDE_GATE_TOASTS)
+        # §7.3: artifacts land in the THREAD, which is a closed drawer by default here.
+        open_thread(page)
         menu_version = menu.get_attribute("data-version")
         offered = page.locator('[data-testid="export-format"]')
         offered_formats = [offered.nth(i).get_attribute("data-format") for i in range(offered.count())]
 
         # ── AC: a PDF export yields a download named <doc-slug>_v<N>.pdf ───────────
+        wake_strip(page)
         page.click('[data-testid="export-menu"] [data-format="pdf"]')
         link = page.locator('[data-testid="doc-artifact-download"]').last
         link.wait_for(timeout=30000)
@@ -2426,6 +2562,7 @@ try:
         page.screenshot(path=str(SHOTS / "slice15-export-download.png"), full_page=True)
 
         # ── AC: PPTX with python-pptx absent — actionable hint, document still usable ──
+        wake_strip(page)
         page.click('[data-testid="export-menu"] [data-format="pptx"]')
         actionable = page.locator('[data-testid="doc-actionable"]')
         actionable.wait_for(timeout=30000)
@@ -2527,8 +2664,11 @@ try:
 
         page.goto(f"{DOC_ORIGIN}/p/{doc_project}/document/{STRIP_DOC}",
                   wait_until="domcontentloaded")
-        page.locator('[data-testid="thread-context"]').wait_for(timeout=30000)
+        page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
         page.add_style_tag(content=HIDE_GATE_TOASTS)
+        # §7.3: the composer context lives in the thread drawer — open it first.
+        open_thread(page)
+        page.locator('[data-testid="thread-context"]').wait_for(timeout=30000)
 
         # ── AC: the theme library lists themes, and picking one is a composer chip ──
         page.click('[data-testid="context-library"]')

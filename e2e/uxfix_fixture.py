@@ -216,11 +216,35 @@ DEMO_STEPS = [
     {"index": 3, "title": "Confirm the order", "timestamp": 21,
      "thumbnail": f"/d/{DEMO_NAME}/demo/thumb-3.png"},
 ]
-DEMO_SPEC = {"steps": DEMO_STEPS, "target_url": "https://shop.example/"}
-DEMO_RECORDING = {"version": 1, "gif_url": f"/d/{DEMO_NAME}/demo/v1.gif"}
 DEMO_MANIFEST = {"head": 1, "kind": "demo", "versions": [
     {"version": 1, "parent": None, "feedback_file": None, "html_file": "v1.html",
      "created_at": iso(NOW0 - 5 * MIN), "meta": {}}]}
+
+
+def storyboard_doc_html(version: int) -> str:
+    """The demo's version HTML — its STORYBOARD (DES-FEEDBACK-001 §7.4), as the real
+    bridge's storyboard() lands it: the recording embedded above an ordered chapter
+    rail, thumbnails included. The studio frames this whole; chapter navigation
+    lives IN here (§9: never re-drawn outside the iframe)."""
+    chapters = "".join(
+        f'<li class="ch" data-step="{i}"><img src="../demo/thumb-{i}.png" alt="">'
+        f"<span>{i + 1}. {s['title']}</span></li>"
+        for i, s in enumerate(DEMO_STEPS))
+    return (
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+        "body{margin:0;background:#0b1020;color:#e6e9f5;font:14px system-ui}"
+        ".player{height:56vh;display:flex;align-items:center;justify-content:center;"
+        "background:#141a30;border-bottom:1px solid #26304f}"
+        ".player img{max-height:100%;max-width:100%}"
+        "ol{display:flex;gap:12px;list-style:none;margin:0;padding:14px;overflow-x:auto}"
+        ".ch{background:#1b2340;border:1px solid #26304f;border-radius:8px;"
+        "padding:8px;width:180px;flex-shrink:0}"
+        ".ch img{width:100%;border-radius:4px;display:block;margin-bottom:6px}"
+        ".ch span{white-space:nowrap;font-size:12px}"
+        "</style></head>"
+        f'<body data-storyboard="{DEMO_NAME}" data-storyboard-version="{version}">'
+        '<div class="player"><img src="../demo/v1.gif" alt="recording"></div>'
+        f"<ol>{chapters}</ol></body></html>")
 
 _demo_frames: dict = {}
 
@@ -644,17 +668,16 @@ class W2Handler(SimpleHTTPRequestHandler):
             self._json(200, {"head": max(e["version"] for e in versions),
                              "kind": "doc", "versions": versions})
             return True
-        # The vision-slice-4 demo surface (§5.6), behind the `demo` switch:
-        # spec, latest recording, and the frames the recording/storyboard show.
+        # DES-FEEDBACK-001 §7.2: the demo spec/recordings routes were INVENTED by
+        # slice 13 — the real bridge never served them, and this fixture answering
+        # them is exactly how the break was masked. They 404 now, unconditionally,
+        # and interactive_wire_contract_test.py pins the same answer on the real
+        # bridge. The storyboard is the demo's version HTML (served below).
         m = re.match(
-            r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/demo/(spec|recordings)$", path)
+            r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/demo/(spec|recordings|record)$",
+            path)
         if m:
-            with state_lock:
-                demo_on = state["demo"]
-            if not demo_on or urllib.parse.unquote(m.group(2)) != DEMO_NAME:
-                self._json(404, {"error": f"no demo at {path}"})
-                return True
-            self._json(200, DEMO_SPEC if m.group(3) == "spec" else DEMO_RECORDING)
+            self._json(404, {"error": f"no such route on the bridge: {path}"})
             return True
         m = re.match(
             r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/demo/(v1\.gif|thumb-[0-3]\.png)$",
@@ -669,10 +692,15 @@ class W2Handler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return True
         # /api/v1/projects/<pid>/interactive/d/<doc>/doc/<v> — the rendered document.
+        # A DEMO's version HTML is its STORYBOARD (DES-FEEDBACK-001 §7.4): chapters and
+        # the embedded recording live IN the document, exactly as the real bridge's
+        # storyboard() lands them.
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/doc/(\d+)$", path)
         if m:
             doc = urllib.parse.unquote(m.group(2))
-            body = doc_html(doc, int(m.group(3))).encode()
+            html = (storyboard_doc_html(int(m.group(3))) if doc == DEMO_NAME
+                    else doc_html(doc, int(m.group(3))))
+            body = html.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -865,6 +893,19 @@ def start_server(port: int, dist: Path) -> str:
     httpd = ThreadingHTTPServer(("127.0.0.1", port), partial(W2Handler, directory=str(dist)))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return f"http://127.0.0.1:{port}"
+
+
+def wake_strip(page) -> None:
+    """DES-FEEDBACK-001 §7.3: the version strip auto-hides after 3s idle (opacity 0,
+    pointer-events none) and wakes on bottom-edge proximity. Rigs park the mouse
+    there before strip interactions so a click never races the hide timer."""
+    vp = page.viewport_size or {"width": 1280, "height": 720}
+    page.mouse.move(vp["width"] // 2, vp["height"] - 60)
+    page.mouse.move(vp["width"] // 2, vp["height"] - 40)
+    page.wait_for_function(
+        """() => { const s = document.querySelector('[data-testid="version-strip"]');
+                   return !!s && s.getAttribute('data-hidden') === 'false'; }""",
+        timeout=10000)
 
 
 def set_fixture(origin: str, **kwargs) -> None:

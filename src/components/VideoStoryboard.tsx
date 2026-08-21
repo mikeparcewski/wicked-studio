@@ -1,106 +1,30 @@
 import { useRef, useState } from 'react';
-import {
-  getDemoSpec, getLatestRecording, getVersions, interactiveUrl, listDemos,
-} from '../api/interactive.js';
-import type { DemoRecording, DemoStep, DocSummary } from '../api/interactive.js';
-import { recordFromThread, recordingSubject, submitStepFeedback, type StepComment } from '../interactive/demoWire.js';
-import { modePath, type Navigate } from '../hooks/useRoute.js';
-import { statusLine } from '../store/narration.js';
-import { threadKey, useDocThreadStore, type DocMsg } from '../store/docThread.js';
-import { Failed, Loading, PANEL, S, useLoad, type Failure } from './SurfaceState.js';
+import { getVersions, interactiveDocUrl, listDemos } from '../api/interactive.js';
+import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
+import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
+import { threadKey, useDocThreadStore } from '../store/docThread.js';
+import { StripSensor, ThreadDrawer, ThreadToggle, useStripAutoHide } from './ThreadDrawer.js';
+import { Failed, Loading, PANEL, S, useLoad } from './SurfaceState.js';
+import { VersionStrip } from './VersionStrip.js';
 
-// Video mode's surface (DES-MERGE-001 §1.3, §4.5, §6.4 slice 13): storyboard + player.
+// Video mode's surface — REWIRED by DES-FEEDBACK-001 §7.2/§7.4.
 //
-// The split ADR-0018 draws is preserved exactly — the agent authors the spec, the
-// model-free service executes and records it — so this surface only ever READS the spec
-// and the recording the service produced. Two consequences it is built around:
+// Slice 13 invented a client-side player: it read `GET /d/:id/api/demo/spec` and
+// `GET /d/:id/api/demo/recordings`, neither of which the bridge serves (verified
+// against wicked-interactive's server.js — its real demo surface is gif export,
+// recording streaming, and the standalone player page). The spec call always 404'd
+// in production and the surface was BROKEN; the slice-13 fixture had implemented the
+// invented route, so the rig confirmed a wire that never existed. The contract-check
+// leg (e2e/interactive_wire_contract_test.py) now pins every URL this file builds
+// against the REAL bridge, so a fixture cannot self-confirm again.
 //
-//   1. Chapters are derived from SPEC STEP BOUNDARIES, never scraped off the video.
-//      Playwright owns viewport, DPR and frame pacing (§4.5), so the spec is the only
-//      authority on where chapter N begins; clicking one seeks the player there.
-//   2. ffmpeg post-processing is BEST-EFFORT (§4.5): a missing ffmpeg must not abort the
-//      version landing, so it must not blank this surface either. The storyboard renders
-//      from the spec regardless, and the player states what is missing with the install
-//      command the service named, verbatim (§3.3 actionable).
-//
-// Everything resolves through the slice-2 client — no second origin, no port literal.
-
-/** ffmpeg is the service's dependency, so the service names the fix. This is only what
- *  we say when it reported the absence WITHOUT a hint: still a command, never "sorry". */
-const FFMPEG_FALLBACK_HINT =
-  'install ffmpeg (macOS: `brew install ffmpeg`, Debian/Ubuntu: `sudo apt install ffmpeg`), '
-  + 'then record again — the demo itself is unaffected.';
-
-/** `0:07`, `1:04` — chapter offsets are seconds, and the storyboard shows them as time. */
-export function mmss(seconds: number): string {
-  const t = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-}
-
-/**
- * Where a chapter click puts the playhead. The step's own timestamp, clamped to the
- * recording's duration when one is known: a spec re-authored against an older recording
- * (slice 14's whole flow) has steps past its end, and seeking past the end is a NaN
- * playhead in every browser. A negative or non-numeric timestamp is a spec defect, not a
- * reason to break the player — it lands at the start.
- */
-export function chapterSeek(step: DemoStep, duration?: number): number {
-  const t = Number(step.timestamp);
-  const at = Number.isFinite(t) && t > 0 ? t : 0;
-  return Number.isFinite(duration) && (duration as number) > 0
-    ? Math.min(at, duration as number)
-    : at;
-}
-
-/** What the player can actually show — one kind, decided once, so no branch renders blank. */
-export type PlayerState =
-  | { kind: 'video'; src: string; poster?: string | undefined }
-  | { kind: 'gif'; src: string }
-  | { kind: 'missing'; ffmpeg: boolean; hint?: string | undefined };
-
-/**
- * The recording, reduced to a player state (§3.3: every branch names its subject or its
- * action). `failure` is folded in rather than thrown: a recording that cannot be read
- * must still leave the storyboard standing, and the bridge reports a missing ffmpeg two
- * ways — a `{ffmpeg_absent, ffmpeg_hint}` body on the happy path, and an error carrying
- * the same word when the post-process itself failed.
- */
-export function playerState(
-  projectId: string, rec: DemoRecording | null, failure: Failure | null,
-): PlayerState {
-  if (rec?.ffmpeg_absent) return { kind: 'missing', ffmpeg: true, hint: rec.ffmpeg_hint || FFMPEG_FALLBACK_HINT };
-  if (rec?.video_url) {
-    return {
-      kind: 'video',
-      src: interactiveUrl(projectId, rec.video_url),
-      poster: rec.poster_url ? interactiveUrl(projectId, rec.poster_url) : undefined,
-    };
-  }
-  if (rec?.gif_url) return { kind: 'gif', src: interactiveUrl(projectId, rec.gif_url) };
-  if (failure) {
-    const ffmpeg = /ffmpeg/i.test(failure.message) || /ffmpeg/i.test(failure.hint ?? '');
-    return { kind: 'missing', ffmpeg, hint: failure.hint || (ffmpeg ? failure.message : undefined) };
-  }
-  return { kind: 'missing', ffmpeg: false };
-}
-
-/** Stable identity for "this thread has said nothing", so the selector never re-renders. */
-const NO_MESSAGES: DocMsg[] = [];
-
-// DES-VISION-001 §5.6 token usage: rails carry the strip and action bar;
-// primary actions are the brand accent with --accent-fg ink; labels read in
-// the sans, recording narration and offsets in the mono (§2.8).
-const ACTION: React.CSSProperties = {
-  border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', flexShrink: 0,
-  fontSize: 'var(--text-xs)', fontWeight: 600, fontFamily: 'var(--font-sans)',
-  padding: '5px 11px',
-};
-
-const BAR: React.CSSProperties = {
-  alignItems: 'center', background: 'var(--surface-rail)', borderTop: `1px solid ${S.border}`,
-  display: 'flex', flexShrink: 0, gap: '8px', padding: '8px 12px',
-  fontFamily: 'var(--font-sans)',
-};
+// The corrected architecture is Document mode's, verbatim: the storyboard —
+// chapters, embedded player, navigation — is the demo's VERSION HTML, built by the
+// bridge's own `storyboard()` (demo.js) and served at `GET /d/:demoId/doc/:version`.
+// This surface frames that HTML and addresses versions through the same strip.
+// The thread is the same right-side drawer as Document's (§7.3); recording still
+// goes through the thread (`recordFromThread` → the `wicked.interactive.demo.requested`
+// bus command), and step feedback still rides the one batch contract.
 
 // ── Demo picker — the mode with no `:demoId` in the route ────────────────────
 
@@ -115,8 +39,8 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
   if (failure) return <Failed surface="video" subject="this project's demos" failure={failure} onRetry={retry} />;
   if (demos === null) return <Loading surface="video" subject="this project's demos" />;
 
-  // An empty region renders an invitation, never a blank (§1.4). Authoring a demo is the
-  // agent's job, so the invitation points at the thread — recording from it is slice 14.
+  // An empty region renders an invitation, never a blank (§1.4). Authoring a demo is
+  // the agent's job, so the invitation points at the thread.
   if (demos.length === 0) {
     return (
       <div data-testid="demo-picker-empty" style={{ padding: '32px', fontFamily: 'var(--font-sans)' }}>
@@ -169,387 +93,118 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
   );
 }
 
-// ── The missing-recording panel — §3.3 actionable, never a dead end ──────────
+// ── The demo surface: storyboard HTML in an iframe, same as Document ─────────
 
-function MissingRecording({
-  demoId, state, record,
-}: {
-  demoId: string; record: (ask: string) => Promise<void>;
-  state: Extract<PlayerState, { kind: 'missing' }>;
-}): React.ReactElement {
-  const [queued, setQueued] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function go(): Promise<void> {
-    setBusy(true);
-    setError(null);
-    try {
-      await record(`Record “${demoId}”.`);
-      setQueued(true);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div data-testid="demo-no-recording" data-ffmpeg-absent={String(state.ffmpeg)}
-         style={{ padding: '32px', fontFamily: 'var(--font-sans)' }}>
-      <div style={PANEL}>
-        <h2 style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: S.ink, margin: '0 0 8px' }}>
-          {state.ffmpeg
-            ? `“${demoId}” recorded, but the video could not be converted`
-            : `“${demoId}” has no recording yet`}
-        </h2>
-        {/* The hint is the SERVICE's command and is rendered verbatim — paraphrasing it
-            would be paraphrasing something the user has to type (§3.3). Actionable ⇒
-            it wears the gate-amber rule (S.accent maps to --status-gate here). */}
-        {state.hint ? (
-          <p
-            data-testid="demo-ffmpeg-hint"
-            style={{
-              fontSize: 'var(--text-sm)', color: S.ink, margin: '0 0 14px', lineHeight: 1.5,
-              borderLeft: `2px solid ${S.accent}`, paddingLeft: '10px',
-            }}
-          >
-            <strong>To fix:</strong> {state.hint}
-          </p>
-        ) : (
-          <p style={{ fontSize: 'var(--text-sm)', color: S.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
-            The steps below are the spec the agent authored. Recording runs them in a real
-            browser and captures the result.
-          </p>
-        )}
-        <button
-          type="button"
-          data-testid="demo-record"
-          disabled={busy || queued}
-          onClick={() => void go()}
-          style={{
-            background: 'transparent', border: `1px solid ${S.border}`,
-            borderRadius: 'var(--radius-sm)',
-            color: queued ? S.muted : S.ink, cursor: busy || queued ? 'default' : 'pointer',
-            fontSize: 'var(--text-xs)', padding: '6px 12px',
-          }}
-        >
-          {queued ? 'Recording queued' : busy ? `Asking the recorder to run “${demoId}”…` : 'Record this demo'}
-        </button>
-        {queued ? (
-          <p data-testid="demo-record-queued" style={{ fontSize: 'var(--text-xs)', color: S.muted, margin: '10px 0 0' }}>
-            The recorder is running “{demoId}” — the player appears here when the version lands.
-          </p>
-        ) : null}
-        {error !== null ? (
-          <p data-testid="demo-record-error" style={{ fontSize: 'var(--text-xs)', color: S.ink, margin: '10px 0 0' }}>
-            Could not queue the recording: {error}. Try again, or ask in the thread.
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
+/** The routed `?v`, narrowed to one the manifest actually has — else the head. */
+function resolveVersion(manifest: VersionManifest, routed: number | null): number {
+  return routed !== null && manifest.versions.some((v) => v.version === routed)
+    ? routed
+    : manifest.head;
 }
 
-// ── Player + storyboard — the demo surface itself ────────────────────────────
-
-function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string }): React.ReactElement {
-  const key = threadKey(projectId, demoId);
-  // A re-authored spec is a NEW VERSION of the same demo (§7.10's continuation), so the
-  // surface re-reads the service when one lands rather than showing the steps it was fed
-  // at mount. `reloads` is the same read on the near side of the stream: a submitted
-  // batch asks for a re-authoring now, and the frame confirming it may be seconds behind.
-  const landed = useDocThreadStore((s) => s.landed[key]);
-  const recording = useDocThreadStore((s) => s.genState[key]) === 'generating';
-  const messages = useDocThreadStore((s) => s.messages[key] ?? NO_MESSAGES);
-  const [reloads, setReloads] = useState(0);
-  const nonce = `${landed ?? 0}:${reloads}`;
-
-  // Three INDEPENDENT loads on purpose: the spec is what makes the storyboard, and a
-  // recording that 404s, errors, or reports a missing ffmpeg must leave the chapters
-  // standing (§4.5 — degradation is required behaviour, not a nicety).
-  const [spec, specFailure, retrySpec] = useLoad(() => getDemoSpec(projectId, demoId), [projectId, demoId, nonce]);
-  const [rec, recFailure] = useLoad(() => getLatestRecording(projectId, demoId), [projectId, demoId, nonce]);
-  const [manifest] = useLoad(() => getVersions(projectId, demoId), [projectId, demoId, nonce]);
-  const [chapter, setChapter] = useState(0);
-  const [at, setAt] = useState(0);
-  const [draft, setDraft] = useState<StepComment | null>(null);
-  const [items, setItems] = useState<StepComment[]>([]);
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const video = useRef<HTMLVideoElement>(null);
+function DemoSurface({
+  projectId, demoId, version, navigate, threadOpen, onToggleThread, children,
+}: {
+  projectId: string; demoId: string; version: number | null; navigate: Navigate;
+  threadOpen: boolean; onToggleThread: () => void; children?: React.ReactNode;
+}): React.ReactElement {
+  // A landed version (a re-record, a re-authored spec) re-reads the manifest, so the
+  // strip advances and the frame swaps the moment the stream lands one — same rule as
+  // Document mode's canvas.
+  const landed = useDocThreadStore((s) => s.landed[threadKey(projectId, demoId)]);
+  const [fresh, failure, retry] = useLoad(
+    () => getVersions(projectId, demoId), [projectId, demoId, landed],
+  );
+  // The last good manifest carries the surface through a re-read (the strip must not
+  // blink on every landed version). A demo change REMOUNTS DemoSurface (keyed).
+  const lastManifest = useRef<VersionManifest | null>(null);
+  if (fresh !== null) lastManifest.current = fresh;
+  const manifest = fresh ?? lastManifest.current;
+  const [loaded, setLoaded] = useState(false);
+  const { hidden, wake } = useStripAutoHide();
 
   const subject = `“${demoId}”`;
-  if (specFailure) return <Failed surface="video" subject={subject} failure={specFailure} onRetry={retrySpec} />;
-  if (spec === null) return <Loading surface="video" subject={subject} />;
-
-  // Ordered by the step's own declared position, not by however the JSON happened to
-  // arrive: `index` IS the chapter number the user sees, so the two cannot disagree.
-  const steps = [...(spec.steps ?? [])].sort((a, b) => a.index - b.index);
-  const player = playerState(projectId, rec, recFailure);
-  const version = manifest?.head ?? rec?.version ?? null;
-
-  /** §3.4's two altitudes, one stream: the thread keeps the transcript, this keeps the
-   *  headline. Rule 1 (a real streamed line) wins; rule 3 — the demo and its first step —
-   *  is why a bare `Working…` is never needed and never rendered here. */
-  const status = statusLine(
-    messages.filter((m): m is Extract<DocMsg, { kind: 'narration' }> => m.kind === 'narration').map((m) => m.text),
-    recordingSubject(demoId, steps.length, steps[0]?.title),
-  );
-
-  /** Both record paths are the same wire (§2.3): the ask lands in the thread first. */
-  async function record(ask: string): Promise<void> {
-    setSent(false);
-    await recordFromThread({ projectId, demoId, ask, steps: steps.length, first: steps[0]?.title });
-  }
-
-  /** Clicking chapter N seeks the player there; with no seekable recording it puts the
-   *  step itself in focus instead, so the click always resolves to something visible. */
-  function onChapter(step: DemoStep, card: HTMLElement | null): void {
-    setChapter(step.index);
-    const el = video.current;
-    const seconds = chapterSeek(step, el?.duration);
-    setAt(seconds);
-    if (el) el.currentTime = seconds;
-    else card?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
-  }
-
-  /** One comment queued against one step. Batched, never sent per comment (§4.3). */
-  function commit(): void {
-    if (draft === null || draft.text.trim() === '') return;
-    setItems((prev) => [...prev, { index: draft.index, text: draft.text.trim() }]);
-    setDraft(null);
-  }
-
-  /** §4.3's batch, aimed at the spec: N step comments → one message, one re-authoring. */
-  async function send(): Promise<void> {
-    if (items.length === 0 || version === null || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await submitStepFeedback(projectId, demoId, version, items);
-      setItems([]);
-      setDraft(null);
-      setSent(true);
-      setReloads((n) => n + 1);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
-      <div
-        data-testid="demo-player"
-        data-chapter={String(chapter)}
-        data-position={String(at)}
-        data-player-kind={player.kind}
-        // §5.6: the player container wears the same framing as Document's canvas.
-        style={{
-          flex: 1, overflow: 'auto', background: 'var(--surface-base)',
-          border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-lg)',
-          margin: '10px 10px 0',
-        }}
-      >
-        {player.kind === 'video' ? (
-          <video
-            ref={video}
-            data-testid="demo-video"
-            src={player.src}
-            poster={player.poster}
-            controls
-            onTimeUpdate={(e) => setAt(e.currentTarget.currentTime)}
-            style={{ display: 'block', height: '100%', width: '100%' }}
-          />
-        ) : player.kind === 'gif' ? (
-          // A GIF has no timeline to scrub, so the chapter is stated in words instead of
-          // pretending the playhead moved (§3.3: informative, with its subject).
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px' }}>
-            <img data-testid="demo-gif" src={player.src} alt={`Recording of ${demoId}`} style={{ maxWidth: '100%' }} />
-            <p data-testid="demo-position" style={{
-              fontSize: 'var(--text-xs)', color: S.muted, margin: 0, fontFamily: 'var(--font-sans)',
-            }}>
-              {steps.length > 0
-                ? `Chapter ${chapter + 1} of ${steps.length}, at ${mmss(at)} — this recording is a `
-                  + 'looping GIF with no timeline, so the chapter is shown rather than played to.'
-                : 'This recording is a looping GIF of the whole demo.'}
-            </p>
-          </div>
-        ) : (
-          <MissingRecording demoId={demoId} state={player} record={record} />
-        )}
-      </div>
-
-      {/* The storyboard: one card per SPEC STEP, in spec order (§4.5). */}
-      <div
-        data-testid="demo-storyboard"
-        data-steps={String(steps.length)}
-        style={{
-          display: 'flex', flexShrink: 0, gap: '8px', overflowX: 'auto', padding: '10px 12px',
-          background: 'var(--surface-rail)', borderTop: `1px solid ${S.border}`,
-          fontFamily: 'var(--font-sans)',
-        }}
-      >
-        {steps.length === 0 ? (
-          <p data-testid="demo-storyboard-empty" style={{ fontSize: 'var(--text-xs)', color: S.muted, margin: 0 }}>
-            {subject} has no steps yet — the agent is still authoring the spec.
-          </p>
-        ) : steps.map((step) => (
-          <button
-            key={step.index}
-            type="button"
-            data-testid="chapter-card"
-            data-index={String(step.index)}
-            data-timestamp={String(step.timestamp)}
-            data-selected={String(step.index === chapter)}
-            data-comments={String(items.filter((i) => i.index === step.index).length)}
-            title={`Chapter ${step.index + 1}: ${step.title} — ${player.kind === 'video' ? 'seeks to' : 'starts at'} ${mmss(step.timestamp)}`}
-            onClick={(e) => onChapter(step, e.currentTarget)}
-            // §5.6: thumbs sit on --surface-raised; the SELECTED chapter carries
-            // border: 2px solid var(--accent) (the slice DOM AC). A chapter with
-            // queued comments shows the dimmer accent tier — pending input, not a
-            // status. The border is 2px in every state so selection never shifts
-            // the layout.
-            style={{
-              background: 'var(--surface-raised)',
-              border: `2px solid ${step.index === chapter
-                ? 'var(--accent)'
-                : items.some((i) => i.index === step.index) ? 'var(--accent-dim)' : 'transparent'}`,
-              borderRadius: 'var(--radius-md)', color: S.ink, cursor: 'pointer', flexShrink: 0,
-              padding: '8px', textAlign: 'left', width: '160px',
-              transition: 'border-color var(--dur-base)',
-            }}
-          >
-            {step.thumbnail ? (
-              <img
-                data-testid="chapter-thumbnail"
-                src={interactiveUrl(projectId, step.thumbnail)}
-                alt=""
-                style={{ display: 'block', borderRadius: 'var(--radius-sm)', marginBottom: '6px', width: '100%' }}
-              />
-            ) : null}
-            <span style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
-              {step.index + 1}. {step.title}
-            </span>
-            {/* Chapter caption: --text-2xs --ink-dim (§5.6); the offset is data → mono. */}
-            <span style={{
-              display: 'block', color: 'var(--ink-dim)', fontSize: 'var(--text-2xs)',
-              fontFamily: 'var(--font-mono)',
-            }}>
-              {mmss(step.timestamp)}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/*
-        The one action bar under the storyboard. It is one bar and not four because the
-        four things it says are the same thing at different moments of one loop — what
-        the recorder is doing, what you are commenting on, what is queued, and what to do
-        with the version that came back — and §3.3 wants each of them stated WITH its
-        control rather than scattered around the surface.
-
-        Commenting targets the SELECTED chapter, which is the chapter the player is
-        already parked on: a step is picked by clicking it, exactly as a document element
-        is picked by clicking it (§4.3), and the click keeps its existing meaning.
-      */}
-      {steps.length > 0 && (
-        <div data-testid="demo-actions" style={BAR}>
-          {recording ? (
-            // §5.6: recording status narration is DATA — mono, --text-xs, --ink-body.
-            <span data-testid="demo-record-status" style={{
-              color: 'var(--ink-body)', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
-            }}>
-              {status}
-            </span>
-          ) : draft !== null ? (
-            <>
-              <span style={{ color: S.muted, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', flexShrink: 0 }}>
-                step {draft.index + 1}
-              </span>
-              <textarea
-                data-testid="step-comment-input"
-                autoFocus
-                rows={1}
-                value={draft.text}
-                placeholder={`What should “${steps.find((s) => s.index === draft.index)?.title ?? ''}” do instead?`}
-                onChange={(e) => setDraft({ index: draft.index, text: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
-                  if (e.key === 'Escape') setDraft(null);
-                }}
-                className="wk-composer"
-                style={{
-                  background: 'var(--surface-raised)', border: '1px solid var(--surface-overlay)',
-                  borderRadius: 'var(--radius-sm)', outline: 'none',
-                  color: S.ink, flex: 1, fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-xs)', padding: '5px 7px', resize: 'none',
-                }}
-              />
-              {/* Primary actions speak the accent with --accent-fg ink (§2.5). */}
-              <button type="button" data-testid="step-comment-add" onClick={commit}
-                      disabled={draft.text.trim() === ''}
-                      style={{ ...ACTION, background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-                Add to batch
-              </button>
-              <button type="button" data-testid="step-comment-cancel" onClick={() => setDraft(null)}
-                      style={{ ...ACTION, background: 'transparent', border: `1px solid ${S.border}`, color: S.muted }}>
-                Cancel
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                data-testid="step-comment-open"
-                data-index={String(chapter)}
-                onClick={() => { setDraft({ index: chapter, text: '' }); setSent(false); }}
-                style={{ ...ACTION, background: 'transparent', border: `1px solid ${S.border}`, color: S.ink }}
-              >
-                Comment on step {chapter + 1}
-              </button>
-              {sent && (
-                <>
-                  <span style={{ color: S.ink, fontSize: 'var(--text-xs)' }}>
-                    “{demoId}” was re-authored from your comments — record it again to see the change.
-                  </span>
-                  <button
-                    type="button"
-                    data-testid="demo-rerecord"
-                    onClick={() => void record(`Re-record “${demoId}” with the updated steps.`)}
-                    style={{ ...ACTION, background: 'var(--accent)', color: 'var(--accent-fg)' }}
-                  >
-                    Re-record
-                  </button>
-                </>
-              )}
-              {items.length > 0 && (
-                <button
-                  type="button"
-                  data-testid="step-feedback-submit"
-                  data-count={String(items.length)}
-                  disabled={busy || version === null}
-                  title={version === null ? 'This demo has no version to comment on yet.' : 'One message, one re-authoring'}
-                  onClick={() => void send()}
-                  style={{ ...ACTION, background: 'var(--accent)', color: 'var(--accent-fg)', marginLeft: 'auto' }}
-                >
-                  {busy ? 'Sending…' : `Send ${items.length} comment${items.length === 1 ? '' : 's'}`}
-                </button>
-              )}
-            </>
-          )}
-          {error !== null && (
-            <span data-testid="step-feedback-error" style={{
-              color: 'var(--status-fail)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
-            }}>
-              {error} — nothing was sent; try again.
-            </span>
+  if (manifest === null) {
+    return (
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+          {failure
+            ? <Failed surface="video" subject={subject} failure={failure} onRetry={retry} />
+            : <Loading surface="video" subject={subject} />}
+          {/* No manifest means no strip, so the toggle floats — the conversation must
+              stay reachable even (especially) while the bridge is down (§1.2). */}
+          {threadOpen ? null : (
+            <div style={{ position: 'absolute', right: '14px', top: '14px' }}>
+              <ThreadToggle open={false} onToggle={onToggleThread} />
+            </div>
           )}
         </div>
-      )}
+        <ThreadDrawer open={threadOpen} onClose={onToggleThread}>{children}</ThreadDrawer>
+      </div>
+    );
+  }
+
+  const shown = resolveVersion(manifest, version);
+  // §7.4: the storyboard HTML is the demo's version HTML — the bridge's own
+  // `GET /d/:demoId/doc/:version`, on the app's origin through crew's proxy.
+  const src = interactiveDocUrl(projectId, demoId, shown);
+
+  const onForked = (result: ForkResult): void => {
+    retry();
+    navigate(versionPath(projectId, demoId, result.version, 'video'));
+  };
+
+  return (
+    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div
+        data-testid="video-canvas"
+        // §5.6: the player container wears the same framing as Document's canvas.
+        style={{
+          flex: 1, position: 'relative', overflow: 'hidden',
+          border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-lg)',
+          margin: '10px', background: 'var(--surface-base)',
+        }}
+      >
+        <iframe
+          // Keyed on the VERSION so a swap replaces the element — same Back-button
+          // reasoning as Document mode's frame.
+          key={shown}
+          data-testid="demo-player"
+          data-demo-id={demoId}
+          data-version={shown}
+          src={src}
+          title={`Demo ${demoId}, version ${shown}`}
+          onLoad={() => { setLoaded(true); }}
+          // Storyboard HTML is agent-authored content: same full sandbox as Document.
+          // Its embedded player page (`/api/demo/player/:v`) is a nested frame and
+          // inherits the sandbox; video playback needs no further grants.
+          sandbox="allow-scripts"
+          style={{ border: 'none', display: 'block', height: '100%', width: '100%' }}
+        />
+        {loaded ? null : (
+          <div style={{ background: 'var(--surface-base)', inset: 0, position: 'absolute' }}>
+            <Loading surface="video" subject={subject} />
+          </div>
+        )}
+        <StripSensor hidden={hidden} wake={wake} />
+        {/* pointerEvents none on the WRAPPER: the strip re-enables itself while visible;
+            while dimmed the box must not shadow the z-1 sensor, or nothing can wake it. */}
+        <div style={{ bottom: 0, left: 0, pointerEvents: 'none', position: 'absolute', right: 0, zIndex: 3 }}>
+          <VersionStrip
+            projectId={projectId}
+            docId={demoId}
+            manifest={manifest}
+            selected={shown}
+            navigate={navigate}
+            onForked={onForked}
+            mode="video"
+            dimmed={hidden}
+            onWake={wake}
+            trailing={<ThreadToggle open={threadOpen} onToggle={onToggleThread} />}
+          />
+        </div>
+      </div>
+      <ThreadDrawer open={threadOpen} onClose={onToggleThread}>{children}</ThreadDrawer>
     </div>
   );
 }
@@ -558,15 +213,50 @@ export interface VideoStoryboardProps {
   projectId: string;
   /** `null` on `/p/:projectId/video` — no demo chosen yet, so the picker shows. */
   demoId: string | null;
+  /** The routed `?v=N`; `null` addresses the manifest head. */
+  version?: number | null;
   navigate: Navigate;
+  /** The thread pane (§7.3): rendered as the right-side drawer this surface owns —
+   *  the same DocumentThread instance the caller has always supplied. */
+  children?: React.ReactNode;
 }
 
-export function VideoStoryboard({ projectId, demoId, navigate }: VideoStoryboardProps): React.ReactElement {
+export function VideoStoryboard({
+  projectId, demoId, version = null, navigate, children,
+}: VideoStoryboardProps): React.ReactElement {
+  // Same drawer defaults as Document (§7.3/§7.4): open on the picker — its empty
+  // state and the demo wizard live in the thread — closed once a demo owns the canvas.
+  const [threadOpen, setThreadOpen] = useState(demoId === null);
+  const toggleThread = (): void => { setThreadOpen((v) => !v); };
   return (
     <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
       {demoId === null
-        ? <DemoPicker projectId={projectId} navigate={navigate} />
-        : <DemoSurface key={`${projectId}/${demoId}`} projectId={projectId} demoId={demoId} />}
+        ? (
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+              <DemoPicker projectId={projectId} navigate={navigate} />
+              {threadOpen ? null : (
+                <div style={{ position: 'absolute', right: '14px', top: '14px' }}>
+                  <ThreadToggle open={false} onToggle={toggleThread} />
+                </div>
+              )}
+            </div>
+            <ThreadDrawer open={threadOpen} onClose={toggleThread}>{children}</ThreadDrawer>
+          </div>
+        )
+        : (
+          <DemoSurface
+            key={`${projectId}/${demoId}`}
+            projectId={projectId}
+            demoId={demoId}
+            version={version}
+            navigate={navigate}
+            threadOpen={threadOpen}
+            onToggleThread={toggleThread}
+          >
+            {children}
+          </DemoSurface>
+        )}
     </div>
   );
 }

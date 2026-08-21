@@ -1,20 +1,19 @@
-// Unit tests for Video mode — DES-MERGE-001 §4.5, §6.4 slice 13.
+// Unit tests for Video mode — REWIRED by DES-FEEDBACK-001 §7.4 (slice F).
 //
-// Four concerns, one per AC:
-//   1. Storyboard: the spec's steps render as chapter cards, in spec order.
-//   2. Chapter seek: clicking chapter N puts the playhead at that step's timestamp —
-//      derived from SPEC STEP BOUNDARIES, never scraped off the video (§4.5).
-//   3. ffmpeg absent: an ACTIONABLE message naming the install command, and the
-//      storyboard STILL renders (degradation is required behaviour, not a nicety).
-//   4. The picker orders most-recent first, lists only demos, and invites creation
-//      rather than rendering blank.
+// The client-side player (spec fetch, chapter scrub, <video>) is GONE: the routes it
+// spoke never existed on the bridge. What this file pins instead:
+//   1. The surface frames the storyboard HTML: `demo-player` IS an <iframe> whose src
+//      is the REAL bridge route `/d/<demoId>/doc/<version>`, fully sandboxed.
+//   2. None of the INVENTED routes are ever requested (spec / recordings / record).
+//   3. The version strip addresses storyboard versions on the VIDEO route.
+//   4. The thread is a drawer: closed by default with a demo open, open on the picker,
+//      toggled from the strip (§7.3).
+//   5. The picker orders most-recent first, lists only demos, invites creation.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {
-  VideoStoryboard, chapterSeek, mmss, playerState,
-} from '../src/components/VideoStoryboard.js';
-import type { DemoStep, DocSummary } from '../src/api/interactive.js';
+import { VideoStoryboard } from '../src/components/VideoStoryboard.js';
+import type { DocSummary } from '../src/api/interactive.js';
 import { apiBase } from '../src/api/client.js';
 
 const PROJECT = 'proj-abc-123';
@@ -50,14 +49,14 @@ function stubFetch(routes: Record<string, Reply>): string[] {
   return seen;
 }
 
-const STEPS: DemoStep[] = [
-  { index: 0, title: 'Open the storefront', timestamp: 0 },
-  { index: 1, title: 'Add a hoodie to the cart', timestamp: 6.5 },
-  { index: 2, title: 'Enter the card details', timestamp: 12 },
-  { index: 3, title: 'Confirm the order', timestamp: 21.25 },
-];
-
-const SPEC = { steps: STEPS, target_url: 'https://shop.example/' };
+const MANIFEST = {
+  head: 2,
+  kind: 'demo',
+  versions: [
+    { version: 1, parent: null, feedback_file: null, html_file: '_v1.html', created_at: '2026-08-17T10:00:00Z' },
+    { version: 2, parent: 1, feedback_file: null, html_file: '_v2.html', created_at: '2026-08-18T11:30:00Z' },
+  ],
+};
 
 const DEMOS: DocSummary[] = [
   { name: 'stale-demo', kind: 'demo', head: 1, versions: 1, updated_at: '2026-08-10T08:00:00Z' },
@@ -68,171 +67,171 @@ const DEMOS: DocSummary[] = [
 beforeEach(prodOrigin);
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
-// ── 1 + 2. Storyboard and chapter seek ──────────────────────────────────────
+// ── 1 + 2. The corrected wire: storyboard HTML in a sandboxed iframe ─────────
 
-describe('storyboard chapters (§4.5)', () => {
-  it('renders one card per spec step, in spec order, with its timestamp', async () => {
-    stubFetch({
-      '/api/demo/spec': { body: SPEC },
-      '/api/demo/recordings': { body: { version: 2, gif_url: '/d/x/demo/v2.gif' } },
-    });
+describe('the demo surface frames the storyboard (§7.4)', () => {
+  it('demo-player IS an <iframe> at the REAL route /d/<id>/doc/<head>, sandboxed', async () => {
+    const seen = stubFetch({ '/api/versions': { body: MANIFEST } });
     render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
 
-    const cards = await screen.findAllByTestId('chapter-card');
-    expect(cards).toHaveLength(STEPS.length);
-    expect(cards.map((c) => c.getAttribute('data-index'))).toEqual(['0', '1', '2', '3']);
-    expect(cards[1]).toHaveTextContent('Add a hoodie to the cart');
-    expect(cards[3]).toHaveTextContent('0:21');
-    expect(screen.getByTestId('demo-storyboard')).toHaveAttribute('data-steps', '4');
-  });
-
-  it('clicking chapter 3 seeks the player to that step’s timestamp', async () => {
-    stubFetch({
-      '/api/demo/spec': { body: SPEC },
-      '/api/demo/recordings': { body: { version: 2, video_url: '/d/x/demo/v2.mp4' } },
-    });
-    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
-    const cards = await screen.findAllByTestId('chapter-card');
-
-    // jsdom loads no media, so `currentTime` is the observable seek; the player reflects
-    // it as `data-position` for the same reason Playwright can then assert it.
-    await userEvent.click(cards[2]!);
-    const player = screen.getByTestId('demo-player');
-    expect(player).toHaveAttribute('data-chapter', '2');
-    expect(player).toHaveAttribute('data-position', '12');
-    expect((screen.getByTestId('demo-video') as HTMLVideoElement).currentTime).toBe(12);
-    expect(cards[2]).toHaveAttribute('data-selected', 'true');
-    expect(cards[0]).toHaveAttribute('data-selected', 'false');
-  });
-
-  it('with no recording, a chapter click focuses the step instead of seeking', async () => {
-    stubFetch({
-      '/api/demo/spec': { body: SPEC },
-      '/api/demo/recordings': { body: { version: 0 } },
-    });
-    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
-    const cards = await screen.findAllByTestId('chapter-card');
-    const scrolled = vi.spyOn(cards[1]!, 'scrollIntoView');
-
-    await userEvent.click(cards[1]!);
-    expect(scrolled).toHaveBeenCalled();
-    expect(screen.getByTestId('demo-player')).toHaveAttribute('data-chapter', '1');
+    const player = await screen.findByTestId('demo-player');
+    expect(player.tagName).toBe('IFRAME');
+    expect(player).toHaveAttribute(
+      'src',
+      `${apiBase()}/projects/${PROJECT}/interactive/d/${DEMO}/doc/2`,
+    );
+    // Same full sandbox as Document mode: agent-authored HTML, nothing else granted.
+    expect(player.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(player).toHaveAttribute('data-version', '2');
+    // No <video>: the storyboard HTML owns playback via the bridge's player page.
     expect(screen.queryByTestId('demo-video')).toBeNull();
+    // The one read is the manifest — through the project-scoped proxy.
+    expect(seen.every((u) => u.startsWith(apiBase()))).toBe(true);
   });
 
-  it('maps a chapter to its own boundary, clamped to a known duration', () => {
-    expect(chapterSeek(STEPS[2]!)).toBe(12);
-    // A spec re-authored against an older recording has steps past its end (slice 14).
-    expect(chapterSeek(STEPS[3]!, 15)).toBe(15);
-    expect(chapterSeek({ index: 0, title: 'x', timestamp: -4 })).toBe(0);
-    expect(chapterSeek({ index: 0, title: 'x', timestamp: Number.NaN })).toBe(0);
-    // An unknown duration (metadata not loaded) must not clamp to zero.
-    expect(chapterSeek(STEPS[3]!, Number.NaN)).toBe(21.25);
-    expect(mmss(21.25)).toBe('0:21');
-    expect(mmss(64)).toBe('1:04');
-  });
-
-  it('spec URLs resolve through the project-scoped proxy — no second origin', async () => {
-    const seen = stubFetch({
-      '/api/demo/spec': { body: SPEC },
-      '/api/demo/recordings': { body: { version: 1, gif_url: '/d/x/demo/v1.gif' } },
-    });
+  it('NEVER requests the invented routes (spec / recordings / record)', async () => {
+    const seen = stubFetch({ '/api/versions': { body: MANIFEST } });
     render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
-    await screen.findByTestId('demo-gif');
-
-    // Spec, recording AND the version manifest slice 14 reads to know what a step
-    // comment is commenting ON — every one of them under the project's proxy mount.
-    for (const url of seen) {
-      expect(url).toContain(`/api/v1/projects/${PROJECT}/interactive/d/${DEMO}/api/`);
-      expect(url).not.toContain('4400');
-    }
-    expect((screen.getByTestId('demo-gif') as HTMLImageElement).getAttribute('src'))
-      .toBe(`${apiBase()}/projects/${PROJECT}/interactive/d/x/demo/v1.gif`);
+    await screen.findByTestId('demo-player');
+    expect(seen.filter((u) => /\/api\/demo\/(spec|recordings|record)\b/.test(u))).toEqual([]);
   });
-});
 
-// ── 3. Missing ffmpeg (§4.5, §3.3) ──────────────────────────────────────────
+  it('the routed ?v addresses the frame; an unknown ?v resolves to the head', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    const { unmount } = render(
+      <VideoStoryboard projectId={PROJECT} demoId={DEMO} version={1} navigate={() => {}} />,
+    );
+    expect(await screen.findByTestId('demo-player')).toHaveAttribute('data-version', '1');
+    unmount();
+    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} version={99} navigate={() => {}} />);
+    expect(await screen.findByTestId('demo-player')).toHaveAttribute('data-version', '2');
+  });
 
-describe('a missing ffmpeg is actionable, not fatal (§4.5)', () => {
-  const HINT = 'brew install ffmpeg && wicked-crew restart';
+  it('the version strip is present and selecting navigates on the VIDEO route', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    const navigate = vi.fn();
+    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={navigate} />);
+    await screen.findByTestId('version-strip');
 
-  it('names the install command verbatim AND still renders the storyboard', async () => {
-    stubFetch({
-      '/api/demo/spec': { body: SPEC },
-      '/api/demo/recordings': { body: { version: 2, ffmpeg_absent: true, ffmpeg_hint: HINT } },
-    });
+    const entries = screen.getAllByTestId('version-entry');
+    expect(entries.map((e) => e.getAttribute('data-version'))).toEqual(['1', '2']);
+    const selects = screen.getAllByTestId('version-select');
+    await userEvent.click(selects[0]!);
+    expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/video/${DEMO}?v=1`);
+  });
+
+  it('a manifest failure is an error surface with a retry — never a blank', async () => {
+    stubFetch({ '/api/versions': { status: 503, body: { code: 'bridge_unavailable', hint: 'npx wicked-interactive serve' } } });
     render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
-
-    expect(await screen.findByTestId('demo-ffmpeg-hint')).toHaveTextContent(HINT);
-    expect(screen.getByTestId('demo-no-recording')).toHaveAttribute('data-ffmpeg-absent', 'true');
-    // The whole point: degradation, not a blank surface.
-    expect(screen.getAllByTestId('chapter-card')).toHaveLength(STEPS.length);
-    expect(screen.queryByTestId('video-canvas-error')).toBeNull();
-  });
-
-  it('offers the record action, and reports it as queued (§3.3: subject + control)', async () => {
-    stubFetch({
-      '/api/demo/spec': { body: SPEC },
-      '/api/demo/recordings': { body: { version: 0 } },
-      '/api/demo/record': { body: { queued: true } },
-    });
-    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
-
-    const record = await screen.findByTestId('demo-record');
-    expect(screen.getByTestId('demo-no-recording')).toHaveAttribute('data-ffmpeg-absent', 'false');
-    await userEvent.click(record);
-    await waitFor(() => expect(screen.getByTestId('demo-record-queued')).toHaveTextContent(DEMO));
-    expect(record).toBeDisabled();
-  });
-
-  it('a recording ERROR that names ffmpeg is read as the same missing dependency', () => {
-    const state = playerState(PROJECT, null, { message: 'API 500: ffmpeg not found on PATH' });
-    expect(state).toEqual({ kind: 'missing', ffmpeg: true, hint: 'API 500: ffmpeg not found on PATH' });
-    // A bridge_unavailable hint wins over the message, and is carried verbatim.
-    expect(playerState(PROJECT, null, { message: 'x', hint: 'run npx wicked-interactive serve' }))
-      .toEqual({ kind: 'missing', ffmpeg: false, hint: 'run npx wicked-interactive serve' });
-    // ffmpeg_absent with no hint still names a command rather than apologising.
-    const bare = playerState(PROJECT, { version: 1, ffmpeg_absent: true }, null);
-    expect(bare.kind === 'missing' && bare.hint).toMatch(/install ffmpeg/i);
-    // Video wins over gif when the service produced both; both resolve through the proxy.
-    expect(playerState(PROJECT, { version: 1, video_url: '/a.mp4', gif_url: '/a.gif' }, null))
-      .toMatchObject({ kind: 'video', src: `${apiBase()}/projects/${PROJECT}/interactive/a.mp4` });
-  });
-
-  it('a spec that fails to load IS an error surface, with the hint and a retry', async () => {
-    stubFetch({
-      '/api/demo/spec': { status: 503, body: { code: 'bridge_unavailable', hint: 'npx wicked-interactive serve' } },
-      '/api/demo/recordings': { status: 503, body: { code: 'bridge_unavailable', hint: 'npx wicked-interactive serve' } },
-    });
-    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
-    expect(await screen.findByTestId('video-bridge-hint')).toHaveTextContent('npx wicked-interactive serve');
+    const hint = await screen.findByTestId('video-bridge-hint');
+    expect(hint).toHaveTextContent('npx wicked-interactive serve');
     expect(screen.getByTestId('video-canvas-retry')).toBeInTheDocument();
+    expect(screen.queryByTestId('demo-player')).toBeNull();
   });
 });
 
-// ── 4. The demo picker ──────────────────────────────────────────────────────
+// ── 4. The thread drawer (§7.3, applied to Video by §7.4) ────────────────────
+
+describe('the thread drawer', () => {
+  const thread = <aside data-testid="fake-thread">the conversation</aside>;
+
+  it('is CLOSED by default with a demo open; the strip toggle opens it and back', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(
+      <VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}}>
+        {thread}
+      </VideoStoryboard>,
+    );
+    await screen.findByTestId('demo-player');
+    expect(screen.queryByTestId('thread-drawer')).toBeNull();
+    expect(screen.queryByTestId('fake-thread')).toBeNull();
+
+    await userEvent.click(screen.getByTestId('thread-toggle'));
+    expect(screen.getByTestId('thread-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('thread-close'));
+    expect(screen.queryByTestId('thread-drawer')).toBeNull();
+  });
+
+  it('is OPEN by default on the picker — the wizard and the invitation live there', async () => {
+    stubFetch({ '/api/docs': { body: DEMOS } });
+    render(
+      <VideoStoryboard projectId={PROJECT} demoId={null} navigate={() => {}}>
+        {thread}
+      </VideoStoryboard>,
+    );
+    await screen.findByTestId('demo-picker');
+    expect(screen.getByTestId('thread-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
+  });
+});
+
+// ── §7.3: the strip auto-hides and wakes on proximity ────────────────────────
+
+describe('version strip auto-hide', () => {
+  it('retires after 3s of idleness; the bottom sensor wakes it', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
+    const strip = await screen.findByTestId('version-strip');
+    expect(strip).toHaveAttribute('data-hidden', 'false');
+
+    vi.useFakeTimers();
+    try {
+      // Re-arm the timer under fake time, then let it elapse.
+      act(() => {
+        strip.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+      });
+      act(() => { vi.advanceTimersByTime(3100); });
+      expect(strip).toHaveAttribute('data-hidden', 'true');
+      expect(strip.style.opacity).toBe('0');
+      expect(strip.style.pointerEvents).toBe('none');
+
+      // Proximity: the sensor exists only while hidden, and a mousemove wakes.
+      const sensor = screen.getByTestId('strip-sensor');
+      act(() => {
+        sensor.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+      });
+      expect(strip).toHaveAttribute('data-hidden', 'false');
+      expect(strip.style.opacity).toBe('1');
+      expect(screen.queryByTestId('strip-sensor')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ── 5. Demo picker (unchanged behaviour) ─────────────────────────────────────
 
 describe('demo picker (§6.3’s pattern, applied to demos)', () => {
   it('lists demos most-recent first and navigates into the demo route', async () => {
-    stubFetch({ '/api/docs': { body: [...DEMOS, { name: 'q3-report', kind: 'doc', head: 1, versions: 1, updated_at: '2026-08-19T00:00:00Z' }] } });
+    stubFetch({ '/api/docs': { body: DEMOS } });
     const navigate = vi.fn();
     render(<VideoStoryboard projectId={PROJECT} demoId={null} navigate={navigate} />);
 
     const rows = await screen.findAllByTestId('demo-picker-row');
-    // The newest row overall is a DOC, and it is not here: Video mode lists demos.
     expect(rows.map((r) => r.getAttribute('data-demo-id')))
       .toEqual([DEMO, 'onboarding-tour', 'stale-demo']);
     await userEvent.click(rows[0]!);
     expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/video/${DEMO}`);
   });
 
-  it('an empty project invites creating a demo from the thread, never a blank', async () => {
-    stubFetch({ '/api/docs': { body: [{ name: 'q3-report', kind: 'doc', head: 1, versions: 1, updated_at: null }] } });
+  it('filters the ONE registry to kind:"demo" — documents never appear', async () => {
+    stubFetch({
+      '/api/docs': {
+        body: [...DEMOS,
+          { name: 'q3-report', kind: 'doc', head: 1, versions: 1, updated_at: '2026-08-19T00:00:00Z' }],
+      },
+    });
     render(<VideoStoryboard projectId={PROJECT} demoId={null} navigate={() => {}} />);
+    const rows = await screen.findAllByTestId('demo-picker-row');
+    expect(rows.map((r) => r.getAttribute('data-demo-id'))).not.toContain('q3-report');
+  });
 
+  it('an empty project invites creating a demo from the thread, never a blank', async () => {
+    stubFetch({ '/api/docs': { body: [] } });
+    render(<VideoStoryboard projectId={PROJECT} demoId={null} navigate={() => {}} />);
     const empty = await screen.findByTestId('demo-picker-empty');
     expect(empty).toHaveTextContent(/thread/i);
-    expect(empty.textContent ?? '').not.toMatch(/^\s*$/);
-    expect(screen.queryByTestId('demo-picker')).toBeNull();
   });
 });

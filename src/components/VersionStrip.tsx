@@ -90,16 +90,27 @@ export interface VersionStripProps {
   navigate: Navigate;
   /** The service's fork result; the owner re-reads the manifest and routes to it. */
   onForked: (result: ForkResult) => void;
+  /** Which mode route a selection navigates (DES-FEEDBACK-001 §7.4): Video reuses
+   *  the strip verbatim, so the ONLY thing that differs is the path it builds. */
+  mode?: 'document' | 'video';
+  /** DES-FEEDBACK-001 §7.3 auto-hide: the OWNER decides visibility (idle timer +
+   *  bottom-proximity sensor); the strip just wears it — opacity 0 and inert. */
+  dimmed?: boolean;
+  /** Mouse presence on the strip is an interaction: it resets the owner's idle timer. */
+  onWake?: (() => void) | undefined;
+  /** The canvas-first chrome's extra control — the thread-drawer toggle (§7.3). */
+  trailing?: React.ReactNode;
 }
 
 export function VersionStrip({
   projectId, docId, manifest, selected, navigate, onForked,
+  mode = 'document', dimmed = false, onWake, trailing,
 }: VersionStripProps): React.ReactElement {
   const [forking, setForking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function select(entry: VersionEntry): void {
-    navigate(versionPath(projectId, docId, entry.version));
+    navigate(versionPath(projectId, docId, entry.version, mode));
     // The cross-link rides ALONG with the selection (§7.6) — the frame swap does not
     // depend on it, so a thread that is not on screen (Document mode's own thread is
     // slice 10) costs the user nothing.
@@ -123,12 +134,19 @@ export function VersionStrip({
   return (
     <div
       data-testid="version-strip"
+      data-hidden={dimmed ? 'true' : 'false'}
+      onMouseMove={onWake}
       // The spine's drawn connection (DES-UXFIX-001 §2.6) now speaks the brand
       // accent's subtle tier — connective tissue, not a status signal (§2.5).
+      // DES-FEEDBACK-001 §7.3: when dimmed, the strip retires visually AND as a
+      // hit target — the canvas underneath owns the pixels until proximity wakes it.
       style={{
         alignItems: 'stretch', background: S.bar,
         borderTop: '2px solid var(--accent-subtle)',
         display: 'flex', flexShrink: 0, gap: '8px', padding: '10px 12px',
+        opacity: dimmed ? 0 : 1,
+        pointerEvents: dimmed ? 'none' : 'auto',
+        transition: 'opacity var(--dur-base)',
       }}
     >
       {/* The versions scroll; the export control does NOT — a doc with 20 versions must
@@ -268,6 +286,9 @@ export function VersionStrip({
           is addressed. The selection is the subject — exporting "the document" would be
           exporting whichever version happened to be head when the button was pressed. */}
       <ExportMenu projectId={projectId} docId={docId} version={selected} />
+
+      {/* DES-FEEDBACK-001 §7.3: the thread-drawer toggle rides the strip's action end. */}
+      {trailing}
     </div>
   );
 }

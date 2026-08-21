@@ -473,8 +473,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
       className="flex flex-col shrink-0 relative"
       // §5.5: the thread pane sits on --surface-base; prose defaults to the
       // sans — only data (narration, tags, ids) opts into the mono (§2.8).
-      style={{ width: '340px', background: S.panel, borderLeft: `1px solid ${S.border}`,
-               fontFamily: 'var(--font-sans)' }}
+      // DES-FEEDBACK-001 §7.3: the pane fills whatever hosts it — its host is
+      // now the thread DRAWER, which owns the min(440px, 40vw) width.
+      style={{ width: '100%', minHeight: 0, flex: 1, background: S.panel,
+               borderLeft: `1px solid ${S.border}`, fontFamily: 'var(--font-sans)' }}
     >
       {wizard !== null && (
         <DemoWizard

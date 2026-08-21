@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { getVersions, interactiveUrl, listDocs } from '../api/interactive.js';
+import { getVersions, interactiveDocUrl, listDocs } from '../api/interactive.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
 import { FeedbackOverlay } from './FeedbackOverlay.js';
+import { StripSensor, ThreadDrawer, ThreadToggle, useStripAutoHide } from './ThreadDrawer.js';
 import { Failed, Loading, PANEL, S, useLoad } from './SurfaceState.js';
 import { VersionStrip } from './VersionStrip.js';
 
@@ -20,11 +21,13 @@ import { VersionStrip } from './VersionStrip.js';
 // and the parent cannot read `contentDocument` back. Everything the overlay needs comes
 // over the instrument bridge instead (§7.3: the overlay never shipped without it).
 //
-// DES-UXFIX-001 §2.6 (slice 6): the component owns the THREE-PANE relationship. The
-// caller passes the thread as `children`; canvas and thread stay visual siblings in the
-// top row, and the version strip renders BELOW BOTH as the spine spanning canvas and
-// thread (§2.6 rule 2) — there is no dead middle column, and the strip is the one piece
-// of connective tissue between the panes, labelled by what it does (rule 1).
+// DES-FEEDBACK-001 §7.3 (canvas-first): THE CANVAS OWNS THE VIEWPORT. The thread the
+// caller passes as `children` is a right-side DRAWER — closed by default when a doc is
+// open, open by default on the picker (its empty state points at the thread) — and the
+// version strip floats INSIDE the canvas container, auto-hiding after 3s of idleness
+// and waking on bottom-edge proximity. The doc→canvas→thread relationship (tags,
+// cross-links, one conversation) is unchanged; only the geometry gave the document
+// back its pixels — the operator's round-2 words verbatim.
 
 // ── Doc picker — the mode with no `:docId` in the route ──────────────────────
 
@@ -106,9 +109,10 @@ function resolveVersion(manifest: VersionManifest, routed: number | null): numbe
 }
 
 function DocFrame({
-  projectId, docId, version, navigate, children,
+  projectId, docId, version, navigate, threadOpen, onToggleThread, children,
 }: {
   projectId: string; docId: string; version: number | null; navigate: Navigate;
+  threadOpen: boolean; onToggleThread: () => void;
   children?: React.ReactNode;
 }): React.ReactElement {
   // §2.6 rule 3: a landing version re-reads the manifest, so the strip advances and the
@@ -133,6 +137,8 @@ function DocFrame({
   const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
   const [loadNonce, setLoadNonce] = useState(0);
   useEffect(() => { setLoaded(false); }, [projectId, docId, version]);
+  // §7.3's strip presence: visible now, gone after 3s of idleness, back on proximity.
+  const { hidden, wake } = useStripAutoHide();
 
   const subject = `“${docId}”`;
   // Failure / loading occupy the CANVAS pane only — the thread beside them stays up
@@ -141,22 +147,26 @@ function DocFrame({
   if (manifest === null) {
     return (
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
           {failure
             ? <Failed surface="doc" subject={subject} failure={failure} onRetry={retry} />
             : <Loading surface="doc" subject={subject} />}
+          {/* No manifest means no strip, so the toggle floats — the conversation must
+              stay reachable even (especially) while the bridge is down (§1.2). */}
+          {threadOpen ? null : (
+            <div style={{ position: 'absolute', right: '14px', top: '14px' }}>
+              <ThreadToggle open={false} onToggle={onToggleThread} />
+            </div>
+          )}
         </div>
-        {children}
+        <ThreadDrawer open={threadOpen} onClose={onToggleThread}>{children}</ThreadDrawer>
       </div>
     );
   }
 
   const shown = resolveVersion(manifest, version);
   // Version-addressed: the VersionStrip swaps this number through the route, nothing else.
-  const src = interactiveUrl(
-    projectId,
-    `/d/${encodeURIComponent(docId)}/doc/${shown}`,
-  );
+  const src = interactiveDocUrl(projectId, docId, shown);
 
   // A fork is committed by the service, so the strip re-reads the manifest (`retry`
   // is that same one load) and routes to the version the service reports — the UI
@@ -167,16 +177,18 @@ function DocFrame({
   };
 
   return (
-    <>
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-      {/* §5.5 token usage: the canvas is framed cleanly — a subtle 1px stroke at
-          --radius-lg, breathing room on the open sides — rather than bleeding to
-          the pane edges. The thread beside it keeps its own left border. */}
-      <div style={{
-        flex: 1, position: 'relative', overflow: 'hidden',
-        border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-lg)',
-        margin: '10px 10px 10px 10px', background: 'var(--surface-base)',
-      }}>
+    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      {/* §5.5 token usage kept; §7.3 geometry: the canvas container is the WHOLE
+          surface — the strip floats over its bottom edge instead of taking a row,
+          so the document, not the chrome, owns the viewport (EC18). */}
+      <div
+        data-testid="document-canvas"
+        style={{
+          flex: 1, position: 'relative', overflow: 'hidden',
+          border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-lg)',
+          margin: '10px', background: 'var(--surface-base)',
+        }}
+      >
       <iframe
         // Keyed on the VERSION so a swap REPLACES the element instead of mutating its
         // src. Mutating it navigates the frame, and a frame navigation lands in the
@@ -212,20 +224,29 @@ function DocFrame({
         docId={docId}
         version={shown}
       />
+      {/* §7.3: while the strip is away, the bottom band listens for the mouse. */}
+      <StripSensor hidden={hidden} wake={wake} />
+      {/* pointerEvents none on the WRAPPER: the strip re-enables itself while visible;
+          while dimmed the box must not shadow the z-1 sensor, or nothing can wake it. */}
+      <div style={{ bottom: 0, left: 0, pointerEvents: 'none', position: 'absolute', right: 0, zIndex: 3 }}>
+        <VersionStrip
+          projectId={projectId}
+          docId={docId}
+          manifest={manifest}
+          selected={shown}
+          navigate={navigate}
+          onForked={onForked}
+          dimmed={hidden}
+          onWake={wake}
+          trailing={<ThreadToggle open={threadOpen} onToggle={onToggleThread} />}
+        />
       </div>
-      {/* The thread pane — a visual sibling of the canvas in this row, so the strip
-          below spans BENEATH BOTH: §2.6 rule 2's spine, drawn rather than implied. */}
-      {children}
       </div>
-      <VersionStrip
-        projectId={projectId}
-        docId={docId}
-        manifest={manifest}
-        selected={shown}
-        navigate={navigate}
-        onForked={onForked}
-      />
-    </>
+      {/* §7.3: the thread is a DRAWER — a flex sibling, so opening it reflows the
+          canvas rather than covering it. Closed by default: the canvas is full-width
+          on first visit, and the conversation is one click away, never lost. */}
+      <ThreadDrawer open={threadOpen} onClose={onToggleThread}>{children}</ThreadDrawer>
+    </div>
   );
 }
 
@@ -245,6 +266,13 @@ export interface DocumentCanvasProps {
 export function DocumentCanvas({
   projectId, docId, version = null, navigate, children,
 }: DocumentCanvasProps): React.ReactElement {
+  // §7.3: the drawer's state lives on the Document surface. Default CLOSED when a doc
+  // is open (the canvas is full-width on first visit); default OPEN on the picker,
+  // whose empty state points at the thread — a pointer at a hidden pane would be a
+  // dead end. The state survives picker→doc navigation, so a conversation that just
+  // created a document stays on screen while its first version lands (W3).
+  const [threadOpen, setThreadOpen] = useState(docId === null);
+  const toggleThread = (): void => { setThreadOpen((v) => !v); };
   return (
     <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
       {docId === null
@@ -252,10 +280,17 @@ export function DocumentCanvas({
           // No doc means no versions, so there is no spine row — the picker's empty
           // state points at the thread instead (§2.6 rule 5, W3 step 2).
           <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
               <DocPicker projectId={projectId} navigate={navigate} />
+              {/* The picker has no strip to host the toggle, so a closed drawer gets
+                  its reopen affordance here — same testid, never both mounted. */}
+              {threadOpen ? null : (
+                <div style={{ position: 'absolute', right: '14px', top: '14px' }}>
+                  <ThreadToggle open={false} onToggle={toggleThread} />
+                </div>
+              )}
             </div>
-            {children}
+            <ThreadDrawer open={threadOpen} onClose={toggleThread}>{children}</ThreadDrawer>
           </div>
         )
         : (
@@ -265,6 +300,8 @@ export function DocumentCanvas({
             docId={docId}
             version={version}
             navigate={navigate}
+            threadOpen={threadOpen}
+            onToggleThread={toggleThread}
           >
             {children}
           </DocFrame>

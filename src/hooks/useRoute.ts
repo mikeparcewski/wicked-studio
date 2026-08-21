@@ -87,9 +87,14 @@ export function modePath(projectId: string, mode: Mode, artifactId?: string | nu
  * one artifact, not a different artifact — and it is still a real navigation, so a
  * selected version is deep-linkable and Back returns to the previously viewed one.
  * `null` addresses the manifest head, i.e. the bare doc route.
+ *
+ * `mode` defaults to Document; Video passes `'video'` (DES-FEEDBACK-001 §7.4 — a demo
+ * is a doc whose storyboard versions are addressed the same way, on its own route).
  */
-export function versionPath(projectId: string, docId: string, version: number | null): string {
-  const base = modePath(projectId, 'document', docId);
+export function versionPath(
+  projectId: string, docId: string, version: number | null, mode: Mode = 'document',
+): string {
+  const base = modePath(projectId, mode, docId);
   return version === null ? base : `${base}?v=${version}`;
 }
 

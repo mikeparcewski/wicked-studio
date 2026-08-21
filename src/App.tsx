@@ -292,14 +292,18 @@ export function App(): React.ReactElement {
         </DocumentCanvas>
       );
     }
-    // Video is the same two-sibling shape (§6.4 slice 13): the storyboard + player pair
-    // beside the SAME thread the other modes render — a demo is a document whose manifest
-    // says `kind: "demo"`, so its conversation is the project's one conversation (§1.3
-    // rule 1), not a second transcript keyed to a different artifact type.
+    // Video is the same canvas-first shape as Document (DES-FEEDBACK-001 §7.4): the
+    // storyboard HTML frames in the canvas, and the SAME thread passes through as the
+    // drawer's children — a demo is a document whose manifest says `kind: "demo"`, so
+    // its conversation is the project's one conversation (§1.3 rule 1).
     if (m === 'video') {
       return (
-        <>
-          <VideoStoryboard projectId={pid} demoId={artifactId} navigate={navigate} />
+        <VideoStoryboard
+          projectId={pid}
+          demoId={artifactId}
+          version={routedVersion(search)}
+          navigate={navigate}
+        >
           <DocumentThread
             projectId={pid}
             docId={artifactId}
@@ -307,7 +311,7 @@ export function App(): React.ReactElement {
             navigate={navigate}
             mode="video"
           />
-        </>
+        </VideoStoryboard>
       );
     }
     if (m === 'chat' && !artifactId) return groupChatSurface(null);
@@ -442,7 +446,13 @@ export function App(): React.ReactElement {
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-base">
-      <LeftSidebar runs={runs} navigate={navigate} />
+      {/* DES-FEEDBACK-001 §7.3: Document and Video are canvas-first — the rail
+          auto-collapses to icons on entry and restores on exit. */}
+      <LeftSidebar
+        runs={runs}
+        navigate={navigate}
+        immersive={projectId !== null && (mode === 'document' || mode === 'video')}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {renderCenter()}
