@@ -425,7 +425,7 @@ export function App(): React.ReactElement {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-wk-canvas">
+    <div className="flex h-screen overflow-hidden bg-surface-base">
       <LeftSidebar runs={runs} navigate={navigate} />
 
       <div className="flex flex-1 overflow-hidden">
