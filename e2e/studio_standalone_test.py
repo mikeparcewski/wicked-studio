@@ -473,9 +473,11 @@ try:
         run_open = problem[:30] in surface.inner_text()
         page.screenshot(path=str(SHOTS / "slice4-legacy-redirect.png"), full_page=True)
 
-        # AC: /projects/:id keeps working as a bookmark too.
+        # AC: /projects/:id keeps working as a bookmark too — since DES-FEEDBACK-001
+        # slice D (#71) it lands on the PROJECT DASHBOARD (/p/:id), not a mode; the
+        # last-used-mode redirect is gone (useLegacyRedirect.ts).
         page.goto(f"{STUDIO_ORIGIN}/projects/{project_id}", wait_until="networkidle")
-        project_redirect_ok = wait_for_path(page, f"/p/{project_id}/build")
+        project_redirect_ok = wait_for_path(page, f"/p/{project_id}")
 
         browser.close()
 
