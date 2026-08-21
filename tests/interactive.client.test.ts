@@ -15,6 +15,7 @@ import {
   getDemoSpec,
   getLatestRecording,
   getSources,
+  getTheme,
   listDemos,
   getVersions,
   interactiveUrl,
@@ -87,6 +88,8 @@ describe('interactive URL resolver', () => {
     ['getDemoSpec', { steps: [] },                     () => getDemoSpec(PROJECT, DEMO)],
     ['getLatestRecording', { version: 1 },             () => getLatestRecording(PROJECT, DEMO)],
     ['requestRecord', { queued: true },                () => requestRecord(PROJECT, DEMO)],
+    // DES-VISION-001 §4.4's one new wrapper — the palette the brand mapper consumes.
+    ['getTheme',   { name: 'acme' },                   () => getTheme(PROJECT, 'acme')],
   ];
 
   describe('prod (same-origin)', () => {
@@ -354,6 +357,18 @@ describe('happy-path shapes', () => {
     expect(calls[0]!.init?.method).toBe('POST');
     expect(calls[0]!.url).toBe(
       `${apiBase()}/projects/${PROJECT}/interactive/d/${DEMO}/api/demo/record`,
+    );
+  });
+
+  it('getTheme GETs /api/themes/:themeId and tolerates extra fields (DES-VISION-001 §4.4)', async () => {
+    // Tolerant reading: the bridge's theme JSON may carry more than the mapper's
+    // minimum — the wrapper passes the body through untouched.
+    const detail = { name: 'acme', primary: '#0a2a5e', logo_url: '/api/brand/logo.svg', fonts: ['Inter'] };
+    const calls = stubFetch(detail);
+    await expect(getTheme(PROJECT, 'acme')).resolves.toEqual(detail);
+    expect(calls[0]!.init?.method).toBeUndefined(); // a bare GET
+    expect(calls[0]!.url).toBe(
+      `${apiBase()}/projects/${PROJECT}/interactive/api/themes/acme`,
     );
   });
 });

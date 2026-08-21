@@ -1,0 +1,48 @@
+# .garden/skills/studio-learn-brand.yaml
+name: wicked-studio:theming:learn-brand
+description: >
+  Extract a brand's visual identity from a URL, PDF, or image using
+  wicked-interactive's theme-learn machinery, map it to studio's
+  design-token set, and apply it as the per-install appearance.
+
+inputs:
+  source:
+    type: string
+    description: >
+      The brand source. One of:
+        • A live URL (https://…) — captured headlessly by the interactive bridge.
+          The SSRF guard (loopback/private/link-local rejection) applies server-side;
+          the skill sends the URL to the proxy, never fetches it directly.
+        • An absolute local path to a PDF — read server-side, nothing uploads.
+        • An absolute local path to an image (PNG/JPG/SVG) — read server-side.
+    required: true
+  project_id:
+    type: string
+    description: >
+      The crew project whose interactive root is used. The brand theme
+      is learned within this project's scope and applied per-install.
+    required: true
+  apply:
+    type: boolean
+    default: false
+    description: >
+      If true, the skill applies the theme immediately after preview
+      without waiting for explicit confirmation. Use for automation;
+      interactive use should leave this false (the Settings UI handles confirm).
+
+outputs:
+  theme_id:
+    type: string
+    description: The interactive bridge's identifier for the learned theme.
+  token_overrides:
+    type: object
+    description: >
+      The studio token overrides derived by the mapper. Keys: accent_h, accent_s,
+      accent_l, logo_url (null when no logo asset was found).
+  applied:
+    type: boolean
+  mapper_adjustments:
+    type: array
+    description: >
+      Any adjustments the mapper made to satisfy contrast or distinctness constraints.
+      Each entry: { constraint, original, adjusted, reason }.
