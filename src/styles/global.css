@@ -122,3 +122,19 @@ code, pre, .font-mono {
   border-radius: 1px;
   box-shadow: none;
 }
+
+/* The live feed's motion grammar (DES-VISION-001 §1.6/§5.1): a NEW narration
+   line fades in at the top of its block (120ms), a NEW project block fades in
+   (220ms). One run each — content-keyed elements remount only on change, and
+   nothing here loops (§1.6's rule). */
+@keyframes wk-feed-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+.wk-feed-line  { animation: wk-feed-in var(--dur-fast) var(--ease-out); }
+.wk-feed-block { animation: wk-feed-in var(--dur-base) var(--ease-out); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-feed-line,
+  .wk-feed-block { animation: none; }
+}

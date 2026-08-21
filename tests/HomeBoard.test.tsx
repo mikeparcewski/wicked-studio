@@ -217,7 +217,10 @@ describe('HomeBoard — the orchestrator board', () => {
     await expandQuiet();
     expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', '60');
     const at60 = screen.getAllByTestId('project-card').length;
-    expect(at60).toBeLessThan(30);
+    // The ceiling is viewport rows × columns: vision slice 2's denser grid
+    // (§1.3's minmax(280px) — 4 columns at the jsdom fallback width, was 3)
+    // mounts one more card per row, and still nowhere near the project count.
+    expect(at60).toBeLessThan(40);
   });
 
   it('states what is missing rather than showing a blank board', async () => {
