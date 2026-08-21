@@ -6,6 +6,7 @@ interface Props {
 }
 
 const ITEMS: { label: string; path: string }[] = [
+  { label: 'Theme', path: '/theme' },
   { label: 'Coverage', path: '/coverage' },
   { label: 'Domain', path: '/domain' },
   { label: 'Workflows', path: '/workflows' },
