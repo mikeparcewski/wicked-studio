@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
-import { lastMode, modePath } from '../hooks/useRoute.js';
+import { projectPath } from '../hooks/useRoute.js';
 import { AppChrome } from './AppChrome.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
 import { NewProjectModal } from './NewProjectModal.js';
@@ -252,9 +252,9 @@ export function LeftSidebar({ runs, navigate, runPath = flatRunPath, immersive =
   const q = searchQuery.trim().toLowerCase();
   const filteredRepos = q ? repos.filter(r => r.name.toLowerCase().includes(q)) : repos;
 
-  /** Enter a project's shell: last-used mode, Chat default (§1.5, §2.3). */
+  /** Enter a project: its DASHBOARD (DES-FEEDBACK-001 §4.1) — context before actions. */
   const openProject = (projectId: string): void => {
-    navigate(modePath(projectId, lastMode(projectId)));
+    navigate(projectPath(projectId));
   };
 
   return (

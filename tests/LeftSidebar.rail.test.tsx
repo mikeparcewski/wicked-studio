@@ -91,7 +91,7 @@ describe('the rail: two taxonomies (§2.3)', () => {
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     fireEvent.click(screen.getAllByTestId('rail-project')[0]!);
-    expect(navigate).toHaveBeenCalledWith('/p/q3-review-deck/chat');
+    expect(navigate).toHaveBeenCalledWith('/p/q3-review-deck');
   });
 
   it('keeps /runs reachable through the ONE escape hatch — at the runs section bottom (§1.4)', async () => {

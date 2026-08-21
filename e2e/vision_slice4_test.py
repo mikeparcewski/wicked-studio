@@ -383,6 +383,13 @@ with sync_playwright() as p:
     # canvas-first geometry (EC18) holds on this 1440px viewport.
     set_fixture(ORIGIN, demo=True)
     page.goto(f"{ORIGIN}/p/q3-review-deck/video/checkout-demo", wait_until="domcontentloaded")
+    # Park the pointer mid-canvas before measuring EC18: the rail is
+    # hover-to-peek (§7.3), so a stationary cursor left over the rail band by
+    # the PREVIOUS scene's last click keeps it expanded and shrinks the canvas
+    # below the 0.8 ratio — a cursor artifact, not a layout regression. (Became
+    # visible when slice D's 32px context header shifted the document scene's
+    # click targets; the geometry itself is unchanged on a fresh navigation.)
+    page.mouse.move(720, 450)
     player_el = page.locator('[data-testid="demo-player"]')
     player_el.wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)

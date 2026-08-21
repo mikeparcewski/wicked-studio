@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ProjectShell } from '../src/components/ProjectShell.js';
 import { useProjectsStore } from '../src/store/projects.js';
-import { lastMode } from '../src/hooks/useRoute.js';
+import { MODES, type Mode } from '../src/hooks/useRoute.js';
 
 vi.mock('../src/api/client.js', () => ({
   api: { listProjects: () => Promise.resolve({ projects: [] }) },
@@ -83,12 +83,46 @@ describe('ProjectShell (DES-MERGE-001 §1.2)', () => {
     expect(navigate).toHaveBeenLastCalledWith('/p/proj-1/build/run-9');
   });
 
-  it('records the last-used mode, which is where a bare /p/:projectId lands', () => {
+  // ── The project-context header (DES-FEEDBACK-001 §4.2, slice D) ────────────
+
+  const MODE_WORD: Record<Mode, string> = {
+    chat: 'Chat', build: 'Build', document: 'Document', video: 'Video',
+  };
+
+  it.each(MODES.map((m) => [m] as const))(
+    'shows the project-context header in %s mode — project name › mode word (EC17)',
+    (m) => {
+      render(
+        <ProjectShell projectId="proj-1" mode={m} artifactId={null} navigate={() => {}}>
+          <p>surface</p>
+        </ProjectShell>,
+      );
+      const header = screen.getByTestId('project-context-header');
+      expect(header).toBeInTheDocument();
+      expect(screen.getByTestId('project-name')).toHaveTextContent('Merge the skins');
+      expect(screen.getByTestId('context-mode')).toHaveTextContent(MODE_WORD[m]);
+    },
+  );
+
+  it('the header project name links back to the project dashboard (§4.2)', () => {
+    const navigate = vi.fn();
+    render(
+      <ProjectShell projectId="proj-1" mode="build" artifactId={null} navigate={navigate}>
+        <p>surface</p>
+      </ProjectShell>,
+    );
+    const crumb = screen.getByTestId('project-name');
+    expect(crumb).toHaveAttribute('href', '/p/proj-1');
+    fireEvent.click(crumb);
+    expect(navigate).toHaveBeenCalledWith('/p/proj-1');
+  });
+
+  it('no longer writes a last-used-mode memory — the dashboard replaced the redirect (slice D)', () => {
     render(
       <ProjectShell projectId="proj-1" mode="build" artifactId={null} navigate={() => {}}>
         <p>surface</p>
       </ProjectShell>,
     );
-    expect(lastMode('proj-1')).toBe('build');
+    expect(window.localStorage.getItem('wk.studio.lastMode.proj-1')).toBeNull();
   });
 });

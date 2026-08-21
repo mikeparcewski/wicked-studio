@@ -123,7 +123,10 @@ PROJECTS = [
     project("default", "Unfiled", NOW0),  # synthesized — must never render (F5)
     project("legacy-spike", "legacy-spike", NOW0 - HOUR),
     project("upload-endpoint", "upload-endpoint", NOW0),
-    project("q3-review-deck", "q3-review-deck", NOW0 - 30 * SEC),
+    # q3 carries an interactive root so the slice-D project dashboard's docs
+    # tile (root-guarded, exactly like the board's §7.12 guard) lists its
+    # registry — which holds the recorded demo when the `demo` switch is on.
+    project("q3-review-deck", "q3-review-deck", NOW0 - 30 * SEC, interactiveRoot="/tmp/wi-q3"),
     project("api-migration", "api-migration", NOW0 - 2 * MIN),
     project("auth-refactor", "auth-refactor", NOW0 - 12 * MIN),
     project("smoke-tests", "smoke-tests", NOW0 - 6 * DAY),
@@ -138,6 +141,21 @@ MEMBERS = {
     "api-migration": ["r-api"],
     "auth-refactor": ["r-auth"],
     "smoke-tests": ["r-smoke1", "r-smoke2"],
+}
+
+# When each run ENTERED its project — `attached_at` on the members wire, the one
+# honest per-run clock that route carries (`AgentSession` has no timestamps).
+# Real epoch-ms so the slice-D dashboard's 7-day activity window has something
+# true to bucket: r-legacy sits OUTSIDE the window (8 days — proves windowing),
+# the rest inside it. Everything not named keeps the old inert `1`.
+ATTACHED_AT = {
+    "r-q3": NOW0 - 30 * SEC,
+    "r-api": NOW0 - 2 * MIN,
+    "r-upload": NOW0 - HOUR,
+    "r-auth": NOW0 - 13 * MIN,
+    "r-legacy": NOW0 - 8 * DAY,
+    "r-smoke1": NOW0 - 6 * DAY,
+    "r-smoke2": NOW0 - 6 * DAY,
 }
 
 
@@ -558,7 +576,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             pid = urllib.parse.unquote(parts[4])
             self._json(200, {"members": [
                 {"id": f"{pid}:crew.run:{ref}", "project_id": pid, "member_kind": "crew.run",
-                 "member_ref": ref, "meta": None, "attached_at": 1, "attached_by": "studio"}
+                 "member_ref": ref, "meta": None,
+                 "attached_at": ATTACHED_AT.get(ref, 1), "attached_by": "studio"}
                 for ref in MEMBERS.get(pid, [])
             ]})
             return True
