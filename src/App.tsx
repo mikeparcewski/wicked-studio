@@ -35,6 +35,7 @@ import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { api } from './api/client.js';
+import { useAppearanceStore } from './theming/appearance.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -119,6 +120,13 @@ export function App(): React.ReactElement {
   );
 
   useEventStream(handleEvent);
+
+  // Per-install appearance (DES-VISION-001 §3.3): one startup read of crew's
+  // settings store; `studio.appearance` lands as inline custom-property
+  // overrides on <html> — the cascade seam tokens.css declares for this.
+  useEffect(() => {
+    void useAppearanceStore.getState().load();
+  }, []);
 
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
   useLegacyRedirect({ panel, runId, projectId, mode, showLaunch }, navigate);

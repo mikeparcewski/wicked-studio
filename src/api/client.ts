@@ -453,6 +453,22 @@ export const api = {
       body: JSON.stringify(patch),
     }),
 
+  /**
+   * The per-install studio appearance rides the SAME settings store under the
+   * namespaced key `studio.appearance` (DES-VISION-001 §3.3). GET reads the
+   * whole settings object untyped — the key is studio-owned, not part of the
+   * daemon's `SystemSettings` contract, and may be absent on a daemon that has
+   * never persisted one; PUT writes just that key, leaving every other setting
+   * untouched (the daemon merges partial PUTs).
+   */
+  getAppearanceSettings: () => apiFetch<{ settings: Record<string, unknown> }>('/settings'),
+
+  putAppearanceSettings: (appearance: import('../theming/appearance.js').StudioAppearance) =>
+    apiFetch<{ settings: Record<string, unknown> }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ 'studio.appearance': appearance }),
+    }),
+
   // ── Projects (DES-PROJECT-001) ───────────────────────────────────────────────
 
   /** All projects; `status=active` (default) or `archived` filters. Includes the synthesized "Unfiled" default. */

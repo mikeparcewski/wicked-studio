@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useConnectionStore } from '../store/connection.js';
+import { useAppearanceStore } from '../theming/appearance.js';
 import { prefersReducedMotion } from './LiveEdge.js';
 import { SettingsMenu } from './SettingsMenu.js';
 import { WickedLogo } from './WickedLogo.js';
@@ -158,9 +159,13 @@ function ConnectionDot({ collapsed }: { collapsed: boolean }): React.ReactElemen
 
 export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
 
   // The §3.1 slot: 32×32 exactly, clearspace by margin, contain-fit custom
-  // asset via the --logo-url custom property, the accent-stroked mark inside.
+  // asset via the --logo-url custom property. The accent-stroked default mark
+  // renders ONLY while no custom logo is set (§3.1: "when no custom logo is
+  // set, the default SVG mark renders" — the slice-7 AC asserts its absence
+  // when `--logo-url` carries an asset, so the two never stack).
   const logoSlot = (
     <button
       type="button"
@@ -176,7 +181,7 @@ export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
-      <WickedLogo size={32} />
+      {logoUrl === null && <WickedLogo size={32} />}
     </button>
   );
 

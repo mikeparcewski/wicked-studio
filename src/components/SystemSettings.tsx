@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
+import { AppearanceSettings } from './AppearanceSettings.js';
 import { Modal } from './Modal.js';
 import { Terminal } from './Terminal.js';
 
@@ -156,6 +157,11 @@ export function SystemSettings(): React.ReactElement {
           {error}
         </div>
       )}
+
+      {/* Appearance (DES-VISION-001 §3.2): a SECTION here, not a new page — it
+          persists itself through the appearance store (debounced PUT), so it
+          rides outside this page's dirty/Save machinery on purpose (§3.4). */}
+      <AppearanceSettings />
 
       <section
         className="rounded-xl px-5 mb-6"
