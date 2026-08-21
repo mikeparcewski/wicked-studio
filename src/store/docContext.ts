@@ -6,7 +6,7 @@
 // no trace of what is in effect.
 //
 // NOTE (issue #65): the PICKED-THEME half of this store is gone. It modeled slice 16's
-// theme library (`GET /api/themes` + a `theme_id` riding the next generation), and the
+// theme library (an invented list route + a `theme_id` riding the next generation), and the
 // real bridge serves neither — no theme registry exists, and nothing consumed `theme_id`.
 // The real theme surface is doc-scoped learning (`requestThemeLearn`): the learned look
 // sticks to the document server-side, so there is nothing for the composer to carry.

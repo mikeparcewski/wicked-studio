@@ -40,11 +40,6 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     vision-slice-7 rig can seed a STORED accent/logo/theme
                     between page loads. GET/PUT /api/v1/settings serve the
                     store itself (DES-VISION-001 §3.3).
-  learn_delay_s   — how long a queued theme-learn "runs" before listThemes
-                    reports it with `learned_at` set (vision slice 8, §4.3
-                    step 4; default 4.0s — long enough for the rig to shoot
-                    the in-progress state, short enough for one 3s poll).
-  reset_learn     — True clears every learned theme, so scenes start clean.
   repo            — whether GET /repos carries the `studio-api` repo plus its
                     graph / git-history / contributors routes (slice E's repo
                     profile visuals; default False). Every field served is on
@@ -95,7 +90,7 @@ def iso(ms: int) -> str:
 # Mutable fixture switches, flipped over POST /__fixture between page loads.
 state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
-         "extra_narration": [], "demo": False, "learn_delay_s": 4.0,
+         "extra_narration": [], "demo": False,
          "repo": False, "metrics_ws": False}
 state_lock = threading.Lock()
 
@@ -420,7 +415,7 @@ NARRATION = "Writing the token-bucket middleware for /upload"
 # ── The slice-6 document surface (DES-UXFIX-001 §2.6): one doc journey, W3-shaped ──
 #
 # The interactive bridge, reduced to what Document mode reads through crew's proxy:
-# preflight, themes, the doc registry, per-doc manifests, the rendered version HTML,
+# preflight, the doc registry, per-doc manifests, the rendered version HTML,
 # create/fork/events. State is mutable ON PURPOSE — the slice-6 rig drives the real
 # composer (create → generate → continue), and the manifest must grow exactly the way
 # the bridge's would: the version's `meta.sourceMessageId` is whatever id the CLIENT
@@ -430,39 +425,16 @@ NARRATION = "Writing the token-bucket middleware for /upload"
 # envelope the client folds (`{type:"interactiveEvent", event}`): each POST queues its
 # frames and the socket loop drains the queue on its next tick.
 
-THEMES = [{"name": "stripe-ish", "source": "url", "learned_at": iso(NOW0 - 2 * DAY)},
-          {"name": "corporate"}]
-
-# ── The vision-slice-8 brand-learn surface (DES-VISION-001 §4) ─────────────────
+# ── Theme learn (issue #65): the fixture speaks ONLY the real wire ─────────────
 #
-# The bridge's theme-learn loop, reduced to what the §4.1 flow reads through
-# crew's proxy: POST /api/theme/learn queues (with the bridge-side SSRF guard —
-# loopback/private/link-local URLs are a 400, §4.6 of DES-MERGE-001), the theme
-# then rides GET /api/themes WITHOUT `learned_at` until `learn_delay_s` elapses
-# (so the rig can shoot the in-progress state and prove the 3s poll), and
-# GET /api/themes/<id> serves the ThemeDetail the mapper consumes (§4.4).
-#
-# The learned palette's primary is a DEEP NAVY (#0a2a5e → hsl(217 81% 20%)) on
-# purpose: it forces the mapper's lightness-clamp (20→42) and contrast-floor
-# (42→59) adjustments — pinned in tests/brandMapper.test.ts — so the §4.3
-# step-7 disclosure has something real to disclose, while hue 217° stays ≥30°
-# clear of the whole status trio (EC12). The logo is bridge-relative and
-# non-square (2:1), matching the §3.1 contain-fit contract end to end.
-
-BRAND_LOGO_SVG = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 32">'
-                  b'<rect width="64" height="32" rx="8" fill="#0a2a5e"/>'
-                  b'<path d="M10 22 L18 10 L26 22" fill="none" stroke="#f8fafc" '
-                  b'stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
-                  b'<rect x="34" y="13" width="22" height="6" rx="3" fill="#f8fafc"/></svg>')
-
-
-def brand_detail(theme_id: str) -> dict:
-    return {"name": theme_id, "primary": "#0a2a5e", "secondary": "#22c55e",
-            "background": "#f4f4f8", "logo_url": "/api/brand/logo.svg"}
-
-
-# theme_id -> {"ready_at": float epoch, "source": kind}; guarded by state_lock.
-learned_themes: dict = {}
+# The invented slice-16 surface — GET /api/themes, GET /api/themes/<id>,
+# POST /api/theme/learn — is GONE: the real bridge never served any of it, and a
+# fixture answering an invented route is exactly how the slice-13 demo break was
+# masked. The real learn wire is the bus command `wicked.interactive.theme.requested`
+# riding POST /api/events (materializeThemeRequested in wicked-interactive), whose
+# progress and refusals arrive ASYNC as the bridge's own status.posted frames. The
+# guard below emulates that: a private/link-local URL queues the bridge's error
+# line, a good source queues the working line + theme.learned — never an HTTP 4xx.
 
 PRIVATE_HOST = re.compile(
     r"^(localhost$|127\.|0\.0\.0\.0$|10\.|192\.168\."
@@ -767,41 +739,13 @@ class W2Handler(SimpleHTTPRequestHandler):
         if m:
             self._json(200, {"deps": []})
             return True
-        # /api/v1/projects/<pid>/interactive/api/themes — the library (§4.6):
-        # built-ins + everything learned; a queued learn rides WITHOUT
-        # `learned_at` until its delay elapses (vision slice 8, §4.3 step 4).
-        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/themes$", path)
+        # Issue #65: the invented slice-16 theme routes 404, unconditionally —
+        # the real bridge never served them, and this fixture answering them is
+        # exactly how the slice-13 demo break was masked. The contract check
+        # (interactive_wire_contract_test.py) pins the same 404 on the real bridge.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/theme(s(/.*)?|/learn)$", path)
         if m:
-            now = time.time()
-            with state_lock:
-                learned = [
-                    {"name": tid, "source": t["source"],
-                     **({"learned_at": iso(NOW0)} if now >= t["ready_at"] else {})}
-                    for tid, t in learned_themes.items()
-                ]
-            self._json(200, {"themes": THEMES + learned})
-            return True
-        # /api/v1/projects/<pid>/interactive/api/themes/<id> — the ThemeDetail
-        # the §4.5 mapper consumes (DES-VISION-001 §4.4). 404 until learned.
-        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/themes/([^/]+)$", path)
-        if m:
-            tid = urllib.parse.unquote(m.group(2))
-            now = time.time()
-            with state_lock:
-                ready = tid in learned_themes and now >= learned_themes[tid]["ready_at"]
-            if not ready:
-                self._json(404, {"error": f"no such theme {tid}"})
-                return True
-            self._json(200, brand_detail(tid))
-            return True
-        # The brand logo asset the learned theme names, bridge-relative (§4.5).
-        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/brand/logo\.svg$", path)
-        if m:
-            self.send_response(200)
-            self.send_header("Content-Type", "image/svg+xml")
-            self.send_header("Content-Length", str(len(BRAND_LOGO_SVG)))
-            self.end_headers()
-            self.wfile.write(BRAND_LOGO_SVG)
+            self._json(404, {"error": f"no such route on the bridge: {path}"})
             return True
         # /api/v1/projects/<pid>/interactive/d/<doc>/api/versions — the manifest.
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/versions$", path)
@@ -900,38 +844,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                      "meta": {"sourceMessageId": body.get("source_message_id")}})
             self._json(200, {"version": v, "parent": frm})
             return True
-        # POST /api/v1/projects/<pid>/interactive/api/theme/learn — the §4.1 loop's
-        # entry (vision slice 8): SSRF-guard URLs server-side (a 400 with the
-        # refusal VERBATIM — the client shows it, never paraphrases), then queue.
+        # Issue #65: the invented POST /api/theme/learn 404s, exactly as the real
+        # bridge answers it (see the GET half for the matching absent routes).
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/theme/learn$", path)
         if m:
-            kind = body.get("kind")
-            if kind == "url":
-                url = str(body.get("url") or "")
-                reason = ssrf_reject_reason(url)
-                if reason is not None:
-                    self._json(400, {"error": reason})
-                    return True
-                parts = urllib.parse.urlsplit(url)
-                theme_id = slug(f"{parts.hostname or 'brand'} {parts.path}")
-                source_label = url
-            elif kind in ("pdf", "image"):
-                p = str(body.get("path") or "")
-                if not (p.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", p)):
-                    self._json(400, {"error": f"the source path must be absolute: {p or '(empty)'}"})
-                    return True
-                theme_id = slug(Path(p).stem)
-                source_label = p
-            else:
-                self._json(400, {"error": f"unknown learn kind: {kind}"})
-                return True
-            with state_lock:
-                learned_themes[theme_id] = {
-                    "ready_at": time.time() + float(state["learn_delay_s"]),
-                    "source": kind,
-                }
-            self._json(202, {"theme_id": theme_id, "status": "queued",
-                             "message": f"Queued — reading the brand at {source_label} (theme-learn agent)"})
+            self._json(404, {"error": f"no such route on the bridge: {path}"})
             return True
         # POST /api/v1/projects/<pid>/interactive/api/events — the inject wire (§5.4).
         # A chat.posted steer regenerates the doc's head version: narrate, then land it.
@@ -940,6 +857,29 @@ class W2Handler(SimpleHTTPRequestHandler):
             pid = urllib.parse.unquote(m.group(1))
             payload = body.get("payload") or {}
             doc = payload.get("document_id")
+            # The REAL theme-learn wire (issue #65): theme.requested is a doc-scoped
+            # command. The ack is an EventAck; progress and the SSRF guard's refusal
+            # arrive as the bridge's own status.posted frames (materializeThemeRequested
+            # emits exactly these lines), then theme.learned announces the grabbed render.
+            if body.get("event_type") == "wicked.interactive.theme.requested" and doc:
+                url = str(payload.get("url") or "").strip()
+                file_path = str(payload.get("path") or "").strip()
+                reason = ssrf_reject_reason(url) if url and not file_path else None
+                if reason is not None:
+                    queue_interactive("wicked.interactive.status.posted", {
+                        "project_id": pid, "document_id": doc, "state": "error",
+                        "message": f"Couldn't grab that URL: {reason}"})
+                else:
+                    queue_interactive("wicked.interactive.status.posted", {
+                        "project_id": pid, "document_id": doc, "state": "working",
+                        "message": "Grabbing the page to read its design…"})
+                    queue_interactive("wicked.interactive.theme.learned", {
+                        "project_id": pid, "document_id": doc,
+                        **({"url": url} if url else {"path": file_path}),
+                        "render_path": file_path or f"/docs/{doc}/theme/learned_1.pdf",
+                        "format": "pdf"})
+                self._json(200, {"ok": True, "event_id": "evt-fixture", "correlation_id": "c-fixture"})
+                return True
             if body.get("event_type") == "wicked.interactive.chat.posted" and doc:
                 versions = doc_versions(pid, doc)
                 head = max((e["version"] for e in versions), default=1)
@@ -976,9 +916,6 @@ class W2Handler(SimpleHTTPRequestHandler):
                     settings_store["studio.appearance"] = (
                         dict(DEFAULT_APPEARANCE) if body["appearance"] is None
                         else body["appearance"])
-                # `reset_learn` clears the learned-theme registry (vision slice 8).
-                if body.get("reset_learn"):
-                    learned_themes.clear()
                 state.update({k: v for k, v in body.items() if k in state})
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})

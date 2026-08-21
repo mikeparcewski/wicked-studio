@@ -364,8 +364,8 @@ export function AppearanceSettings(): React.ReactElement {
       </div>
 
       {/* NOTE (issue #65): the "Learn from brand source" leg (BrandLearn, vision
-          slice 8) is GONE. Its whole loop — POST /api/theme/learn, a polled
-          GET /api/themes, GET /api/themes/:id — was an invented wire: the real
+          slice 8) is GONE. Its whole loop — a learn POST, a polled theme list,
+          a theme-detail read — was an invented wire: the real
           wicked-interactive bridge has never served a theme route (verified
           against src/service/server.js and its history). Theme learning on the
           real bridge is DOC-scoped (wicked.interactive.theme.requested) and its
