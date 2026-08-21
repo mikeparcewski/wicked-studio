@@ -37,6 +37,7 @@ function card(id: string, statuses: SessionStatus[], attention: BoardProject['at
       makeView({ id: `${id}-run-${i}`, status }, [makeUnit({ id: `${id}-u${i}`, stage: 'build' })]),
     ),
     docs: [],
+    attachedAt: {},
     attention,
     score: attention === 'quiet' ? 0 : 100,
     band: attention === 'quiet' ? 'quiet' : 'needs-you',

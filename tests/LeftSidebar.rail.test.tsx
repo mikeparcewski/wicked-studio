@@ -37,7 +37,7 @@ function bp(id: string, attention: BoardProject['attention'], score: number): Bo
       id, name: id, description: null, status: 'active',
       scope: `project:${id}`, created_at: 1, updated_at: 1,
     },
-    repo: null, runs: [], docs: [], attention, score,
+    repo: null, runs: [], docs: [], attachedAt: {}, attention, score,
     band: score >= 20 ? 'needs-you' : 'quiet', signal: null,
   };
 }

@@ -30,6 +30,7 @@ function item(status: SessionStatus = 'awaiting_human'): BoardProject {
     repo: null,
     runs: [makeView({ id: RUN, status, unit_ix: 0 }, [makeUnit({ id: `${RUN}:u0`, session_id: RUN, ord: 0, stage: 'build' })])],
     docs: [],
+    attachedAt: {},
     attention: status === 'awaiting_human' ? 'gate' : 'running',
     // Slice-1 score fields: the chip is driven by run status + the gate store,
     // so a nominal score/band is enough to typecheck.
