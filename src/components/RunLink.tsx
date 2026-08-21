@@ -1,4 +1,5 @@
 import type { SessionStatus, SessionView } from '../api/types.js';
+import { MODE_SPECS } from './ModeSwitcher.js';
 
 interface Props {
   view: SessionView;
@@ -27,6 +28,11 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
   const unitCount = units.length;
   const pulse = session.status === 'awaiting_human' || session.status === 'executing'
     || session.status === 'distributing' || session.status === 'planning';
+  // A run item names its MODE (DES-UXFIX-001 §1 spine, slice 3 — the F4 fix for
+  // "visually identical truncated work items"): `workflow_id` stays internal
+  // (V5) — what the user reads is the spine word + glyph, Chat or Build.
+  const kind = !session.workflow_id || session.workflow_id === 'chat' ? 'chat' : 'build';
+  const spec = MODE_SPECS[kind];
 
   return (
     <button
@@ -34,12 +40,16 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
       data-testid="run-link"
       data-run-id={session.id}
       data-status={session.status}
+      data-kind={kind}
       onClick={() => onSelect(session.id)}
       className={`w-full text-left px-3 py-2 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20 ${
         isActive ? 'bg-black/35' : 'bg-transparent hover:bg-black/20 focus-visible:bg-black/20'
       }`}
     >
       <div className="flex items-center gap-2">
+        <span aria-hidden className="shrink-0 text-[11px]" title={spec.label}>
+          {spec.glyph}
+        </span>
         <span
           className="flex-1 truncate text-xs leading-tight font-mono"
           style={{ color: isActive ? '#e6edf3' : 'rgba(230,237,243,0.7)' }}
@@ -53,7 +63,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
         />
       </div>
       <p className="text-[10px] mt-0.5 font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
-        {unitCount} task{unitCount === 1 ? '' : 's'} · {session.id.slice(0, 8)}
+        {spec.label} · {unitCount} task{unitCount === 1 ? '' : 's'} · {session.id.slice(0, 8)}
       </p>
     </button>
   );

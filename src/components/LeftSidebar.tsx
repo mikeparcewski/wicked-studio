@@ -1,16 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
+import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
+import { lastMode, modePath } from '../hooks/useRoute.js';
 import { useConnectionStore } from '../store/connection.js';
+import { MODE_SPECS } from './ModeSwitcher.js';
 import { NotificationBell } from './NotificationBell.js';
-import { RunLink } from './RunLink.js';
+import { ATTENTION_DOT } from './ProjectCard.js';
 import { SettingsMenu } from './SettingsMenu.js';
 import { WickedLogo } from './WickedLogo.js';
 
+/**
+ * The rail, consolidated to TWO taxonomies (DES-UXFIX-001 §2.3, slice 3 — F4):
+ *
+ *   1. PROJECTS — the same axis as the board, attention-ordered (§2.1.3) off the
+ *      SAME model the board reads (`useBoardModel`), so the rail and the board
+ *      agree on which project needs you first. Clicking one enters its shell
+ *      (last-used mode, Chat default — §1.5).
+ *   2. REPOSITORIES — the one cross-project axis a coder genuinely browses by.
+ *      Unchanged in behaviour; keeps its search.
+ *
+ * Chats and Work are GONE as rail sections: they were one object (a run) sliced
+ * by an internal field (`workflow_id`, V5) into two visually identical truncated
+ * lists. A run lives under its project now; the flat cross-project lists survive
+ * only behind the single "All runs ›" escape hatch (§1.5).
+ *
+ * The creation verbs compress to one compact row in the mode spine's own words
+ * (V9/V10: Build / Chat — the switcher's glyphs, not "Do Work" vs "New Chat")
+ * plus Repository.
+ */
+
 interface Props {
   runs: SessionView[];
-  selectedRunId: string | null;
-  onSelectRun: (id: string) => void;
   navigate: (path: string) => void;
 }
 
@@ -28,24 +49,10 @@ const S = {
 };
 
 const SECTION_MAX = 4;
+/** Collapsed rail: at most this many project dots — a glance strip, not a list. */
+const COLLAPSED_MAX = 12;
 
 // ── Inline SVG icons ──────────────────────────────────────────────────────────
-
-function IconDoWork(): React.ReactElement {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
-    </svg>
-  );
-}
-
-function IconChat(): React.ReactElement {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M20 2H4C2.9 2 2 2.9 2 4v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
-    </svg>
-  );
-}
 
 function IconPlus(): React.ReactElement {
   return (
@@ -66,15 +73,22 @@ function IconSearch(): React.ReactElement {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+/** One creation verb: a faint "+" (create, unless the glyph already is one),
+ *  the spine glyph, the mode's own word. `hint` (the MODE_SPECS sublabel)
+ *  teaches what the verb produces, on hover. */
 function ActionLink({
-  icon,
+  glyph,
   label,
+  hint,
+  plus,
   testId,
   onClick,
   collapsed,
 }: {
-  icon: React.ReactElement;
+  glyph: React.ReactNode;
   label: string;
+  hint?: string;
+  plus?: boolean;
   testId?: string;
   onClick: () => void;
   collapsed: boolean;
@@ -85,13 +99,14 @@ function ActionLink({
       data-testid={testId}
       onClick={onClick}
       aria-label={label}
-      title={label}
-      className={`flex items-center gap-2 rounded text-sm font-semibold transition-opacity hover:opacity-70 ${
-        collapsed ? 'w-9 h-9 justify-center mx-auto' : 'w-full px-2 py-1.5'
+      title={hint !== undefined ? `${label} — ${hint}` : label}
+      className={`flex items-center gap-1.5 rounded text-sm font-semibold transition-opacity hover:opacity-70 ${
+        collapsed ? 'w-9 h-9 justify-center mx-auto' : 'px-1 py-1'
       }`}
       style={{ color: S.accent, background: 'transparent' }}
     >
-      {icon}
+      {plus === true && !collapsed && <span aria-hidden style={{ color: S.faint, fontWeight: 400 }}>+</span>}
+      <span aria-hidden>{glyph}</span>
       {!collapsed && <span>{label}</span>}
     </button>
   );
@@ -254,15 +269,50 @@ function CheckRow({ label, ok, detail }: { label: string; ok: boolean | null; de
   );
 }
 
+/** One rail project row: the board's attention dot + the name. The row is the
+ *  board card's one-glance summary, never a second place that explains it. */
+function ProjectRow({ item, onOpen }: { item: BoardProject; onOpen: () => void }): React.ReactElement {
+  const { project, attention, score, band } = item;
+  return (
+    <button
+      type="button"
+      data-testid="rail-project"
+      data-project-id={project.id}
+      data-band={band}
+      data-score={score.toFixed(2)}
+      onClick={onOpen}
+      title={project.name}
+      className="w-full text-left px-3 py-1.5 rounded-md transition-colors"
+      style={{ background: 'transparent' }}
+      onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: ATTENTION_DOT[attention] }}
+        />
+        <span className="flex-1 truncate text-xs leading-tight font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>
+          {project.name}
+        </span>
+      </div>
+    </button>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Props): React.ReactElement {
+export function LeftSidebar({ runs, navigate }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
+  // The board's own model, attention-ordered (§2.1.3) — the rail's Projects list
+  // is the board's first column, not a fourth taxonomy of its own.
+  const { items, loading, error } = useBoardModel(runs);
 
   const isExpanded = !collapsed || hovered;
 
@@ -283,23 +333,17 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
     return () => { disposed = true; clearInterval(id); };
   }, []);
 
-  const chats: SessionView[] = [];
-  const work: SessionView[] = [];
-  for (const v of runs) {
-    if (!v.session.workflow_id || v.session.workflow_id === 'chat') {
-      chats.push(v);
-    } else {
-      work.push(v);
-    }
-  }
-
   const q = searchQuery.trim().toLowerCase();
-  const filteredRepos  = q ? repos.filter(r => r.name.toLowerCase().includes(q)) : repos;
-  const filteredChats  = q ? chats.filter(v => v.session.problem.toLowerCase().includes(q)) : chats;
-  const filteredWork   = q ? work.filter(v  => v.session.problem.toLowerCase().includes(q)) : work;
+  const filteredRepos = q ? repos.filter(r => r.name.toLowerCase().includes(q)) : repos;
+
+  /** Enter a project's shell: last-used mode, Chat default (§1.5, §2.3). */
+  const openProject = (projectId: string): void => {
+    navigate(modePath(projectId, lastMode(projectId)));
+  };
 
   return (
     <div
+      data-testid="left-rail"
       className={`flex flex-col shrink-0 transition-all duration-200 ${isExpanded ? 'w-[280px]' : 'w-14'}`}
       style={{ background: S.bg, borderRight: `1px solid ${S.border}` }}
       onMouseEnter={() => { if (collapsed) setHovered(true); }}
@@ -343,25 +387,30 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
         <NotificationBell navigate={navigate} collapsed={!isExpanded} />
       </div>
 
-      {/* Action links */}
-      <div className={`flex flex-col ${!isExpanded ? 'px-2 items-center gap-2 mt-1' : 'px-5 pt-1 pb-1 gap-1'}`}>
-        <ActionLink icon={<IconDoWork />} label="Do Work"        testId="new-run" onClick={() => navigate('/runs/new')}  collapsed={!isExpanded} />
-        <ActionLink icon={<IconChat />}   label="New Chat"                         onClick={() => navigate('/chat/new')} collapsed={!isExpanded} />
-        <ActionLink icon={<IconPlus />}   label="New Repository"                   onClick={() => navigate('/repos/new')} collapsed={!isExpanded} />
+      {/* Creation verbs — ONE compact row in the mode spine's words (§2.3, V9/V10):
+          Build and Chat are the switcher's verbs with the switcher's glyphs, so
+          they are differentiable (F2); Repository keeps its plus. */}
+      <div
+        data-testid="rail-actions"
+        className={`flex ${!isExpanded ? 'flex-col px-2 items-center gap-2 mt-1' : 'flex-wrap items-center px-4 pt-1 pb-1 gap-x-3 gap-y-0.5'}`}
+      >
+        <ActionLink glyph={MODE_SPECS.build.glyph} label="Build" hint={MODE_SPECS.build.sublabel} plus testId="new-run" onClick={() => navigate('/runs/new')} collapsed={!isExpanded} />
+        <ActionLink glyph={MODE_SPECS.chat.glyph} label="Chat" hint={MODE_SPECS.chat.sublabel} plus onClick={() => navigate('/chat/new')} collapsed={!isExpanded} />
+        <ActionLink glyph={<IconPlus />} label="Repository" onClick={() => navigate('/repos/new')} collapsed={!isExpanded} />
       </div>
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto flex flex-col min-h-0 mt-2">
         {isExpanded ? (
           <>
-            {/* Search input (shared across all sections) */}
+            {/* Search input (repositories) */}
             {searchOpen && (
               <div className="px-4 pb-2">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search…"
+                  placeholder="Search repositories…"
                   autoFocus
                   className="w-full bg-transparent text-xs font-mono outline-none border-b"
                   style={{ color: S.ink, borderColor: S.faint, caretColor: S.accent }}
@@ -369,89 +418,102 @@ export function LeftSidebar({ runs, selectedRunId, onSelectRun, navigate }: Prop
               </div>
             )}
 
-            {/* ── Projects section ── */}
-            <SectionLabel
-              label="Projects"
-              asLink
-              onClick={() => navigate('/projects')}
-            />
+            {/* ── Taxonomy 1: Projects — the board's axis, attention-ordered ── */}
+            <div data-testid="rail-section-projects">
+              <SectionLabel
+                label="Projects"
+                asLink
+                onClick={() => navigate('/projects')}
+              />
+              {/* Loading/error render nothing here — the board owns those states
+                  (§3.1); the rail never narrates absence it cannot yet know. */}
+              {!loading && error === null && (
+                <SectionList empty="No projects yet" viewAllPath="/projects" navigate={navigate}>
+                  {items.slice(0, SECTION_MAX).map(item => (
+                    <ProjectRow key={item.project.id} item={item} onOpen={() => openProject(item.project.id)} />
+                  ))}
+                </SectionList>
+              )}
+              {items.length > SECTION_MAX && (
+                <ViewAll onClick={() => navigate('/projects')} />
+              )}
+            </div>
 
-            {/* ── Repositories section ── */}
-            <SectionLabel
-              label="Repositories"
-              withSearch
-              searchActive={searchOpen}
-              onToggleSearch={() => { setSearchOpen(v => !v); if (searchOpen) setSearchQuery(''); }}
-            />
-            <SectionList
-              empty="No repositories yet"
-              viewAllPath="/repos"
-              navigate={navigate}
-            >
-              {filteredRepos.slice(0, SECTION_MAX).map(repo => (
-                <button
-                  key={repo.id}
-                  type="button"
-                  onClick={() => navigate(`/repo-detail/${encodeURIComponent(repo.id)}`)}
-                  title={repo.root_path}
-                  className="w-full text-left px-3 py-2 rounded-md transition-colors"
-                  style={{ background: 'transparent' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex-1 truncate text-xs leading-tight font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>
-                      {repo.name}
-                    </span>
-                  </div>
-                  <p className="text-[10px] mt-0.5 font-mono truncate" style={{ color: 'rgba(230,237,243,0.3)' }}>
-                    {repo.root_path}
-                  </p>
-                </button>
-              ))}
-            </SectionList>
-            {filteredRepos.length > SECTION_MAX && (
-              <ViewAll onClick={() => navigate('/repos')} />
-            )}
+            {/* ── Taxonomy 2: Repositories — the cross-project axis, with search ── */}
+            <div data-testid="rail-section-repos">
+              <SectionLabel
+                label="Repositories"
+                withSearch
+                searchActive={searchOpen}
+                onToggleSearch={() => { setSearchOpen(v => !v); if (searchOpen) setSearchQuery(''); }}
+              />
+              <SectionList
+                empty="No repositories yet"
+                viewAllPath="/repos"
+                navigate={navigate}
+              >
+                {filteredRepos.slice(0, SECTION_MAX).map(repo => (
+                  <button
+                    key={repo.id}
+                    type="button"
+                    onClick={() => navigate(`/repo-detail/${encodeURIComponent(repo.id)}`)}
+                    title={repo.root_path}
+                    className="w-full text-left px-3 py-2 rounded-md transition-colors"
+                    style={{ background: 'transparent' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1 truncate text-xs leading-tight font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>
+                        {repo.name}
+                      </span>
+                    </div>
+                    <p className="text-[10px] mt-0.5 font-mono truncate" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                      {repo.root_path}
+                    </p>
+                  </button>
+                ))}
+              </SectionList>
+              {filteredRepos.length > SECTION_MAX && (
+                <ViewAll onClick={() => navigate('/repos')} />
+              )}
+            </div>
 
-            {/* ── Chats section ── */}
-            <SectionLabel label="Chats" />
-            <SectionList empty="No chats yet" viewAllPath="/chats" navigate={navigate}>
-              {filteredChats.slice(0, SECTION_MAX).map(v => (
-                <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelectRun} />
-              ))}
-            </SectionList>
-            {filteredChats.length > SECTION_MAX && (
-              <ViewAll onClick={() => navigate('/chats')} />
-            )}
-
-            {/* ── Work section ── */}
-            <SectionLabel label="Work" />
-            <SectionList empty="No work yet" viewAllPath="/work" navigate={navigate}>
-              {filteredWork.slice(0, SECTION_MAX).map(v => (
-                <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelectRun} />
-              ))}
-            </SectionList>
-            {filteredWork.length > SECTION_MAX && (
-              <ViewAll onClick={() => navigate('/work')} />
-            )}
+            {/* ── The ONE escape hatch to the flat cross-project run lists (§2.3):
+                   Chats and Work are not rail taxonomies any more — a run lives
+                   under its project, and the power-user lists live behind this. ── */}
+            <div className="px-3 pt-3 pb-1">
+              <a
+                href="/runs"
+                data-testid="rail-all-runs"
+                onClick={(e) => { e.preventDefault(); navigate('/runs'); }}
+                className="text-[11px] font-mono transition-opacity hover:opacity-80"
+                style={{ color: S.link, textDecoration: 'none' }}
+              >
+                All runs ›
+              </a>
+            </div>
           </>
         ) : (
-          /* Not expanded: dots for all runs */
+          /* Not expanded: attention dots for the top projects — same axis, same
+             order, same colours as the expanded list and the board. */
           <div className="px-2 flex flex-col gap-0.5 mt-1">
-            {runs.map(v => (
+            {items.slice(0, COLLAPSED_MAX).map(item => (
               <button
-                key={v.session.id}
+                key={item.project.id}
                 type="button"
-                onClick={() => onSelectRun(v.session.id)}
-                aria-label={v.session.problem}
-                title={v.session.problem}
+                onClick={() => openProject(item.project.id)}
+                aria-label={item.project.name}
+                title={item.project.name}
                 className="w-9 h-9 mx-auto flex items-center justify-center rounded-md transition-colors"
-                style={{ background: selectedRunId === v.session.id ? S.active : 'transparent' }}
-                onMouseEnter={e => { if (selectedRunId !== v.session.id) e.currentTarget.style.background = S.hover; }}
-                onMouseLeave={e => { if (selectedRunId !== v.session.id) e.currentTarget.style.background = 'transparent'; }}
+                style={{ background: 'transparent' }}
+                onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
               >
-                <CollapsedDot status={v.session.status} />
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${item.attention === 'gate' || item.attention === 'running' ? 'animate-pulse' : ''}`}
+                  style={{ background: ATTENTION_DOT[item.attention] }}
+                />
               </button>
             ))}
           </div>
@@ -530,25 +592,5 @@ function ViewAll({ onClick }: { onClick: () => void }): React.ReactElement {
     >
       view all
     </button>
-  );
-}
-
-function CollapsedDot({ status }: { status: string }): React.ReactElement {
-  const color =
-    status === 'completed'      ? '#3fb950' :
-    status === 'failed'         ? '#f85149' :
-    status === 'cancelled'      ? 'rgba(230,237,243,0.25)' :
-    status === 'awaiting_human' ? '#ffda19' :
-    '#79c0ff';
-  const pulse =
-    status === 'awaiting_human' ||
-    status === 'executing' ||
-    status === 'distributing' ||
-    status === 'planning';
-  return (
-    <span
-      className={`w-2.5 h-2.5 rounded-full ${pulse ? 'animate-pulse' : ''}`}
-      style={{ background: color }}
-    />
   );
 }
