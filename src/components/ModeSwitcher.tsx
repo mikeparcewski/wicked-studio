@@ -1,16 +1,19 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import { MODES, type Mode } from '../hooks/useRoute.js';
+import { prefersReducedMotion } from './LiveEdge.js';
 
+// DES-VISION-001 §5.2: the switcher's visual language is the token contract's
+// (§2.11 — no raw colors). Active segment: accent fill + accent-fg ink; inactive:
+// transparent + ink-muted; hover: surface-raised + ink-body.
 const S = {
-  bar:      '#161c26',
-  border:   'rgba(230,237,243,0.1)',
-  ink:      '#e6edf3',
-  muted:    'rgba(230,237,243,0.55)',
-  faint:    'rgba(230,237,243,0.3)',
-  accent:   '#ffda19',
-  /** Text on a filled accent segment — the house pairing for accent-filled controls. */
-  accentInk: '#0d1117',
-  /** An unfilled segment's resting surface — present enough to read as a control. */
-  segment:  'rgba(230,237,243,0.04)',
+  bar:    'var(--surface-rail)',
+  border: 'var(--surface-raised)',
+  muted:  'var(--ink-muted)',
+  dim:    'var(--ink-dim)',
+  hover:  'var(--surface-raised)',
+  hoverInk: 'var(--ink-body)',
+  accent: 'var(--accent)',
+  accentInk: 'var(--accent-fg)',
 };
 
 export interface ModeSpec {
@@ -97,16 +100,65 @@ interface Props {
  * title still names the one enabling action (§1.3 rule 3).
  */
 export function ModeSwitcher({ mode, onSelect, unavailable }: Props): React.ReactElement {
+  const listRef = useRef<HTMLDivElement>(null);
+  // The active fill's rect, measured off the active segment. Null until the
+  // first layout pass; the active button paints its own accent from frame one,
+  // so the control is never fill-less.
+  const [fill, setFill] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const reduced = prefersReducedMotion();
+
+  // §5.2: "the active fill slides between segments via a positioned <div> that
+  // transitions its left and width" — measured, not derived, so font loading
+  // and container resizes re-place it (the ResizeObserver below).
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const measure = (): void => {
+      const btn = list.querySelector<HTMLElement>(`[data-mode="${mode}"]`);
+      if (btn) {
+        setFill({ left: btn.offsetLeft, top: btn.offsetTop, width: btn.offsetWidth, height: btn.offsetHeight });
+      }
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [mode]);
+
   return (
     <div
       data-testid="mode-switcher"
       style={{ flexShrink: 0, background: S.bar, borderBottom: `1px solid ${S.border}` }}
     >
       <div
+        ref={listRef}
         role="tablist"
         aria-label="Project mode"
-        style={{ display: 'flex', gap: '6px', padding: '10px 12px 0' }}
+        style={{ position: 'relative', display: 'flex', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3) 0' }}
       >
+        {/* The active fill underlayer (§1.6: mode segment click → the fill slides,
+            220ms, --ease-in-out; the labels do not move). One div, transitioned on
+            left/width; prefers-reduced-motion snaps it. */}
+        {fill !== null && (
+          <div
+            aria-hidden
+            data-testid="mode-fill"
+            style={{
+              position: 'absolute',
+              left: `${fill.left}px`,
+              top: `${fill.top}px`,
+              width: `${fill.width}px`,
+              height: `${fill.height}px`,
+              background: S.accent,
+              borderRadius: 'var(--radius-md)',
+              transition: reduced
+                ? 'none'
+                : 'left var(--dur-base) var(--ease-in-out), width var(--dur-base) var(--ease-in-out)',
+              pointerEvents: 'none',
+            }}
+          />
+        )}
         {MODES.map((m) => {
           const spec = MODE_SPECS[m];
           const active = m === mode;
@@ -125,20 +177,34 @@ export function ModeSwitcher({ mode, onSelect, unavailable }: Props): React.Reac
               // "how do I turn this on" to a user who is still asking "what is this".
               title={action !== null ? `${spec.summary}\n${spec.label} ${action}` : spec.summary}
               onClick={() => onSelect(m)}
+              onMouseEnter={(e) => {
+                if (!active) { e.currentTarget.style.background = S.hover; e.currentTarget.style.color = S.hoverInk; }
+              }}
+              onMouseLeave={(e) => {
+                if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = S.muted; }
+              }}
               style={{
+                position: 'relative',
+                zIndex: 1,
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '7px',
-                // The F8 fix in one property: the active segment is FILLED, not underlined.
-                background: active ? S.accent : S.segment,
-                border: `1px solid ${active ? S.accent : S.border}`,
-                borderRadius: '8px',
+                // The segment itself resolves the accent (EC15's computed-style AC);
+                // its paint is DELAYED one slide so the traveling fill, not the
+                // endpoint, carries the motion — accent lands on accent, seamlessly.
+                background: active ? S.accent : 'transparent',
+                border: 'none',
+                borderRadius: 'var(--radius-md)',
                 color: active ? S.accentInk : S.muted,
                 cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: active ? 700 : 500,
+                fontFamily: 'var(--font-sans)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 'var(--weight-medium)',
                 opacity: action !== null && !active ? 0.45 : 1,
                 padding: '7px 14px',
+                transition: active && !reduced
+                  ? 'background-color var(--dur-fast) var(--ease-in-out) var(--dur-base), color var(--dur-fast) var(--ease-in-out)'
+                  : 'none',
               }}
             >
               {/* The SAME four glyphs as the board quick actions and doc tiles (§2.5 rule 4). */}
@@ -148,10 +214,14 @@ export function ModeSwitcher({ mode, onSelect, unavailable }: Props): React.Reac
           );
         })}
       </div>
-      {/* §2.5 rule 2: the active mode's summary is ON SCREEN, not tooltip-only. */}
+      {/* §2.5 rule 2: the active mode's summary is ON SCREEN, not tooltip-only.
+          §5.2: normal weight, --text-xs, sans, --ink-dim. */}
       <p
         data-testid="mode-summary"
-        style={{ color: S.muted, fontSize: '11px', margin: 0, padding: '7px 14px 9px' }}
+        style={{
+          color: S.dim, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)',
+          fontWeight: 'var(--weight-normal)', margin: 0, padding: '7px 14px 9px',
+        }}
       >
         {MODE_SPECS[mode].summary}
       </p>

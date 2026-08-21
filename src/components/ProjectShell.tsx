@@ -9,11 +9,13 @@ import {
 import { InstallGate } from './InstallGate.js';
 import { ModeSwitcher } from './ModeSwitcher.js';
 
+// The shell's breadcrumb bar is chrome (DES-VISION-001 §5.2: breadcrumb, mode
+// switcher, mode surface, connection status) — token-resolved per §2.11.
 const S = {
-  bar:    '#161c26',
-  border: 'rgba(230,237,243,0.1)',
-  ink:    '#e6edf3',
-  muted:  'rgba(230,237,243,0.55)',
+  bar:    'var(--surface-rail)',
+  border: 'var(--surface-raised)',
+  ink:    'var(--ink-high)',
+  muted:  'var(--ink-muted)',
 };
 
 interface Props {
@@ -87,11 +89,20 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
           type="button"
           onClick={() => navigate('/')}
           title="All projects"
-          style={{ background: 'transparent', border: 'none', color: S.muted, cursor: 'pointer', fontSize: '12px', padding: 0 }}
+          style={{
+            background: 'transparent', border: 'none', color: S.muted, cursor: 'pointer',
+            fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)', padding: 0,
+          }}
         >
           ‹ Projects
         </button>
-        <h1 data-testid="project-name" style={{ fontSize: '13px', fontWeight: 700, color: S.ink, margin: 0 }}>
+        <h1
+          data-testid="project-name"
+          style={{
+            fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semi)',
+            fontFamily: 'var(--font-sans)', color: S.ink, margin: 0,
+          }}
+        >
           {name}
         </h1>
       </header>

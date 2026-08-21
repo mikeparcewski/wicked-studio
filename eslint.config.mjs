@@ -53,6 +53,13 @@ const TOKEN_CLEAN = [
   'src/components/ProjectCard.tsx',
   'src/components/GateChip.tsx',
   'src/hooks/useBoardHeadline.ts',
+  // Vision slice 3 — the chrome + mode switcher (§3.1, §5.2).
+  'src/components/AppChrome.tsx',
+  'src/components/WickedLogo.tsx',
+  'src/components/LeftSidebar.tsx',
+  'src/components/SettingsMenu.tsx',
+  'src/components/ModeSwitcher.tsx',
+  'src/components/ProjectShell.tsx',
 ];
 
 export default tseslint.config(
