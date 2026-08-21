@@ -65,9 +65,11 @@ BASELINE_MODE = os.environ.get("VISION_BASELINE") == "1"
 BASELINE_SHOT = SHOTS / "vision-1-baseline.png"
 CHECK_SHOT = SHOTS / "vision-1-token-check.png"
 
-# The pre-token card background (ProjectCard.tsx's hardcoded #161b22) — the EC15
-# baseline this slice records and slice 2 moves.
-CARD_BG_RGB = "rgb(22, 27, 34)"
+# The card background AFTER slice 2 moved it onto the token system: --surface-card
+# (#1a1a26). Slice 1 recorded the pre-token rgb(22,27,34) baseline; slice 2 superseded
+# it exactly as this rig's docstring declared it would, so the assertion now pins the
+# token-resolved value — the rig set stays all-green at every landed slice.
+CARD_BG_RGB = "rgb(26, 26, 38)"
 
 # One name per §2 table, so a hole in any section is caught, not just §2.3.
 SAMPLED_TOKENS = [
