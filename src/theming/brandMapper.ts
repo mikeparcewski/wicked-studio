@@ -25,7 +25,11 @@ import type { ThemeDetail } from '../api/interactive.js';
  *   4. Perceptual distinctness — the full computed accent keeps a deltaE
  *      (CIE76 Lab distance — §4.5 sanctions a simplified approximation) of
  *      ≥25 from each full status color; a too-close accent has its lightness
- *      moved ±10 to push them apart, never below the contrast floor.
+ *      moved ±10 to push them apart, never below the contrast floor. Because
+ *      guarantee 3 outranks 4, a nudge that satisfies the floor WITHIN the
+ *      lightness clamp always beats one that leaves it; the up-nudge may
+ *      exceed the 78% ceiling (disclosed) only when no in-clamp move meets
+ *      the floor — the §4.5 remedy is literally ±10, clamp or no clamp.
  *
  * Every move is logged as a `MapperAdjustment` (§4.5: no silent truncation —
  * an unsatisfiable combination returns a `constraint: 'unsatisfiable'` entry
@@ -419,8 +423,13 @@ export function mapBrandTheme(theme: ThemeDetail): BrandTokenOverrides {
       Math.min(LIGHTNESS_CAP, l + PERCEPTUAL_NUDGE),
       Math.max(LGT_MIN, l - PERCEPTUAL_NUDGE),
     ].filter((c) => c !== l && meetsContrast(c)); // g1 outranks g4: never break the floor
-    if (candidates.length > 0) {
-      const best = candidates.reduce((a, b) => (minDeltaAt(a) >= minDeltaAt(b) ? a : b));
+    // g3 outranks g4: when a candidate satisfies the deltaE floor WITHOUT
+    // leaving the [42,78] clamp, it wins — the up-nudge may exceed the clamp
+    // (disclosed) only when no in-clamp candidate meets the floor.
+    const inClamp = candidates.filter((c) => c <= LGT_MAX && minDeltaAt(c) >= DELTA_E_FLOOR);
+    const pool = inClamp.length > 0 ? inClamp : candidates;
+    if (pool.length > 0) {
+      const best = pool.reduce((a, b) => (minDeltaAt(a) >= minDeltaAt(b) ? a : b));
       adjustments.push({
         constraint: 'perceptual-distance',
         original: `l=${l}%`,

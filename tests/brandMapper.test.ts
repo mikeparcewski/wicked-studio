@@ -190,6 +190,17 @@ describe('mapBrandTheme — guarantee 4: perceptual distinctness (§4.5)', () =>
       expect(contrastRatio(accentRgb(m), SURFACE_CARD_RGB)).toBeGreaterThanOrEqual(CONTRAST_FLOOR);
     }
   });
+
+  it('a nudge that can satisfy the floor IN-clamp never leaves it (priority 3 beats 4)', () => {
+    // hsl(96 60% 70%): both ±10 candidates clear 25 deltaE (up 80 ≈ 30.2,
+    // down 60 ≈ 29.6) — the in-clamp 60 must win over the marginally-farther
+    // out-of-clamp 80, because guarantee 3's l ≤ 78 outranks maximizing g4.
+    const m = mapBrandTheme({ name: 'in-clamp', primary: 'hsl(96, 60%, 70%)' });
+    expect(m.adjustments.some((a) => a.constraint === 'perceptual-distance')).toBe(true);
+    expect(m.accent_l).toBeLessThanOrEqual(78);
+    expect(minStatusDeltaE(m)).toBeGreaterThanOrEqual(DELTA_FLOOR);
+    expect(contrastRatio(accentRgb(m), SURFACE_CARD_RGB)).toBeGreaterThanOrEqual(CONTRAST_FLOOR);
+  });
 });
 
 describe('mapBrandTheme — the whole-gamut property (§4.5: all four at once)', () => {

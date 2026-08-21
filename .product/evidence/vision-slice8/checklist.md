@@ -68,12 +68,16 @@ verdicts.
   resource line excepted, filtered by exact shape).
 
 **The §4.5 mapper guarantees, unit-proven** (`tests/brandMapper.test.ts`,
-26 cases): contrast floor raised-and-capped (90%), the low-saturation rescue
+27 cases): contrast floor raised-and-capped (90%), the low-saturation rescue
 (s→40 minimum), hue search in ±5° steps with the nearest-side win pinned
 (`#22c55e` h142 → 117, down at 5 steps beats up at 8) and the dead-center
 tie-break to max total status distance (h148 → 178), all four clamps,
 CIE76-deltaE distinctness with the g1-beats-g4 ordering (a perceptual nudge
-never breaks the contrast floor), a **whole-gamut property sweep** (h×s×l
+never breaks the contrast floor) AND the g3-beats-g4 ordering (a nudge that
+can satisfy the deltaE floor inside the l≤78 clamp never leaves it — pinned
+on `hsl(96 60% 70%)`, where the in-clamp down-nudge beats a marginally-farther
+out-of-clamp up-nudge; the up-nudge may exceed the clamp, disclosed, only
+when no in-clamp ±10 move meets the floor), a **whole-gamut property sweep** (h×s×l
 grid: every input either satisfies all four guarantees or discloses
 `unsatisfiable`), degenerate palettes (`{}`, unparseable strings, grey, black,
 white, secondary-only — §4.4 tolerant reading, every fallback disclosed), logo
@@ -81,7 +85,7 @@ passthrough, and purity (frozen input, deep-equal reruns).
 
 **Repo gates:** `npm run lint` exit **0 — zero errors, zero warnings** (the
 §2.11 rule stays ERROR repo-wide over the new files). `npm run typecheck`
-exit 0. `npm test` **906/906** (95 files — +39 new: the mapper's 26, the
+exit 0. `npm test` **907/907** (95 files — +40 new: the mapper's 27, the
 BrandLearn flow's 10 incl. verbatim-error and poll-past-a-flake cases, and
 `getTheme` in the wrapper suite's resolver/happy-path tables).
 
