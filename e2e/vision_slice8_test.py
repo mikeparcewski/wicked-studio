@@ -1,36 +1,32 @@
 #!/usr/bin/env python3
 """
-vision_slice8_test.py — the /theme page, after the theme-wire correction
-(issue #65; formerly the DES-VISION-001 slice-8 brand-learn gate).
+vision_slice8_test.py — the /theme page honesty gate, re-scoped again.
 
-Slice 8's subject — the brand-learn extraction loop (learn a source, poll a
-theme list, read a palette back, map it onto the studio accent) — was built
-entirely on INVENTED wires: `POST /api/theme/learn`, a polled `GET /api/themes`
-and `GET /api/themes/:id` were never served by the real wicked-interactive
-bridge (verified in interactive_wire_contract_test.py, which now pins all
-three as must-stay-404). On the real bridge a theme is learned FOR ONE
-DOCUMENT via the `wicked.interactive.theme.requested` bus command, and its
-result is never readable back over HTTP — so a studio-accent extraction leg
-has no wire to ride, and the honest fix removed the affordance (BrandLearn)
-rather than keeping a dead one.
+The history this gate carries: slice 8 built the brand-learn extraction loop
+on INVENTED wires (POST /api/theme/learn, a polled GET /api/themes,
+GET /api/themes/:id — never served by the real bridge), so issue #65 removed
+the affordance and this gate pinned its ABSENCE. wicked-interactive#181 then
+gave the doc-scoped learn the readback it was missing
+(GET /d/:docId/api/theme/learned), and the affordance is BACK — on real wires
+this time (theme.requested over POST /api/events + the readback poll; see
+brand_learn_test.py for the full flow rig). So the honesty this gate now pins
+is three-sided:
 
-What this rig proves instead, in a real browser against the shared W2 fixture:
-
-  1. THE PAGE IS HONEST: /theme renders the appearance surface
-     (data-testid="appearance-settings" — accent wheel, logo, theme mode; all
-     real, crew-persisted wires) and NO brand-learn affordance survives — no
-     [data-testid="brand-learn"], no learn-submit, no "Learn from brand
-     source" copy.
-  2. NO INVENTED WIRE IS EVEN ATTEMPTED: across the whole visit not one
-     request path contains /api/themes or /api/theme/learn — the browser-side
-     twin of the contract check's grep AC.
-  3. THE REAL SURFACE STILL WORKS: the appearance settings PUT (the slice-7
-     machinery this page hosts) still answers, so removing the dead leg did
-     not take the live one with it.
+  1. THE PAGE IS WHOLE: /theme renders BOTH surfaces — the manual appearance
+     section (accent wheel, logo, theme mode; untouched) AND the restored
+     "Learn from a brand" section (data-testid="brand-learn", its submit, its
+     logo-stays-manual copy).
+  2. THE DEAD WIRES STAY DEAD, AND THE LIVE ONE STAYS LAZY: across the whole
+     visit not one request path contains /api/themes (the registry that never
+     existed), and the REAL readback route (/api/theme/learned) is not touched
+     either — the section renders with zero learn-related requests until the
+     user acts. (The browser-side twin of the contract check's grep AC.)
+  3. THE MANUAL SURFACE STILL WORKS: the appearance settings PUT (the slice-7
+     machinery) still answers — restoring the learn leg did not disturb the
+     live one.
 
 Captures (§6.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/vision/:
-  theme-wire-fix-theme-page.png  the /theme page — appearance surface present,
-                                 brand-learn affordance honestly absent.
+  theme-page-restored-learn.png  the /theme page — both surfaces present.
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
 SKIP_STUDIO_BUILD=1. Env knobs: VISION_PORT (default 4348), SKIP_STUDIO_BUILD.
@@ -52,7 +48,7 @@ from uxfix_fixture import (
 VISION_PORT = int(os.environ.get("VISION_PORT", "4348"))
 ORIGIN = f"http://127.0.0.1:{VISION_PORT}"
 VSHOTS = REPO / "e2e" / "shots" / "vision"
-SHOT_PAGE = VSHOTS / "theme-wire-fix-theme-page.png"
+SHOT_PAGE = VSHOTS / "theme-page-restored-learn.png"
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -88,9 +84,11 @@ with sync_playwright() as p:
 
     page.goto(f"{ORIGIN}/theme", wait_until="domcontentloaded")
     page.locator('[data-testid="appearance-settings"]').wait_for(timeout=30000)
+    page.locator('[data-testid="brand-learn"]').wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
 
-    # AC 1 — the appearance surface is present; the brand-learn affordance is not.
+    # AC 1 — both surfaces present: the manual appearance section AND the
+    # restored brand-learn section (real wires — see brand_learn_test.py).
     surface = page.evaluate(
         """() => ({
              appearance: !!document.querySelector('[data-testid="appearance-settings"]'),
@@ -98,19 +96,19 @@ with sync_playwright() as p:
              preview: !!document.querySelector('[data-testid="appearance-preview"]'),
              brandLearn: !!document.querySelector('[data-testid="brand-learn"]'),
              learnSubmit: !!document.querySelector('[data-testid="learn-submit"]'),
-             learnCopy: (document.body.innerText || '').includes('Learn from brand source'),
+             learnCopy: (document.body.innerText || '').toLowerCase()
+               .includes('learn from a brand'),  // the heading is CSS-uppercased
+             logoHonesty: (document.body.innerText || '')
+               .includes('the logo stays your manual choice'),
            })"""
     )
-    report["steps"]["theme_page_honest"] = {
-        "ok": all([
-            surface["appearance"], surface["hueWheel"], surface["preview"],
-            not surface["brandLearn"], not surface["learnSubmit"], not surface["learnCopy"],
-        ]),
+    report["steps"]["theme_page_whole"] = {
+        "ok": all(surface.values()),
         **surface,
     }
 
-    # AC 3 — the REAL wire this page hosts still answers: move the accent lightness
-    # and wait for the debounced settings PUT to land (the slice-7 machinery).
+    # AC 3 — the REAL manual wire this page hosts still answers: move the accent
+    # lightness and wait for the debounced settings PUT to land (slice-7 machinery).
     page.locator('[data-testid="accent-lgt"]').wait_for(timeout=30000)
     put_before = sum(1 for q in request_paths if q == "/api/v1/settings")
     page.locator('[data-testid="accent-lgt"]').fill("55")
@@ -123,11 +121,15 @@ with sync_playwright() as p:
 
     page.screenshot(path=str(SHOT_PAGE))
 
-    # AC 2 — no invented theme wire was even attempted, page-wide.
-    invented = [q for q in request_paths if "/api/themes" in q or "/api/theme/learn" in q]
-    report["steps"]["no_invented_wire_attempted"] = {
-        "ok": invented == [],
+    # AC 2 — the invented wires stay dead, and the real readback stays LAZY:
+    # nothing touched /api/themes (the never-existed registry) or
+    # /api/theme/learn(ed) — the user never acted on the learn section.
+    invented = [q for q in request_paths if "/api/themes" in q]
+    learn_touched = [q for q in request_paths if "/api/theme/learn" in q]
+    report["steps"]["dead_wires_dead_live_wire_lazy"] = {
+        "ok": invented == [] and learn_touched == [],
         "invented_requests": invented,
+        "learn_requests_before_user_acts": learn_touched,
         "requests_seen": len(request_paths),
     }
 
