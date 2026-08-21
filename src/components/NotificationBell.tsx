@@ -11,15 +11,15 @@ interface Props {
 // ── Design tokens (matching LeftSidebar's `S` palette) ──────────────────────
 
 const S = {
-  bg:        '#1c4053',
-  ink:       '#e6edf3',
-  muted:     'rgba(230,237,243,0.55)',
-  faint:     'rgba(230,237,243,0.3)',
-  hover:     'rgba(0,0,0,0.2)',
-  accent:    '#ffda19',
-  accentInk: '#0d1117',
-  link:      '#79c0ff',
-  danger:    '#f85149',
+  bg:        'var(--surface-overlay)',
+  ink:       'var(--ink-high)',
+  muted:     'var(--ink-muted)',
+  faint:     'var(--ink-dim)',
+  hover:     'var(--surface-raised)',
+  accent:    'var(--status-gate)',
+  accentInk: 'var(--surface-base)',
+  link:      'var(--accent)',
+  danger:    'var(--status-fail)',
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -145,12 +145,12 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
             top: 'calc(100% + 6px)',
             left: 0,
             zIndex: 200,
-            background: '#1b222e',
-            border: '1px solid rgba(230,237,243,0.12)',
+            background: 'var(--surface-card)',
+            border: '1px solid var(--surface-raised)',
             borderRadius: '10px',
             minWidth: '280px',
             maxWidth: '320px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            boxShadow: 'var(--shadow-overlay)',
             overflow: 'hidden',
           }}
         >
@@ -161,7 +161,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '10px 14px 8px',
-              borderBottom: '1px solid rgba(230,237,243,0.08)',
+              borderBottom: '1px solid var(--surface-raised)',
             }}
           >
             <span
@@ -170,7 +170,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.1em',
-                color: 'rgba(230,237,243,0.4)',
+                color: 'var(--ink-dim)',
                 fontFamily: 'monospace',
               }}
             >
@@ -216,13 +216,13 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
                     type="button"
                     role="menuitem"
                     onClick={() => handleNotifClick(n.id, n.runId)}
-                    className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#79c0ff]"
+                    className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                     style={{
                       width: '100%',
                       textAlign: 'left',
-                      background: n.read ? 'transparent' : 'rgba(255,218,25,0.04)',
+                      background: n.read ? 'transparent' : 'var(--status-gate-dim)',
                       border: 'none',
-                      borderBottom: '1px solid rgba(230,237,243,0.06)',
+                      borderBottom: '1px solid var(--surface-raised)',
                       padding: '10px 14px',
                       cursor: 'pointer',
                       display: 'block',
@@ -233,7 +233,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
                     onMouseLeave={(e) => {
                       (e.currentTarget as HTMLButtonElement).style.background = n.read
                         ? 'transparent'
-                        : 'rgba(255,218,25,0.04)';
+                        : 'var(--status-gate-dim)';
                     }}
                   >
                     {/* Kind label + timestamp */}
@@ -274,7 +274,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
                         style={{
                           fontSize: '9px',
                           fontFamily: 'monospace',
-                          color: 'rgba(230,237,243,0.3)',
+                          color: 'var(--ink-dim)',
                           whiteSpace: 'nowrap',
                           marginLeft: '8px',
                         }}
@@ -286,7 +286,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
                     <p
                       style={{
                         fontSize: '11px',
-                        color: 'rgba(230,237,243,0.65)',
+                        color: 'var(--ink-muted)',
                         margin: '0 0 3px',
                         overflow: 'hidden',
                         display: '-webkit-box',

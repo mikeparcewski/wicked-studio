@@ -123,7 +123,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
     : failedGroup;
 
   return (
-    <div className="flex flex-col h-full" style={{ color: '#e6edf3' }}>
+    <div className="flex flex-col h-full" style={{ color: 'var(--ink-high)' }}>
       {/* Header */}
       <div className="px-8 pt-8 pb-4 flex items-center gap-4">
         <h1 className="text-xl font-semibold font-mono">Work</h1>
@@ -136,9 +136,9 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
           onChange={e => setQuery(e.target.value)}
           className="rounded-xl px-4 py-2 text-sm font-mono outline-none"
           style={{
-            background: '#1b222e',
-            border: '1px solid rgba(230,237,243,0.12)',
-            color: '#e6edf3',
+            background: 'var(--surface-card)',
+            border: '1px solid var(--surface-raised)',
+            color: 'var(--ink-high)',
             width: '240px',
           }}
         />
@@ -146,7 +146,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
           type="button"
           onClick={() => navigate('/runs/new')}
           className="rounded-lg px-4 py-2 text-sm font-semibold font-mono shrink-0"
-          style={{ background: '#ffda19', color: '#0d1117' }}
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
         >
           Do Work
         </button>
@@ -156,24 +156,24 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
       <div className="px-8 pb-4 grid gap-3" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         {([
           { label: 'Total Runs',    value: String(metrics.total),       accent: undefined },
-          { label: 'Active',        value: String(metrics.active),       accent: '#79c0ff' },
-          { label: 'Success Rate',  value: metrics.successRate,          accent: '#3fb950' },
+          { label: 'Active',        value: String(metrics.active),       accent: 'var(--status-run)' },
+          { label: 'Success Rate',  value: metrics.successRate,          accent: 'var(--status-run)' },
           { label: 'Top Workflow',  value: metrics.topWorkflow,          accent: undefined },
         ] as const).map(s => (
           <div
             key={s.label}
             className="rounded-xl px-4 py-3"
-            style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+            style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
           >
             <p
               className="text-[10px] font-mono uppercase tracking-widest"
-              style={{ color: 'rgba(230,237,243,0.4)', margin: 0 }}
+              style={{ color: 'var(--ink-dim)', margin: 0 }}
             >
               {s.label}
             </p>
             <p
               className="text-xl font-semibold font-mono mt-1 truncate"
-              style={{ color: s.accent ?? '#e6edf3', margin: '4px 0 0' }}
+              style={{ color: s.accent ?? 'var(--ink-high)', margin: '4px 0 0' }}
             >
               {s.value}
             </p>
@@ -217,8 +217,8 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
             className="rounded-full px-3 py-1 text-xs font-mono"
             style={
               tab === t.id
-                ? { background: 'rgba(230,237,243,0.1)', color: '#e6edf3' }
-                : { color: 'rgba(230,237,243,0.4)' }
+                ? { background: 'var(--surface-raised)', color: 'var(--ink-high)' }
+                : { color: 'var(--ink-dim)' }
             }
           >
             {t.label} {counts[t.id]}
@@ -233,8 +233,8 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
           className="rounded-full px-3 py-1 text-xs font-mono"
           style={
             showArchived
-              ? { background: 'rgba(230,237,243,0.1)', color: '#e6edf3', border: '1px dashed rgba(230,237,243,0.3)' }
-              : { color: 'rgba(230,237,243,0.4)', border: '1px dashed rgba(230,237,243,0.15)' }
+              ? { background: 'var(--surface-raised)', color: 'var(--ink-high)', border: '1px dashed var(--ink-dim)' }
+              : { color: 'var(--ink-dim)', border: '1px dashed var(--surface-raised)' }
           }
         >
           Archived{archivedRuns !== null ? ` ${archivedRuns.length}` : ''}
@@ -291,7 +291,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
           <>
             <GroupLabel>Archived</GroupLabel>
             {archivedRuns.length === 0 ? (
-              <p className="px-3 py-3 text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+              <p className="px-3 py-3 text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
                 Nothing archived.
               </p>
             ) : (
@@ -304,7 +304,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
                     type="button"
                     onClick={() => void unarchive(v.session.id)}
                     className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
-                    style={{ color: 'rgba(230,237,243,0.55)', border: '1px solid rgba(230,237,243,0.15)' }}
+                    style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
                   >
                     Unarchive
                   </button>
@@ -322,12 +322,12 @@ function GroupLabel({ children, pulse }: { children: React.ReactNode; pulse?: bo
   return (
     <div
       className="flex items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-widest font-semibold font-mono"
-      style={{ color: 'rgba(230,237,243,0.4)' }}
+      style={{ color: 'var(--ink-dim)' }}
     >
       {pulse && (
         <span
           className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
-          style={{ background: '#79c0ff' }}
+          style={{ background: 'var(--status-run)' }}
         />
       )}
       {children}
@@ -342,7 +342,7 @@ function EmptyState({ query, tab }: { query: string; tab?: StatusTab }): React.R
     ? `No ${tab} runs yet.`
     : 'No work sessions yet.';
   return (
-    <p className="px-3 py-6 text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+    <p className="px-3 py-6 text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
       {msg}
     </p>
   );

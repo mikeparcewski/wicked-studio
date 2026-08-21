@@ -12,10 +12,11 @@ import reactHooks from 'eslint-plugin-react-hooks';
 // DES-VISION-001 §2.11 — the no-raw-color contract's selectors. No file in
 // src/ ships a literal color: hex, or rgb()/hsl() with literal channel values.
 // Colors come from the semantic tokens in src/styles/tokens.css (a .css file —
-// outside ESLint's reach; its build-time twin, the PostCSS check, lands with
-// the global error-mode flip). One list, two postures below: WARN as the
-// migration baseline (§2.11 — the inherited hardcoded colors are converted
-// slice by slice), ERROR for every file a landed slice has converted.
+// outside ESLint's reach; its build-time twin, the PostCSS check in
+// postcss.config.js, covers the stylesheets). Slice 6 finished the migration:
+// the rule is ERROR for all of src/ — a raw color anywhere is a build failure,
+// not a review finding. The per-file TOKEN_CLEAN allowlist that staged the
+// slice-by-slice conversion is retired.
 const NO_RAW_COLOR = [
   {
     selector: 'Literal[value=/#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\\b/]',
@@ -43,39 +44,6 @@ const NO_RAW_COLOR = [
   },
 ];
 
-// Files a landed slice has fully converted — the rule is ERROR here, and a raw
-// color is a build failure, not a review finding (§6.0). Grows slice by slice
-// until slice 6 flips src/** wholesale and this list retires.
-const TOKEN_CLEAN = [
-  // Vision slice 2 — the orchestrator home (§5.1).
-  'src/components/HomeBoard.tsx',
-  'src/components/LiveFeed.tsx',
-  'src/components/ProjectCard.tsx',
-  'src/components/GateChip.tsx',
-  'src/hooks/useBoardHeadline.ts',
-  // Vision slice 3 — the chrome + mode switcher (§3.1, §5.2).
-  'src/components/AppChrome.tsx',
-  'src/components/WickedLogo.tsx',
-  'src/components/LeftSidebar.tsx',
-  'src/components/SettingsMenu.tsx',
-  'src/components/ModeSwitcher.tsx',
-  'src/components/ProjectShell.tsx',
-  // Vision slice 4 — the Chat + Build surfaces (§5.3, §5.4).
-  'src/components/GroupChat.tsx',
-  'src/components/ChatPanel.tsx',
-  'src/components/CenterDashboard.tsx',
-  // Vision slice 4 (cont.) — the Document + Video surfaces (§5.5, §5.6),
-  // including the strip toolbar and the shared surface-state constants.
-  'src/components/DocumentCanvas.tsx',
-  'src/components/DocumentThread.tsx',
-  'src/components/VersionStrip.tsx',
-  'src/components/ThemesMenu.tsx',
-  'src/components/ExportMenu.tsx',
-  'src/components/VideoStoryboard.tsx',
-  'src/components/SurfaceState.tsx',
-  'src/components/threadAnchor.ts',
-];
-
 export default tseslint.config(
   {
     ignores: [
@@ -97,12 +65,6 @@ export default tseslint.config(
   },
   {
     files: ['src/**/*.{ts,tsx}'],
-    rules: {
-      'no-restricted-syntax': ['warn', ...NO_RAW_COLOR],
-    },
-  },
-  {
-    files: TOKEN_CLEAN,
     rules: {
       'no-restricted-syntax': ['error', ...NO_RAW_COLOR],
     },

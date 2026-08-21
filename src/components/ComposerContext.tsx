@@ -27,17 +27,17 @@ import { contextKey, useDocContextStore } from '../store/docContext.js';
 // Record button does: they render as messages, and a message needs a thread to land in.
 
 const S = {
-  ink:    '#e6edf3',
-  faint:  'rgba(230,237,243,0.35)',
-  muted:  'rgba(230,237,243,0.55)',
-  accent: '#ffda19',
-  card:   '#1b222e',
-  border: 'rgba(230,237,243,0.1)',
-  danger: '#f85149',
+  ink:    'var(--ink-high)',
+  faint:  'var(--ink-dim)',
+  muted:  'var(--ink-muted)',
+  accent: 'var(--accent)',
+  card:   'var(--surface-card)',
+  border: 'var(--surface-raised)',
+  danger: 'var(--status-fail)',
 };
 
 const CHIP: React.CSSProperties = {
-  background: 'rgba(255,218,25,0.1)', color: S.accent, border: '1px solid rgba(255,218,25,0.25)',
+  background: 'var(--accent-subtle)', color: S.accent, border: '1px solid var(--accent-subtle)',
 };
 const ACTION: React.CSSProperties = {
   background: 'transparent', color: S.muted, border: `1px solid ${S.border}`, cursor: 'pointer',
@@ -47,7 +47,7 @@ const FIELD: React.CSSProperties = {
   borderRadius: '8px', outline: 'none',
 };
 const SUBMIT: React.CSSProperties = {
-  background: S.accent, color: '#0d1117', border: 'none', cursor: 'pointer',
+  background: S.accent, color: 'var(--accent-fg)', border: 'none', cursor: 'pointer',
 };
 const BOX: React.CSSProperties = { background: S.card, border: `1px solid ${S.border}` };
 const PANEL = 'flex flex-col gap-1.5 rounded-xl px-2.5 py-2';

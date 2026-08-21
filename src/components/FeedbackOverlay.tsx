@@ -23,13 +23,13 @@ import type { FeedbackItem } from '../store/docThread.js';
 //     because documents are interactive HTML and clicking them must click them.
 
 const S = {
-  card:   '#161b22',
-  border: 'rgba(230,237,243,0.1)',
-  ink:    '#e6edf3',
-  muted:  'rgba(230,237,243,0.55)',
-  accent: '#ffda19',
-  live:   '#79c0ff',
-  danger: '#f85149',
+  card:   'var(--surface-card)',
+  border: 'var(--surface-raised)',
+  ink:    'var(--ink-high)',
+  muted:  'var(--ink-muted)',
+  accent: 'var(--accent)',
+  live:   'var(--accent)',
+  danger: 'var(--status-fail)',
 };
 
 /** The bridge script runs on the frame's load; ask a few times before giving up. */
@@ -178,7 +178,7 @@ export function FeedbackOverlay({
           style={{
             ...px(hoverBox), position: 'absolute', pointerEvents: 'none',
             border: `2px solid ${S.accent}`, borderRadius: '3px',
-            background: 'rgba(255,218,25,0.08)',
+            background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
           }}
         />
       )}
@@ -195,7 +195,7 @@ export function FeedbackOverlay({
               // Just OUTSIDE the element's left edge where there is room, so the pin
               // marks the target without sitting on top of the text being commented on.
               position: 'absolute', left: `${Math.max(0, box.left - 18)}px`, top: `${box.top}px`,
-              background: S.accent, borderRadius: '9px', color: '#0d1117',
+              background: S.accent, borderRadius: '9px', color: 'var(--accent-fg)',
               fontSize: '10px', fontWeight: 700, padding: '1px 6px', pointerEvents: 'none',
             }}
           >
@@ -238,7 +238,7 @@ export function FeedbackOverlay({
             <button
               type="button" data-testid="feedback-comment-add" onClick={commit}
               disabled={draft.text.trim() === ''}
-              style={{ ...btn, background: S.accent, color: '#0d1117' }}
+              style={{ ...btn, background: S.accent, color: 'var(--accent-fg)' }}
             >
               Add to batch
             </button>
@@ -268,7 +268,7 @@ export function FeedbackOverlay({
           <button
             type="button" data-testid="feedback-submit" onClick={() => void submit()} disabled={busy}
             title={`Send all ${items.length} comments as one message`}
-            style={{ ...btn, background: S.accent, color: '#0d1117' }}
+            style={{ ...btn, background: S.accent, color: 'var(--accent-fg)' }}
           >
             {busy ? '…' : `Send ${items.length} comment${items.length === 1 ? '' : 's'}`}
           </button>
@@ -284,9 +284,9 @@ export function FeedbackOverlay({
           onClick={() => { setActive((a) => !a); setDraft(null); setHover(null); }}
           style={{
             ...btn,
-            background: active ? S.live : 'rgba(13,17,23,0.75)',
+            background: active ? S.live : 'var(--scrim)',
             border: `1px solid ${active ? S.live : S.border}`,
-            color: active ? '#0d1117' : ready ? S.ink : S.muted,
+            color: active ? 'var(--surface-base)' : ready ? S.ink : S.muted,
             cursor: ready ? 'pointer' : 'not-allowed',
             opacity: ready ? 1 : 0.5,
           }}

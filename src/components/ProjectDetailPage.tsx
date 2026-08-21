@@ -4,15 +4,15 @@ import type { ActivityEntry, ProjectDetail, ProjectMember } from '../api/types.j
 import { useProjectsStore } from '../store/projects.js';
 
 const S = {
-  card:   '#161b22',
-  border: 'rgba(230,237,243,0.1)',
-  ink:    '#e6edf3',
-  muted:  'rgba(230,237,243,0.55)',
-  faint:  'rgba(230,237,243,0.3)',
-  accent: '#ffda19',
-  green:  '#3fb950',
-  red:    '#f85149',
-  hover:  'rgba(230,237,243,0.04)',
+  card:   'var(--surface-card)',
+  border: 'var(--surface-raised)',
+  ink:    'var(--ink-high)',
+  muted:  'var(--ink-muted)',
+  faint:  'var(--ink-dim)',
+  accent: 'var(--accent)',
+  green:  'var(--status-run)',
+  red:    'var(--status-fail)',
+  hover:  'var(--surface-raised)',
 };
 
 function IconBack(): React.ReactElement {
@@ -36,11 +36,11 @@ function Pill({ label, color }: { label: string; color: string }): React.ReactEl
 
 function MemberKindLabel({ kind }: { kind: string }): React.ReactElement {
   const colors: Record<string, string> = {
-    'crew.run': '#79c0ff',
-    'crew.chat': '#a5d6ff',
-    'crew.repo': '#7ee787',
-    'crew.workflow': '#ffa657',
-    'interactive.doc': '#d2a8ff',
+    'crew.run': 'var(--accent)',
+    'crew.chat': 'var(--accent)',
+    'crew.repo': 'var(--accent)',
+    'crew.workflow': 'var(--accent)',
+    'interactive.doc': 'var(--accent-dim)',
   };
   const color = colors[kind] ?? S.faint;
   return <Pill label={kind} color={color} />;
@@ -66,7 +66,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }): React.ReactElement {
       </div>
       <span style={{
         fontSize: '10px', fontFamily: 'monospace', flexShrink: 0,
-        color: entry.source === 'crew' ? '#79c0ff' : '#d2a8ff',
+        color: entry.source === 'crew' ? 'var(--accent)' : 'var(--accent-dim)',
       }}>
         {entry.source}
       </span>
@@ -265,7 +265,7 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
             onChange={(e) => setEditName(e.target.value)}
             autoFocus
             style={{
-              width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${S.border}`,
+              width: '100%', background: 'var(--surface-raised)', border: `1px solid ${S.border}`,
               borderRadius: '6px', padding: '8px 10px', fontSize: '18px', fontWeight: 700,
               color: S.ink, outline: 'none', marginBottom: '8px', boxSizing: 'border-box',
             }}
@@ -276,7 +276,7 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
             rows={2}
             placeholder="Description (optional)"
             style={{
-              width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${S.border}`,
+              width: '100%', background: 'var(--surface-raised)', border: `1px solid ${S.border}`,
               borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: S.ink,
               outline: 'none', resize: 'vertical', marginBottom: '10px', boxSizing: 'border-box',
               fontFamily: 'inherit',
@@ -289,7 +289,7 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
               onClick={() => void saveEdit()}
               disabled={editBusy || !editName.trim()}
               style={{
-                background: S.accent, color: '#0d1117', border: 'none', borderRadius: '6px',
+                background: S.accent, color: 'var(--accent-fg)', border: 'none', borderRadius: '6px',
                 padding: '6px 14px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                 opacity: editBusy ? 0.5 : 1,
               }}

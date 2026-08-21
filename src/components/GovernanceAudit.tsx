@@ -9,9 +9,9 @@ interface Props {
 
 function DecisionBadge({ decision }: { decision: GovernanceClaim['decision'] }): React.ReactElement {
   const styles: Record<GovernanceClaim['decision'], { bg: string; color: string }> = {
-    allow:                { bg: 'rgba(63,185,80,0.12)',   color: '#3fb950' },
-    deny:                 { bg: 'rgba(248,81,73,0.12)',   color: '#f85149' },
-    allow_with_conditions:{ bg: 'rgba(255,218,25,0.12)',  color: '#ffda19' },
+    allow:                { bg: 'var(--status-run-dim)',   color: 'var(--status-run)' },
+    deny:                 { bg: 'var(--status-fail-dim)',   color: 'var(--status-fail)' },
+    allow_with_conditions:{ bg: 'var(--status-gate-dim)', color: 'var(--status-gate)' },
   };
   const labels: Record<GovernanceClaim['decision'], string> = {
     allow: 'ALLOW',
@@ -36,21 +36,21 @@ function ClaimRow({ claim }: { claim: GovernanceClaim }): React.ReactElement {
   return (
     <li
       className="rounded p-2 text-[11px]"
-      style={{ background: '#161c26', border: '1px solid rgba(230,237,243,0.07)' }}
+      style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <DecisionBadge decision={claim.decision} />
-          <span className="font-mono truncate" style={{ color: 'rgba(230,237,243,0.6)' }}>{claim.phase}</span>
+          <span className="font-mono truncate" style={{ color: 'var(--ink-muted)' }}>{claim.phase}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>{ts}</span>
+          <span className="font-mono" style={{ color: 'var(--ink-dim)' }}>{ts}</span>
           {(claim.criteria || claim.obligations.length > 0 || claim.policy_ids.length > 0) && (
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
               className="text-xs"
-              style={{ color: 'rgba(230,237,243,0.35)' }}
+              style={{ color: 'var(--ink-dim)' }}
               aria-label={open ? 'Collapse' : 'Expand'}
             >
               {open ? '▲' : '▼'}
@@ -60,17 +60,17 @@ function ClaimRow({ claim }: { claim: GovernanceClaim }): React.ReactElement {
       </div>
 
       {open && (
-        <div className="mt-2 flex flex-col gap-1.5 text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>
+        <div className="mt-2 flex flex-col gap-1.5 text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>
           {claim.criteria && (
             <p>
-              <span className="font-semibold" style={{ color: 'rgba(230,237,243,0.7)' }}>criteria: </span>
+              <span className="font-semibold" style={{ color: 'var(--ink-muted)' }}>criteria: </span>
               {claim.criteria}
             </p>
           )}
 
           {claim.policy_ids.length > 0 && (
             <div>
-              <p className="font-semibold" style={{ color: 'rgba(230,237,243,0.7)' }}>policies matched:</p>
+              <p className="font-semibold" style={{ color: 'var(--ink-muted)' }}>policies matched:</p>
               <ul className="list-inside list-disc pl-1">
                 {claim.policy_ids.map((pid) => <li key={pid}>{pid}</li>)}
               </ul>
@@ -79,7 +79,7 @@ function ClaimRow({ claim }: { claim: GovernanceClaim }): React.ReactElement {
 
           {claim.obligations.length > 0 && (
             <div>
-              <p className="font-semibold" style={{ color: 'rgba(230,237,243,0.7)' }}>obligations:</p>
+              <p className="font-semibold" style={{ color: 'var(--ink-muted)' }}>obligations:</p>
               <ul className="list-inside list-disc pl-1">
                 {claim.obligations.map((ob, i) => <li key={i}>{ob}</li>)}
               </ul>
@@ -121,19 +121,19 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
       type="button"
       onClick={() => void load()}
       className="self-start text-[10px] font-mono hover:underline"
-      style={{ color: 'rgba(230,237,243,0.4)' }}
+      style={{ color: 'var(--ink-dim)' }}
     >
       Refresh
     </button>
   );
 
-  if (loading) return <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>Loading governance claims…</p>;
+  if (loading) return <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>Loading governance claims…</p>;
   if (error) {
     return (
       <div className="flex flex-col gap-1">
         <p
           className="rounded px-2 py-1 text-xs font-mono"
-          style={{ background: 'rgba(248,81,73,0.1)', color: '#f85149', border: '1px solid rgba(248,81,73,0.2)' }}
+          style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
         >
           {error}
         </p>
@@ -145,10 +145,10 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
   if (claims.length === 0) {
     return (
       <div className="flex flex-col gap-1">
-        <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+        <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
           No governance claims recorded for this run.
         </p>
-        <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+        <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
           Claims appear when wicked-core runs governance decisions (core#24/#26).
         </p>
         {refreshBtn}
@@ -162,10 +162,10 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+        <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
           {claims.length} decision{claims.length !== 1 ? 's' : ''}
-          {denies > 0 && <span className="ml-1 font-semibold" style={{ color: '#f85149' }}>· {denies} denied</span>}
-          {conditioned > 0 && <span className="ml-1" style={{ color: '#ffda19' }}>· {conditioned} with obligations</span>}
+          {denies > 0 && <span className="ml-1 font-semibold" style={{ color: 'var(--status-fail)' }}>· {denies} denied</span>}
+          {conditioned > 0 && <span className="ml-1" style={{ color: 'var(--status-gate)' }}>· {conditioned} with obligations</span>}
         </p>
         {refreshBtn}
       </div>

@@ -29,9 +29,9 @@ export function TimeRangeSelector({ value, onChange }: Props): React.ReactElemen
             ...mono,
             cursor: 'pointer',
             border: '1px solid',
-            borderColor: value === r ? 'rgba(121,192,255,0.5)' : 'rgba(230,237,243,0.1)',
-            background: value === r ? 'rgba(121,192,255,0.12)' : 'transparent',
-            color: value === r ? '#79c0ff' : 'rgba(230,237,243,0.4)',
+            borderColor: value === r ? 'var(--accent)' : 'var(--surface-raised)',
+            background: value === r ? 'var(--accent-subtle)' : 'transparent',
+            color: value === r ? 'var(--accent)' : 'var(--ink-dim)',
             transition: 'all 0.15s',
           }}
         >

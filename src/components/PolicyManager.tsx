@@ -3,15 +3,15 @@ import { api } from '../api/client.js';
 import type { GovernancePolicy } from '../api/types.js';
 
 const EFFECT_COLOR: Record<string, string> = {
-  deny: '#f85149',
-  allow_with_conditions: '#ffda19',
-  allow: '#3fb950',
+  deny: 'var(--status-fail)',
+  allow_with_conditions: 'var(--status-gate)',
+  allow: 'var(--status-run)',
 };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  high: '#f85149',
-  medium: '#ffda19',
-  low: 'rgba(230,237,243,0.4)',
+  high: 'var(--status-fail)',
+  medium: 'var(--status-gate)',
+  low: 'var(--ink-dim)',
 };
 
 const POLICY_TEMPLATE: GovernancePolicy = {
@@ -46,41 +46,41 @@ function PolicyRow({
     <tr
       className="text-[11px]"
       style={{
-        borderBottom: '1px solid rgba(230,237,243,0.06)',
+        borderBottom: '1px solid var(--surface-raised)',
         opacity: retired ? 0.45 : 1,
       }}
     >
-      <td className="px-3 py-2 font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>
+      <td className="px-3 py-2 font-mono" style={{ color: 'var(--ink-muted)' }}>
         {policy.id}
         {retired && (
           <span
             className="ml-2 inline-flex rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
-            style={{ background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.45)' }}
+            style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}
           >
             retired
           </span>
         )}
       </td>
-      <td className="px-3 py-2" style={{ color: 'rgba(230,237,243,0.45)' }}>{policy.kind}</td>
+      <td className="px-3 py-2" style={{ color: 'var(--ink-muted)' }}>{policy.kind}</td>
       <td className="px-3 py-2">
         <span
           className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold font-mono"
-          style={{ background: 'rgba(230,237,243,0.06)', color: EFFECT_COLOR[policy.effect] ?? 'rgba(230,237,243,0.5)' }}
+          style={{ background: 'var(--surface-raised)', color: EFFECT_COLOR[policy.effect] ?? 'var(--ink-muted)' }}
         >
           {policy.effect}
         </span>
       </td>
-      <td className="px-3 py-2 text-[11px] font-semibold" style={{ color: SEVERITY_COLOR[policy.severity] ?? 'rgba(230,237,243,0.5)' }}>
+      <td className="px-3 py-2 text-[11px] font-semibold" style={{ color: SEVERITY_COLOR[policy.severity] ?? 'var(--ink-muted)' }}>
         {policy.severity}
       </td>
-      <td className="px-3 py-2 truncate max-w-xs" style={{ color: 'rgba(230,237,243,0.5)' }}>{policy.rule}</td>
+      <td className="px-3 py-2 truncate max-w-xs" style={{ color: 'var(--ink-muted)' }}>{policy.rule}</td>
       <td className="px-3 py-2">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => onEdit(policy)}
             className="text-[10px] hover:underline"
-            style={{ color: '#79c0ff' }}
+            style={{ color: 'var(--accent)' }}
           >
             Edit
           </button>
@@ -100,7 +100,7 @@ function PolicyRow({
                 });
               }}
               className="text-[10px] hover:underline disabled:opacity-50"
-              style={{ color: armed ? '#f85149' : 'rgba(230,237,243,0.4)' }}
+              style={{ color: armed ? 'var(--status-fail)' : 'var(--ink-dim)' }}
             >
               {busy ? 'Retiring…' : armed ? 'Confirm retire' : 'Retire'}
             </button>
@@ -187,12 +187,12 @@ export function PolicyManager(): React.ReactElement {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <h2 className="text-sm font-semibold" style={{ color: '#e6edf3' }}>Policies</h2>
+        <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Policies</h2>
         <button
           type="button"
           onClick={() => void load()}
           className="text-[10px] hover:underline"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
+          style={{ color: 'var(--ink-dim)' }}
         >
           Refresh
         </button>
@@ -200,7 +200,7 @@ export function PolicyManager(): React.ReactElement {
           type="button"
           onClick={() => openEditor()}
           className="ml-auto rounded px-2 py-1 text-[11px] font-semibold"
-          style={{ background: '#ffda19', color: '#0d1117' }}
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
         >
           + New policy
         </button>
@@ -209,21 +209,21 @@ export function PolicyManager(): React.ReactElement {
       {error && (
         <p
           className="rounded px-2 py-1 text-xs"
-          style={{ background: 'rgba(248,81,73,0.08)', color: '#f85149' }}
+          style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
         >
           {error}
         </p>
       )}
 
       {loading ? (
-        <p className="text-xs" style={{ color: 'rgba(230,237,243,0.4)' }}>Loading policies…</p>
+        <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading policies…</p>
       ) : (
-        <div className="overflow-x-auto rounded" style={{ border: '1px solid rgba(230,237,243,0.08)' }}>
+        <div className="overflow-x-auto rounded" style={{ border: '1px solid var(--surface-raised)' }}>
           <table className="w-full text-[11px]">
             <thead>
               <tr
                 className="text-[10px] uppercase tracking-wider"
-                style={{ borderBottom: '1px solid rgba(230,237,243,0.08)', background: '#0f1419', color: 'rgba(230,237,243,0.4)' }}
+                style={{ borderBottom: '1px solid var(--surface-raised)', background: 'var(--surface-rail)', color: 'var(--ink-dim)' }}
               >
                 <th className="px-3 py-2 text-left">ID</th>
                 <th className="px-3 py-2 text-left">Kind</th>
@@ -236,7 +236,7 @@ export function PolicyManager(): React.ReactElement {
             <tbody>
               {policies.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-center text-xs" style={{ color: 'rgba(230,237,243,0.35)' }}>
+                  <td colSpan={6} className="px-3 py-4 text-center text-xs" style={{ color: 'var(--ink-dim)' }}>
                     No policies registered.
                   </td>
                 </tr>
@@ -253,15 +253,15 @@ export function PolicyManager(): React.ReactElement {
       {editorJson !== '' && (
         <div
           className="flex flex-col gap-2 rounded p-3"
-          style={{ border: '1px solid rgba(255,218,25,0.25)', background: 'rgba(255,218,25,0.04)' }}
+          style={{ border: '1px solid var(--status-gate-dim)', background: 'var(--surface-rail)' }}
         >
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold" style={{ color: '#ffda19' }}>Policy JSON</span>
+            <span className="text-[11px] font-semibold" style={{ color: 'var(--status-gate)' }}>Policy JSON</span>
             <button
               type="button"
               onClick={() => { setEditorJson(''); setSaveStatus('idle'); }}
               className="ml-auto text-[10px] hover:underline"
-              style={{ color: 'rgba(230,237,243,0.4)' }}
+              style={{ color: 'var(--ink-dim)' }}
             >
               Cancel
             </button>
@@ -272,10 +272,10 @@ export function PolicyManager(): React.ReactElement {
             onChange={(e) => handleEditorChange(e.target.value)}
             spellCheck={false}
             className="rounded p-2 font-mono text-[10px] focus:outline-none min-h-[200px] resize-y"
-            style={{ background: '#0d1117', color: '#e6edf3', border: '1px solid rgba(230,237,243,0.1)' }}
+            style={{ background: 'var(--surface-base)', color: 'var(--ink-high)', border: '1px solid var(--surface-raised)' }}
           />
           {parseError && (
-            <p className="text-[10px]" style={{ color: '#f85149' }}>{parseError}</p>
+            <p className="text-[10px]" style={{ color: 'var(--status-fail)' }}>{parseError}</p>
           )}
           <div className="flex items-center gap-2">
             <button
@@ -283,13 +283,13 @@ export function PolicyManager(): React.ReactElement {
               onClick={() => void handleSave()}
               disabled={!!parseError || saveStatus === 'saving'}
               className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-50"
-              style={{ background: '#3fb950', color: '#0d1117' }}
+              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
             >
               {saveStatus === 'saving' ? 'Saving…' : 'Save policy'}
             </button>
-            {saveStatus === 'ok' && <span className="text-[10px]" style={{ color: '#3fb950' }}>Saved.</span>}
+            {saveStatus === 'ok' && <span className="text-[10px]" style={{ color: 'var(--status-run)' }}>Saved.</span>}
             {saveStatus === 'error' && (
-              <span className="text-[10px]" style={{ color: '#f85149' }}>{saveError}</span>
+              <span className="text-[10px]" style={{ color: 'var(--status-fail)' }}>{saveError}</span>
             )}
           </div>
         </div>

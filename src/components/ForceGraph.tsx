@@ -12,28 +12,28 @@ interface Props {
 }
 
 const KIND_COLORS: Record<string, string> = {
-  function:    '#10b981',
-  method:      '#10b981',
-  constructor: '#10b981',
-  class:       '#f97316',
-  struct:      '#f97316',
-  interface:   '#3b82f6',
-  type_alias:  '#3b82f6',
-  trait:       '#3b82f6',
-  enum:        '#8b5cf6',
-  macro:       '#a855f7',
+  function:    'var(--status-run)',
+  method:      'var(--status-run)',
+  constructor: 'var(--status-run)',
+  class:       'var(--status-gate)',
+  struct:      'var(--status-gate)',
+  interface:   'var(--accent)',
+  type_alias:  'var(--accent)',
+  trait:       'var(--accent)',
+  enum:        'var(--accent-dim)',
+  macro:       'var(--accent-dim)',
 };
 
 const LANG_COLORS: Record<string, string> = {
-  typescript: '#10b981',
-  javascript: '#10b981',
-  rust:       '#f97316',
-  python:     '#3b82f6',
-  go:         '#06b6d4',
+  typescript: 'var(--status-run)',
+  javascript: 'var(--status-run)',
+  rust:       'var(--status-gate)',
+  python:     'var(--accent)',
+  go:         'var(--accent-dim)',
 };
 
 function nodeColor(n: CodeGraphNode): string {
-  return KIND_COLORS[n.kind?.toLowerCase()] ?? LANG_COLORS[n.lang?.toLowerCase()] ?? '#9ca3af';
+  return KIND_COLORS[n.kind?.toLowerCase()] ?? LANG_COLORS[n.lang?.toLowerCase()] ?? 'var(--ink-muted)';
 }
 
 function nodeRadius(inDeg: number): number {
@@ -311,7 +311,7 @@ export function ForceGraph({
               y1={s.y}
               x2={t.x}
               y2={t.y}
-              stroke="#6b7280"
+              stroke="var(--ink-dim)"
               strokeOpacity={highlighted ? 0.8 : 0.3}
               strokeWidth={highlighted ? 1.5 : 1}
             />
@@ -366,14 +366,14 @@ export function ForceGraph({
                 width={labelW}
                 height={subLabel ? 30 : 18}
                 rx={3}
-                fill="#1f2937"
+                fill="var(--surface-raised)"
                 opacity={0.92}
               />
               <text x={hoverPos.x + rad + 11} y={hoverPos.y - 3} fontSize={11} fontWeight="600" fill="white">
                 {label}
               </text>
               {subLabel && (
-                <text x={hoverPos.x + rad + 11} y={hoverPos.y + 11} fontSize={9} fill="#9ca3af">
+                <text x={hoverPos.x + rad + 11} y={hoverPos.y + 11} fontSize={9} fill="var(--ink-muted)">
                   {subLabel}
                 </text>
               )}

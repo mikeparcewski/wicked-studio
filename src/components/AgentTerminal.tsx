@@ -3,6 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { terminalWsUrl } from '../api/client.js';
+import { resolveToken } from '../styles/resolveToken.js';
 
 interface Props {
   /** The terminalId from a workerSessionStarted event — connects to this existing PTY. */
@@ -40,7 +41,14 @@ export function AgentTerminal({ terminalId, cliKey, onClose }: Props): React.Rea
       disableStdin: true,
       fontSize: 12,
       fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-      theme: { background: '#0d1117', foreground: '#e6edf3', cursor: '#ffda19', cursorAccent: '#0d1117' },
+      // xterm parses concrete colors (no var() support) — resolve the tokens
+      // through the cascade at mount time (§2.11's escape hatch).
+      theme: {
+        background: resolveToken('--surface-base'),
+        foreground: resolveToken('--ink-body'),
+        cursor: resolveToken('--accent'),
+        cursorAccent: resolveToken('--surface-base'),
+      },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -91,21 +99,21 @@ export function AgentTerminal({ terminalId, cliKey, onClose }: Props): React.Rea
   return (
     <div
       className="flex flex-col rounded-xl overflow-hidden"
-      style={{ background: '#0d1117', border: '1px solid rgba(230,237,243,0.08)' }}
+      style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)' }}
     >
       <div
         className="flex items-center justify-between px-3 py-1.5 shrink-0"
-        style={{ background: '#161c26', borderBottom: '1px solid rgba(230,237,243,0.06)' }}
+        style={{ background: 'var(--surface-rail)', borderBottom: '1px solid var(--surface-raised)' }}
       >
-        <span className="text-[11px] font-mono font-semibold" style={{ color: 'rgba(230,237,243,0.5)' }}>
-          {cliKey} <span style={{ color: 'rgba(230,237,243,0.3)', fontWeight: 400 }}>· observer</span>
+        <span className="text-[11px] font-mono font-semibold" style={{ color: 'var(--ink-muted)' }}>
+          {cliKey} <span style={{ color: 'var(--ink-dim)', fontWeight: 400 }}>· observer</span>
         </span>
         <button
           type="button"
           onClick={onClose}
           aria-label={`Close ${cliKey} terminal`}
           className="text-[13px] leading-none opacity-50 hover:opacity-100 transition-opacity"
-          style={{ background: 'transparent', border: 'none', color: '#e6edf3', cursor: 'pointer' }}
+          style={{ background: 'transparent', border: 'none', color: 'var(--ink-high)', cursor: 'pointer' }}
         >
           ×
         </button>

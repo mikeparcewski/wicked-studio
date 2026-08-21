@@ -22,9 +22,9 @@ function relativeTime(tsSeconds: number): string {
 }
 
 const inputCss: React.CSSProperties = {
-  background: '#0f1419',
-  border: '1px solid rgba(230,237,243,0.14)',
-  color: '#e6edf3',
+  background: 'var(--surface-rail)',
+  border: '1px solid var(--surface-raised)',
+  color: 'var(--ink-high)',
   borderRadius: '6px',
   padding: '6px 10px',
   fontSize: '12px',
@@ -37,14 +37,14 @@ function StatCard({ label, value, hint }: { label: string; value: number; hint?:
   return (
     <div
       className="rounded-2xl p-5 flex flex-col gap-1"
-      style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+      style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
     >
-      <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'rgba(230,237,243,0.4)' }}>
+      <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'var(--ink-dim)' }}>
         {label}
       </p>
-      <p className="text-3xl font-mono font-bold" style={{ color: '#e6edf3' }}>{value}</p>
+      <p className="text-3xl font-mono font-bold" style={{ color: 'var(--ink-high)' }}>{value}</p>
       {hint && (
-        <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>{hint}</p>
+        <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{hint}</p>
       )}
     </div>
   );
@@ -163,15 +163,15 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
         <div className="flex items-center gap-3 mb-5">
           <h1
             className="text-base font-bold font-mono flex-1"
-            style={{ color: '#e6edf3', letterSpacing: '-0.01em' }}
+            style={{ color: 'var(--ink-high)', letterSpacing: '-0.01em' }}
           >
             Repositories
           </h1>
           <input
             style={{
-              background: '#1b222e',
-              border: '1px solid rgba(230,237,243,0.12)',
-              color: '#e6edf3',
+              background: 'var(--surface-card)',
+              border: '1px solid var(--surface-raised)',
+              color: 'var(--ink-high)',
               borderRadius: '6px',
               padding: '6px 12px',
               fontSize: '12px',
@@ -190,7 +190,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
               else { setShowRegister(true); navigate('/repos/new'); }
             }}
             className="shrink-0 rounded-lg px-4 py-1.5 text-xs font-semibold font-mono"
-            style={{ background: showRegister ? 'rgba(230,237,243,0.1)' : '#ffda19', color: showRegister ? '#e6edf3' : '#0d1117' }}
+            style={{ background: showRegister ? 'var(--surface-raised)' : 'var(--accent)', color: showRegister ? 'var(--ink-high)' : 'var(--accent-fg)' }}
           >
             {showRegister ? 'Cancel' : '+ Add Repository'}
           </button>
@@ -200,7 +200,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
         {showRegister && (
           <div
             className="flex flex-col gap-3 rounded-2xl p-5 mb-5"
-            style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
+            style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
           >
             {/* Source mode toggle — two mutually exclusive options; aria-pressed is correct for a binary toggle */}
             <div role="group" aria-label="Repository source" className="flex gap-1">
@@ -213,8 +213,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                   className="rounded-md px-3 py-1 text-[11px] font-mono font-medium transition-colors"
                   style={
                     sourceMode === m
-                      ? { background: 'rgba(230,237,243,0.12)', color: '#e6edf3' }
-                      : { color: 'rgba(230,237,243,0.4)' }
+                      ? { background: 'var(--surface-raised)', color: 'var(--ink-high)' }
+                      : { color: 'var(--ink-dim)' }
                   }
                 >
                   {m === 'local' ? 'Local path' : 'Remote URL'}
@@ -254,7 +254,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                   }}
                 />
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                  <label className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                     Clone to (optional)
                   </label>
                   <input
@@ -267,14 +267,14 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
               </>
             )}
 
-            <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
               {sourceMode === 'remote'
                 ? `Clones to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then runs the onboarding workflow as a governed run.`
                 : 'Runs the onboarding workflow (index → annotate → domain) as a governed run.'}
             </p>
 
             {registerError && (
-              <p className="text-[11px] font-mono" style={{ color: '#f85149' }}>
+              <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
                 {registerError}
               </p>
             )}
@@ -284,7 +284,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
               onClick={() => void registerRepo()}
               disabled={registering || !canSubmit}
               className="self-start rounded-lg px-4 py-1.5 text-[11px] font-semibold font-mono disabled:opacity-50"
-              style={{ background: '#ffda19', color: '#0d1117' }}
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               {registering
                 ? sourceMode === 'remote'
@@ -318,22 +318,22 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
 
         {/* ── Content area ── */}
         {loading ? (
-          <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+          <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
             Loading repositories…
           </p>
         ) : error ? (
-          <p className="text-xs font-mono" style={{ color: '#f85149' }}>{error}</p>
+          <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>{error}</p>
         ) : repos.length === 0 ? (
           /* Empty state */
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div
               className="rounded-2xl p-10 flex flex-col items-center gap-4"
-              style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)', maxWidth: 420 }}
+              style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)', maxWidth: 420 }}
             >
-              <p className="text-2xl font-mono font-bold" style={{ color: 'rgba(230,237,243,0.15)' }}>
+              <p className="text-2xl font-mono font-bold" style={{ color: 'var(--ink-dim)' }}>
                 No repositories
               </p>
-              <p className="text-sm font-mono" style={{ color: 'rgba(230,237,243,0.45)' }}>
+              <p className="text-sm font-mono" style={{ color: 'var(--ink-muted)' }}>
                 Register a local git repo or clone a remote one. wicked-crew will index it,
                 annotate the domain model, and keep the knowledge graph up to date.
               </p>
@@ -341,14 +341,14 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                 type="button"
                 onClick={() => setShowRegister(true)}
                 className="rounded-lg px-5 py-2 text-xs font-semibold font-mono mt-2"
-                style={{ background: '#ffda19', color: '#0d1117' }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 + Add Repository
               </button>
             </div>
           </div>
         ) : filteredRepos.length === 0 ? (
-          <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+          <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
             No repos match &ldquo;{search}&rdquo;.
           </p>
         ) : (
@@ -362,7 +362,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                 <div
                   key={repo.id}
                   className="rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-colors"
-                  style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
+                  style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
                   onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
                   role="button"
                   tabIndex={0}
@@ -377,13 +377,13 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                     <div className="flex-1 min-w-0">
                       <p
                         className="text-sm font-bold font-mono truncate"
-                        style={{ color: '#e6edf3' }}
+                        style={{ color: 'var(--ink-high)' }}
                       >
                         {repo.name}
                       </p>
                       <p
                         className="text-[11px] font-mono mt-0.5 truncate"
-                        style={{ color: 'rgba(230,237,243,0.4)' }}
+                        style={{ color: 'var(--ink-dim)' }}
                         title={repo.root_path}
                       >
                         {repo.root_path}
@@ -393,14 +393,14 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                       {activeCount > 0 && (
                         <span
                           className="rounded-full px-2 py-0.5 text-[10px] font-mono font-semibold"
-                          style={{ background: 'rgba(63,185,80,0.15)', color: '#3fb950' }}
+                          style={{ background: 'var(--status-run-dim)', color: 'var(--status-run)' }}
                         >
                           {activeCount} active
                         </span>
                       )}
                       <span
                         className="rounded-full px-2 py-0.5 text-[10px] font-mono"
-                        style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff' }}
+                        style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
                       >
                         {repo.default_branch}
                       </span>
@@ -408,13 +408,13 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                   </div>
 
                   {/* Timestamp */}
-                  <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                  <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                     {relativeTime(repo.registered_at)}
                   </p>
 
                   {/* Error (if onboard failed) */}
                   {runErr && (
-                    <p className="text-[11px] font-mono" style={{ color: '#f85149' }}>
+                    <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
                       {runErr}
                     </p>
                   )}
@@ -430,7 +430,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                       type="button"
                       onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
                       className="text-xs font-mono hover:underline"
-                      style={{ color: '#79c0ff' }}
+                      style={{ color: 'var(--accent)' }}
                     >
                       View →
                     </button>
@@ -440,9 +440,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                       onClick={() => void rerunOnboarding(repo.id)}
                       className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
                       style={{
-                        background: 'rgba(230,237,243,0.07)',
-                        color: 'rgba(230,237,243,0.6)',
-                        border: '1px solid rgba(230,237,243,0.08)',
+                        background: 'var(--surface-raised)',
+                        color: 'var(--ink-muted)',
+                        border: '1px solid var(--surface-raised)',
                       }}
                     >
                       {isRerunning ? 'Starting…' : 'Onboard'}

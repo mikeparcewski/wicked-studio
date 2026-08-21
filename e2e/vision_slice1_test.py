@@ -220,22 +220,26 @@ if not BASELINE_MODE:
         fail("pixel_compare_verdict", "vision-1-token-check.png is not pixel-identical "
              "to the pre-slice baseline — see pixel_compare")
 
-# ── 5. Lint posture: exit 0, and the new rule WARNS on the existing raw colors ─
+# ── 5. Lint posture: exit 0 with ZERO §2.11 findings. Slice 1 established the
+#      rule in warn mode and this step originally asserted the warn baseline
+#      was firing; slice 6 finished the migration (§2.11: error repo-wide, the
+#      TOKEN_CLEAN staging retired), exactly as slice 1's docstring declared the
+#      arc would — so the posture this rig pins is the end state: clean.
 if not BASELINE_MODE:
     r = subprocess.run([NPM, "run", "lint"], cwd=REPO,
                        capture_output=True, text=True, timeout=600)
     out = r.stdout + r.stderr
-    raw_color_warnings = out.count("(DES-VISION-001 §2.11)")
+    raw_color_findings = out.count("(DES-VISION-001 §2.11)")
     report["steps"]["lint"] = {
-        "ok": r.returncode == 0 and raw_color_warnings > 0,
+        "ok": r.returncode == 0 and raw_color_findings == 0,
         "exit_code": r.returncode,
         "exits_zero_no_errors": r.returncode == 0,
-        "raw_color_warnings": raw_color_warnings,
+        "raw_color_findings": raw_color_findings,
         "tail": out[-600:],
     }
     if not report["steps"]["lint"]["ok"]:
-        fail("lint_verdict", "lint must exit 0 (warnings only) AND warn on the "
-             "existing raw colors — see lint")
+        fail("lint_verdict", "lint must exit 0 with zero raw-color findings "
+             "(§2.11 complete since slice 6) — see lint")
 
 report["ok"] = True
 print(json.dumps(report, indent=2))

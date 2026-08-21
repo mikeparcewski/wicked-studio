@@ -31,23 +31,23 @@ export function LiveOutput({ runId }: Props): React.ReactElement {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3" data-testid="live-output">
       <section>
         <p className="text-[11px] font-semibold uppercase tracking-wider mb-1 font-mono"
-          style={{ color: 'rgba(230,237,243,0.4)' }}>
+          style={{ color: 'var(--ink-dim)' }}>
           Live output
         </p>
         <div
           ref={outputRef}
           data-testid="live-output-pane"
           className="max-h-64 overflow-auto rounded p-2 text-[10px] leading-tight font-mono"
-          style={{ background: '#0d1117', color: '#e6edf3' }}
+          style={{ background: 'var(--surface-base)', color: 'var(--ink-high)' }}
         >
           {unitOutputs.length === 0 ? (
-            <span style={{ color: 'rgba(230,237,243,0.3)' }}>
+            <span style={{ color: 'var(--ink-dim)' }}>
               No streaming output — the engine emits output via transcript after each unit completes.
             </span>
           ) : (
             unitOutputs.map(({ ord, text }) => (
               <div key={ord} className="mb-2">
-                <p style={{ color: 'rgba(230,237,243,0.3)' }}>— unit #{ord} —</p>
+                <p style={{ color: 'var(--ink-dim)' }}>— unit #{ord} —</p>
                 <pre className="whitespace-pre-wrap">{text}</pre>
               </div>
             ))
@@ -57,28 +57,28 @@ export function LiveOutput({ runId }: Props): React.ReactElement {
 
       <section>
         <p className="text-[11px] font-semibold uppercase tracking-wider mb-1 font-mono"
-          style={{ color: 'rgba(230,237,243,0.4)' }}>
+          style={{ color: 'var(--ink-dim)' }}>
           Event log
         </p>
         <ol
           data-testid="event-log"
           className="max-h-64 overflow-auto rounded p-2 text-[11px] font-mono"
-          style={{ background: '#0f1419', border: '1px solid rgba(230,237,243,0.07)' }}
+          style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
         >
           {log.length === 0 ? (
-            <li style={{ color: 'rgba(230,237,243,0.3)' }}>No events yet.</li>
+            <li style={{ color: 'var(--ink-dim)' }}>No events yet.</li>
           ) : (
             log.map((e) => (
               <li
                 key={e.seq}
                 className="flex gap-2 py-0.5 last:border-0"
-                style={{ borderBottom: '1px solid rgba(230,237,243,0.04)' }}
+                style={{ borderBottom: '1px solid var(--surface-raised)' }}
               >
-                <span className="shrink-0" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                <span className="shrink-0" style={{ color: 'var(--ink-dim)' }}>
                   {typeof e.ord === 'number' ? `#${e.ord}` : '·'}
                 </span>
-                <span className="font-medium shrink-0" style={{ color: '#79c0ff' }}>{e.type}</span>
-                <span className="truncate" style={{ color: 'rgba(230,237,243,0.5)' }}>{e.detail}</span>
+                <span className="font-medium shrink-0" style={{ color: 'var(--accent)' }}>{e.type}</span>
+                <span className="truncate" style={{ color: 'var(--ink-muted)' }}>{e.detail}</span>
               </li>
             ))
           )}

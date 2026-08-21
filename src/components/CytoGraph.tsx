@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import cytoscape from 'cytoscape';
 import fcose from 'cytoscape-fcose';
 import type { CodeGraphNode, CodeGraphEdge } from '../api/types.js';
+import { resolveToken } from '../styles/resolveToken.js';
 
 cytoscape.use(fcose as Parameters<typeof cytoscape.use>[0]);
 
@@ -13,28 +14,36 @@ interface Props {
   onNodeSelect?: (node: CodeGraphNode | null) => void;
 }
 
-const KIND_COLORS: Record<string, string> = {
-  function:    '#10b981',
-  method:      '#10b981',
-  constructor: '#10b981',
-  class:       '#f97316',
-  struct:      '#f97316',
-  interface:   '#3b82f6',
-  type_alias:  '#3b82f6',
-  trait:       '#3b82f6',
-  enum:        '#8b5cf6',
-  macro:       '#a855f7',
+// Cytoscape parses concrete colors (no var() support), so these maps carry
+// token NAMES and nodeColor resolves them through the cascade at graph-build
+// time (§2.11's escape hatch). Same palette as ForceGraph/HotspotsView/
+// RepoGraphModal: the legacy categorical hues collapsed onto the sanctioned
+// families (§2.5/§2.6) — callables run-emerald, data shapes gate-amber,
+// interface-likes the accent, the rest accent-dim.
+const KIND_TOKENS: Record<string, string> = {
+  function:    '--status-run',
+  method:      '--status-run',
+  constructor: '--status-run',
+  class:       '--status-gate',
+  struct:      '--status-gate',
+  interface:   '--accent',
+  type_alias:  '--accent',
+  trait:       '--accent',
+  enum:        '--accent-dim',
+  macro:       '--accent-dim',
 };
-const LANG_COLORS: Record<string, string> = {
-  typescript: '#10b981',
-  javascript: '#10b981',
-  rust:       '#f97316',
-  python:     '#3b82f6',
-  go:         '#06b6d4',
+const LANG_TOKENS: Record<string, string> = {
+  typescript: '--status-run',
+  javascript: '--status-run',
+  rust:       '--status-gate',
+  python:     '--accent',
+  go:         '--accent-dim',
 };
 
 function nodeColor(n: CodeGraphNode): string {
-  return KIND_COLORS[n.kind?.toLowerCase()] ?? LANG_COLORS[n.lang?.toLowerCase()] ?? '#9ca3af';
+  return resolveToken(
+    KIND_TOKENS[n.kind?.toLowerCase()] ?? LANG_TOKENS[n.lang?.toLowerCase()] ?? '--ink-muted',
+  );
 }
 
 function nodeSize(inDeg: number): number {
@@ -105,7 +114,7 @@ export function CytoGraph({ nodes, edges, externalSelectedId, onNodeClick, onNod
             label: 'data(label)',
             'font-size': 10,
             'font-family': 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            color: '#ffffff',
+            color: resolveToken('--ink-high'),
             'text-valign': 'center',
             'text-halign': 'center',
             'text-outline-color': 'data(color)',
@@ -122,7 +131,7 @@ export function CytoGraph({ nodes, edges, externalSelectedId, onNodeClick, onNod
           selector: 'node:selected',
           style: {
             'border-width': 3,
-            'border-color': '#fbbf24',
+            'border-color': resolveToken('--accent'),
             'border-opacity': 1,
           },
         },
@@ -138,8 +147,8 @@ export function CytoGraph({ nodes, edges, externalSelectedId, onNodeClick, onNod
           selector: 'edge',
           style: {
             width: 1,
-            'line-color': '#cbd5e1',
-            'target-arrow-color': '#94a3b8',
+            'line-color': resolveToken('--ink-body'),
+            'target-arrow-color': resolveToken('--ink-muted'),
             'target-arrow-shape': 'triangle',
             'arrow-scale': 0.7,
             'curve-style': 'bezier',
@@ -148,7 +157,7 @@ export function CytoGraph({ nodes, edges, externalSelectedId, onNodeClick, onNod
         },
         {
           selector: 'edge.highlighted',
-          style: { 'line-color': '#fbbf24', 'target-arrow-color': '#fbbf24', opacity: 0.9, width: 2 },
+          style: { 'line-color': resolveToken('--accent'), 'target-arrow-color': resolveToken('--accent'), opacity: 0.9, width: 2 },
         },
         {
           selector: 'edge.dimmed',

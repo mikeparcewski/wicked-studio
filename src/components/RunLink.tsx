@@ -9,11 +9,11 @@ interface Props {
 
 function statusColor(status: SessionStatus): string {
   switch (status) {
-    case 'completed':      return '#3fb950';
-    case 'failed':         return '#f85149';
-    case 'cancelled':      return 'rgba(230,237,243,0.25)';
-    case 'awaiting_human': return '#ffda19';
-    default:               return '#79c0ff';
+    case 'completed':      return 'var(--status-done)';
+    case 'failed':         return 'var(--status-fail)';
+    case 'cancelled':      return 'var(--ink-dim)';
+    case 'awaiting_human': return 'var(--status-gate)';
+    default:               return 'var(--status-run)';
   }
 }
 
@@ -42,8 +42,8 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
       data-status={session.status}
       data-kind={kind}
       onClick={() => onSelect(session.id)}
-      className={`w-full text-left px-3 py-2 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20 ${
-        isActive ? 'bg-black/35' : 'bg-transparent hover:bg-black/20 focus-visible:bg-black/20'
+      className={`w-full text-left px-3 py-2 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-dim ${
+        isActive ? 'bg-surface-raised' : 'bg-transparent hover:bg-surface-card focus-visible:bg-surface-card'
       }`}
     >
       <div className="flex items-center gap-2">
@@ -52,7 +52,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
         </span>
         <span
           className="flex-1 truncate text-xs leading-tight font-mono"
-          style={{ color: isActive ? '#e6edf3' : 'rgba(230,237,243,0.7)' }}
+          style={{ color: isActive ? 'var(--ink-high)' : 'var(--ink-muted)' }}
           title={session.problem}
         >
           {title}
@@ -62,7 +62,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
           style={{ background: statusColor(session.status) }}
         />
       </div>
-      <p className="text-[10px] mt-0.5 font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+      <p className="text-[10px] mt-0.5 font-mono" style={{ color: 'var(--ink-dim)' }}>
         {spec.label} · {unitCount} task{unitCount === 1 ? '' : 's'} · {session.id.slice(0, 8)}
       </p>
     </button>

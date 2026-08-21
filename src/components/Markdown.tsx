@@ -3,17 +3,17 @@ import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 
 const components: Components = {
-  h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2" style={{ color: '#e6edf3' }}>{children}</h1>,
-  h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5" style={{ color: '#e6edf3' }}>{children}</h2>,
-  h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1" style={{ color: '#e6edf3' }}>{children}</h3>,
+  h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2" style={{ color: 'var(--ink-high)' }}>{children}</h1>,
+  h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5" style={{ color: 'var(--ink-high)' }}>{children}</h2>,
+  h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1" style={{ color: 'var(--ink-high)' }}>{children}</h3>,
   p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: '#79c0ff' }}>
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
       {children}
     </a>
   ),
   img: ({ alt }) => (
-    <span className="text-xs font-mono rounded px-1" style={{ background: 'rgba(230,237,243,0.08)', color: 'rgba(230,237,243,0.4)' }}>
+    <span className="text-xs font-mono rounded px-1" style={{ background: 'var(--surface-raised)', color: 'var(--ink-dim)' }}>
       [image{alt ? `: ${alt}` : ''}]
     </span>
   ),
@@ -24,7 +24,7 @@ const components: Components = {
       return (
         <code
           className={`block overflow-auto rounded-lg px-4 py-3 text-xs leading-5 font-mono my-2 ${className ?? ''}`}
-          style={{ background: '#0d1117', color: '#e6edf3' }}
+          style={{ background: 'var(--surface-base)', color: 'var(--ink-high)' }}
         >
           {children}
         </code>
@@ -33,7 +33,7 @@ const components: Components = {
     return (
       <code
         className="rounded px-1.5 py-0.5 text-xs font-mono"
-        style={{ background: 'rgba(230,237,243,0.1)', color: '#e6edf3' }}
+        style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}
       >
         {children}
       </code>
@@ -43,7 +43,7 @@ const components: Components = {
   blockquote: ({ children }) => (
     <blockquote
       className="pl-3 my-2 italic text-sm"
-      style={{ borderLeft: '3px solid rgba(230,237,243,0.2)', color: 'rgba(230,237,243,0.6)' }}
+      style={{ borderLeft: '3px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
     >
       {children}
     </blockquote>
@@ -56,22 +56,22 @@ const components: Components = {
       <table className="text-xs w-full border-collapse font-mono">{children}</table>
     </div>
   ),
-  thead: ({ children }) => <thead style={{ borderBottom: '1px solid rgba(230,237,243,0.12)' }}>{children}</thead>,
+  thead: ({ children }) => <thead style={{ borderBottom: '1px solid var(--surface-raised)' }}>{children}</thead>,
   tbody: ({ children }) => <tbody>{children}</tbody>,
-  tr: ({ children }) => <tr style={{ borderBottom: '1px solid rgba(230,237,243,0.06)' }}>{children}</tr>,
+  tr: ({ children }) => <tr style={{ borderBottom: '1px solid var(--surface-raised)' }}>{children}</tr>,
   th: ({ children }) => (
-    <th className="text-left px-3 py-1.5 font-semibold" style={{ color: 'rgba(230,237,243,0.7)' }}>
+    <th className="text-left px-3 py-1.5 font-semibold" style={{ color: 'var(--ink-muted)' }}>
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="px-3 py-1.5" style={{ color: '#e6edf3' }}>
+    <td className="px-3 py-1.5" style={{ color: 'var(--ink-high)' }}>
       {children}
     </td>
   ),
-  hr: () => <hr className="my-3" style={{ borderColor: 'rgba(230,237,243,0.1)' }} />,
-  strong: ({ children }) => <strong className="font-semibold" style={{ color: '#e6edf3' }}>{children}</strong>,
-  em: ({ children }) => <em style={{ color: 'rgba(230,237,243,0.8)' }}>{children}</em>,
+  hr: () => <hr className="my-3" style={{ borderColor: 'var(--surface-raised)' }} />,
+  strong: ({ children }) => <strong className="font-semibold" style={{ color: 'var(--ink-high)' }}>{children}</strong>,
+  em: ({ children }) => <em style={{ color: 'var(--ink-body)' }}>{children}</em>,
 };
 
 interface Props {
@@ -83,7 +83,7 @@ export function Markdown({ children, className }: Props): React.ReactElement {
   return (
     <div
       className={`text-sm leading-relaxed ${className ?? ''}`}
-      style={{ color: '#e6edf3' }}
+      style={{ color: 'var(--ink-high)' }}
     >
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {children}

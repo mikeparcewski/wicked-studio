@@ -277,17 +277,19 @@ r = subprocess.run([NPM, "run", "lint"], cwd=REPO,
                    capture_output=True, text=True, timeout=600)
 out = r.stdout + r.stderr
 slice_hits = [f for f in SLICE_FILES if f in out]
+# Slice 6 completed the §2.11 migration: the rule is ERROR repo-wide and the
+# warn baseline this step once expected is retired — zero findings, full stop.
 baseline_warnings = out.count("(DES-VISION-001 §2.11)")
 report["steps"]["lint"] = {
-    "ok": r.returncode == 0 and not slice_hits and baseline_warnings > 0,
+    "ok": r.returncode == 0 and not slice_hits and baseline_warnings == 0,
     "exit_code": r.returncode,
     "slice_files_with_findings": slice_hits,
-    "warn_baseline_still_firing_elsewhere": baseline_warnings,
+    "raw_color_findings_repo_wide": baseline_warnings,
     "tail": out[-400:],
 }
 if not report["steps"]["lint"]["ok"]:
     fail("lint_verdict", "lint must exit 0 with no findings in the slice-2 "
-         "error-mode files (and the warn baseline still firing elsewhere) — see lint")
+         "files (nor anywhere: the rule is error repo-wide since slice 6) — see lint")
 
 report["ok"] = True
 print(json.dumps(report, indent=2))

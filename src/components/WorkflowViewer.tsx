@@ -13,14 +13,14 @@ function gateLabel(gate: GateSpec): string {
 }
 
 const KIND_DOT_COLOR: Record<string, string> = {
-  recon: '#79c0ff',
-  build: '#3fb950',
-  review: '#a78bfa',
-  test: '#ffda19',
+  recon: 'var(--accent)',
+  build: 'var(--status-run)',
+  review: 'var(--accent-dim)',
+  test: 'var(--status-gate)',
 };
 
 function kindDotColor(kind: PhaseDef['kind']): string {
-  return KIND_DOT_COLOR[kind] ?? 'rgba(230,237,243,0.3)';
+  return KIND_DOT_COLOR[kind] ?? 'var(--ink-dim)';
 }
 
 // ── Viewer-only phase card ─────────────────────────────────────────────────────
@@ -31,18 +31,18 @@ function PhaseCard({ phase }: { phase: PhaseDef }): React.ReactElement {
   return (
     <div
       className="rounded px-3 py-2 text-[11px] flex flex-col gap-1"
-      style={{ border: '1px solid rgba(230,237,243,0.08)', background: '#1b222e' }}
+      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
     >
       <div className="flex items-center gap-2 flex-wrap">
         <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} title={phase.kind} />
-        <span className="font-semibold" style={{ color: '#e6edf3' }}>{phase.id}</span>
-        <span className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>{phase.kind}</span>
+        <span className="font-semibold" style={{ color: 'var(--ink-high)' }}>{phase.id}</span>
+        <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{phase.kind}</span>
         {phase.role !== 'neutral' && (
           <span
             className="rounded px-1.5 py-0.5 text-[10px] font-semibold font-mono"
             style={{
-              background: phase.role === 'creator' ? 'rgba(121,192,255,0.1)' : 'rgba(167,139,250,0.1)',
-              color: phase.role === 'creator' ? '#79c0ff' : '#a78bfa',
+              background: 'var(--accent-subtle)',
+              color: phase.role === 'creator' ? 'var(--accent)' : 'var(--accent-dim)',
             }}
           >
             {phase.role}
@@ -51,26 +51,26 @@ function PhaseCard({ phase }: { phase: PhaseDef }): React.ReactElement {
         {ex && ex.type === 'tool' && (
           <span
             className="rounded px-1.5 py-0.5 text-[10px] font-semibold font-mono"
-            style={{ background: 'rgba(255,218,25,0.08)', color: '#ffda19' }}
+            style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
           >
             tool: {ex.cmd.join(' ')}
           </span>
         )}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px]" style={{ color: 'rgba(230,237,243,0.45)' }}>
+      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
         <span>
-          <span className="font-medium" style={{ color: 'rgba(230,237,243,0.6)' }}>gate:</span>{' '}
+          <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>gate:</span>{' '}
           {phase.gate_type ? `${phase.gate_type} / ` : ''}{gateLabel(phase.gate)}
         </span>
         {phase.depends_on.length > 0 && (
           <span>
-            <span className="font-medium" style={{ color: 'rgba(230,237,243,0.6)' }}>after:</span>{' '}
+            <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>after:</span>{' '}
             {phase.depends_on.join(', ')}
           </span>
         )}
         {phase.skill_ref && (
           <span>
-            <span className="font-medium" style={{ color: 'rgba(230,237,243,0.6)' }}>skill:</span>{' '}
+            <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>skill:</span>{' '}
             <span className="font-mono">{phase.skill_ref}</span>
           </span>
         )}
@@ -160,7 +160,7 @@ async function buildDef(id: string, phases: BuilderPhase[]): Promise<WorkflowDef
 
 // ── Phase editor ───────────────────────────────────────────────────────────────
 
-const inputStyle = { background: '#0f1419', border: '1px solid rgba(230,237,243,0.1)', color: '#e6edf3' };
+const inputStyle = { background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' };
 
 function ToggleBtn({
   active,
@@ -177,8 +177,8 @@ function ToggleBtn({
       onClick={onClick}
       className="rounded px-2.5 py-1 text-[11px] font-medium capitalize transition-colors"
       style={active
-        ? { background: '#1b222e', color: '#e6edf3', border: '1px solid rgba(230,237,243,0.2)' }
-        : { background: 'transparent', color: 'rgba(230,237,243,0.4)', border: '1px solid transparent' }
+        ? { background: 'var(--surface-card)', color: 'var(--ink-high)', border: '1px solid var(--surface-raised)' }
+        : { background: 'transparent', color: 'var(--ink-dim)', border: '1px solid transparent' }
       }
     >
       {children}
@@ -211,32 +211,32 @@ function PhaseEditor({
   return (
     <div
       className="rounded p-3 flex flex-col gap-2"
-      style={{ border: '1px solid rgba(230,237,243,0.08)', background: '#1b222e' }}
+      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
     >
       {/* header */}
       <div className="flex items-center gap-2">
         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: kindDotColor(phase.kind) }} />
-        <span className="text-[11px] font-semibold" style={{ color: 'rgba(230,237,243,0.7)' }}>Phase {index + 1}</span>
+        <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-muted)' }}>Phase {index + 1}</span>
         <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
             onClick={onMoveUp}
             disabled={index === 0}
             className="px-1 text-[10px] disabled:opacity-30"
-            style={{ color: 'rgba(230,237,243,0.4)' }}
+            style={{ color: 'var(--ink-dim)' }}
           >▲</button>
           <button
             type="button"
             onClick={onMoveDown}
             disabled={index === total - 1}
             className="px-1 text-[10px] disabled:opacity-30"
-            style={{ color: 'rgba(230,237,243,0.4)' }}
+            style={{ color: 'var(--ink-dim)' }}
           >▼</button>
           <button
             type="button"
             onClick={onRemove}
             className="px-1 text-[10px]"
-            style={{ color: '#f85149' }}
+            style={{ color: 'var(--status-fail)' }}
           >✕</button>
         </div>
       </div>
@@ -285,7 +285,7 @@ function PhaseEditor({
         {phase.execMode === 'script' && (
           <div className="flex flex-col gap-1">
             <div className="flex gap-1 items-center">
-              <span className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>Language:</span>
+              <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Language:</span>
               {(['bash', 'sh', 'python'] as ScriptLang[]).map((l) => (
                 <ToggleBtn key={l} active={phase.scriptLang === l} onClick={() => up('scriptLang', l)}>
                   {l}
@@ -298,11 +298,11 @@ function PhaseEditor({
               placeholder={phase.scriptLang === 'python' ? '# python script\nprint("hello")' : '# bash script\necho "hello"'}
               value={phase.script}
               onChange={(e) => up('script', e.target.value)}
-              style={{ ...inputStyle, background: '#0d1117' }}
+              style={{ ...inputStyle, background: 'var(--surface-base)' }}
             />
-            <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
               Saved to{' '}
-              <span style={{ color: 'rgba(230,237,243,0.5)' }}>
+              <span style={{ color: 'var(--ink-muted)' }}>
                 ~/.wicked/scripts/{phase.id || 'script'}.{phase.scriptLang === 'python' ? 'py' : 'sh'}
               </span>
             </p>
@@ -313,7 +313,7 @@ function PhaseEditor({
       {/* gate + role */}
       <div className="flex gap-2 flex-wrap">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>Gate</span>
+          <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Gate</span>
           <div className="flex gap-1">
             {([['auto', 'Auto'], ['human', 'Human'], ['human_if', 'Human if fails']] as [GateMode, string][]).map(([v, label]) => (
               <ToggleBtn key={v} active={phase.gate === v} onClick={() => up('gate', v)}>
@@ -323,7 +323,7 @@ function PhaseEditor({
           </div>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>Role</span>
+          <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Role</span>
           <div className="flex gap-1">
             {(['neutral', 'creator', 'evaluator'] as const).map((r) => (
               <ToggleBtn key={r} active={phase.role === r} onClick={() => up('role', r)}>
@@ -337,10 +337,10 @@ function PhaseEditor({
       {/* depends on */}
       {prior.length > 0 && (
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>Depends on</span>
+          <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Depends on</span>
           <div className="flex flex-wrap gap-1.5">
             {prior.map((pid) => (
-              <label key={pid} className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'rgba(230,237,243,0.55)' }}>
+              <label key={pid} className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
                 <input
                   type="checkbox"
                   checked={phase.dependsOn.includes(pid)}
@@ -358,7 +358,7 @@ function PhaseEditor({
       )}
 
       {/* flags */}
-      <div className="flex gap-3 text-[10px]" style={{ color: 'rgba(230,237,243,0.45)' }}>
+      <div className="flex gap-3 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
         <label className="flex items-center gap-1 cursor-pointer">
           <input type="checkbox" checked={phase.executesCode} onChange={(e) => up('executesCode', e.target.checked)} />
           executes code
@@ -496,7 +496,7 @@ function WorkflowBuilder({
           type="button"
           onClick={() => fileRef.current?.click()}
           className="rounded px-2 py-1 text-[11px]"
-          style={{ border: '1px solid rgba(230,237,243,0.1)', color: 'rgba(230,237,243,0.6)' }}
+          style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
         >
           Upload JSON
         </button>
@@ -504,7 +504,7 @@ function WorkflowBuilder({
           type="button"
           onClick={() => void handlePreview()}
           className="rounded px-2 py-1 text-[11px]"
-          style={{ border: '1px solid rgba(230,237,243,0.1)', color: 'rgba(230,237,243,0.6)' }}
+          style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
         >
           Preview JSON
         </button>
@@ -512,7 +512,7 @@ function WorkflowBuilder({
           type="button"
           onClick={onCancel}
           className="text-[11px] px-1 hover:underline"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
+          style={{ color: 'var(--ink-dim)' }}
         >
           Cancel
         </button>
@@ -523,7 +523,7 @@ function WorkflowBuilder({
         <div className="relative">
           <pre
             className="rounded text-[10px] p-3 overflow-auto max-h-48 font-mono"
-            style={{ background: '#0d1117', color: '#3fb950' }}
+            style={{ background: 'var(--surface-base)', color: 'var(--status-run)' }}
           >
             {previewJson}
           </pre>
@@ -531,7 +531,7 @@ function WorkflowBuilder({
             type="button"
             onClick={() => setShowJson(false)}
             className="absolute top-1 right-1 text-[10px]"
-            style={{ color: 'rgba(230,237,243,0.4)' }}
+            style={{ color: 'var(--ink-dim)' }}
           >✕</button>
         </div>
       )}
@@ -557,19 +557,19 @@ function WorkflowBuilder({
         type="button"
         onClick={addPhase}
         className="self-start rounded px-3 py-1 text-[11px] transition-colors"
-        style={{ border: '1px dashed rgba(230,237,243,0.15)', color: 'rgba(230,237,243,0.45)' }}
+        style={{ border: '1px dashed var(--surface-raised)', color: 'var(--ink-muted)' }}
       >
         + Add phase
       </button>
 
-      {error && <p className="text-[11px]" style={{ color: '#f85149' }}>{error}</p>}
+      {error && <p className="text-[11px]" style={{ color: 'var(--status-fail)' }}>{error}</p>}
 
       <button
         type="button"
         onClick={() => void handleSave()}
         disabled={saving}
         className="self-start rounded px-4 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-        style={{ background: '#3fb950', color: '#0d1117' }}
+        style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
       >
         {saving ? 'Saving…' : 'Save workflow'}
       </button>
@@ -624,14 +624,14 @@ export function WorkflowViewer(): React.ReactElement {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 flex-wrap">
-        <h2 className="text-sm font-semibold flex-1" style={{ color: '#e6edf3' }}>Workflows</h2>
+        <h2 className="text-sm font-semibold flex-1" style={{ color: 'var(--ink-high)' }}>Workflows</h2>
         {!building && (
           <>
             <button
               type="button"
               onClick={() => openBuilder()}
               className="rounded px-3 py-1 text-[11px] font-semibold"
-              style={{ background: '#3fb950', color: '#0d1117' }}
+              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
             >
               New workflow
             </button>
@@ -639,7 +639,7 @@ export function WorkflowViewer(): React.ReactElement {
               type="button"
               onClick={() => void load()}
               className="text-[10px] hover:underline"
-              style={{ color: 'rgba(230,237,243,0.4)' }}
+              style={{ color: 'var(--ink-dim)' }}
             >
               Refresh
             </button>
@@ -647,9 +647,9 @@ export function WorkflowViewer(): React.ReactElement {
         )}
       </div>
 
-      {loading && <p className="text-xs" style={{ color: 'rgba(230,237,243,0.4)' }}>Loading workflows…</p>}
+      {loading && <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading workflows…</p>}
       {error && (
-        <p className="rounded px-2 py-1 text-xs" style={{ background: 'rgba(248,81,73,0.08)', color: '#f85149' }}>
+        <p className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
           {error}
         </p>
       )}
@@ -665,12 +665,12 @@ export function WorkflowViewer(): React.ReactElement {
                 onClick={() => setSelected(w.id)}
                 className="w-full text-left rounded px-3 py-2 text-[11px] transition-colors"
                 style={w.id === selected
-                  ? { border: '1px solid rgba(121,192,255,0.4)', background: 'rgba(121,192,255,0.08)', color: '#79c0ff' }
-                  : { border: '1px solid rgba(230,237,243,0.08)', background: '#1b222e', color: 'rgba(230,237,243,0.7)' }
+                  ? { border: '1px solid var(--accent-dim)', background: 'var(--accent-subtle)', color: 'var(--accent)' }
+                  : { border: '1px solid var(--surface-raised)', background: 'var(--surface-card)', color: 'var(--ink-muted)' }
                 }
               >
                 <div className="font-semibold">{w.id}</div>
-                <div className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>{w.phases.length} phases</div>
+                <div className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{w.phases.length} phases</div>
               </button>
             ))}
           </div>
@@ -687,17 +687,17 @@ export function WorkflowViewer(): React.ReactElement {
           ) : current ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                <span className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'var(--ink-dim)' }}>
                   {current.id}
                 </span>
-                <span className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
+                <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                   — {current.phases.length} phases
                 </span>
                 <button
                   type="button"
                   onClick={() => openBuilder(current)}
                   className="ml-auto text-[10px] hover:underline"
-                  style={{ color: '#79c0ff' }}
+                  style={{ color: 'var(--accent)' }}
                 >
                   Edit
                 </button>
@@ -705,7 +705,7 @@ export function WorkflowViewer(): React.ReactElement {
                   type="button"
                   onClick={() => openBuilder({ ...current, id: `${current.id}-copy` })}
                   className="text-[10px] hover:underline"
-                  style={{ color: 'rgba(230,237,243,0.4)' }}
+                  style={{ color: 'var(--ink-dim)' }}
                 >
                   Duplicate
                 </button>
@@ -717,9 +717,9 @@ export function WorkflowViewer(): React.ReactElement {
       </div>
 
       {!building && (
-        <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.25)' }}>
-          Workflows saved to <span style={{ color: 'rgba(230,237,243,0.4)' }}>~/.wicked/workflows/</span> and registered immediately.
-          Scripts saved to <span style={{ color: 'rgba(230,237,243,0.4)' }}>~/.wicked/scripts/</span>.
+        <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+          Workflows saved to <span style={{ color: 'var(--ink-dim)' }}>~/.wicked/workflows/</span> and registered immediately.
+          Scripts saved to <span style={{ color: 'var(--ink-dim)' }}>~/.wicked/scripts/</span>.
         </p>
       )}
     </div>

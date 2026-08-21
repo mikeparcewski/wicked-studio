@@ -65,9 +65,9 @@ function ActivePill({
     <span
       className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-mono"
       style={{
-        background: 'rgba(230,237,243,0.07)',
-        color: 'rgba(230,237,243,0.6)',
-        border: '1px solid rgba(230,237,243,0.1)',
+        background: 'var(--surface-raised)',
+        color: 'var(--ink-muted)',
+        border: '1px solid var(--surface-raised)',
       }}
     >
       {label}
@@ -325,21 +325,21 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       return (
         <div
           className="px-5 py-4 flex flex-col gap-2 shrink-0"
-          style={{ borderTop: '1px solid rgba(230,237,243,0.07)', background: '#161c26' }}
+          style={{ borderTop: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
         >
           {steerError && (
-            <p className="text-[11px] font-mono" style={{ color: '#f85149' }}>
+            <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
               {steerError}
             </p>
           )}
           <div
             className="flex items-end gap-3 rounded-2xl px-4 py-3"
-            style={{ background: '#1b222e', border: '1px solid rgba(255,218,25,0.25)' }}
+            style={{ background: 'var(--surface-card)', border: '1px solid var(--status-gate-dim)' }}
           >
             <textarea
               ref={steerRef}
               className="flex-1 resize-none text-base outline-none border-0 bg-transparent leading-6"
-              style={{ minHeight: '28px', color: '#e6edf3', fontFamily: 'inherit' }}
+              style={{ minHeight: '28px', color: 'var(--ink-high)', fontFamily: 'inherit' }}
               placeholder="Send steering guidance… (approves gate)"
               value={steerText}
               onChange={(e) => setSteerText(e.target.value)}
@@ -357,14 +357,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               onClick={() => void submitSteer()}
               disabled={!canSteer}
               className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-opacity disabled:opacity-40"
-              style={{ background: '#ffda19', color: '#0d1117' }}
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               {steering ? '…' : 'Steer →'}
             </button>
           </div>
           <p
             className="text-[10px] font-mono text-center"
-            style={{ color: 'rgba(230,237,243,0.3)' }}
+            style={{ color: 'var(--ink-dim)' }}
           >
             Approve + steer · Cmd+Enter · Use the gate panel above to approve/reject without steering
           </p>
@@ -381,20 +381,20 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       return (
         <div
           className="px-5 py-4 flex flex-col gap-2 shrink-0"
-          style={{ borderTop: '1px solid rgba(230,237,243,0.07)', background: '#161c26' }}
+          style={{ borderTop: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
         >
           {injectError && (
-            <p className="text-[11px] font-mono" style={{ color: '#f85149' }}>
+            <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
               {injectError}
             </p>
           )}
           <div
             className="flex items-end gap-3 rounded-2xl px-4 py-3"
-            style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.12)' }}
+            style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
           >
             <textarea
               className="flex-1 resize-none text-base outline-none border-0 bg-transparent leading-6"
-              style={{ minHeight: '28px', color: '#e6edf3', fontFamily: 'inherit' }}
+              style={{ minHeight: '28px', color: 'var(--ink-high)', fontFamily: 'inherit' }}
               placeholder={`Send message to ${targetLabel}…`}
               value={injectText}
               onChange={(e) => setInjectText(e.target.value)}
@@ -412,7 +412,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               onClick={() => void submitInject()}
               disabled={!canInject}
               className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-opacity disabled:opacity-40"
-              style={{ background: '#ffda19', color: '#0d1117' }}
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               {injecting ? '…' : 'Send →'}
             </button>
@@ -423,21 +423,21 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             <span
               data-testid="steering-live-chip"
               className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-mono shrink-0"
-              style={{ background: 'rgba(121,192,255,0.08)', color: '#79c0ff', border: '1px solid rgba(121,192,255,0.2)' }}
+              style={{ background: 'var(--status-run-dim)', color: 'var(--status-run)', border: '1px solid var(--status-run-dim)' }}
             >
-              <span className="inline-block w-1 h-1 rounded-full animate-pulse" style={{ background: '#79c0ff' }} />
+              <span className="inline-block w-1 h-1 rounded-full animate-pulse" style={{ background: 'var(--status-run)' }} />
               steering live run
             </span>
             <p
               className="text-[10px] font-mono flex-1"
-              style={{ color: 'rgba(230,237,243,0.3)' }}
+              style={{ color: 'var(--ink-dim)' }}
             >
               Cmd+Enter · Click an agent to target it
             </p>
             {isTargeted && (
               <span
                 className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-mono"
-                style={{ background: 'rgba(139,92,246,0.15)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,0.25)' }}
+                style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', border: '1px solid var(--accent-subtle)' }}
               >
                 → {normalizedTarget}
                 {onClearInjectTarget && (
@@ -461,13 +461,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     return (
       <div
         className="px-5 py-4 shrink-0"
-        style={{ borderTop: '1px solid rgba(230,237,243,0.07)', background: '#161c26' }}
+        style={{ borderTop: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
       >
         <div
           className="rounded-2xl px-5 py-4"
-          style={{ border: '1px solid rgba(230,237,243,0.1)', background: '#1b222e' }}
+          style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
         >
-          <p className="text-sm italic font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
+          <p className="text-sm italic font-mono" style={{ color: 'var(--ink-dim)' }}>
             Steer at the next gate.
           </p>
         </div>
@@ -548,8 +548,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         embedded
           ? {}
           : {
-              borderTop: '1px solid rgba(230,237,243,0.07)',
-              background: '#161c26',
+              borderTop: '1px solid var(--surface-raised)',
+              background: 'var(--surface-rail)',
             }
       }
     >
@@ -558,13 +558,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <div
           className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
           style={{
-            background: '#161c26',
-            border: '1px solid rgba(230,237,243,0.1)',
-            color: 'rgba(230,237,243,0.7)',
+            background: 'var(--surface-rail)',
+            border: '1px solid var(--surface-raised)',
+            color: 'var(--ink-muted)',
           }}
         >
           <span>
-            Detected: <strong style={{ color: '#ffda19' }}>{detectedWorkflow}</strong> workflow
+            Detected: <strong style={{ color: 'var(--accent)' }}>{detectedWorkflow}</strong> workflow
           </span>
           <button
             type="button"
@@ -573,7 +573,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               setWorkflowDismissed(true);
             }}
             className="rounded-lg px-3 py-1 font-semibold text-xs"
-            style={{ background: '#ffda19', color: '#0d1117' }}
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             Apply
           </button>
@@ -581,7 +581,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             type="button"
             onClick={() => setWorkflowDismissed(true)}
             className="ml-auto"
-            style={{ color: 'rgba(230,237,243,0.35)' }}
+            style={{ color: 'var(--ink-dim)' }}
           >
             ✕
           </button>
@@ -594,9 +594,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-testid="signin-warning"
           className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
           style={{
-            background: 'rgba(248,81,73,0.08)',
-            border: '1px solid rgba(248,81,73,0.3)',
-            color: '#f85149',
+            background: 'var(--status-fail-dim)',
+            border: '1px solid var(--status-fail-dim)',
+            color: 'var(--status-fail)',
           }}
         >
           <span className="flex-1">
@@ -608,7 +608,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             type="button"
             onClick={() => navigate?.('/system')}
             className="rounded-lg px-3 py-1 font-semibold text-xs shrink-0"
-            style={{ background: 'rgba(248,81,73,0.15)', color: '#f85149', border: '1px solid rgba(248,81,73,0.35)' }}
+            style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
           >
             Open Settings
           </button>
@@ -618,7 +618,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {/* ── Main input bubble ────────────────────────────────────────────── */}
       <div
         className="flex items-end gap-2 rounded-2xl px-4 py-3 transition-all"
-        style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.14)' }}
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
       >
         {/* + button with floating popover — both share the anchor ref */}
         <div className="relative shrink-0" ref={popoverAnchorRef}>
@@ -668,14 +668,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             style={
               popoverOpen
                 ? {
-                    background: 'rgba(255,218,25,0.15)',
-                    color: '#ffda19',
-                    border: '1px solid rgba(255,218,25,0.3)',
+                    background: 'var(--accent-subtle)',
+                    color: 'var(--accent)',
+                    border: '1px solid var(--accent-dim)',
                   }
                 : {
-                    background: 'rgba(230,237,243,0.06)',
-                    color: 'rgba(230,237,243,0.4)',
-                    border: '1px solid rgba(230,237,243,0.08)',
+                    background: 'var(--surface-raised)',
+                    color: 'var(--ink-dim)',
+                    border: '1px solid var(--surface-raised)',
                   }
             }
           >
@@ -688,7 +688,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           ref={textareaRef}
           data-testid="launch-problem"
           className="flex-1 resize-none text-base outline-none border-0 bg-transparent leading-6"
-          style={{ minHeight: '28px', color: '#e6edf3', fontFamily: 'inherit' }}
+          style={{ minHeight: '28px', color: 'var(--ink-high)', fontFamily: 'inherit' }}
           placeholder="What do you need built?"
           value={problem}
           onChange={(e) => {
@@ -713,7 +713,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           disabled={!canSubmit}
           aria-label="Send"
           className="shrink-0 rounded-xl px-5 py-2.5 text-sm font-semibold font-mono disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-          style={{ background: '#ffda19', color: '#0d1117' }}
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
         >
           {submitting ? `${elapsedSecs}s` : 'Send'}
         </button>
@@ -732,7 +732,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {error && (
         <p
           className="text-xs px-1 font-mono"
-          style={{ color: '#f85149' }}
+          style={{ color: 'var(--status-fail)' }}
           data-testid="launch-error"
         >
           {error}
@@ -741,7 +741,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
       {/* Planning latency hint */}
       {submitting && elapsedSecs >= 5 && (
-        <p className="text-xs text-center font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
+        <p className="text-xs text-center font-mono" style={{ color: 'var(--ink-dim)' }}>
           Creating run… council distribution happens off-thread once launched.
         </p>
       )}

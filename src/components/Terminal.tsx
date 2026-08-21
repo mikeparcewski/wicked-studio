@@ -3,6 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { api, terminalWsUrl } from '../api/client.js';
+import { resolveToken } from '../styles/resolveToken.js';
 
 interface Props {
   /** Working directory the PTY opens in. */
@@ -56,7 +57,14 @@ export function Terminal({ cwd, cmd, governed = true, initialInput }: Props): Re
       cursorBlink: true,
       fontSize: 12,
       fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-      theme: { background: '#0d1117', foreground: '#e6edf3', cursor: '#ffda19', cursorAccent: '#0d1117' },
+      // xterm parses concrete colors (no var() support) — resolve the tokens
+      // through the cascade at mount time (§2.11's escape hatch).
+      theme: {
+        background: resolveToken('--surface-base'),
+        foreground: resolveToken('--ink-body'),
+        cursor: resolveToken('--accent'),
+        cursorAccent: resolveToken('--surface-base'),
+      },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -156,10 +164,10 @@ export function Terminal({ cwd, cmd, governed = true, initialInput }: Props): Re
   return (
     <div data-testid="terminal" className="flex flex-col gap-1">
       <div className="flex items-center justify-between text-[11px]">
-        <span className="font-semibold font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>Terminal</span>
+        <span className="font-semibold font-mono" style={{ color: 'var(--ink-dim)' }}>Terminal</span>
         <span
           data-testid="terminal-governed"
-          style={{ color: governed ? 'rgba(230,237,243,0.35)' : '#ffda19', fontWeight: governed ? undefined : 600 }}
+          style={{ color: governed ? 'var(--ink-dim)' : 'var(--status-gate)', fontWeight: governed ? undefined : 600 }}
         >
           {governed ? 'governed' : 'ungoverned operator shell'}
         </span>
@@ -168,7 +176,7 @@ export function Terminal({ cwd, cmd, governed = true, initialInput }: Props): Re
         ref={hostRef}
         data-testid="terminal-host"
         className="h-64 w-full overflow-hidden rounded p-1"
-        style={{ background: '#0d1117' }}
+        style={{ background: 'var(--surface-base)' }}
       />
     </div>
   );

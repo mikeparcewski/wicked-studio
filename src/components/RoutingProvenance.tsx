@@ -10,17 +10,17 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
 
   if (routing.method === 'council') {
     return (
-      <p className="text-[11px] font-mono" style={{ color: 'rgba(230,237,243,0.45)' }} data-testid="routing-provenance">
-        <span className="font-medium" style={{ color: 'rgba(230,237,243,0.6)' }}>Council:</span>{' '}
+      <p className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance">
+        <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>Council:</span>{' '}
         {routing.winner} won · {routing.agreement_pct}% agreement · {quorumLabel(routing)} · {routing.dissent} dissent
-        {lostQuorum(routing) && <span style={{ color: '#ffda19' }}> · quorum lost</span>}
+        {lostQuorum(routing) && <span style={{ color: 'var(--status-gate)' }}> · quorum lost</span>}
       </p>
     );
   }
 
   if (routing.method === 'degraded') {
     return (
-      <p className="text-[11px] font-mono" style={{ color: '#ffda19' }} data-testid="routing-provenance">
+      <p className="text-[11px] font-mono" style={{ color: 'var(--status-gate)' }} data-testid="routing-provenance">
         <span className="font-medium">Degraded:</span> {routing.reason}
       </p>
     );
@@ -28,14 +28,14 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
 
   if (routing.method === 'tool') {
     return (
-      <p className="text-[11px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }} data-testid="routing-provenance">
+      <p className="text-[11px] font-mono" style={{ color: 'var(--ink-dim)' }} data-testid="routing-provenance">
         <span className="font-medium">Tool:</span> direct command — no council
       </p>
     );
   }
 
   return (
-    <p className="text-[11px] font-mono" style={{ color: '#a78bfa' }} data-testid="routing-provenance">
+    <p className="text-[11px] font-mono" style={{ color: 'var(--accent)' }} data-testid="routing-provenance">
       <span className="font-medium">Evaluator-distinct:</span> {routing.winner} (was {routing.was})
     </p>
   );

@@ -19,26 +19,26 @@ export function Modal({ title, onClose, children, disableEscapeKey }: Props): Re
     return () => document.removeEventListener('keydown', handler);
   }, [onClose, disableEscapeKey]);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         className="relative w-[90vw] h-[80vh] rounded-xl flex flex-col shadow-2xl"
-        style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.1)' }}
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
       >
         <div
           className="flex items-center justify-between px-4 py-3 shrink-0"
-          style={{ borderBottom: '1px solid rgba(230,237,243,0.07)' }}
+          style={{ borderBottom: '1px solid var(--surface-raised)' }}
         >
-          <h2 id={titleId} className="text-sm font-semibold font-mono" style={{ color: '#e6edf3' }}>{title}</h2>
+          <h2 id={titleId} className="text-sm font-semibold font-mono" style={{ color: 'var(--ink-high)' }}>{title}</h2>
           <button
             type="button"
             onClick={onClose}
             className="text-lg leading-none transition-colors"
-            style={{ color: 'rgba(230,237,243,0.35)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#e6edf3'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(230,237,243,0.35)'; }}
+            style={{ color: 'var(--ink-dim)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ink-high)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-dim)'; }}
             aria-label="Close"
           >
             ✕

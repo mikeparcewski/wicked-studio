@@ -51,8 +51,8 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
   })();
 
   const rowStyle = {
-    background: '#161c26',
-    border: '1px solid rgba(230,237,243,0.07)',
+    background: 'var(--surface-rail)',
+    border: '1px solid var(--surface-raised)',
     borderRadius: '6px',
     padding: '8px',
   };
@@ -60,7 +60,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
   return (
     <div data-testid="decisions-ledger" className="flex flex-col gap-2">
       {decidedUnits.length === 0 && pendingGate === null ? (
-        <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+        <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
           No governed decisions recorded yet.
         </p>
       ) : (
@@ -69,14 +69,14 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
             <li key={u.ord} data-testid="ledger-row" data-ord={u.ord} style={rowStyle}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1">
-                  <span className="font-semibold text-[11px] font-mono" style={{ color: '#e6edf3' }}>unit #{u.ord}</span>
+                  <span className="font-semibold text-[11px] font-mono" style={{ color: 'var(--ink-high)' }}>unit #{u.ord}</span>
                   {(u.role === 'creator' || u.role === 'evaluator') && (
                     <span
                       data-testid="role-badge"
                       className="text-[10px] font-mono px-1 rounded"
                       style={{
-                        background: u.role === 'evaluator' ? 'rgba(56,139,253,0.15)' : 'rgba(63,185,80,0.12)',
-                        color: u.role === 'evaluator' ? '#58a6ff' : '#3fb950',
+                        background: u.role === 'evaluator' ? 'var(--accent-subtle)' : 'var(--status-run-dim)',
+                        color: u.role === 'evaluator' ? 'var(--accent)' : 'var(--status-run)',
                       }}
                     >
                       {u.role === 'creator' ? 'Creator' : 'Evaluator'}
@@ -86,7 +86,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                     <span
                       data-testid="gate-badge"
                       className="text-[10px] font-mono px-1 rounded"
-                      style={{ background: 'rgba(255,218,25,0.1)', color: '#ffda19' }}
+                      style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
                     >
                       {typeof u.gate === 'string' && u.gate === 'human_confirm'
                         ? 'HUMAN-CONFIRM'
@@ -99,21 +99,21 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                     <span
                       data-testid="rework-badge"
                       className="text-[10px] font-mono px-1 rounded"
-                      style={{ background: 'rgba(248,81,73,0.12)', color: '#f85149' }}
+                      style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
                     >
                       ×{u.attempts.length}
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
+                <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                   {u.resolved ? u.stage : 'resolving…'}
                 </span>
               </div>
 
               <RoutingProvenance routing={u.routing} />
               {u.skillRef && (
-                <p className="text-[11px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
-                  skill: <span style={{ color: 'rgba(230,237,243,0.6)' }}>{u.skillRef}</span>
+                <p className="text-[11px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+                  skill: <span style={{ color: 'var(--ink-muted)' }}>{u.skillRef}</span>
                 </p>
               )}
 
@@ -121,33 +121,33 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                 <div
                   key={i}
                   className="mt-1 rounded p-1.5"
-                  style={{ background: '#0f1419', border: '1px solid rgba(230,237,243,0.05)' }}
+                  style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
                 >
                   <p className="text-[11px] font-mono">
                     <span
                       className="font-semibold"
-                      style={{ color: g.combined ? '#3fb950' : '#f85149' }}
+                      style={{ color: g.combined ? 'var(--status-run)' : 'var(--status-fail)' }}
                     >
                       {g.combined ? 'ALLOW' : 'DENY'}
                     </span>
-                    <span style={{ color: 'rgba(230,237,243,0.45)' }}>
+                    <span style={{ color: 'var(--ink-muted)' }}>
                       {' · '}{gateDecider(g)}
                       {g.criterion ? ` · ${g.criterion}` : ' · (ungated)'}
                     </span>
                   </p>
                   {g.hasDeterministicFloor && (
-                    <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                    <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                       deterministic: {g.deterministicPass ? 'pass' : 'fail'}
                     </p>
                   )}
                   {g.agentVerdict !== null && (
-                    <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                    <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                       agent: {g.agentVerdict}
                       {g.agentReasoning ? ` — ${g.agentReasoning}` : ''}
                     </p>
                   )}
                   {g.evaluatorPass !== null && (
-                    <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                    <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                       evaluator: {g.evaluatorPass ? 'pass' : 'fail'}
                       {/* Name the policies that ran, or say plainly that none did — "pass" on its
                           own reads as an enforced approval when it is a default-allow. */}
@@ -159,7 +159,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                     </p>
                   )}
                   {g.denialReason && (
-                    <p className="text-[10px] font-mono" style={{ color: '#f85149' }}>
+                    <p className="text-[10px] font-mono" style={{ color: 'var(--status-fail)' }}>
                       reason: {g.denialReason}
                     </p>
                   )}
@@ -167,7 +167,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
               ))}
 
               {u.denialReason && u.gateEvals.length === 0 && (
-                <p className="mt-1 text-[11px] font-mono" style={{ color: '#f85149' }} data-testid="ledger-denial">
+                <p className="mt-1 text-[11px] font-mono" style={{ color: 'var(--status-fail)' }} data-testid="ledger-denial">
                   denied: {u.denialReason}
                 </p>
               )}
@@ -179,9 +179,9 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
               data-testid="ledger-pending"
               className="rounded p-2 text-[11px] font-mono"
               style={{
-                background: 'rgba(255,218,25,0.06)',
-                border: '1px dashed rgba(255,218,25,0.35)',
-                color: '#ffda19',
+                background: 'var(--status-gate-dim)',
+                border: '1px dashed var(--status-gate)',
+                color: 'var(--status-gate)',
               }}
             >
               <span className="font-semibold">PENDING</span> · awaiting human · before unit #
@@ -194,8 +194,8 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
               data-testid="ledger-next"
               className="rounded p-2 text-[11px] font-mono"
               style={{
-                border: '1px dashed rgba(230,237,243,0.12)',
-                color: 'rgba(230,237,243,0.35)',
+                border: '1px dashed var(--surface-raised)',
+                color: 'var(--ink-dim)',
               }}
             >
               {nextIsGated ? 'next decision point · unit #' : 'next unit · unit #'}

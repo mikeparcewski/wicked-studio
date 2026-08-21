@@ -5,17 +5,17 @@ interface Props {
 }
 
 const STATUS_DOT: Record<UnitModel['status'], { bg: string; border: string; color: string; label: string }> = {
-  pending:     { bg: 'rgba(230,237,243,0.04)', border: 'rgba(230,237,243,0.15)', color: 'rgba(230,237,243,0.3)', label: 'pending' },
-  distributed: { bg: 'rgba(121,192,255,0.08)', border: '#79c0ff',               color: '#79c0ff',               label: 'dispatched' },
-  done:        { bg: 'rgba(63,185,80,0.08)',   border: '#3fb950',                color: '#3fb950',               label: 'done' },
-  rejected:    { bg: 'rgba(248,81,73,0.08)',   border: '#f85149',                color: '#f85149',               label: 'rejected' },
+  pending:     { bg: 'var(--surface-raised)', border: 'var(--surface-raised)', color: 'var(--ink-dim)', label: 'pending' },
+  distributed: { bg: 'var(--accent-subtle)', border: 'var(--accent)',      color: 'var(--accent)',      label: 'dispatched' },
+  done:        { bg: 'var(--status-run-dim)',   border: 'var(--status-run)',                color: 'var(--status-run)',               label: 'done' },
+  rejected:    { bg: 'var(--status-fail-dim)',   border: 'var(--status-fail)',                color: 'var(--status-fail)',               label: 'rejected' },
 };
 
 const STAGE_COLOR: Record<UnitModel['stage'], string> = {
-  recon:  '#79c0ff',
-  build:  '#3fb950',
-  review: '#a78bfa',
-  test:   '#ffda19',
+  recon:  'var(--accent)',
+  build:  'var(--status-run)',
+  review: 'var(--accent-dim)',
+  test:   'var(--status-gate)',
 };
 
 export function PhaseLadder({ model }: Props): React.ReactElement {
@@ -30,7 +30,7 @@ export function PhaseLadder({ model }: Props): React.ReactElement {
 
   if (units.length === 0) {
     return (
-      <div data-testid="phase-ladder" className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+      <div data-testid="phase-ladder" className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
         No units planned yet.
       </div>
     );
@@ -38,7 +38,7 @@ export function PhaseLadder({ model }: Props): React.ReactElement {
 
   return (
     <div data-testid="phase-ladder" className="flex flex-col gap-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+      <p className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'var(--ink-dim)' }}>
         Phase ladder
       </p>
       <ol className="flex flex-wrap items-stretch gap-1">
@@ -52,13 +52,13 @@ export function PhaseLadder({ model }: Props): React.ReactElement {
                 data-ord={u.ord}
                 data-resolving="true"
               >
-                {i > 0 && <span className="h-px w-3" style={{ background: 'rgba(230,237,243,0.08)' }} aria-hidden />}
+                {i > 0 && <span className="h-px w-3" style={{ background: 'var(--surface-raised)' }} aria-hidden />}
                 <div
                   className="flex min-w-[3.5rem] flex-col items-center rounded px-2 py-1 font-mono"
                   style={{
-                    background: 'rgba(230,237,243,0.03)',
-                    border: '1px dashed rgba(230,237,243,0.15)',
-                    color: 'rgba(230,237,243,0.3)',
+                    background: 'var(--surface-raised)',
+                    border: '1px dashed var(--surface-raised)',
+                    color: 'var(--ink-dim)',
                   }}
                   title={`unit #${u.ord} — resolving (awaiting snapshot)`}
                 >
@@ -73,21 +73,21 @@ export function PhaseLadder({ model }: Props): React.ReactElement {
           const gate = u.gateEvals.length > 0;
           const gateDenied = u.gateEvals.some((g) => !g.combined) || u.status === 'rejected';
           const human = humanGateAt(u.ord);
-          const stageColor = STAGE_COLOR[u.stage] ?? 'rgba(230,237,243,0.4)';
+          const stageColor = STAGE_COLOR[u.stage] ?? 'var(--ink-dim)';
           return (
             <li key={u.ord} className="flex items-center gap-1" data-testid="ladder-unit" data-ord={u.ord}>
-              {i > 0 && <span className="h-px w-3" style={{ background: 'rgba(230,237,243,0.08)' }} aria-hidden />}
+              {i > 0 && <span className="h-px w-3" style={{ background: 'var(--surface-raised)' }} aria-hidden />}
               <div
                 className="flex min-w-[3.5rem] flex-col items-center rounded px-2 py-1 font-mono"
                 style={{
                   background: dot.bg,
-                  border: `1px solid ${isCurrent ? '#79c0ff' : dot.border}`,
-                  boxShadow: isCurrent ? '0 0 0 2px rgba(121,192,255,0.2)' : 'none',
+                  border: `1px solid ${isCurrent ? 'var(--accent)' : dot.border}`,
+                  boxShadow: isCurrent ? '0 0 0 2px var(--accent-subtle)' : 'none',
                   color: dot.color,
                 }}
                 title={`unit #${u.ord} — ${u.stage} — ${dot.label}`}
               >
-                <span className="text-[10px] font-semibold" style={{ color: 'rgba(230,237,243,0.7)' }}>#{u.ord}</span>
+                <span className="text-[10px] font-semibold" style={{ color: 'var(--ink-muted)' }}>#{u.ord}</span>
                 <span className="text-[9px] font-medium uppercase" style={{ color: stageColor }}>{u.stage}</span>
                 <span className="text-[9px]">{dot.label}</span>
               </div>
@@ -95,7 +95,7 @@ export function PhaseLadder({ model }: Props): React.ReactElement {
                 <span
                   data-testid="ladder-gate"
                   className="text-xs"
-                  style={{ color: gateDenied ? '#f85149' : gate ? '#3fb950' : 'rgba(230,237,243,0.3)' }}
+                  style={{ color: gateDenied ? 'var(--status-fail)' : gate ? 'var(--status-run)' : 'var(--ink-dim)' }}
                   title={
                     gate
                       ? `gate evaluated (${gateDenied ? 'denied' : 'allowed'})`

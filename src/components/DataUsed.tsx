@@ -10,7 +10,7 @@ export function DataUsed({ model }: Props): React.ReactElement {
   return (
     <div data-testid="data-used" className="flex flex-col gap-2 text-[11px]">
       {withFiles.length === 0 ? (
-        <p style={{ color: 'rgba(230,237,243,0.4)' }} data-testid="data-used-empty">
+        <p style={{ color: 'var(--ink-dim)' }} data-testid="data-used-empty">
           No files-read captured yet — populated from claude <code>tool_use</code> blocks via{' '}
           <code>dataUsed</code>.
         </p>
@@ -18,13 +18,13 @@ export function DataUsed({ model }: Props): React.ReactElement {
         <ul className="flex flex-col gap-2">
           {withFiles.map((u) => (
             <li key={u.ord} data-testid="data-used-unit" data-ord={u.ord}>
-              <p className="font-semibold font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>
+              <p className="font-semibold font-mono" style={{ color: 'var(--ink-muted)' }}>
                 unit #{u.ord}
                 {u.assignedCli ? ` · ${u.assignedCli}` : ''}
               </p>
               <ul className="mt-0.5 flex flex-col gap-0.5">
                 {u.filesRead.map((f) => (
-                  <li key={f} className="truncate font-mono" style={{ color: 'rgba(230,237,243,0.45)' }} title={f}>
+                  <li key={f} className="truncate font-mono" style={{ color: 'var(--ink-muted)' }} title={f}>
                     {f}
                   </li>
                 ))}
@@ -37,7 +37,7 @@ export function DataUsed({ model }: Props): React.ReactElement {
       <p
         data-testid="data-used-recall-disabled"
         className="rounded p-1.5 font-mono"
-        style={{ border: '1px dashed rgba(230,237,243,0.12)', color: 'rgba(230,237,243,0.35)' }}
+        style={{ border: '1px dashed var(--surface-raised)', color: 'var(--ink-dim)' }}
       >
         memory / knowledge recall: disabled (pending core-ts binding)
       </p>
