@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { Project, ProjectMember } from '../src/api/types.js';
 import { resolveRunProject, useLegacyRedirect } from '../src/hooks/useLegacyRedirect.js';
-import { rememberMode } from '../src/hooks/useRoute.js';
 
 const listProjects = vi.fn();
 const listProjectMembers = vi.fn();
@@ -102,21 +101,21 @@ describe('useLegacyRedirect (DES-MERGE-001 §1.5 — no bookmark breaks)', () =>
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('/projects/:id → /p/:id on the last-used mode, with no membership lookup', () => {
+  it('/projects/:id → /p/:id (the project dashboard), with no membership lookup', () => {
     const navigate = vi.fn();
-    rememberMode('proj-1', 'document');
 
     renderHook(() => useLegacyRedirect(legacy.projects('proj-1'), navigate));
 
-    expect(navigate).toHaveBeenCalledWith('/p/proj-1/document', { replace: true });
+    expect(navigate).toHaveBeenCalledWith('/p/proj-1', { replace: true });
     expect(listProjects).not.toHaveBeenCalled();
   });
 
-  it('a bare /p/:projectId lands on chat by default', () => {
+  it('a bare /p/:projectId is NOT redirected — it IS the dashboard (DES-FEEDBACK-001 §4.1)', () => {
     const navigate = vi.fn();
     renderHook(() => useLegacyRedirect(
       { panel: 'runs', runId: null, projectId: 'proj-1', mode: null, showLaunch: false }, navigate));
-    expect(navigate).toHaveBeenCalledWith('/p/proj-1/chat', { replace: true });
+    expect(navigate).not.toHaveBeenCalled();
+    expect(listProjects).not.toHaveBeenCalled();
   });
 
   it('never redirects a route that is already in the shell, or the launch form', () => {

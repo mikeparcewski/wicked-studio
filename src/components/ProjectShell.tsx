@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { usePreflight } from '../hooks/usePreflight.js';
-import { MODES, modePath, rememberMode, type Mode, type Navigate } from '../hooks/useRoute.js';
+import { MODES, modePath, projectPath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useProjectsStore } from '../store/projects.js';
 import {
@@ -16,6 +16,22 @@ const S = {
   border: 'var(--surface-raised)',
   ink:    'var(--ink-high)',
   muted:  'var(--ink-muted)',
+  dim:    'var(--ink-dim)',
+};
+
+/** The context header's word for each mode (§4.2) — the switcher's capitalization. */
+export const MODE_LABEL: Record<Mode, string> = {
+  chat: 'Chat',
+  build: 'Build',
+  document: 'Document',
+  video: 'Video',
+};
+
+/** §4.2's type spec, shared by both breadcrumb segments: sans, sm, medium. */
+const CRUMB: React.CSSProperties = {
+  fontSize: 'var(--text-sm)',
+  fontWeight: 'var(--weight-medium)',
+  fontFamily: 'var(--font-sans)',
 };
 
 interface Props {
@@ -54,8 +70,6 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
   const lastArtifact = useRef<Partial<Record<Mode, string>>>({});
   if (artifactId) lastArtifact.current[mode] = artifactId;
 
-  useEffect(() => { rememberMode(projectId, mode); }, [projectId, mode]);
-
   const onSelectMode = useCallback(
     (next: Mode) => navigate(modePath(projectId, next, lastArtifact.current[next] ?? null)),
     [navigate, projectId],
@@ -79,10 +93,17 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden" data-testid="project-shell" data-project-id={projectId}>
+      {/* The project-context header (DES-FEEDBACK-001 §4.2, slice D): one slim
+          32px band — "project › mode" — above the switcher in EVERY mode surface.
+          It absorbed the shell's old breadcrumb rather than stacking beneath it;
+          always visible, never collapses. It answers: "where am I, and how do I
+          get back?" — the project name links back to the dashboard (§4.1). */}
       <header
+        data-testid="project-context-header"
         style={{
           display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0,
-          padding: '10px 14px 8px', background: S.bar, borderBottom: `1px solid ${S.border}`,
+          height: '32px', boxSizing: 'border-box', padding: '0 14px',
+          background: S.bar, borderBottom: `1px solid ${S.border}`,
         }}
       >
         <button
@@ -90,21 +111,27 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
           onClick={() => navigate('/')}
           title="All projects"
           style={{
-            background: 'transparent', border: 'none', color: S.muted, cursor: 'pointer',
+            background: 'transparent', border: 'none', color: S.dim, cursor: 'pointer',
             fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)', padding: 0,
           }}
         >
           ‹ Projects
         </button>
-        <h1
+        {/* The project name is CONTEXT, not the current focus (§4.2): muted ink,
+            and a real link — deep-linkable, middle-clickable — to the dashboard. */}
+        <a
           data-testid="project-name"
-          style={{
-            fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semi)',
-            fontFamily: 'var(--font-sans)', color: S.ink, margin: 0,
-          }}
+          href={projectPath(projectId)}
+          onClick={(e) => { e.preventDefault(); navigate(projectPath(projectId)); }}
+          title={`${name} — project dashboard`}
+          style={{ ...CRUMB, color: S.muted, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         >
           {name}
-        </h1>
+        </a>
+        <span aria-hidden style={{ ...CRUMB, color: S.dim }}>›</span>
+        <span data-testid="context-mode" style={{ ...CRUMB, color: S.ink }}>
+          {MODE_LABEL[mode]}
+        </span>
       </header>
 
       <ModeSwitcher mode={mode} onSelect={onSelectMode} unavailable={unavailable} />

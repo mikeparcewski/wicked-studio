@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { MODES, lastMode, modePath, rememberMode, useRoute } from '../src/hooks/useRoute.js';
+import { MODES, modePath, projectPath, useRoute } from '../src/hooks/useRoute.js';
 
 /** Render the hook against a given path — the parse reads `window.location` at mount. */
 function routeAt(path: string) {
@@ -107,22 +107,15 @@ describe('navigate', () => {
   });
 });
 
-describe('modePath / last-used mode', () => {
+describe('modePath / projectPath', () => {
   it('builds the single spelling of the shell path', () => {
     expect(modePath('proj-1', 'build')).toBe('/p/proj-1/build');
     expect(modePath('proj-1', 'build', 'run-9')).toBe('/p/proj-1/build/run-9');
     expect(modePath('proj one', 'chat', 'run/9')).toBe('/p/proj%20one/chat/run%2F9');
   });
 
-  it('defaults to chat and remembers per project', () => {
-    expect(lastMode('proj-1')).toBe('chat');
-    rememberMode('proj-1', 'build');
-    expect(lastMode('proj-1')).toBe('build');
-    expect(lastMode('proj-2')).toBe('chat');
-  });
-
-  it('ignores a junk stored value rather than routing to a mode that does not exist', () => {
-    window.localStorage.setItem('wk.studio.lastMode.proj-1', 'sideways');
-    expect(lastMode('proj-1')).toBe('chat');
+  it('builds the dashboard path — the no-mode project landing (DES-FEEDBACK-001 §4.1)', () => {
+    expect(projectPath('proj-1')).toBe('/p/proj-1');
+    expect(projectPath('proj one')).toBe('/p/proj%20one');
   });
 });

@@ -10,6 +10,7 @@ import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
 import { VideoStoryboard } from './components/VideoStoryboard.js';
 import { PolicyManager } from './components/PolicyManager.js';
+import { ProjectDashboard } from './components/ProjectDashboard.js';
 import { ProjectShell } from './components/ProjectShell.js';
 import { ProjectDetailPage } from './components/ProjectDetailPage.js';
 import { ProjectsPage } from './components/ProjectsPage.js';
@@ -337,6 +338,18 @@ export function App(): React.ReactElement {
         <ProjectShell projectId={projectId} mode={mode} artifactId={artifactId} navigate={navigate}>
           {renderModeSurface(mode, projectId)}
         </ProjectShell>
+      );
+    }
+    // `/p/:projectId` with NO mode segment is the PROJECT DASHBOARD (DES-FEEDBACK-001
+    // §4.1, slice D) — context before actions, replacing the last-used-mode redirect.
+    // Not a fifth mode: no shell, no switcher tab; the mode verbs live in its header.
+    // (`panel === 'project-detail'` is the legacy `/projects/:id` page, which keeps
+    // its own branch below while `useLegacyRedirect` replaces it with this route.)
+    if (projectId !== null && panel !== 'project-detail') {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <ProjectDashboard projectId={projectId} runs={runs} navigate={navigate} />
+        </div>
       );
     }
     // `/` is the orchestrator board (§1.4, slice 5); the flat run list it replaced is

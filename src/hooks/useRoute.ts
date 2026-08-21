@@ -58,26 +58,19 @@ function safeDecode(s: string): string {
   try { return decodeURIComponent(s); } catch { return s; }
 }
 
-/** Where `/p/:projectId` (no mode) lands, per project. §1.5: last-used mode, default `chat`. */
-const LAST_MODE_KEY = 'wk.studio.lastMode';
-
-export function lastMode(projectId: string): Mode {
-  try {
-    return asMode(window.localStorage.getItem(`${LAST_MODE_KEY}.${projectId}`) ?? '') ?? 'chat';
-  } catch {
-    return 'chat'; // storage denied (private mode) — the default is still correct
-  }
-}
-
-export function rememberMode(projectId: string, mode: Mode): void {
-  try {
-    window.localStorage.setItem(`${LAST_MODE_KEY}.${projectId}`, mode);
-  } catch { /* storage denied — the default mode simply stays 'chat' */ }
+/**
+ * Where `/p/:projectId` (no mode) lands: the PROJECT DASHBOARD (DES-FEEDBACK-001
+ * §4.1) — context before actions. This replaced the last-used-mode redirect
+ * (slice D): entering a project no longer jumps into whatever mode was open
+ * last; the operator sees the project's state and CHOOSES a mode.
+ */
+export function projectPath(projectId: string): string {
+  return `/p/${encodeURIComponent(projectId)}`;
 }
 
 /** Build a project-shell path. The single spelling of `/p/:projectId/:mode[/:artifactId]`. */
 export function modePath(projectId: string, mode: Mode, artifactId?: string | null): string {
-  const base = `/p/${encodeURIComponent(projectId)}/${mode}`;
+  const base = `${projectPath(projectId)}/${mode}`;
   return artifactId ? `${base}/${encodeURIComponent(artifactId)}` : base;
 }
 

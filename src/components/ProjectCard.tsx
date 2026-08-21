@@ -1,7 +1,7 @@
 import type { SessionView } from '../api/types.js';
 import type { SignalKind } from '../board/boardAttention.js';
 import { isLive, useRunHeadline } from '../hooks/useBoardHeadline.js';
-import { modePath, MODES, type Navigate } from '../hooks/useRoute.js';
+import { modePath, MODES, projectPath, type Navigate } from '../hooks/useRoute.js';
 import type { Attention, BoardProject } from '../hooks/useBoardModel.js';
 import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore } from '../store/runtime.js';
@@ -311,7 +311,9 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
       }}
     />
   );
-  const name = <a {...link(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>;
+  // The name leads to the project DASHBOARD (DES-FEEDBACK-001 §4.1, W6): context
+  // before actions. The quick actions beside it are still the direct mode doors.
+  const name = <a {...link(projectPath(project.id))} style={CSS.name}>{project.name}</a>;
   const repoTag = repo != null
     ? <span data-testid="project-repo" style={CSS.repo}>{repo}</span>
     : null;
