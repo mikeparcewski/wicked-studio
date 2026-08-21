@@ -28,4 +28,43 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
+  {
+    // DES-VISION-001 §2.11 — the no-raw-color contract. No file in src/ ships
+    // a literal color: hex, or rgb()/hsl() with literal channel values. Colors
+    // come from the semantic tokens in src/styles/tokens.css (a .css file —
+    // outside ESLint's reach; its build-time twin, the PostCSS check, lands
+    // with the error-mode flip). Slice-1 posture is WARN (§2.11 migration):
+    // the ~40 inherited hardcoded colors are converted slice by slice, and the
+    // rule moves to error per-surface as each slice lands, global by slice 6.
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: 'Literal[value=/#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\\b/]',
+          message: 'Raw hex color — use a semantic token from src/styles/tokens.css, e.g. var(--surface-card) (DES-VISION-001 §2.11).',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\\b/]',
+          message: 'Raw hex color — use a semantic token from src/styles/tokens.css, e.g. var(--surface-card) (DES-VISION-001 §2.11).',
+        },
+        {
+          selector: 'Literal[value=/\\brgba?\\(\\s*[0-9]/]',
+          message: 'rgb()/rgba() with literal values — use a semantic token from src/styles/tokens.css (DES-VISION-001 §2.11).',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/\\brgba?\\(\\s*[0-9]/]',
+          message: 'rgb()/rgba() with literal values — use a semantic token from src/styles/tokens.css (DES-VISION-001 §2.11).',
+        },
+        {
+          selector: 'Literal[value=/\\bhsla?\\(\\s*[0-9.]/]',
+          message: 'hsl()/hsla() with literal values — use a semantic token from src/styles/tokens.css (DES-VISION-001 §2.11).',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/\\bhsla?\\(\\s*[0-9.]/]',
+          message: 'hsl()/hsla() with literal values — use a semantic token from src/styles/tokens.css (DES-VISION-001 §2.11).',
+        },
+      ],
+    },
+  },
 );
