@@ -42,8 +42,8 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
       data-status={session.status}
       data-kind={kind}
       onClick={() => onSelect(session.id)}
-      className={`w-full text-left px-3 py-2 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20 ${
-        isActive ? 'bg-black/35' : 'bg-transparent hover:bg-black/20 focus-visible:bg-black/20'
+      className={`w-full text-left px-3 py-2 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-dim ${
+        isActive ? 'bg-surface-raised' : 'bg-transparent hover:bg-surface-card focus-visible:bg-surface-card'
       }`}
     >
       <div className="flex items-center gap-2">
