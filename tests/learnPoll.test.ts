@@ -40,7 +40,7 @@ describe('pollLearnedTheme', () => {
     const ctl = new AbortController();
     const fetchLearned = vi.fn().mockResolvedValue(null);
     // A sleeper that aborts DURING the wait, as the real abortableSleep resolves early.
-    const sleep = (_ms: number): Promise<void> => { ctl.abort(); return Promise.resolve(); };
+    const sleep = (): Promise<void> => { ctl.abort(); return Promise.resolve(); };
     const out = await pollLearnedTheme({ fetchLearned, signal: ctl.signal, sleep });
     expect(out).toEqual({ kind: 'cancelled' });
     expect(fetchLearned).toHaveBeenCalledTimes(1); // nothing after the abort

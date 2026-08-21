@@ -363,15 +363,13 @@ export function AppearanceSettings(): React.ReactElement {
         </p>
       </div>
 
-      {/* NOTE (issue #65): the "Learn from brand source" leg (BrandLearn, vision
-          slice 8) is GONE. Its whole loop — a learn POST, a polled theme list,
-          a theme-detail read — was an invented wire: the real
-          wicked-interactive bridge has never served a theme route (verified
-          against src/service/server.js and its history). Theme learning on the
-          real bridge is DOC-scoped (wicked.interactive.theme.requested) and its
-          result is never readable back over HTTP, so a studio-accent extraction
-          leg has no wire to ride. The manual accent/logo/theme controls above
-          are the appearance surface's real, crew-persisted capability.
+      {/* NOTE: the "Learn from a brand" extraction leg lives in its OWN section
+          (BrandLearn.tsx, rendered beside this one on /theme). Issue #65 removed
+          it from here because its old loop rode invented routes; it returned on
+          real wires once wicked-interactive#181 gave the doc-scoped learn a
+          readback (GET /d/:docId/api/theme/learned). This section stays the
+          MANUAL surface only — accent/logo/theme, crew-persisted — and the
+          brand-learn Apply funnels into the same appearance store it uses.
       */}
     </section>
   );
