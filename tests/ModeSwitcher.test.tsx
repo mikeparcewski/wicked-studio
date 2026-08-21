@@ -24,16 +24,41 @@ describe('ModeSwitcher (DES-MERGE-001 §1.3)', () => {
     expect(screen.getByTestId('mode-tab-chat')).toHaveAttribute('aria-selected', 'false');
   });
 
-  it('fills the active segment and greys none of the rest — F8, the weight fix (§2.5)', () => {
+  it('fills the active segment from the accent token — F8 weight, §5.2 language (EC15)', () => {
     render(<ModeSwitcher mode="document" onSelect={() => {}} />);
-    // The slice-4 DOM AC verbatim: the active segment's background is FILLED,
-    // not transparent — the switcher reads as a control, not as text links.
-    const ACCENT = /#ffda19|rgb\(255,\s*218,\s*25\)/;
+    // DES-VISION-001 §5.2: active = accent fill + accent-fg ink; inactive =
+    // transparent + ink-muted. The fill is a TOKEN now (the uxfix slice-4 AC's
+    // literal yellow was that token's pre-vision value) — the switcher still
+    // reads as a control because the active segment is FILLED, not underlined.
     const active = screen.getByTestId('mode-tab-document');
-    expect(active.style.background).toMatch(ACCENT);
+    expect(active.style.background).toBe('var(--accent)');
+    expect(active.style.color).toBe('var(--accent-fg)');
     const inactive = screen.getByTestId('mode-tab-chat');
-    expect(inactive.style.background).not.toMatch(ACCENT);
-    expect(inactive.style.background).not.toBe('transparent');
+    expect(inactive.style.background).toBe('transparent');
+    expect(inactive.style.color).toBe('var(--ink-muted)');
+  });
+
+  it('slides an accent fill underlayer sized to the active segment (§5.2, §1.6)', () => {
+    render(<ModeSwitcher mode="build" onSelect={() => {}} />);
+    // The positioned <div> §5.2 names: accent-filled, transitioned on left/width
+    // at --dur-base / --ease-in-out. jsdom has no layout, so the RECT is 0 here —
+    // the rig (e2e/vision_slice3_test.py) asserts the real slide; this pins the
+    // contract's shape: the div exists, is aria-hidden, and transitions the two
+    // properties the design says move (left, width — never the labels).
+    const fill = screen.getByTestId('mode-fill');
+    expect(fill).toHaveAttribute('aria-hidden');
+    expect(fill.style.background).toBe('var(--accent)');
+    expect(fill.style.transition).toContain('left var(--dur-base) var(--ease-in-out)');
+    expect(fill.style.transition).toContain('width var(--dur-base) var(--ease-in-out)');
+    expect(fill.style.pointerEvents).toBe('none');
+  });
+
+  it('keeps the summary in the §5.2 voice: --text-xs sans in --ink-dim', () => {
+    render(<ModeSwitcher mode="chat" onSelect={() => {}} />);
+    const summary = screen.getByTestId('mode-summary');
+    expect(summary.style.color).toBe('var(--ink-dim)');
+    expect(summary.style.fontSize).toBe('var(--text-xs)');
+    expect(summary.style.fontFamily).toBe('var(--font-sans)');
   });
 
   it('keeps the active mode’s summary ON SCREEN, not tooltip-only (§2.5 rule 2)', () => {

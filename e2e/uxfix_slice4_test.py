@@ -56,7 +56,20 @@ from uxfix_fixture import (
 W2_PORT = int(os.environ.get("W2_PORT", "4333"))
 ORIGIN = f"http://127.0.0.1:{W2_PORT}"
 CHAT_URL = f"{ORIGIN}/p/q3-review-deck/chat"
-ACCENT_RGB = "rgb(255, 218, 25)"
+# The switcher's fill was pinned to the pre-token accent literal here; vision
+# slice 3 moved the active segment onto `var(--accent)` (DES-VISION-001 §5.2),
+# so the assertion is re-pinned to the TOKEN by in-page probe — same
+# supersession the slice-1 rig went through when the card background moved onto
+# `--surface-card`. The design assertion is unchanged: the active segment is
+# FILLED and an inactive one is not (F8).
+ACCENT_PROBE_JS = """() => {
+  const el = document.createElement('div');
+  el.style.background = 'var(--accent)';
+  document.body.appendChild(el);
+  const v = getComputedStyle(el).backgroundColor;
+  el.remove();
+  return v;
+}"""
 ROSTER_KEYS = ["claude", "codex", "agy", "pi"]
 
 report: dict = {"ok": False, "steps": {}}
@@ -124,7 +137,9 @@ with sync_playwright() as p:
     page.add_style_tag(content=HIDE_GATE_TOASTS)
 
     # AC 1 — the switcher is the spine (F8): filled active segment, glyph+label
-    # segments, summary in the DOM. All read from computed style / live DOM.
+    # segments, summary in the DOM. All read from computed style / live DOM;
+    # the fill's value comes from the accent TOKEN by probe (see ACCENT_PROBE_JS).
+    accent_rgb = page.evaluate(ACCENT_PROBE_JS)
     switcher = page.evaluate(
         """accent => {
              const active = document.querySelector('[data-testid="mode-tab-chat"]');
@@ -143,7 +158,7 @@ with sync_playwright() as p:
                summaryVisible: summary !== null && summary.offsetParent !== null,
              };
            }""",
-        ACCENT_RGB,
+        accent_rgb,
     )
 
     # AC 2 — first-run teaches, nothing warms. The network tap has recorded every

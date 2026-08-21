@@ -20,7 +20,10 @@ html, body, #root {
   background: var(--wk-canvas);
   color: var(--wk-ink);
   height: 100%;
-  font-family: "Archivo", ui-sans-serif, sans-serif;
+  /* §2.8's one sans, resolved from the token: Inter (loaded in index.html —
+     slice 3 reconciled the legacy Archivo load against the token contract;
+     the doc names Inter in §1.5 rule 3 and §2.8, so Inter is what loads). */
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -46,7 +49,7 @@ html, body, #root {
   --wk-blue-2:          #182f3c;
   --wk-blue-surface:    #224a5e;
   --wk-blue-surface-2:  #1a3b4e;
-  --wk-font-display:    "Archivo", ui-sans-serif, sans-serif;
+  --wk-font-display:    var(--font-sans);
   --wk-font-mono:       "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -81,15 +84,18 @@ code, pre, .font-mono {
   50%      { opacity: 1;   }
 }
 
-/* EXECUTING: 2px, breathing, faint matching glow. Slow and low-contrast on purpose. */
+/* EXECUTING: 2px, breathing, faint matching glow. Slow and low-contrast on
+   purpose. Colors are the STATUS layer (DES-VISION-001 §2.6 — slice 3 retired
+   the legacy --wk-link/--wk-accent pair here): executing = run-emerald with the
+   §5.1 `--status-run-dim` glow, gate = the amber the gate chip already speaks. */
 .wk-live-edge {
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--wk-link);
-  box-shadow: 0 0 8px rgba(121, 192, 255, 0.2);
+  background: var(--status-run);
+  box-shadow: 0 0 8px var(--status-run-dim);
   animation: wk-live-pulse 2s ease-in-out infinite;
   pointer-events: none;
 }
@@ -104,11 +110,11 @@ code, pre, .font-mono {
   .wk-live-edge { animation: none; opacity: 1; width: 3px; }
 }
 
-/* GATE-WAITING: out-ranks executing — wider, accent-yellow, solid, never breathing. */
+/* GATE-WAITING: out-ranks executing — wider, gate-amber, solid, never breathing. */
 .wk-live-edge--gate {
   width: 3px;
-  background: var(--wk-accent);
-  box-shadow: 0 0 10px rgba(255, 218, 25, 0.3);
+  background: var(--status-gate);
+  box-shadow: 0 0 10px var(--status-gate-dim);
   animation: none;
   opacity: 1;
 }

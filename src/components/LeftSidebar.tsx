@@ -1,14 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { lastMode, modePath } from '../hooks/useRoute.js';
-import { useConnectionStore } from '../store/connection.js';
+import { AppChrome } from './AppChrome.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
 import { NotificationBell } from './NotificationBell.js';
 import { ATTENTION_DOT } from './ProjectCard.js';
-import { SettingsMenu } from './SettingsMenu.js';
-import { WickedLogo } from './WickedLogo.js';
 
 /**
  * The rail, consolidated to TWO taxonomies (DES-UXFIX-001 §2.3, slice 3 — F4):
@@ -35,17 +33,22 @@ interface Props {
   navigate: (path: string) => void;
 }
 
+// The rail is chrome (§5.1's token table: `--surface-rail → rail, chrome`), so
+// slice 3's chrome conversion moves the whole palette onto the semantic tokens
+// (§2.11) — the legacy teal shell retires with it. Links and the creation verbs
+// are the rail's interactive affordances: on-accent, the §5.3 "Add agents"
+// precedent (low-key but on-accent to signal interactivity).
 const S = {
-  bg:        '#1c4053',
-  border:    'rgba(0,0,0,0.25)',
-  ink:       '#e6edf3',
-  muted:     'rgba(230,237,243,0.55)',
-  faint:     'rgba(230,237,243,0.3)',
-  hover:     'rgba(0,0,0,0.2)',
-  active:    'rgba(0,0,0,0.35)',
-  accent:    '#ffda19',
-  accentInk: '#0d1117',
-  link:      '#79c0ff',
+  bg:        'var(--surface-rail)',
+  border:    'var(--surface-raised)',
+  ink:       'var(--ink-body)',
+  muted:     'var(--ink-muted)',
+  faint:     'var(--ink-dim)',
+  hover:     'var(--surface-card)',
+  active:    'var(--surface-raised)',
+  accent:    'var(--accent)',
+  accentInk: 'var(--accent-fg)',
+  link:      'var(--accent)',
 };
 
 const SECTION_MAX = 4;
@@ -166,109 +169,6 @@ function SectionLabel({
   );
 }
 
-// ── Connection status pill + health popover ───────────────────────────────────
-
-interface HealthInfo {
-  status: string;
-  version: string;
-  ping: string;
-}
-
-function ConnectionPill(): React.ReactElement {
-  const wsStatus = useConnectionStore((s) => s.status);
-  const [open, setOpen] = useState(false);
-  const [health, setHealth] = useState<HealthInfo | null>(null);
-  const [healthError, setHealthError] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setHealth(null);
-    setHealthError(false);
-    api.getHealth()
-      .then((h) => setHealth(h))
-      .catch(() => setHealthError(true));
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onOutside(e: MouseEvent): void {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('click', onOutside);
-    return () => document.removeEventListener('click', onOutside);
-  }, [open]);
-
-  const dotColor =
-    wsStatus === 'connected' ? '#3fb950' :
-    wsStatus === 'connecting' ? '#ffda19' : '#f85149';
-
-  const pillLabel =
-    wsStatus === 'connected' ? 'Connected' :
-    wsStatus === 'connecting' ? 'Connecting' : 'Disconnected';
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        title="Connection status"
-        style={{
-          display: 'flex', alignItems: 'center', gap: '5px',
-          background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(230,237,243,0.1)',
-          borderRadius: '20px', padding: '2px 8px 2px 6px', cursor: 'pointer',
-        }}
-      >
-        <span style={{
-          width: '7px', height: '7px', borderRadius: '50%',
-          background: dotColor, flexShrink: 0,
-          boxShadow: wsStatus === 'connected' ? `0 0 5px ${dotColor}` : 'none',
-        }} />
-        <span style={{ fontSize: '10px', fontFamily: 'monospace', color: dotColor, whiteSpace: 'nowrap' }}>
-          {pillLabel}
-        </span>
-        <span style={{ fontSize: '9px', color: 'rgba(230,237,243,0.35)', marginLeft: '1px' }}>▾</span>
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
-          background: '#1b222e', border: '1px solid rgba(230,237,243,0.12)',
-          borderRadius: '10px', padding: '12px 14px', minWidth: '220px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        }}>
-          <p style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(230,237,243,0.4)', marginBottom: '8px', fontFamily: 'monospace' }}>
-            Health checks
-          </p>
-          <CheckRow label="WebSocket" ok={wsStatus === 'connected'} detail={pillLabel} />
-          {healthError ? (
-            <CheckRow label="API server" ok={false} detail="unreachable" />
-          ) : health ? (
-            <>
-              <CheckRow label="API server" ok={health.status === 'ok'} detail={health.status} />
-              <CheckRow label="wicked-core" ok detail={health.version} />
-            </>
-          ) : (
-            <CheckRow label="API server" ok={null} detail="checking…" />
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CheckRow({ label, ok, detail }: { label: string; ok: boolean | null; detail: string }): React.ReactElement {
-  const icon = ok === null ? '·' : ok ? '✓' : '✗';
-  const color = ok === null ? 'rgba(230,237,243,0.3)' : ok ? '#3fb950' : '#f85149';
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
-      <span style={{ width: '12px', fontSize: '11px', color, fontFamily: 'monospace', flexShrink: 0 }}>{icon}</span>
-      <span style={{ fontSize: '11px', color: '#e6edf3', fontFamily: 'monospace', flex: 1 }}>{label}</span>
-      <span style={{ fontSize: '10px', color: 'rgba(230,237,243,0.45)', fontFamily: 'monospace' }}>{detail}</span>
-    </div>
-  );
-}
-
 /** One rail project row: the board's attention dot + the name. The row is the
  *  board card's one-glance summary, never a second place that explains it. */
 function ProjectRow({ item, onOpen }: { item: BoardProject; onOpen: () => void }): React.ReactElement {
@@ -293,7 +193,7 @@ function ProjectRow({ item, onOpen }: { item: BoardProject; onOpen: () => void }
           className="w-2 h-2 rounded-full shrink-0"
           style={{ background: ATTENTION_DOT[attention] }}
         />
-        <span className="flex-1 truncate text-xs leading-tight font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>
+        <span className="flex-1 truncate text-xs leading-tight font-mono" style={{ color: S.muted }}>
           {project.name}
         </span>
       </div>
@@ -306,7 +206,6 @@ function ProjectRow({ item, onOpen }: { item: BoardProject; onOpen: () => void }
 export function LeftSidebar({ runs, navigate }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
@@ -349,38 +248,20 @@ export function LeftSidebar({ runs, navigate }: Props): React.ReactElement {
       onMouseEnter={() => { if (collapsed) setHovered(true); }}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 pt-5 pb-3 shrink-0">
-        <button type="button" onClick={() => navigate('/')} className="shrink-0" aria-label="Home">
-          <WickedLogo size={26} />
-        </button>
-        {isExpanded && (
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="flex-1 text-left text-sm font-semibold font-mono truncate transition-opacity hover:opacity-70"
-            style={{ color: S.ink, background: 'transparent' }}
-          >
-            wicked-studio
-          </button>
-        )}
+      {/* The app chrome (DES-VISION-001 §6.3 slice 3): logo slot + product name
+          + connection dot + settings — the rail's header region, token-built. */}
+      <div className={`flex shrink-0 ${isExpanded ? 'items-center pr-2' : 'flex-col items-center pt-2 gap-1'}`}>
+        <AppChrome collapsed={!isExpanded} navigate={navigate} />
         <button
           type="button"
           onClick={() => setCollapsed(v => !v)}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={`text-xs font-mono shrink-0 leading-none ${isExpanded ? 'ml-auto' : ''}`}
+          className="text-xs font-mono shrink-0 leading-none"
           style={{ color: S.faint }}
         >
           {collapsed ? '»' : '«'}
         </button>
       </div>
-
-      {/* Connection pill — below logo, matching the gap between action links and section headers */}
-      {isExpanded && (
-        <div className="px-4 pt-1 pb-3">
-          <ConnectionPill />
-        </div>
-      )}
 
       {/* Notification bell — always visible (collapsed: icon-only with badge; expanded: label too) */}
       <div className={isExpanded ? 'px-4 pb-2' : 'flex justify-center pb-2'}>
@@ -464,11 +345,11 @@ export function LeftSidebar({ runs, navigate }: Props): React.ReactElement {
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="flex-1 truncate text-xs leading-tight font-mono" style={{ color: 'rgba(230,237,243,0.7)' }}>
+                      <span className="flex-1 truncate text-xs leading-tight font-mono" style={{ color: S.muted }}>
                         {repo.name}
                       </span>
                     </div>
-                    <p className="text-[10px] mt-0.5 font-mono truncate" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                    <p className="text-[10px] mt-0.5 font-mono truncate" style={{ color: S.faint }}>
                       {repo.root_path}
                     </p>
                   </button>
@@ -520,36 +401,6 @@ export function LeftSidebar({ runs, navigate }: Props): React.ReactElement {
         )}
       </div>
 
-      {/* Footer */}
-      <div className={`px-2 pb-3 shrink-0 ${!isExpanded ? 'flex flex-col items-center gap-1' : ''}`}>
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(v => !v)}
-            onMouseDown={e => e.stopPropagation()}
-            aria-label="Settings"
-            className={`rounded transition-colors ${
-              !isExpanded
-                ? 'w-9 h-9 flex items-center justify-center text-base'
-                : 'w-full flex items-center gap-2 px-2 py-1.5 text-xs'
-            }`}
-            style={{ color: S.faint }}
-            onMouseEnter={e => { e.currentTarget.style.background = S.hover; e.currentTarget.style.color = S.ink; }}
-            onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = S.faint; }}
-          >
-            <span>⚙</span>
-            {isExpanded && (
-              <>
-                <span>Settings</span>
-                <span className="ml-auto text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.25)' }}>v0.3.2</span>
-              </>
-            )}
-          </button>
-          {settingsOpen && (
-            <SettingsMenu onNavigate={navigate} onClose={() => setSettingsOpen(false)} />
-          )}
-        </div>
-      </div>
     </div>
   );
 }
