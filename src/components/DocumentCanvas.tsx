@@ -226,7 +226,9 @@ function DocFrame({
       />
       {/* §7.3: while the strip is away, the bottom band listens for the mouse. */}
       <StripSensor hidden={hidden} wake={wake} />
-      <div style={{ bottom: 0, left: 0, position: 'absolute', right: 0, zIndex: 3 }}>
+      {/* pointerEvents none on the WRAPPER: the strip re-enables itself while visible;
+          while dimmed the box must not shadow the z-1 sensor, or nothing can wake it. */}
+      <div style={{ bottom: 0, left: 0, pointerEvents: 'none', position: 'absolute', right: 0, zIndex: 3 }}>
         <VersionStrip
           projectId={projectId}
           docId={docId}
