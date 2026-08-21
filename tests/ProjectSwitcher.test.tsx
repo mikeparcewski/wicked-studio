@@ -80,4 +80,33 @@ describe('ProjectSwitcher', () => {
     fireEvent.click(field);
     expect(screen.queryByTestId('project-switcher-list')).toBeNull();
   });
+
+  it('onOpen fires when the dropdown OPENS — never on mount, never on close (slice B lazy-load)', () => {
+    const onOpen = vi.fn();
+    render(<ProjectSwitcher current={null} projects={PROJECTS} onSelect={() => {}} onOpen={onOpen} />);
+    expect(onOpen, 'mount must not open').not.toHaveBeenCalled();
+
+    const field = screen.getByTestId('project-field');
+    fireEvent.click(field); // open
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    fireEvent.click(field); // close
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    fireEvent.click(field); // re-open
+    expect(onOpen).toHaveBeenCalledTimes(2);
+  });
+
+  it('locked never fires onOpen (slice B: a pre-bound field costs no fetch)', () => {
+    const onOpen = vi.fn();
+    render(<ProjectSwitcher current={PROJECTS[0]!} projects={PROJECTS} onSelect={() => {}} locked onOpen={onOpen} />);
+    fireEvent.click(screen.getByTestId('project-field'));
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('dropUp opens the list above the field (bottom-docked composers)', () => {
+    render(<ProjectSwitcher current={null} projects={PROJECTS} onSelect={() => {}} dropUp />);
+    fireEvent.click(screen.getByTestId('project-field'));
+    const list = screen.getByTestId('project-switcher-list');
+    expect(list.className).toContain('bottom-full');
+    expect(list.className).not.toContain('top-full');
+  });
 });

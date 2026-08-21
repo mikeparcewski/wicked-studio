@@ -200,8 +200,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // show the name, not the id. Unbound forms load nothing until the first open.
   useEffect(() => {
     if (lockedProjectId != null) loadProjects();
-    // loadProjects is stable in behaviour (ref-guarded, single-shot).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // (loadProjects is ref-guarded and single-shot, so listing only the lock is safe.)
   }, [lockedProjectId]);
 
   // ── Elapsed-time ticker ────────────────────────────────────────────────────
