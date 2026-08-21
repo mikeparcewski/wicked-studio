@@ -494,3 +494,572 @@ diff colorizer emits class names mapped to tokens in CSS, never inline hex.
 - Escape closes the viewer; focus returns to the FilesPanel row.
 
 ---
+
+## 4 P1-4 — Project pivot on the context header
+
+**Operator:** *"ProjectSwitcher dropdown ON the context-header project name (1-click pivot
+to another project RETAINING the current mode verb)."*
+
+### 4.1 Current state
+
+The project-context header (`ProjectShell.tsx:101–135`, slice D) renders the project name
+as a plain link back to the project dashboard (`ProjectShell.tsx:122–130`). Pivoting to a
+sibling project today costs: name → dashboard → `‹ Projects` → board → other project →
+mode tab. Four clicks to do what the operator wants in one.
+
+The `ProjectSwitcher` component (slice A/B, `ProjectSwitcher.tsx:36+`) already does the
+hard part: current binding + filterable project list + outside-click close + `onOpen`
+lazy-load hook + `dropUp`. It owns no fetch — callers pass projects they already have.
+
+### 4.2 Design
+
+The header's project name becomes the ProjectSwitcher's trigger, in a header-flavored
+dress (a `variant="crumb"` prop — same behavior, breadcrumb typography instead of the
+form-field box):
+
+```
+‹ Projects   api-migration ▾  ›  Build
+             ┌──────────────────────┐
+             │ filter projects…     │
+             │ ▸ api-migration    ✓ │
+             │ ▸ q3-review-deck     │
+             │ ▸ smoke-suite        │
+             │ ──────────────────── │
+             │ ⌂ Project dashboard  │
+             └──────────────────────┘
+```
+
+- **Selecting a sibling project navigates to `modePath(nextId, mode)`** — the SAME mode
+  verb, no artifact id (the artifact belongs to the old project; carrying it would 404 or
+  worse, silently show the wrong project's run). Mode retention is exactly the operator's
+  ask; artifact retention is deliberately NOT promised.
+- The current project renders with a `✓` and selecting it is a no-op close.
+- The dashboard link the name used to be does not vanish: the dropdown's last row
+  (`⌂ Project dashboard`) navigates to `/p/:projectId` — and the `›`-separated crumb
+  itself stays middle-clickable to the dashboard via a small `⌂` glyph directly after the
+  name, preserving the deep-linkable-real-link contract (§4.2 of DES-FEEDBACK-001).
+- No "Unfiled" row and no "+ New project" row here: this is a pivot between projects, not
+  a binding field — `onNewProject` is simply not passed, and Unfiled is not a project you
+  can stand in.
+
+**Wire verdict:** **CLIENT-DERIVABLE** — `useProjectsStore` is already loaded by the
+shell itself (`ProjectShell.tsx:61–66`); the dropdown adds zero requests.
+
+### 4.3 Token usage
+
+Trigger: the existing CRUMB spec (`--text-sm --weight-medium --font-sans --ink-muted`,
+ProjectShell.tsx:31–35) plus a `▾` in `--ink-dim` that turns `--ink-high` on hover/open.
+Dropdown: `--surface-raised`, `--shadow-raised`, `--radius-md` (the ProjectSwitcher's
+existing dress); the `✓` in `--accent`. Focus ring on the trigger: `--accent` (keyboard
+reachable: the trigger is a real `<button>`, Enter opens, arrows navigate the list,
+Escape closes — the switcher list rows become focusable in this slice, an a11y repair
+that benefits every existing call site).
+
+### 4.4 DOM ACs
+
+- Inside `/p/A/build`, clicking `[data-testid="project-name"]` opens
+  `[data-testid="project-switcher-list"]`; choosing project B navigates to `/p/B/build`
+  (assert URL — mode verb retained; no artifact segment).
+- The same pivot from `/p/A/document` lands on `/p/B/document`.
+- `[data-testid="switcher-dashboard-row"]` navigates to `/p/A`.
+- Zero network requests fire on dropdown open (projects store already warm — asserted).
+- Keyboard: trigger reachable by Tab, opens on Enter, ArrowDown walks rows, Escape closes
+  and restores focus to the trigger.
+
+---
+
+## 5 P1-5 — Cross-project global search
+
+**Operator:** *"Cross-project global search over runs, prompts, decisions ledger entries,
+repo names."*
+
+### 5.1 Wire check — what is client-held vs. what would need a daemon index
+
+| Corpus | Where it lives today | Wire verdict |
+|---|---|---|
+| Runs (intent/`problem` text, id, status, repo_ref) | App's one `useRuns()` — every non-archived run view is client-held (`GET /runs`, routes.ts:481) | **CLIENT-DERIVABLE** (already fetched) |
+| Open gate prompts | `useGateStore.gates` — event-sourced `awaitingHuman` prompts (gates.ts:93) | **CLIENT-DERIVABLE** (store) |
+| Prompt inbox (durable interaction requests) | `GET /projects/:id/prompts` (projects/routes.ts:427) — **per-project only**; a cross-project sweep would be an N-request fan-out | **EXISTS(per-project)** — used scoped, never fanned out (see honesty rule below) |
+| Decisions (governance claims) | `GET /governance/claims` (routes.ts:1128) — daemon-wide conformance-store claims, already typed (`GovernanceClaim`) and consumed by PolicyManager | **EXISTS** — one GET on search-open |
+| Per-run decisions ledger (gate evals, routing, denials) | derived client-side from a run's event trail (`DecisionsLedger.tsx` over `useRunModel`) — exists ONLY for runs whose events are loaded | **CLIENT-DERIVABLE(loaded runs only)** — labeled as such |
+| Repo names | `GET /repos` (routes.ts:368) | **EXISTS** — the §1.4 palette cache is reused |
+| Full-text over transcripts / all historical events | nothing — no search endpoint (`GET /api/v1/search` → 404, probed §0) | **NEEDS-CREW-ENDPOINT** (deferred, §5.4) |
+
+### 5.2 The honest v1 (the operator's framing accepted)
+
+Global search is the **palette's deep mode**, not a second surface: typing `?` as the
+prefix (or opening with `Cmd+Shift+F`, registered in the §1.2 table) switches the palette
+into search mode — wider result rows, snippet lines, a corpus label.
+
+**The corpus label is a first-class UI element, always visible** (EC24, §12.1):
+
+```
+Searching: runs (all) · open gates · decisions (governance claims) · repos
+Not searched: transcripts, historical events — [why?]
+```
+
+The `[why?]` popover states the wire truth in one sentence: "The crew daemon has no
+search index yet; the studio searches what it holds." No result ranking pretends
+otherwise; no "0 results" ever implies transcript absence.
+
+**What each hit row shows and where it goes:**
+
+| Hit kind | Row | Target |
+|---|---|---|
+| Run | status dot + `problem` (matched chars accented) + project name | `runPath(id)` |
+| Gate | `⏸` + prompt snippet + run's project | run + `#gate` |
+| Decision (claim) | rule/policy id + verdict + subject snippet | the run when the claim names one, else `/policies` |
+| Repo | `⬡` + name | `/repos/:id` |
+
+Matching reuses the §1.5 fuzzy scorer for names and adds a plain case-insensitive
+substring pass for prose fields (prompts, claim subjects) — subsequence matching on prose
+produces false-positive noise; substring on prose + fuzzy on identifiers is the honest
+pairing.
+
+**Request budget:** search mode fires at most two GETs on entry (`/governance/claims`,
+plus `/repos` if the palette cache is cold), both cached for the session, refreshed on
+next entry. Keystrokes fire nothing — filtering is in-memory.
+
+**Scoped prompt search:** inside a project shell, search mode ALSO queries
+`GET /projects/:id/prompts` for the current project (one request, labeled "prompts:
+this project") — using the per-project wire the way it scales, never fanning out across
+all projects.
+
+### 5.3 Token usage
+
+Search mode inherits §1.6's palette tokens. Snippets: `--text-xs --font-mono --ink-muted`
+with matched substrings `--ink-high`. The corpus label: `--text-2xs --ink-dim`, with the
+"not searched" clause in `--status-gate` — an honesty marker earns the attention color.
+
+### 5.4 The deferred daemon index (NEEDS-CREW-ENDPOINT, explicitly out of v1)
+
+When transcript/full-text search earns its keep, the proposed wire is:
+
+```
+GET /api/v1/search?q=<text>&kinds=runs,events,prompts&limit=50
+→ { "hits": [ { "kind": "run|event|prompt", "runId": "…", "snippet": "…",
+                "at": 1724200000000, "score": 0.83 } ], "truncated": false }
+```
+
+backed by SQLite FTS5 over the daemon's existing durable stores (the event log and
+interaction_requests are already SQLite — the index is a migration, not a new store).
+This is flagged as future cross-repo work and deliberately NOT a prerequisite of any
+slice in §12: v1 must not promise indexed full-text the wire cannot answer.
+
+### 5.5 DOM ACs
+
+- Typing `?auth` in the palette renders `[data-testid="search-corpus-label"]` naming the
+  four searched corpora and the not-searched clause; run hits whose `problem` contains
+  "auth" appear with accent-marked matches.
+- With the W2 fixture's gated run, searching a word from its gate prompt returns a gate
+  hit that navigates to the run with `#gate`.
+- Entering search mode fires at most `GET /governance/claims` (+ `GET /repos` cold-cache)
+  — asserted via request interception; ten keystrokes fire zero further requests.
+- Inside `/p/A/*`, the label adds "prompts: this project" and one
+  `GET /projects/A/prompts` fires.
+- No request to any `/search` route ever fires (grep + interception — the invented-wire
+  guard, the slice-13 lesson from DES-FEEDBACK-001 §7.2).
+
+---
+
+## 6 P1-6 — GroupChat grid/columns toggle
+
+**Operator:** *"GroupChat grid/columns toggle: side-by-side comparison when multiple
+agents reply to the same prompt."*
+
+### 6.1 Current state
+
+The transcript is one linear column (`GroupChat.tsx:597–633`): user bubbles self-end,
+seat bubbles self-start with a two-letter agent avatar. When three agents answer the same
+prompt, comparison means scrolling — replies stack in arrival order.
+
+The data model already groups naturally: `messages` is a flat `Msg[]` where a send
+appends one `UserMsg` then N pending `SeatMsg`s (one per warm seat, GroupChat.tsx:481–484)
+that fill in place as `chatOutputDelta`/completion events land (GroupChat.tsx:371). A
+"round" = a user message plus every seat message before the next user message.
+
+**Wire verdict:** **CLIENT-DERIVABLE** (local component state; zero wire impact).
+
+### 6.2 Design
+
+A two-state toggle in the chat header, right of the seat chips: `[≡ list] [⫼ columns]`
+— visible only when the current chat has ≥2 distinct replying seats (a single-agent chat
+has nothing to compare; the toggle would be dead chrome).
+
+**Columns mode** re-renders each round as a grid:
+
+```
+                                    ┌────────────────────────┐
+                                    │ user: refactor the API │   (user row: unchanged)
+                                    └────────────────────────┘
+┌─ CL claude ───────┬─ CX codex ────────┬─ AG antigravity ────┐
+│ I'd extract the   │ Start by moving   │ The seam is the     │
+│ fetch layer…      │ types out…        │ adapter here…       │
+│                   │                   │                     │
+└───────────────────┴───────────────────┴─────────────────────┘
+```
+
+- `grid-template-columns: repeat(N, minmax(260px, 1fr))` where N = distinct seats in the
+  round, horizontal scroll inside the round container past 3 columns (the page never
+  scrolls horizontally).
+- Column order is stable across rounds (first-seen seat order), so the same agent is
+  always in the same column — the property that makes scanning down a column meaningful.
+- Column header: the seat chip (avatar + cliKey) in the existing chip dress; pending
+  cells keep the `thinking…` pulse; a seat that did not answer this round renders an
+  empty dimmed cell (`--ink-dim` "—") rather than collapsing the column — absence is
+  information when comparing.
+- List mode is untouched and remains the default; the choice persists per-session in
+  component state (deliberately not a crew setting: it is a reading posture, not
+  configuration — and adding a settings write for it would violate the surface's request
+  frugality).
+
+### 6.3 The constraint this must not break
+
+Chat's zero-requests-on-mount (UXFIX §2.4, held by slice C's chip design) is untouched
+by construction: the toggle reads and re-arranges `messages` state only. The composer,
+send path, seat warming, and chip logic (GroupChat.tsx:380–520) are not modified — this
+is a pure transcript-rendering slice.
+
+### 6.4 Token usage
+
+Toggle: segmented pair in the mode-switcher grammar — active segment `--surface-raised`
+background + `--ink-high`, inactive `--ink-muted`; `--radius-md`. Column dividers:
+`1px solid var(--surface-raised)`. Column headers reuse `SEAT_CHIP` tokens verbatim
+(GroupChat.tsx:520–536). Cell bubbles keep their exact current tokens (`--surface-card`,
+status-pair borders while pending/failed).
+
+### 6.5 DOM ACs
+
+- With a fixture chat of 3 seats × 2 rounds: `[data-testid="chat-layout-toggle"]` is
+  present; clicking columns renders `[data-testid="chat-round"]` containers each with
+  `[data-testid="chat-round-grid"]` of `data-columns="3"`; the same seat's cells share a
+  column index across rounds.
+- With 1 seat, the toggle is absent.
+- Toggling fires zero network requests; the composer keeps focus and its draft text.
+- A pending cell shows the pulse; a seat absent from a round renders
+  `[data-testid="chat-cell-empty"]`.
+- Enter in the composer still sends (typing-context guard: the §2 triage keys and the
+  toggle never intercept composer keys).
+
+---
+
+## 7 P2-7 — Document version visual diff
+
+**Operator:** *"Document version visual diff: Compare v(N) vs v(N-1) toggle in
+VersionStrip — split-pane of two version iframes… and/or overlay."*
+
+### 7.1 Current state
+
+The VersionStrip (slice F/9, `VersionStrip.tsx`) renders the lineage as selectable
+entries; selecting is a navigation (`?v=N`, `versionPath`, VersionStrip.tsx:18–21). One
+canvas iframe shows one version (`DocumentCanvas` via `interactiveDocUrl(projectId,
+docId, version)`, `interactive.ts:195`). There is no compare affordance
+(`grep -n compare VersionStrip.tsx` → comments only).
+
+**Wire verdict:** **CLIENT-DERIVABLE / EXISTS** — both panes are just two instances of
+the already-real version URL (`interactiveDocUrl` builds `/d/:docId/doc/:version` on the
+app's own origin, proxied through crew — verified in slice F). Zero new routes; compare
+is a client-side layout of two URLs that each already render today.
+
+### 7.2 Design — split as the primary, overlay as the refinement
+
+A `[⇆ Compare]` toggle in the strip's toolbar (beside `[Themes] [Export]`). Entering
+compare splits the canvas:
+
+```
+┌──────────────── canvas (still >80% viewport width, EC18) ────────────────┐
+│ ┌─ v3 (selected) ────────────┐ │ ┌─ v2 (parent) ──────────────────────┐ │
+│ │  [iframe: doc @ v3]        │ │ │  [iframe: doc @ v2]                │ │
+│ └────────────────────────────┘ │ └────────────────────────────────────┘ │
+├──────────────────────────────────────────────────────────────────────────┤
+│  ◂ v1  v2  ● v3 ▸   [⇆ Comparing v3 ↔ v2 ·  vs: parent ▾ · ✕]  [Themes] │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Default comparand: the selected version's PARENT** — the manifest's lineage
+  (parent-pointer, write-once — VersionStrip.tsx:9–12) names it; "v(N) vs v(N−1)" in the
+  operator's words is lineage-parent, not ordinal-minus-one, and for forked documents
+  those differ. The `vs:` dropdown lets the operator pick any other version.
+- **Selection stays a navigation:** the LEFT pane is `?v=N` exactly as today (deep-link
+  and back-button semantics untouched); the comparand is ephemeral UI state (`cmp` local
+  state, reset on exit) — comparing is a lens, not an address. Clicking a strip entry
+  while comparing re-points the left pane; the right pane keeps its comparand.
+- **Overlay refinement:** an `[▣ overlay]` sub-toggle inside compare stacks the two
+  iframes with the top one at 50% opacity and an opacity slider (0–100) — the
+  spot-the-layout-shift tool for visually near-identical versions. Same two URLs, one
+  absolute-positioned container. Pointer events go to the top iframe only; the slider
+  states which version is on top.
+- **EC18 honesty (§7.3 canvas-first geometry):** compare mode's two panes TOGETHER are
+  the canvas — the pair occupies the same >80% viewport width the single iframe did; the
+  thread drawer stays closed-by-default and, if opened, overlays as the existing drawer
+  (never a third column). Each pane is narrower than solo view by necessity; that is the
+  operator's explicit trade in asking for split-pane, stated here so EC18's measurement
+  is amended (§12.1: EC18 measures the canvas REGION, compare panes included) rather
+  than silently gamed.
+- Exiting compare (`✕` or Escape) returns to the solo canvas at the selected version.
+
+### 7.3 What compare does NOT claim
+
+No DOM-diffing, no changed-element highlighting inside the iframes: the studio treats
+version HTML as opaque (the bridge owns the document internals — the slice-F boundary).
+A structural visual diff would need bridge cooperation and is named future work, not
+smuggled in as screenshot-XOR trickery.
+
+### 7.4 Token usage
+
+Pane headers: `--text-2xs --font-mono`; the selected version's header dot `--accent`
+(the strip's addressed-version grammar), the comparand's `--ink-muted`. Divider:
+`1px solid var(--surface-raised)`. Compare/overlay toggles: the §6.4 segmented dress.
+Slider: thumb `--accent`, track `--surface-raised` (a native input styled by tokens).
+
+### 7.5 DOM ACs
+
+- With a fixture doc at v3 (parent v2): `[data-testid="version-compare-toggle"]` enters
+  compare; two `[data-testid="compare-pane"]` iframes render with `src` ending `/doc/3`
+  and `/doc/2` respectively; the pane pair's bounding box is >80% of viewport width
+  (EC18-as-region).
+- The `vs:` dropdown lists every OTHER version; choosing v1 re-points only the right
+  pane's `src`.
+- Overlay mode renders both iframes stacked with `[data-testid="overlay-slider"]`;
+  moving the slider changes the top iframe's computed `opacity`.
+- URL still carries `?v=3` throughout; back-button after entering compare exits to the
+  prior route (compare state is not a history entry).
+- On a v1-only document (no parent), the compare toggle is disabled with a stated reason
+  (title: "only one version exists") — the §7.6 disabled-with-reason rule.
+
+---
+
+## 8 P2-8 — Desktop notifications + chime
+
+**Operator:** *"Desktop Web Notifications + optional audio chime when awaitingHuman
+arrives while the tab is unfocused. Opt-in, permission-gated, settings-persisted (crew
+settings like appearance)."*
+
+### 8.1 Current state
+
+`awaitingHuman` is real and already flows: the app's one `/ws` subscription folds every
+frame into `useNotificationStore.ingest` (App.tsx:93,113; notifications.ts:68 handles
+`awaitingHuman`) and `useGateStore.ingest` (gates.ts:93) — verified in slice E, no
+invented events. Nothing OS-facing exists: no `Notification` API call, no audio, no
+visibility check anywhere in `src/` (grep-verified).
+
+The persistence pattern to copy is the appearance store: `studio.appearance` rides crew's
+settings store as a namespaced key over `GET/PUT /settings` (**EXISTS** — routes.ts:1642,
+1644; the daemon merges partial PUTs), written debounced by `useAppearanceStore`
+(`theming/appearance.ts:95–106`, `client.ts:458–472`).
+
+### 8.2 Design
+
+**Settings surface** (in the existing Appearance/system settings page, a "Notifications"
+group):
+
+```
+Notifications
+  ( ) Off — in-app toasts only            ← default
+  (•) Desktop notification when a gate needs you and this tab is hidden
+  [ ] Also play a chime
+  Status: permission granted ✓            ← live permission state, named
+```
+
+- **Opt-in and permission-gated in the right order:** selecting the desktop option calls
+  `Notification.requestPermission()` — the browser prompt fires only on this explicit
+  click, never on app load (EC25, §12.1). `denied` renders the state honestly ("blocked
+  in browser settings — the studio cannot re-ask") with the radio reverting to Off.
+- **Persistence:** a `studio.notifications` key on the same settings wire —
+  `PUT /settings {"studio.notifications": {"desktop": true, "chime": false}}` — the
+  appearance pattern verbatim (namespaced studio-owned key, daemon merges, absent on old
+  daemons → defaults). A new `useNotifPrefsStore` mirrors `useAppearanceStore`'s
+  load-once + optimistic-update + debounced-persist shape. **EXISTS** (settings routes).
+- **Trigger:** inside the existing `ingest` fold — when an `awaitingHuman` lands AND
+  `document.visibilityState === 'hidden'` (the tab-unfocused test; `document.hasFocus()
+  === false` is accepted as the OR-condition for visible-but-unfocused windows) AND the
+  pref is on AND permission is `granted`: fire one
+  `new Notification('Gate needs you', { body: <prompt first line> · <project name>,
+  tag: runId })`. The `tag` collapses repeat frames for the same run into one OS
+  notification (no notification spam from replays). Clicking it focuses the tab and
+  navigates to the run + `#gate`.
+- **Chime:** a ~0.4s two-tone generated by the Web Audio API (`OscillatorNode`, sine,
+  880→1175 Hz, gain-enveloped) — zero asset bytes shipped, no `<audio>` element, no
+  external fetch (CSP-clean). Played only when a desktop notification actually fires
+  (same guards), never for visible-tab gates — the in-app chip/toast already owns that.
+- **No invented events:** the trigger set is exactly `awaitingHuman` — not failures, not
+  completions. Extending the set is future settings work, named in §13.
+
+### 8.3 Token usage
+
+Settings rows use the existing settings dress (labels `--text-sm --font-sans
+--ink-body`; the permission state line `--text-xs --font-mono` in `--status-run` when
+granted, `--status-fail` when denied). No new visual surface otherwise — the feature's
+output is the OS's, not ours.
+
+### 8.4 DOM ACs
+
+- On app load with no stored pref: zero `Notification.requestPermission` calls (asserted
+  by stubbing the API before load — EC25).
+- Selecting the desktop option calls `requestPermission` exactly once; with the
+  permission stub returning `granted`, `PUT /settings` fires with the
+  `studio.notifications` key (request interception).
+- With prefs on + permission granted + `document.visibilityState` stubbed `hidden`: an
+  injected `awaitingHuman` frame constructs one `Notification` with `tag` = the run id;
+  a second frame for the same run constructs one with the same tag (no unbounded stack).
+- With the tab visible, the same frame constructs zero Notifications.
+- With chime on, the notification path creates an `AudioContext` (stub-asserted); with
+  chime off, none.
+- A daemon settings blob without the key yields defaults (Off) — no crash, no prompt.
+
+---
+
+## 9 P2-9 — Batch gate resolution
+
+**Operator:** *"Batch gate resolution: approve/reject N routine gates at once — design as
+client-side fan-out of the EXISTING per-run gate POST unless a batch endpoint exists."*
+
+### 9.1 Wire check
+
+No batch gate endpoint exists. The daemon's gate write is strictly per-run
+(`POST /runs/:id/gate`, routes.ts:780 — 404 unknown, 409 not-awaiting, audited per
+decision at routes.ts:797–806). The daemon DOES have a batch-shape precedent —
+`POST /runs/archive` (routes.ts:528–547): explicit ids only (max 200), per-id outcomes
+(`{results: [{id, ok, error?}], archived: n}`), never all-or-nothing.
+
+**Verdict: client-side fan-out of the EXISTING per-run POST** (the operator's default,
+confirmed necessary). A batch endpoint is proposed for the future in §9.4 but is NOT a
+prerequisite: routine-gate batches are small (the fixture's worst case is single digits),
+and N sequential POSTs preserve the per-decision audit trail (task #88) that a batch
+route would have to re-plumb.
+
+### 9.2 Design
+
+Batch mode lives where triage lives — an extension of §2's cursor, plus checkboxes:
+
+- **`x` (or Space) toggles selection** on the cursor's card/row; a checkbox renders on
+  gate-bearing cards once ≥1 is selected (mouse users click the checkboxes directly).
+  Only SIMPLE gates (`isSimpleGate`) are selectable — a complex gate cannot be batch-
+  answered for the same reason its chip has no inline buttons; its checkbox slot renders
+  a `↗` "needs the thread" marker instead.
+- A **batch bar** docks above the board/inbox when ≥1 selected:
+  ```
+  3 gates selected   [Approve all]  [Reject all…]  [clear]
+  ```
+- **Approve all:** sequential fan-out of `POST /runs/:id/gate {approve:true}` —
+  sequential, not parallel: each response (or 409) updates its card live, and the
+  single-writer daemon gains nothing from a request burst. In-flight: the bar shows
+  `2/3…`; each card shows its own state (the §3.3 adjacency rule).
+- **Reject all…:** opens the §2.3 inline note ONCE at the bar level; the note (as
+  `amend`) rides every reject in the fan-out. The ellipsis is the destructive-action
+  pause: reject cancels runs (routes.ts:779 comment), so it is never a single silent key.
+- **Per-id outcomes, the archive-precedent shape client-side:** failures stay listed in
+  the bar — `1 failed: q3-deck (409 run resumed) [retry] [open]` — successes leave as
+  their `resumed`/`runCancelled` frames land on the shared socket and take them off
+  `awaiting_human` (the store reconciles; no optimistic lying).
+- Escape clears selection; selection also clears on route change.
+
+### 9.3 Token usage
+
+Checkboxes: `--radius-sm` boxes, checked fill `--accent` with `--accent-fg` check.
+Batch bar: `--surface-raised`, `--shadow-raised`, `--radius-lg`; the approve button in
+the `--status-run` pair, reject in the `--status-fail` pair (status semantics, not
+accent — these are run-state actions). Failure lines: `--text-xs --font-mono
+--status-fail` with the retry/open controls adjacent.
+
+### 9.4 The optional future batch route (NEEDS-CREW-ENDPOINT, deferred, not a prerequisite)
+
+Modeled letter-for-letter on the bulk-archive precedent:
+
+```
+POST /api/v1/runs/gates
+{ "ids": ["run-a", "run-b"], "approve": true, "amend": "optional note" }
+→ { "results": [ { "id": "run-a", "ok": true },
+                 { "id": "run-b", "ok": false, "error": "not awaiting a human gate" } ],
+    "decided": 1 }
+```
+
+Explicit ids only (max 200), per-id outcomes, per-id audit records (the loop calls the
+same `confirmGate` + `audit.record` pair the single route uses). Worth building only if
+fan-out latency is ever felt; the studio's fan-out code is shaped so swapping it in is a
+one-function change.
+
+### 9.5 DOM ACs
+
+- With 3 simple gates in the fixture: cursor + `x` on two of them renders
+  `[data-testid="batch-bar"]` with `data-count="2"`; Approve all fires exactly two
+  sequential `POST /runs/:id/gate` bodies `{"approve":true}` (order asserted).
+- A complex-gate card renders `[data-testid="batch-ineligible"]`, never a checkbox; it
+  cannot enter the selection via `x`.
+- Reject-all with note "wrong branch" fires `{"approve":false,"amend":"wrong branch"}`
+  per selected run.
+- A stubbed 409 on one id leaves `[data-testid="batch-failure-row"]` naming the run and
+  error, with retry firing only that id again.
+- Escape clears selection and removes the bar; no request fires on clear.
+
+---
+
+## 10 The review's gap notes (slotted where they fit)
+
+### 10.1 LiveFeed lines deep-link to the run
+
+**Review note:** *"LiveFeed events deep-link to the executing phase/run view."*
+
+**Current state:** feed blocks link at two points only — the project name →
+`modePath(project.id, 'build')` (LiveFeed.tsx:112, mode home, not the run) and the
+failure line's `[open run]` (LiveFeed.tsx:124–130). The narration lines themselves
+(`feed-line`, LiveFeed.tsx:73–86) carry `data-run-id` but are inert `<p>` elements — the
+operator sees a run narrating and cannot click the words.
+
+**Design:** every `feed-line` becomes the same real-link the failure line already is —
+wrapping the line in an anchor to `modePath(project.id, 'build', runId)` (Chat threads:
+the run-kind rule if the feed ever narrates one; today MOVING runs are build runs).
+Hover: the line's `--ink-body` lifts to `--ink-high` and an `↗` glyph fades in at
+`--dur-instant` at line-end — the affordance whisper, no underline (mono narration must
+not read as prose links at rest). The block header keeps its project-level link — two
+altitudes, both real. **CLIENT-DERIVABLE** (the run id is already on the element).
+
+**DOM AC:** each `[data-testid="feed-line"]` is (or is wrapped by) an `<a href>` whose
+path ends with its `data-run-id`; middle-click-able (real href); clicking navigates to
+the run view. Slots into slice J.
+
+### 10.2 Project dashboard surfaces bound repos
+
+**Review note:** *"project dashboard surfaces bound repos (members already fetched —
+slice B/D precedent)."*
+
+**Current state:** the dashboard's one membership read (`api.listProjectMembers`,
+ProjectDashboard.tsx:123–140) already returns EVERY member — but `RUN_KINDS` filters to
+`crew.run`/`crew.chat` (ProjectDashboard.tsx:33) and drops `crew.repo` members on the
+floor. The wire grammar names `crew.repo` explicitly (crew-api-types index.d.ts:1179–1183).
+
+**Design:** a repos row in the dashboard header's meta line region — not a fifth tile
+(the 2×2 grid is a load-bearing §4.1 shape):
+
+```
+api-migration                          [💬 Chat] [⚙ Build] [▤ Doc] [▶ Video]
+last activity 4m ago · 3 open runs
+⬡ studio-api   ⬡ studio-web                     ← bound repos, each → /repos/:id
+```
+
+Each chip: `⬡` + repo name (resolved by ref from the same `listRepos` cache §1.4 holds;
+an unresolvable ref renders the raw ref in `--ink-dim` — membership is the truth even
+when the repo listing lags), linking to `/repos/:id`. Zero repos = the row is absent
+(empty-state budget). **CLIENT-DERIVABLE** (same fetch, one dropped filter + palette's
+repo cache). **DOM AC:** with a fixture project holding one `crew.repo` member,
+`[data-testid="dashboard-repos"]` renders one chip linking to that repo's page; with
+none, the testid is absent. Slots into slice J.
+
+---
+
+## 11 Constraint inventory — what every slice must hold (with its guardian section)
+
+| # | Constraint | Guarded by | How this document honors it |
+|---|---|---|---|
+| C1 | Chat: zero requests on mount | DES-UXFIX-001 §2.4 | §6.3 (toggle is render-only); §1.4 (palette fetches on OPEN, a gesture); ProjectSwitcher `onOpen` contract untouched |
+| C2 | Tokens only — no raw color (ERROR lint + PostCSS twin); linguist palette sole exemption | DES-VISION-001 §2.11 | every "token usage" subsection; §3.5's diff colors are status tokens by design, no new exemption |
+| C3 | Attention model untouched | DES-VISION-001 §1.4 / UXFIX | §2.2 (cursor WALKS the existing order, never re-sorts); §1.5 reuses `scoreOf`, no second model |
+| C4 | Canvas-first (EC18) | DES-FEEDBACK-001 §7.3 | §7.2 (compare panes measured as the canvas region; drawer stays a drawer); §3.4 (viewer is an overlay, not a column) |
+| C5 | Charts/affordances answer named questions (EC19) | DES-FEEDBACK-001 §2.1 | no new chart is introduced; §3.5 rejects decoration-grade highlighting on the same test |
+| C6 | Wall + feed structure | DES-VISION-001 §5.1 | §10.1 changes link-ness of feed lines, not feed structure/содержimit — no header, no scrollbar, block budget intact |
+| C7 | Keyboard a11y — visible focus, no key theft from inputs | DES-VISION-001 focus-ring rule | §1.2's single `isTypingContext` guard before EVERY handler; §2.2 real-DOM-focus cursor; §4.3 switcher keyboard repair; EC21/EC22 |
+| C8 | No invented wire | house rule §0 | every data need carries a verdict; §5.2's corpus label makes the wire's limits VISIBLE to the operator, not just to reviewers |
+
+(One correction during authoring: C6's cell should read "structure/content-limit" — the
+feed's 3-line block budget from §1.3 is untouched.)
+
