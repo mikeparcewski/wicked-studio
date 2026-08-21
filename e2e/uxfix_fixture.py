@@ -133,6 +133,17 @@ NOTES_DOCS = [
     {"name": "todo", "kind": "doc", "head": 1, "versions": 1, "updated_at": iso(NOW0 - 3 * DAY)},
 ]
 
+# The chat surface (slice 4, §2.4): a four-seat roster and instant-warm chat
+# endpoints. Seats warm the moment they are asked — determinism over realism —
+# and the daemon's real semantics are kept where the client depends on them:
+# GET /chats/<id> answers an EMPTY seat list (a 200, not a 404) for a chat this
+# fixture has never been told about, which is the "reclaimed" signal the rejoin
+# probe distinguishes from an error.
+ROSTER = [
+    {"key": k, "display_name": k, "binary": k, "enabled_for_council": True}
+    for k in ("claude", "codex", "agy", "pi")
+]
+
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 NARRATION = "Writing the token-bucket middleware for /upload"
 
@@ -197,6 +208,14 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/repos":
             self._json(200, {"repos": []})
             return True
+        if path == "/api/v1/roster":
+            self._json(200, {"roster": ROSTER})
+            return True
+        # /api/v1/chats/<id> — seats of a chat. Empty for a chat we never opened
+        # (the daemon does not 404 an unknown id; empty means reclaimed/none).
+        if path.startswith("/api/v1/chats/") and len(path.split("/")) == 5:
+            self._json(200, {"chatId": urllib.parse.unquote(path.split("/")[4]), "seats": []})
+            return True
         parts = path.split("/")
         # /api/v1/projects/<id>/members
         if len(parts) == 6 and parts[3] == "projects" and parts[5] == "members":
@@ -251,12 +270,31 @@ class W2Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if path == "/__fixture":
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             with state_lock:
                 state.update({k: v for k, v in body.items() if k in state})
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})
+        # POST /api/v1/chats — open a chat: warm the asked-for seats (or the whole
+        # roster when `clis` is omitted, matching the daemon), every seat ok, instantly.
+        if path == "/api/v1/chats":
+            clis = body.get("clis") or [s["key"] for s in ROSTER]
+            return self._json(201, {
+                "chatId": body.get("chatId") or "fixture-chat",
+                "seats": [{"cliKey": k, "ok": True} for k in clis],
+            })
+        # POST /api/v1/chats/<id>/messages — accept the fan-out; replies would
+        # stream over /ws, which this fixture leaves to the narration loop.
+        parts = path.split("/")
+        if len(parts) == 6 and parts[3] == "chats" and parts[5] == "messages":
+            return self._json(200, {"seats": []})
+        return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+
+    def do_DELETE(self):  # noqa: N802 (stdlib naming)
+        path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/api/v1/chats/"):
+            return self._json(200, {"ok": True})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
 
 
