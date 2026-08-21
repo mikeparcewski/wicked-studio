@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getVersions, interactiveUrl, listDocs } from '../api/interactive.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
+import { threadKey, useDocThreadStore } from '../store/docThread.js';
 import { FeedbackOverlay } from './FeedbackOverlay.js';
 import { Failed, Loading, PANEL, S, useLoad } from './SurfaceState.js';
 import { VersionStrip } from './VersionStrip.js';
@@ -18,6 +19,12 @@ import { VersionStrip } from './VersionStrip.js';
 // cannot read `localStorage`, cannot call `/api/v1` with the user's ambient authority,
 // and the parent cannot read `contentDocument` back. Everything the overlay needs comes
 // over the instrument bridge instead (§7.3: the overlay never shipped without it).
+//
+// DES-UXFIX-001 §2.6 (slice 6): the component owns the THREE-PANE relationship. The
+// caller passes the thread as `children`; canvas and thread stay visual siblings in the
+// top row, and the version strip renders BELOW BOTH as the spine spanning canvas and
+// thread (§2.6 rule 2) — there is no dead middle column, and the strip is the one piece
+// of connective tissue between the panes, labelled by what it does (rule 1).
 
 // ── Doc picker — the mode with no `:docId` in the route ──────────────────────
 
@@ -96,13 +103,26 @@ function resolveVersion(manifest: VersionManifest, routed: number | null): numbe
 }
 
 function DocFrame({
-  projectId, docId, version, navigate,
+  projectId, docId, version, navigate, children,
 }: {
   projectId: string; docId: string; version: number | null; navigate: Navigate;
+  children?: React.ReactNode;
 }): React.ReactElement {
-  const [manifest, failure, retry] = useLoad(
-    () => getVersions(projectId, docId), [projectId, docId],
+  // §2.6 rule 3: a landing version re-reads the manifest, so the strip advances and the
+  // canvas swaps the moment the stream lands one — the newcomer watches a message produce
+  // a version produce a canvas change, left to right, without a reload. (VideoStoryboard
+  // already keys its own re-read to the same `landed` fact.)
+  const landed = useDocThreadStore((s) => s.landed[threadKey(projectId, docId)]);
+  const [fresh, failure, retry] = useLoad(
+    () => getVersions(projectId, docId), [projectId, docId, landed],
   );
+  // The last good manifest carries the surface through a re-read: `useLoad` nulls its
+  // value per run, and a strip that unmounted on every landed version would visibly
+  // blink. A doc change REMOUNTS DocFrame (it is keyed on `projectId/docId`), so the
+  // ref can never leak one document's lineage into another's.
+  const lastManifest = useRef<VersionManifest | null>(null);
+  if (fresh !== null) lastManifest.current = fresh;
+  const manifest = fresh ?? lastManifest.current;
   const [loaded, setLoaded] = useState(false);
   // The overlay's instrumentation handshake is keyed to LOADS, not to renders: every
   // swapped version is a different document with a different inventory (§4.3 / INV-1
@@ -112,8 +132,21 @@ function DocFrame({
   useEffect(() => { setLoaded(false); }, [projectId, docId, version]);
 
   const subject = `“${docId}”`;
-  if (failure) return <Failed surface="doc" subject={subject} failure={failure} onRetry={retry} />;
-  if (manifest === null) return <Loading surface="doc" subject={subject} />;
+  // Failure / loading occupy the CANVAS pane only — the thread beside them stays up
+  // (§1.2: the one conversation is always present), and with no manifest there is no
+  // strip, because a spine with nothing to connect would be decoration.
+  if (manifest === null) {
+    return (
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
+          {failure
+            ? <Failed surface="doc" subject={subject} failure={failure} onRetry={retry} />
+            : <Loading surface="doc" subject={subject} />}
+        </div>
+        {children}
+      </div>
+    );
+  }
 
   const shown = resolveVersion(manifest, version);
   // Version-addressed: the VersionStrip swaps this number through the route, nothing else.
@@ -132,6 +165,7 @@ function DocFrame({
 
   return (
     <>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
       <iframe
         // Keyed on the VERSION so a swap REPLACES the element instead of mutating its
@@ -169,6 +203,10 @@ function DocFrame({
         version={shown}
       />
       </div>
+      {/* The thread pane — a visual sibling of the canvas in this row, so the strip
+          below spans BENEATH BOTH: §2.6 rule 2's spine, drawn rather than implied. */}
+      {children}
+      </div>
       <VersionStrip
         projectId={projectId}
         docId={docId}
@@ -188,15 +226,28 @@ export interface DocumentCanvasProps {
   /** The routed `?v=N` (slice 9); `null` addresses the manifest head. */
   version?: number | null;
   navigate: Navigate;
+  /** The thread pane (DES-UXFIX-001 §2.6): rendered in the top row beside the canvas so
+   *  the version strip spans beneath both. Canvas and thread stay visual siblings — this
+   *  slot exists only so ONE component owns where the spine sits relative to the panes. */
+  children?: React.ReactNode;
 }
 
 export function DocumentCanvas({
-  projectId, docId, version = null, navigate,
+  projectId, docId, version = null, navigate, children,
 }: DocumentCanvasProps): React.ReactElement {
   return (
     <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
       {docId === null
-        ? <DocPicker projectId={projectId} navigate={navigate} />
+        ? (
+          // No doc means no versions, so there is no spine row — the picker's empty
+          // state points at the thread instead (§2.6 rule 5, W3 step 2).
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
+              <DocPicker projectId={projectId} navigate={navigate} />
+            </div>
+            {children}
+          </div>
+        )
         : (
           <DocFrame
             key={`${projectId}/${docId}`}
@@ -204,7 +255,9 @@ export function DocumentCanvas({
             docId={docId}
             version={version}
             navigate={navigate}
-          />
+          >
+            {children}
+          </DocFrame>
         )}
     </div>
   );

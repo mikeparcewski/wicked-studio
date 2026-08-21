@@ -8,9 +8,10 @@
 //   3. The picker orders most-recent first and navigates into /p/<id>/document/<docId>;
 //      empty invites creation rather than rendering blank.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DocumentCanvas } from '../src/components/DocumentCanvas.js';
+import { threadKey, useDocThreadStore } from '../src/store/docThread.js';
 import type { DocSummary, VersionManifest } from '../src/api/interactive.js';
 
 const PROJECT = 'proj-abc-123';
@@ -309,5 +310,96 @@ describe('DocumentCanvas — the picker (§6.3: no :docId in the route)', () => 
 
     await waitFor(() => expect(seen.length).toBe(1));
     expect(seen[0]).toBe(`http://127.0.0.1:7788/api/v1/projects/${PROJECT}/interactive/api/docs`);
+  });
+});
+
+// ── DES-UXFIX-001 §2.6 (slice 6): the three-pane spine ───────────────────────
+
+describe('DocumentCanvas — the strip is the spine spanning canvas and thread (§2.6)', () => {
+  const thread = <aside data-testid="fake-thread">the thread pane</aside>;
+
+  beforeEach(() => {
+    useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+  });
+
+  it('AC: the thread rides IN the top row and the strip renders BELOW both — no dead middle column', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(
+      <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
+        {thread}
+      </DocumentCanvas>,
+    );
+
+    await screen.findByTestId('doc-canvas');
+    const row = screen.getByTestId('fake-thread').parentElement!;
+    const strip = screen.getByTestId('version-strip');
+    // Canvas and thread are visual siblings in one row; the strip is that row's OWN
+    // next sibling — beneath canvas AND thread, the drawn doc↔canvas↔thread spine.
+    expect(row.contains(screen.getByTestId('doc-canvas'))).toBe(true);
+    expect(row.contains(strip)).toBe(false);
+    expect(row.nextElementSibling).toBe(strip);
+  });
+
+  it('the spine says what selecting does, and carries [Themes] [Export] (§2.6 rules 1+4)', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(<DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}} />);
+
+    await screen.findByTestId('doc-canvas');
+    const strip = screen.getByTestId('version-strip');
+    expect(strip.querySelector('[data-testid="version-spine-caption"]'))
+      .toHaveTextContent(/selecting a version scrolls the thread/i);
+    expect(strip.querySelector('[data-testid="themes-open"]')).toHaveTextContent('Themes');
+    expect(strip.querySelector('[data-testid="export-menu"]')).not.toBeNull();
+  });
+
+  it('the thread stays up while the canvas loads AND when it fails (§1.2: always present)', async () => {
+    stubFetch({ '/api/versions': { status: 500, body: { error: 'versions.json is corrupt' } } });
+    render(
+      <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
+        {thread}
+      </DocumentCanvas>,
+    );
+
+    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();     // while loading
+    await screen.findByTestId('doc-canvas-error');
+    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();     // on failure
+    expect(screen.queryByTestId('version-strip')).toBeNull();          // no manifest, no spine
+  });
+
+  it('the doc-less picker keeps the thread beside it, with no spine row', async () => {
+    stubFetch({ '/api/docs': { body: [] } });
+    render(
+      <DocumentCanvas projectId={PROJECT} docId={null} navigate={() => {}}>
+        {thread}
+      </DocumentCanvas>,
+    );
+
+    await screen.findByTestId('doc-picker-empty');
+    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
+    expect(screen.queryByTestId('version-strip')).toBeNull();
+  });
+
+  it('AC (§2.6 rule 3): a LANDED version re-reads the manifest — the strip advances, no reload', async () => {
+    const grown: VersionManifest = {
+      head: 4,
+      versions: [...MANIFEST.versions, {
+        version: 4, parent: 3, feedback_file: null, html_file: 'v4.html',
+        created_at: '2026-08-18T11:00:00Z', meta: { sourceMessageId: 'dmsg-4' },
+      }],
+    };
+    let reads = 0;
+    stubFetch({ '/api/versions': { get body() { reads += 1; return reads === 1 ? MANIFEST : grown; } } });
+    render(<DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}} />);
+
+    await screen.findByTestId('doc-canvas');
+    expect(screen.getAllByTestId('version-entry')).toHaveLength(3);
+
+    // The stream lands v4 (the docThread store's `landed` fact — same trigger
+    // VideoStoryboard re-reads on). The strip must advance without a remount.
+    act(() => { useDocThreadStore.setState({ landed: { [threadKey(PROJECT, DOC)]: 4 } }); });
+
+    await waitFor(() => expect(screen.getAllByTestId('version-entry')).toHaveLength(4));
+    // …and the strip never blinked: the canvas stayed mounted through the re-read.
+    expect(screen.getByTestId('doc-canvas')).toBeInTheDocument();
   });
 });

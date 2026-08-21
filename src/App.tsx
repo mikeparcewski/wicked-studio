@@ -263,24 +263,24 @@ export function App(): React.ReactElement {
     // The document's VERSION rides in the query (`?v=N`, slice 9) — the artifact is the
     // doc, the version is a lens on it — so the strip's selection is a real navigation.
     if (m === 'document') {
-      // Canvas and thread are SIBLINGS, never nested: §1.2's "mode surface + the one
-      // conversation thread, always present" (slice 10). The thread is fixed-width and
-      // dismissible-by-navigation — never force-opened over the canvas (§2.5).
+      // Canvas and thread stay VISUAL siblings — the thread is fixed-width and never
+      // force-opened over the canvas (§1.2, §2.5) — but the thread passes through
+      // `DocumentCanvas` as its children so the version strip renders BELOW BOTH: the
+      // spine spanning canvas and thread, DES-UXFIX-001 §2.6 rule 2 (the F9 fix).
       return (
-        <>
-          <DocumentCanvas
-            projectId={pid}
-            docId={artifactId}
-            version={routedVersion(search)}
-            navigate={navigate}
-          />
+        <DocumentCanvas
+          projectId={pid}
+          docId={artifactId}
+          version={routedVersion(search)}
+          navigate={navigate}
+        >
           <DocumentThread
             projectId={pid}
             docId={artifactId}
             selectedVersion={routedVersion(search)}
             navigate={navigate}
           />
-        </>
+        </DocumentCanvas>
       );
     }
     // Video is the same two-sibling shape (§6.4 slice 13): the storyboard + player pair
