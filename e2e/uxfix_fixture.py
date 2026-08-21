@@ -33,6 +33,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -163,6 +164,67 @@ ROSTER = [
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 NARRATION = "Writing the token-bucket middleware for /upload"
 
+# ── The slice-6 document surface (DES-UXFIX-001 §2.6): one doc journey, W3-shaped ──
+#
+# The interactive bridge, reduced to what Document mode reads through crew's proxy:
+# preflight, themes, the doc registry, per-doc manifests, the rendered version HTML,
+# create/fork/events. State is mutable ON PURPOSE — the slice-6 rig drives the real
+# composer (create → generate → continue), and the manifest must grow exactly the way
+# the bridge's would: the version's `meta.sourceMessageId` is whatever id the CLIENT
+# minted and sent, which is what makes the §7.6 strip→thread scroll assertable.
+#
+# Bus frames the journey emits ride the same /ws as the board narration, in the relay
+# envelope the client folds (`{type:"interactiveEvent", event}`): each POST queues its
+# frames and the socket loop drains the queue on its next tick.
+
+THEMES = [{"name": "stripe-ish", "source": "url", "learned_at": iso(NOW0 - 2 * DAY)},
+          {"name": "corporate"}]
+
+# The headline the continue "tightens" — v1 verbose, v2+ tight — so the canvas change
+# between versions is legible in the screenshots, not just a version number swapping.
+HEADLINES = {1: "Q3 was a quarter of significant and wide-ranging positive developments"}
+TIGHT_HEADLINE = "Q3: revenue up 18%"
+
+docs_lock = threading.Lock()
+# pid -> docId -> [version entries, manifest-shaped]. Grown by create/fork below.
+docs_created: dict = {}
+
+ws_lock = threading.Lock()
+ws_queue: list = []
+
+
+def queue_interactive(event_type: str, payload: dict) -> None:
+    """Queue one relayed interactive frame for the /ws loop's next tick."""
+    with ws_lock:
+        ws_queue.append({"type": "interactiveEvent",
+                         "event": {"event_type": event_type, "payload": payload}})
+
+
+def slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "doc"
+
+
+def doc_versions(pid: str, doc: str) -> list:
+    with docs_lock:
+        return list(docs_created.get(pid, {}).get(doc, []))
+
+
+def doc_html(doc: str, version: int) -> str:
+    """The rendered document at one version — a light deck slide, so the canvas reads
+    as a document against the app chrome and the v1→v2 headline change is visible."""
+    headline = HEADLINES.get(version, TIGHT_HEADLINE)
+    return f"""<!doctype html><html><head><meta charset="utf-8"><title>{doc} v{version}</title>
+<style>body{{margin:0;font-family:Georgia,serif;background:#f4f1ea;color:#1b1b1b;
+display:flex;align-items:center;justify-content:center;height:100vh}}
+main{{max-width:720px;padding:48px;background:#fffdf7;border:1px solid #ddd6c4;
+box-shadow:0 2px 18px rgba(0,0,0,.12)}}h1{{font-size:34px;line-height:1.2;margin:0 0 18px}}
+p{{font-size:16px;color:#4a463c;margin:0 0 8px}}footer{{margin-top:26px;font-size:11px;
+color:#8a8471;letter-spacing:.08em;text-transform:uppercase}}</style></head><body>
+<main data-wid="slide-1"><h1 data-wid="headline">{headline}</h1>
+<p>Pipeline grew in every segment; churn held under 2%.</p>
+<p>Focus for Q4: enterprise onboarding and the pricing revamp.</p>
+<footer>Q3 review deck · version {version}</footer></main></body></html>"""
+
 
 def ws_frame(payload: dict) -> bytes:
     data = json.dumps(payload).encode()
@@ -210,6 +272,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 }))
                 self.wfile.flush()
             while True:
+                # Drain the interactive frames the document journey queued (slice 6) —
+                # the client folds them into the doc thread off this one subscription.
+                with ws_lock:
+                    pending, ws_queue[:] = list(ws_queue), []
+                for frame in pending:
+                    self.wfile.write(ws_frame(frame))
                 self.wfile.write(ws_frame({
                     "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
                     "text": NARRATION + "\n",
@@ -257,10 +325,20 @@ class W2Handler(SimpleHTTPRequestHandler):
                 for ref in MEMBERS.get(pid, [])
             ]})
             return True
-        # /api/v1/projects/<id>/interactive/api/docs — the notes project's registry
+        # /api/v1/projects/<id>/interactive/api/docs — the registry: the notes seeds
+        # plus whatever the slice-6 journey has created in this server's lifetime.
         if path.startswith("/api/v1/projects/") and path.endswith("/interactive/api/docs"):
             pid = urllib.parse.unquote(path.split("/")[4])
-            self._json(200, NOTES_DOCS if pid == "notes" else [])
+            with docs_lock:
+                created = [
+                    {"name": doc, "kind": "doc", "head": max(e["version"] for e in vs),
+                     "versions": len(vs), "updated_at": vs[-1]["created_at"]}
+                    for doc, vs in docs_created.get(pid, {}).items()
+                ]
+            self._json(200, (NOTES_DOCS if pid == "notes" else []) + created)
+            return True
+        # The rest of the interactive surface the Document journey reads (slice 6).
+        if self._interactive_get(path):
             return True
         # /api/v1/runs/<id>/gate
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "gate":
@@ -289,6 +367,103 @@ class W2Handler(SimpleHTTPRequestHandler):
             return True
         return False
 
+    def _interactive_get(self, path: str) -> bool:
+        """GET half of the slice-6 bridge surface (DES-UXFIX-001 §2.6)."""
+        # /api/v1/projects/<pid>/interactive/api/preflight — all deps present.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/preflight$", path)
+        if m:
+            self._json(200, {"deps": []})
+            return True
+        # /api/v1/projects/<pid>/interactive/api/themes — the library (§4.6).
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/themes$", path)
+        if m:
+            self._json(200, {"themes": THEMES})
+            return True
+        # /api/v1/projects/<pid>/interactive/d/<doc>/api/versions — the manifest.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/versions$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            versions = doc_versions(pid, doc)
+            if not versions:
+                self._json(404, {"error": f"no versions for {doc}"})
+                return True
+            self._json(200, {"head": max(e["version"] for e in versions),
+                             "kind": "doc", "versions": versions})
+            return True
+        # /api/v1/projects/<pid>/interactive/d/<doc>/doc/<v> — the rendered document.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/doc/(\d+)$", path)
+        if m:
+            doc = urllib.parse.unquote(m.group(2))
+            body = doc_html(doc, int(m.group(3))).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+        return False
+
+    def _interactive_post(self, path: str, body: dict) -> bool:
+        """POST half: create / fork / the UI-originated bus emit. Each one commits the
+        manifest move FIRST and then queues the frames the bridge would emit, so the
+        client's next read is never behind the event that announced it."""
+        # POST /api/v1/projects/<pid>/interactive/api/docs — create (§2.2 case 1).
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/docs$", path)
+        if m:
+            pid = urllib.parse.unquote(m.group(1))
+            doc = slug(str(body.get("name") or "doc"))
+            anchor = body.get("source_message_id")
+            with docs_lock:
+                docs_created.setdefault(pid, {})[doc] = [
+                    {"version": 1, "parent": None, "feedback_file": None,
+                     "html_file": "v1.html", "created_at": iso(NOW0),
+                     "meta": {"sourceMessageId": anchor}}]
+            queue_interactive("wicked.interactive.status.posted", {
+                "project_id": pid, "document_id": doc, "state": "working",
+                "message": "Planning the deck — outline first, then the slides."})
+            queue_interactive("wicked.interactive.version.created", {
+                "project_id": pid, "document_id": doc,
+                "version": 1, "parent": None, "kind": "generated"})
+            self._json(201, {"name": doc, "head": 1, "generating": True, "project_id": pid})
+            return True
+        # POST /api/v1/projects/<pid>/interactive/d/<doc>/api/fork — branch (§7.10).
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/fork$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            frm = int(body.get("from") or 0)
+            with docs_lock:
+                versions = docs_created.get(pid, {}).get(doc)
+                if versions is None:
+                    self._json(404, {"error": f"no such doc {doc}"})
+                    return True
+                v = max(e["version"] for e in versions) + 1
+                versions.append(
+                    {"version": v, "parent": frm, "feedback_file": None,
+                     "html_file": f"v{v}.html", "created_at": iso(NOW0 + v * SEC),
+                     "meta": {"sourceMessageId": body.get("source_message_id")}})
+            self._json(200, {"version": v, "parent": frm})
+            return True
+        # POST /api/v1/projects/<pid>/interactive/api/events — the inject wire (§5.4).
+        # A chat.posted steer regenerates the doc's head version: narrate, then land it.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/events$", path)
+        if m:
+            pid = urllib.parse.unquote(m.group(1))
+            payload = body.get("payload") or {}
+            doc = payload.get("document_id")
+            if body.get("event_type") == "wicked.interactive.chat.posted" and doc:
+                versions = doc_versions(pid, doc)
+                head = max((e["version"] for e in versions), default=1)
+                queue_interactive("wicked.interactive.status.posted", {
+                    "project_id": pid, "document_id": doc, "state": "working",
+                    "message": "Tightening the headline and rebalancing the slide."})
+                queue_interactive("wicked.interactive.version.created", {
+                    "project_id": pid, "document_id": doc,
+                    "version": head, "parent": head - 1 if head > 1 else None,
+                    "kind": "generated"})
+            self._json(200, {"ok": True, "event_id": "evt-fixture", "correlation_id": "c-fixture"})
+            return True
+        return False
+
     def do_GET(self):  # noqa: N802 (stdlib naming)
         if self.headers.get("Upgrade", "").lower() == "websocket":
             return self._ws()
@@ -307,6 +482,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                 state.update({k: v for k, v in body.items() if k in state})
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})
+        # The slice-6 document journey's writes (create / fork / bus emit).
+        if self._interactive_post(path, body if isinstance(body, dict) else {}):
+            return None
         # POST /api/v1/chats — open a chat: warm the asked-for seats (or the whole
         # roster when `clis` is omitted, matching the daemon), every seat ok, instantly.
         if path == "/api/v1/chats":
