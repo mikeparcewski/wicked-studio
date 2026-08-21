@@ -90,67 +90,38 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-// ── AC: theme pick → chip ────────────────────────────────────────────────────
+// ── AC (DES-UXFIX-001 V19, slice 6): the library pill LEFT this row ──────────
 
-describe('the theme library', () => {
-  it('lists the learned themes and picking one renders the context chip', async () => {
+describe('the theme pick moved to the strip (V19) — the chip stayed here', () => {
+  it('offers NO library pill and no "theme library" spelling — that control is ThemesMenu, on the strip', () => {
+    const { container } = mountContext();
+    expect(screen.queryByTestId('context-library')).toBeNull();
+    expect(container.querySelectorAll('[data-testid*="theme-library"]')).toHaveLength(0);
+    expect(container.textContent ?? '').not.toMatch(/theme library/i);
+    // Never fetched from here either: the row no longer has a reason to list themes.
+    expect(listThemes).not.toHaveBeenCalled();
+  });
+
+  it('a theme picked on the strip still renders as THIS row’s chip, and the chip clears the pick', async () => {
     const user = userEvent.setup();
+    useDocContextStore.getState().pickTheme(contextKey(PROJECT, DOC), 'stripe-ish');
     mountContext();
-    expect(chips()).toHaveLength(0);
 
-    await user.click(screen.getByTestId('context-library'));
-    const rows = await screen.findAllByTestId('theme-row');
-    expect(rows.map((r) => r.getAttribute('data-theme'))).toEqual(['stripe-ish', 'corporate']);
-    expect(listThemes).toHaveBeenCalledWith(PROJECT);
-
-    await user.click(rows[0]!);
     await waitFor(() => expect(chips()).toHaveLength(1));
     expect(chips()[0]).toHaveAttribute('data-chip-kind', 'theme');
     expect(chips()[0]).toHaveAttribute('data-chip-value', 'stripe-ish');
     expect(chips()[0]).toHaveTextContent('stripe-ish');
-  });
-
-  it('picking a second theme REPLACES the first — one theme at a time (§4.6)', async () => {
-    const user = userEvent.setup();
-    mountContext();
-    await user.click(screen.getByTestId('context-library'));
-    await user.click((await screen.findAllByTestId('theme-row'))[0]!);
-    await user.click(screen.getByTestId('context-library'));
-    await user.click((await screen.findAllByTestId('theme-row'))[1]!);
-    await waitFor(() => expect(chips()).toHaveLength(1));
-    expect(chips()[0]).toHaveAttribute('data-chip-value', 'corporate');
-  });
-
-  it('the chip is removable, and removing it clears the pick', async () => {
-    const user = userEvent.setup();
-    mountContext();
-    await user.click(screen.getByTestId('context-library'));
-    await user.click((await screen.findAllByTestId('theme-row'))[0]!);
-    await waitFor(() => expect(chips()).toHaveLength(1));
 
     await user.click(screen.getByTestId('context-chip-remove'));
     await waitFor(() => expect(chips()).toHaveLength(0));
     expect(useDocContextStore.getState().theme[contextKey(PROJECT, DOC)]).toBeUndefined();
   });
 
-  it('is pickable with NO document open — it is context for a generation not yet started', async () => {
-    const user = userEvent.setup();
+  it('with NO document open the row offers nothing — both remaining actions are messages', () => {
     mountContext(null);
-    // The two THREAD actions need a transcript for their message; the pick does not.
     expect(screen.queryByTestId('context-learn')).toBeNull();
     expect(screen.queryByTestId('context-sources')).toBeNull();
-    await user.click(screen.getByTestId('context-library'));
-    await user.click((await screen.findAllByTestId('theme-row'))[0]!);
-    await waitFor(() => expect(chips()).toHaveLength(1));
-  });
-
-  it('a library that cannot be read says so and picks nothing (§3.3)', async () => {
-    listThemes.mockRejectedValue(new Error('API 503: bridge down'));
-    const user = userEvent.setup();
-    mountContext();
-    await user.click(screen.getByTestId('context-library'));
-    expect(await screen.findByTestId('theme-library-error')).toHaveTextContent('bridge down');
-    expect(chips()).toHaveLength(0);
+    expect(screen.queryByTestId('context-library')).toBeNull();
   });
 });
 

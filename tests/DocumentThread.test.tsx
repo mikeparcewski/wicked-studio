@@ -258,3 +258,47 @@ describe('the transcript is the record (§2.3, §2.5)', () => {
     expect(screen.getByTestId('thread').querySelector('[data-message-id="dmsg-anchor"]')).toBe(message);
   });
 });
+
+// ── DES-UXFIX-001 §2.6 rule 2 (slice 6): the visible half of the F9 fix ──────
+
+describe('the ▤ v<N> landed tag — the thread half of the doc↔canvas↔thread link', () => {
+  function landVersion(version: number): void {
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, 'dmsg-anchor', 'make the intro punchier');
+    store.ingest({
+      type: 'interactiveEvent',
+      event: {
+        event_type: 'wicked.interactive.version.created',
+        payload: { project_id: PROJECT, document_id: DOC, version, parent: version - 1, kind: 'generated' },
+      },
+    } as never);
+  }
+
+  it('AC: the message that produced a version is TAGGED with it, visibly', () => {
+    landVersion(7);
+    mount(DOC);
+
+    const tag = screen.getByTestId('thread-version-tag');
+    expect(tag).toHaveAttribute('data-version', '7');
+    // The tag is the wireframe's literal words — legible, not attribute-only (EC9).
+    expect(tag).toHaveTextContent('▤ v7 landed');
+  });
+
+  it('AC: the tag CROSS-LINKS to the strip — clicking navigates to that version', async () => {
+    landVersion(7);
+    mount(DOC);
+
+    await userEvent.click(screen.getByTestId('thread-version-tag'));
+    // The same `?v=N` route the strip selects by: the canvas swaps, the strip entry
+    // highlights, and Back rewinds the move — a navigation, never local state.
+    expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/${DOC}?v=7`);
+  });
+
+  it('a message that produced NO version carries no tag', () => {
+    useDocThreadStore.getState().addUserMsg(KEY, 'dmsg-1', 'still thinking about this');
+    mount(DOC);
+
+    expect(screen.getByTestId('doc-message')).not.toHaveAttribute('data-version');
+    expect(screen.queryByTestId('thread-version-tag')).toBeNull();
+  });
+});
