@@ -17,7 +17,7 @@ interface Props {
 export function UnitList({ runId, units, gateOrd, onResolved }: Props): React.ReactElement {
   if (units.length === 0) {
     return (
-      <p data-testid="unit-list" className="text-xs" style={{ color: 'rgba(230,237,243,0.4)' }}>
+      <p data-testid="unit-list" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
         No units planned yet.
       </p>
     );

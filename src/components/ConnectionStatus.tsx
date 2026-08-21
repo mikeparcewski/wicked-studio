@@ -1,9 +1,9 @@
 import { useConnectionStore } from '../store/connection.js';
 
 const statusConfig = {
-  connecting:   { label: 'Connecting…', color: '#ffda19' },
-  connected:    { label: 'Connected',   color: '#3fb950' },
-  disconnected: { label: 'Disconnected',color: '#f85149' },
+  connecting:   { label: 'Connecting…', color: 'var(--status-gate)' },
+  connected:    { label: 'Connected',   color: 'var(--status-run)' },
+  disconnected: { label: 'Disconnected',color: 'var(--status-fail)' },
 } as const;
 
 export function ConnectionStatus(): React.ReactElement {

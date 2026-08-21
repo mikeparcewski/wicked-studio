@@ -20,9 +20,9 @@ export function FailureBanner({ view, log }: Props): React.ReactElement | null {
         data-kind="cancelled"
         className="rounded-lg p-3 text-xs font-mono"
         style={{
-          background: 'rgba(230,237,243,0.04)',
-          border: '1px solid rgba(230,237,243,0.1)',
-          color: 'rgba(230,237,243,0.5)',
+          background: 'var(--surface-raised)',
+          border: '1px solid var(--surface-raised)',
+          color: 'var(--ink-muted)',
         }}
       >
         Run cancelled.
@@ -36,15 +36,15 @@ export function FailureBanner({ view, log }: Props): React.ReactElement | null {
       data-kind="failed"
       className="rounded-lg p-3 text-xs font-mono"
       style={{
-        background: 'rgba(248,81,73,0.08)',
-        border: '1px solid rgba(248,81,73,0.25)',
-        color: '#f85149',
+        background: 'var(--status-fail-dim)',
+        border: '1px solid var(--status-fail-dim)',
+        color: 'var(--status-fail)',
       }}
     >
       <p className="font-semibold">Run halted.</p>
-      {lastError && <p className="mt-1" style={{ color: 'rgba(230,237,243,0.65)' }}>{lastError.detail}</p>}
+      {lastError && <p className="mt-1" style={{ color: 'var(--ink-muted)' }}>{lastError.detail}</p>}
       {denied.length > 0 && (
-        <ul className="mt-1 list-disc pl-4" style={{ color: 'rgba(230,237,243,0.55)' }}>
+        <ul className="mt-1 list-disc pl-4" style={{ color: 'var(--ink-muted)' }}>
           {denied.map((u) => (
             <li key={u.id}>
               Unit #{u.ord}: {u.denial_reason ?? 'rejected'}

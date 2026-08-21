@@ -57,19 +57,19 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
 
   if (loading) {
     return (
-      <div className="p-8 font-mono text-sm" style={{ color: 'rgba(230,237,243,0.4)' }}>Loading…</div>
+      <div className="p-8 font-mono text-sm" style={{ color: 'var(--ink-dim)' }}>Loading…</div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-8 font-mono text-sm" style={{ color: '#f85149' }}>{error}</div>
+      <div className="p-8 font-mono text-sm" style={{ color: 'var(--status-fail)' }}>{error}</div>
     );
   }
 
   if (!repo) {
     return (
-      <div className="p-8 font-mono text-sm" style={{ color: '#f85149' }}>Repo not found.</div>
+      <div className="p-8 font-mono text-sm" style={{ color: 'var(--status-fail)' }}>Repo not found.</div>
     );
   }
 
@@ -104,14 +104,14 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   }
 
   return (
-    <div className="flex flex-col gap-6 p-8" style={{ color: '#e6edf3' }}>
+    <div className="flex flex-col gap-6 p-8" style={{ color: 'var(--ink-high)' }}>
       {/* Header */}
       <div className="flex flex-col gap-3">
         <button
           type="button"
           onClick={() => navigate('/repos')}
           className="text-xs font-mono self-start transition-opacity hover:opacity-70"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
+          style={{ color: 'var(--ink-dim)' }}
         >
           ← Repositories
         </button>
@@ -124,7 +124,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                 onClick={() => void startOnboarding()}
                 disabled={onboarding}
                 className="px-3 py-1 rounded-lg text-xs font-semibold font-mono transition-opacity disabled:opacity-50"
-                style={{ background: '#ffda19', color: '#0d1117' }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 {onboarding ? 'Starting…' : '↺ Run Onboarding'}
               </button>
@@ -132,7 +132,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                 type="button"
                 onClick={() => onOpenGraph()}
                 className="px-3 py-1 rounded-lg text-xs font-semibold font-mono transition-opacity hover:opacity-80"
-                style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff', border: '1px solid rgba(121,192,255,0.2)' }}
+                style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', border: '1px solid var(--accent-subtle)' }}
               >
                 Open Graph →
               </button>
@@ -140,15 +140,15 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                 type="button"
                 onClick={() => setRequirementsOpen(true)}
                 className="px-3 py-1 rounded-lg text-xs font-semibold font-mono transition-opacity hover:opacity-80"
-                style={{ background: 'rgba(63,185,80,0.12)', color: '#3fb950', border: '1px solid rgba(63,185,80,0.2)' }}
+                style={{ background: 'var(--status-run-dim)', color: 'var(--status-run)', border: '1px solid var(--status-run-dim)' }}
               >
                 Open Requirements →
               </button>
             </div>
             {onboardError && (
-              <p className="text-[11px] font-mono mt-1" style={{ color: '#f85149' }}>{onboardError}</p>
+              <p className="text-[11px] font-mono mt-1" style={{ color: 'var(--status-fail)' }}>{onboardError}</p>
             )}
-            <p className="text-xs font-mono mt-1 break-all" style={{ color: 'rgba(230,237,243,0.4)' }}>
+            <p className="text-xs font-mono mt-1 break-all" style={{ color: 'var(--ink-dim)' }}>
               {repo.root_path}
             </p>
             {repo.git_url && (
@@ -158,7 +158,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[11px] font-mono mt-0.5 block truncate hover:underline"
-                  style={{ color: '#79c0ff' }}
+                  style={{ color: 'var(--accent)' }}
                   title={repo.git_url}
                 >
                   {repo.git_url}
@@ -166,7 +166,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
               ) : (
                 <span
                   className="text-[11px] font-mono mt-0.5 block truncate"
-                  style={{ color: '#79c0ff' }}
+                  style={{ color: 'var(--accent)' }}
                   title={repo.git_url}
                 >
                   {repo.git_url}
@@ -177,9 +177,9 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           <span
             className="shrink-0 mt-1 rounded px-2 py-0.5 text-[11px] font-mono"
             style={{
-              background: 'rgba(121,192,255,0.12)',
-              color: '#79c0ff',
-              border: '1px solid rgba(121,192,255,0.2)',
+              background: 'var(--accent-subtle)',
+              color: 'var(--accent)',
+              border: '1px solid var(--accent-subtle)',
             }}
           >
             {repo.default_branch}
@@ -191,22 +191,22 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: 'Total Runs', value: runs.length,      accent: undefined },
-          { label: 'Active',     value: active.length,    accent: active.length > 0 ? '#79c0ff' : undefined },
-          { label: 'Completed',  value: completed.length, accent: completed.length > 0 ? '#3fb950' : undefined },
-          { label: 'Failed',     value: failed.length,    accent: failed.length > 0 ? '#f85149' : undefined },
+          { label: 'Active',     value: active.length,    accent: active.length > 0 ? 'var(--status-run)' : undefined },
+          { label: 'Completed',  value: completed.length, accent: completed.length > 0 ? 'var(--status-run)' : undefined },
+          { label: 'Failed',     value: failed.length,    accent: failed.length > 0 ? 'var(--status-fail)' : undefined },
         ].map(s => (
           <div
             key={s.label}
             className="rounded-2xl px-6 py-4"
-            style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+            style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
           >
             <p
               className="text-[10px] font-semibold uppercase tracking-widest font-mono"
-              style={{ color: 'rgba(230,237,243,0.4)' }}
+              style={{ color: 'var(--ink-dim)' }}
             >
               {s.label}
             </p>
-            <p className="text-3xl font-semibold mt-1" style={{ color: s.accent ?? '#e6edf3' }}>
+            <p className="text-3xl font-semibold mt-1" style={{ color: s.accent ?? 'var(--ink-high)' }}>
               {s.value}
             </p>
           </div>
@@ -241,7 +241,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                   type="button"
                   onClick={() => setExpanded(e => !e)}
                   className="mt-3 text-xs font-mono hover:underline"
-                  style={{ color: 'rgba(230,237,243,0.4)' }}
+                  style={{ color: 'var(--ink-dim)' }}
                 >
                   {expanded ? '↑ show less' : `↓ show all ${runs.length} runs`}
                 </button>
@@ -252,7 +252,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
           {/* Code Hotspots */}
           <Section title="Code Hotspots">
             {hotspots.length === 0 ? (
-              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+              <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
                 Graph not yet indexed — run onboarding to build it.
               </p>
             ) : (
@@ -261,24 +261,24 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                   <div
                     key={node.id}
                     className="flex items-center gap-3 px-3 py-2 rounded-lg"
-                    style={{ background: '#161c26', border: '1px solid rgba(230,237,243,0.05)' }}
+                    style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
                   >
                     <span
                       className="text-[10px] font-mono w-4 text-right shrink-0"
-                      style={{ color: 'rgba(230,237,243,0.3)' }}
+                      style={{ color: 'var(--ink-dim)' }}
                     >
                       {i + 1}
                     </span>
                     <span
                       className="flex-1 text-xs font-mono truncate"
-                      style={{ color: 'rgba(230,237,243,0.75)' }}
+                      style={{ color: 'var(--ink-body)' }}
                       title={node.file}
                     >
                       {node.file}
                     </span>
                     <span
                       className="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded"
-                      style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff' }}
+                      style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
                     >
                       {node.inDeg} edges
                     </span>
@@ -286,7 +286,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                       type="button"
                       onClick={() => onOpenGraph()}
                       className="shrink-0 text-[10px] font-mono hover:underline"
-                      style={{ color: 'rgba(230,237,243,0.4)' }}
+                      style={{ color: 'var(--ink-dim)' }}
                     >
                       → Graph
                     </button>
@@ -296,7 +296,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                   type="button"
                   onClick={() => onOpenGraph()}
                   className="mt-2 self-start text-xs font-mono hover:underline"
-                  style={{ color: '#79c0ff' }}
+                  style={{ color: 'var(--accent)' }}
                 >
                   Open full graph →
                 </button>
@@ -317,21 +317,21 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                   { label: 'Files indexed', value: graphStats.fileCount },
                 ].map(s => (
                   <div key={s.label} className="flex items-center justify-between">
-                    <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>{s.label}</span>
-                    <span className="text-sm font-semibold font-mono" style={{ color: '#e6edf3' }}>{s.value.toLocaleString()}</span>
+                    <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>{s.label}</span>
+                    <span className="text-sm font-semibold font-mono" style={{ color: 'var(--ink-high)' }}>{s.value.toLocaleString()}</span>
                   </div>
                 ))}
                 <button
                   type="button"
                   onClick={() => onOpenGraph()}
                   className="mt-2 self-start text-xs font-mono hover:underline"
-                  style={{ color: '#79c0ff' }}
+                  style={{ color: 'var(--accent)' }}
                 >
                   Browse full graph →
                 </button>
               </div>
             ) : (
-              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+              <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
                 No graph yet — run onboarding to index this repo.
               </p>
             )}
@@ -342,7 +342,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
             {commits === null ? (
               <SkeletonRows count={6} widths={['w-14', 'w-16', 'flex-1', 'w-12']} />
             ) : commits.length === 0 ? (
-              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+              <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
                 No commits yet.
               </p>
             ) : (
@@ -355,22 +355,22 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                         target="_blank"
                         rel="noopener noreferrer"
                         className="shrink-0 text-[10px] font-mono hover:underline"
-                        style={{ color: '#79c0ff', marginTop: '1px' }}
+                        style={{ color: 'var(--accent)', marginTop: '1px' }}
                       >
                         {c.shortSha}
                       </a>
                     ) : (
-                      <span className="shrink-0 text-[10px] font-mono" style={{ color: '#79c0ff', marginTop: '1px' }}>
+                      <span className="shrink-0 text-[10px] font-mono" style={{ color: 'var(--accent)', marginTop: '1px' }}>
                         {c.shortSha}
                       </span>
                     )}
-                    <span className="shrink-0 text-[9px] font-mono truncate max-w-[80px]" style={{ color: 'rgba(230,237,243,0.45)' }} title={c.author}>
+                    <span className="shrink-0 text-[9px] font-mono truncate max-w-[80px]" style={{ color: 'var(--ink-muted)' }} title={c.author}>
                       {c.author}
                     </span>
-                    <span className="flex-1 text-[10px] font-mono truncate" style={{ color: 'rgba(230,237,243,0.8)' }} title={c.message}>
+                    <span className="flex-1 text-[10px] font-mono truncate" style={{ color: 'var(--ink-body)' }} title={c.message}>
                       {c.message.length > 72 ? `${c.message.slice(0, 72)}…` : c.message}
                     </span>
-                    <span className="shrink-0 text-[9px] font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                    <span className="shrink-0 text-[9px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                       {c.date}
                     </span>
                   </div>
@@ -384,7 +384,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
             {contributors === null ? (
               <SkeletonContributors count={4} />
             ) : contributors.length === 0 ? (
-              <p className="text-sm font-mono italic" style={{ color: 'rgba(230,237,243,0.35)' }}>
+              <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
                 No contributors found.
               </p>
             ) : (
@@ -395,12 +395,12 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                     <div key={`${c.email}-${c.name}-${i}`} className="flex items-center gap-2">
                       <span
                         className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold font-mono"
-                        style={{ background: 'rgba(121,192,255,0.15)', color: '#79c0ff' }}
+                        style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
                       >
                         {initials}
                       </span>
-                      <span className="flex-1 text-xs font-mono truncate" style={{ color: 'rgba(230,237,243,0.8)' }}>{c.name}</span>
-                      <span className="shrink-0 text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                      <span className="flex-1 text-xs font-mono truncate" style={{ color: 'var(--ink-body)' }}>{c.name}</span>
+                      <span className="shrink-0 text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                         {c.commits} commit{c.commits !== 1 ? 's' : ''}
                       </span>
                     </div>
@@ -426,7 +426,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   );
 }
 
-const SKELETON_BG = 'rgba(230,237,243,0.06)';
+const SKELETON_BG = 'var(--surface-raised)';
 
 function SkeletonBlock({ className }: { className: string }): React.ReactElement {
   return (
@@ -472,10 +472,10 @@ function SkeletonContributors({ count }: { count: number }): React.ReactElement 
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
   return (
-    <div className="rounded-2xl p-6" style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}>
+    <div className="rounded-2xl p-6" style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}>
       <h2
         className="text-[10px] font-semibold uppercase tracking-widest mb-4 font-mono"
-        style={{ color: 'rgba(230,237,243,0.4)' }}
+        style={{ color: 'var(--ink-dim)' }}
       >
         {title}
       </h2>

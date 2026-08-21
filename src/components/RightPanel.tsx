@@ -63,16 +63,16 @@ function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; 
   const glyph = opKind === 'delete' ? '−' : opKind === 'write' ? '±' : '~';
   const glyphColor =
     opKind === 'delete'
-      ? '#f85149'
+      ? 'var(--status-fail)'
       : opKind === 'write'
-        ? '#ffda19'
-        : 'rgba(230,237,243,0.25)';
+        ? 'var(--status-gate)'
+        : 'var(--ink-dim)';
   const nameColor =
     opKind === 'delete'
-      ? '#f85149'
+      ? 'var(--status-fail)'
       : opKind === 'write'
-        ? '#e6edf3'
-        : '#e6edf3';
+        ? 'var(--ink-high)'
+        : 'var(--ink-high)';
 
   function flash(state: FileFeedback): void {
     setFeedback(state);
@@ -113,16 +113,16 @@ function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; 
         title={`Open with system default app: ${path}`}
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
       >
-        {dir && <span style={{ color: 'rgba(230,237,243,0.3)' }}>{dir}</span>}
+        {dir && <span style={{ color: 'var(--ink-dim)' }}>{dir}</span>}
         <span style={{ color: nameColor }}>{name}</span>
         {feedback === 'opened' && (
-          <span className="ml-1 text-[9px]" style={{ color: '#3fb950' }}>✓ opened</span>
+          <span className="ml-1 text-[9px]" style={{ color: 'var(--status-run)' }}>✓ opened</span>
         )}
         {feedback === 'copied' && (
-          <span className="ml-1 text-[9px]" style={{ color: '#3fb950' }}>✓ copied</span>
+          <span className="ml-1 text-[9px]" style={{ color: 'var(--status-run)' }}>✓ copied</span>
         )}
         {feedback === 'open-failed' && (
-          <span className="ml-1 text-[9px]" style={{ color: '#ffda19' }}>
+          <span className="ml-1 text-[9px]" style={{ color: 'var(--status-gate)' }}>
             open unavailable — path copied
           </span>
         )}
@@ -133,7 +133,7 @@ function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; 
         aria-label={`Copy path ${path}`}
         title="Copy path"
         className="shrink-0 mt-0.5 text-[9px] font-mono leading-5 transition-opacity hover:opacity-70"
-        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'rgba(230,237,243,0.35)' }}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-dim)' }}
       >
         ⧉
       </button>
@@ -184,7 +184,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
 
   if (!hasAny) {
     return (
-      <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
+      <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
         {isActive ? 'No files changed yet.' : 'No files changed.'}
       </p>
     );
@@ -199,11 +199,11 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
       {/* Modified / Created section */}
       {(hasModified || isActive) && (
         <div>
-          <p className="text-[10px] font-mono mb-2 uppercase tracking-wider" style={{ color: 'rgba(230,237,243,0.3)' }}>
+          <p className="text-[10px] font-mono mb-2 uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>
             Modified / Created
           </p>
           {!hasModified ? (
-            <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
               No files changed yet.
             </p>
           ) : (
@@ -222,7 +222,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
       {/* Referenced section */}
       {sortedReferenced.length > 0 && (
         <div>
-          <p className="text-[10px] font-mono mb-2 uppercase tracking-wider" style={{ color: 'rgba(230,237,243,0.3)' }}>
+          <p className="text-[10px] font-mono mb-2 uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>
             Referenced
           </p>
           <ul className="flex flex-col gap-1">
@@ -233,7 +233,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
         </div>
       )}
 
-      <p className="text-[10px] font-mono" style={{ color: 'rgba(230,237,243,0.2)' }}>
+      <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
         {allFiles.size} file{allFiles.size !== 1 ? 's' : ''} total
       </p>
     </div>
@@ -265,13 +265,13 @@ export function RightPanel({ view }: Props): React.ReactElement {
     return (
       <div
         className="flex flex-col items-center w-10 shrink-0 py-3 gap-2"
-        style={{ background: '#0c1015', borderLeft: '1px solid rgba(230,237,243,0.07)' }}
+        style={{ background: 'var(--surface-base)', borderLeft: '1px solid var(--surface-raised)' }}
       >
         <button
           type="button"
           onClick={() => setCollapsed(false)}
           className="text-sm leading-none"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
+          style={{ color: 'var(--ink-dim)' }}
           aria-label="Expand insights panel"
         >
           ‹
@@ -282,7 +282,7 @@ export function RightPanel({ view }: Props): React.ReactElement {
           title="Terminal"
           aria-label="Open terminal"
           className="w-7 h-7 flex items-center justify-center rounded text-sm"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
+          style={{ color: 'var(--ink-dim)' }}
         >
           ⬛
         </button>
@@ -292,7 +292,7 @@ export function RightPanel({ view }: Props): React.ReactElement {
           title="Coverage"
           aria-label="Open coverage"
           className="w-7 h-7 flex items-center justify-center rounded text-sm font-mono"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
+          style={{ color: 'var(--ink-dim)' }}
         >
           %
         </button>
@@ -303,12 +303,12 @@ export function RightPanel({ view }: Props): React.ReactElement {
   return (
     <div
       className="flex flex-col w-72 shrink-0 overflow-hidden"
-      style={{ background: '#0c1015', borderLeft: '1px solid rgba(230,237,243,0.07)' }}
+      style={{ background: 'var(--surface-base)', borderLeft: '1px solid var(--surface-raised)' }}
     >
       {/* Header */}
       <div
         className="flex items-center gap-1 px-3 py-2 border-b shrink-0"
-        style={{ background: '#090d12', borderColor: 'rgba(230,237,243,0.07)' }}
+        style={{ background: 'var(--surface-base)', borderColor: 'var(--surface-raised)' }}
       >
         <button
           type="button"
@@ -316,8 +316,8 @@ export function RightPanel({ view }: Props): React.ReactElement {
           className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
           aria-label="Collapse insights panel"
         >
-          <span className="text-sm leading-none shrink-0" style={{ color: 'rgba(230,237,243,0.35)' }}>›</span>
-          <span className="text-[10px] font-semibold uppercase tracking-widest font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
+          <span className="text-sm leading-none shrink-0" style={{ color: 'var(--ink-dim)' }}>›</span>
+          <span className="text-[10px] font-semibold uppercase tracking-widest font-mono" style={{ color: 'var(--ink-dim)' }}>
             Insights
           </span>
         </button>
@@ -327,7 +327,7 @@ export function RightPanel({ view }: Props): React.ReactElement {
           title="Terminal"
           aria-label="Open terminal"
           className="rounded px-2 py-0.5 text-[11px] font-mono"
-          style={{ color: 'rgba(230,237,243,0.45)' }}
+          style={{ color: 'var(--ink-muted)' }}
         >
           Term
         </button>
@@ -337,7 +337,7 @@ export function RightPanel({ view }: Props): React.ReactElement {
           title="Coverage"
           aria-label="Open coverage report"
           className="rounded px-2 py-0.5 text-[11px] font-mono"
-          style={{ color: 'rgba(230,237,243,0.45)' }}
+          style={{ color: 'var(--ink-muted)' }}
         >
           Cov
         </button>
@@ -346,13 +346,13 @@ export function RightPanel({ view }: Props): React.ReactElement {
       {/* Accordion sections */}
       <div className="flex-1 overflow-y-auto">
         {ACCORDIONS.map(({ id, label }) => (
-          <div key={id} style={{ borderBottom: '1px solid rgba(230,237,243,0.06)' }}>
+          <div key={id} style={{ borderBottom: '1px solid var(--surface-raised)' }}>
             <button
               type="button"
               onClick={() => toggleAccordion(id)}
               className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
-              style={{ color: openAccordion === id ? '#e6edf3' : 'rgba(230,237,243,0.55)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(230,237,243,0.04)'; }}
+              style={{ color: openAccordion === id ? 'var(--ink-high)' : 'var(--ink-muted)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-raised)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               aria-expanded={openAccordion === id}
             >
@@ -361,18 +361,18 @@ export function RightPanel({ view }: Props): React.ReactElement {
                 {id === 'files' && fileCount !== null && fileCount > 0 && (
                   <span
                     className="text-[9px] font-mono px-1 py-0.5 rounded"
-                    style={{ background: 'rgba(121,192,255,0.12)', color: '#79c0ff' }}
+                    style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
                   >
                     {fileCount}
                   </span>
                 )}
               </div>
-              <span className="text-xs" style={{ color: 'rgba(230,237,243,0.3)' }}>
+              <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>
                 {openAccordion === id ? '▲' : '▼'}
               </span>
             </button>
             {openAccordion === id && model && (
-              <div className="px-4 py-3" style={{ background: '#0a0d12' }}>
+              <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
                 {id === 'decisions' && <DecisionsLedger model={model} />}
                 {id === 'governance' && <GovernanceAudit model={model} />}
                 {id === 'burn' && <Burn model={model} />}
@@ -385,7 +385,7 @@ export function RightPanel({ view }: Props): React.ReactElement {
             )}
             {openAccordion === id && !model && (
               <div className="px-4 py-3">
-                <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>Loading…</p>
+                <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>Loading…</p>
               </div>
             )}
           </div>

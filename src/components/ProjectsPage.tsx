@@ -4,16 +4,16 @@ import type { Project } from '../api/types.js';
 import { useProjectsStore } from '../store/projects.js';
 
 const S = {
-  bg:     '#0d1117',
-  card:   '#161b22',
-  border: 'rgba(230,237,243,0.1)',
-  ink:    '#e6edf3',
-  muted:  'rgba(230,237,243,0.55)',
-  faint:  'rgba(230,237,243,0.3)',
-  accent: '#ffda19',
-  hover:  'rgba(230,237,243,0.05)',
-  green:  '#3fb950',
-  red:    '#f85149',
+  bg:     'var(--surface-base)',
+  card:   'var(--surface-card)',
+  border: 'var(--surface-raised)',
+  ink:    'var(--ink-high)',
+  muted:  'var(--ink-muted)',
+  faint:  'var(--ink-dim)',
+  accent: 'var(--accent)',
+  hover:  'var(--surface-raised)',
+  green:  'var(--status-run)',
+  red:    'var(--status-fail)',
 };
 
 function IconFolder(): React.ReactElement {
@@ -86,7 +86,7 @@ function CreateProjectForm({ onCreated, onCancel }: { onCreated: (p: Project) =>
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') void submit(); if (e.key === 'Escape') onCancel(); }}
         style={{
-          width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${S.border}`,
+          width: '100%', background: 'var(--surface-raised)', border: `1px solid ${S.border}`,
           borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: S.ink,
           outline: 'none', marginBottom: '8px', boxSizing: 'border-box',
         }}
@@ -97,7 +97,7 @@ function CreateProjectForm({ onCreated, onCancel }: { onCreated: (p: Project) =>
         onChange={(e) => setDescription(e.target.value)}
         rows={2}
         style={{
-          width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${S.border}`,
+          width: '100%', background: 'var(--surface-raised)', border: `1px solid ${S.border}`,
           borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: S.ink,
           outline: 'none', resize: 'vertical', marginBottom: '12px', boxSizing: 'border-box',
           fontFamily: 'inherit',
@@ -110,7 +110,7 @@ function CreateProjectForm({ onCreated, onCancel }: { onCreated: (p: Project) =>
           onClick={() => void submit()}
           disabled={busy || !name.trim()}
           style={{
-            background: S.accent, color: '#0d1117', border: 'none', borderRadius: '6px',
+            background: S.accent, color: 'var(--accent-fg)', border: 'none', borderRadius: '6px',
             padding: '7px 16px', fontSize: '12px', fontWeight: 700, cursor: busy ? 'default' : 'pointer',
             opacity: busy || !name.trim() ? 0.5 : 1,
           }}
@@ -145,7 +145,7 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'block', width: '100%', textAlign: 'left',
-        background: hovered ? 'rgba(230,237,243,0.04)' : S.card,
+        background: hovered ? 'var(--surface-raised)' : S.card,
         border: `1px solid ${S.border}`,
         borderRadius: '10px', padding: '16px', cursor: 'pointer',
         transition: 'background 0.1s',
@@ -235,7 +235,7 @@ export function ProjectsPage({ navigate }: Props): React.ReactElement {
           onClick={() => setShowCreate(true)}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
-            background: S.accent, color: '#0d1117', border: 'none', borderRadius: '7px',
+            background: S.accent, color: 'var(--accent-fg)', border: 'none', borderRadius: '7px',
             padding: '8px 14px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
             flexShrink: 0,
           }}

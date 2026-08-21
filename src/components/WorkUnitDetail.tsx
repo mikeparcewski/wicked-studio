@@ -6,17 +6,17 @@ import { useRuntimeStore, outputKey } from '../store/runtime.js';
 import { RoutingProvenance } from './RoutingProvenance.js';
 
 const STAGE_STYLE: Record<StageKind, { bg: string; color: string }> = {
-  recon:   { bg: 'rgba(121,192,255,0.12)', color: '#79c0ff' },
-  build:   { bg: 'rgba(63,185,80,0.12)',   color: '#3fb950' },
-  review:  { bg: 'rgba(167,139,250,0.12)', color: '#a78bfa' },
-  test:    { bg: 'rgba(255,218,25,0.12)',  color: '#ffda19' },
+  recon:   { bg: 'var(--accent-subtle)', color: 'var(--accent)' },
+  build:   { bg: 'var(--status-run-dim)',   color: 'var(--status-run)' },
+  review:  { bg: 'var(--accent-subtle)', color: 'var(--accent)' },
+  test:    { bg: 'var(--status-gate-dim)', color: 'var(--status-gate)' },
 };
 
 const UNIT_STATUS_COLOR: Record<UnitStatus, string> = {
-  pending:     'rgba(230,237,243,0.3)',
-  distributed: '#79c0ff',
-  done:        '#3fb950',
-  rejected:    '#f85149',
+  pending:     'var(--ink-dim)',
+  distributed: 'var(--accent)',
+  done:        'var(--status-run)',
+  rejected:    'var(--status-fail)',
 };
 
 interface Props {
@@ -88,18 +88,18 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
     }
   }
 
-  const stageBadge = STAGE_STYLE[unit.stage] ?? { bg: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.5)' };
-  const statusColor = UNIT_STATUS_COLOR[unit.status] ?? 'rgba(230,237,243,0.4)';
+  const stageBadge = STAGE_STYLE[unit.stage] ?? { bg: 'var(--surface-raised)', color: 'var(--ink-muted)' };
+  const statusColor = UNIT_STATUS_COLOR[unit.status] ?? 'var(--ink-dim)';
 
   return (
     <li
       className="rounded-lg p-3"
-      style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+      style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
       data-testid="work-unit"
       data-ord={unit.ord}
     >
       <div className="flex items-center gap-2 text-sm">
-        <span className="w-6 text-center text-xs shrink-0 font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+        <span className="w-6 text-center text-xs shrink-0 font-mono" style={{ color: 'var(--ink-dim)' }}>
           #{unit.ord}
         </span>
         <span
@@ -111,13 +111,13 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
         {(() => {
           const sep = unit.description.indexOf(' — ');
           return sep === -1 ? (
-            <span className="flex-1 truncate text-xs" style={{ color: 'rgba(230,237,243,0.7)' }}>{unit.description}</span>
+            <span className="flex-1 truncate text-xs" style={{ color: 'var(--ink-muted)' }}>{unit.description}</span>
           ) : (
             <span className="flex-1 min-w-0 flex items-baseline gap-1">
-              <span className="text-xs font-medium shrink-0" style={{ color: '#e6edf3' }}>
+              <span className="text-xs font-medium shrink-0" style={{ color: 'var(--ink-high)' }}>
                 {unit.description.slice(0, sep)}
               </span>
-              <span className="truncate text-[10px]" style={{ color: 'rgba(230,237,243,0.4)' }}>
+              <span className="truncate text-[10px]" style={{ color: 'var(--ink-dim)' }}>
                 {unit.description.slice(sep + 3)}
               </span>
             </span>
@@ -130,13 +130,13 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
 
       <div className="mt-1.5 pl-8 flex flex-col gap-0.5">
         {unit.assigned_cli && (
-          <p className="text-[11px] font-mono" style={{ color: 'rgba(230,237,243,0.4)' }}>
-            cli: <span style={{ color: 'rgba(230,237,243,0.65)' }}>{unit.assigned_cli}</span>
+          <p className="text-[11px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+            cli: <span style={{ color: 'var(--ink-muted)' }}>{unit.assigned_cli}</span>
           </p>
         )}
         <RoutingProvenance routing={unit.routing} />
         {unit.denial_reason && (
-          <p className="text-[11px] font-mono" style={{ color: '#f85149' }} data-testid="unit-denial-reason">
+          <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }} data-testid="unit-denial-reason">
             denied: {unit.denial_reason}
           </p>
         )}
@@ -147,7 +147,7 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
             data-testid="unit-transcript-toggle"
             onClick={() => void toggleTranscript()}
             className="text-[11px] hover:underline font-mono"
-            style={{ color: '#79c0ff' }}
+            style={{ color: 'var(--accent)' }}
           >
             {showTranscript ? 'Hide transcript' : 'View transcript'}
           </button>
@@ -158,7 +158,7 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
               onClick={() => void approve()}
               disabled={approving}
               className="rounded px-2 py-0.5 text-[11px] font-semibold disabled:opacity-50"
-              style={{ background: '#3fb950', color: '#0d1117' }}
+              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
             >
               Approve this unit
             </button>
@@ -169,7 +169,7 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
           <pre
             data-testid="unit-transcript"
             className="mt-1 max-h-96 overflow-auto rounded-lg p-2 text-[10px] leading-tight whitespace-pre-wrap font-mono"
-            style={{ background: '#0d1117', color: '#e6edf3' }}
+            style={{ background: 'var(--surface-base)', color: 'var(--ink-high)' }}
           >
             {loadingTranscript ? 'Loading…' : transcript}
           </pre>

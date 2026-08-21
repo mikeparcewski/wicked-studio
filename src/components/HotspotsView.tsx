@@ -7,26 +7,26 @@ interface Props {
 }
 
 const KIND_COLORS: Record<string, string> = {
-  function:    '#10b981',
-  method:      '#10b981',
-  constructor: '#10b981',
-  class:       '#f97316',
-  struct:      '#f97316',
-  interface:   '#3b82f6',
-  type_alias:  '#3b82f6',
-  trait:       '#3b82f6',
-  enum:        '#8b5cf6',
-  macro:       '#a855f7',
+  function:    'var(--status-run)',
+  method:      'var(--status-run)',
+  constructor: 'var(--status-run)',
+  class:       'var(--status-gate)',
+  struct:      'var(--status-gate)',
+  interface:   'var(--accent)',
+  type_alias:  'var(--accent)',
+  trait:       'var(--accent)',
+  enum:        'var(--accent-dim)',
+  macro:       'var(--accent-dim)',
 };
 const LANG_COLORS: Record<string, string> = {
-  typescript: '#10b981',
-  javascript: '#10b981',
-  rust:       '#f97316',
-  python:     '#3b82f6',
-  go:         '#06b6d4',
+  typescript: 'var(--status-run)',
+  javascript: 'var(--status-run)',
+  rust:       'var(--status-gate)',
+  python:     'var(--accent)',
+  go:         'var(--accent-dim)',
 };
 function nodeColor(n: CodeGraphNode): string {
-  return KIND_COLORS[n.kind?.toLowerCase()] ?? LANG_COLORS[n.lang?.toLowerCase()] ?? '#9ca3af';
+  return KIND_COLORS[n.kind?.toLowerCase()] ?? LANG_COLORS[n.lang?.toLowerCase()] ?? 'var(--ink-muted)';
 }
 
 export function HotspotsView({ nodes, selectedId, onSelect }: Props): React.ReactElement {
@@ -34,7 +34,7 @@ export function HotspotsView({ nodes, selectedId, onSelect }: Props): React.Reac
   const maxInDeg = top40[0]?.inDeg ?? 1;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden" style={{ background: '#0f1419' }}>
+    <div className="h-full flex flex-col overflow-hidden" style={{ background: 'var(--surface-rail)' }}>
       <div className="flex-1 overflow-y-auto">
         {top40.map((n, i) => {
           const barPct = maxInDeg > 0 ? (n.inDeg / maxInDeg) * 100 : 0;
@@ -50,10 +50,10 @@ export function HotspotsView({ nodes, selectedId, onSelect }: Props): React.Reac
               onClick={() => onSelect?.(n)}
               className="w-full text-left px-4 py-2.5 relative transition-colors border-b"
               style={{
-                borderColor: 'rgba(230,237,243,0.06)',
-                background: isSelected ? 'rgba(63,185,80,0.08)' : 'transparent',
+                borderColor: 'var(--surface-raised)',
+                background: isSelected ? 'var(--status-run-dim)' : 'transparent',
               }}
-              onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'rgba(230,237,243,0.04)'; }}
+              onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--surface-raised)'; }}
               onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
             >
               <div
@@ -64,7 +64,7 @@ export function HotspotsView({ nodes, selectedId, onSelect }: Props): React.Reac
               <div className="relative flex items-center gap-2">
                 <span
                   className="text-[10px] tabular-nums w-5 text-right shrink-0 font-mono"
-                  style={{ color: 'rgba(230,237,243,0.25)' }}
+                  style={{ color: 'var(--ink-dim)' }}
                 >
                   {i + 1}
                 </span>
@@ -72,21 +72,21 @@ export function HotspotsView({ nodes, selectedId, onSelect }: Props): React.Reac
                 <span className="flex-1 min-w-0 flex flex-col">
                   <span
                     className="font-mono text-[11px] truncate font-medium"
-                    style={{ color: '#e6edf3' }}
+                    style={{ color: 'var(--ink-high)' }}
                     title={n.name || n.id}
                   >
                     {displayName}
                   </span>
                   {filePart && (
-                    <span className="text-[9px] truncate font-mono" style={{ color: 'rgba(230,237,243,0.35)' }}>
-                      {n.kind && <span style={{ color: 'rgba(230,237,243,0.45)', marginRight: '4px' }}>{n.kind}</span>}
+                    <span className="text-[9px] truncate font-mono" style={{ color: 'var(--ink-dim)' }}>
+                      {n.kind && <span style={{ color: 'var(--ink-muted)', marginRight: '4px' }}>{n.kind}</span>}
                       {filePart}
                     </span>
                   )}
                 </span>
                 <span
                   className="shrink-0 text-[11px] font-semibold tabular-nums ml-2 font-mono"
-                  style={{ color: isSelected ? '#3fb950' : 'rgba(230,237,243,0.6)' }}
+                  style={{ color: isSelected ? 'var(--status-run)' : 'var(--ink-muted)' }}
                 >
                   {n.inDeg}
                 </span>

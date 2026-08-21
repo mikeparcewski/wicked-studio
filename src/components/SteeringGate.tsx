@@ -111,20 +111,20 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
     <div
       className="rounded-xl p-4"
       style={{
-        background: '#161c26',
-        border: '1px solid rgba(255,218,25,0.3)',
-        boxShadow: '0 0 0 1px rgba(255,218,25,0.08)',
+        background: 'var(--surface-rail)',
+        border: '1px solid var(--status-gate-dim)',
+        boxShadow: '0 0 0 1px var(--status-gate-dim)',
       }}
       data-testid="steering-gate"
       data-run-id={runId}
     >
       <div className="flex items-center gap-2 mb-2">
-        <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#ffda19' }} />
-        <p className="font-semibold text-sm font-mono" style={{ color: '#ffda19' }}>
+        <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--status-gate)' }} />
+        <p className="font-semibold text-sm font-mono" style={{ color: 'var(--status-gate)' }}>
           Awaiting human decision
         </p>
       </div>
-      <p className="text-xs font-mono mb-3" style={{ color: 'rgba(230,237,243,0.4)' }}>
+      <p className="text-xs font-mono mb-3" style={{ color: 'var(--ink-dim)' }}>
         run {runId.slice(0, 8)}
         {typeof ord === 'number' ? ` · before unit #${ord}` : ''}
       </p>
@@ -135,7 +135,7 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
         // Focusable only programmatically: the deep-link target, never a tab stop.
         tabIndex={-1}
         className="text-xs mb-1 leading-relaxed font-mono"
-        style={{ color: 'rgba(230,237,243,0.85)', outline: 'none' }}
+        style={{ color: 'var(--ink-body)', outline: 'none' }}
         data-testid="steering-prompt"
       >
         {headline}
@@ -143,7 +143,7 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
 
       {/* Coverage stats — shown when evaluator gate fails and we have repo coverage data */}
       {isCoverageFail && coverage && (
-        <p className="text-xs mb-2 font-mono" style={{ color: 'rgba(96,165,250,0.85)' }}>
+        <p className="text-xs mb-2 font-mono" style={{ color: 'var(--ink-body)' }}>
           {coverageLabel(coverage)}
         </p>
       )}
@@ -153,11 +153,11 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
         <details className="mb-3">
           <summary
             className="text-[10px] font-mono cursor-pointer select-none"
-            style={{ color: 'rgba(230,237,243,0.3)' }}
+            style={{ color: 'var(--ink-dim)' }}
           >
             why this gate fired
           </summary>
-          <p className="text-[10px] font-mono mt-1 leading-relaxed" style={{ color: 'rgba(230,237,243,0.35)' }}>
+          <p className="text-[10px] font-mono mt-1 leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
             {footnote}
           </p>
         </details>
@@ -168,9 +168,9 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
         data-testid="steering-amend"
         className="w-full rounded-lg p-2 text-xs mb-3 resize-none font-mono"
         style={{
-          background: '#0f1419',
-          border: '1px solid rgba(230,237,243,0.14)',
-          color: '#e6edf3',
+          background: 'var(--surface-rail)',
+          border: '1px solid var(--surface-raised)',
+          color: 'var(--ink-high)',
           outline: 'none',
         }}
         rows={2}
@@ -185,7 +185,7 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
       />
 
       {error && (
-        <p className="text-xs mb-3 font-mono" style={{ color: '#f85149' }} data-testid="steering-error">
+        <p className="text-xs mb-3 font-mono" style={{ color: 'var(--status-fail)' }} data-testid="steering-error">
           {error}
         </p>
       )}
@@ -197,7 +197,7 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
           onClick={() => void approve()}
           disabled={loading}
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-          style={{ background: '#3fb950', color: '#0d1117' }}
+          style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
         >
           Approve
         </button>
@@ -206,7 +206,7 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
           onClick={() => void approveWithSteer()}
           disabled={loading || !amend.trim()}
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-          style={{ background: '#ffda19', color: '#0d1117' }}
+          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
         >
           Approve + steer
         </button>
@@ -215,7 +215,7 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
           onClick={() => void reject()}
           disabled={loading}
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-          style={{ background: 'rgba(248,81,73,0.15)', border: '1px solid rgba(248,81,73,0.3)', color: '#f85149' }}
+          style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
         >
           Reject
         </button>
@@ -224,14 +224,14 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
           onClick={() => void cancel()}
           disabled={loading}
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-          style={{ background: 'rgba(139,148,158,0.12)', border: '1px solid rgba(139,148,158,0.25)', color: 'rgba(139,148,158,0.9)' }}
+          style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
         >
           Cancel run
         </button>
       </div>
 
       {/* Mode-selector note: workflow gates are always HITL regardless of run-level human_confirm */}
-      <p className="text-[10px] font-mono mt-2" style={{ color: 'rgba(230,237,243,0.25)' }}>
+      <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
         Workflow-declared gate — run-level human_confirm setting does not apply here.
       </p>
     </div>

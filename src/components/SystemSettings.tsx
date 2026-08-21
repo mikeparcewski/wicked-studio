@@ -24,11 +24,11 @@ function SettingRow({ label, description, children }: SettingRowProps): React.Re
   return (
     <div
       className="flex items-start justify-between gap-6 py-4 border-b last:border-b-0"
-      style={{ borderColor: 'rgba(230,237,243,0.07)' }}
+      style={{ borderColor: 'var(--surface-raised)' }}
     >
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium" style={{ color: '#e6edf3' }}>{label}</p>
-        <p className="text-xs mt-0.5" style={{ color: 'rgba(230,237,243,0.45)' }}>{description}</p>
+        <p className="text-sm font-medium" style={{ color: 'var(--ink-high)' }}>{label}</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--ink-muted)' }}>{description}</p>
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -136,12 +136,12 @@ export function SystemSettings(): React.ReactElement {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-lg font-semibold" style={{ color: '#e6edf3' }}>System</h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(230,237,243,0.45)' }}>
+        <h1 className="text-lg font-semibold" style={{ color: 'var(--ink-high)' }}>System</h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--ink-muted)' }}>
           Runtime tunables persisted to{' '}
           <code
             className="font-mono text-xs rounded px-1 py-0.5"
-            style={{ background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.7)' }}
+            style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}
           >
             ~/.config/wicked-core/settings.json
           </code>.
@@ -151,7 +151,7 @@ export function SystemSettings(): React.ReactElement {
       {error && (
         <div
           className="mb-4 px-3 py-2 rounded text-xs"
-          style={{ background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.3)', color: '#f85149' }}
+          style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
         >
           {error}
         </div>
@@ -159,11 +159,11 @@ export function SystemSettings(): React.ReactElement {
 
       <section
         className="rounded-xl px-5 mb-6"
-        style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
       >
         <h2
           className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
+          style={{ color: 'var(--ink-dim)' }}
         >
           Code Graph
         </h2>
@@ -183,18 +183,18 @@ export function SystemSettings(): React.ReactElement {
               if (!Number.isNaN(n)) patch('graphNodeLimit', Math.max(20, Math.min(500, n)));
             }}
             className="w-24 rounded px-2 py-1 text-sm text-right tabular-nums focus:outline-none"
-            style={{ background: '#161c26', border: '1px solid rgba(230,237,243,0.12)', color: '#e6edf3' }}
+            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
           />
         </SettingRow>
       </section>
 
       <section
         className="rounded-xl px-5 mb-6"
-        style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
       >
         <h2
           className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
+          style={{ color: 'var(--ink-dim)' }}
         >
           Workers
         </h2>
@@ -215,18 +215,18 @@ export function SystemSettings(): React.ReactElement {
               }}
               className="w-56 rounded px-2 py-1 text-sm font-mono focus:outline-none"
               style={{
-                background: '#161c26',
-                border: `1px solid ${workerRootInvalid || workerRootError ? 'rgba(248,81,73,0.5)' : 'rgba(230,237,243,0.12)'}`,
-                color: '#e6edf3',
+                background: 'var(--surface-rail)',
+                border: `1px solid ${workerRootInvalid || workerRootError ? 'var(--status-fail-dim)' : 'var(--surface-raised)'}`,
+                color: 'var(--ink-high)',
               }}
             />
             {workerRootInvalid && (
-              <p className="text-xs" style={{ color: '#f85149' }} data-testid="worker-root-invalid">
+              <p className="text-xs" style={{ color: 'var(--status-fail)' }} data-testid="worker-root-invalid">
                 Must be empty or an absolute path.
               </p>
             )}
             {workerRootError && (
-              <p className="text-xs" style={{ color: '#f85149' }} data-testid="worker-root-error">
+              <p className="text-xs" style={{ color: 'var(--status-fail)' }} data-testid="worker-root-error">
                 {workerRootError}
               </p>
             )}
@@ -241,33 +241,33 @@ export function SystemSettings(): React.ReactElement {
           disabled={!hasDirty || saving}
           className="px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
           style={hasDirty && !saving
-            ? { background: '#3fb950', color: '#0d1117' }
-            : { background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.35)', cursor: 'not-allowed' }
+            ? { background: 'var(--status-run)', color: 'var(--surface-base)' }
+            : { background: 'var(--surface-raised)', color: 'var(--ink-dim)', cursor: 'not-allowed' }
           }
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
-        {saved && <span className="text-xs font-medium" style={{ color: '#3fb950' }}>Saved</span>}
+        {saved && <span className="text-xs font-medium" style={{ color: 'var(--status-run)' }}>Saved</span>}
       </div>
 
       {/* ── CLI seats & sign-in ───────────────────────────────────────────── */}
       <section
         className="rounded-xl px-5 mb-6"
-        style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.07)' }}
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
       >
         <h2
           className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
+          style={{ color: 'var(--ink-dim)' }}
         >
           CLI seats &amp; sign-in
         </h2>
-        <p className="text-xs mb-4" style={{ color: 'rgba(230,237,243,0.4)' }}>
+        <p className="text-xs mb-4" style={{ color: 'var(--ink-dim)' }}>
           Checked CLIs are pre-selected when you open the launch form (takes effect on the next new
           session). The status shows whether each seat looks signed in; Sign in opens that CLI&apos;s
           own login flow in a terminal.
         </p>
         {roster.length === 0 ? (
-          <p className="text-xs italic pb-4 font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>Loading roster…</p>
+          <p className="text-xs italic pb-4 font-mono" style={{ color: 'var(--ink-dim)' }}>Loading roster…</p>
         ) : (
           <div className="flex flex-col gap-2 pb-4">
             {roster.map((seat) => (
@@ -279,19 +279,19 @@ export function SystemSettings(): React.ReactElement {
                     type="checkbox"
                     checked={defaultClis.has(seat.key)}
                     onChange={() => toggleDefaultCli(seat.key)}
-                    className="accent-[#ffda19] w-3.5 h-3.5 shrink-0"
+                    className="w-3.5 h-3.5 shrink-0" style={{ accentColor: 'var(--accent)' }}
                   />
-                  <span className="text-sm font-mono truncate" style={{ color: '#e6edf3' }}>
+                  <span className="text-sm font-mono truncate" style={{ color: 'var(--ink-high)' }}>
                     {seat.display_name}
                   </span>
                 </label>
-                <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                   {seat.key}
                 </span>
                 {seat.signed_in === true && (
                   <span
                     className="text-xs font-mono"
-                    style={{ color: '#3fb950' }}
+                    style={{ color: 'var(--status-run)' }}
                     data-testid={`seat-signin-${seat.key}`}
                   >
                     ✓ signed in
@@ -300,7 +300,7 @@ export function SystemSettings(): React.ReactElement {
                 {seat.signed_in === false && (
                   <span
                     className="text-xs font-mono"
-                    style={{ color: '#f85149' }}
+                    style={{ color: 'var(--status-fail)' }}
                     data-testid={`seat-signin-${seat.key}`}
                   >
                     sign in needed
@@ -312,7 +312,7 @@ export function SystemSettings(): React.ReactElement {
                     onClick={() => setSignInSeat(seat)}
                     aria-label={`Sign in ${seat.display_name}`}
                     className="px-2.5 py-1 rounded-lg text-xs font-medium shrink-0"
-                    style={{ background: 'rgba(255,218,25,0.15)', color: '#ffda19', border: '1px solid rgba(255,218,25,0.3)' }}
+                    style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)', border: '1px solid var(--status-gate-dim)' }}
                   >
                     Sign in
                   </button>
@@ -324,17 +324,17 @@ export function SystemSettings(): React.ReactElement {
         {roster.length > 0 && (
           <div
             className="flex items-center gap-3 pb-4 pt-2 border-t"
-            style={{ borderColor: 'rgba(230,237,243,0.07)' }}
+            style={{ borderColor: 'var(--surface-raised)' }}
           >
             <button
               type="button"
               onClick={saveDefaultClis}
               className="px-4 py-2 rounded-lg text-sm font-medium"
-              style={{ background: '#ffda19', color: '#0d1117' }}
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               Save CLI defaults
             </button>
-            {clisSaved && <span className="text-xs font-medium" style={{ color: '#3fb950' }}>Saved</span>}
+            {clisSaved && <span className="text-xs font-medium" style={{ color: 'var(--status-run)' }}>Saved</span>}
           </div>
         )}
       </section>
@@ -351,11 +351,11 @@ export function SystemSettings(): React.ReactElement {
           disableEscapeKey
         >
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
               Running{' '}
               <code
                 className="rounded px-1 py-0.5"
-                style={{ background: 'rgba(230,237,243,0.06)', color: '#e6edf3' }}
+                style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}
               >
                 {signInSeat.login_invocation}
               </code>{' '}

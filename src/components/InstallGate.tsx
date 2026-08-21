@@ -15,7 +15,7 @@ import type { Mode } from '../hooks/useRoute.js';
 // document.
 
 const CODE: React.CSSProperties = {
-  background: '#0d1117', border: `1px solid ${S.border}`, borderRadius: '6px',
+  background: 'var(--surface-base)', border: `1px solid ${S.border}`, borderRadius: '6px',
   color: S.ink, display: 'block', fontFamily: 'ui-monospace, monospace', fontSize: '12px',
   margin: '6px 0 0', padding: '8px 10px', userSelect: 'all', whiteSpace: 'pre-wrap',
 };

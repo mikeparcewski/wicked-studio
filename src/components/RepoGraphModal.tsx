@@ -17,48 +17,46 @@ type GraphType = 'code' | 'domain';
 
 // Wicked design tokens (matches tokens.css)
 const T = {
-  canvas:       '#0d1117',
-  canvas2:      '#161c26',
-  surface:      '#1b222e',
-  surface2:     '#0f1419',
-  ink:          '#e6edf3',
-  muted:        'rgba(230,237,243,0.55)',
-  faint:        'rgba(230,237,243,0.24)',
-  hairline:     'rgba(230,237,243,0.07)',
-  hairlineS:    'rgba(230,237,243,0.14)',
-  accent:       '#ffda19',
-  accentInk:    '#0d1117',
-  link:         '#79c0ff',
-  ok:           '#3fb950',
-  deny:         '#f85149',
-  // Blue modal
-  blue:         '#1c4053',
-  blue2:        '#182f3c',
-  blueS:        '#224a5e',
-  blueS2:       '#1a3b4e',
+  canvas:       'var(--surface-base)',
+  canvas2:      'var(--surface-rail)',
+  surface:      'var(--surface-card)',
+  surface2:     'var(--surface-rail)',
+  ink:          'var(--ink-high)',
+  muted:        'var(--ink-muted)',
+  faint:        'var(--ink-dim)',
+  hairline:     'var(--surface-raised)',
+  hairlineS:    'var(--surface-raised)',
+  accent:       'var(--accent)',
+  accentInk:    'var(--accent-fg)',
+  link:         'var(--accent)',
+  ok:           'var(--status-run)',
+  deny:         'var(--status-fail)',
+  // The former "blue modal" surfaces, now on the surface ramp.
+  blue:         'var(--surface-overlay)',
+  blue2:        'var(--surface-raised)',
 };
 
 const KIND_COLORS: Record<string, string> = {
-  function:    '#10b981',
-  method:      '#10b981',
-  constructor: '#10b981',
-  class:       '#f97316',
-  struct:      '#f97316',
-  interface:   '#3b82f6',
-  type_alias:  '#3b82f6',
-  trait:       '#3b82f6',
-  enum:        '#8b5cf6',
-  macro:       '#a855f7',
+  function:    'var(--status-run)',
+  method:      'var(--status-run)',
+  constructor: 'var(--status-run)',
+  class:       'var(--status-gate)',
+  struct:      'var(--status-gate)',
+  interface:   'var(--accent)',
+  type_alias:  'var(--accent)',
+  trait:       'var(--accent)',
+  enum:        'var(--accent-dim)',
+  macro:       'var(--accent-dim)',
 };
 const LANG_COLORS: Record<string, string> = {
-  typescript: '#10b981',
-  javascript: '#10b981',
-  rust:       '#f97316',
-  python:     '#3b82f6',
-  go:         '#06b6d4',
+  typescript: 'var(--status-run)',
+  javascript: 'var(--status-run)',
+  rust:       'var(--status-gate)',
+  python:     'var(--accent)',
+  go:         'var(--accent-dim)',
 };
 function symbolColor(n: CodeGraphNode): string {
-  return KIND_COLORS[n.kind?.toLowerCase()] ?? LANG_COLORS[n.lang?.toLowerCase()] ?? '#9ca3af';
+  return KIND_COLORS[n.kind?.toLowerCase()] ?? LANG_COLORS[n.lang?.toLowerCase()] ?? 'var(--ink-muted)';
 }
 
 function NodeDetailPanel({
@@ -127,7 +125,7 @@ function NodeDetailPanel({
                 onClick={() => onBlast(node)}
                 disabled={blastBusy}
                 className="flex-1 px-2 py-1 rounded-lg text-[10px] font-mono font-semibold disabled:opacity-50"
-                style={{ background: 'rgba(248,81,73,0.12)', color: T.deny, border: `1px solid ${T.hairline}` }}
+                style={{ background: 'var(--status-fail-dim)', color: T.deny, border: `1px solid ${T.hairline}` }}
               >
                 {blastBusy ? 'Computing…' : '⚡ Blast radius'}
               </button>
@@ -138,7 +136,7 @@ function NodeDetailPanel({
                 onClick={() => onExpand(node)}
                 disabled={expandBusy}
                 className="flex-1 px-2 py-1 rounded-lg text-[10px] font-mono font-semibold disabled:opacity-50"
-                style={{ background: 'rgba(121,192,255,0.12)', color: T.link, border: `1px solid ${T.hairline}` }}
+                style={{ background: 'var(--accent-subtle)', color: T.link, border: `1px solid ${T.hairline}` }}
               >
                 {expandBusy ? 'Expanding…' : '⤢ Expand neighbors'}
               </button>
@@ -404,7 +402,7 @@ function DomainDetailPanel({
                     <span
                       className="text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded font-mono"
                       style={{
-                        background: req.status === 'active' ? 'rgba(63,185,80,0.15)' : req.status === 'deprecated' ? 'rgba(248,81,73,0.15)' : T.surface,
+                        background: req.status === 'active' ? 'var(--status-run-dim)' : req.status === 'deprecated' ? 'var(--status-fail-dim)' : T.surface,
                         color: req.status === 'active' ? T.ok : req.status === 'deprecated' ? T.deny : T.muted,
                       }}
                     >
@@ -435,7 +433,7 @@ function PanelDots(): React.ReactElement {
   return (
     <div className="flex items-center gap-1.5">
       <span className="w-3 h-3 rounded-full" style={{ background: T.deny }} />
-      <span className="w-3 h-3 rounded-full" style={{ background: T.accent }} />
+      <span className="w-3 h-3 rounded-full" style={{ background: 'var(--status-gate)' }} />
       <span className="w-3 h-3 rounded-full" style={{ background: T.ok }} />
     </div>
   );
@@ -610,7 +608,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
         style={{
           background: active ? T.surface : 'transparent',
           color: active ? T.ink : T.muted,
-          boxShadow: active ? '0 1px 4px rgba(0,0,0,0.4)' : 'none',
+          boxShadow: active ? 'var(--shadow-card)' : 'none',
         }}
       >
         {label}
@@ -621,7 +619,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.75)' }}
+      style={{ background: 'var(--scrim)' }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Modal card — wicked teal-blue */}
@@ -630,7 +628,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
         style={{
           background: T.blue,
           border: `1px solid ${T.hairlineS}`,
-          boxShadow: '0 40px 80px -20px rgba(0,0,0,0.8)',
+          boxShadow: 'var(--shadow-overlay)',
         }}
       >
         {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -646,7 +644,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
           {/* Graph-type pills */}
           <div
             className="flex gap-0.5 rounded p-0.5"
-            style={{ background: 'rgba(0,0,0,0.25)' }}
+            style={{ background: 'var(--surface-rail)' }}
           >
             {(['code', 'domain'] as GraphType[]).map((t) => (
               <TabPill key={t} value={t} current={graphType} label={t === 'code' ? 'Code' : 'Domain'} onChange={setGraphType} />
@@ -657,7 +655,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
           {graphType === 'code' && (
             <div
               className="flex gap-0.5 rounded p-0.5"
-              style={{ background: 'rgba(0,0,0,0.25)' }}
+              style={{ background: 'var(--surface-rail)' }}
             >
               {(['graph', 'hotspots'] as TabId[]).map((t) => (
                 <TabPill key={t} value={t} current={tab} label={t === 'graph' ? 'Graph' : 'Hotspots'} onChange={setTab} />
@@ -672,8 +670,8 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
               onClick={() => setHideTests((h) => !h)}
               className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono font-medium transition-colors border"
               style={{
-                borderColor: hideTests ? T.hairline : 'rgba(255,218,25,0.4)',
-                background:  hideTests ? 'rgba(0,0,0,0.2)' : 'rgba(255,218,25,0.08)',
+                borderColor: hideTests ? T.hairline : 'var(--accent-dim)',
+                background:  hideTests ? 'var(--surface-rail)' : 'var(--accent-subtle)',
                 color:       hideTests ? T.faint : T.accent,
               }}
             >
@@ -685,7 +683,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
           {codeData && graphType === 'code' && (
             <span
               className="text-[10px] font-mono px-2 py-0.5 rounded"
-              style={{ background: 'rgba(0,0,0,0.2)', color: T.muted }}
+              style={{ background: 'var(--surface-rail)', color: T.muted }}
             >
               {localNodes.length} nodes · {codeData.stats.edgeCount} edges
             </span>
@@ -802,7 +800,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                     flex: 1,
                     border: `1px solid ${T.hairlineS}`,
                     background: T.canvas2,
-                    boxShadow: '0 20px 50px -20px rgba(0,0,0,0.6)',
+                    boxShadow: 'var(--shadow-overlay)',
                   }}
                 >
                   {/* Panel header — traffic lights + title */}
@@ -840,7 +838,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                     flex: 1,
                     border: `1px solid ${T.hairlineS}`,
                     background: T.canvas2,
-                    boxShadow: '0 20px 50px -20px rgba(0,0,0,0.6)',
+                    boxShadow: 'var(--shadow-overlay)',
                   }}
                 >
                   <div

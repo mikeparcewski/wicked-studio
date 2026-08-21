@@ -16,7 +16,7 @@ import { S } from './SurfaceState.js';
 // without the other is not authored, for the same reason a status line is never bare.
 
 const FIELD: React.CSSProperties = {
-  background: 'rgba(13,17,23,0.6)', border: `1px solid ${S.border}`, borderRadius: '6px',
+  background: 'var(--surface-rail)', border: `1px solid ${S.border}`, borderRadius: '6px',
   color: S.ink, fontFamily: 'inherit', fontSize: '12px', padding: '6px 8px', width: '100%',
 };
 
@@ -93,7 +93,7 @@ export function DemoWizard({ projectId, seed, msgId, onCancel, onCreated }: Demo
             {draft.steps.map((s, i) => (
               <li key={`${s.subject}-${i}`} data-testid="wizard-step" data-index={String(i)}
                   className="flex items-center gap-2 rounded-md px-2 py-1 text-[11px]"
-                  style={{ background: 'rgba(13,17,23,0.6)', border: `1px solid ${S.border}`, color: S.ink }}>
+                  style={{ background: 'var(--surface-rail)', border: `1px solid ${S.border}`, color: S.ink }}>
                 <span className="font-mono" style={{ color: S.accent }}>{i + 1}</span>
                 <span className="flex-1">{stepTitle(s)}</span>
                 <button type="button" data-testid="wizard-step-remove"
@@ -124,7 +124,7 @@ export function DemoWizard({ projectId, seed, msgId, onCancel, onCreated }: Demo
       <div className="mt-auto flex items-center gap-2 pt-2">
         <button type="button" data-testid="wizard-create" disabled={!draftReady(draft) || busy}
                 onClick={() => void create()} className="disabled:opacity-40"
-                style={{ ...BTN, background: S.accent, color: '#0d1117' }}>
+                style={{ ...BTN, background: S.accent, color: 'var(--surface-base)' }}>
           {busy ? 'Authoring…' : `Create demo (${draft.steps.length} steps)`}
         </button>
         <button type="button" data-testid="wizard-cancel" onClick={onCancel}
@@ -133,7 +133,7 @@ export function DemoWizard({ projectId, seed, msgId, onCancel, onCreated }: Demo
         </button>
       </div>
       {error !== null && (
-        <p data-testid="wizard-error" className="text-[11px] font-mono" style={{ color: '#f85149', margin: 0 }}>
+        <p data-testid="wizard-error" className="text-[11px] font-mono" style={{ color: 'var(--status-fail)', margin: 0 }}>
           {error} — nothing was created; fix it and submit again.
         </p>
       )}

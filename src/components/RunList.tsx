@@ -16,7 +16,7 @@ export function RunList({ runs, selectedRunId, onSelect }: Props): React.ReactEl
   // actions), so we surface the disconnect explicitly and let reconnect refill.
   if (status === 'disconnected') {
     return (
-      <div data-testid="run-list" className="p-4 text-sm text-gray-400 text-center">
+      <div data-testid="run-list" className="p-4 text-sm text-ink-muted text-center">
         Daemon not reachable — reconnecting…
       </div>
     );
@@ -24,7 +24,7 @@ export function RunList({ runs, selectedRunId, onSelect }: Props): React.ReactEl
 
   if (runs.length === 0) {
     return (
-      <div data-testid="run-list" className="p-4 text-sm text-gray-400 text-center">
+      <div data-testid="run-list" className="p-4 text-sm text-ink-muted text-center">
         No runs yet
       </div>
     );

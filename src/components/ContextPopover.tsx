@@ -41,7 +41,7 @@ function SectionHead({ children }: { children: React.ReactNode }): React.ReactEl
   return (
     <p
       className="text-[10px] uppercase tracking-widest font-semibold mb-2"
-      style={{ color: 'rgba(230,237,243,0.35)' }}
+      style={{ color: 'var(--ink-dim)' }}
     >
       {children}
     </p>
@@ -49,7 +49,7 @@ function SectionHead({ children }: { children: React.ReactNode }): React.ReactEl
 }
 
 function Divider(): React.ReactElement {
-  return <div style={{ height: '1px', background: 'rgba(230,237,243,0.07)' }} />;
+  return <div style={{ height: '1px', background: 'var(--surface-raised)' }} />;
 }
 
 /**
@@ -94,9 +94,9 @@ export function ContextPopover({
       aria-label="Launch options"
       className="flex flex-col text-xs font-mono overflow-y-auto rounded-2xl"
       style={{
-        background: '#1b222e',
-        border: '1px solid rgba(230,237,243,0.15)',
-        boxShadow: '0 16px 48px rgba(0,0,0,0.55)',
+        background: 'var(--surface-card)',
+        border: '1px solid var(--surface-raised)',
+        boxShadow: 'var(--shadow-overlay)',
         width: '300px',
         maxHeight: '460px',
       }}
@@ -109,9 +109,9 @@ export function ContextPopover({
           onClick={() => fileInputRef.current?.click()}
           className="rounded-lg px-3 py-1.5 font-semibold transition-opacity hover:opacity-80"
           style={{
-            background: 'rgba(230,237,243,0.07)',
-            color: '#e6edf3',
-            border: '1px solid rgba(230,237,243,0.1)',
+            background: 'var(--surface-raised)',
+            color: 'var(--ink-high)',
+            border: '1px solid var(--surface-raised)',
           }}
         >
           Choose file(s)…
@@ -132,9 +132,9 @@ export function ContextPopover({
                 key={i}
                 className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px]"
                 style={{
-                  background: 'rgba(121,192,255,0.1)',
-                  color: '#79c0ff',
-                  border: '1px solid rgba(121,192,255,0.2)',
+                  background: 'var(--accent-subtle)',
+                  color: 'var(--accent)',
+                  border: '1px solid var(--accent-subtle)',
                 }}
               >
                 {f.name}
@@ -158,14 +158,14 @@ export function ContextPopover({
       <div className="px-4 py-3">
         <SectionHead>CLIs on/off</SectionHead>
         {roster.length === 0 ? (
-          <span style={{ color: 'rgba(230,237,243,0.3)' }}>No roster loaded</span>
+          <span style={{ color: 'var(--ink-dim)' }}>No roster loaded</span>
         ) : (
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
             {roster.map((seat) => (
               <label
                 key={seat.key}
                 className="flex items-center gap-1.5 cursor-pointer"
-                style={{ color: 'rgba(230,237,243,0.65)' }}
+                style={{ color: 'var(--ink-muted)' }}
               >
                 <input
                   type="checkbox"
@@ -177,7 +177,7 @@ export function ContextPopover({
                 {seat.health?.status === 'inactive' && (
                   <span
                     className="rounded-full border px-1.5 text-[10px] font-mono"
-                    style={{ color: '#f85149', borderColor: 'rgba(248,81,73,0.5)' }}
+                    style={{ color: 'var(--status-fail)', borderColor: 'var(--status-fail-dim)' }}
                     title={seat.health.message ?? 'marked inactive by the platform'}
                     data-testid={`seat-health-${seat.key}`}
                   >
@@ -187,7 +187,7 @@ export function ContextPopover({
                 {seat.signed_in === false && (
                   <span
                     className="rounded-full border px-1.5 text-[10px] font-mono"
-                    style={{ color: '#f85149', borderColor: 'rgba(248,81,73,0.5)' }}
+                    style={{ color: 'var(--status-fail)', borderColor: 'var(--status-fail-dim)' }}
                     title={`${seat.key} isn't signed in — runs routed there will fall back or fail. Sign in in Settings.`}
                     data-testid={`seat-signin-${seat.key}`}
                   >
@@ -210,9 +210,9 @@ export function ContextPopover({
             data-testid="launch-confirm"
             className="rounded-lg px-2 py-1"
             style={{
-              background: '#0d1117',
-              border: '1px solid rgba(230,237,243,0.14)',
-              color: '#e6edf3',
+              background: 'var(--surface-base)',
+              border: '1px solid var(--surface-raised)',
+              color: 'var(--ink-high)',
             }}
             value={confirmMode}
             onChange={(e) => onConfirmModeChange(e.target.value as ConfirmMode)}
@@ -229,9 +229,9 @@ export function ContextPopover({
               onChange={(e) => onBeforeOrdChange(Math.max(1, Number(e.target.value) || 1))}
               className="w-14 rounded-lg px-2 py-1"
               style={{
-                background: '#0d1117',
-                border: '1px solid rgba(230,237,243,0.14)',
-                color: '#e6edf3',
+                background: 'var(--surface-base)',
+                border: '1px solid var(--surface-raised)',
+                color: 'var(--ink-high)',
               }}
             />
           )}
@@ -253,8 +253,8 @@ export function ContextPopover({
               className="rounded-lg px-3 py-1 capitalize font-medium transition-colors"
               style={
                 entityMode === m
-                  ? { background: 'rgba(230,237,243,0.12)', color: '#e6edf3' }
-                  : { color: 'rgba(230,237,243,0.4)' }
+                  ? { background: 'var(--surface-raised)', color: 'var(--ink-high)' }
+                  : { color: 'var(--ink-dim)' }
               }
             >
               {m}
@@ -272,9 +272,9 @@ export function ContextPopover({
           data-testid="launch-workflow"
           className="rounded-lg px-2 py-1 w-full"
           style={{
-            background: '#0d1117',
-            border: '1px solid rgba(230,237,243,0.14)',
-            color: '#e6edf3',
+            background: 'var(--surface-base)',
+            border: '1px solid var(--surface-raised)',
+            color: 'var(--ink-high)',
           }}
           value={workflow}
           onChange={(e) => onWorkflowChange(e.target.value)}
@@ -297,7 +297,7 @@ export function ContextPopover({
       <div className="px-4 py-3">
         <SectionHead>Add repos</SectionHead>
         {repos.length === 0 ? (
-          <p className="text-[11px] font-mono italic" style={{ color: 'rgba(230,237,243,0.3)' }}>No repos registered.</p>
+          <p className="text-[11px] font-mono italic" style={{ color: 'var(--ink-dim)' }}>No repos registered.</p>
         ) : (
           <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
             {repos.map((r) => {
@@ -305,7 +305,7 @@ export function ContextPopover({
               return (
                 <label
                   key={r.id}
-                  className="flex items-center gap-2 cursor-pointer rounded px-1 py-0.5 hover:bg-[rgba(230,237,243,0.04)]"
+                  className="flex items-center gap-2 cursor-pointer rounded px-1 py-0.5 hover:bg-[var(--surface-raised)]"
                 >
                   <input
                     type="checkbox"
@@ -315,9 +315,9 @@ export function ContextPopover({
                       if (checked) onRepoRefsChange(repoRefs.filter((id) => id !== r.id));
                       else onRepoRefsChange([...repoRefs, r.id]);
                     }}
-                    className="accent-[#ffda19] w-3.5 h-3.5 shrink-0"
+                    className="w-3.5 h-3.5 shrink-0" style={{ accentColor: 'var(--accent)' }}
                   />
-                  <span className="text-[11px] font-mono truncate" style={{ color: '#e6edf3' }}>
+                  <span className="text-[11px] font-mono truncate" style={{ color: 'var(--ink-high)' }}>
                     {r.name}
                   </span>
                 </label>

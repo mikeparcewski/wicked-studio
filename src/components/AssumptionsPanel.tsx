@@ -31,7 +31,7 @@ export function AssumptionsPanel({ model }: Props): React.ReactElement {
     <div data-testid="assumptions" className="flex flex-col gap-2 text-[11px]">
       {recorded.length > 0 && (
         <div className="flex flex-col gap-1">
-          <p className="font-mono font-semibold" style={{ color: 'rgba(230,237,243,0.6)' }}>
+          <p className="font-mono font-semibold" style={{ color: 'var(--ink-muted)' }}>
             external transformations
           </p>
           <ul className="flex flex-col gap-1">
@@ -41,34 +41,34 @@ export function AssumptionsPanel({ model }: Props): React.ReactElement {
                 data-testid="assumption-transform"
                 className="rounded p-1.5 font-mono"
                 style={{
-                  background: a.known ? 'rgba(63,185,80,0.06)' : 'rgba(255,218,25,0.08)',
+                  background: a.known ? 'var(--status-run-dim)' : 'var(--status-gate-dim)',
                   border: a.known
-                    ? '1px solid rgba(63,185,80,0.2)'
-                    : '1px dashed rgba(255,218,25,0.45)',
+                    ? '1px solid var(--status-run-dim)'
+                    : '1px dashed var(--status-gate)',
                 }}
               >
                 <div className="flex items-center gap-1.5">
-                  <span style={{ color: '#e6edf3' }}>unit #{a.ord}</span>
-                  <span style={{ color: '#79c0ff' }}>{a.library}</span>
+                  <span style={{ color: 'var(--ink-high)' }}>unit #{a.ord}</span>
+                  <span style={{ color: 'var(--accent)' }}>{a.library}</span>
                   {!a.known && (
                     <span
                       data-testid="needs-review-badge"
                       className="rounded px-1 text-[9px] font-semibold uppercase"
-                      style={{ background: 'rgba(255,218,25,0.2)', color: '#ffda19' }}
+                      style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
                     >
                       needs review
                     </span>
                   )}
                 </div>
-                <p style={{ color: 'rgba(230,237,243,0.7)' }}>{a.transform}</p>
-                <p style={{ color: 'rgba(230,237,243,0.45)' }}>{a.detail}</p>
+                <p style={{ color: 'var(--ink-muted)' }}>{a.transform}</p>
+                <p style={{ color: 'var(--ink-muted)' }}>{a.detail}</p>
               </li>
             ))}
           </ul>
         </div>
       )}
       {routed.length === 0 ? (
-        <p style={{ color: 'rgba(230,237,243,0.4)' }}>
+        <p style={{ color: 'var(--ink-dim)' }}>
           No routing decisions recorded yet.
         </p>
       ) : (
@@ -77,11 +77,11 @@ export function AssumptionsPanel({ model }: Props): React.ReactElement {
             <li
               key={u.ord}
               className="rounded p-1.5 font-mono"
-              style={{ background: '#161c26', border: '1px solid rgba(230,237,243,0.07)', color: 'rgba(230,237,243,0.6)' }}
+              style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
             >
-              <span className="font-medium" style={{ color: '#e6edf3' }}>unit #{u.ord}</span>
+              <span className="font-medium" style={{ color: 'var(--ink-high)' }}>unit #{u.ord}</span>
               {u.description.includes(' — ') && (
-                <span className="ml-1" style={{ color: 'rgba(230,237,243,0.4)' }}>
+                <span className="ml-1" style={{ color: 'var(--ink-dim)' }}>
                   {u.description.split(' — ')[0]}
                 </span>
               )}{' '}

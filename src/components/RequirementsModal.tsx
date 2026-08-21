@@ -13,19 +13,19 @@ import { api } from '../api/client.js';
 import type { RequirementSummary, RequirementDetail, RequirementsPage, RequirementPatch } from '../api/types.js';
 
 const T = {
-  canvas: '#0d1117',
-  canvas2: '#121826',
-  surface: '#151b2c',
-  surface2: '#161d2f',
-  ink: '#e6edf3',
-  muted: 'rgba(230,237,243,0.6)',
-  faint: 'rgba(230,237,243,0.35)',
-  hairline: 'rgba(230,237,243,0.08)',
-  hairlineS: 'rgba(230,237,243,0.14)',
-  ok: '#3fb950',
-  deny: '#f85149',
-  link: '#79c0ff',
-  accent: '#ffda19',
+  canvas: 'var(--surface-base)',
+  canvas2: 'var(--surface-rail)',
+  surface: 'var(--surface-card)',
+  surface2: 'var(--surface-raised)',
+  ink: 'var(--ink-high)',
+  muted: 'var(--ink-muted)',
+  faint: 'var(--ink-dim)',
+  hairline: 'var(--surface-raised)',
+  hairlineS: 'var(--surface-raised)',
+  ok: 'var(--status-run)',
+  deny: 'var(--status-fail)',
+  link: 'var(--accent)',
+  accent: 'var(--accent)',
 };
 
 const PAGE_SIZE = 50;
@@ -102,7 +102,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const pageNo = Math.floor(offset / PAGE_SIZE) + 1;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
       <div
         className="w-[92vw] h-[92vh] rounded-2xl flex flex-col overflow-hidden border"
         style={{ background: T.surface, border: `1px solid ${T.hairlineS}` }}
@@ -172,7 +172,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                 aria-pressed={risk === r}
                 className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold"
                 style={{
-                  background: risk === r ? (r === 'risk' ? 'rgba(248,81,73,0.18)' : T.surface2) : 'transparent',
+                  background: risk === r ? (r === 'risk' ? 'var(--status-fail-dim)' : T.surface2) : 'transparent',
                   color: risk === r ? (r === 'risk' ? T.deny : T.ink) : T.faint,
                   border: `1px solid ${risk === r ? T.hairlineS : 'transparent'}`,
                 }}
@@ -307,7 +307,7 @@ function RequirementRow({
       {req.risk && (
         <span
           className="text-[9px] uppercase font-semibold font-mono px-1.5 py-0.5 rounded shrink-0"
-          style={{ background: 'rgba(248,81,73,0.15)', color: T.deny }}
+          style={{ background: 'var(--status-fail-dim)', color: T.deny }}
           title={req.riskSource === 'operator' ? 'Marked risk by operator' : 'Risk derived from business rules'}
         >
           risk{req.riskSource === 'operator' ? ' ●' : ''}
@@ -316,7 +316,7 @@ function RequirementRow({
       <span
         className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded shrink-0"
         style={{
-          background: req.status === 'active' ? 'rgba(63,185,80,0.12)' : req.status === 'deprecated' ? 'rgba(248,81,73,0.12)' : T.surface2,
+          background: req.status === 'active' ? 'var(--status-run-dim)' : req.status === 'deprecated' ? 'var(--status-fail-dim)' : T.surface2,
           color: req.status === 'active' ? T.ok : req.status === 'deprecated' ? T.deny : T.muted,
         }}
       >
@@ -470,7 +470,7 @@ function RequirementEditRail({
               disabled={saving}
               className="text-[11px] font-mono font-semibold px-3 py-1 rounded-lg disabled:opacity-50"
               style={{
-                background: detail.risk ? 'rgba(248,81,73,0.18)' : T.canvas2,
+                background: detail.risk ? 'var(--status-fail-dim)' : T.canvas2,
                 color: detail.risk ? T.deny : T.muted,
                 border: `1px solid ${T.hairlineS}`,
               }}
@@ -545,7 +545,7 @@ function RequirementEditRail({
               onClick={() => save()}
               disabled={saving}
               className="px-4 py-1.5 rounded-lg text-[12px] font-mono font-semibold disabled:opacity-50"
-              style={{ background: T.accent, color: '#0d1117' }}
+              style={{ background: T.accent, color: 'var(--surface-base)' }}
             >
               {saving ? 'Saving…' : 'Save'}
             </button>

@@ -83,14 +83,14 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
   return (
     <div
       className="flex flex-col gap-2 rounded p-3"
-      style={{ border: '1px solid rgba(230,237,243,0.12)', background: '#1b222e' }}
+      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
       data-testid="elicitation-prompt"
     >
       <p className="text-[11px] font-semibold uppercase tracking-wider font-mono"
-         style={{ color: 'rgba(230,237,243,0.4)' }}>
+         style={{ color: 'var(--ink-dim)' }}>
         Input requested
       </p>
-      <p className="text-sm" style={{ color: '#e6edf3' }}>{e.message}</p>
+      <p className="text-sm" style={{ color: 'var(--ink-high)' }}>{e.message}</p>
 
       {e.options === null ? (
         <input
@@ -101,7 +101,7 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
           placeholder="Your answer"
           aria-label="Your answer"
           className="rounded px-2 py-1 text-sm"
-          style={{ background: '#161c26', border: '1px solid rgba(230,237,243,0.1)', color: '#e6edf3' }}
+          style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
         />
       ) : (
         <div className="flex flex-wrap gap-1">
@@ -113,9 +113,9 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
               onClick={() => setChoice(opt)}
               className="rounded px-2 py-0.5 text-xs font-mono"
               style={{
-                background: choice === opt ? 'rgba(121,192,255,0.15)' : '#161c26',
-                border: `1px solid ${choice === opt ? '#79c0ff' : 'rgba(230,237,243,0.1)'}`,
-                color: '#e6edf3',
+                background: choice === opt ? 'var(--accent-subtle)' : 'var(--surface-rail)',
+                border: `1px solid ${choice === opt ? 'var(--accent)' : 'var(--surface-raised)'}`,
+                color: 'var(--ink-high)',
               }}
             >
               {opt}
@@ -125,7 +125,7 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
       )}
 
       {error !== null && (
-        <p className="text-xs" style={{ color: '#f85149' }}>{error}</p>
+        <p className="text-xs" style={{ color: 'var(--status-fail)' }}>{error}</p>
       )}
 
       <div className="flex gap-2">
@@ -135,9 +135,9 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
           onClick={() => void send('accept')}
           className="rounded px-2 py-0.5 text-xs font-semibold"
           style={{
-            background: canAccept ? 'rgba(63,185,80,0.12)' : 'rgba(230,237,243,0.05)',
-            border: `1px solid ${canAccept ? 'rgba(63,185,80,0.3)' : 'rgba(230,237,243,0.1)'}`,
-            color: canAccept ? '#3fb950' : 'rgba(230,237,243,0.3)',
+            background: canAccept ? 'var(--status-run-dim)' : 'var(--surface-raised)',
+            border: `1px solid ${canAccept ? 'var(--status-run-dim)' : 'var(--surface-raised)'}`,
+            color: canAccept ? 'var(--status-run)' : 'var(--ink-dim)',
           }}
         >
           Send
@@ -147,7 +147,7 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
           disabled={busy}
           onClick={() => void send('decline')}
           className="rounded px-2 py-0.5 text-xs"
-          style={{ border: '1px solid rgba(230,237,243,0.15)', color: 'rgba(230,237,243,0.7)' }}
+          style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
         >
           Decline
         </button>

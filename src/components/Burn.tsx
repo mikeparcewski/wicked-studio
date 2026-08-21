@@ -24,8 +24,8 @@ export function Burn({ model }: Props): React.ReactElement {
   const partialTotals = nonTerminal || b.noAdapterClis.length > 0 || b.pendingUsageClis.length > 0;
 
   const cardStyle = {
-    background: '#161c26',
-    border: '1px solid rgba(230,237,243,0.07)',
+    background: 'var(--surface-rail)',
+    border: '1px solid var(--surface-raised)',
     borderRadius: '6px',
     padding: '8px',
   };
@@ -33,7 +33,7 @@ export function Burn({ model }: Props): React.ReactElement {
   return (
     <div data-testid="burn" className="flex flex-col gap-2 text-[11px]">
       {!b.hasUsage ? (
-        <p style={{ color: 'rgba(230,237,243,0.4)' }} data-testid="burn-empty">
+        <p style={{ color: 'var(--ink-dim)' }} data-testid="burn-empty">
           Awaiting usage — token/cost burn lights up when a CLI emits <code>cliUsage</code>{' '}
           (claude reports tokens + cost directly).
         </p>
@@ -41,42 +41,42 @@ export function Burn({ model }: Props): React.ReactElement {
         <>
           <div className="grid grid-cols-3 gap-2">
             <div style={cardStyle}>
-              <p style={{ color: 'rgba(230,237,243,0.4)' }}>tokens{partialTotals ? ' (partial)' : ''}</p>
-              <p className="font-mono text-sm" style={{ color: '#e6edf3' }}>{tokens(b.totalTokens)}</p>
-              <p className="text-[10px]" style={{ color: 'rgba(230,237,243,0.35)' }}>
+              <p style={{ color: 'var(--ink-dim)' }}>tokens{partialTotals ? ' (partial)' : ''}</p>
+              <p className="font-mono text-sm" style={{ color: 'var(--ink-high)' }}>{tokens(b.totalTokens)}</p>
+              <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
                 {tokens(b.totalInput)} in / {tokens(b.totalOutput)} out
               </p>
               {(b.totalCacheRead > 0 || b.totalCacheCreation > 0) && (
-                <p className="text-[10px]" style={{ color: 'rgba(96,165,250,0.55)' }}>
+                <p className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>
                   {tokens(b.totalCacheRead)} cached · {tokens(b.totalCacheCreation)} written
                 </p>
               )}
             </div>
             <div style={cardStyle}>
-              <p style={{ color: 'rgba(230,237,243,0.4)' }}>cost{b.costComplete && !partialTotals ? '' : ' (partial)'}</p>
-              <p className="font-mono text-sm" style={{ color: '#e6edf3' }}>{cost(b.totalCost)}</p>
-              {b.totalCost === null && <p className="text-[10px]" style={{ color: 'rgba(230,237,243,0.35)' }}>no cost reported</p>}
+              <p style={{ color: 'var(--ink-dim)' }}>cost{b.costComplete && !partialTotals ? '' : ' (partial)'}</p>
+              <p className="font-mono text-sm" style={{ color: 'var(--ink-high)' }}>{cost(b.totalCost)}</p>
+              {b.totalCost === null && <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>no cost reported</p>}
             </div>
             <div style={cardStyle} data-testid="burn-rework">
-              <p style={{ color: 'rgba(230,237,243,0.4)' }}>rework{partialTotals ? ' (prov.)' : ''}</p>
-              <p className="font-mono text-sm" style={{ color: '#e6edf3' }}>
+              <p style={{ color: 'var(--ink-dim)' }}>rework{partialTotals ? ' (prov.)' : ''}</p>
+              <p className="font-mono text-sm" style={{ color: 'var(--ink-high)' }}>
                 {partialTotals ? '~' : ''}{b.reworkPct.toFixed(0)}%
               </p>
-              <p className="text-[10px]" style={{ color: 'rgba(230,237,243,0.35)' }}>{tokens(b.reworkTokens)} tok</p>
+              <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>{tokens(b.reworkTokens)} tok</p>
             </div>
           </div>
 
           {partialTotals && (
-            <p className="text-[10px]" style={{ color: 'rgba(230,237,243,0.35)' }} data-testid="burn-partial">
+            <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }} data-testid="burn-partial">
               Token totals and rework% are from connect onward; earlier usage may be missing.
             </p>
           )}
 
           <div>
-            <p className="mb-1" style={{ color: 'rgba(230,237,243,0.4)' }}>per CLI</p>
+            <p className="mb-1" style={{ color: 'var(--ink-dim)' }}>per CLI</p>
             <ul className="flex flex-col gap-0.5">
               {b.perCli.map((c) => (
-                <li key={c.cli} className="flex justify-between font-mono" style={{ color: 'rgba(230,237,243,0.6)' }}>
+                <li key={c.cli} className="flex justify-between font-mono" style={{ color: 'var(--ink-muted)' }}>
                   <span>{c.cli}</span>
                   <span>{tokens(c.input + c.output)} tok · {cost(c.cost)}</span>
                 </li>
@@ -87,13 +87,13 @@ export function Burn({ model }: Props): React.ReactElement {
       )}
 
       {b.noAdapterClis.length > 0 && (
-        <p style={{ color: '#ffda19' }} data-testid="burn-unavailable">
+        <p style={{ color: 'var(--status-gate)' }} data-testid="burn-unavailable">
           usage unavailable for {b.noAdapterClis.join(', ')} — no usage adapter
         </p>
       )}
 
       {b.pendingUsageClis.length > 0 && (
-        <p style={{ color: 'rgba(230,237,243,0.4)' }} data-testid="burn-pending">
+        <p style={{ color: 'var(--ink-dim)' }} data-testid="burn-pending">
           usage not yet reported for {b.pendingUsageClis.join(', ')}
         </p>
       )}
