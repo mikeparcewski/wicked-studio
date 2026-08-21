@@ -7,6 +7,7 @@ import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { ExportMenu } from './ExportMenu.js';
 import { GateChip } from './GateChip.js';
+import { ProjectSparkline } from './ProjectSparkline.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
 import { STATUS_STYLE } from './RunCard.js';
@@ -345,15 +346,20 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
               Start by describing what you want →
             </a>
           ) : (
-            <p
-              data-testid="quiet-summary"
-              style={{
-                marginLeft: 'auto', flexShrink: 0, fontSize: 'var(--text-xs)',
-                color: 'var(--ink-dim)', margin: 0,
-              }}
-            >
-              Quiet — last active {ago(signal?.at ?? project.updated_at)} ago
-            </p>
+            <>
+              <p
+                data-testid="quiet-summary"
+                style={{
+                  marginLeft: 'auto', flexShrink: 0, fontSize: 'var(--text-xs)',
+                  color: 'var(--ink-dim)', margin: 0,
+                }}
+              >
+                Quiet — last active {ago(signal?.at ?? project.updated_at)} ago
+              </p>
+              {/* Slice E (DES-FEEDBACK-001 §2.1): the 7-day activity sparkline in the
+                  quiet row — renders nothing when the window is empty (§2.3). */}
+              <ProjectSparkline runs={runs} attachedAt={item.attachedAt} />
+            </>
           )}
         </div>
         {/* Compact on a quiet card — a calm board is scanned, not operated (W2);

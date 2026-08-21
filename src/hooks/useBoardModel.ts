@@ -57,6 +57,14 @@ export interface BoardProject {
   repo: string | null;
   runs: SessionView[];
   docs: DocSummary[];
+  /**
+   * When each member run ENTERED this project (`attached_at` off the members
+   * wire, run id → epoch ms) — the one honest per-run clock this surface can
+   * reach, since `AgentSession` carries no timestamps. Slice E's charts bucket
+   * on it (run outcome windows, the 7-day quiet-row sparklines), exactly as the
+   * slice-D project dashboard already does.
+   */
+  attachedAt: Record<string, number>;
   attention: Attention;
   /** Decayed attention (§2.1.3): the max over the project's signals at the last tick. */
   score: number;
@@ -137,9 +145,11 @@ interface Bindings {
   runIds: ReadonlySet<string>;
   repo: string | null;
   docs: DocSummary[];
+  /** Run id → `attached_at` (epoch ms) off the same members read. */
+  attachedAt: Record<string, number>;
 }
 
-const EMPTY: Bindings = { runIds: new Set(), repo: null, docs: [] };
+const EMPTY: Bindings = { runIds: new Set(), repo: null, docs: [], attachedAt: {} };
 
 async function loadBindings(p: Project, repoNames: Map<string, string>): Promise<Bindings> {
   const [members, docs] = await Promise.all([
@@ -149,10 +159,14 @@ async function loadBindings(p: Project, repoNames: Map<string, string>): Promise
     interactiveRootOf(p) ? listDocs(p.id).catch((): DocSummary[] => []) : Promise.resolve([]),
   ]);
   const repoRef = members.find((m) => m.member_kind === 'crew.repo')?.member_ref ?? null;
+  const runMembers = members.filter((m) => RUN_KINDS.has(m.member_kind));
+  const attachedAt: Record<string, number> = {};
+  for (const m of runMembers) attachedAt[m.member_ref] = m.attached_at;
   return {
-    runIds: new Set(members.filter((m) => RUN_KINDS.has(m.member_kind)).map((m) => m.member_ref)),
+    runIds: new Set(runMembers.map((m) => m.member_ref)),
     repo: repoRef === null ? null : repoNames.get(repoRef) ?? repoRef,
     docs,
+    attachedAt,
   };
 }
 
@@ -296,7 +310,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
             now,
           );
           return {
-            project, repo: b.repo, runs: mine, docs: b.docs,
+            project, repo: b.repo, runs: mine, docs: b.docs, attachedAt: b.attachedAt,
             attention: deriveAttention(mine, b.docs),
             score, band: bandOf(score), signal,
           };

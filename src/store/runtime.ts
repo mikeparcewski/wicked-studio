@@ -15,6 +15,16 @@ export interface LoggedEvent {
   ord?: number;
   /** Attempt number — preserved from any event that carries an `attempt` field. */
   attempt?: number;
+  /**
+   * `cliUsage` only: the dollar cost the frame reported (DES-FEEDBACK-001 §2.1).
+   * Preserved here because this log is the ONE client store that stamps an
+   * arrival clock (`ts`) on live frames — `useRunEventStore` keeps the full
+   * frame but live `/ws` frames carry no `ts`, so a burn-over-time fold needs
+   * the (ts, cost) pair from HERE. Only ever a number: a `costUsd: null`
+   * ("cost unknown") frame is not preserved, so no consumer can turn an
+   * unknown cost into $0.00.
+   */
+  costUsd?: number;
   ts: number;
   /** A short human summary of the frame (cli won, description, prompt, message...). */
   detail: string;
@@ -101,6 +111,8 @@ function summarize(event: CoreEvent): string {
       return typeof event.message === 'string'
         ? `${String(event.target ?? 'all')}: "${event.message.length > 80 ? event.message.slice(0, 80) + '…' : event.message}"`
         : event.type;
+    case 'cliUsage':
+      return typeof event.costUsd === 'number' ? `usage $${event.costUsd.toFixed(2)}` : 'usage reported (no cost)';
     case 'error':
       return typeof event.message === 'string' ? `error: ${event.message}` : 'error';
     default:
@@ -468,6 +480,7 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       const entry: LoggedEvent = { seq, type: event.type, ts: Date.now(), detail: summarize(event) };
       if (typeof event.ord === 'number') entry.ord = event.ord;
       if (typeof event.attempt === 'number') entry.attempt = event.attempt;
+      if (event.type === 'cliUsage' && typeof event.costUsd === 'number') entry.costUsd = event.costUsd;
       const prevLog = s.logs[session] ?? [];
       const nextLog = [...prevLog, entry];
       if (nextLog.length > LOG_CAP) nextLog.splice(0, nextLog.length - LOG_CAP);
