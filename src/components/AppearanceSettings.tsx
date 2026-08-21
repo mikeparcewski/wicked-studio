@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppearanceStore } from '../theming/appearance.js';
+import { BrandLearn } from './BrandLearn.js';
 import { WickedLogo } from './WickedLogo.js';
 
 /**
@@ -362,6 +363,9 @@ export function AppearanceSettings(): React.ReactElement {
           and are not customizable.
         </p>
       </div>
+
+      {/* ── Learn from brand source (§4.3): the brand-learn loop, in-section ── */}
+      <BrandLearn />
     </section>
   );
 }

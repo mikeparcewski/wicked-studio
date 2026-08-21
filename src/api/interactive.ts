@@ -347,6 +347,29 @@ export function learnTheme(projectId: string, body: LearnThemeBody): Promise<Lea
 }
 
 /**
+ * Full theme data for one learned theme — the palette the mapper consumes.
+ * `GET /api/themes/:themeId` — bridge-root-relative, per (§4.6 of DES-MERGE-001).
+ *
+ * The shape is the interactive service's own theme JSON format (src/themes/*.json),
+ * which the bridge already reads for `core/theme.js`. The fields here are the
+ * minimum the mapper needs; additional fields are tolerated (tolerant reading —
+ * DES-VISION-001 §4.4's ASSUMPTION[external-transform]: absent fields are null,
+ * and the mapper derives what it can from what is present).
+ */
+export interface ThemeDetail {
+  name: string;
+  primary?: string;    /* CSS color string — dominant brand color */
+  secondary?: string;  /* CSS color string — secondary brand color, if extracted */
+  background?: string; /* CSS color string — brand background, if extracted */
+  logo_url?: string;   /* URL within the bridge to a logo asset, if found */
+}
+
+/** `GET /api/themes/:themeId` — one learned theme's palette (DES-VISION-001 §4.4). */
+export function getTheme(projectId: string, themeId: string): Promise<ThemeDetail> {
+  return iFetch<ThemeDetail>(`${interactiveBase(projectId)}/api/themes/${encodeURIComponent(themeId)}`);
+}
+
+/**
  * `POST /d/:docId/api/sources { path }` — attach a local reference path (§4.9).
  *
  * The body is `application/json` carrying only the path string — the service reads the files
