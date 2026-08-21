@@ -4,13 +4,20 @@ import { useEventStream } from '../hooks/useEventStream.js';
 import { Markdown } from './Markdown.js';
 
 /**
- * GROUP CHAT (crew#165 / core#134): warm persistent CLI sessions + fan-out.
+ * CHAT (crew#165 / core#134): warm persistent CLI sessions + fan-out.
  *
- * NOT a run — no council, no gates, no units. On mount the daemon warms one ACP
- * session per roster seat; each user message fans out to every warm seat and the
- * replies stream back side by side (`chatDelta` tokens, `chatReply` terminal).
- * Sessions hold conversation memory across turns; they live until "End chat"
- * (or daemon shutdown) — leaving the page keeps them warm.
+ * NOT a run — no council, no gates, no units. Each user message fans out to
+ * every warm seat and the replies stream back side by side (`chatDelta` tokens,
+ * `chatReply` terminal). Sessions hold conversation memory across turns; they
+ * live until "Close" (or daemon shutdown) — leaving the page keeps them warm.
+ *
+ * NOTHING warms on mount (DES-UXFIX-001 §2.4, F6). First-run is a calm teaching
+ * state: one line on what Chat is, a focused composer, and ONE disclosure —
+ * "Add agents". The first send warms the one default agent; "Add agents" warms
+ * the whole roster and turns the header into the multi-agent chip strip. The
+ * warm-and-rejoin machinery (FINDING-027) is preserved verbatim — it just runs
+ * on opt-in, not on mount: a stored chat the daemon still holds is rejoined
+ * exactly as before, because warm seats someone paid for must not be orphaned.
  */
 
 const SEAT_COLORS: Record<string, { bg: string; fg: string }> = {
@@ -85,6 +92,8 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
   const [input, setInput] = useState('');
   const [openError, setOpenError] = useState<string | null>(null);
   const [ended, setEnded] = useState(false);
+  /** An arm (warm) in flight — guards the two opt-in paths against double fire. */
+  const [arming, setArming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatIdRef = useRef<string | null>(null);
   chatIdRef.current = chatId;
@@ -93,12 +102,10 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Open once on mount; sessions OUTLIVE the page (explicit End chat closes them).
-  // The chat id is minted CLIENT-side and set before the open call: seats warm
-  // serially (~2-3s each), and their chatSessionReady events arrive BEFORE the
-  // POST resolves — a server-minted id would drop every one of them.
+  // The mount effect REJOINS — it never warms (§2.4 rule 1). Warming moved to
+  // `armChat` below, which runs only on the two opt-ins (first send / Add agents).
   //
-  // REJOIN, don't re-mint (FINDING-027). This effect used to call crypto.randomUUID() on every
+  // REJOIN, don't re-mint (FINDING-027). The pre-fix component called crypto.randomUUID() on every
   // fire, so each remount or repo switch abandoned a warm chat that nothing would ever close:
   // measured at ~520 MB of pinned CLI processes per orphan, one leaked deterministically per mount,
   // 19 seats warmed against 2 chats ever closed across a campaign. Closing on unmount would have
@@ -128,87 +135,44 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
     setChatId(null);
     chatIdRef.current = null;
 
-    // Started now so the network round-trip overlaps the probe below, but APPLIED only on the mint
-    // path. Optimistic chips are a stand-in for an open that is in flight; after a rejoin there is
-    // no open and no incoming seat events, so a roster seat that is not warm in the rejoined chat
-    // would sit at `warming` forever with nothing left to correct it.
-    const rosterP = api
-      .getRoster()
-      .then(({ roster }) => roster)
-      .catch(() => []);
-
     void (async () => {
       // A stored id is a claim, not a fact — the daemon reaps idle chats and enforces a pool cap,
-      // so it may have reclaimed this one underneath us. Ask before trusting it.
+      // so it may have reclaimed this one underneath us. Ask before trusting it. With nothing
+      // stored, this is first-run: NO probe, NO roster fetch, NO warming — zero requests (§2.4).
       const stored = readStoredChatId(repoId);
-      if (stored !== null) {
-        // Three distinct answers, and collapsing them is how the leak comes back. `chat_seats`
-        // returns an empty list (a 200, not an error) for a chat the daemon no longer holds, so
-        // ONLY that means reclaimed. A thrown error means we do not know — and "do not know" must
-        // not mint, because minting on a transient 5xx orphans a chat that is still warm and burns
-        // the one id that could have reached it.
-        const probe = await api
-          .getChat(stored)
-          .then(({ seats }) => ({ seats }))
-          .catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
-        if (cancelled) return;
-
-        if ('error' in probe) {
-          setChatId(stored);
-          chatIdRef.current = stored;
-          setOpenError(
-            `Could not reach the daemon to check the previous chat (${probe.error}). Keeping it — ` +
-              `reload to retry, or End chat to disconnect the agents.`,
-          );
-          return;
-        }
-        if (probe.seats.length > 0) {
-          setChatId(stored);
-          chatIdRef.current = stored;
-          // Warm seats only — the transcript is not persisted server-side, so a rejoined chat
-          // starts with an empty log. The SESSIONS carry the conversation memory, which is the
-          // expensive part; re-minting would have thrown that away as well as leaking it.
-          setSeats(Object.fromEntries(probe.seats.map((k) => [k, 'ready' as SeatState])));
-          return;
-        }
-        clearStoredChatId(repoId);
-      }
-
-      const id = crypto.randomUUID();
+      if (stored === null) return;
+      // Three distinct answers, and collapsing them is how the leak comes back. `chat_seats`
+      // returns an empty list (a 200, not an error) for a chat the daemon no longer holds, so
+      // ONLY that means reclaimed. A thrown error means we do not know — and "do not know" must
+      // not forget the id, because forgetting on a transient 5xx orphans a chat that is still
+      // warm and burns the one id that could have reached it.
+      const probe = await api
+        .getChat(stored)
+        .then(({ seats }) => ({ seats }))
+        .catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
       if (cancelled) return;
-      setChatId(id);
-      chatIdRef.current = id;
-      writeStoredChatId(repoId, id);
 
-      // Optimistic chips: every enabled roster seat shows as warming while the open is in flight;
-      // ready/failed events (and the open response) correct them as truth arrives.
-      const roster = await rosterP;
-      if (cancelled) return;
-      setSeats(
-        Object.fromEntries(
-          roster.flatMap((seat) =>
-            typeof seat.key === 'string' ? [[seat.key, 'warming' as SeatState]] : [],
-          ),
-        ),
-      );
-
-      try {
-        const { seats } = await api.openChat(repoId ? { chatId: id, repoRef: repoId } : { chatId: id });
-        if (cancelled) return;
-        const st: Record<string, SeatState> = {};
-        const errs: Record<string, string> = {};
-        for (const s of seats) {
-          st[s.cliKey] = s.ok ? 'ready' : 'failed';
-          if (!s.ok && s.error) errs[s.cliKey] = s.error;
-        }
-        setSeats(st);
-        setSeatErrors(errs);
-      } catch (e: unknown) {
-        // The id stays stored on purpose: an open that failed at the HTTP layer may still have
-        // warmed seats server-side, and dropping the id here would orphan exactly what this
-        // change exists to stop orphaning. The next mount re-checks it and clears it if dead.
-        if (!cancelled) setOpenError(e instanceof Error ? e.message : String(e));
+      if ('error' in probe) {
+        setChatId(stored);
+        chatIdRef.current = stored;
+        setOpenError(
+          `Could not reach the daemon to check the previous chat (${probe.error}). Keeping it — ` +
+            `reload to retry, or Close to disconnect the agents.`,
+        );
+        return;
       }
+      if (probe.seats.length > 0) {
+        setChatId(stored);
+        chatIdRef.current = stored;
+        // Warm seats only — the transcript is not persisted server-side, so a rejoined chat
+        // starts with an empty log. The SESSIONS carry the conversation memory, which is the
+        // expensive part; re-minting would have thrown that away as well as leaking it.
+        setSeats(Object.fromEntries(probe.seats.map((k) => [k, 'ready' as SeatState])));
+        return;
+      }
+      // Reclaimed → back to the calm first-run state, not a re-mint: warming is the
+      // user's call now, and the next opt-in mints fresh.
+      clearStoredChatId(repoId);
     })();
 
     return () => {
@@ -272,21 +236,99 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
     });
   }
 
+  /**
+   * Warm seats — the §2.4 opt-in, and the ONLY place a chat is minted or opened.
+   * `'one'` is the first send's path (the single default agent — the first
+   * council-enabled roster seat); `'all'` is the "Add agents" disclosure (the
+   * whole roster, exactly what the pre-slice-4 mount warmed). Reuses the live
+   * chat id when there is one: `chat_open` ensures per seat, so warming MORE
+   * seats into an existing chat reuses the warm ones and adds only the missing.
+   * Returns the seat keys that came up ready.
+   */
+  async function armChat(scope: 'one' | 'all'): Promise<string[]> {
+    setArming(true);
+    try {
+      // The chat id is minted CLIENT-side and set before the open call: seats warm
+      // serially (~2-3s each), and their chatSessionReady events arrive BEFORE the
+      // POST resolves — a server-minted id would drop every one of them.
+      let id = chatIdRef.current;
+      if (id === null) {
+        id = crypto.randomUUID();
+        setChatId(id);
+        chatIdRef.current = id;
+        writeStoredChatId(repoId, id);
+      }
+      const roster = await api
+        .getRoster()
+        .then(({ roster: r }) => r)
+        .catch(() => []);
+      // A repo switch mid-arm resets `chatIdRef` (the mount effect) — every await
+      // below re-checks it so nothing is attributed to a repo we already left.
+      if (chatIdRef.current !== id) return [];
+      const keys = roster.flatMap((s) => (typeof s.key === 'string' ? [s.key] : []));
+      const one = roster.find((s) => s.enabled_for_council)?.key ?? keys[0];
+      const chosen = scope === 'one' ? (one !== undefined ? [one] : []) : keys;
+      // Optimistic chips: each seat being warmed shows as warming while the open is in
+      // flight; ready/failed events (and the open response) correct them as truth arrives.
+      setSeats((prev) => ({
+        ...prev,
+        ...Object.fromEntries(
+          chosen.filter((k) => prev[k] !== 'ready').map((k) => [k, 'warming' as SeatState]),
+        ),
+      }));
+      try {
+        const body: { chatId: string; repoRef?: string; clis?: string[] } = { chatId: id };
+        if (repoId) body.repoRef = repoId;
+        // 'all' omits `clis` on purpose — the daemon warms its own full roster, exactly
+        // as the pre-slice-4 mount did. 'one' names the single default agent; with no
+        // roster answer it also omits, and the daemon's roster decides.
+        if (scope === 'one' && chosen.length > 0) body.clis = chosen;
+        const { seats: opened } = await api.openChat(body);
+        if (chatIdRef.current !== id) return [];
+        const st: Record<string, SeatState> = {};
+        const errs: Record<string, string> = {};
+        for (const s of opened) {
+          st[s.cliKey] = s.ok ? 'ready' : 'failed';
+          if (!s.ok && s.error) errs[s.cliKey] = s.error;
+        }
+        setSeats((prev) => ({ ...prev, ...st }));
+        setSeatErrors((prev) => ({ ...prev, ...errs }));
+        return opened.filter((s) => s.ok).map((s) => s.cliKey);
+      } catch (e: unknown) {
+        // The id stays stored on purpose: an open that failed at the HTTP layer may still have
+        // warmed seats server-side, and dropping the id here would orphan exactly what
+        // FINDING-027 exists to stop orphaning. The next mount re-checks it and clears it if dead.
+        if (chatIdRef.current === id) setOpenError(e instanceof Error ? e.message : String(e));
+        return [];
+      }
+    } finally {
+      setArming(false);
+    }
+  }
+
   async function send(): Promise<void> {
     const text = input.trim();
-    const anyReady = Object.values(seats).some((st) => st === 'ready');
-    if (text === '' || chatId === null || ended || !anyReady) return;
-    setInput('');
-    const warm = Object.entries(seats)
+    if (text === '' || ended || arming) return;
+    const firstSend = chatIdRef.current === null;
+    let warm = Object.entries(seats)
       .filter(([, st]) => st === 'ready')
       .map(([k]) => k);
+    if (!firstSend && warm.length === 0) return;
+    setInput('');
+    setMessages((prev) => [...prev, { kind: 'user', text }]);
+    if (firstSend) {
+      // Typing IS the opt-in (§2.4): the first send warms the one default agent.
+      warm = await armChat('one');
+      if (warm.length === 0) return; // armChat surfaced why (openError / failed chip)
+    }
+    const id = chatIdRef.current;
+    if (id === null) return; // repo switched under the send
     setMessages((prev) => [
       ...prev,
-      { kind: 'user', text },
       ...warm.map((cliKey): SeatMsg => ({ kind: 'seat', cliKey, text: '', pending: true, ok: false })),
     ]);
     try {
-      await api.sendChatMessage(chatId, text);
+      await api.sendChatMessage(id, text);
     } catch (e: unknown) {
       const err = e instanceof Error ? e.message : String(e);
       setMessages((prev) =>
@@ -330,24 +372,37 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
     );
   };
 
+  const anyReady = Object.values(seats).some((st) => st === 'ready');
+  // V8: a teardown control exists only once there is something armed to tear down —
+  // warm agents, or a kept-on-error chat id the operator may want to disconnect.
+  const closable = chatId !== null && (anyReady || openError !== null);
+  // The ONE disclosure (§2.4): shown until the roster is warmed in (0 seats =
+  // first-run, 1 seat = the single default agent the first send warmed).
+  const showAddAgents = !ended && Object.keys(seats).length <= 1;
+  const firstRun = messages.length === 0 && Object.keys(seats).length === 0 && openError === null;
+
   return (
     <div className="flex flex-col h-full" style={{ color: '#e6edf3' }}>
-      {/* Header: seats + end */}
+      {/* Header: seats + close */}
       <div className="flex items-center gap-3 px-6 py-3 border-b shrink-0" style={{ borderColor: 'rgba(230,237,243,0.08)' }}>
         <button type="button" onClick={onBack} className="text-sm font-mono opacity-60 hover:opacity-100">←</button>
-        <span className="text-sm font-mono font-semibold">Group chat</span>
+        <span className="text-sm font-mono font-semibold">Chat</span>
         <div className="flex items-center gap-1.5 flex-wrap">
           {Object.entries(seats).map(([k, st]) => seatChip(k, st))}
         </div>
         <div className="flex-1" />
-        <button
-          type="button"
-          onClick={() => void endChat()}
-          className="text-[11px] font-mono px-2.5 py-1 rounded-lg"
-          style={{ background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.65)', border: '1px solid rgba(230,237,243,0.18)' }}
-        >
-          End chat
-        </button>
+        {closable && (
+          <button
+            type="button"
+            data-testid="chat-close"
+            title="Disconnect the agents and end this chat"
+            onClick={() => void endChat()}
+            className="text-[11px] font-mono px-2.5 py-1 rounded-lg"
+            style={{ background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.65)', border: '1px solid rgba(230,237,243,0.18)' }}
+          >
+            Close
+          </button>
+        )}
       </div>
 
       {/* Messages */}
@@ -355,8 +410,21 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
         {openError !== null && (
           <p className="text-[12px] font-mono" style={{ color: '#f85149' }}>Could not open chat: {openError}</p>
         )}
-        {Object.keys(seats).length === 0 && openError === null && (
-          <p className="text-[12px] font-mono opacity-60">Warming seats…</p>
+        {firstRun && (
+          // §2.4: the first-run state TEACHES — what Chat is, what typing does, and the
+          // product's central trick (choose a mode by conversation). Never a warmed roster.
+          <div
+            data-testid="chat-firstrun"
+            className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-8"
+          >
+            <p className="text-[14px] font-semibold" style={{ margin: 0 }}>
+              Chat with an agent about this project.
+            </p>
+            <p className="text-[12px]" style={{ color: 'rgba(230,237,243,0.55)', margin: 0, maxWidth: '480px' }}>
+              No run, no gates — just talk. Ask for a deck or some code and I’ll switch
+              you to the right mode.
+            </p>
+          </div>
         )}
         {messages.map((m, i) =>
           m.kind === 'user' ? (
@@ -403,20 +471,36 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
               }
             }}
             rows={2}
-            placeholder="Message the agents… (Enter to send, Shift+Enter for newline)"
+            autoFocus
+            placeholder="Describe what you want… (Enter to send, Shift+Enter for newline)"
             className="flex-1 rounded-xl px-4 py-2 text-[13px] font-mono outline-none resize-none"
             style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.12)' }}
           />
           <button
             type="button"
             onClick={() => void send()}
-            disabled={!Object.values(seats).some((st) => st === 'ready') || input.trim() === ''}
+            // Before any chat exists, typing is how the first agent warms — so text alone
+            // enables Send. Once a chat exists, sending needs a ready seat, as before.
+            disabled={input.trim() === '' || arming || (chatId !== null && !anyReady)}
             className="px-4 rounded-xl text-sm font-mono font-semibold disabled:opacity-40"
             style={{ background: 'rgba(88,166,255,0.2)', color: '#79c0ff' }}
           >
             Send
           </button>
         </div>
+        {showAddAgents && (
+          <button
+            type="button"
+            data-testid="add-agents"
+            disabled={arming}
+            title="Warm every agent on the roster into this chat — replies stream side by side"
+            onClick={() => void armChat('all')}
+            className="mt-2 text-[11px] font-mono px-2.5 py-1 rounded-lg disabled:opacity-40"
+            style={{ background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.65)', border: '1px solid rgba(230,237,243,0.18)' }}
+          >
+            + Add agents
+          </button>
+        )}
       </div>
     </div>
   );

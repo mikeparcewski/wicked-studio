@@ -7,6 +7,10 @@ const S = {
   muted:    'rgba(230,237,243,0.55)',
   faint:    'rgba(230,237,243,0.3)',
   accent:   '#ffda19',
+  /** Text on a filled accent segment — the house pairing for accent-filled controls. */
+  accentInk: '#0d1117',
+  /** An unfilled segment's resting surface — present enough to read as a control. */
+  segment:  'rgba(230,237,243,0.04)',
 };
 
 export interface ModeSpec {
@@ -83,52 +87,74 @@ interface Props {
  *
  * Each mode is a verb on the current project, not a document type, and each is
  * peer-level: Document is deliberately NOT a tab under Build (§1.3 rule 4).
+ *
+ * Slice 4 (DES-UXFIX-001 §2.5, F8) gives it the weight of the spine it is: a
+ * SEGMENTED control — glyph + label per segment, the active segment FILLED
+ * (accent background, dark ink), not a row of low-contrast text links — and the
+ * active mode's one-line summary always on screen below the control, so a
+ * newcomer reads what the current mode IS without hovering (W1). The readiness
+ * model is untouched: an unavailable segment is greyed, never hidden, and its
+ * title still names the one enabling action (§1.3 rule 3).
  */
 export function ModeSwitcher({ mode, onSelect, unavailable }: Props): React.ReactElement {
   return (
     <div
-      role="tablist"
-      aria-label="Project mode"
       data-testid="mode-switcher"
-      style={{
-        display: 'flex', gap: '2px', padding: '0 12px', flexShrink: 0,
-        background: S.bar, borderBottom: `1px solid ${S.border}`,
-      }}
+      style={{ flexShrink: 0, background: S.bar, borderBottom: `1px solid ${S.border}` }}
     >
-      {MODES.map((m) => {
-        const spec = MODE_SPECS[m];
-        const active = m === mode;
-        const action = unavailable?.[m] ?? null;
-        return (
-          <button
-            key={m}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            data-testid={`mode-tab-${m}`}
-            data-mode={m}
-            data-unavailable={action !== null ? 'true' : undefined}
-            // §1.3 rule 3: a mode that cannot open states the one action that enables it —
-            // on its own line, under what the mode IS. Replacing the summary would answer
-            // "how do I turn this on" to a user who is still asking "what is this".
-            title={action !== null ? `${spec.summary}\n${spec.label} ${action}` : spec.summary}
-            onClick={() => onSelect(m)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              borderBottom: `2px solid ${active ? S.accent : 'transparent'}`,
-              color: active ? S.ink : S.muted,
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: active ? 700 : 500,
-              opacity: action !== null && !active ? 0.45 : 1,
-              padding: '10px 14px',
-            }}
-          >
-            {spec.label}
-          </button>
-        );
-      })}
+      <div
+        role="tablist"
+        aria-label="Project mode"
+        style={{ display: 'flex', gap: '6px', padding: '10px 12px 0' }}
+      >
+        {MODES.map((m) => {
+          const spec = MODE_SPECS[m];
+          const active = m === mode;
+          const action = unavailable?.[m] ?? null;
+          return (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              data-testid={`mode-tab-${m}`}
+              data-mode={m}
+              data-unavailable={action !== null ? 'true' : undefined}
+              // §1.3 rule 3: a mode that cannot open states the one action that enables it —
+              // on its own line, under what the mode IS. Replacing the summary would answer
+              // "how do I turn this on" to a user who is still asking "what is this".
+              title={action !== null ? `${spec.summary}\n${spec.label} ${action}` : spec.summary}
+              onClick={() => onSelect(m)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '7px',
+                // The F8 fix in one property: the active segment is FILLED, not underlined.
+                background: active ? S.accent : S.segment,
+                border: `1px solid ${active ? S.accent : S.border}`,
+                borderRadius: '8px',
+                color: active ? S.accentInk : S.muted,
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: active ? 700 : 500,
+                opacity: action !== null && !active ? 0.45 : 1,
+                padding: '7px 14px',
+              }}
+            >
+              {/* The SAME four glyphs as the board quick actions and doc tiles (§2.5 rule 4). */}
+              <span aria-hidden style={{ flexShrink: 0 }}>{spec.glyph}</span>
+              {spec.label}
+            </button>
+          );
+        })}
+      </div>
+      {/* §2.5 rule 2: the active mode's summary is ON SCREEN, not tooltip-only. */}
+      <p
+        data-testid="mode-summary"
+        style={{ color: S.muted, fontSize: '11px', margin: 0, padding: '7px 14px 9px' }}
+      >
+        {MODE_SPECS[mode].summary}
+      </p>
     </div>
   );
 }

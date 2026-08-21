@@ -29,9 +29,13 @@ describe('copy triage — internal vocabulary stays internal', () => {
     for (const p of placeholders) expect(p).not.toMatch(/warm seat/i);
   });
 
-  it('the End chat button is not styled as a destructive action', async () => {
+  it('the Close button (né "End chat", V8) is not styled as a destructive action', async () => {
     const src = (await import('node:fs')).readFileSync('src/components/GroupChat.tsx', 'utf8');
-    const btn = src.slice(src.indexOf('End chat') - 600, src.indexOf('End chat'));
+    const anchor = src.indexOf('data-testid="chat-close"');
+    expect(anchor).toBeGreaterThan(-1);
+    const btn = src.slice(anchor, anchor + 600);
     expect(btn).not.toMatch(/f85149|248,\s*81,\s*73/);
+    // V8's rename holds: the old label must not resurface as user copy.
+    expect(src).not.toContain('End chat');
   });
 });
