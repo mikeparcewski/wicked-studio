@@ -451,6 +451,7 @@ export function App(): React.ReactElement {
       <LeftSidebar
         runs={runs}
         navigate={navigate}
+        runPath={runPath}
         immersive={projectId !== null && (mode === 'document' || mode === 'video')}
       />
 

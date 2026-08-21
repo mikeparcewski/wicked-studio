@@ -3,15 +3,19 @@ import { api } from '../api/client.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useAppearanceStore } from '../theming/appearance.js';
 import { prefersReducedMotion } from './LiveEdge.js';
-import { SettingsMenu } from './SettingsMenu.js';
 import { WickedLogo } from './WickedLogo.js';
 
 /**
  * The app chrome (DES-VISION-001 §6.3 slice 3, §3.1, §5.2): the one place the
- * product frames itself — the logo slot, the product name, the connection
- * status, and the settings entry point. It renders as the rail's header region
- * (the chrome the product already had, token-converted — §6.0: no IA change),
- * at the §2.7 chrome height (`--space-12`).
+ * product frames itself — the logo slot, the product name, and the connection
+ * status. It renders as the rail's header region (the chrome the product
+ * already had, token-converted — §6.0: no IA change), at the §2.7 chrome
+ * height (`--space-12`).
+ *
+ * The settings gear is GONE from the chrome (DES-FEEDBACK-001 §1.2, §4.4,
+ * slice A): its dropdown moved into the rail's expand/collapse settings
+ * section (SettingsRailSection); the freed slot is reserved for the §4.3
+ * project-switcher breadcrumb. The logo slot and connection dot are untouched.
  *
  * The logo slot contract (§3.1):
  *   - exactly 32×32, with `--space-2` clearspace to the viewport edge and the
@@ -158,7 +162,6 @@ function ConnectionDot({ collapsed }: { collapsed: boolean }): React.ReactElemen
 }
 
 export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
 
   // The §3.1 slot: 32×32 exactly, clearspace by margin, contain-fit custom
@@ -185,31 +188,6 @@ export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
     </button>
   );
 
-  const settingsButton = (
-    <div style={{ position: 'relative', flexShrink: 0 }}>
-      <button
-        type="button"
-        data-testid="chrome-settings"
-        onClick={() => setSettingsOpen((v) => !v)}
-        onMouseDown={(e) => e.stopPropagation()}
-        aria-label="Settings"
-        title="Settings"
-        style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          color: 'var(--ink-muted)', fontSize: 'var(--text-md)', padding: 'var(--space-1)',
-          borderRadius: 'var(--radius-sm)', lineHeight: 1,
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ink-body)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-muted)'; }}
-      >
-        ⚙
-      </button>
-      {settingsOpen && (
-        <SettingsMenu onNavigate={navigate} onClose={() => setSettingsOpen(false)} />
-      )}
-    </div>
-  );
-
   if (collapsed) {
     return (
       <div
@@ -218,7 +196,6 @@ export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
       >
         {logoSlot}
         <ConnectionDot collapsed />
-        {settingsButton}
       </div>
     );
   }
@@ -246,7 +223,6 @@ export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
         wicked-studio
       </button>
       <ConnectionDot collapsed={false} />
-      {settingsButton}
     </div>
   );
 }

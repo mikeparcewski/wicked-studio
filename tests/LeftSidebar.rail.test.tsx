@@ -94,28 +94,58 @@ describe('the rail: two taxonomies (§2.3)', () => {
     expect(navigate).toHaveBeenCalledWith('/p/q3-review-deck/chat');
   });
 
-  it('keeps /runs reachable through the ONE escape hatch', async () => {
+  it('keeps /runs reachable through the ONE escape hatch — at the runs section bottom (§1.4)', async () => {
     const navigate = vi.fn();
     render(<LeftSidebar runs={[]} navigate={navigate} />);
     await screen.findByRole('button', { name: 'wicked-studio' });
 
-    const hatch = screen.getByTestId('rail-all-runs');
+    const hatch = within(screen.getByTestId('rail-runs')).getByTestId('rail-all-runs');
     expect(hatch).toHaveAttribute('href', '/runs');
     fireEvent.click(hatch);
     expect(navigate).toHaveBeenCalledWith('/runs');
   });
 
-  it('speaks the mode spine for creation: Build / Chat / Repository, never the old synonyms', async () => {
+  // Re-scoped to DES-FEEDBACK-001 §1.2 (slice A): the creation verbs are a
+  // VERTICAL list under the QUICK header now, with Project leading — and the
+  // `+` glyphs are gone (EC20).
+  it('QUICK section: Project / Build / Chat / Repository under the QUICK header, no + glyphs (EC20)', async () => {
     render(<LeftSidebar runs={[]} navigate={() => {}} />);
     await screen.findByRole('button', { name: 'wicked-studio' });
 
-    const actions = within(screen.getByTestId('rail-actions'));
-    expect(actions.getByRole('button', { name: 'Build' })).toBeInTheDocument();
-    expect(actions.getByRole('button', { name: 'Chat' })).toBeInTheDocument();
-    expect(actions.getByRole('button', { name: 'Repository' })).toBeInTheDocument();
+    expect(screen.getByTestId('rail-quick').textContent).toBe('QUICK');
+    const actions = screen.getByTestId('rail-actions');
+    const labels = within(actions).getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(labels).toEqual(['Project', 'Build', 'Chat', 'Repository']);
+    expect(actions.textContent).not.toContain('+');
     expect(screen.queryByText('Do Work')).toBeNull();
     expect(screen.queryByText('New Chat')).toBeNull();
     expect(screen.queryByText('New Repository')).toBeNull();
+  });
+
+  it('Project opens the new-project modal (§1.3)', async () => {
+    render(<LeftSidebar runs={[]} navigate={() => {}} />);
+    await screen.findByRole('button', { name: 'wicked-studio' });
+
+    expect(screen.queryByTestId('new-project-modal')).toBeNull();
+    fireEvent.click(screen.getByTestId('new-project'));
+    expect(screen.getByTestId('new-project-modal')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('new-project-modal')).toBeNull();
+  });
+
+  it('renders the recent runs inline below QUICK and the settings section at the bottom (§1.2)', async () => {
+    render(
+      <LeftSidebar
+        runs={[makeView({ id: 'r-live', status: 'executing', problem: 'add rate-limiting' })]}
+        navigate={() => {}}
+      />,
+    );
+    await screen.findByRole('button', { name: 'wicked-studio' });
+
+    const runsSection = screen.getByTestId('rail-runs');
+    expect(within(runsSection).getByTestId('rail-run')).toHaveAttribute('data-run-id', 'r-live');
+    // Settings: collapsed by default, at the rail bottom.
+    expect(screen.getByTestId('rail-settings-section').dataset.open).toBe('false');
   });
 });
 

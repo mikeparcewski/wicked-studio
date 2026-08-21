@@ -153,13 +153,15 @@ with sync_playwright() as p:
     body_text = page.evaluate("() => document.body.innerText")
     page_banned_hits = [s for s in PAGE_BANNED if s in body_text]
 
-    # ── AC 3: the creation verbs are the mode spine's words ────────────────────
+    # ── AC 3: the creation verbs are the mode spine's words — re-scoped to
+    #    DES-FEEDBACK-001 §1.2 (slice A): a VERTICAL QUICK list with Project
+    #    leading; the spine verbs (Build/Chat/Repository) are all still there.
     verbs_ok = page.evaluate(
         """() => { const labels = Array.from(document.querySelectorAll(
                      '[data-testid="rail-actions"] button'))
                      .map(b => b.getAttribute('aria-label'));
                    return JSON.stringify(labels)
-                       === JSON.stringify(['Build', 'Chat', 'Repository']); }""")
+                       === JSON.stringify(['Project', 'Build', 'Chat', 'Repository']); }""")
 
     # ── Capture: the consolidated rail beside the settled W2 board (§4.0) ──────
     page.locator('[data-testid="rail-all-runs"]').wait_for(timeout=10000)
