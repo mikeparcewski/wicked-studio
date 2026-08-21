@@ -1,0 +1,28 @@
+/* themes/light.css — the light theme as a THEME INSTANCE (DES-VISION-001 §2.14):
+ * applied via [data-theme="light"] on <html>, not a separate stylesheet tree.
+ * Exactly the surface and ink ramp overrides, plus the status `-dim` re-tints —
+ * the dark values (near-black tints the full-status text reads against) are
+ * unreadable as backgrounds on a light surface, so each gets a high-lightness
+ * override here (§2.14, in scope for slice 1). Accent, full status colors,
+ * spacing, type, radius, and motion tokens are theme-invariant and stay in
+ * tokens.css. Nothing sets this attribute yet — the file is inert until a
+ * later slice offers the switch. */
+
+[data-theme="light"] {
+  --_surface-0: #f4f4f8;
+  --_surface-1: #eeeef4;
+  --_surface-2: #e5e5ef;
+  --_surface-3: #d8d8e8;
+  --_surface-4: #ccccdc;
+
+  --_ink-a35: rgba(0, 0, 0, 0.30);
+  --_ink-a55: rgba(0, 0, 0, 0.52);
+  --_ink-a80: rgba(0, 0, 0, 0.78);
+  --_ink-100: #080810;
+
+  /* Status pill backgrounds on a light surface: same fixed hues, lifted
+     lightness (§2.14's gate example, applied to all three signals). */
+  --status-gate-dim: hsl(var(--_sg-h) 80% 88%);
+  --status-fail-dim: hsl(var(--_sf-h) 75% 91%);
+  --status-run-dim:  hsl(var(--_sr-h) 55% 88%);
+}

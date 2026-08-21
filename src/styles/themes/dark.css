@@ -1,0 +1,5 @@
+/* themes/dark.css — deliberately empty (DES-VISION-001 §2.13).
+ *
+ * The default DARK theme IS `src/styles/tokens.css`: a browser with no
+ * `data-theme` attribute gets its values as-is. This directory holds
+ * OVERRIDES only — see `light.css` for the one real theme instance. */
