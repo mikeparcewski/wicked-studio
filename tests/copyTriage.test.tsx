@@ -3,30 +3,29 @@
  * debug artifacts must not render as product copy. String-pinned like productName.test.
  */
 import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
-import React from 'react';
-import { CampaignDagStub } from '../src/components/CampaignDagStub.js';
 
 describe('copy triage — internal vocabulary stays internal', () => {
-  it('the campaigns placeholder speaks product, not spec', () => {
-    render(<CampaignDagStub />);
-    const text = document.body.textContent ?? '';
-    expect(text).not.toMatch(/§|primitive|RunFinished|DAG/);
-    expect(text).toMatch(/Campaigns are coming/);
-  });
-
-  it('no spec citations in the Build dashboard source', async () => {
-    // Comments and event-name code legitimately mention RunFinished etc. — only the
-    // user-visible COPY sentence is banned.
+  it('the campaigns shell is gone from the Build dashboard (V4, DES-UXFIX-001 §2.7)', async () => {
+    // Slice 5 deleted the inert "Campaigns are coming" panel (and the dead
+    // CampaignDagStub/InsightRail components with it): an inert shell teaches a
+    // newcomer the product is unfinished. Neither the copy, the testid, nor the
+    // old spec-citation phrasing may resurface on the Build surface.
     const src = (await import('node:fs')).readFileSync('src/components/CenterDashboard.tsx', 'utf8');
+    expect(src).not.toMatch(/Campaigns are coming/);
+    expect(src).not.toMatch(/campaign-dag-stub/);
     expect(src).not.toMatch(/Pending core.{0,40}Campaign primitive/);
-    expect(src).toMatch(/Campaigns are coming/);
   });
 
   it('no user-visible "warm seat" phrasing in the chat composer', async () => {
     const src = (await import('node:fs')).readFileSync('src/components/GroupChat.tsx', 'utf8');
     const placeholders = src.match(/placeholder="[^"]*"/g) ?? [];
     for (const p of placeholders) expect(p).not.toMatch(/warm seat/i);
+  });
+
+  it('no user-visible "inject" phrasing on the Build surface (V15: the user word is steer)', async () => {
+    const src = (await import('node:fs')).readFileSync('src/components/CenterDashboard.tsx', 'utf8');
+    const placeholders = src.match(/placeholder="[^"]*"/g) ?? [];
+    for (const p of placeholders) expect(p).not.toMatch(/inject/i);
   });
 
   it('the Close button (né "End chat", V8) is not styled as a destructive action', async () => {
