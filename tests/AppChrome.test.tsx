@@ -17,10 +17,12 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { AppChrome } = await import('../src/components/AppChrome.js');
+const { DEFAULT_APPEARANCE, useAppearanceStore } = await import('../src/theming/appearance.js');
 
 afterEach(() => {
   cleanup();
   useConnectionStore.setState({ status: 'connecting' });
+  useAppearanceStore.setState({ appearance: DEFAULT_APPEARANCE, loaded: false });
 });
 
 describe('AppChrome (DES-VISION-001 §3.1, §5.2)', () => {
@@ -42,6 +44,18 @@ describe('AppChrome (DES-VISION-001 §3.1, §5.2)', () => {
     const path = mark.querySelector('path');
     expect(path?.style.stroke).toBe('var(--accent)');
     expect(mark.querySelector('rect')).toBeNull();
+  });
+
+  it('a custom logo replaces the default mark — the two never stack (§3.1, slice-7 AC)', () => {
+    useAppearanceStore.setState({
+      appearance: { ...DEFAULT_APPEARANCE, logo_url: 'https://example.test/logo.png' },
+      loaded: true,
+    });
+    render(<AppChrome collapsed={false} navigate={() => {}} />);
+    // The slot stays (its background-image resolves the custom asset via
+    // --logo-url); the accent-stroked default mark is ABSENT.
+    expect(screen.getByTestId('logo-slot')).toBeInTheDocument();
+    expect(screen.queryByTestId('logo-wicked-mark')).toBeNull();
   });
 
   it('names the product and navigates home from name and slot', () => {

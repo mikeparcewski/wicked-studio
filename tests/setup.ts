@@ -32,6 +32,7 @@ if (typeof window.HTMLCanvasElement.prototype.getContext !== 'function' ||
     measureText: (t: string) => ({ width: String(t).length * 7 }),
     fillText: () => {}, clearRect: () => {}, fillRect: () => {},
     beginPath: () => {}, moveTo: () => {}, lineTo: () => {}, stroke: () => {},
+    arc: () => {}, closePath: () => {},
     save: () => {}, restore: () => {}, scale: () => {}, translate: () => {},
   })) as unknown as typeof window.HTMLCanvasElement.prototype.getContext;
 }
