@@ -121,11 +121,18 @@ function parse(pathname: string): Route {
   // `Panel` union below is untouched and still owns every side panel.
   if (first === 'p' && second) {
     const mode = asMode(third);
-    const artifactId = mode !== null && fourth ? safeDecode(fourth) : null;
+    const raw = mode !== null && fourth ? safeDecode(fourth) : null;
+    // `/p/:projectId/:mode/new` is the project-scoped CREATE route (DES-FEEDBACK-001
+    // §4.3, slice B): the launch form pre-bound to the project — never an artifact
+    // named "new", so `artifactId` stays null and no run-selected machinery
+    // (event backfill, kill shortcut) fires against a non-id.
+    const isNew = raw === 'new';
+    const artifactId = isNew ? null : raw;
     return route({
       projectId: safeDecode(second),
       mode,
       artifactId,
+      showLaunch: isNew,
       // Build and Chat wire straight into the existing run surfaces, so the artifact IS
       // the run: every run-selected behaviour (event backfill, Ctrl+K kill, RightPanel,
       // gate toasts) keeps working unchanged inside the shell.
