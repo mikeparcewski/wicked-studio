@@ -90,6 +90,26 @@ def http(method: str, url: str, body: dict | None = None) -> tuple[int, str, str
         return e.code, e.read().decode("utf-8", "replace"), e.headers.get("Content-Type", "") or ""
 
 
+# ── 0. The client side of the contract: no invented wire is even SPELLED ───────
+# §8.3's grep AC: `getDemoSpec` is not imported anywhere in src/ — nor is
+# `getLatestRecording`, nor any /api/demo/{spec,recordings,record} path literal.
+# A client that cannot build the URL cannot regress onto it.
+import re  # noqa: E402 (grouped with its one use, harness style)
+
+BANNED_SPELLINGS = re.compile(r"getDemoSpec|getLatestRecording|api/demo/(spec|recordings|record)\b")
+spelled: list[str] = []
+for f in sorted((REPO / "src").rglob("*")):
+    if f.suffix not in (".ts", ".tsx"):
+        continue
+    for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+        if BANNED_SPELLINGS.search(line) and "invented" not in line and "neither of which" not in line:
+            spelled.append(f"{f.relative_to(REPO)}:{n}: {line.strip()[:120]}")
+report["steps"]["client_never_spells_invented_wire"] = {"ok": spelled == [], "hits": spelled}
+if spelled:
+    fail("client_grep_verdict",
+         "src/ still spells an invented demo wire — remove it before contract-checking: "
+         + "; ".join(spelled[:5]))
+
 # ── 1. The real bridge, on a temp root ─────────────────────────────────────────
 cli = WI_DIR / "bin" / "wicked-interactive.js"
 if not cli.is_file():
