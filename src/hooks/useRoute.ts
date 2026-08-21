@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail';
+export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail';
 
-const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'chats', 'work', 'repo-detail', 'projects', 'project-detail'];
+const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not

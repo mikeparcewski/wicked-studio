@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
-import { AppearanceSettings } from './AppearanceSettings.js';
 import { Modal } from './Modal.js';
 import { Terminal } from './Terminal.js';
 
@@ -44,7 +43,11 @@ function loadDefaultClis(roster: RosterSeat[]): Set<string> {
   return new Set(roster.filter((s) => s.enabled_for_council).map((s) => s.key));
 }
 
-export function SystemSettings(): React.ReactElement {
+interface SystemSettingsProps {
+  navigate?: (path: string) => void;
+}
+
+export function SystemSettings({ navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); } }: SystemSettingsProps): React.ReactElement {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [dirty, setDirty] = useState<Partial<Settings>>({});
   const [saving, setSaving] = useState(false);
@@ -158,10 +161,27 @@ export function SystemSettings(): React.ReactElement {
         </div>
       )}
 
-      {/* Appearance (DES-VISION-001 §3.2): a SECTION here, not a new page — it
-          persists itself through the appearance store (debounced PUT), so it
-          rides outside this page's dirty/Save machinery on purpose (§3.4). */}
-      <AppearanceSettings />
+      {/* Theming lives at /theme — link, not a duplicate surface. */}
+      <div
+        className="rounded-xl px-5 mb-6 flex items-center justify-between py-4"
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+      >
+        <div>
+          <p className="text-sm font-medium" style={{ color: 'var(--ink-high)' }}>Theme</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--ink-muted)' }}>
+            Appearance, accent, logo, and brand identity.
+          </p>
+        </div>
+        <a
+          href="/theme"
+          data-testid="theme-page-link"
+          onClick={(e) => { e.preventDefault(); navigate('/theme'); }}
+          className="text-xs font-mono transition-opacity hover:opacity-80"
+          style={{ color: 'var(--accent)', textDecoration: 'none' }}
+        >
+          Theme ›
+        </a>
+      </div>
 
       <section
         className="rounded-xl px-5 mb-6"

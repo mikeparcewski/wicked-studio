@@ -171,7 +171,7 @@ with sync_playwright() as p:
     page.on("request", lambda r: requests_log.append(f"{r.method} {r.url}"))
     page.clock.set_fixed_time(datetime.fromtimestamp((NOW0 + 5000) / 1000, tz=timezone.utc))
 
-    page.goto(f"{ORIGIN}/system", wait_until="domcontentloaded")
+    page.goto(f"{ORIGIN}/theme", wait_until="domcontentloaded")
     page.locator('[data-testid="brand-learn"]').wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS + "\n" + FREEZE_MOTION)
     try:

@@ -23,6 +23,7 @@ import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { WorkPage } from './components/WorkPage.js';
 import { SystemSettings } from './components/SystemSettings.js';
+import { ThemePage } from './components/ThemePage.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { useLegacyRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
@@ -416,7 +417,14 @@ export function App(): React.ReactElement {
     if (panel === 'system') {
       return (
         <div className="flex-1 overflow-y-auto p-6">
-          <SystemSettings />
+          <SystemSettings navigate={navigate} />
+        </div>
+      );
+    }
+    if (panel === 'theme') {
+      return (
+        <div className="flex-1 overflow-y-auto p-6">
+          <ThemePage />
         </div>
       );
     }
