@@ -1,26 +1,30 @@
 import { useState } from 'react';
-import { listThemes, type LearnKind, type ThemeSummary } from '../api/interactive.js';
+import { type LearnKind } from '../api/interactive.js';
 import {
   attachSourceFromThread, learnReady, learnThemeFromThread, LEARN_KINDS, LEARN_LABEL,
 } from '../interactive/themeWire.js';
 import { contextKey, useDocContextStore } from '../store/docContext.js';
 
-// The composer's context row (DES-MERGE-001 §4.6, §4.9, §6.4 slice 16).
+// The composer's context row (DES-MERGE-001 §4.6, §4.9, §6.4 slice 16; narrowed by
+// DES-UXFIX-001 §2.6 rule 4 / V19, slice 6).
 //
-// Three actions and the chips they produce, in the footer beside the composer, because
+// Two actions and the chips they produce, in the footer beside the composer, because
 // what they change is what the NEXT message generates:
 //
-//   Style   — teach the agent a theme from a website, a PDF or an image (§4.6). The
+//   Learn   — teach the agent a theme from a website, a PDF or an image (§4.6). The
 //             submission is a message (§2.3) and the learning narrates in the thread.
-//   Theme   — the library (built-ins + everything learned). Picking one is a chip, and
-//             the chip rides with the next generation as `theme_id`.
 //   Sources — attach a folder or file the service reads IN PLACE (§4.9). The chip is a
 //             path, never a payload: this component has no file input and builds no
 //             FormData, so attaching context uploads nothing.
 //
-// The two thread actions require an open document, for the same reason the storyboard's
+// PICKING a theme is no longer here: the audit's unexplained "theme library" pill (F9,
+// V19) is now the **Themes** control on the version strip beside Export (`ThemesMenu`),
+// where it acts on the document and explains itself on open. The pick still lands in the
+// same docContext store, so the chip below still shows it and it still rides with the
+// next generation as `theme_id` — only the control moved.
+//
+// Both remaining actions require an open document, for the same reason the storyboard's
 // Record button does: they render as messages, and a message needs a thread to land in.
-// Picking a theme does not — it is context for a generation that has not started yet.
 
 const S = {
   ink:    '#e6edf3',
@@ -52,15 +56,13 @@ const INPUT = 'px-2 py-1 text-[11px] font-mono';
 const GO = 'self-start rounded-lg px-2.5 py-1 text-[11px] font-semibold disabled:opacity-40';
 const NOTE = 'text-[10px] font-mono';
 
-type Panel = 'learn' | 'library' | 'sources';
+type Panel = 'learn' | 'sources';
 
-/** The three actions, in §4.6/§4.9's order. `needsDoc` marks the ones that render as
- *  MESSAGES: a message needs a transcript, so they wait for a document to exist. */
+/** The two actions, in §4.6/§4.9's order. Both render as MESSAGES: a message needs a
+ *  transcript, so they wait for a document to exist. */
 const ACTIONS: ReadonlyArray<{ panel: Panel; testId: string; label: string; title: string; needsDoc: boolean }> = [
   { panel: 'learn', testId: 'context-learn', label: 'learn a theme', needsDoc: true,
     title: 'Teach the agent a theme from a website, a PDF or an image' },
-  { panel: 'library', testId: 'context-library', label: 'theme library', needsDoc: false,
-    title: 'Pick a theme for the next generation' },
   { panel: 'sources', testId: 'context-sources', label: 'attach sources', needsDoc: true,
     title: 'Point at a folder or file the service reads in place — nothing uploads' },
 ];
@@ -99,17 +101,9 @@ export function ComposerContext({ projectId, docId }: ComposerContextProps): Rea
   const [value, setValue] = useState('');
   const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
-  const [themes, setThemes] = useState<ThemeSummary[] | null>(null);
-  const [libraryError, setLibraryError] = useState<string | null>(null);
 
   function toggle(next: Panel): void {
-    const opening = panel !== next;
-    setPanel(opening ? next : null);
-    if (!opening || next !== 'library') return;
-    setLibraryError(null);
-    listThemes(projectId)
-      .then(setThemes)
-      .catch((e: unknown) => setLibraryError(e instanceof Error ? e.message : String(e)));
+    setPanel(panel !== next ? next : null);
   }
 
   async function submitLearn(): Promise<void> {
@@ -119,7 +113,7 @@ export function ComposerContext({ projectId, docId }: ComposerContextProps): Rea
     // service's own reason) — the panel's job is only to stop offering the same submit.
     const outcome = await learnThemeFromThread({ projectId, docId, kind, value });
     setBusy(false);
-    if (outcome.ok) { setValue(''); setPanel(null); setThemes(null); }
+    if (outcome.ok) { setValue(''); setPanel(null); }
   }
 
   async function submitSource(): Promise<void> {
@@ -131,18 +125,6 @@ export function ComposerContext({ projectId, docId }: ComposerContextProps): Rea
     useDocContextStore.getState().addSource(key, outcome.entry.path);
     setPath(''); setPanel(null);
   }
-
-  // §3.3: the library says what it is doing or why it cannot, and a library that failed
-  // to load picks nothing rather than silently offering the default as if it were chosen.
-  const status = libraryError !== null
-    ? { testId: 'theme-library-error', danger: true,
-        text: `${libraryError} — no theme was picked; the next generation uses the default.` }
-    : themes === null
-      ? { testId: 'theme-library-loading', danger: false, text: 'Loading the theme library…' }
-      : themes.length === 0
-        ? { testId: 'theme-library-empty', danger: false,
-            text: 'No themes yet — learn one from a website, a PDF or an image.' }
-        : null;
 
   return (
     <div data-testid="thread-context" className="flex flex-col gap-1.5">
@@ -159,15 +141,20 @@ export function ComposerContext({ projectId, docId }: ComposerContextProps): Rea
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1.5">
-        {ACTIONS.filter((a) => docId !== null || !a.needsDoc).map((a) => (
-          <button key={a.panel} type="button" data-testid={a.testId} title={a.title}
-                  aria-expanded={panel === a.panel} onClick={() => toggle(a.panel)}
-                  className={PILL} style={ACTION}>
-            {a.label}
-          </button>
-        ))}
-      </div>
+      {/* Both actions render as messages, so a doc-less composer offers neither — an
+          empty action row is omitted, not rendered blank (DES-UXFIX-001 §2.1.2's rule,
+          applied at this altitude). */}
+      {docId !== null && (
+        <div className="flex flex-wrap gap-1.5">
+          {ACTIONS.filter((a) => !a.needsDoc || docId !== null).map((a) => (
+            <button key={a.panel} type="button" data-testid={a.testId} title={a.title}
+                    aria-expanded={panel === a.panel} onClick={() => toggle(a.panel)}
+                    className={PILL} style={ACTION}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {panel === 'learn' && docId !== null && (
         <div data-testid="learn-panel" className={PANEL} style={BOX}>
@@ -199,30 +186,6 @@ export function ComposerContext({ projectId, docId }: ComposerContextProps): Rea
                   disabled={busy || !learnReady(kind, value)} onClick={() => void submitLearn()}>
             {busy ? 'Submitting…' : `Learn from this ${LEARN_LABEL[kind].noun}`}
           </button>
-        </div>
-      )}
-
-      {panel === 'library' && (
-        <div data-testid="theme-library" className={`${PANEL} gap-1 max-h-40 overflow-y-auto`} style={BOX}>
-          {status !== null && (
-            <p data-testid={status.testId} className={NOTE}
-               style={{ color: status.danger ? S.danger : S.faint, margin: 0 }}>
-              {status.text}
-            </p>
-          )}
-          {(themes ?? []).map((t) => (
-            <button
-              key={t.name} type="button" data-testid="theme-row" data-theme={t.name}
-              aria-pressed={theme === t.name}
-              onClick={() => { useDocContextStore.getState().pickTheme(key, t.name); setPanel(null); }}
-              className="flex items-baseline justify-between gap-2 rounded-lg px-2 py-1 text-left text-[11px] font-mono"
-              style={{ background: theme === t.name ? 'rgba(255,218,25,0.1)' : 'transparent',
-                       color: S.ink, border: 'none', cursor: 'pointer' }}
-            >
-              <span className="truncate">{t.name}</span>
-              <span className="shrink-0 text-[10px]" style={{ color: S.faint }}>{t.source ?? 'built-in'}</span>
-            </button>
-          ))}
         </div>
       )}
 

@@ -31,3 +31,20 @@ export function scrollThreadToMessage(messageId: string): boolean {
   el.focus({ preventScroll: true });
   return true;
 }
+
+/**
+ * The same seam, pointed the other way (DES-UXFIX-001 §2.6 rule 2): a thread message's
+ * `▤ v<N> landed` tag puts ITS version entry in view on the strip, so the eye can trace
+ * thread → strip → canvas as well as canvas → strip → thread. The strip scrolls
+ * horizontally, so the entry is centred on the inline axis; a strip that is not on
+ * screen (a doc-less thread) is a reported miss, never a throw — the tag's navigation
+ * (the `?v=N` route) never depends on it.
+ */
+export function scrollStripToVersion(version: number): boolean {
+  const el = document.querySelector(
+    `[data-testid="version-strip"] [data-testid="version-entry"][data-version="${version}"]`,
+  );
+  if (!(el instanceof HTMLElement)) return false;
+  el.scrollIntoView({ block: 'nearest', inline: 'center' });
+  return true;
+}

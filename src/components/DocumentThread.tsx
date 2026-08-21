@@ -6,6 +6,7 @@ import { recordFromThread } from '../interactive/demoWire.js';
 import { runExport } from '../interactive/exportWire.js';
 import { retryBatchInject } from '../interactive/feedbackBatch.js';
 import { scrollToWid } from '../interactive/widScroller.js';
+import { scrollStripToVersion } from './threadAnchor.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { contextKey, useDocContextStore } from '../store/docContext.js';
 import { nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState } from '../store/docThread.js';
@@ -50,10 +51,16 @@ const COMPOSER: Record<GenState, { placeholder: string; submit: string }> = {
 
 // ── Message renderers ────────────────────────────────────────────────────────
 
-function Bubble({ msg, projectId, docId }: { msg: DocMsg; projectId: string; docId: string | null }): React.ReactElement | null {
+function Bubble({
+  msg, projectId, docId, onShowVersion,
+}: {
+  msg: DocMsg; projectId: string; docId: string | null;
+  /** The tag's cross-link (DES-UXFIX-001 §2.6 rule 2): show this version on the strip. */
+  onShowVersion?: (version: number) => void;
+}): React.ReactElement | null {
   if (msg.kind === 'user') {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1">
         <div
           data-testid="doc-message"
           data-message-id={msg.id}
@@ -88,6 +95,24 @@ function Bubble({ msg, projectId, docId }: { msg: DocMsg; projectId: string; doc
             <NotRecordedChip projectId={projectId} docId={docId} msgId={msg.id} text={msg.text} />
           )}
         </div>
+        {/* §2.6 rule 2 (DES-UXFIX-001, the F9 fix): the message that produced a version
+            is TAGGED with it, and the tag cross-links to the strip — the same seam the
+            strip's "In thread" crosses the other way. The eye can trace canvas ↔ strip ↔
+            thread in both directions. */}
+        {msg.version !== undefined && (
+          <button
+            type="button"
+            data-testid="thread-version-tag"
+            data-version={String(msg.version)}
+            onClick={() => { if (msg.version !== undefined) onShowVersion?.(msg.version); }}
+            title={`This message made v${msg.version} — show it on the canvas and the strip`}
+            className="rounded-full px-2 py-0.5 text-[10px] font-mono"
+            style={{ background: 'rgba(255,218,25,0.1)', color: S.accent,
+                     border: '1px solid rgba(255,218,25,0.25)', cursor: 'pointer' }}
+          >
+            ▤ v{msg.version} landed
+          </button>
+        )}
       </div>
     );
   }
@@ -398,6 +423,15 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     }
   }
 
+  // The tag's cross-link (§2.6 rule 2): selecting the version IS a navigation — the
+  // same `?v=N` the strip selects by — plus putting its strip entry in view. The strip
+  // owns the reverse direction (its select scrolls the thread to the message, §7.6).
+  function showVersion(version: number): void {
+    if (docId === null) return;
+    navigate(versionPath(projectId, docId, version));
+    scrollStripToVersion(version);
+  }
+
   const { placeholder, submit: label } = COMPOSER[state];
   // Case 1 is the only state whose words differ by artifact — what the composer DOES is
   // the same function of run state either way (§2.2), it just says what it will make.
@@ -446,7 +480,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
                   onAnswered={() => useDocThreadStore.getState().setGenState(key, 'generating')}
                 />
               )) || null
-            : <Bubble key={m.id} msg={m} projectId={projectId} docId={docId} />,
+            : <Bubble key={m.id} msg={m} projectId={projectId} docId={docId} onShowVersion={showVersion} />,
         )}
         <div ref={bottom} />
       </div>

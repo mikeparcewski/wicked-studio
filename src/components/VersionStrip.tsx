@@ -3,6 +3,7 @@ import { postFork } from '../api/interactive.js';
 import type { ForkResult, VersionEntry, VersionManifest } from '../api/interactive.js';
 import { versionPath, type Navigate } from '../hooks/useRoute.js';
 import { ExportMenu } from './ExportMenu.js';
+import { ThemesMenu } from './ThemesMenu.js';
 import { scrollThreadToMessage } from './threadAnchor.js';
 
 // The rewind / compare / fork surface (DES-MERGE-001 §4.2, §6.3 slice 9). The version
@@ -20,6 +21,12 @@ import { scrollThreadToMessage } from './threadAnchor.js';
 //   3. A fork is the service's decision: `POST /d/:docId/api/fork` returns the new
 //      version and its parent, and the strip re-reads the manifest rather than
 //      predicting what the branch produced.
+//
+// DES-UXFIX-001 §2.6 (slice 6): the strip is drawn as the SPINE — its owner mounts it
+// spanning canvas and thread, the accent rule along its top is the drawn connection, and
+// it says in one line what selecting a version does (rule 1: the connective tissue is
+// labelled by what it does). The canvas toolbar it carries is [Themes] [Export] — the
+// two actions that act on the document at the addressed version (rule 4, V19).
 
 const S = {
   bar:      '#0f1419',
@@ -111,7 +118,8 @@ export function VersionStrip({
     <div
       data-testid="version-strip"
       style={{
-        alignItems: 'stretch', background: S.bar, borderTop: `1px solid ${S.border}`,
+        alignItems: 'stretch', background: S.bar,
+        borderTop: '2px solid rgba(255,218,25,0.35)',
         display: 'flex', flexShrink: 0, gap: '8px', padding: '10px 12px',
       }}
     >
@@ -209,6 +217,21 @@ export function VersionStrip({
         </span>
       )}
       </div>
+
+      {/* §2.6 rule 1: the spine is labelled by what it does. This caption sits at the
+          strip's thread-side end, pointing the eye at the pane the selection scrolls. */}
+      <span
+        data-testid="version-spine-caption"
+        style={{
+          alignSelf: 'center', color: S.faint, flexShrink: 1, fontSize: '10px',
+          lineHeight: 1.3, maxWidth: '210px', minWidth: 0, textAlign: 'right',
+        }}
+      >
+        selecting a version scrolls the thread to the message that made it ▸
+      </span>
+
+      {/* The canvas toolbar (§2.6 rule 4): [Themes] [Export], acting on the document. */}
+      <ThemesMenu projectId={projectId} docId={docId} />
 
       {/* §4.4: export is PER-VERSION, so it belongs to the surface that owns which version
           is addressed. The selection is the subject — exporting "the document" would be
