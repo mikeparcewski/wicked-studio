@@ -9,8 +9,11 @@
  *   - the composer sits on `--surface-raised` at `--radius-xl` and carries the
  *     wk-composer class whose :focus ring is `--accent-dim` (global.css —
  *     §5.3 motion: never the full accent);
- *   - "Add agents" is low-key but ON-ACCENT (§5.3: color alone signals it's
- *     interactive) and Send is the accent-filled primary action;
+ *   - the §6.2 default chips (DES-FEEDBACK-001, slice C) are token-built pills:
+ *     --surface-raised on --radius-full, --text-xs SANS --ink-body (EC13), a
+ *     --surface-overlay hairline standing in for §6.2's literal rgba (the
+ *     no-raw-color lint), the ✕ transparent at 12×12; [+ Add] is the separate
+ *     dashed --ink-dim affordance; Send is the accent-filled primary action;
  *   - user messages are transparent, agent bubbles sit on `--surface-card`
  *     (§5.3 token usage);
  *   - none of this disturbs the §2.4 behaviours — the firstrun/rejoin suites
@@ -20,6 +23,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat } from '../src/components/GroupChat.js';
+import { clearCachedRoster } from '../src/store/rosterCache.js';
 
 const openChat = vi.fn();
 const getChat = vi.fn();
@@ -60,6 +64,7 @@ beforeEach(() => {
   );
   sendChatMessage.mockResolvedValue({ seats: [] });
   sessionStorage.clear();
+  clearCachedRoster(); // chips render the §6.2 fallback trio
 });
 
 describe('GroupChat — the §5.3 visual language', () => {
@@ -80,10 +85,29 @@ describe('GroupChat — the §5.3 visual language', () => {
     expect(composer.style.fontFamily).toBe('var(--font-sans)');
   });
 
-  it('"Add agents" is on-accent text; Send is the accent-filled action', () => {
+  it('the default chips wear §6.3 anatomy in tokens; [+ Add] is dashed --ink-dim; Send is accent-filled', () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    const add = screen.getByTestId('add-agents');
-    expect(add.style.color).toBe('var(--accent)');
+    const chip = screen.getAllByTestId('agent-chip')[0]!;
+    expect(chip.style.background).toBe('var(--surface-raised)');
+    expect(chip.style.borderRadius).toBe('var(--radius-full)');
+    expect(chip.style.fontSize).toBe('var(--text-xs)');
+    // EC13: chip text is a selection LABEL — the sans, --ink-body (§6.3).
+    expect(chip.style.fontFamily).toBe('var(--font-sans)');
+    expect(chip.style.color).toBe('var(--ink-body)');
+    expect(chip.style.padding).toBe('3px 8px 3px 6px');
+    // §6.2's literal `rgba(255,255,255,0.08)` hairline is substituted with the
+    // token carrying that role (no-raw-color lint) — see GroupChat.tsx comment.
+    expect(chip.style.border).toBe('1px solid var(--surface-overlay)');
+    // The ✕: 12×12, transparent, --ink-dim → --ink-high on hover (wk-chip-x).
+    const x = chip.querySelector('button')!;
+    expect(x.className).toContain('wk-chip-x');
+    expect(x.style.width).toBe('12px');
+    expect(x.style.height).toBe('12px');
+    expect(x.style.background).toBe('transparent');
+    // [+ Add] is the SEPARATE affordance (§6.3): dashed vs solid, dim vs body.
+    const add = screen.getByTestId('add-agent');
+    expect(add.style.border).toBe('1px dashed var(--surface-overlay)');
+    expect(add.style.color).toBe('var(--ink-dim)');
     expect(add.style.background).toBe('transparent');
     const send = screen.getByRole('button', { name: 'Send' });
     expect(send.style.background).toBe('var(--accent)');
@@ -100,11 +124,12 @@ describe('GroupChat — the §5.3 visual language', () => {
 
     const bubble = screen.getByText('make me a deck');
     expect(bubble.style.background).toBe('transparent');
-    // The one warmed seat's pending reply bubble is a card surface.
-    const pending = screen.getByText('thinking…').closest('div') as HTMLElement;
+    // Each warmed seat's pending reply bubble is a card surface (§6.2 warms the
+    // chip selection — the fallback trio here — not a single default agent).
+    const pending = screen.getAllByText('thinking…')[0]!.closest('div') as HTMLElement;
     expect(pending.style.background).toBe('var(--surface-card)');
-    // The seat chip animates in via wk-disclose (§5.3 motion, one run, no loop).
-    const chip = screen.getByTitle('ready');
+    // The seat chips animate in via wk-disclose (§5.3 motion, one run, no loop).
+    const chip = screen.getAllByTitle('ready')[0]!;
     expect(chip.className).toContain('wk-disclose');
   });
 });

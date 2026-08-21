@@ -16,9 +16,11 @@ import { GroupChat } from '../src/components/GroupChat.js';
  * the exact remount trigger in production was never pinned down, and a fix keyed to one trigger
  * would leak on the next one.
  *
- * Slice 4 (DES-UXFIX-001 §2.4) moved warming behind the opt-ins (first send / "Add agents"), so a
- * bare mount no longer opens anything — each case below arms explicitly before it can leak. The
- * rejoin machinery these tests pin is otherwise verbatim.
+ * Slice 4 (DES-UXFIX-001 §2.4) moved warming behind the opt-ins, so a bare mount no longer opens
+ * anything — each case below arms explicitly before it can leak. Slice C (DES-FEEDBACK-001 §6)
+ * retired the "Add agents" disclosure in favour of default chips, leaving the FIRST SEND as the
+ * one warm opt-in — the arm helper types a message. The rejoin machinery these tests pin is
+ * otherwise verbatim.
  */
 
 const openChat = vi.fn();
@@ -63,9 +65,10 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 
-/** Arm the chat the way an operator does — the "Add agents" disclosure (§2.4). */
-async function armViaAddAgents(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.click(await screen.findByTestId('add-agents'));
+/** Arm the chat the way an operator does — the first send warms the chip selection (§2.4/§6.2). */
+async function armViaFirstSend(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.type(screen.getByRole('textbox'), 'warm us up');
+  await user.keyboard('{Enter}');
 }
 
 describe('GroupChat — chat reuse (FINDING-027)', () => {
@@ -73,7 +76,7 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     const user = userEvent.setup();
     // Mount 1: nothing stored and nothing warmed — the operator opts in, which mints and opens.
     const first = render(<GroupChat repoId="r1" onBack={() => undefined} />);
-    await armViaAddAgents(user);
+    await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const openedId = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
     expect(openedId).toBeTruthy();
@@ -105,7 +108,7 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     expect(screen.getByTestId('chat-firstrun')).toBeInTheDocument();
 
     // The next opt-in mints FRESH — never the reclaimed id.
-    await armViaAddAgents(user);
+    await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const openedId = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
     expect(openedId).not.toBe('reclaimed-id');
@@ -118,14 +121,14 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     // would not catch state that fails to reset across the switch.
     const user = userEvent.setup();
     const { rerender } = render(<GroupChat repoId="r1" onBack={() => undefined} />);
-    await armViaAddAgents(user);
+    await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const idA = sessionStorage.getItem('wicked.chat.r1');
 
     // A different repo is a different conversation — switching lands on ITS first-run state
     // (nothing stored for r2), and arming there opens its own chat rather than reusing r1's.
     rerender(<GroupChat repoId="r2" onBack={() => undefined} />);
-    await armViaAddAgents(user);
+    await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(2));
     const idB = sessionStorage.getItem('wicked.chat.r2');
 
@@ -143,7 +146,7 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     const user = userEvent.setup();
     const { rerender } = render(<GroupChat repoId="r1" onBack={() => undefined} />);
 
-    // The first send is the other opt-in (§2.4): it warms the one default agent, then sends.
+    // The first send is the warm opt-in (§2.4): it warms the chip selection, then sends.
     await user.type(screen.getByRole('textbox'), 'a message about repo one');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
@@ -198,9 +201,10 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
 
     expect(openChat, 'a send mid-probe must not mint a chat').not.toHaveBeenCalled();
     expect(sessionStorage.getItem('wicked.chat.r1'), 'the stored id must survive').toBe('probing-id');
-    // Both opt-ins are parked, visibly: Send and the disclosure wait for the probe.
+    // The opt-in is parked, visibly: Send waits for the probe, and the §6.2
+    // default chips do not show — mid-probe this may not be first-run at all.
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
-    expect(screen.getByTestId('add-agents')).toBeDisabled();
+    expect(screen.queryByTestId('agent-chips-bar')).toBeNull();
 
     // The probe answers: the chat rejoins, and the held-back text sends into IT — no mint.
     releaseProbe();
@@ -241,7 +245,7 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     sessionStorage.setItem('wicked.chat.r2', 'stored-b');
 
     const { rerender } = render(<GroupChat repoId="r1" onBack={() => undefined} />);
-    await armViaAddAgents(user);
+    await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const idA = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
 
@@ -274,7 +278,7 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     sessionStorage.setItem('wicked.chat.r2', 'stored-b');
 
     const { rerender } = render(<GroupChat repoId="r1" onBack={() => undefined} />);
-    await armViaAddAgents(user);
+    await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const idA = sessionStorage.getItem('wicked.chat.r1');
 
@@ -291,7 +295,7 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
   it('Close forgets the id, so the next mount starts clean instead of rejoining a closed chat', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId="r1" onBack={() => undefined} />);
-    await armViaAddAgents(user);
+    await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     expect(sessionStorage.getItem('wicked.chat.r1')).toBeTruthy();
 
@@ -306,7 +310,7 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     const user = userEvent.setup();
     closeChat.mockRejectedValue(new Error('daemon unreachable'));
     render(<GroupChat repoId="r1" onBack={() => undefined} />);
-    await armViaAddAgents(user);
+    await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
 
     await user.click(await screen.findByTestId('chat-close'));
