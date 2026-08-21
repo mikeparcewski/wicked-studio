@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { EntityMode, LaunchRunBody, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
+import { setCachedRoster } from '../store/rosterCache.js';
 import { ContextPopover } from './ContextPopover.js';
 import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
@@ -173,6 +174,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     api
       .getRoster()
       .then(({ roster: seats }) => {
+        // Deposit for Chat's default chips (§6.1: cached, never fetched on mount).
+        setCachedRoster(seats);
         setRoster(seats);
         try {
           const stored = localStorage.getItem('wicked_default_clis');

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
+import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { Terminal } from './Terminal.js';
 
@@ -71,6 +72,8 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       .catch((e: unknown) => setError(String(e)));
     api.getRoster()
       .then(({ roster: seats }) => {
+        // Deposit for Chat's default chips (DES-FEEDBACK-001 §6.1).
+        setCachedRoster(seats);
         setRoster(seats);
         setDefaultClis(loadDefaultClis(seats));
       })
