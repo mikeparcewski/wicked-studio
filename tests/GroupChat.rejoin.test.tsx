@@ -25,6 +25,7 @@ const openChat = vi.fn();
 const getChat = vi.fn();
 const closeChat = vi.fn();
 const getRoster = vi.fn();
+const sendChatMessage = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
   api: {
@@ -32,7 +33,7 @@ vi.mock('../src/api/client.js', () => ({
     getChat: (...a: unknown[]) => getChat(...a),
     closeChat: (...a: unknown[]) => closeChat(...a),
     getRoster: (...a: unknown[]) => getRoster(...a),
-    sendChatMessage: vi.fn(),
+    sendChatMessage: (...a: unknown[]) => sendChatMessage(...a),
   },
   wsBase: () => 'ws://localhost',
 }));
@@ -57,6 +58,8 @@ beforeEach(() => {
   getRoster.mockResolvedValue({ roster: [{ key: 'claude' }] });
   openChat.mockResolvedValue({ chatId: 'x', seats: [{ cliKey: 'claude', ok: true }] });
   closeChat.mockResolvedValue({ ok: true });
+  sendChatMessage.mockReset();
+  sendChatMessage.mockResolvedValue({ seats: [] });
   sessionStorage.clear();
 });
 
@@ -172,6 +175,41 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     // The kept-on-error chat is disconnectable: Close renders for it (V8's one exception —
     // there IS something armed here, we just cannot see it).
     expect(screen.getByTestId('chat-close')).toBeInTheDocument();
+  });
+
+  it('a send during the rejoin probe cannot mint over the stored chat', async () => {
+    // Slice 4 made typing the first-send opt-in AND autofocused the composer, which opened a
+    // window the old always-disabled Send never had: while the stored id's probe is in flight,
+    // `chatId` is still null, so a fast finger's send would read as first-run, mint a fresh id
+    // and write it OVER the stored one — orphaning the warm chat the probe was about to rejoin
+    // (the FINDING-027 leak, back through the front door). The opt-ins must wait the probe out.
+    const user = userEvent.setup();
+    sessionStorage.setItem('wicked.chat.r1', 'probing-id');
+    let releaseProbe = (): void => undefined;
+    getChat.mockReturnValue(
+      new Promise((resolve) => {
+        releaseProbe = () => resolve({ chatId: 'probing-id', seats: ['claude'] });
+      }),
+    );
+
+    render(<GroupChat repoId="r1" onBack={() => undefined} />);
+    await user.type(screen.getByRole('textbox'), 'typed before the probe answered');
+    await user.keyboard('{Enter}');
+
+    expect(openChat, 'a send mid-probe must not mint a chat').not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('wicked.chat.r1'), 'the stored id must survive').toBe('probing-id');
+    // Both opt-ins are parked, visibly: Send and the disclosure wait for the probe.
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByTestId('add-agents')).toBeDisabled();
+
+    // The probe answers: the chat rejoins, and the held-back text sends into IT — no mint.
+    releaseProbe();
+    await waitFor(() => expect(screen.getByTitle('ready')).toHaveTextContent('claude'));
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(sendChatMessage).toHaveBeenCalledWith('probing-id', 'typed before the probe answered'),
+    );
+    expect(openChat, 'the rejoined chat needs no open').not.toHaveBeenCalled();
   });
 
   it('a rejoin shows the seats the chat actually has, and never consults the roster', async () => {

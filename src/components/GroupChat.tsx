@@ -94,6 +94,16 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
   const [ended, setEnded] = useState(false);
   /** An arm (warm) in flight — guards the two opt-in paths against double fire. */
   const [arming, setArming] = useState(false);
+  /**
+   * The rejoin probe is in flight — a stored id is being checked against the daemon.
+   * While it is, this repo is NOT first-run and the opt-ins must wait: `chatId` is
+   * still null, so a send in this window would read as a first send, mint a fresh id
+   * and write it OVER the stored one — orphaning the warm chat the probe was about
+   * to rejoin (the FINDING-027 leak, reintroduced by a fast finger on the focused
+   * composer). Never true when nothing is stored, so first-run still fires zero
+   * requests and gates nothing.
+   */
+  const [resolving, setResolving] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatIdRef = useRef<string | null>(null);
   chatIdRef.current = chatId;
@@ -135,11 +145,14 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
     setChatId(null);
     chatIdRef.current = null;
 
+    // A stored id is a claim, not a fact — the daemon reaps idle chats and enforces a pool cap,
+    // so it may have reclaimed this one underneath us. Ask before trusting it. With nothing
+    // stored, this is first-run: NO probe, NO roster fetch, NO warming — zero requests (§2.4).
+    // Read SYNCHRONOUSLY, and park the opt-ins while the probe runs (see `resolving`).
+    const stored = readStoredChatId(repoId);
+    setResolving(stored !== null);
+
     void (async () => {
-      // A stored id is a claim, not a fact — the daemon reaps idle chats and enforces a pool cap,
-      // so it may have reclaimed this one underneath us. Ask before trusting it. With nothing
-      // stored, this is first-run: NO probe, NO roster fetch, NO warming — zero requests (§2.4).
-      const stored = readStoredChatId(repoId);
       if (stored === null) return;
       // Three distinct answers, and collapsing them is how the leak comes back. `chat_seats`
       // returns an empty list (a 200, not an error) for a chat the daemon no longer holds, so
@@ -159,6 +172,7 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
           `Could not reach the daemon to check the previous chat (${probe.error}). Keeping it — ` +
             `reload to retry, or Close to disconnect the agents.`,
         );
+        setResolving(false);
         return;
       }
       if (probe.seats.length > 0) {
@@ -168,11 +182,15 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
         // starts with an empty log. The SESSIONS carry the conversation memory, which is the
         // expensive part; re-minting would have thrown that away as well as leaking it.
         setSeats(Object.fromEntries(probe.seats.map((k) => [k, 'ready' as SeatState])));
+        setResolving(false);
         return;
       }
       // Reclaimed → back to the calm first-run state, not a re-mint: warming is the
       // user's call now, and the next opt-in mints fresh.
       clearStoredChatId(repoId);
+      setResolving(false);
+      // (On the cancelled path `resolving` is deliberately left alone: the next effect
+      // run has already set its own value for the new repo.)
     })();
 
     return () => {
@@ -308,7 +326,9 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
 
   async function send(): Promise<void> {
     const text = input.trim();
-    if (text === '' || ended || arming) return;
+    // `resolving` waits out the rejoin probe: until it answers, "no chat id" does NOT
+    // mean first-run, and treating it as one would mint over the stored id (FINDING-027).
+    if (text === '' || ended || arming || resolving) return;
     const firstSend = chatIdRef.current === null;
     let warm = Object.entries(seats)
       .filter(([, st]) => st === 'ready')
@@ -379,7 +399,10 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
   // The ONE disclosure (§2.4): shown until the roster is warmed in (0 seats =
   // first-run, 1 seat = the single default agent the first send warmed).
   const showAddAgents = !ended && Object.keys(seats).length <= 1;
-  const firstRun = messages.length === 0 && Object.keys(seats).length === 0 && openError === null;
+  // Not first-run while the rejoin probe is unresolved — teaching "nothing here yet"
+  // over a chat that may be about to pop back in would be a lie held for milliseconds.
+  const firstRun =
+    messages.length === 0 && Object.keys(seats).length === 0 && openError === null && !resolving;
 
   return (
     <div className="flex flex-col h-full" style={{ color: '#e6edf3' }}>
@@ -481,7 +504,8 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
             onClick={() => void send()}
             // Before any chat exists, typing is how the first agent warms — so text alone
             // enables Send. Once a chat exists, sending needs a ready seat, as before.
-            disabled={input.trim() === '' || arming || (chatId !== null && !anyReady)}
+            // (`resolving`: the stored chat is still being checked — not first-run yet.)
+            disabled={input.trim() === '' || arming || resolving || (chatId !== null && !anyReady)}
             className="px-4 rounded-xl text-sm font-mono font-semibold disabled:opacity-40"
             style={{ background: 'rgba(88,166,255,0.2)', color: '#79c0ff' }}
           >
@@ -492,7 +516,7 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
           <button
             type="button"
             data-testid="add-agents"
-            disabled={arming}
+            disabled={arming || resolving}
             title="Warm every agent on the roster into this chat — replies stream side by side"
             onClick={() => void armChat('all')}
             className="mt-2 text-[11px] font-mono px-2.5 py-1 rounded-lg disabled:opacity-40"
