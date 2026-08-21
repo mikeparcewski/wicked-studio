@@ -52,6 +52,12 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     5-frame burn drains (slice E's token-burn tile; default
                     False). Same real frame shape as usage_ws; drip-fed so
                     the cumulative fold has more than one arrival instant.
+  learn_delay_s   — how long after a successful theme.requested the learned
+                    tokens ripen into GET /d/<doc>/api/theme/learned
+                    (interactive#181; default 0.75 — long enough for the
+                    brand-learn rig to witness the 404→200 transition).
+  reset_learn     — POST {"reset_learn": true} clears all learned-theme
+                    readback state (back to the 404).
 
 A rig that never flips them gets the default W2 board.
 """
@@ -91,7 +97,11 @@ def iso(ms: int) -> str:
 state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False,
-         "repo": False, "metrics_ws": False}
+         "repo": False, "metrics_ws": False,
+         # theme-learn readback (interactive#181): how long after a successful
+         # theme.requested the learned tokens become readable (the 404→200
+         # ripening the studio poll rides). reset_learn clears learned state.
+         "learn_delay_s": 0.75}
 state_lock = threading.Lock()
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
@@ -440,6 +450,32 @@ PRIVATE_HOST = re.compile(
     r"^(localhost$|127\.|0\.0\.0\.0$|10\.|192\.168\."
     r"|172\.(1[6-9]|2[0-9]|3[01])\.|169\.254\.|::1$|fe80:|fd)")
 
+# ── The learned-theme READBACK (interactive#181) ───────────────────────────────
+#
+# The real bridge serves GET /d/<doc>/api/theme/learned: 404 {"error":"no
+# learned theme"} until a learn lands, then 200 {document_id, learned_at,
+# tokens} with tokens = the doc's learned.theme.json VERBATIM. This fixture
+# materializes the same ripening: a successful theme.requested records the
+# learned tokens for (pid, doc) with a small delay (`learn_delay_s`, default
+# 0.75s — enough for the rig to witness the 404→200 transition the studio poll
+# rides); the SSRF-refused path records NOTHING, exactly as the real
+# materializer leaves no learned file behind a refusal.
+#
+# The token object is the bridge's own theme vocabulary — nested colors/fonts,
+# partials legal. The deep-navy #0a2a5e primary forces the studio mapper's two
+# disclosed adjustments (lightness-clamp + contrast-floor), same as the old
+# slice-8 fixture brand did.
+LEARNED_TOKENS = {
+    "name": "acme-brand",
+    "colors": {"background": "#f8fafc", "surface": "#ffffff", "primary": "#0a2a5e",
+               "secondary": "#0e7490", "accent": "#0a2a5e", "text_primary": "#1e293b"},
+    "fonts": {"heading": "Georgia", "body": "Georgia", "mono": "Menlo"},
+}
+
+learned_lock = threading.Lock()
+# (pid, doc) -> ready_at_ms. Readable (200) once NOW >= ready_at_ms.
+learned_themes: dict = {}
+
 
 def ssrf_reject_reason(url: str) -> str | None:
     """The bridge-side guard (DES-MERGE-001 §4.6): why this URL is refused, or None."""
@@ -747,6 +783,21 @@ class W2Handler(SimpleHTTPRequestHandler):
         if m:
             self._json(404, {"error": f"no such route on the bridge: {path}"})
             return True
+        # The REAL learned-theme readback (interactive#181): 404 with the route's
+        # OWN JSON body until the doc's learn has ripened, then the tokens
+        # verbatim — exactly the shapes the contract check pins on the bridge.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/theme/learned$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            with learned_lock:
+                ready_at = learned_themes.get((pid, doc))
+            now = int(time.time() * 1000)
+            if ready_at is None or now < ready_at:
+                self._json(404, {"error": "no learned theme"})
+            else:
+                self._json(200, {"document_id": doc, "learned_at": iso(ready_at),
+                                 "tokens": LEARNED_TOKENS})
+            return True
         # /api/v1/projects/<pid>/interactive/d/<doc>/api/versions — the manifest.
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/versions$", path)
         if m:
@@ -878,6 +929,14 @@ class W2Handler(SimpleHTTPRequestHandler):
                         **({"url": url} if url else {"path": file_path}),
                         "render_path": file_path or f"/docs/{doc}/theme/learned_1.pdf",
                         "format": "pdf"})
+                    # …and the tokens ripen into the READBACK route (#181) after
+                    # learn_delay_s — the 404→200 transition the studio poll rides.
+                    # The refused branch above records nothing, exactly as the real
+                    # materializer leaves no learned.theme.json behind a refusal.
+                    with state_lock:
+                        delay_ms = int(float(state["learn_delay_s"]) * 1000)
+                    with learned_lock:
+                        learned_themes[(pid, doc)] = int(time.time() * 1000) + delay_ms
                 self._json(200, {"ok": True, "event_id": "evt-fixture", "correlation_id": "c-fixture"})
                 return True
             if body.get("event_type") == "wicked.interactive.chat.posted" and doc:
@@ -908,6 +967,11 @@ class W2Handler(SimpleHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if path == "/__fixture":
+            # `reset_learn` clears the learned-theme readback state between page
+            # loads (the brand-learn rig re-runs the flow from a clean 404).
+            if body.get("reset_learn"):
+                with learned_lock:
+                    learned_themes.clear()
             with state_lock:
                 # `appearance` rides the same control channel but lands in the
                 # settings store: a dict replaces studio.appearance wholesale,
