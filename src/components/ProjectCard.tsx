@@ -64,7 +64,9 @@ const S = {
   accent: '#ffda19',
 };
 
-const DOT: Record<Attention, string> = {
+/** Attention → dot colour — shared with the rail (slice 3), so the same signal
+ *  reads as the same colour on the board card and the sidebar's project list. */
+export const ATTENTION_DOT: Record<Attention, string> = {
   gate:    '#ffda19',
   failing: '#f85149',
   running: '#79c0ff',
@@ -274,7 +276,7 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
     <span
       data-testid="project-status-dot"
       aria-hidden
-      style={{ width: '8px', height: '8px', borderRadius: '50%', background: DOT[attention], flexShrink: 0 }}
+      style={{ width: '8px', height: '8px', borderRadius: '50%', background: ATTENTION_DOT[attention], flexShrink: 0 }}
     />
   );
   const name = <a {...link(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>;
@@ -339,7 +341,7 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
             data-kind={signal.kind}
             style={{
               marginLeft: 'auto', flexShrink: 0, fontSize: '10px', fontWeight: 700,
-              letterSpacing: '0.06em', textTransform: 'uppercase', color: DOT[attention],
+              letterSpacing: '0.06em', textTransform: 'uppercase', color: ATTENTION_DOT[attention],
               border: `1px solid ${S.border}`, borderRadius: '999px', padding: '1px 8px',
             }}
           >

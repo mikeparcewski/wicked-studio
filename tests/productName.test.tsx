@@ -13,6 +13,7 @@ vi.mock('../src/api/client.js', () => ({
   api: {
     getHealth: () => Promise.resolve({ ok: true, version: '0.2.0' }),
     listRepos: () => Promise.resolve({ repos: [] }),
+    listProjects: () => Promise.resolve({ projects: [] }),
   },
 }));
 
@@ -20,9 +21,7 @@ const { LeftSidebar } = await import('../src/components/LeftSidebar.js');
 
 describe('visible product name', () => {
   it('the sidebar wordmark reads wicked-studio', async () => {
-    render(
-      <LeftSidebar runs={[]} selectedRunId={null} onSelectRun={() => {}} navigate={() => {}} />,
-    );
+    render(<LeftSidebar runs={[]} navigate={() => {}} />);
 
     // The wordmark is the home button next to the logo. `findByRole` also settles the
     // health/repos fetches the sidebar kicks off on mount. Matched exactly, so the old

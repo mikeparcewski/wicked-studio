@@ -426,12 +426,7 @@ export function App(): React.ReactElement {
 
   return (
     <div className="flex h-screen overflow-hidden bg-wk-canvas">
-      <LeftSidebar
-        runs={runs}
-        selectedRunId={runId}
-        onSelectRun={selectRun}
-        navigate={navigate}
-      />
+      <LeftSidebar runs={runs} navigate={navigate} />
 
       <div className="flex flex-1 overflow-hidden">
         {renderCenter()}
