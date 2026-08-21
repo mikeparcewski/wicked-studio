@@ -124,6 +124,10 @@ with sync_playwright() as p:
     page = ctx.new_page()
     page.on("console", lambda m: console_errors.append(m.text) if m.type == "error" else None)
     net = tap(page)
+    # EVERY request URL, method-agnostic — the SSRF assertion below needs to see a GET
+    # to the target too, which the POST-only tap would miss.
+    all_request_urls: list[str] = []
+    page.on("request", lambda r: all_request_urls.append(r.url))
 
     # ── Scene 0: the doc-less mode — empty state points at the thread (§2.6 rule 5) ─
     page.goto(DOC_URL, wait_until="domcontentloaded")
@@ -308,7 +312,9 @@ with sync_playwright() as p:
     wake_strip(page)  # the panel rides the strip — keep it awake for the submit
     page.locator('[data-testid="themes-input"]').fill("https://acme.example/brand")
     page.locator('[data-testid="themes-submit"]').click()
-    # The submission is a MESSAGE (§2.3): the ask lands in the thread verbatim.
+    # A queued learn closes the popover (the ack resolved), and the submission is a
+    # MESSAGE (§2.3): the ask lands in the thread verbatim.
+    page.locator('[data-testid="themes-panel"]').wait_for(state="detached", timeout=30000)
     page.locator('[data-testid="doc-message"]').last.wait_for(timeout=30000)
     learned = page.evaluate(
         """() => ({
@@ -318,8 +324,27 @@ with sync_playwright() as p:
              chipCount: document.querySelectorAll('[data-chip-kind="theme"]').length,
            })"""
     )
+    # The ASYNC guard (issue #65): a link-local source is refused by the SERVICE, in
+    # its own status line, arriving over the bus — never an HTTP 4xx on the ack. The
+    # fixture emits exactly the frame materializeThemeRequested writes.
+    wake_strip(page)
+    page.locator('[data-testid="themes-open"]').click()
+    page.locator('[data-testid="themes-input"]').fill("http://169.254.169.254/")
+    page.locator('[data-testid="themes-submit"]').click()
+    page.locator('[data-testid="doc-narration"]', has_text="Couldn't grab that URL") \
+        .first.wait_for(timeout=30000)
+    refusal = page.evaluate(
+        """() => {
+             const lines = Array.from(document.querySelectorAll('[data-testid="doc-narration"]'))
+               .map(n => n.textContent || '');
+             return {
+               serviceRefusal: lines.find(t => t.includes("Couldn't grab that URL")) || null,
+             };
+           }"""
+    )
     theme_events = [b for (_m, q, b) in net if q.endswith("/api/events")
                     and (b or {}).get("event_type") == "wicked.interactive.theme.requested"]
+    ssrf_outbound = [u for u in all_request_urls if "169.254.169.254" in u]
     report["steps"]["slice6_themes"] = {
         "ok": all([
             themes["explainMatches"],
@@ -329,12 +354,19 @@ with sync_playwright() as p:
             learned["askInThread"],
             learned["panelClosed"],
             learned["chipCount"] == 0,        # no pick, so no chip — ever
-            len(theme_events) == 1,
+            len(theme_events) == 2,           # the good learn + the refused one
             (theme_events[0] or {}).get("payload", {}).get("document_id") not in (None, ""),
             (theme_events[0] or {}).get("payload", {}).get("url") == "https://acme.example/brand",
+            (theme_events[1] or {}).get("payload", {}).get("url") == "http://169.254.169.254/",
+            # The refusal is the service's own sentence, and the SPA never touched
+            # the target — the guard lives (and refuses) server-side.
+            refusal["serviceRefusal"] is not None,
+            "link-local" in (refusal["serviceRefusal"] or ""),
+            ssrf_outbound == [],
         ]),
-        **themes, **learned,
+        **themes, **learned, **refusal,
         "theme_event_bodies": theme_events,
+        "spa_requests_to_the_target": ssrf_outbound,
     }
 
     # ── The wire, as the tap saw it: create carried the anchor; fork carried the
