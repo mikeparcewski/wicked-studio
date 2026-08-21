@@ -102,6 +102,22 @@ not the nearest hex; §2.6 status/accent separation):
   (Terminal/AgentTerminal) and cytoscape stylesheets (CytoGraph) resolve tokens
   through the cascade at mount/build time via the new
   `src/styles/resolveToken.ts` — customization (§3.3) still reaches them.
+  **Found-and-fixed in adversarial verification:** the first cut read
+  `getPropertyValue(name)` off `:root`, which returns an unregistered custom
+  property's RAW token stream — `hsl(258 72% 62%)` (space-separated) and even
+  `hsl(258 72% calc(62% - 18%))` (calc unevaluated). Cytoscape's color regexes
+  require comma-separated channels and no calc: verified in a real Chromium
+  against the bundled cytoscape, it logged "style property … is invalid" and
+  fell back to its gray/black defaults for every hsl-family token — the graph's
+  categorical colors, selected border, and highlight edges were silently lost
+  (xterm was unaffected: its canvas-parser fallback handles both forms; SVG
+  presentation attributes take `var()` directly, so ForceGraph was fine).
+  `resolveToken` now applies `var(--token)` to a probe element's `color` and
+  reads the COMPUTED color — canonical `rgb()`/`rgba()`, which every sink
+  parses (re-verified: the same in-browser cytoscape run accepts every token
+  with zero warnings). jsdom's passthrough (`"var(--x)"`) is guarded, keeping
+  the documented `''`-in-unit-tests contract; all gates and all eleven rigs
+  re-ran green on a rebuilt dist after the fix.
 
 **UXFIX preserved:** this slice is color replacement only — all ten prior rigs
 (every UXFIX behavior contract among them) pass unchanged on this build; the
