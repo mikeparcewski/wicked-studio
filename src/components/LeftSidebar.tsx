@@ -73,12 +73,14 @@ function IconSearch(): React.ReactElement {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-/** One creation verb: a faint "+" (create), the spine glyph, the mode's own word.
- *  `hint` (the MODE_SPECS sublabel) teaches what the verb produces, on hover. */
+/** One creation verb: a faint "+" (create, unless the glyph already is one),
+ *  the spine glyph, the mode's own word. `hint` (the MODE_SPECS sublabel)
+ *  teaches what the verb produces, on hover. */
 function ActionLink({
   glyph,
   label,
   hint,
+  plus,
   testId,
   onClick,
   collapsed,
@@ -86,6 +88,7 @@ function ActionLink({
   glyph: React.ReactNode;
   label: string;
   hint?: string;
+  plus?: boolean;
   testId?: string;
   onClick: () => void;
   collapsed: boolean;
@@ -102,7 +105,7 @@ function ActionLink({
       }`}
       style={{ color: S.accent, background: 'transparent' }}
     >
-      {!collapsed && <span aria-hidden style={{ color: S.faint, fontWeight: 400 }}>+</span>}
+      {plus === true && !collapsed && <span aria-hidden style={{ color: S.faint, fontWeight: 400 }}>+</span>}
       <span aria-hidden>{glyph}</span>
       {!collapsed && <span>{label}</span>}
     </button>
@@ -340,6 +343,7 @@ export function LeftSidebar({ runs, navigate }: Props): React.ReactElement {
 
   return (
     <div
+      data-testid="left-rail"
       className={`flex flex-col shrink-0 transition-all duration-200 ${isExpanded ? 'w-[280px]' : 'w-14'}`}
       style={{ background: S.bg, borderRight: `1px solid ${S.border}` }}
       onMouseEnter={() => { if (collapsed) setHovered(true); }}
@@ -390,8 +394,8 @@ export function LeftSidebar({ runs, navigate }: Props): React.ReactElement {
         data-testid="rail-actions"
         className={`flex ${!isExpanded ? 'flex-col px-2 items-center gap-2 mt-1' : 'flex-wrap items-center px-4 pt-1 pb-1 gap-x-3 gap-y-0.5'}`}
       >
-        <ActionLink glyph={MODE_SPECS.build.glyph} label="Build" hint={MODE_SPECS.build.sublabel} testId="new-run" onClick={() => navigate('/runs/new')} collapsed={!isExpanded} />
-        <ActionLink glyph={MODE_SPECS.chat.glyph} label="Chat" hint={MODE_SPECS.chat.sublabel} onClick={() => navigate('/chat/new')} collapsed={!isExpanded} />
+        <ActionLink glyph={MODE_SPECS.build.glyph} label="Build" hint={MODE_SPECS.build.sublabel} plus testId="new-run" onClick={() => navigate('/runs/new')} collapsed={!isExpanded} />
+        <ActionLink glyph={MODE_SPECS.chat.glyph} label="Chat" hint={MODE_SPECS.chat.sublabel} plus onClick={() => navigate('/chat/new')} collapsed={!isExpanded} />
         <ActionLink glyph={<IconPlus />} label="Repository" onClick={() => navigate('/repos/new')} collapsed={!isExpanded} />
       </div>
 

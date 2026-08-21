@@ -187,10 +187,15 @@ with sync_playwright() as p:
                      '[data-testid="project-card"][data-project-id="legacy-spike"]');
                    return !!c && c.dataset.band === 'quiet' && c.dataset.signal === 'failing'
                        && Number(c.dataset.score) < 1; }""")
-    # …and upload-endpoint precedes it in document order (EC4, read from the DOM).
+    # …and upload-endpoint's CARD precedes legacy-spike's in document order (EC4,
+    # read from the DOM). Card-scoped: since slice 3 the RAIL also carries
+    # data-project-id rows (the same axis as the board), so the bare attribute
+    # is ambiguous — the assertion's subject was always the board card.
     precedes_ok = page.evaluate(
-        """() => { const up = document.querySelector('[data-project-id="upload-endpoint"]');
-                   const legacy = document.querySelector('[data-project-id="legacy-spike"]');
+        """() => { const up = document.querySelector(
+                     '[data-testid="project-card"][data-project-id="upload-endpoint"]');
+                   const legacy = document.querySelector(
+                     '[data-testid="project-card"][data-project-id="legacy-spike"]');
                    return !!up && !!legacy &&
                      !!(up.compareDocumentPosition(legacy) & Node.DOCUMENT_POSITION_FOLLOWING); }""")
 
@@ -206,7 +211,8 @@ with sync_playwright() as p:
                    return ids.includes('q3-review-deck')
                        && ids.indexOf('q3-review-deck') < ids.indexOf('auth-refactor'); }""")
     ancient_gate_score = page.evaluate(
-        """() => document.querySelector('[data-project-id="q3-review-deck"]')?.dataset.score ?? null""")
+        """() => document.querySelector(
+             '[data-testid="project-card"][data-project-id="q3-review-deck"]')?.dataset.score ?? null""")
 
     # ── Assertion 5's second half: no orphan ⇒ no shelf in the DOM at all ──────
     set_fixture(orphan=False)

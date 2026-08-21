@@ -142,9 +142,12 @@ with sync_playwright() as p:
         """() => ['auth-refactor', 'q3-review-deck'].every(id => {
                const c = document.querySelector(`[data-testid="project-card"][data-project-id="${id}"]`);
                return !!c && c.querySelectorAll('[data-testid="doc-tile"]').length === 0; })""")
-    # The gate chip is live on the q3 card (§2.1.5 weight — it is why the card leads).
+    # The gate chip is live on the q3 card (§2.1.5 weight — it is why the card
+    # leads). Card-scoped: since slice 3 the RAIL also carries data-project-id
+    # rows (the same axis as the board), so the bare attribute is ambiguous.
     gate_chip_ok = page.evaluate(
-        """() => { const c = document.querySelector('[data-project-id="q3-review-deck"]');
+        """() => { const c = document.querySelector(
+                     '[data-testid="project-card"][data-project-id="q3-review-deck"]');
                    return !!c && !!c.querySelector('[data-testid="gate-approve-r-q3"]')
                        && !!c.querySelector('[data-testid="gate-reject-r-q3"]'); }""")
     # The header pill names the signal in user words (V3: 'working', not 'distributing').
