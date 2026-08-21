@@ -29,8 +29,12 @@ tests ROUTE EXISTENCE, not recording success (§9 names this out of scope).
 The theme wires are FATAL steps since issue #65 (they were slice F's advisory
 finding): the corrected client speaks `wicked.interactive.theme.requested` over
 POST /api/events, and the invented `GET /api/themes` / `POST /api/theme/learn`
-must stay 404. The remaining known-invented wire OUTSIDE scope (sources attach:
-slice 19) is still probed as ADVISORY — reported, not fatal.
+must stay 404. The learned-theme READBACK (interactive#181) is FATAL too:
+`GET /d/:docId/api/theme/learned` must answer its own JSON 404 on a fresh doc,
+the tokens VERBATIM after a written learn, and the JSON 404 again on a corrupt
+file — the wire studio's restored brand-learn flow polls. The remaining
+known-invented wire OUTSIDE scope (sources attach: slice 19) is still probed as
+ADVISORY — reported, not fatal.
 
 Env knobs:
   WICKED_INTERACTIVE_DIR  the bridge checkout (default: ../wicked-interactive
@@ -98,12 +102,14 @@ def http(method: str, url: str, body: dict | None = None) -> tuple[int, str, str
 # A client that cannot build the URL cannot regress onto it.
 import re  # noqa: E402 (grouped with its one use, harness style)
 
-# Issue #65 adds the invented theme spellings: the path literals /api/themes and
-# /api/theme/learn, and the wrappers that built them. (`learnTheme\b` does not match
-# `learnThemeFromThread` — that helper now speaks the corrected event wire.)
+# Issue #65 adds the invented theme spellings: the path literal /api/themes and the
+# wrappers that built them. (`learnTheme\b` does not match `learnThemeFromThread` —
+# that helper now speaks the corrected event wire; `api/theme/learn\b` does not match
+# `api/theme/learned` — the REAL interactive#181 readback route getLearnedTheme
+# builds, whose existence is asserted as a FATAL positive step below.)
 BANNED_SPELLINGS = re.compile(
     r"getDemoSpec|getLatestRecording|api/demo/(spec|recordings|record)\b"
-    r"|api/themes|api/theme/learn|listThemes|getTheme\b|learnTheme\b")
+    r"|api/themes|api/theme/learn\b|listThemes|getTheme\b|learnTheme\b")
 spelled: list[str] = []
 for f in sorted((REPO / "src").rglob("*")):
     if f.suffix not in (".ts", ".tsx"):
@@ -259,6 +265,72 @@ try:
         "ok": gif_ok and rec_ok,
         "gif_export": {"status": gif_status, "body": gif_text[:200]},
         "recording_file_missing": {"status": rec_status, "body": rec_text[:200]},
+    }
+
+    # ── 6. The learned-theme READBACK exists (interactive#181) — FATAL ──────────
+    # `getLearnedTheme` builds GET /d/:docId/api/theme/learned. Four probes:
+    #   a. FRESH doc → the route's OWN 404 {"error":"no learned theme"} — the JSON
+    #      body IS the route-exists proof (an express-default 404 is HTML
+    #      "Cannot GET …", which is what an absent route would answer).
+    #   b. a WRITTEN learn: drop learned.theme.json into the doc workspace (the
+    #      exact file the assist agent writes) → 200 {document_id, learned_at,
+    #      tokens} with the tokens VERBATIM.
+    #   c. CORRUPT file → back to the route's own 404 (the apply seam degrades
+    #      past it identically — resolveLearnedTheme returns null).
+    #   d. UNKNOWN doc → status 404 asserted, and STATUS ONLY (the body there is
+    #      express's, not the route's — never pin it).
+    def learned_get(doc: str) -> tuple[int, str, str]:
+        return http("GET", f"{base}/d/{doc}/api/theme/learned")
+
+    fresh_status, fresh_text, _ = learned_get(DEMO)
+    try:
+        fresh_body = json.loads(fresh_text)
+    except ValueError:
+        fresh_body = None
+    fresh_ok = (fresh_status == 404 and isinstance(fresh_body, dict)
+                and fresh_body.get("error") == "no learned theme")
+
+    theme_dir = tmp / "docs" / DEMO / "theme"
+    theme_dir.mkdir(parents=True, exist_ok=True)
+    LEARNED_TOKENS = {
+        "name": "contract-check-brand",
+        "colors": {"background": "#f8fafc", "surface": "#ffffff", "primary": "#0a2a5e",
+                   "secondary": "#0e7490", "accent": "#0a2a5e", "text_primary": "#1e293b"},
+        "fonts": {"heading": "Georgia", "body": "Georgia", "mono": "Menlo"},
+    }
+    (theme_dir / "learned.theme.json").write_text(json.dumps(LEARNED_TOKENS), encoding="utf-8")
+    learned_status, learned_text, learned_ctype = learned_get(DEMO)
+    try:
+        learned_body = json.loads(learned_text)
+    except ValueError:
+        learned_body = {}
+    learned_ok = (learned_status == 200
+                  and learned_body.get("document_id") == DEMO
+                  and learned_body.get("tokens") == LEARNED_TOKENS  # the file VERBATIM
+                  and ("learned_at" in learned_body))
+
+    (theme_dir / "learned.theme.json").write_text("{not json", encoding="utf-8")
+    corrupt_status, corrupt_text, _ = learned_get(DEMO)
+    try:
+        corrupt_body = json.loads(corrupt_text)
+    except ValueError:
+        corrupt_body = None
+    corrupt_ok = (corrupt_status == 404 and isinstance(corrupt_body, dict)
+                  and corrupt_body.get("error") == "no learned theme")
+
+    unknown_status, _, _ = learned_get("absent-doc-that-never-existed")
+    unknown_ok = unknown_status == 404  # status ONLY — the body is express's, not ours
+
+    report["steps"]["learned_theme_readback"] = {
+        "ok": fresh_ok and learned_ok and corrupt_ok and unknown_ok,
+        "fresh_doc_404_with_route_body": {"ok": fresh_ok, "status": fresh_status,
+                                          "body": fresh_text[:200]},
+        "written_learn_200_verbatim": {"ok": learned_ok, "status": learned_status,
+                                       "content_type": learned_ctype,
+                                       **({} if learned_ok else {"body": learned_text[:400]})},
+        "corrupt_file_404": {"ok": corrupt_ok, "status": corrupt_status,
+                             "body": corrupt_text[:200]},
+        "unknown_doc_404_status_only": {"ok": unknown_ok, "status": unknown_status},
     }
 
     # ── Advisory: invented wires OUTSIDE this scope (on the record, not fatal) ──
