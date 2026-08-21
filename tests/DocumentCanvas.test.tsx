@@ -315,14 +315,14 @@ describe('DocumentCanvas — the picker (§6.3: no :docId in the route)', () => 
 
 // ── DES-UXFIX-001 §2.6 (slice 6): the three-pane spine ───────────────────────
 
-describe('DocumentCanvas — the strip is the spine spanning canvas and thread (§2.6)', () => {
+describe('DocumentCanvas — canvas-first: drawer + floating strip (DES-FEEDBACK-001 §7.3)', () => {
   const thread = <aside data-testid="fake-thread">the thread pane</aside>;
 
   beforeEach(() => {
     useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
   });
 
-  it('AC: the thread rides IN the top row and the strip renders BELOW both — no dead middle column', async () => {
+  it('AC: with a doc open the thread drawer is CLOSED by default and the strip lives INSIDE the canvas container', async () => {
     stubFetch({ '/api/versions': { body: MANIFEST } });
     render(
       <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
@@ -331,16 +331,39 @@ describe('DocumentCanvas — the strip is the spine spanning canvas and thread (
     );
 
     await screen.findByTestId('doc-canvas');
-    const row = screen.getByTestId('fake-thread').parentElement!;
+    // §7.3: the canvas owns the viewport — no thread column on first visit.
+    expect(screen.queryByTestId('thread-drawer')).toBeNull();
+    expect(screen.queryByTestId('fake-thread')).toBeNull();
+    // The strip floats over the canvas's bottom edge, inside its container.
+    const container = screen.getByTestId('document-canvas');
     const strip = screen.getByTestId('version-strip');
-    // Canvas and thread are visual siblings in one row; the strip is that row's OWN
-    // next sibling — beneath canvas AND thread, the drawn doc↔canvas↔thread spine.
-    expect(row.contains(screen.getByTestId('doc-canvas'))).toBe(true);
-    expect(row.contains(strip)).toBe(false);
-    expect(row.nextElementSibling).toBe(strip);
+    expect(container.contains(strip)).toBe(true);
+    expect(container.contains(screen.getByTestId('doc-canvas'))).toBe(true);
   });
 
-  it('the spine says what selecting does, and carries [Themes] [Export] (§2.6 rules 1+4)', async () => {
+  it('AC: the strip toggle opens the drawer (canvas reflows to a flex sibling) and closes it again', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(
+      <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
+        {thread}
+      </DocumentCanvas>,
+    );
+    await screen.findByTestId('doc-canvas');
+
+    await userEvent.click(screen.getByTestId('thread-toggle'));
+    const drawer = screen.getByTestId('thread-drawer');
+    expect(drawer).toBeInTheDocument();
+    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
+    // A flex SIBLING of the canvas container — reflow, not overlay (§7.3).
+    const container = screen.getByTestId('document-canvas');
+    expect(drawer.parentElement).toBe(container.parentElement);
+    expect(drawer.style.width).toBe('min(440px, 40vw)');
+
+    await userEvent.click(screen.getByTestId('thread-close'));
+    expect(screen.queryByTestId('thread-drawer')).toBeNull();
+  });
+
+  it('the strip says what selecting does, and carries [Themes] [Export] + the thread toggle', async () => {
     stubFetch({ '/api/versions': { body: MANIFEST } });
     render(<DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}} />);
 
@@ -350,9 +373,10 @@ describe('DocumentCanvas — the strip is the spine spanning canvas and thread (
       .toHaveTextContent(/selecting a version scrolls the thread/i);
     expect(strip.querySelector('[data-testid="themes-open"]')).toHaveTextContent('Themes');
     expect(strip.querySelector('[data-testid="export-menu"]')).not.toBeNull();
+    expect(strip.querySelector('[data-testid="thread-toggle"]')).not.toBeNull();
   });
 
-  it('the thread stays up while the canvas loads AND when it fails (§1.2: always present)', async () => {
+  it('the conversation stays REACHABLE while loading and on failure: the floating toggle opens it (§1.2)', async () => {
     stubFetch({ '/api/versions': { status: 500, body: { error: 'versions.json is corrupt' } } });
     render(
       <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
@@ -360,13 +384,13 @@ describe('DocumentCanvas — the strip is the spine spanning canvas and thread (
       </DocumentCanvas>,
     );
 
-    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();     // while loading
     await screen.findByTestId('doc-canvas-error');
-    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();     // on failure
-    expect(screen.queryByTestId('version-strip')).toBeNull();          // no manifest, no spine
+    expect(screen.queryByTestId('version-strip')).toBeNull();          // no manifest, no strip
+    await userEvent.click(screen.getByTestId('thread-toggle'));        // …but the thread is one click away
+    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
   });
 
-  it('the doc-less picker keeps the thread beside it, with no spine row', async () => {
+  it('the doc-less picker keeps the thread OPEN beside it (its empty state points there), with no strip', async () => {
     stubFetch({ '/api/docs': { body: [] } });
     render(
       <DocumentCanvas projectId={PROJECT} docId={null} navigate={() => {}}>
@@ -375,8 +399,32 @@ describe('DocumentCanvas — the strip is the spine spanning canvas and thread (
     );
 
     await screen.findByTestId('doc-picker-empty');
+    expect(screen.getByTestId('thread-drawer')).toBeInTheDocument();
     expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
     expect(screen.queryByTestId('version-strip')).toBeNull();
+  });
+
+  it('§7.3 auto-hide: the strip retires after 3s idle and the bottom sensor wakes it', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(<DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}} />);
+    const strip = await screen.findByTestId('version-strip');
+    expect(strip).toHaveAttribute('data-hidden', 'false');
+
+    vi.useFakeTimers();
+    try {
+      act(() => { strip.dispatchEvent(new MouseEvent('mousemove', { bubbles: true })); });
+      act(() => { vi.advanceTimersByTime(3100); });
+      expect(strip).toHaveAttribute('data-hidden', 'true');
+      expect(strip.style.opacity).toBe('0');
+      expect(strip.style.pointerEvents).toBe('none');
+
+      const sensor = screen.getByTestId('strip-sensor');
+      act(() => { sensor.dispatchEvent(new MouseEvent('mousemove', { bubbles: true })); });
+      expect(strip).toHaveAttribute('data-hidden', 'false');
+      expect(strip.style.opacity).toBe('1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('AC (§2.6 rule 3): a LANDED version re-reads the manifest — the strip advances, no reload', async () => {

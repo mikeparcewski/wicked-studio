@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
@@ -31,6 +31,10 @@ import { ATTENTION_DOT } from './ProjectCard.js';
 interface Props {
   runs: SessionView[];
   navigate: (path: string) => void;
+  /** DES-FEEDBACK-001 §7.3: Document/Video are canvas-first, so entering them
+   *  auto-collapses the rail to its icon state; leaving restores what the user had.
+   *  Hover-peek still works, and the expand control stays live — auto, not locked. */
+  immersive?: boolean;
 }
 
 // The rail is chrome (§5.1's token table: `--surface-rail → rail, chrome`), so
@@ -203,9 +207,22 @@ function ProjectRow({ item, onOpen }: { item: BoardProject; onOpen: () => void }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function LeftSidebar({ runs, navigate }: Props): React.ReactElement {
+export function LeftSidebar({ runs, navigate, immersive = false }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
+  // §7.3 auto-collapse: entering an immersive mode stashes the user's state and
+  // collapses; leaving restores it. `null` = nothing stashed. The user can still
+  // re-expand mid-mode — this fires only on the transition, never per render.
+  const stashed = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (immersive) {
+      setCollapsed((prev) => { stashed.current = prev; return true; });
+    } else if (stashed.current !== null) {
+      const prev = stashed.current;
+      stashed.current = null;
+      setCollapsed(prev);
+    }
+  }, [immersive]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [repos, setRepos] = useState<RepoEntry[]>([]);

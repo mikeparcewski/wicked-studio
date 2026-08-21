@@ -12,12 +12,11 @@ import {
   BridgeUnavailableError,
   ServiceHintError,
   createDoc,
-  getDemoSpec,
-  getLatestRecording,
   getSources,
   getTheme,
   listDemos,
   getVersions,
+  interactiveDocUrl,
   interactiveUrl,
   listDocs,
   postEvent,
@@ -83,11 +82,10 @@ describe('interactive URL resolver', () => {
     ['getSources', { sources: [] },                    () => getSources(PROJECT, DOC)],
     ['postEvent',  { ok: true, event_id: 'e1', correlation_id: 'c1' },
                                                        () => postEvent(PROJECT, { event_type: 'wicked.interactive.chat.posted' })],
-    // Slice 13's demo surface — same mount, same rules: no second origin, no port.
+    // The demo surface (corrected wire, DES-FEEDBACK-001 §7.4) — same mount, same rules.
     ['listDemos',  [],                                 () => listDemos(PROJECT)],
-    ['getDemoSpec', { steps: [] },                     () => getDemoSpec(PROJECT, DEMO)],
-    ['getLatestRecording', { version: 1 },             () => getLatestRecording(PROJECT, DEMO)],
-    ['requestRecord', { queued: true },                () => requestRecord(PROJECT, DEMO)],
+    ['requestRecord', { ok: true, event_id: 'e1', correlation_id: 'c1' },
+                                                       () => requestRecord(PROJECT, DEMO)],
     // DES-VISION-001 §4.4's one new wrapper — the palette the brand mapper consumes.
     ['getTheme',   { name: 'acme' },                   () => getTheme(PROJECT, 'acme')],
   ];
@@ -331,33 +329,31 @@ describe('happy-path shapes', () => {
     expect(calls[0]!.url).toBe(`${apiBase()}/projects/${PROJECT}/interactive/api/docs`);
   });
 
-  it('getDemoSpec reads the spec under the demo\'s own /d/<id> mount', async () => {
-    const spec = {
-      steps: [{ index: 0, title: 'Open the storefront', timestamp: 0, thumbnail: '/d/x/demo/t0.png' }],
-      target_url: 'https://shop.example/',
-    };
-    const calls = stubFetch(spec);
-    await expect(getDemoSpec(PROJECT, DEMO)).resolves.toEqual(spec);
-    expect(calls[0]!.url).toBe(
-      `${apiBase()}/projects/${PROJECT}/interactive/d/${DEMO}/api/demo/spec`,
+  // DES-FEEDBACK-001 §7.2/§7.4: `getDemoSpec` and `getLatestRecording` are GONE —
+  // they spoke routes the bridge never served (the slice-13 fixture invented them).
+  // The storyboard is the demo's version HTML now, addressed by `interactiveDocUrl`,
+  // and the contract-check rig (e2e/interactive_wire_contract_test.py) pins the
+  // invented routes as 404s against the REAL bridge.
+
+  it('interactiveDocUrl builds the REAL storyboard route: /d/<id>/doc/<version>', () => {
+    expect(interactiveDocUrl(PROJECT, DEMO, 2)).toBe(
+      `${apiBase()}/projects/${PROJECT}/interactive/d/${DEMO}/doc/2`,
     );
   });
 
-  it('getLatestRecording carries the ffmpeg_absent shape through untouched (§4.5)', async () => {
-    // Best-effort post-processing: the version LANDED, only the conversion did not, and
-    // the hint is the service's own command — the client never rewrites it.
-    const rec = { version: 3, ffmpeg_absent: true, ffmpeg_hint: 'brew install ffmpeg' };
-    stubFetch(rec);
-    await expect(getLatestRecording(PROJECT, DEMO)).resolves.toEqual(rec);
-  });
-
-  it('requestRecord POSTs (no body fields — the spec is already the service\'s)', async () => {
-    const calls = stubFetch({ queued: true });
+  it('requestRecord speaks the CORRECTED wire: demo.requested over POST /api/events', async () => {
+    // The bridge has no /api/demo/record route; the real record trigger is the
+    // UI-emittable `wicked.interactive.demo.requested` bus command (§7.2/§7.4).
+    const calls = stubFetch({ ok: true, event_id: 'e1', correlation_id: 'c1' });
     await expect(requestRecord(PROJECT, DEMO)).resolves.toEqual({ queued: true });
     expect(calls[0]!.init?.method).toBe('POST');
     expect(calls[0]!.url).toBe(
-      `${apiBase()}/projects/${PROJECT}/interactive/d/${DEMO}/api/demo/record`,
+      `${apiBase()}/projects/${PROJECT}/interactive/api/events`,
     );
+    expect(calls[0]!.init?.body).toBe(JSON.stringify({
+      event_type: 'wicked.interactive.demo.requested',
+      payload: { document_id: DEMO },
+    }));
   });
 
   it('getTheme GETs /api/themes/:themeId and tolerates extra fields (DES-VISION-001 §4.4)', async () => {

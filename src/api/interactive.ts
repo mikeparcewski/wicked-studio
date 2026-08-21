@@ -183,6 +183,17 @@ export function interactiveUrl(projectId: string, bridgePath: string): string {
   return `${interactiveBase(projectId)}${bridgePath.startsWith('/') ? bridgePath : `/${bridgePath}`}`;
 }
 
+/**
+ * The one iframe src both mode surfaces use (DES-FEEDBACK-001 §7.4): the rendered
+ * version HTML at `GET /d/:docId/doc/:version` — a REAL bridge route (`server.js`
+ * `app.get("/doc/:version")` under the per-doc mount), on the app's own origin
+ * through crew's proxy. A demo's storyboard is a document version like any other,
+ * which is exactly why Video mode needs no route of its own.
+ */
+export function interactiveDocUrl(projectId: string, docId: string, version: number): string {
+  return `${docBase(projectId, docId)}/doc/${version}`;
+}
+
 /** Per-document mount (ADR-0015): state reads + artifact commands are prefixed. */
 function docBase(projectId: string, docId: string): string {
   return `${interactiveBase(projectId)}/d/${encodeURIComponent(docId)}`;
@@ -380,41 +391,6 @@ export function attachSource(projectId: string, docId: string, path: string): Pr
   return iFetch<SourceEntry>(`${docBase(projectId, docId)}/api/sources`, jsonPost({ path }));
 }
 
-// ── Demo types (§4.5, §6.4 slice 13) ────────────────────────────────────────
-
-/** One chapter of a demo spec — the agent authors the spec; the service executes it. */
-export interface DemoStep {
-  /** 0-based position within the spec. */
-  index: number;
-  title: string;
-  /** Seconds into the recording — used to seek the player when a chapter is clicked. */
-  timestamp: number;
-  /** Bridge-relative thumbnail URL. Not always present; absent for unrecorded steps. */
-  thumbnail?: string;
-}
-
-export interface DemoSpec {
-  steps: DemoStep[];
-  target_url?: string;
-}
-
-/**
- * The recording state for a demo at its head version.
- *
- * - `video_url` or `gif_url` present → the recording exists; use `interactiveUrl` to resolve.
- * - Neither present AND `ffmpeg_absent` false/absent → spec is ready but never recorded.
- * - `ffmpeg_absent` true → recording was attempted; ffmpeg was missing. `ffmpeg_hint` names
- *   the install command verbatim (§3.3 actionable: show it, never paraphrase it).
- */
-export interface DemoRecording {
-  version: number;
-  video_url?: string;
-  gif_url?: string;
-  poster_url?: string;
-  ffmpeg_absent?: boolean;
-  ffmpeg_hint?: string;
-}
-
 // ── Preflight (§5.6, §4.9, slice 17) ─────────────────────────────────────────
 
 /**
@@ -444,30 +420,23 @@ export function listDemos(projectId: string): Promise<DocSummary[]> {
   return listDocs(projectId).then((docs) => docs.filter((d) => d.kind === 'demo'));
 }
 
-/** `GET /d/:demoId/api/demo/spec` — the spec the agent authored (steps + target URL). */
-export function getDemoSpec(projectId: string, demoId: string): Promise<DemoSpec> {
-  return iFetch<DemoSpec>(`${docBase(projectId, demoId)}/api/demo/spec`);
-}
-
 /**
- * `GET /d/:demoId/api/demo/recordings` — the latest recording state.
- * Returns `{ ffmpeg_absent: true, ffmpeg_hint }` when ffmpeg is missing (§4.5):
- * a missing ffmpeg must not abort the version landing; the hint is shown verbatim.
- */
-export function getLatestRecording(projectId: string, demoId: string): Promise<DemoRecording> {
-  return iFetch<DemoRecording>(`${docBase(projectId, demoId)}/api/demo/recordings`);
-}
-
-/**
- * `POST /d/:demoId/api/demo/record` — queue a new recording run.
- * Slice 14 wires the thread integration; this wrapper is what slice 13 calls to make
- * the Record button actionable (§3.3: subject + action, never blank).
+ * Queue a new recording run — the CORRECTED wire (DES-FEEDBACK-001 §7.2/§7.4).
+ *
+ * Slice 13 invented `POST /d/:demoId/api/demo/record`; the bridge has no such route
+ * (verified against `wicked-interactive/src/service/server.js` — its demo surface is
+ * `POST /api/demo/gif`, `GET /api/demo/recording/:name`, `GET /api/demo/player/:v`).
+ * The real record trigger is the bus: `wicked.interactive.demo.requested` is
+ * UI-emittable (`events.js` ownership table) and a COMMAND the per-doc workspace
+ * materializes (`materializeDemo` runs the authored spec in a real browser). So the
+ * wrapper keeps its name and shape, and speaks `POST /api/events` underneath —
+ * the same top-level route every other UI-originated intent rides.
  */
 export function requestRecord(projectId: string, demoId: string): Promise<{ queued: boolean }> {
-  return iFetch<{ queued: boolean }>(
-    `${docBase(projectId, demoId)}/api/demo/record`,
-    jsonPost({}),
-  );
+  return postEvent(projectId, {
+    event_type: 'wicked.interactive.demo.requested',
+    payload: { document_id: demoId },
+  }).then(() => ({ queued: true }));
 }
 
 /**
