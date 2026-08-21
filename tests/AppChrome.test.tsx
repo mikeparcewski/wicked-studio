@@ -90,19 +90,20 @@ describe('AppChrome (DES-VISION-001 §3.1, §5.2)', () => {
     }
   });
 
-  it('opens the settings menu from the chrome gear', () => {
+  // DES-FEEDBACK-001 §1.2/§4.4 (slice A): the settings gear LEFT the chrome —
+  // its dropdown lives in the rail's SettingsRailSection now. The chrome keeps
+  // exactly the logo slot, the product name, and the connection dot.
+  it('carries NO settings gear — the dropdown moved into the rail (§4.4)', () => {
     render(<AppChrome collapsed={false} navigate={() => {}} />);
+    expect(screen.queryByTestId('chrome-settings')).toBeNull();
     expect(screen.queryByRole('menu')).toBeNull();
-    fireEvent.click(screen.getByTestId('chrome-settings'));
-    expect(screen.getByRole('menu')).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: 'System' })).toBeInTheDocument();
   });
 
-  it('collapsed: keeps the slot, the dot, and settings reachable — no product name', () => {
+  it('collapsed: keeps the slot and the dot — no product name, no gear', () => {
     render(<AppChrome collapsed navigate={() => {}} />);
     expect(screen.getByTestId('logo-slot')).toBeInTheDocument();
     expect(screen.getByTestId('connection-dot')).toBeInTheDocument();
-    expect(screen.getByTestId('chrome-settings')).toBeInTheDocument();
+    expect(screen.queryByTestId('chrome-settings')).toBeNull();
     expect(screen.queryByText('wicked-studio')).toBeNull();
   });
 });
