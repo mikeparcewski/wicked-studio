@@ -28,14 +28,10 @@ interface Props {
   navigate?: (path: string) => void;
 }
 
-// Per-CLI identity: consistent avatar colours across multi-agent runs
-const CLI_COLORS: Record<string, { bg: string; fg: string }> = {
-  claude:      { bg: 'rgba(139,92,246,0.25)',  fg: '#c4b5fd' },
-  codex:       { bg: 'rgba(59,130,246,0.25)',  fg: '#93c5fd' },
-  antigravity: { bg: 'rgba(34,197,94,0.2)',   fg: '#86efac' },
-  cursor:      { bg: 'rgba(20,184,166,0.2)',   fg: '#5eead4' },
-};
-const CLI_FALLBACK = { bg: 'rgba(230,237,243,0.1)', fg: 'rgba(230,237,243,0.55)' };
+// Agent identity under the token contract (DES-VISION-001 §2.11): one
+// surface/ink pair for every avatar — identity rides the monogram + name, and
+// color stays reserved for signal (§1.5 rule 2: status ≠ identity ≠ accent).
+const CLI_AVATAR = { bg: 'var(--surface-raised)', fg: 'var(--ink-body)' } as const;
 
 function cliInitials(key: string): string {
   const parts = key.split(/[-_]/);
@@ -91,16 +87,17 @@ function routingSummary(unit: WorkUnit): string | null {
 type StepState = 'done' | 'rejected' | 'active' | 'queued';
 
 /**
- * `active` is link-blue, not accent-yellow: yellow is the colour of a gate — the state
- * that needs a human — and spending it on "a phase is running" left the two ranked the
- * same. Executing now carries the same blue live edge it carries on the board, and the
- * attention colour is free to mean only one thing.
+ * The stepper speaks the §2.6 status layer (DES-VISION-001): active = the
+ * run-emerald (the same signal the board's live edge carries — running, NOT the
+ * gate's amber, so "a phase is running" and "a gate needs you" stay ranked
+ * apart, the original intent of the pre-token link-blue); rejected = fail-red;
+ * done and queued are history/future — ink, not signal.
  */
 const STEP_STYLE: Record<StepState, { color: string; background: string; border: string }> = {
-  done:     { color: '#3fb950',               background: 'rgba(63,185,80,0.1)',    border: '1px solid rgba(63,185,80,0.25)' },
-  rejected: { color: '#f85149',               background: 'rgba(248,81,73,0.1)',    border: '1px solid rgba(248,81,73,0.3)' },
-  active:   { color: '#79c0ff',               background: 'rgba(121,192,255,0.12)', border: '1px solid rgba(121,192,255,0.35)' },
-  queued:   { color: 'rgba(230,237,243,0.3)', background: 'transparent',            border: '1px solid rgba(230,237,243,0.08)' },
+  done:     { color: 'var(--status-done)', background: 'var(--status-done-dim)', border: '1px solid var(--surface-raised)' },
+  rejected: { color: 'var(--status-fail)', background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)' },
+  active:   { color: 'var(--status-run)',  background: 'var(--status-run-dim)',  border: '1px solid var(--status-run-dim)' },
+  queued:   { color: 'var(--ink-dim)',     background: 'transparent',            border: '1px solid var(--surface-raised)' },
 };
 
 /**
@@ -128,7 +125,7 @@ function ProcessStepper({
       data-testid="process-stepper"
       aria-label="Workflow phases"
       className="flex items-center gap-1.5 flex-wrap px-6 py-2.5 shrink-0 font-mono text-[11px]"
-      style={{ borderBottom: '1px solid rgba(230,237,243,0.05)', background: '#161c26' }}
+      style={{ borderBottom: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
     >
       {units.map((unit, i) => {
         const state: StepState =
@@ -153,7 +150,7 @@ function ProcessStepper({
         return (
           <Fragment key={unit.id}>
             {i > 0 && (
-              <span aria-hidden="true" style={{ color: 'rgba(230,237,243,0.15)' }}>
+              <span aria-hidden="true" style={{ color: 'var(--ink-dim)' }}>
                 ›
               </span>
             )}
@@ -170,7 +167,7 @@ function ProcessStepper({
                   continuity with the run's status, so it no longer pulses too. */}
               {state === 'active' && <LiveEdge state="executing" pill />}
               {state === 'active' && (
-                <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#79c0ff' }} />
+                <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--status-run)' }} />
               )}
               {phaseName(runId, unit)}
             </span>
@@ -210,10 +207,10 @@ function LiveNarration({ runId, ord, phase }: { runId: string; ord: number; phas
 
   return (
     <div data-testid={`live-narration-${ord}`}>
-      <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>
-        <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#79c0ff' }} />
+      <div className="flex items-center gap-2 text-sm font-mono" style={{ color: 'var(--ink-muted)' }}>
+        <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--status-run)' }} />
         {/* Phase label leads the entry (operator UX directive) — mirrors the done-unit header. */}
-        <span className="font-medium" style={{ color: '#79c0ff' }}>{phase}</span>
+        <span className="font-medium" style={{ color: 'var(--status-run)' }}>{phase}</span>
         <span>{hasText ? 'Working — live output' : 'Working…'}</span>
         {hasText && (
           <button
@@ -221,7 +218,7 @@ function LiveNarration({ runId, ord, phase }: { runId: string; ord: number; phas
             data-testid={`live-narration-toggle-${ord}`}
             onClick={() => setVisible((v) => !v)}
             className="ml-auto text-xs font-medium font-mono hover:underline"
-            style={{ color: '#79c0ff' }}
+            style={{ color: 'var(--accent)' }}
           >
             {visible ? '▾ Hide live output' : '▸ Show live output'}
           </button>
@@ -232,7 +229,7 @@ function LiveNarration({ runId, ord, phase }: { runId: string; ord: number; phas
           ref={scrollRef}
           data-testid={`live-narration-text-${ord}`}
           className="mt-2 max-h-64 overflow-auto rounded-lg p-2.5 text-[11px] leading-snug whitespace-pre-wrap break-words font-mono"
-          style={{ background: 'rgba(13,17,23,0.6)', color: 'rgba(230,237,243,0.65)', border: '1px solid rgba(230,237,243,0.06)' }}
+          style={{ background: 'var(--surface-base)', color: 'var(--ink-body)', border: '1px solid var(--surface-raised)' }}
         >
           {tail}
         </pre>
@@ -249,7 +246,7 @@ function DegradedRoutingBanner({ reason }: { reason: string }): React.ReactEleme
   return (
     <div
       className="self-start max-w-[85%] rounded-xl px-4 py-2.5 text-xs font-mono flex flex-col gap-1.5"
-      style={{ background: 'rgba(255,218,25,0.08)', border: '1px solid rgba(255,218,25,0.2)', color: '#ffda19' }}
+      style={{ background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)', color: 'var(--status-gate)' }}
     >
       <div className="flex items-center gap-2">
         <span className="shrink-0" aria-hidden="true">⚠</span>
@@ -258,7 +255,7 @@ function DegradedRoutingBanner({ reason }: { reason: string }): React.ReactEleme
           type="button"
           onClick={() => setExpanded(v => !v)}
           className="shrink-0 text-[10px] transition-opacity hover:opacity-70"
-          style={{ color: 'rgba(255,218,25,0.6)' }}
+          style={{ color: 'var(--status-gate)', opacity: 0.7 }}
           aria-expanded={expanded}
           aria-controls={detailId}
           aria-label={expanded ? 'Hide explanation' : 'Show explanation'}
@@ -269,14 +266,14 @@ function DegradedRoutingBanner({ reason }: { reason: string }): React.ReactEleme
           type="button"
           onClick={() => setDismissed(true)}
           className="shrink-0 transition-opacity hover:opacity-70"
-          style={{ color: 'rgba(255,218,25,0.5)' }}
+          style={{ color: 'var(--status-gate)', opacity: 0.6 }}
           aria-label="Dismiss degraded routing warning"
         >
           <span aria-hidden="true">✕</span>
         </button>
       </div>
       {expanded && (
-        <p id={detailId} className="text-[10px] leading-relaxed pl-5" style={{ color: 'rgba(255,218,25,0.6)' }}>
+        <p id={detailId} className="text-[10px] leading-relaxed pl-5" style={{ color: 'var(--status-gate)', opacity: 0.7 }}>
           The multi-model council could not reach a quorum vote. The unit proceeded using a
           fallback routing strategy. Open the <strong>Decisions</strong> section in the Insights
           panel on the right to see each reviewer's verdict.
@@ -287,24 +284,25 @@ function DegradedRoutingBanner({ reason }: { reason: string }): React.ReactEleme
 }
 
 function CliAvatar({ cli }: { cli: string }): React.ReactElement {
-  const { bg, fg } = CLI_COLORS[cli.toLowerCase()] ?? CLI_FALLBACK;
   return (
     <span
       aria-hidden="true"
       className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold font-mono select-none"
-      style={{ background: bg, color: fg }}
+      style={{ background: CLI_AVATAR.bg, color: CLI_AVATAR.fg }}
     >
       {cliInitials(cli)}
     </span>
   );
 }
 
-// Stage pill — wicked dark palette
+// Stage pill — the methodology stage is process vocabulary, not run state, so
+// it reads as quiet ink on a raised surface (§1.5 rule 2: color is signal;
+// four always-on badge hues would out-shout the actual status layer).
 const STAGE_BADGE: Record<StageKind, { bg: string; color: string }> = {
-  recon:   { bg: 'rgba(139,92,246,0.15)', color: '#a78bfa' },
-  build:   { bg: 'rgba(63,185,80,0.12)',  color: '#3fb950' },
-  review:  { bg: 'rgba(121,192,255,0.12)',color: '#79c0ff' },
-  test:    { bg: 'rgba(255,218,25,0.12)', color: '#ffda19' },
+  recon:   { bg: 'var(--surface-raised)', color: 'var(--ink-muted)' },
+  build:   { bg: 'var(--surface-raised)', color: 'var(--ink-muted)' },
+  review:  { bg: 'var(--surface-raised)', color: 'var(--ink-muted)' },
+  test:    { bg: 'var(--surface-raised)', color: 'var(--ink-muted)' },
 };
 
 const UNIT_STATUS_TEXT: Record<UnitStatus, string> = {
@@ -352,13 +350,15 @@ function systemEventLabel(type: string, detail: string): string {
   }
 }
 
+// The header dot speaks the §2.6 status layer: emerald while anything is
+// moving, amber at a gate, red on failure, dim ink once it's history.
 function statusDotColor(status: string): string {
   switch (status) {
-    case 'completed':      return '#3fb950';
-    case 'failed':        return '#f85149';
-    case 'cancelled':     return 'rgba(230,237,243,0.25)';
-    case 'awaiting_human': return '#ffda19';
-    default:              return '#79c0ff';
+    case 'completed':      return 'var(--status-done)';
+    case 'failed':        return 'var(--status-fail)';
+    case 'cancelled':     return 'var(--ink-dim)';
+    case 'awaiting_human': return 'var(--status-gate)';
+    default:              return 'var(--status-run)';
   }
 }
 
@@ -412,7 +412,7 @@ function ExportEvidenceButton({ runId, disabled }: { runId: string; disabled: bo
         <span
           role="alert"
           className="text-[11px] font-mono shrink-0 max-w-[14rem] truncate"
-          style={{ color: '#f85149' }}
+          style={{ color: 'var(--status-fail)' }}
         >
           Export failed: {error}
         </span>
@@ -425,7 +425,7 @@ function ExportEvidenceButton({ runId, disabled }: { runId: string; disabled: bo
         aria-label="Export evidence"
         aria-busy={busy}
         className="flex items-center justify-center w-6 h-6 rounded shrink-0 transition-opacity disabled:cursor-not-allowed"
-        style={{ color: error ? '#f85149' : '#79c0ff', opacity: inert ? 0.3 : 0.65 }}
+        style={{ color: error ? 'var(--status-fail)' : 'var(--accent)', opacity: inert ? 0.3 : 0.65 }}
         onMouseEnter={(e) => { if (!inert) e.currentTarget.style.opacity = '1'; }}
         onMouseLeave={(e) => { if (!inert) e.currentTarget.style.opacity = '0.65'; }}
       >
@@ -447,14 +447,14 @@ function StepFailedCard({
   return (
     <div
       className="self-start max-w-[85%] rounded-xl px-4 py-3 flex flex-col gap-2 font-mono text-xs"
-      style={{ background: 'rgba(248,81,73,0.07)', border: '1px solid rgba(248,81,73,0.25)', color: '#f85149' }}
+      style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
     >
       <div className="flex items-center gap-2 font-semibold text-[11px] uppercase tracking-wide">
         <span>⚠</span>
         <span>Step failure</span>
       </div>
       {detail && (
-        <pre className="text-[11px] leading-relaxed whitespace-pre-wrap break-words m-0 overflow-hidden" style={{ color: 'rgba(230,237,243,0.6)', fontFamily: 'inherit' }}>
+        <pre className="text-[11px] leading-relaxed whitespace-pre-wrap break-words m-0 overflow-hidden" style={{ color: 'var(--ink-muted)', fontFamily: 'inherit' }}>
           {detail.length > 200 ? `${detail.slice(0, 200)}…` : detail}
         </pre>
       )}
@@ -464,7 +464,7 @@ function StepFailedCard({
           title="Reassign not yet available"
           disabled
           className="rounded px-3 py-1 text-[11px] font-semibold opacity-30 cursor-not-allowed"
-          style={{ background: 'rgba(230,237,243,0.08)', color: '#e6edf3' }}
+          style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}
         >
           Reassign
         </button>
@@ -473,7 +473,7 @@ function StepFailedCard({
           onClick={canStop ? onStop : undefined}
           disabled={!canStop}
           className="rounded px-3 py-1 text-[11px] font-semibold transition-opacity hover:opacity-100 opacity-80 disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{ background: 'rgba(248,81,73,0.15)', color: '#f85149', border: '1px solid rgba(248,81,73,0.3)' }}
+          style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
         >
           Stop run
         </button>
@@ -486,13 +486,13 @@ function CrashRedriveCard({ attempt }: { attempt: number }): React.ReactElement 
   return (
     <div
       className="self-start max-w-[85%] rounded-xl px-4 py-3 flex flex-col gap-1 font-mono text-xs"
-      style={{ background: 'rgba(255,218,25,0.06)', border: '1px solid rgba(255,218,25,0.2)', color: '#ffda19' }}
+      style={{ background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)', color: 'var(--status-gate)' }}
     >
       <div className="flex items-center gap-2 font-semibold text-[11px] uppercase tracking-wide">
         <span>↺</span>
         <span>Crash recovery — attempt {attempt}</span>
       </div>
-      <p className="text-[11px]" style={{ color: 'rgba(230,237,243,0.5)' }}>
+      <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
         The engine restarted and is re-dispatching this unit automatically.
       </p>
     </div>
@@ -533,8 +533,8 @@ function ModePill({
       title={readOnly ? 'Run mode (read-only — run is complete)' : undefined}
       className="flex items-center rounded-lg overflow-hidden shrink-0"
       style={{
-        background: 'rgba(230,237,243,0.06)',
-        border: '1px solid rgba(230,237,243,0.1)',
+        background: 'var(--surface-raised)',
+        border: '1px solid var(--surface-overlay)',
         opacity: readOnly ? 0.6 : 1,
       }}
     >
@@ -550,10 +550,13 @@ function ModePill({
           onKeyDown={readOnly ? undefined : (e) => handleKey(e, idx)}
           disabled={readOnly}
           className="px-3 py-1 text-[11px] font-mono font-medium transition-colors disabled:cursor-default"
+          // The selected segment is an interactive selection → the accent
+          // (mirrors the mode switcher's active fill, §5.2/§2.5); never amber —
+          // that's the gate's color.
           style={
             mode === m
-              ? { background: 'rgba(255,218,25,0.15)', color: readOnly ? 'rgba(255,218,25,0.7)' : '#ffda19' }
-              : { background: 'transparent', color: 'rgba(230,237,243,0.35)' }
+              ? { background: 'var(--accent)', color: 'var(--accent-fg)' }
+              : { background: 'transparent', color: 'var(--ink-dim)' }
           }
         >
           {MODE_LABELS[m]}
@@ -609,30 +612,32 @@ function LegacyChatHistory({
     <div className="flex flex-col h-full">
       <div
         className="flex items-center gap-3 px-6 py-4 shrink-0"
-        style={{ borderBottom: '1px solid rgba(230,237,243,0.07)', background: '#1b222e' }}
+        style={{ borderBottom: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
       >
         <button
           type="button"
           onClick={onNavigateBack}
           aria-label="Back"
           className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors shrink-0"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(230,237,243,0.06)'; e.currentTarget.style.color = '#e6edf3'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(230,237,243,0.4)'; }}
+          style={{ color: 'var(--ink-dim)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-raised)'; e.currentTarget.style.color = 'var(--ink-high)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-dim)'; }}
         >
           ←
         </button>
-        <p className="flex-1 text-base font-semibold truncate" style={{ color: '#e6edf3' }} title={session.problem}>
+        <p className="flex-1 text-base font-semibold truncate" style={{ color: 'var(--ink-high)' }} title={session.problem}>
           {session.problem}
         </p>
-        <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>legacy chat</span>
+        <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>legacy chat</span>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-6 max-w-3xl w-full mx-auto">
         <div className="flex justify-end">
           <div
+            // §5.3 token usage: the user's message is transparent — a hairline
+            // keeps the bubble shape without claiming a surface of its own.
             className="max-w-[72%] rounded-2xl text-base px-5 py-3.5 leading-relaxed"
-            style={{ background: '#224a5e', color: '#e6edf3', border: '1px solid rgba(230,237,243,0.12)' }}
+            style={{ background: 'transparent', color: 'var(--ink-high)', border: '1px solid var(--surface-raised)' }}
           >
             {session.problem}
           </div>
@@ -646,20 +651,20 @@ function LegacyChatHistory({
                 {unit.assigned_cli ? (
                   <>
                     <CliAvatar cli={unit.assigned_cli} />
-                    <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }}>
+                    <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
                       {unit.assigned_cli}
                     </span>
                   </>
                 ) : (
-                  <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }}>agent</span>
+                  <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>agent</span>
                 )}
               </div>
               <div
                 className="rounded-2xl px-5 py-4"
-                style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
+                style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
               >
                 {tc?.loading && (
-                  <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>Loading…</span>
+                  <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>Loading…</span>
                 )}
                 {!tc?.loading && tc?.text && (
                   <div>
@@ -667,19 +672,19 @@ function LegacyChatHistory({
                       type="button"
                       onClick={() => setTranscripts((prev) => ({ ...prev, [unit.ord]: { ...prev[unit.ord]!, visible: !tc.visible } }))}
                       className="text-xs font-medium font-mono hover:underline"
-                      style={{ color: '#79c0ff' }}
+                      style={{ color: 'var(--accent)' }}
                     >
                       {tc.visible ? '▾ Hide response' : '▸ View response'}
                     </button>
                     {tc.visible && (
-                      <div className="mt-2.5 max-h-96 overflow-auto rounded-xl p-4" style={{ background: '#0d1117' }}>
+                      <div className="mt-2.5 max-h-96 overflow-auto rounded-xl p-4" style={{ background: 'var(--surface-base)' }}>
                         <Markdown className="whitespace-pre-wrap">{tc.text}</Markdown>
                       </div>
                     )}
                   </div>
                 )}
                 {!tc?.loading && !tc?.text && (
-                  <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.3)' }}>
+                  <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                     Response not available — this session predates durable transcripts.
                   </span>
                 )}
@@ -788,7 +793,7 @@ function RunChat({
     });
   }
 
-  const style = STATUS_STYLE[session.status] ?? { label: session.status, className: '', color: 'rgba(230,237,243,0.5)' };
+  const style = STATUS_STYLE[session.status] ?? { label: session.status, className: '', color: 'var(--ink-muted)' };
   const isTerminal = ['completed', 'cancelled', 'failed'].includes(session.status);
   // Keep action + system events interleaved in arrival order (log is seq-ordered).
   const eventLog = log.filter((e) => SYSTEM_EVENT_TYPES.has(e.type) || ACTION_EVENT_TYPES.has(e.type));
@@ -804,16 +809,16 @@ function RunChat({
       {/* Run header */}
       <div
         className="flex items-center gap-3 px-6 py-4 shrink-0"
-        style={{ borderBottom: '1px solid rgba(230,237,243,0.07)', background: '#1b222e' }}
+        style={{ borderBottom: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
       >
         <button
           type="button"
           onClick={onNavigateBack}
           aria-label="Back to run list"
           className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors shrink-0"
-          style={{ color: 'rgba(230,237,243,0.4)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(230,237,243,0.06)'; e.currentTarget.style.color = '#e6edf3'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(230,237,243,0.4)'; }}
+          style={{ color: 'var(--ink-dim)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-raised)'; e.currentTarget.style.color = 'var(--ink-high)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-dim)'; }}
         >
           ←
         </button>
@@ -821,7 +826,7 @@ function RunChat({
           className={`w-2.5 h-2.5 rounded-full shrink-0 ${pulse ? 'animate-pulse' : ''}`}
           style={{ background: dotColor }}
         />
-        <p className="flex-1 text-base font-semibold truncate" style={{ color: '#e6edf3' }} title={session.problem}>
+        <p className="flex-1 text-base font-semibold truncate" style={{ color: 'var(--ink-high)' }} title={session.problem}>
           {session.problem}
         </p>
         <span className="text-xs font-medium shrink-0 font-mono" style={{ color: style.color }}>{style.label}</span>
@@ -834,7 +839,7 @@ function RunChat({
             title="Kill run (Ctrl+K)"
             aria-label="Kill run"
             className="flex items-center justify-center w-6 h-6 rounded shrink-0 transition-opacity disabled:opacity-30"
-            style={{ color: '#f85149', opacity: 0.65 }}
+            style={{ color: 'var(--status-fail)', opacity: 0.65 }}
             onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
             onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.65'; }}
           >
@@ -866,8 +871,10 @@ function RunChat({
         {/* User prompt bubble */}
         <div className="flex justify-end">
           <div
+            // §5.3 token usage: the user's message is transparent — a hairline
+            // keeps the bubble shape without claiming a surface of its own.
             className="max-w-[72%] rounded-2xl text-base px-5 py-3.5 leading-relaxed"
-            style={{ background: '#224a5e', color: '#e6edf3', border: '1px solid rgba(230,237,243,0.12)' }}
+            style={{ background: 'transparent', color: 'var(--ink-high)', border: '1px solid var(--surface-raised)' }}
           >
             {session.problem}
           </div>
@@ -877,7 +884,7 @@ function RunChat({
             inline before the unit it blocks when that unit has already entered the thread */}
         {timeline.flatMap((unit) => {
           const tc = transcripts[unit.ord];
-          const stageBadge = STAGE_BADGE[unit.stage] ?? { bg: 'rgba(230,237,243,0.08)', color: 'rgba(230,237,243,0.5)' };
+          const stageBadge = STAGE_BADGE[unit.stage] ?? { bg: 'var(--surface-raised)', color: 'var(--ink-muted)' };
           const gateBeforeThis = session.status === 'awaiting_human' && gate?.ord === unit.ord;
           const unitEl = (
             <div key={unit.id} data-message-id={unit.id} className="flex flex-col gap-2">
@@ -885,15 +892,15 @@ function RunChat({
               {unit.routing !== null && unit.routing.method === 'council' && (
                 <div
                   className="self-start max-w-[85%] rounded-xl px-4 py-2 text-xs flex items-center gap-2 font-mono"
-                  style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', color: '#a78bfa' }}
+                  style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-subtle)', color: 'var(--accent)' }}
                 >
                   <span className="shrink-0">⚖</span>
                   <span>
                     <span className="font-semibold">Council → {unit.assigned_cli ?? '?'}</span>
-                    <span className="ml-2" style={{ color: 'rgba(167,139,250,0.6)' }}>
+                    <span className="ml-2" style={{ color: 'var(--accent)', opacity: 0.7 }}>
                       {quorumLabel(unit.routing)} · {unit.routing.agreement_pct}% agree · {unit.routing.dissent} dissent
                       {lostQuorum(unit.routing) && (
-                        <span className="ml-2" style={{ color: '#ffda19' }}>· quorum lost</span>
+                        <span className="ml-2" style={{ color: 'var(--status-gate)' }}>· quorum lost</span>
                       )}
                     </span>
                   </span>
@@ -902,12 +909,12 @@ function RunChat({
               {unit.routing !== null && unit.routing.method === 'evaluator_distinct' && (
                 <div
                   className="self-start max-w-[85%] rounded-xl px-4 py-2 text-xs flex items-center gap-2 font-mono"
-                  style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', color: '#a78bfa' }}
+                  style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-subtle)', color: 'var(--accent)' }}
                 >
                   <span className="shrink-0">⚖</span>
                   <span>
                     <span className="font-semibold">Evaluator-distinct → {unit.assigned_cli ?? '?'}</span>
-                    <span className="ml-2" style={{ color: 'rgba(167,139,250,0.6)' }}>(was: {unit.routing.was})</span>
+                    <span className="ml-2" style={{ color: 'var(--accent)', opacity: 0.7 }}>(was: {unit.routing.was})</span>
                   </span>
                 </div>
               )}
@@ -930,9 +937,9 @@ function RunChat({
                         style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
                       >
                         <CliAvatar cli={unit.assigned_cli} />
-                        <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }}>
+                        <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
                           {unit.assigned_cli}
-                          <span style={{ color: 'rgba(230,237,243,0.3)' }}> · unit {unit.ord}</span>
+                          <span style={{ color: 'var(--ink-dim)' }}> · unit {unit.ord}</span>
                         </span>
                       </button>
                       {terminalIds[`${session.id}:${unit.assigned_cli}`] && (
@@ -947,7 +954,7 @@ function RunChat({
                             setAgentTerminal(agentTerminal?.cliKey === cli ? null : { cliKey: cli, terminalId: tid! });
                           }}
                           className="text-xs rounded px-1 py-0.5 transition-opacity hover:opacity-80"
-                          style={{ background: 'rgba(230,237,243,0.06)', border: 'none', cursor: 'pointer', color: 'rgba(230,237,243,0.55)', fontFamily: 'monospace' }}
+                          style={{ background: 'var(--surface-raised)', border: 'none', cursor: 'pointer', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}
                         >
                           ⌨
                         </button>
@@ -955,10 +962,10 @@ function RunChat({
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <span className="w-7 h-7 rounded-full shrink-0" style={{ background: 'rgba(230,237,243,0.06)' }} />
-                      <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.55)' }}>
+                      <span className="w-7 h-7 rounded-full shrink-0" style={{ background: 'var(--surface-raised)' }} />
+                      <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
                         agent
-                        <span style={{ color: 'rgba(230,237,243,0.3)' }}> · unit {unit.ord}</span>
+                        <span style={{ color: 'var(--ink-dim)' }}> · unit {unit.ord}</span>
                       </span>
                     </div>
                   )}
@@ -969,9 +976,9 @@ function RunChat({
                     {unit.stage}
                   </span>
                   {unit.has_validator_pin && (
-                    <span role="img" aria-label="Governance floor armed" style={{ color: '#ffda19', fontSize: '12px' }}>🔒</span>
+                    <span role="img" aria-label="Governance floor armed" style={{ color: 'var(--status-gate)', fontSize: '12px' }}>🔒</span>
                   )}
-                  <span className="text-xs font-mono truncate max-w-xs" style={{ color: 'rgba(230,237,243,0.35)' }} title={unit.description}>
+                  <span className="text-xs font-mono truncate max-w-xs" style={{ color: 'var(--ink-dim)' }} title={unit.description}>
                     {unit.description}
                   </span>
                 </div>
@@ -979,7 +986,7 @@ function RunChat({
                 {/* Content card */}
                 <div
                   className="rounded-2xl px-5 py-4"
-                  style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.08)' }}
+                  style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
                 >
                   {/* A `distributed` unit is in the timeline ONLY as the cursor unit of an
                       executing run (FINDING-052: distributed = routed, not running — queued
@@ -991,15 +998,15 @@ function RunChat({
                     <div data-testid={`unit-output-${unit.ord}`}>
                       {/* Output header: phase name + status (crew#272) */}
                       <div className="flex items-center gap-2 text-sm font-mono">
-                        <span style={{ color: '#3fb950' }}>✓</span>
-                        <span className="font-medium" style={{ color: '#3fb950' }}>{phaseName(session.id, unit)}</span>
-                        <span className="text-xs" style={{ color: 'rgba(230,237,243,0.4)' }}>{UNIT_STATUS_TEXT[unit.status]}</span>
+                        <span style={{ color: 'var(--status-done)' }}>✓</span>
+                        <span className="font-medium" style={{ color: 'var(--status-done)' }}>{phaseName(session.id, unit)}</span>
+                        <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>{UNIT_STATUS_TEXT[unit.status]}</span>
                         <button
                           type="button"
                           data-testid={`unit-output-toggle-${unit.ord}`}
                           onClick={() => toggleTranscript(unit.ord)}
                           className="ml-auto text-xs font-medium font-mono hover:underline"
-                          style={{ color: '#79c0ff' }}
+                          style={{ color: 'var(--accent)' }}
                         >
                           {tc?.visible ? '▾ Hide output' : '▸ Show output'}
                         </button>
@@ -1010,7 +1017,7 @@ function RunChat({
                       {tc?.visible && (
                         <div className="mt-2.5 max-h-[28rem] overflow-y-auto">
                           {tc.loading
-                            ? <span className="text-xs font-mono" style={{ color: 'rgba(230,237,243,0.5)' }}>Loading output…</span>
+                            ? <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>Loading output…</span>
                             : <Markdown className="whitespace-pre-wrap">{tc.text ?? ''}</Markdown>
                           }
                         </div>
@@ -1018,7 +1025,7 @@ function RunChat({
                     </div>
                   )}
                   {unit.status === 'rejected' && (
-                    <div className="text-sm font-medium font-mono" style={{ color: '#f85149' }}>
+                    <div className="text-sm font-medium font-mono" style={{ color: 'var(--status-fail)' }}>
                       Rejected{unit.denial_reason ? `: ${unit.denial_reason}` : ''}
                     </div>
                   )}
@@ -1065,7 +1072,7 @@ function RunChat({
             <div key={entry.seq} className="flex justify-center">
               <span
                 className="text-xs rounded-full px-3 py-1 font-mono"
-                style={{ color: 'rgba(230,237,243,0.4)', background: '#161c26', border: '1px solid rgba(230,237,243,0.07)' }}
+                style={{ color: 'var(--ink-dim)', background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
               >
                 {systemEventLabel(entry.type, entry.detail)}
               </span>
@@ -1136,10 +1143,10 @@ function NewRunView({
     <div className="flex flex-col h-full items-center justify-center">
       <div className="w-full max-w-2xl px-8 flex flex-col gap-5">
         <div className="flex flex-col gap-2 text-center">
-          <h1 className="text-3xl font-bold tracking-tight" style={{ color: '#e6edf3' }}>
+          <h1 className="text-3xl font-bold tracking-tight" style={{ color: 'var(--ink-high)' }}>
             {heading}
           </h1>
-          <p className="text-base leading-relaxed" style={{ color: 'rgba(230,237,243,0.5)' }}>
+          <p className="text-base leading-relaxed" style={{ color: 'var(--ink-muted)' }}>
             {sub}
           </p>
         </div>

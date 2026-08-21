@@ -60,6 +60,10 @@ const TOKEN_CLEAN = [
   'src/components/SettingsMenu.tsx',
   'src/components/ModeSwitcher.tsx',
   'src/components/ProjectShell.tsx',
+  // Vision slice 4 — the Chat + Build surfaces (§5.3, §5.4).
+  'src/components/GroupChat.tsx',
+  'src/components/ChatPanel.tsx',
+  'src/components/CenterDashboard.tsx',
 ];
 
 export default tseslint.config(

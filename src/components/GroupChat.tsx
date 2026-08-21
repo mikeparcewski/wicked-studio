@@ -20,15 +20,22 @@ import { Markdown } from './Markdown.js';
  * exactly as before, because warm seats someone paid for must not be orphaned.
  */
 
-const SEAT_COLORS: Record<string, { bg: string; fg: string }> = {
-  claude: { bg: 'rgba(139,92,246,0.25)', fg: '#c4b5fd' },
-  codex: { bg: 'rgba(59,130,246,0.25)', fg: '#93c5fd' },
-  agy: { bg: 'rgba(34,197,94,0.2)', fg: '#86efac' },
-  pi: { bg: 'rgba(234,179,8,0.2)', fg: '#fde68a' },
-};
-const SEAT_FALLBACK = { bg: 'rgba(230,237,243,0.1)', fg: 'rgba(230,237,243,0.55)' };
+/**
+ * Seat identity under the token contract (DES-VISION-001 §2.11): every chip and
+ * avatar wears the SAME surface/ink pair, and identity rides the monogram +
+ * name, not a per-CLI hue. Color is reserved for signal (§1.5 rule 2): the
+ * chip's dot speaks the §2.6 status layer — warming = amber, ready = emerald,
+ * failed = red — and nothing else on the seat is colored.
+ */
+const SEAT_CHIP = { bg: 'var(--surface-raised)', fg: 'var(--ink-body)' } as const;
 
 type SeatState = 'warming' | 'ready' | 'failed';
+
+const SEAT_DOT: Record<SeatState, string> = {
+  warming: 'var(--status-gate)',
+  ready: 'var(--status-run)',
+  failed: 'var(--status-fail)',
+};
 
 /**
  * Where a repo's live chat id is parked between mounts (FINDING-027).
@@ -373,24 +380,23 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
     onBack();
   }
 
-  const seatChip = (cliKey: string, st: SeatState): React.ReactElement => {
-    const c = SEAT_COLORS[cliKey] ?? SEAT_FALLBACK;
-    return (
+  const seatChip = (cliKey: string, st: SeatState): React.ReactElement => (
+    // wk-disclose: the roster disclosure animates in at --dur-base ease-out
+    // (§5.3 motion) — once per chip mount, never a loop (§1.6).
+    <span
+      key={cliKey}
+      title={st === 'failed' ? seatErrors[cliKey] : st}
+      className="wk-disclose inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-mono"
+      style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg, opacity: st === 'failed' ? 0.5 : 1 }}
+    >
       <span
-        key={cliKey}
-        title={st === 'failed' ? seatErrors[cliKey] : st}
-        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-mono"
-        style={{ background: c.bg, color: c.fg, opacity: st === 'failed' ? 0.5 : 1 }}
-      >
-        <span
-          className={`inline-block w-1.5 h-1.5 rounded-full ${st === 'warming' ? 'animate-pulse' : ''}`}
-          style={{ background: st === 'failed' ? '#f85149' : st === 'warming' ? '#d29922' : '#3fb950' }}
-        />
-        {cliKey}
-        {st === 'failed' ? ' ✕' : ''}
-      </span>
-    );
-  };
+        className={`inline-block w-1.5 h-1.5 rounded-full ${st === 'warming' ? 'animate-pulse' : ''}`}
+        style={{ background: SEAT_DOT[st] }}
+      />
+      {cliKey}
+      {st === 'failed' ? ' ✕' : ''}
+    </span>
+  );
 
   const anyReady = Object.values(seats).some((st) => st === 'ready');
   // V8: a teardown control exists only once there is something armed to tear down —
@@ -405,11 +411,13 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
     messages.length === 0 && Object.keys(seats).length === 0 && openError === null && !resolving;
 
   return (
-    <div className="flex flex-col h-full" style={{ color: '#e6edf3' }}>
+    // The surface's own ink (§2.4); labels read in the sans by inheritance —
+    // only data (seat keys, narration) opts into the mono below (§2.8).
+    <div className="flex flex-col h-full" style={{ color: 'var(--ink-body)', fontFamily: 'var(--font-sans)' }}>
       {/* Header: seats + close */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b shrink-0" style={{ borderColor: 'rgba(230,237,243,0.08)' }}>
+      <div className="flex items-center gap-3 px-6 py-3 border-b shrink-0" style={{ borderColor: 'var(--surface-raised)' }}>
         <button type="button" onClick={onBack} className="text-sm font-mono opacity-60 hover:opacity-100">←</button>
-        <span className="text-sm font-mono font-semibold">Chat</span>
+        <span className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Chat</span>
         <div className="flex items-center gap-1.5 flex-wrap">
           {Object.entries(seats).map(([k, st]) => seatChip(k, st))}
         </div>
@@ -420,8 +428,8 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
             data-testid="chat-close"
             title="Disconnect the agents and end this chat"
             onClick={() => void endChat()}
-            className="text-[11px] font-mono px-2.5 py-1 rounded-lg"
-            style={{ background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.65)', border: '1px solid rgba(230,237,243,0.18)' }}
+            className="text-[11px] px-2.5 py-1 rounded-lg"
+            style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', border: '1px solid var(--surface-overlay)' }}
           >
             Close
           </button>
@@ -431,19 +439,20 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-3">
         {openError !== null && (
-          <p className="text-[12px] font-mono" style={{ color: '#f85149' }}>Could not open chat: {openError}</p>
+          <p className="text-[12px] font-mono" style={{ color: 'var(--status-fail)' }}>Could not open chat: {openError}</p>
         )}
         {firstRun && (
           // §2.4: the first-run state TEACHES — what Chat is, what typing does, and the
           // product's central trick (choose a mode by conversation). Never a warmed roster.
+          // §5.3: the instruction reads as prose — the sans, body ink.
           <div
             data-testid="chat-firstrun"
             className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-8"
           >
-            <p className="text-[14px] font-semibold" style={{ margin: 0 }}>
+            <p style={{ fontSize: 'var(--text-md)', fontWeight: 'var(--weight-semi)', color: 'var(--ink-high)', fontFamily: 'var(--font-sans)', margin: 0 }}>
               Chat with an agent about this project.
             </p>
-            <p className="text-[12px]" style={{ color: 'rgba(230,237,243,0.55)', margin: 0, maxWidth: '480px' }}>
+            <p data-testid="chat-firstrun-instruction" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)', fontFamily: 'var(--font-sans)', margin: 0, maxWidth: '480px' }}>
               No run, no gates — just talk. Ask for a deck or some code and I’ll switch
               you to the right mode.
             </p>
@@ -451,22 +460,30 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
         )}
         {messages.map((m, i) =>
           m.kind === 'user' ? (
-            <div key={i} className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[13px]" style={{ background: 'rgba(88,166,255,0.15)' }}>
+            // §5.3 token usage: user messages are transparent — the hairline
+            // keeps the bubble shape without claiming a surface of its own.
+            <div
+              key={i}
+              className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[13px]"
+              style={{ background: 'transparent', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+            >
               {m.text}
             </div>
           ) : (
             <div key={i} className="self-start max-w-[80%] flex gap-2">
               <span
                 className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-mono font-bold mt-0.5"
-                style={{ background: (SEAT_COLORS[m.cliKey] ?? SEAT_FALLBACK).bg, color: (SEAT_COLORS[m.cliKey] ?? SEAT_FALLBACK).fg }}
+                style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg }}
               >
                 {m.cliKey.slice(0, 2).toUpperCase()}
               </span>
               <div
+                // §5.3 token usage: agent bubbles sit on --surface-card; the
+                // border speaks status while a reply is pending or failed.
                 className="rounded-xl px-4 py-2 text-[13px] min-w-[60px]"
                 style={{
-                  background: 'rgba(230,237,243,0.05)',
-                  border: `1px solid ${m.pending ? 'rgba(210,153,34,0.35)' : m.ok ? 'rgba(230,237,243,0.08)' : 'rgba(248,81,73,0.35)'}`,
+                  background: 'var(--surface-card)',
+                  border: `1px solid ${m.pending ? 'var(--status-run-dim)' : m.ok ? 'var(--surface-raised)' : 'var(--status-fail-dim)'}`,
                 }}
               >
                 {m.pending && m.text === '' ? (
@@ -481,8 +498,10 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div className="px-6 py-3 border-t shrink-0" style={{ borderColor: 'rgba(230,237,243,0.08)' }}>
+      {/* Input — §5.3 token usage: the composer sits on --surface-raised at
+          --radius-xl; its focus ring is --accent-dim (wk-composer in
+          global.css), never the full accent (§5.3 motion: too dominant). */}
+      <div className="px-6 py-3 border-t shrink-0" style={{ borderColor: 'var(--surface-raised)' }}>
         <div className="flex gap-2">
           <textarea
             value={input}
@@ -496,8 +515,14 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
             rows={2}
             autoFocus
             placeholder="Describe what you want… (Enter to send, Shift+Enter for newline)"
-            className="flex-1 rounded-xl px-4 py-2 text-[13px] font-mono outline-none resize-none"
-            style={{ background: '#1b222e', border: '1px solid rgba(230,237,243,0.12)' }}
+            className="wk-composer flex-1 px-4 py-2 text-[13px] outline-none resize-none"
+            style={{
+              background: 'var(--surface-raised)',
+              border: '1px solid var(--surface-overlay)',
+              borderRadius: 'var(--radius-xl)',
+              color: 'var(--ink-high)',
+              fontFamily: 'var(--font-sans)',
+            }}
           />
           <button
             type="button"
@@ -506,8 +531,8 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
             // enables Send. Once a chat exists, sending needs a ready seat, as before.
             // (`resolving`: the stored chat is still being checked — not first-run yet.)
             disabled={input.trim() === '' || arming || resolving || (chatId !== null && !anyReady)}
-            className="px-4 rounded-xl text-sm font-mono font-semibold disabled:opacity-40"
-            style={{ background: 'rgba(88,166,255,0.2)', color: '#79c0ff' }}
+            className="px-4 text-sm font-semibold disabled:opacity-40"
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)', borderRadius: 'var(--radius-xl)' }}
           >
             Send
           </button>
@@ -519,8 +544,9 @@ export function GroupChat({ repoId, onBack }: Props): React.ReactElement {
             disabled={arming || resolving}
             title="Warm every agent on the roster into this chat — replies stream side by side"
             onClick={() => void armChat('all')}
-            className="mt-2 text-[11px] font-mono px-2.5 py-1 rounded-lg disabled:opacity-40"
-            style={{ background: 'rgba(230,237,243,0.06)', color: 'rgba(230,237,243,0.65)', border: '1px solid rgba(230,237,243,0.18)' }}
+            // §5.3: low-key but ON-ACCENT — color alone signals it's interactive.
+            className="mt-2 text-[11px] px-1 py-1 disabled:opacity-40"
+            style={{ background: 'transparent', color: 'var(--accent)', border: 'none', cursor: 'pointer' }}
           >
             + Add agents
           </button>
