@@ -17,13 +17,13 @@ import { contextKey, useDocContextStore } from '../store/docContext.js';
 //             path, never a payload: this component has no file input and builds no
 //             FormData, so attaching context uploads nothing.
 //
-// PICKING a theme is no longer here: the audit's unexplained "theme library" pill (F9,
-// V19) is now the **Themes** control on the version strip beside Export (`ThemesMenu`),
-// where it acts on the document and explains itself on open. The pick still lands in the
-// same docContext store, so the chip below still shows it and it still rides with the
-// next generation as `theme_id` — only the control moved.
+// PICKING a theme exists nowhere any more (issue #65): the "theme library" it picked
+// from was an invented wire — the real bridge serves no theme registry and nothing
+// consumed the `theme_id` that rode the next generation. The real capability is the
+// Learn action below (and the strip's `ThemesMenu`, which offers the same form): the
+// learned look sticks to THIS document server-side, so there is no pick to carry.
 //
-// Both remaining actions require an open document, for the same reason the storyboard's
+// Both actions require an open document, for the same reason the storyboard's
 // Record button does: they render as messages, and a message needs a thread to land in.
 
 const S = {
@@ -86,14 +86,13 @@ function Chip({
 
 export interface ComposerContextProps {
   projectId: string;
-  /** `null` on the doc-less composer — the theme picker still works; the two thread
-   *  actions do not, because there is no transcript for their message yet. */
+  /** `null` on the doc-less composer — neither thread action works there, because
+   *  there is no transcript for their message yet. */
   docId: string | null;
 }
 
 export function ComposerContext({ projectId, docId }: ComposerContextProps): React.ReactElement {
   const key = contextKey(projectId, docId);
-  const theme = useDocContextStore((s) => s.theme[key]);
   const sources = useDocContextStore((s) => s.sources[key] ?? EMPTY);
 
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -128,12 +127,8 @@ export function ComposerContext({ projectId, docId }: ComposerContextProps): Rea
 
   return (
     <div data-testid="thread-context" className="flex flex-col gap-1.5">
-      {(theme !== undefined || sources.length > 0) && (
+      {sources.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {theme !== undefined && (
-            <Chip kind="theme" value={theme} label={`theme: ${theme}`}
-                  onRemove={() => useDocContextStore.getState().pickTheme(key, null)} />
-          )}
           {sources.map((p) => (
             <Chip key={p} kind="source" value={p} label={p}
                   onRemove={() => useDocContextStore.getState().removeSource(key, p)} />

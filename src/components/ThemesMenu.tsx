@@ -1,24 +1,26 @@
 import { useState } from 'react';
-import { listThemes, type ThemeSummary } from '../api/interactive.js';
-import { contextKey, useDocContextStore } from '../store/docContext.js';
+import { type LearnKind } from '../api/interactive.js';
+import {
+  learnReady, learnThemeFromThread, LEARN_KINDS, LEARN_LABEL,
+} from '../interactive/themeWire.js';
 
-// The Themes control (DES-UXFIX-001 §2.6 rule 4, V19; the library itself is DES-MERGE-001
-// §4.6). The audit's "theme library" pill floated unexplained in the composer context
-// (F9): a newcomer could not say what a theme was or what picking one did. The redesign
-// renames it to the one word "Themes", moves it into the canvas toolbar beside Export —
-// where it acts on the document — and opens with ONE line saying what it is:
-// "Borrow a look from a site, PDF, or image."
+// The Themes control (DES-UXFIX-001 §2.6 rule 4, V19), CORRECTED by issue #65.
 //
-// Picking is unchanged underneath: the choice lands in the docContext store keyed to this
-// composer, renders as the composer's context chip, and rides with the NEXT generation as
-// `theme_id` — a theme is context for what the conversation makes, not an edit of what
-// the canvas already shows. Learning a new theme stays in the composer's "learn a theme"
-// action, because that submission is a thread message (§2.3).
+// Slice 16 built this menu on an invented wire: `GET /api/themes` listed a "theme
+// library" and picking a row rode a `theme_id` with the next generation. The real
+// wicked-interactive bridge serves NO theme registry — no list route, no theme ids,
+// and nothing that consumed `theme_id` (verified against src/service/server.js and
+// the assist skill). What the bridge CAN do is learn a look FOR THIS DOCUMENT:
+// `wicked.interactive.theme.requested {document_id, url|path}` grabs the source,
+// the agent reads its design, and every subsequent version of the document wears it
+// (theme-source.js applies <doc>/theme/learned.theme.json at each version creation).
+//
+// So the control keeps its V19 duties — it reads "Themes", sits on the strip beside
+// Export, and explains itself in one line on open — but the popover now offers the
+// capability that exists: teach this document a look from a site, a PDF or an image.
+// There is no picking, because there is nothing to pick from; the learned look sticks
+// server-side, and the submission narrates in the thread (§2.3: it is a message).
 
-// DES-VISION-001 §5.5 token usage: the popover is a raised surface; a PICKED
-// theme speaks the brand accent (an affordance state, §2.5), failures speak the
-// §2.6 status layer. The explainer is prose → sans/--ink-body/--text-sm; theme
-// names are identifiers → the mono.
 const S = {
   ink:    'var(--ink-high)',
   body:   'var(--ink-body)',
@@ -28,7 +30,6 @@ const S = {
   picked: 'var(--accent-subtle)',
   card:   'var(--surface-raised)',
   border: 'var(--surface-raised)',
-  danger: 'var(--status-fail)',
 };
 
 const BUTTON: React.CSSProperties = {
@@ -37,8 +38,18 @@ const BUTTON: React.CSSProperties = {
   fontFamily: 'var(--font-sans)', lineHeight: 1.6, padding: '1px 6px',
 };
 
+const KIND_ON: React.CSSProperties = {
+  background: S.picked, color: S.accent, border: '1px solid var(--accent-subtle)',
+};
+const KIND_OFF: React.CSSProperties = {
+  background: 'transparent', color: S.muted, border: `1px solid ${S.border}`, cursor: 'pointer',
+};
+
 /** V19's one-line explanation, shown every time the menu opens — never tooltip-only. */
 export const THEMES_EXPLAINER = 'Borrow a look from a site, PDF, or image.';
+
+/** The real model, said where the user acts on it (§3.3: informative, in the UI). */
+export const THEMES_STICKS = 'The learned look sticks to this document — every new version wears it.';
 
 export interface ThemesMenuProps {
   projectId: string;
@@ -46,33 +57,20 @@ export interface ThemesMenuProps {
 }
 
 export function ThemesMenu({ projectId, docId }: ThemesMenuProps): React.ReactElement {
-  const key = contextKey(projectId, docId);
-  const picked = useDocContextStore((s) => s.theme[key]);
   const [open, setOpen] = useState(false);
-  const [themes, setThemes] = useState<ThemeSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [kind, setKind] = useState<LearnKind>('url');
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  function toggle(): void {
-    const opening = !open;
-    setOpen(opening);
-    if (!opening) return;
-    setError(null);
-    listThemes(projectId)
-      .then(setThemes)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  async function submit(): Promise<void> {
+    if (busy || !learnReady(kind, value)) return;
+    setBusy(true);
+    // Both outcomes are already IN the thread (informative, or actionable with the
+    // service's own reason) — the popover's job is only to stop offering the same submit.
+    const outcome = await learnThemeFromThread({ projectId, docId, kind, value });
+    setBusy(false);
+    if (outcome.ok) { setValue(''); setOpen(false); }
   }
-
-  // §3.3: the menu says what it is doing or why it cannot, and a list that failed to
-  // load picks nothing rather than silently offering the default as if it were chosen.
-  const status = error !== null
-    ? { testId: 'themes-error', danger: true,
-        text: `${error} — no theme was picked; the next generation uses the default.` }
-    : themes === null
-      ? { testId: 'themes-loading', danger: false, text: 'Loading the themes…' }
-      : themes.length === 0
-        ? { testId: 'themes-empty', danger: false,
-            text: 'No themes yet — learn one from a website, a PDF or an image.' }
-        : null;
 
   return (
     <div style={{ alignSelf: 'center', flexShrink: 0, position: 'relative' }}>
@@ -80,22 +78,22 @@ export function ThemesMenu({ projectId, docId }: ThemesMenuProps): React.ReactEl
         type="button"
         data-testid="themes-open"
         aria-expanded={open}
-        onClick={toggle}
-        title={`${THEMES_EXPLAINER} The pick rides with the next generation.`}
-        style={{ ...BUTTON, ...(picked !== undefined ? { color: S.accent } : {}) }}
+        onClick={() => setOpen(!open)}
+        title={`${THEMES_EXPLAINER} ${THEMES_STICKS}`}
+        style={BUTTON}
       >
-        Themes{picked !== undefined ? `: ${picked}` : ''}
+        Themes
       </button>
 
       {open && (
         <div
           data-testid="themes-panel"
-          className="flex flex-col gap-1 overflow-y-auto"
+          className="flex flex-col gap-1.5"
           style={{
             background: S.card, border: '1px solid var(--surface-overlay)',
             borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-overlay)',
-            bottom: 'calc(100% + 6px)', maxHeight: '200px', padding: '8px 10px',
-            position: 'absolute', right: 0, width: '250px', zIndex: 30,
+            bottom: 'calc(100% + 6px)', padding: '8px 10px',
+            position: 'absolute', right: 0, width: '260px', zIndex: 30,
           }}
         >
           {/* §5.5: the one-line explanation opens WITH the popover, in
@@ -109,36 +107,47 @@ export function ThemesMenu({ projectId, docId }: ThemesMenuProps): React.ReactEl
           >
             {THEMES_EXPLAINER}
           </p>
-          {status !== null && (
-            <p
-              data-testid={status.testId}
-              className="text-[10px] font-mono"
-              style={{ color: status.danger ? S.danger : S.faint, margin: 0 }}
-            >
-              {status.text}
+          <div className="flex gap-1.5">
+            {LEARN_KINDS.map((k) => (
+              <button key={k} type="button" data-testid="themes-kind" data-kind={k}
+                      aria-pressed={kind === k} onClick={() => setKind(k)}
+                      className="rounded-full px-2 py-0.5 text-[10px] font-mono"
+                      style={kind === k ? KIND_ON : KIND_OFF}>
+                {k}
+              </button>
+            ))}
+          </div>
+          <input
+            data-testid="themes-input"
+            className="px-2 py-1 text-[11px] font-mono rounded-lg"
+            style={{ background: 'transparent', border: `1px solid ${S.border}`, color: S.ink, outline: 'none' }}
+            aria-label={`Theme source ${LEARN_LABEL[kind].noun}`}
+            placeholder={LEARN_LABEL[kind].placeholder}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void submit(); } }}
+          />
+          {/* §4.6 asks for this to be SAID in the UI, not only honoured on the wire. */}
+          {kind !== 'url' && (
+            <p data-testid="themes-no-upload" className="text-[10px] font-mono"
+               style={{ color: S.faint, margin: 0 }}>
+              Read in place — the file is not uploaded.
             </p>
           )}
-          {(themes ?? []).map((t) => (
-            <button
-              key={t.name}
-              type="button"
-              data-testid="theme-row"
-              data-theme={t.name}
-              aria-pressed={picked === t.name}
-              onClick={() => {
-                useDocContextStore.getState().pickTheme(key, t.name);
-                setOpen(false);
-              }}
-              className="flex items-baseline justify-between gap-2 rounded-lg px-2 py-1 text-left text-[11px] font-mono"
-              style={{ background: picked === t.name ? S.picked : 'transparent',
-                       color: S.ink, border: 'none', cursor: 'pointer' }}
-            >
-              <span className="truncate">{t.name}</span>
-              <span className="shrink-0 text-[10px]" style={{ color: S.faint }}>
-                {t.source ?? 'built-in'}
-              </span>
-            </button>
-          ))}
+          <p data-testid="themes-sticks" className="text-[10px] font-mono"
+             style={{ color: S.faint, margin: 0 }}>
+            {THEMES_STICKS}
+          </p>
+          <button
+            type="button"
+            data-testid="themes-submit"
+            className="self-start rounded-lg px-2.5 py-1 text-[11px] font-semibold disabled:opacity-40"
+            style={{ background: S.accent, color: 'var(--accent-fg)', border: 'none', cursor: 'pointer' }}
+            disabled={busy || !learnReady(kind, value)}
+            onClick={() => void submit()}
+          >
+            {busy ? 'Submitting…' : `Learn from this ${LEARN_LABEL[kind].noun}`}
+          </button>
         </div>
       )}
     </div>

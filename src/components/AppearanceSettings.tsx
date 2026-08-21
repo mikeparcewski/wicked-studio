@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppearanceStore } from '../theming/appearance.js';
-import { BrandLearn } from './BrandLearn.js';
 import { WickedLogo } from './WickedLogo.js';
 
 /**
@@ -364,8 +363,16 @@ export function AppearanceSettings(): React.ReactElement {
         </p>
       </div>
 
-      {/* ── Learn from brand source (§4.3): the brand-learn loop, in-section ── */}
-      <BrandLearn />
+      {/* NOTE (issue #65): the "Learn from brand source" leg (BrandLearn, vision
+          slice 8) is GONE. Its whole loop — POST /api/theme/learn, a polled
+          GET /api/themes, GET /api/themes/:id — was an invented wire: the real
+          wicked-interactive bridge has never served a theme route (verified
+          against src/service/server.js and its history). Theme learning on the
+          real bridge is DOC-scoped (wicked.interactive.theme.requested) and its
+          result is never readable back over HTTP, so a studio-accent extraction
+          leg has no wire to ride. The manual accent/logo/theme controls above
+          are the appearance surface's real, crew-persisted capability.
+      */}
     </section>
   );
 }
