@@ -60,9 +60,13 @@ The review note is verified correct. The only global chord in the codebase is
   `select`, or `isContentEditable` (App.tsx:71–73).
 - On fire: `e.preventDefault()` then `api.cancelRun(runId)` (App.tsx:197–207).
 
-No other component binds a modifier chord (`grep -rn "metaKey|ctrlKey" src/` returns only
-App.tsx:70). The seventeen `onKeyDown` handlers elsewhere are all local (Enter-to-send in
-composers, Escape in modals) — none are global listeners.
+No other component binds a **global** modifier chord. `grep -rn "metaKey|ctrlKey" src/`
+returns four more hits — ChatInput.tsx:393,448,785 and CenterDashboard.tsx:708 — but all
+are local Ctrl/Cmd+Enter send handlers on their own elements, no conflict with K/P chords.
+The remaining `onKeyDown` handlers elsewhere are likewise local (Enter-to-send in
+composers); the modal family (Modal.tsx:18, NewProjectModal.tsx:53, RepoGraphModal.tsx:471,
+ChatInput.tsx:268) holds document-level keydown listeners that act on Escape only — they
+stay as-is (slice G preserves them) and steal nothing from the chords above.
 
 There is no palette, no fuzzy matcher, and no global-shortcut registry: today a second
 global chord would be a second ad-hoc `window.addEventListener` with its own guard copy.
@@ -577,7 +581,7 @@ repo names."*
 
 | Corpus | Where it lives today | Wire verdict |
 |---|---|---|
-| Runs (intent/`problem` text, id, status, repo_ref) | App's one `useRuns()` — every non-archived run view is client-held (`GET /runs`, routes.ts:481) | **CLIENT-DERIVABLE** (already fetched) |
+| Runs (intent/`problem` text, id, status, repo_ref) | App's one `useRuns()` — every non-archived run view is client-held (`GET /runs`, routes.ts:481; archived runs are excluded by the default listing and named in the not-searched clause) | **CLIENT-DERIVABLE** (already fetched) |
 | Open gate prompts | `useGateStore.gates` — event-sourced `awaitingHuman` prompts (gates.ts:93) | **CLIENT-DERIVABLE** (store) |
 | Prompt inbox (durable interaction requests) | `GET /projects/:id/prompts` (projects/routes.ts:427) — **per-project only**; a cross-project sweep would be an N-request fan-out | **EXISTS(per-project)** — used scoped, never fanned out (see honesty rule below) |
 | Decisions (governance claims) | `GET /governance/claims` (routes.ts:1128) — daemon-wide conformance-store claims, already typed (`GovernanceClaim`) and consumed by PolicyManager | **EXISTS** — one GET on search-open |
@@ -594,8 +598,8 @@ into search mode — wider result rows, snippet lines, a corpus label.
 **The corpus label is a first-class UI element, always visible** (EC24, §12.1):
 
 ```
-Searching: runs (all) · open gates · decisions (governance claims) · repos
-Not searched: transcripts, historical events — [why?]
+Searching: runs (all non-archived) · open gates · decisions (governance claims) · repos
+Not searched: archived runs, transcripts, historical events — [why?]
 ```
 
 The `[why?]` popover states the wire truth in one sentence: "The crew daemon has no
@@ -1026,7 +1030,7 @@ slice B/D precedent)."*
 **Current state:** the dashboard's one membership read (`api.listProjectMembers`,
 ProjectDashboard.tsx:123–140) already returns EVERY member — but `RUN_KINDS` filters to
 `crew.run`/`crew.chat` (ProjectDashboard.tsx:33) and drops `crew.repo` members on the
-floor. The wire grammar names `crew.repo` explicitly (crew-api-types index.d.ts:1179–1183).
+floor. The wire grammar names `crew.repo` explicitly (crew-api-types index.d.ts:1198).
 
 **Design:** a repos row in the dashboard header's meta line region — not a fifth tile
 (the 2×2 grid is a load-bearing §4.1 shape):
@@ -1079,7 +1083,8 @@ none, the testid is absent. Slots into slice J.
 - **EC21 — No key theft, one guard.** No unmodified or chorded shortcut acts while an
   `input`, `textarea`, `select`, or contentEditable has focus; every global handler runs
   behind the ONE shared `isTypingContext` predicate (grep: exactly one
-  `addEventListener('keydown'` at the registry). (§1.2, §2.4)
+  `window.addEventListener('keydown'` in `src/` — the registry; the modal family's
+  document-level Escape-only listeners (§1.1) are local, preserved, and exempt). (§1.2, §2.4)
 - **EC22 — The cursor is focus.** Keyboard selection (palette rows, triage cursor,
   switcher rows) moves real DOM focus with a visible `--accent` ring; every screenshot of
   a keyboard state shows the ring. (§2.2, §4.3)
