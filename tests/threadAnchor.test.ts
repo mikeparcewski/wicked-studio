@@ -20,16 +20,28 @@ afterEach(() => {
 });
 
 describe('scrollThreadToMessage (§7.6)', () => {
-  it('puts the anchored message in view and focuses it', () => {
+  it('puts the anchored message in view (smoothly, §5.5) and focuses it', () => {
     mountThread('msg-1', 'msg-2');
     const spy = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
 
     expect(scrollThreadToMessage('msg-2')).toBe(true);
-    expect(spy).toHaveBeenCalledWith({ block: 'center' });
+    expect(spy).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
     const focused = document.activeElement as HTMLElement;
     expect(focused.getAttribute('data-message-id')).toBe('msg-2');
     // Focusable programmatically only — the cross-link target is not a new tab stop.
     expect(focused).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('flashes the anchored message once — wk-anchor-flash on, removed on animationend (§5.5, §1.6)', () => {
+    mountThread('msg-1');
+    expect(scrollThreadToMessage('msg-1')).toBe(true);
+    const el = document.querySelector('[data-message-id="msg-1"]') as HTMLElement;
+    expect(el.classList.contains('wk-anchor-flash')).toBe(true);
+    // The class retires with its one animation run, so a later select flashes again.
+    el.dispatchEvent(new Event('animationend'));
+    expect(el.classList.contains('wk-anchor-flash')).toBe(false);
+    expect(scrollThreadToMessage('msg-1')).toBe(true);
+    expect(el.classList.contains('wk-anchor-flash')).toBe(true);
   });
 
   it('leaves an existing tabindex alone', () => {

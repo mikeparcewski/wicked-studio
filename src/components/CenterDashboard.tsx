@@ -68,23 +68,25 @@ const FEED_EVENTS_PER_SESSION = 30;
 /** Most rows the ONE runs list shows before deferring to "view all →" (/work). */
 const MAX_RUN_ROWS = 9;
 
-// ── Style tokens (matches Dashboard.tsx palette) ───────────────────────────────
+// ── Style constants (DES-VISION-001 §2.11: semantic tokens only — the two-face
+//    rule of §2.8 rides on these: `mono` marks narration/data, `sans` labels/prose) ──
 
-const mono = { fontFamily: 'monospace' } as const;
+const mono = { fontFamily: 'var(--font-mono)' } as const;
+const sans = { fontFamily: 'var(--font-sans)' } as const;
 
 const cardBase = {
-  background: '#1b222e',
-  border: '1px solid rgba(230,237,243,0.08)',
-  borderRadius: '12px',
+  background: 'var(--surface-card)',
+  border: '1px solid var(--surface-raised)',
+  borderRadius: 'var(--radius-lg)',
 } as const;
 
 const sectionLabel: React.CSSProperties = {
-  fontSize: '10px',
+  fontSize: 'var(--text-2xs)',
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
-  color: 'rgba(230,237,243,0.4)',
-  fontFamily: 'monospace',
+  color: 'var(--ink-dim)',
+  ...mono,
   margin: 0,
 };
 
@@ -135,21 +137,24 @@ export function runRowModel(view: SessionView, failReason?: string): RunRowModel
   const n = view.units.length;
   const done = view.units.filter((u) => u.status === 'done').length;
   const phase = n > 0 ? Math.min(done + 1, n) : 0;
+  // The colors are the §2.6 STATUS layer (never the accent): amber = a gate
+  // needs a human, emerald = working, red = failed, dim ink = history. The
+  // same token drives the row's status icon AND its 2px left border (§5.4).
   switch (view.session.status) {
     case 'awaiting_human':
-      return { glyph: '⏸', status: 'gate', detail: 'needs you', color: '#ffda19' };
+      return { glyph: '⏸', status: 'gate', detail: 'needs you', color: 'var(--status-gate)' };
     case 'planning':
-      return { glyph: '⚙', status: 'planning', detail: '', color: '#79c0ff' };
+      return { glyph: '⚙', status: 'planning', detail: '', color: 'var(--status-run)' };
     case 'distributing':
     case 'executing':
       return {
         glyph: '⚙',
         status: 'working',
         detail: n > 0 ? `phase ${phase}/${n}` : '',
-        color: '#79c0ff',
+        color: 'var(--status-run)',
       };
     case 'completed':
-      return { glyph: '✓', status: 'done', detail: '', color: '#3fb950' };
+      return { glyph: '✓', status: 'done', detail: '', color: 'var(--status-done)' };
     case 'failed':
       return {
         glyph: '✕',
@@ -157,10 +162,10 @@ export function runRowModel(view: SessionView, failReason?: string): RunRowModel
         detail: [n > 0 ? `at phase ${phase}` : '', failReason ? truncate(failReason, 48) : '']
           .filter(Boolean)
           .join(': '),
-        color: '#f85149',
+        color: 'var(--status-fail)',
       };
     default:
-      return { glyph: '⊘', status: view.session.status, detail: '', color: 'rgba(230,237,243,0.35)' };
+      return { glyph: '⊘', status: view.session.status, detail: '', color: 'var(--ink-dim)' };
   }
 }
 
@@ -184,71 +189,75 @@ interface FeedMeta {
   badgeColor: string;
 }
 
+// Every entry speaks the §2.6 status layer: full token for text, `-dim` for the
+// pill's border + background (the GateChip convention from vision slice 2).
+// Council/workflow provenance is the one exception — it speaks the accent
+// (deliberation is the product's own voice, not a run state).
 const FEED_META: Record<string, FeedMeta> = {
   awaitingHuman: {
     icon: '🔒',
     label: 'Gate decision required',
-    borderColor: 'rgba(255,218,25,0.35)',
-    textColor: '#ffda19',
-    badgeColor: 'rgba(255,218,25,0.12)',
+    borderColor: 'var(--status-gate-dim)',
+    textColor: 'var(--status-gate)',
+    badgeColor: 'var(--status-gate-dim)',
   },
   gateEscalated: {
     icon: '⬆',
     label: 'Gate escalated to human',
-    borderColor: 'rgba(121,192,255,0.3)',
-    textColor: '#79c0ff',
-    badgeColor: 'rgba(121,192,255,0.08)',
+    borderColor: 'var(--status-gate-dim)',
+    textColor: 'var(--status-gate)',
+    badgeColor: 'transparent',
   },
   stepFailed: {
     icon: '✕',
     label: 'Step failed',
-    borderColor: 'rgba(248,81,73,0.3)',
-    textColor: '#f85149',
-    badgeColor: 'rgba(248,81,73,0.08)',
+    borderColor: 'var(--status-fail-dim)',
+    textColor: 'var(--status-fail)',
+    badgeColor: 'var(--status-fail-dim)',
   },
   sessionFailed: {
     icon: '✕',
     label: 'Session failed',
-    borderColor: 'rgba(248,81,73,0.3)',
-    textColor: '#f85149',
-    badgeColor: 'rgba(248,81,73,0.08)',
+    borderColor: 'var(--status-fail-dim)',
+    textColor: 'var(--status-fail)',
+    badgeColor: 'var(--status-fail-dim)',
   },
   crashRecoveryRedrive: {
     icon: '↻',
     label: 'Crash recovery redrive',
-    borderColor: 'rgba(248,81,73,0.2)',
-    textColor: 'rgba(248,81,73,0.8)',
-    badgeColor: 'rgba(248,81,73,0.06)',
+    borderColor: 'var(--status-fail-dim)',
+    textColor: 'var(--status-fail)',
+    badgeColor: 'transparent',
   },
   unitDone: {
     icon: '✓',
     label: 'Unit complete',
-    borderColor: 'rgba(63,185,80,0.2)',
-    textColor: '#3fb950',
-    badgeColor: 'rgba(63,185,80,0.06)',
+    borderColor: 'var(--surface-raised)',
+    textColor: 'var(--status-done)',
+    badgeColor: 'var(--status-done-dim)',
   },
   workflowSelected: {
     icon: '◈',
     label: 'Workflow selected',
-    borderColor: 'rgba(167,139,250,0.25)',
-    textColor: '#a78bfa',
-    badgeColor: 'rgba(167,139,250,0.06)',
+    borderColor: 'var(--accent-subtle)',
+    textColor: 'var(--accent)',
+    badgeColor: 'transparent',
   },
   acpFallback: {
     icon: '⚠',
     label: 'ACP degraded — single-shot fallback',
-    borderColor: 'rgba(248,81,73,0.2)',
-    textColor: 'rgba(248,81,73,0.75)',
-    badgeColor: 'rgba(248,81,73,0.05)',
+    borderColor: 'var(--status-fail-dim)',
+    textColor: 'var(--status-fail)',
+    badgeColor: 'transparent',
   },
 };
 
 const DEFAULT_META: FeedMeta = {
   icon: '·',
   label: 'Event',
-  borderColor: 'rgba(230,237,243,0.08)',
-  textColor: '#e6edf3',
-  badgeColor: 'rgba(230,237,243,0.04)',
+  borderColor: 'var(--surface-raised)',
+  textColor: 'var(--ink-body)',
+  badgeColor: 'transparent',
 };
 
 // ── GateActionCard — inline approval for a single awaiting-human gate ─────────
@@ -293,9 +302,9 @@ function GateActionCard({
   return (
     <div
       style={{
-        background: '#161c26',
+        background: 'var(--surface-card)',
         border: `1px solid ${meta.borderColor}`,
-        borderRadius: '10px',
+        borderRadius: 'var(--radius-lg)',
         padding: '14px 16px',
       }}
     >
@@ -325,8 +334,8 @@ function GateActionCard({
         </div>
         <span
           style={{
-            fontSize: '10px',
-            color: 'rgba(230,237,243,0.4)',
+            fontSize: 'var(--text-2xs)',
+            color: 'var(--ink-dim)',
             ...mono,
             flexShrink: 0,
             marginLeft: '8px',
@@ -339,8 +348,8 @@ function GateActionCard({
       {/* Context line */}
       <p
         style={{
-          fontSize: '11px',
-          color: 'rgba(230,237,243,0.45)',
+          fontSize: 'var(--text-xs)',
+          color: 'var(--ink-dim)',
           ...mono,
           margin: '0 0 8px',
         }}
@@ -349,13 +358,13 @@ function GateActionCard({
         {typeof ord === 'number' ? ` · before unit #${ord}` : ''}
       </p>
 
-      {/* Prompt excerpt */}
+      {/* Prompt excerpt — the gate's question is prose, so it reads in the sans (§2.8) */}
       {prompt && (
         <p
           style={{
-            fontSize: '12px',
-            color: 'rgba(230,237,243,0.7)',
-            ...mono,
+            fontSize: 'var(--text-sm)',
+            color: 'var(--ink-body)',
+            ...sans,
             margin: '0 0 10px',
             lineHeight: 1.5,
             display: '-webkit-box',
@@ -373,11 +382,11 @@ function GateActionCard({
         <textarea
           style={{
             width: '100%',
-            background: '#0f1419',
-            border: '1px solid rgba(230,237,243,0.14)',
-            borderRadius: '6px',
-            color: '#e6edf3',
-            fontSize: '12px',
+            background: 'var(--surface-base)',
+            border: '1px solid var(--surface-raised)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--ink-high)',
+            fontSize: 'var(--text-xs)',
             ...mono,
             padding: '6px 8px',
             resize: 'vertical',
@@ -395,19 +404,22 @@ function GateActionCard({
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {/* The GateChip pairs (vision slice 2): approve speaks run-emerald,
+            steer speaks gate-amber, reject speaks fail-red — status semantics,
+            never the accent (§2.6). Labels are actions, so they read sans. */}
         <button
           type="button"
           disabled={loading}
           onClick={() => void run(() => onApprove(runId))}
           style={{
-            background: '#3fb950',
-            color: '#0d1117',
-            border: 'none',
-            borderRadius: '6px',
+            background: 'var(--status-run-dim)',
+            color: 'var(--status-run)',
+            border: '1px solid var(--status-run-dim)',
+            borderRadius: 'var(--radius-sm)',
             padding: '5px 12px',
-            fontSize: '11px',
+            fontSize: 'var(--text-xs)',
             fontWeight: 700,
-            ...mono,
+            ...sans,
             cursor: loading ? 'not-allowed' : 'pointer',
             opacity: loading ? 0.5 : 1,
           }}
@@ -425,14 +437,14 @@ function GateActionCard({
             }
           }}
           style={{
-            background: steerOpen && amend.trim() ? '#ffda19' : 'rgba(255,218,25,0.12)',
-            color: steerOpen && amend.trim() ? '#0d1117' : '#ffda19',
-            border: '1px solid rgba(255,218,25,0.3)',
-            borderRadius: '6px',
+            background: steerOpen && amend.trim() ? 'var(--status-gate)' : 'var(--status-gate-dim)',
+            color: steerOpen && amend.trim() ? 'var(--surface-base)' : 'var(--status-gate)',
+            border: '1px solid var(--status-gate-dim)',
+            borderRadius: 'var(--radius-sm)',
             padding: '5px 12px',
-            fontSize: '11px',
+            fontSize: 'var(--text-xs)',
             fontWeight: 600,
-            ...mono,
+            ...sans,
             cursor: loading ? 'not-allowed' : 'pointer',
             opacity: loading ? 0.5 : 1,
           }}
@@ -444,14 +456,14 @@ function GateActionCard({
           disabled={loading}
           onClick={() => void run(() => onReject(runId))}
           style={{
-            background: 'rgba(248,81,73,0.1)',
-            color: '#f85149',
-            border: '1px solid rgba(248,81,73,0.3)',
-            borderRadius: '6px',
+            background: 'var(--status-fail-dim)',
+            color: 'var(--status-fail)',
+            border: '1px solid var(--status-fail-dim)',
+            borderRadius: 'var(--radius-sm)',
             padding: '5px 12px',
-            fontSize: '11px',
+            fontSize: 'var(--text-xs)',
             fontWeight: 600,
-            ...mono,
+            ...sans,
             cursor: loading ? 'not-allowed' : 'pointer',
             opacity: loading ? 0.5 : 1,
           }}
@@ -487,7 +499,7 @@ function FeedEventRow({
       style={{
         background: meta.badgeColor,
         border: `1px solid ${meta.borderColor}`,
-        borderRadius: '8px',
+        borderRadius: 'var(--radius-md)',
         padding: '8px 12px',
         display: 'flex',
         alignItems: 'flex-start',
@@ -499,19 +511,19 @@ function FeedEventRow({
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 600, color: meta.textColor, ...mono }}>
+          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: meta.textColor, ...mono }}>
             {meta.label}
             {typeof ord === 'number' ? ` · unit #${ord}` : ''}
           </span>
-          <span style={{ fontSize: '10px', color: 'rgba(230,237,243,0.3)', ...mono, flexShrink: 0 }}>
+          <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', ...mono, flexShrink: 0 }}>
             {sessionId.slice(0, 6)}
           </span>
         </div>
         {detail && (
           <p
             style={{
-              fontSize: '11px',
-              color: 'rgba(230,237,243,0.55)',
+              fontSize: 'var(--text-xs)',
+              color: 'var(--ink-muted)',
               ...mono,
               margin: '2px 0 0',
               overflow: 'hidden',
@@ -524,7 +536,7 @@ function FeedEventRow({
           </p>
         )}
         {!detail && (
-          <p style={{ fontSize: '10px', color: 'rgba(230,237,243,0.3)', ...mono, margin: '2px 0 0' }}>
+          <p style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', ...mono, margin: '2px 0 0' }}>
             {sessionLbl}
           </p>
         )}
@@ -549,36 +561,46 @@ function RunRow({ view, failReason, onSelect }: RunRowProps): React.ReactElement
     <button
       type="button"
       data-testid="build-run-row"
+      data-status={m.status}
       title={view.session.problem || view.session.id}
       onClick={() => onSelect(view.session.id)}
+      // §5.4: the thin left border encodes run state at the list edge — the eye
+      // scans the margin for color without reading labels. The same status token
+      // drives the icon; a state change recolors both with a --dur-base
+      // transition, and a new row fades in once (wk-fade-in, §1.6: no loops).
+      className="wk-fade-in"
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: '10px',
         padding: '9px 12px',
-        background: '#1b222e',
-        border: '1px solid rgba(230,237,243,0.07)',
-        borderRadius: '10px',
+        background: 'var(--surface-card)',
+        border: '1px solid var(--surface-raised)',
+        borderLeft: `2px solid ${m.color}`,
+        borderRadius: 'var(--radius-md)',
         cursor: 'pointer',
-        transition: 'border-color 0.15s',
+        transition: 'color var(--dur-base), border-color var(--dur-base), background var(--dur-instant)',
         width: '100%',
         textAlign: 'left',
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(230,237,243,0.18)';
+        // Hover brightens the surface, never the border — the left border is
+        // status signal and must not be overwritten by an affordance.
+        (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-raised)';
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(230,237,243,0.07)';
+        (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-card)';
       }}
     >
-      <span style={{ color: m.color, fontSize: '12px', flexShrink: 0, width: '14px' }}>
+      <span style={{ color: m.color, fontSize: 'var(--text-xs)', flexShrink: 0, width: '14px', transition: 'color var(--dur-base)' }}>
         {m.glyph}
       </span>
+      {/* Intent label: prose, so sans + high ink (§5.4 token usage). */}
       <span
         style={{
-          fontSize: '12px',
-          color: '#e6edf3',
-          ...mono,
+          fontSize: 'var(--text-sm)',
+          color: 'var(--ink-high)',
+          ...sans,
           flex: 1,
           minWidth: 0,
           overflow: 'hidden',
@@ -588,10 +610,11 @@ function RunRow({ view, failReason, onSelect }: RunRowProps): React.ReactElement
       >
         {intent}
       </span>
-      <span style={{ fontSize: '11px', color: m.color, ...mono, flexShrink: 0 }}>
+      {/* Status word + phase detail: data, so mono; the detail dims (§5.4). */}
+      <span style={{ fontSize: 'var(--text-xs)', color: m.color, ...mono, flexShrink: 0, transition: 'color var(--dur-base)' }}>
         {m.status}
         {m.detail ? (
-          <span style={{ color: 'rgba(230,237,243,0.45)' }}>{` · ${m.detail}`}</span>
+          <span style={{ color: 'var(--ink-dim)', fontSize: 'var(--text-2xs)' }}>{` · ${m.detail}`}</span>
         ) : null}
       </span>
     </button>
@@ -649,11 +672,11 @@ function SendPanel({ activeRuns }: SendPanelProps): React.ReactElement {
                 onChange={(e) => setTarget(e.target.value)}
                 disabled={sending}
                 style={{
-                  background: '#0f1419',
-                  border: '1px solid rgba(230,237,243,0.14)',
-                  borderRadius: '6px',
-                  color: '#e6edf3',
-                  fontSize: '11px',
+                  background: 'var(--surface-base)',
+                  border: '1px solid var(--surface-raised)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--ink-high)',
+                  fontSize: 'var(--text-xs)',
                   ...mono,
                   padding: '4px 8px',
                   cursor: 'pointer',
@@ -683,11 +706,11 @@ function SendPanel({ activeRuns }: SendPanelProps): React.ReactElement {
               rows={3}
               style={{
                 width: '100%',
-                background: '#0f1419',
-                border: '1px solid rgba(230,237,243,0.14)',
-                borderRadius: '6px',
-                color: '#e6edf3',
-                fontSize: '12px',
+                background: 'var(--surface-base)',
+                border: '1px solid var(--surface-raised)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--ink-high)',
+                fontSize: 'var(--text-xs)',
                 ...mono,
                 padding: '8px 10px',
                 resize: 'vertical',
@@ -702,26 +725,28 @@ function SendPanel({ activeRuns }: SendPanelProps): React.ReactElement {
                 disabled={sending || !message.trim()}
                 onClick={() => void handleSend()}
                 style={{
-                  background: message.trim() ? '#79c0ff' : 'rgba(121,192,255,0.15)',
-                  color: message.trim() ? '#0d1117' : 'rgba(121,192,255,0.45)',
+                  // Send is an action → the accent, dimmed while it has nothing
+                  // to send (§2.5: the accent marks primary actions, sparingly).
+                  background: message.trim() ? 'var(--accent)' : 'var(--accent-subtle)',
+                  color: message.trim() ? 'var(--accent-fg)' : 'var(--ink-muted)',
                   border: 'none',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   padding: '6px 14px',
-                  fontSize: '11px',
+                  fontSize: 'var(--text-xs)',
                   fontWeight: 700,
-                  ...mono,
+                  ...sans,
                   cursor: sending || !message.trim() ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.15s',
+                  transition: 'background var(--dur-instant), color var(--dur-instant)',
                 }}
               >
                 {sending ? 'Sending…' : 'Send'}
               </button>
               {sent && (
-                <span style={{ fontSize: '11px', color: '#3fb950', ...mono }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--status-run)', ...mono }}>
                   ✓ Sent
                 </span>
               )}
-              <span style={{ fontSize: '10px', color: 'rgba(230,237,243,0.25)', ...mono }}>
+              <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', ...mono }}>
                 Ctrl+Enter
               </span>
             </div>
@@ -917,20 +942,23 @@ export function CenterDashboard({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div data-testid="build-dashboard" style={{ color: '#e6edf3', ...mono }}>
+    // Two faces, one rule (§2.8): the surface defaults to the sans (labels and
+    // prose); data — status words, phases, ids, the cost — opts into the mono.
+    <div data-testid="build-dashboard" style={{ color: 'var(--ink-body)', ...sans }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '28px 32px' }}>
 
         {/* ── 1. Header + purpose statement (the F7 fix; also the empty state) ── */}
-        <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#e6edf3', margin: 0, ...mono }}>
+        <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--ink-high)', margin: 0, ...sans }}>
           Build
         </h1>
+        {/* Purpose: prose — `--ink-body --text-sm` in the sans (§5.4 token usage). */}
         <p
           data-testid="build-purpose"
           style={{
-            fontSize: '13px',
+            fontSize: 'var(--text-sm)',
             lineHeight: 1.6,
-            color: 'rgba(230,237,243,0.65)',
-            ...mono,
+            color: 'var(--ink-body)',
+            ...sans,
             margin: '8px 0 24px',
             maxWidth: '640px',
           }}
@@ -941,13 +969,20 @@ export function CenterDashboard({
         {/* ── 2. Gate inbox — only when gates are pending (§2.7 rule 5, W4) ───── */}
         {openGates.length > 0 && (
           <div data-testid="gate-inbox" style={{ marginBottom: '24px' }}>
-            {/* Sentence case (the wireframe's "⏸ 1 gate needs you"), not the
-                uppercased section-label treatment: this line is a headline. */}
+            {/* The §5.4 gate-inbox pill: `--status-gate-dim` background,
+                `--status-gate` text. Sentence case — this line is a headline. */}
             <p
+              data-testid="gate-inbox-pill"
               style={{
-                fontSize: '12px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'var(--status-gate-dim)',
+                borderRadius: 'var(--radius-full)',
+                padding: '4px 12px',
+                fontSize: 'var(--text-xs)',
                 fontWeight: 600,
-                color: '#ffda19',
+                color: 'var(--status-gate)',
                 ...mono,
                 margin: '0 0 10px',
               }}
@@ -1005,9 +1040,9 @@ export function CenterDashboard({
                 type="button"
                 onClick={() => navigate('/work')}
                 style={{
-                  fontSize: '11px',
-                  color: '#79c0ff',
-                  ...mono,
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--accent)',
+                  ...sans,
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
@@ -1018,44 +1053,56 @@ export function CenterDashboard({
                 view all →
               </button>
             )}
-            {/* Stats footer — a summary of runs, shown only when there IS data
-                (§2.7 rule 2). Absent entirely otherwise; never `—`. */}
-            {footerParts.length > 0 && (
-              <p
-                data-testid="build-stats-footer"
-                style={{
-                  fontSize: '11px',
-                  color: 'rgba(230,237,243,0.4)',
-                  ...mono,
-                  margin: '10px 2px 0',
-                }}
-              >
-                {footerParts.join(' · ')}
-              </p>
-            )}
           </div>
         )}
 
-        {/* ── 4. The one primary action, in the mode's own words (§2.7 rule 6) ── */}
-        <button
-          type="button"
-          data-testid="build-something"
-          onClick={() => navigate('/runs/new')}
+        {/* ── 4. The one primary action + the cost footer, one row (§5.4's
+               wireframe: `[ + Build something ]` left, `cost: $0.24` right).
+               The action speaks the accent (§2.5); the footer is a data point,
+               not a hero — mono because it's a number, dim because it's ambient
+               (§5.4 token usage), and shown only when there IS data (§2.7
+               rule 2, never `—`). ─────────────────────────────────────────── */}
+        <div
           style={{
-            background: '#ffda19',
-            color: '#0d1117',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '9px 18px',
-            fontSize: '12px',
-            fontWeight: 700,
-            ...mono,
-            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
             marginBottom: '28px',
           }}
         >
-          + Build something
-        </button>
+          <button
+            type="button"
+            data-testid="build-something"
+            onClick={() => navigate('/runs/new')}
+            style={{
+              background: 'var(--accent)',
+              color: 'var(--accent-fg)',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              padding: '9px 18px',
+              fontSize: 'var(--text-xs)',
+              fontWeight: 700,
+              ...sans,
+              cursor: 'pointer',
+            }}
+          >
+            + Build something
+          </button>
+          {runRows.length > 0 && footerParts.length > 0 && (
+            <p
+              data-testid="build-stats-footer"
+              style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--ink-dim)',
+                ...mono,
+                margin: 0,
+              }}
+            >
+              {footerParts.join(' · ')}
+            </p>
+          )}
+        </div>
 
         {/* ── 5. Agent activity — compact feed, only when active sessions carry
                events and no gate is pending. An event-less feed is OMITTED

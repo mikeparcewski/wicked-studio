@@ -144,3 +144,35 @@ code, pre, .font-mono {
   .wk-feed-line,
   .wk-feed-block { animation: none; }
 }
+
+/* Slice-4 surface motion (DES-VISION-001 §5.3/§5.4, grammar per §1.6):
+   - wk-fade-in: one fade on mount — a new Build run row appears at --dur-fast
+     (§5.4 "run row appears on creation with a fade-in"); no loops.
+   - wk-disclose: the Chat multi-agent roster disclosure at --dur-base ease-out
+     (§5.3 motion) — the seat chips' entrance when the strip is disclosed.
+   - wk-composer: the Chat composer's focus ring is --accent-dim, deliberately
+     NOT the full accent (§5.3 motion: full opacity is too dominant). */
+.wk-fade-in  { animation: wk-feed-in var(--dur-fast) var(--ease-out); }
+.wk-disclose { animation: wk-feed-in var(--dur-base) var(--ease-out); }
+
+.wk-composer:focus,
+.wk-composer:focus-within {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+/* The §5.5 cross-link animation: selecting a version scrolls the thread AND
+   flashes the message that produced it — a 1s fade of --accent-subtle. One run
+   (§1.6: motion is state change, never a loop); threadAnchor.ts removes the
+   class on animationend so the next select can flash again. */
+@keyframes wk-anchor-flash {
+  from { background-color: var(--accent-subtle); }
+  to   { background-color: transparent; }
+}
+.wk-anchor-flash { animation: wk-anchor-flash 1s var(--ease-out); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-fade-in,
+  .wk-disclose,
+  .wk-anchor-flash { animation: none; }
+}

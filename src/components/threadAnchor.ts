@@ -19,16 +19,27 @@ function messageSelector(messageId: string): string {
  * lands on it (the same posture as a board gate deep-link). Returns false when the
  * thread or the message is not on screen — the caller decides what that means; the
  * version selection itself never depends on it.
+ *
+ * DES-VISION-001 §5.5 (the cross-link animation): the scroll is SMOOTH, and the
+ * anchored message flashes once — a 1s fade of `--accent-subtle` (the
+ * `wk-anchor-flash` keyframes in global.css; one run, never a loop, §1.6). The
+ * class is removed when its animation ends so a later select of the same
+ * version flashes again.
  */
 export function scrollThreadToMessage(messageId: string): boolean {
   const thread = document.querySelector('[data-testid="thread"]');
   if (thread === null) return false;
   const el = thread.querySelector(messageSelector(messageId));
   if (!(el instanceof HTMLElement)) return false;
-  el.scrollIntoView({ block: 'center' });
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   // Programmatically focusable only: the cross-link target, never a new tab stop.
   if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
   el.focus({ preventScroll: true });
+  el.classList.remove('wk-anchor-flash');
+  // Force a reflow so re-adding the class restarts a still-running animation.
+  void el.offsetWidth;
+  el.classList.add('wk-anchor-flash');
+  el.addEventListener('animationend', () => el.classList.remove('wk-anchor-flash'), { once: true });
   return true;
 }
 

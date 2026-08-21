@@ -41,14 +41,16 @@ function DocPicker({ projectId, navigate }: { projectId: string; navigate: Navig
 
   // §1.4's rule, applied to a surface: an empty region renders an invitation, never a
   // blank. Creation itself is slice 10, so the invitation points at the thread.
+  // §2.8's two faces: the invitation and doc names are prose (sans); the
+  // kind · version pair on each row is data (mono).
   if (docs.length === 0) {
     return (
-      <div data-testid="doc-picker-empty" style={{ padding: '32px' }}>
+      <div data-testid="doc-picker-empty" style={{ padding: '32px', fontFamily: 'var(--font-sans)' }}>
         <div style={PANEL}>
-          <h2 style={{ fontSize: '15px', fontWeight: 700, color: S.ink, margin: '0 0 8px' }}>
+          <h2 style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: S.ink, margin: '0 0 8px' }}>
             No documents in this project yet
           </h2>
-          <p style={{ fontSize: '13px', color: S.muted, margin: 0, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 'var(--text-sm)', color: S.muted, margin: 0, lineHeight: 1.5 }}>
             Ask for one in the thread — “make me a deck for the Q3 review”, “write this up as a
             report” — and it appears here, with its versions, as soon as it exists.
           </p>
@@ -58,10 +60,10 @@ function DocPicker({ projectId, navigate }: { projectId: string; navigate: Navig
   }
 
   return (
-    <div style={{ padding: '32px', overflowY: 'auto' }}>
+    <div style={{ padding: '32px', overflowY: 'auto', fontFamily: 'var(--font-sans)' }}>
       <p style={{
-        fontSize: '11px', fontWeight: 600, color: S.label, margin: '0 0 10px',
-        textTransform: 'uppercase', letterSpacing: '0.06em',
+        fontSize: 'var(--text-xs)', fontWeight: 600, color: S.label, margin: '0 0 10px',
+        textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-mono)',
       }}>
         Documents
       </p>
@@ -77,11 +79,12 @@ function DocPicker({ projectId, navigate }: { projectId: string; navigate: Navig
               display: 'flex', alignItems: 'center', gap: '12px', width: '100%', textAlign: 'left',
               background: 'transparent', border: 'none',
               borderBottom: i < sorted.length - 1 ? `1px solid ${S.border}` : 'none',
-              color: S.ink, cursor: 'pointer', fontSize: '13px', padding: '12px 16px',
+              color: S.ink, cursor: 'pointer', fontSize: 'var(--text-sm)',
+              fontFamily: 'var(--font-sans)', padding: '12px 16px',
             }}
           >
             <span style={{ flex: 1, fontWeight: 500 }}>{doc.name}</span>
-            <span style={{ color: S.muted, flexShrink: 0, fontSize: '12px' }}>
+            <span style={{ color: S.muted, flexShrink: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>
               {doc.kind} · v{doc.head}
             </span>
           </button>
@@ -166,7 +169,14 @@ function DocFrame({
   return (
     <>
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      {/* §5.5 token usage: the canvas is framed cleanly — a subtle 1px stroke at
+          --radius-lg, breathing room on the open sides — rather than bleeding to
+          the pane edges. The thread beside it keeps its own left border. */}
+      <div style={{
+        flex: 1, position: 'relative', overflow: 'hidden',
+        border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-lg)',
+        margin: '10px 10px 10px 10px', background: 'var(--surface-base)',
+      }}>
       <iframe
         // Keyed on the VERSION so a swap REPLACES the element instead of mutating its
         // src. Mutating it navigates the frame, and a frame navigation lands in the
@@ -189,7 +199,7 @@ function DocFrame({
       />
       {/* The frame is in the DOM while it loads, so the named status sits over it. */}
       {loaded ? null : (
-        <div style={{ background: '#0d1117', inset: 0, position: 'absolute' }}>
+        <div style={{ background: 'var(--surface-base)', inset: 0, position: 'absolute' }}>
           <Loading surface="doc" subject={subject} />
         </div>
       )}

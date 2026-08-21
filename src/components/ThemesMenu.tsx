@@ -15,19 +15,26 @@ import { contextKey, useDocContextStore } from '../store/docContext.js';
 // the canvas already shows. Learning a new theme stays in the composer's "learn a theme"
 // action, because that submission is a thread message (§2.3).
 
+// DES-VISION-001 §5.5 token usage: the popover is a raised surface; a PICKED
+// theme speaks the brand accent (an affordance state, §2.5), failures speak the
+// §2.6 status layer. The explainer is prose → sans/--ink-body/--text-sm; theme
+// names are identifiers → the mono.
 const S = {
-  ink:    '#e6edf3',
-  faint:  'rgba(230,237,243,0.35)',
-  muted:  'rgba(230,237,243,0.55)',
-  accent: '#ffda19',
-  card:   '#1b222e',
-  border: 'rgba(230,237,243,0.1)',
-  danger: '#f85149',
+  ink:    'var(--ink-high)',
+  body:   'var(--ink-body)',
+  faint:  'var(--ink-dim)',
+  muted:  'var(--ink-muted)',
+  accent: 'var(--accent)',
+  picked: 'var(--accent-subtle)',
+  card:   'var(--surface-raised)',
+  border: 'var(--surface-raised)',
+  danger: 'var(--status-fail)',
 };
 
 const BUTTON: React.CSSProperties = {
-  background: 'transparent', border: `1px solid ${S.border}`, borderRadius: '5px',
-  color: S.muted, cursor: 'pointer', fontSize: '10px', lineHeight: 1.6, padding: '1px 6px',
+  background: 'transparent', border: `1px solid ${S.border}`, borderRadius: 'var(--radius-sm)',
+  color: S.muted, cursor: 'pointer', fontSize: 'var(--text-2xs)',
+  fontFamily: 'var(--font-sans)', lineHeight: 1.6, padding: '1px 6px',
 };
 
 /** V19's one-line explanation, shown every time the menu opens — never tooltip-only. */
@@ -85,14 +92,20 @@ export function ThemesMenu({ projectId, docId }: ThemesMenuProps): React.ReactEl
           data-testid="themes-panel"
           className="flex flex-col gap-1 overflow-y-auto"
           style={{
-            background: S.card, border: `1px solid ${S.border}`, borderRadius: '10px',
+            background: S.card, border: '1px solid var(--surface-overlay)',
+            borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-overlay)',
             bottom: 'calc(100% + 6px)', maxHeight: '200px', padding: '8px 10px',
             position: 'absolute', right: 0, width: '250px', zIndex: 30,
           }}
         >
+          {/* §5.5: the one-line explanation opens WITH the popover, in
+              --font-sans --ink-body --text-sm — prose, never tooltip-only. */}
           <p
-            data-testid="themes-explain"
-            style={{ color: S.muted, fontSize: '11px', lineHeight: 1.4, margin: 0 }}
+            data-testid="themes-explanation"
+            style={{
+              color: S.body, fontSize: 'var(--text-sm)', fontFamily: 'var(--font-sans)',
+              lineHeight: 1.4, margin: 0,
+            }}
           >
             {THEMES_EXPLAINER}
           </p>
@@ -117,7 +130,7 @@ export function ThemesMenu({ projectId, docId }: ThemesMenuProps): React.ReactEl
                 setOpen(false);
               }}
               className="flex items-baseline justify-between gap-2 rounded-lg px-2 py-1 text-left text-[11px] font-mono"
-              style={{ background: picked === t.name ? 'rgba(255,218,25,0.1)' : 'transparent',
+              style={{ background: picked === t.name ? S.picked : 'transparent',
                        color: S.ink, border: 'none', cursor: 'pointer' }}
             >
               <span className="truncate">{t.name}</span>

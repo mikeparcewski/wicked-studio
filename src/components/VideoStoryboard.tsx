@@ -87,14 +87,19 @@ export function playerState(
 /** Stable identity for "this thread has said nothing", so the selector never re-renders. */
 const NO_MESSAGES: DocMsg[] = [];
 
+// DES-VISION-001 §5.6 token usage: rails carry the strip and action bar;
+// primary actions are the brand accent with --accent-fg ink; labels read in
+// the sans, recording narration and offsets in the mono (§2.8).
 const ACTION: React.CSSProperties = {
-  border: 'none', borderRadius: '6px', cursor: 'pointer', flexShrink: 0,
-  fontSize: '11px', fontWeight: 600, padding: '5px 11px',
+  border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', flexShrink: 0,
+  fontSize: 'var(--text-xs)', fontWeight: 600, fontFamily: 'var(--font-sans)',
+  padding: '5px 11px',
 };
 
 const BAR: React.CSSProperties = {
-  alignItems: 'center', background: '#0f1419', borderTop: `1px solid ${S.border}`,
+  alignItems: 'center', background: 'var(--surface-rail)', borderTop: `1px solid ${S.border}`,
   display: 'flex', flexShrink: 0, gap: '8px', padding: '8px 12px',
+  fontFamily: 'var(--font-sans)',
 };
 
 // ── Demo picker — the mode with no `:demoId` in the route ────────────────────
@@ -114,12 +119,12 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
   // agent's job, so the invitation points at the thread — recording from it is slice 14.
   if (demos.length === 0) {
     return (
-      <div data-testid="demo-picker-empty" style={{ padding: '32px' }}>
+      <div data-testid="demo-picker-empty" style={{ padding: '32px', fontFamily: 'var(--font-sans)' }}>
         <div style={PANEL}>
-          <h2 style={{ fontSize: '15px', fontWeight: 700, color: S.ink, margin: '0 0 8px' }}>
+          <h2 style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: S.ink, margin: '0 0 8px' }}>
             No demos in this project yet
           </h2>
-          <p style={{ fontSize: '13px', color: S.muted, margin: 0, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 'var(--text-sm)', color: S.muted, margin: 0, lineHeight: 1.5 }}>
             A demo is a set of steps the agent authors and the service records. Ask for a
             walkthrough in the thread — “a demo of the checkout flow” — and it appears here as
             a storyboard with its player as soon as the spec exists.
@@ -130,10 +135,10 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
   }
 
   return (
-    <div style={{ padding: '32px', overflowY: 'auto' }}>
+    <div style={{ padding: '32px', overflowY: 'auto', fontFamily: 'var(--font-sans)' }}>
       <p style={{
-        fontSize: '11px', fontWeight: 600, color: S.label, margin: '0 0 10px',
-        textTransform: 'uppercase', letterSpacing: '0.06em',
+        fontSize: 'var(--text-xs)', fontWeight: 600, color: S.label, margin: '0 0 10px',
+        textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-mono)',
       }}>
         Demos
       </p>
@@ -149,11 +154,14 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
               display: 'flex', alignItems: 'center', gap: '12px', width: '100%', textAlign: 'left',
               background: 'transparent', border: 'none',
               borderBottom: i < sorted.length - 1 ? `1px solid ${S.border}` : 'none',
-              color: S.ink, cursor: 'pointer', fontSize: '13px', padding: '12px 16px',
+              color: S.ink, cursor: 'pointer', fontSize: 'var(--text-sm)',
+              fontFamily: 'var(--font-sans)', padding: '12px 16px',
             }}
           >
             <span style={{ flex: 1, fontWeight: 500 }}>{demo.name}</span>
-            <span style={{ color: S.muted, flexShrink: 0, fontSize: '12px' }}>v{demo.head}</span>
+            <span style={{ color: S.muted, flexShrink: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>
+              v{demo.head}
+            </span>
           </button>
         ))}
       </div>
@@ -187,27 +195,29 @@ function MissingRecording({
   }
 
   return (
-    <div data-testid="demo-no-recording" data-ffmpeg-absent={String(state.ffmpeg)} style={{ padding: '32px' }}>
+    <div data-testid="demo-no-recording" data-ffmpeg-absent={String(state.ffmpeg)}
+         style={{ padding: '32px', fontFamily: 'var(--font-sans)' }}>
       <div style={PANEL}>
-        <h2 style={{ fontSize: '15px', fontWeight: 700, color: S.ink, margin: '0 0 8px' }}>
+        <h2 style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: S.ink, margin: '0 0 8px' }}>
           {state.ffmpeg
             ? `“${demoId}” recorded, but the video could not be converted`
             : `“${demoId}” has no recording yet`}
         </h2>
         {/* The hint is the SERVICE's command and is rendered verbatim — paraphrasing it
-            would be paraphrasing something the user has to type (§3.3). */}
+            would be paraphrasing something the user has to type (§3.3). Actionable ⇒
+            it wears the gate-amber rule (S.accent maps to --status-gate here). */}
         {state.hint ? (
           <p
             data-testid="demo-ffmpeg-hint"
             style={{
-              fontSize: '13px', color: S.ink, margin: '0 0 14px', lineHeight: 1.5,
+              fontSize: 'var(--text-sm)', color: S.ink, margin: '0 0 14px', lineHeight: 1.5,
               borderLeft: `2px solid ${S.accent}`, paddingLeft: '10px',
             }}
           >
             <strong>To fix:</strong> {state.hint}
           </p>
         ) : (
-          <p style={{ fontSize: '13px', color: S.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 'var(--text-sm)', color: S.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
             The steps below are the spec the agent authored. Recording runs them in a real
             browser and captures the result.
           </p>
@@ -218,20 +228,21 @@ function MissingRecording({
           disabled={busy || queued}
           onClick={() => void go()}
           style={{
-            background: 'transparent', border: `1px solid ${S.border}`, borderRadius: '6px',
+            background: 'transparent', border: `1px solid ${S.border}`,
+            borderRadius: 'var(--radius-sm)',
             color: queued ? S.muted : S.ink, cursor: busy || queued ? 'default' : 'pointer',
-            fontSize: '12px', padding: '6px 12px',
+            fontSize: 'var(--text-xs)', padding: '6px 12px',
           }}
         >
           {queued ? 'Recording queued' : busy ? `Asking the recorder to run “${demoId}”…` : 'Record this demo'}
         </button>
         {queued ? (
-          <p data-testid="demo-record-queued" style={{ fontSize: '12px', color: S.muted, margin: '10px 0 0' }}>
+          <p data-testid="demo-record-queued" style={{ fontSize: 'var(--text-xs)', color: S.muted, margin: '10px 0 0' }}>
             The recorder is running “{demoId}” — the player appears here when the version lands.
           </p>
         ) : null}
         {error !== null ? (
-          <p data-testid="demo-record-error" style={{ fontSize: '12px', color: S.ink, margin: '10px 0 0' }}>
+          <p data-testid="demo-record-error" style={{ fontSize: 'var(--text-xs)', color: S.ink, margin: '10px 0 0' }}>
             Could not queue the recording: {error}. Try again, or ask in the thread.
           </p>
         ) : null}
@@ -336,7 +347,12 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
         data-chapter={String(chapter)}
         data-position={String(at)}
         data-player-kind={player.kind}
-        style={{ flex: 1, overflow: 'auto', background: '#0d1117' }}
+        // §5.6: the player container wears the same framing as Document's canvas.
+        style={{
+          flex: 1, overflow: 'auto', background: 'var(--surface-base)',
+          border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-lg)',
+          margin: '10px 10px 0',
+        }}
       >
         {player.kind === 'video' ? (
           <video
@@ -353,7 +369,9 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
           // pretending the playhead moved (§3.3: informative, with its subject).
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px' }}>
             <img data-testid="demo-gif" src={player.src} alt={`Recording of ${demoId}`} style={{ maxWidth: '100%' }} />
-            <p data-testid="demo-position" style={{ fontSize: '12px', color: S.muted, margin: 0 }}>
+            <p data-testid="demo-position" style={{
+              fontSize: 'var(--text-xs)', color: S.muted, margin: 0, fontFamily: 'var(--font-sans)',
+            }}>
               {steps.length > 0
                 ? `Chapter ${chapter + 1} of ${steps.length}, at ${mmss(at)} — this recording is a `
                   + 'looping GIF with no timeline, so the chapter is shown rather than played to.'
@@ -371,11 +389,12 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
         data-steps={String(steps.length)}
         style={{
           display: 'flex', flexShrink: 0, gap: '8px', overflowX: 'auto', padding: '10px 12px',
-          background: '#0f1419', borderTop: `1px solid ${S.border}`,
+          background: 'var(--surface-rail)', borderTop: `1px solid ${S.border}`,
+          fontFamily: 'var(--font-sans)',
         }}
       >
         {steps.length === 0 ? (
-          <p data-testid="demo-storyboard-empty" style={{ fontSize: '12px', color: S.muted, margin: 0 }}>
+          <p data-testid="demo-storyboard-empty" style={{ fontSize: 'var(--text-xs)', color: S.muted, margin: 0 }}>
             {subject} has no steps yet — the agent is still authoring the spec.
           </p>
         ) : steps.map((step) => (
@@ -389,11 +408,19 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
             data-comments={String(items.filter((i) => i.index === step.index).length)}
             title={`Chapter ${step.index + 1}: ${step.title} — ${player.kind === 'video' ? 'seeks to' : 'starts at'} ${mmss(step.timestamp)}`}
             onClick={(e) => onChapter(step, e.currentTarget)}
+            // §5.6: thumbs sit on --surface-raised; the SELECTED chapter carries
+            // border: 2px solid var(--accent) (the slice DOM AC). A chapter with
+            // queued comments shows the dimmer accent tier — pending input, not a
+            // status. The border is 2px in every state so selection never shifts
+            // the layout.
             style={{
-              background: step.index === chapter ? 'rgba(255,218,25,0.1)' : 'transparent',
-              border: `1px solid ${step.index === chapter || items.some((i) => i.index === step.index) ? S.accent : S.border}`,
-              borderRadius: '8px', color: S.ink, cursor: 'pointer', flexShrink: 0,
+              background: 'var(--surface-raised)',
+              border: `2px solid ${step.index === chapter
+                ? 'var(--accent)'
+                : items.some((i) => i.index === step.index) ? 'var(--accent-dim)' : 'transparent'}`,
+              borderRadius: 'var(--radius-md)', color: S.ink, cursor: 'pointer', flexShrink: 0,
               padding: '8px', textAlign: 'left', width: '160px',
+              transition: 'border-color var(--dur-base)',
             }}
           >
             {step.thumbnail ? (
@@ -401,13 +428,19 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
                 data-testid="chapter-thumbnail"
                 src={interactiveUrl(projectId, step.thumbnail)}
                 alt=""
-                style={{ display: 'block', borderRadius: '4px', marginBottom: '6px', width: '100%' }}
+                style={{ display: 'block', borderRadius: 'var(--radius-sm)', marginBottom: '6px', width: '100%' }}
               />
             ) : null}
-            <span style={{ display: 'block', fontSize: '12px', fontWeight: 600 }}>
+            <span style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
               {step.index + 1}. {step.title}
             </span>
-            <span style={{ display: 'block', color: S.muted, fontSize: '11px' }}>{mmss(step.timestamp)}</span>
+            {/* Chapter caption: --text-2xs --ink-dim (§5.6); the offset is data → mono. */}
+            <span style={{
+              display: 'block', color: 'var(--ink-dim)', fontSize: 'var(--text-2xs)',
+              fontFamily: 'var(--font-mono)',
+            }}>
+              {mmss(step.timestamp)}
+            </span>
           </button>
         ))}
       </div>
@@ -426,10 +459,15 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
       {steps.length > 0 && (
         <div data-testid="demo-actions" style={BAR}>
           {recording ? (
-            <span data-testid="demo-record-status" style={{ color: S.ink, fontSize: '12px' }}>{status}</span>
+            // §5.6: recording status narration is DATA — mono, --text-xs, --ink-body.
+            <span data-testid="demo-record-status" style={{
+              color: 'var(--ink-body)', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
+            }}>
+              {status}
+            </span>
           ) : draft !== null ? (
             <>
-              <span style={{ color: S.muted, fontFamily: 'monospace', fontSize: '10px', flexShrink: 0 }}>
+              <span style={{ color: S.muted, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', flexShrink: 0 }}>
                 step {draft.index + 1}
               </span>
               <textarea
@@ -443,14 +481,18 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
                   if (e.key === 'Escape') setDraft(null);
                 }}
+                className="wk-composer"
                 style={{
-                  background: 'transparent', border: `1px solid ${S.border}`, borderRadius: '6px',
-                  color: S.ink, flex: 1, fontFamily: 'inherit', fontSize: '12px', padding: '5px 7px', resize: 'none',
+                  background: 'var(--surface-raised)', border: '1px solid var(--surface-overlay)',
+                  borderRadius: 'var(--radius-sm)', outline: 'none',
+                  color: S.ink, flex: 1, fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-xs)', padding: '5px 7px', resize: 'none',
                 }}
               />
+              {/* Primary actions speak the accent with --accent-fg ink (§2.5). */}
               <button type="button" data-testid="step-comment-add" onClick={commit}
                       disabled={draft.text.trim() === ''}
-                      style={{ ...ACTION, background: S.accent, color: '#0d1117' }}>
+                      style={{ ...ACTION, background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                 Add to batch
               </button>
               <button type="button" data-testid="step-comment-cancel" onClick={() => setDraft(null)}
@@ -471,14 +513,14 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
               </button>
               {sent && (
                 <>
-                  <span style={{ color: S.ink, fontSize: '12px' }}>
+                  <span style={{ color: S.ink, fontSize: 'var(--text-xs)' }}>
                     “{demoId}” was re-authored from your comments — record it again to see the change.
                   </span>
                   <button
                     type="button"
                     data-testid="demo-rerecord"
                     onClick={() => void record(`Re-record “${demoId}” with the updated steps.`)}
-                    style={{ ...ACTION, background: S.accent, color: '#0d1117' }}
+                    style={{ ...ACTION, background: 'var(--accent)', color: 'var(--accent-fg)' }}
                   >
                     Re-record
                   </button>
@@ -492,7 +534,7 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
                   disabled={busy || version === null}
                   title={version === null ? 'This demo has no version to comment on yet.' : 'One message, one re-authoring'}
                   onClick={() => void send()}
-                  style={{ ...ACTION, background: S.accent, color: '#0d1117', marginLeft: 'auto' }}
+                  style={{ ...ACTION, background: 'var(--accent)', color: 'var(--accent-fg)', marginLeft: 'auto' }}
                 >
                   {busy ? 'Sending…' : `Send ${items.length} comment${items.length === 1 ? '' : 's'}`}
                 </button>
@@ -500,7 +542,9 @@ function DemoSurface({ projectId, demoId }: { projectId: string; demoId: string 
             </>
           )}
           {error !== null && (
-            <span data-testid="step-feedback-error" style={{ color: '#f85149', fontFamily: 'monospace', fontSize: '11px' }}>
+            <span data-testid="step-feedback-error" style={{
+              color: 'var(--status-fail)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
+            }}>
               {error} — nothing was sent; try again.
             </span>
           )}

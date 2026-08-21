@@ -48,11 +48,11 @@ describe('Themes — named, placed, and explained (V19)', () => {
     // Nothing fetched and nothing explained until the user asks (the pill's old sin
     // was the reverse: always on screen, never explained).
     expect(listThemes).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('themes-explain')).toBeNull();
+    expect(screen.queryByTestId('themes-explanation')).toBeNull();
 
     await user.click(open);
-    expect(screen.getByTestId('themes-explain')).toHaveTextContent(THEMES_EXPLAINER);
-    expect(screen.getByTestId('themes-explain')).toHaveTextContent(
+    expect(screen.getByTestId('themes-explanation')).toHaveTextContent(THEMES_EXPLAINER);
+    expect(screen.getByTestId('themes-explanation')).toHaveTextContent(
       'Borrow a look from a site, PDF, or image.',
     );
     expect(listThemes).toHaveBeenCalledWith(PROJECT);

@@ -52,7 +52,15 @@ from uxfix_fixture import (
 
 W2_PORT = int(os.environ.get("W2_PORT", "4334"))
 ORIGIN = f"http://127.0.0.1:{W2_PORT}"
-ACCENT_RGB = "rgb(255, 218, 25)"
+
+# EC1's contract is that exactly ONE element on the surface is filled with THE
+# accent — whatever hue the token system says the accent is. Originally this
+# was the inherited amber literal; DES-VISION-001 made the accent a token
+# (§2.5, applied to this surface by vision slice 4), so the rig PROBES
+# var(--accent) in the page rather than pinning a hex that theming may move.
+ACCENT_PROBE = """() => { const el = document.createElement('div');
+  el.style.background = 'var(--accent)'; document.body.appendChild(el);
+  const v = getComputedStyle(el).backgroundColor; el.remove(); return v; }"""
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -118,7 +126,7 @@ with sync_playwright() as p:
     page.locator('[data-testid="build-something"]').wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
 
-    empty = page.evaluate(SURFACE_JS, ACCENT_RGB)
+    empty = page.evaluate(SURFACE_JS, page.evaluate(ACCENT_PROBE))
     page.screenshot(path=str(SHOTS / "uxfix-5-build-empty.png"))
     page.close()
 
@@ -161,7 +169,7 @@ with sync_playwright() as p:
     )
     page2.add_style_tag(content=HIDE_GATE_TOASTS)
 
-    working = page2.evaluate(SURFACE_JS, ACCENT_RGB)
+    working = page2.evaluate(SURFACE_JS, page2.evaluate(ACCENT_PROBE))
     page2.screenshot(path=str(SHOTS / "uxfix-5-build-runs.png"))
     page2.close()
 
