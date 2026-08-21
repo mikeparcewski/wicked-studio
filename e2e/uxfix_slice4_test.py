@@ -10,31 +10,48 @@ Same rig pattern as the slice-1/2/3 gates: the SHARED deterministic fixture
 server serves the `dist-sameorigin/` build plus every endpoint the routes read;
 no crew daemon is involved anywhere. This rig never flips the fixture switches.
 
-What it asserts (design §4.3, the slice-4 DOM AC):
+RE-SCOPED by DES-FEEDBACK-001 §6 (slice C): the "Add agents" disclosure this
+rig used to pin is retired — the operator asked for agents ADDED BY DEFAULT,
+and §6.2 reconciles that with the still-binding §2.4 (zero requests on mount)
+by rendering removable default chips from the roster CACHE (the hardcoded
+fallback trio on a cold cache — this route fetches no roster, so that is what
+renders here), never a fetch. The first send warms the chip selection; [+ Add]
+opens the roster picker, whose fetch rides that user action. The teaching
+state, the network tap, and the F8 switcher assertions carry over verbatim.
+
+What it asserts (design §4.3 as amended by DES-FEEDBACK-001 §6/§8.3):
   1. Switcher weight (F8): data-testid="mode-switcher" renders four segments,
      each glyph + label; the ACTIVE segment's computed background is FILLED
      (≠ transparent — asserted as the literal accent rgb), an inactive one is
      not; the active mode's summary is IN THE DOM (data-testid="mode-summary"),
      not just a title attribute.
-  2. Chat first-run (F6): entering /p/<id>/chat with nothing stored warms ZERO
-     seats — the rig taps the network and proves NO POST /api/v1/chats and NO
-     GET /api/v1/roster fires on mount — and shows the teaching state
-     (chat-firstrun), a focused composer, ONE disclosure (add-agents), no seat
-     chips, no Close, and no "Group chat"/"End chat" copy anywhere.
-  3. The disclosure: clicking add-agents fires exactly ONE POST /api/v1/chats
-     (with NO `clis` — the daemon warms its own roster), the four-seat chip
-     strip appears all-ready, Close appears, the disclosure retires.
-  4. Typing is the other opt-in: in a FRESH tab (own sessionStorage), typing a
+  2. Chat first-run (F6 + §6.2): entering /p/<id>/chat with nothing stored
+     warms ZERO seats — the rig taps the network and proves NO POST
+     /api/v1/chats and NO GET /api/v1/roster fires on mount — and shows the
+     teaching state (chat-firstrun), a focused composer, the default chips bar
+     (agent-chips-bar, data-count 3 — the §6.2 fallback trio, cache cold on
+     this route), no WARM seat chips, no Close, and no "Group chat"/"End chat"
+     copy anywhere.
+  3. [+ Add] is the roster opt-in now (§6.2): clicking add-agent fires exactly
+     ONE GET /api/v1/roster (a user action, not a mount), the picker lists the
+     roster, and an added agent joins the selection (data-count 4); the first
+     send then fires exactly ONE POST /api/v1/chats whose `clis` is the
+     selection (trio + addition), the four-seat chip strip appears all-ready,
+     Close appears, the chips bar retires.
+  4. Typing is the warm opt-in: in a FRESH tab (own sessionStorage), typing a
      message and pressing Enter fires exactly ONE POST /api/v1/chats whose
-     `clis` is ["claude"] — the single default agent, not the roster — then
-     POSTs the message to /chats/<id>/messages; the user bubble renders and the
-     disclosure is still available (one agent is not the multi-agent strip).
+     `clis` is the DEFAULT selection (the fallback trio — §6.2's "defaults +
+     additions − removals" with nothing touched) — then POSTs the message to
+     /chats/<id>/messages; the user bubble renders and the chips bar retires
+     (the header's warm seat chips are the truth now).
 
 Captures (§4.0 contract: 1440x900 viewport, device_scale_factor=1, waits on
 data-testid, never a sleep) into e2e/shots/uxfix/ — gitignored evidence:
   uxfix-4-switcher.png        the weighted segmented control (element shot)
-  uxfix-4-chat-firstrun.png   the teaching first-run Chat surface (full page)
-  uxfix-4-chat-multiagent.png the disclosed multi-agent strip + Close (full page)
+  uxfix-4-chat-firstrun.png   the teaching first-run Chat surface with the
+                              §6.2 default chips (full page)
+  uxfix-4-chat-multiagent.png the warmed multi-agent strip + Close after a
+                              picker-add and first send (full page)
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
 SKIP_STUDIO_BUILD=1. Env knobs: W2_PORT (default 4333), SKIP_STUDIO_BUILD.
@@ -71,6 +88,9 @@ ACCENT_PROBE_JS = """() => {
   return v;
 }"""
 ROSTER_KEYS = ["claude", "codex", "agy", "pi"]
+# §6.2's hardcoded fallback trio — what the default chips render on this route
+# (nothing fetches the roster before Chat mounts, so the cache is cold).
+FALLBACK = ["writer", "reviewer", "planner"]
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -168,11 +188,15 @@ with sync_playwright() as p:
         """() => {
              const teach = document.querySelector('[data-testid="chat-firstrun"]');
              const body = document.body.innerText;
+             const bar = document.querySelector('[data-testid="agent-chips-bar"]');
              return {
                teachText: teach ? teach.innerText : null,
-               addAgents: !!document.querySelector('[data-testid="add-agents"]'),
+               chipsBarCount: bar ? bar.dataset.count : null,
+               chipKeys: Array.from(document.querySelectorAll('[data-testid="agent-chip"]'))
+                 .map(c => c.dataset.agent),
+               addAgent: !!document.querySelector('[data-testid="add-agent"]'),
                closeAbsent: !document.querySelector('[data-testid="chat-close"]'),
-               noChips: !document.querySelector('[title="ready"], [title="warming"]'),
+               noWarmChips: !document.querySelector('[title="ready"], [title="warming"]'),
                noGroupChatCopy: !body.includes('Group chat') && !body.includes('End chat'),
                composerFocused: document.activeElement?.tagName === 'TEXTAREA',
              };
@@ -186,12 +210,26 @@ with sync_playwright() as p:
         path=str(SHOTS / "uxfix-4-switcher.png"))
     page.screenshot(path=str(SHOTS / "uxfix-4-chat-firstrun.png"))
 
-    # AC 3 — the disclosure warms the roster and reveals the strip.
-    page.locator('[data-testid="add-agents"]').click()
+    # AC 3 — [+ Add] is the roster opt-in now (§6.2): the picker's fetch rides
+    # the click (ONE GET /roster), the addition joins the selection, and the
+    # first send warms the whole selection into the four-seat strip.
+    page.locator('[data-testid="add-agent"]').click()
+    page.locator('[data-testid="agent-picker"]').wait_for(timeout=10000)
+    page.wait_for_function(
+        """n => document.querySelectorAll('[data-testid="agent-picker-option"]').length === n""",
+        arg=len(ROSTER_KEYS), timeout=10000,
+    )
+    picker_roster_gets = len([1 for (m, q, _b) in net if q == "/api/v1/roster"])
+    page.locator('[data-testid="agent-picker-option"][data-agent-key="claude"]').click()
+    added_count = page.evaluate(
+        """() => document.querySelector('[data-testid="agent-chips-bar"]')?.dataset.count ?? null""")
+
+    page.locator("textarea").fill("warm the whole selection")
+    page.keyboard.press("Enter")
     page.locator('[data-testid="chat-close"]').wait_for(timeout=30000)
     page.wait_for_function(
         """n => document.querySelectorAll('[title="ready"]').length === n""",
-        arg=len(ROSTER_KEYS), timeout=30000,
+        arg=len(FALLBACK) + 1, timeout=30000,
     )
     disclosed = page.evaluate(
         """keys => {
@@ -200,12 +238,12 @@ with sync_playwright() as p:
              return {
                chips,
                allSeats: keys.every(k => chips.includes(k)),
-               addAgentsRetired: !document.querySelector('[data-testid="add-agents"]'),
+               chipsBarRetired: !document.querySelector('[data-testid="agent-chips-bar"]'),
                closePresent: !!document.querySelector('[data-testid="chat-close"]'),
                firstrunGone: !document.querySelector('[data-testid="chat-firstrun"]'),
              };
            }""",
-        ROSTER_KEYS,
+        FALLBACK + ["claude"],
     )
     disclosed_opens = opens(net)
     page.screenshot(path=str(SHOTS / "uxfix-4-chat-multiagent.png"))
@@ -227,7 +265,7 @@ with sync_playwright() as p:
              userBubble: document.body.innerText.includes('make me a deck'),
              readyChips: Array.from(document.querySelectorAll('[title="ready"]'))
                .map(c => c.textContent.trim()),
-             addAgentsStillOffered: !!document.querySelector('[data-testid="add-agents"]'),
+             chipsBarRetired: !document.querySelector('[data-testid="agent-chips-bar"]'),
            })"""
     )
     typed_opens = opens(net2)
@@ -251,7 +289,11 @@ report["steps"]["slice4_chat_firstrun"] = {
         firstrun["teachText"] is not None,
         "Chat with an agent about this project." in (firstrun["teachText"] or ""),
         "just talk" in (firstrun["teachText"] or ""),
-        firstrun["addAgents"], firstrun["closeAbsent"], firstrun["noChips"],
+        # §6.2: the default chips render immediately — the fallback trio, no fetch.
+        firstrun["chipsBarCount"] == str(len(FALLBACK)),
+        firstrun["chipKeys"] == FALLBACK,
+        firstrun["addAgent"],
+        firstrun["closeAbsent"], firstrun["noWarmChips"],
         firstrun["noGroupChatCopy"], firstrun["composerFocused"],
         mount_opens == 0, mount_roster == 0,
     ]),
@@ -259,24 +301,29 @@ report["steps"]["slice4_chat_firstrun"] = {
     "openChat_requests_on_mount": mount_opens,
     "roster_requests_on_mount": mount_roster,
 }
-report["steps"]["slice4_add_agents"] = {
+report["steps"]["slice4_add_agent_picker"] = {
     "ok": all([
-        disclosed["allSeats"], disclosed["addAgentsRetired"], disclosed["closePresent"],
+        # The picker's roster fetch rode the CLICK — exactly one, none on mount.
+        picker_roster_gets == 1,
+        added_count == str(len(FALLBACK) + 1),
+        disclosed["allSeats"], disclosed["chipsBarRetired"], disclosed["closePresent"],
         disclosed["firstrunGone"],
         len(disclosed_opens) == 1,
-        (disclosed_opens[0] or {}).get("clis") is None,
+        (disclosed_opens[0] or {}).get("clis") == FALLBACK + ["claude"],
     ]),
     **disclosed,
+    "roster_gets_after_picker_open": picker_roster_gets,
+    "chip_count_after_add": added_count,
     "openChat_requests_total": len(disclosed_opens),
     "open_body_clis": (disclosed_opens[0] or {}).get("clis") if disclosed_opens else "none",
 }
 report["steps"]["slice4_first_send"] = {
     "ok": all([
         typed["userBubble"],
-        typed["readyChips"] == ["claude"],
-        typed["addAgentsStillOffered"],
+        typed["readyChips"] == FALLBACK,
+        typed["chipsBarRetired"],
         len(typed_opens) == 1,
-        (typed_opens[0] or {}).get("clis") == ["claude"],
+        (typed_opens[0] or {}).get("clis") == FALLBACK,
         len(sent) == 1,
         (sent[0][2] or {}).get("text") == "make me a deck",
     ]),
