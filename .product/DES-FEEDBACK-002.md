@@ -1056,10 +1056,241 @@ none, the testid is absent. Slots into slice J.
 | C3 | Attention model untouched | DES-VISION-001 §1.4 / UXFIX | §2.2 (cursor WALKS the existing order, never re-sorts); §1.5 reuses `scoreOf`, no second model |
 | C4 | Canvas-first (EC18) | DES-FEEDBACK-001 §7.3 | §7.2 (compare panes measured as the canvas region; drawer stays a drawer); §3.4 (viewer is an overlay, not a column) |
 | C5 | Charts/affordances answer named questions (EC19) | DES-FEEDBACK-001 §2.1 | no new chart is introduced; §3.5 rejects decoration-grade highlighting on the same test |
-| C6 | Wall + feed structure | DES-VISION-001 §5.1 | §10.1 changes link-ness of feed lines, not feed structure/содержimit — no header, no scrollbar, block budget intact |
+| C6 | Wall + feed structure | DES-VISION-001 §5.1 | §10.1 changes the link-ness of feed lines, not feed structure — no header, no scrollbar, the 3-line block budget (§1.3) intact |
 | C7 | Keyboard a11y — visible focus, no key theft from inputs | DES-VISION-001 focus-ring rule | §1.2's single `isTypingContext` guard before EVERY handler; §2.2 real-DOM-focus cursor; §4.3 switcher keyboard repair; EC21/EC22 |
 | C8 | No invented wire | house rule §0 | every data need carries a verdict; §5.2's corpus label makes the wire's limits VISIBLE to the operator, not just to reviewers |
 
-(One correction during authoring: C6's cell should read "structure/content-limit" — the
-feed's 3-line block budget from §1.3 is untouched.)
 
+---
+
+## 12 Slice plan
+
+### 12.0 Inherited rules (DES-VISION-001 §6.0, DES-FEEDBACK-001 §8.0 — unchanged)
+
+- Each PR ≤350 LOC production diff (tests excluded from count, never from the PR)
+- Each PR independently mergeable and revertable
+- Merge protocol: branch → open → wait 6–8 min for bots + CI → address → merge
+- Every studio slice gated by named screenshots at 1440×900 via the Playwright harness
+- Every slice preserves all VISION/UXFIX/FEEDBACK-001 behaviors it touches
+- Token discipline (EC15): the no-raw-color ERROR lint + PostCSS twin stay green
+
+### 12.1 New experience-checklist items (extends EC17–EC20)
+
+- **EC21 — No key theft, one guard.** No unmodified or chorded shortcut acts while an
+  `input`, `textarea`, `select`, or contentEditable has focus; every global handler runs
+  behind the ONE shared `isTypingContext` predicate (grep: exactly one
+  `addEventListener('keydown'` at the registry). (§1.2, §2.4)
+- **EC22 — The cursor is focus.** Keyboard selection (palette rows, triage cursor,
+  switcher rows) moves real DOM focus with a visible `--accent` ring; every screenshot of
+  a keyboard state shows the ring. (§2.2, §4.3)
+- **EC23 — The viewer never silently amputates.** Any truncated/binary/unavailable
+  content state renders a labeled banner naming the limit and the fallback affordance.
+  (§3.4, §5.2)
+- **EC24 — Search names its corpus.** Any search surface displays what IS and IS NOT
+  searched; wire limits are operator-visible, not reviewer-only. (§5.2)
+- **EC25 — Permission prompts follow gestures.** No browser permission request
+  (notifications, and any future ones) ever fires on load — only from an explicit
+  settings action, and the denied state renders honestly. (§8.2)
+- **EC18 (amended)** — the >80%-viewport-width canvas measurement counts the canvas
+  REGION: in compare mode the two panes together are the canvas. (§7.2)
+
+### 12.2 Fixture additions (extends the W2 messy-reality fixture)
+
+- Three simple-gated runs across two projects + one complex gate (triage + batch: j/k
+  walk, `a`/`r`/`x`, the ineligible marker).
+- A run with a workdir containing one modified tracked file, one untracked file, one
+  >512 KB file, and one binary file (viewer truthfulness states; CREW-1's route tests).
+- A chat fixture with 3 seats × 2 rounds, one seat silent in round 2 (columns mode).
+- A document at v3 with parent v2 and a fork (compare default-comparand correctness).
+- A project holding one `crew.repo` member (dashboard repos row).
+
+### 12.3 Slices
+
+---
+
+**Slice G — Shortcut registry + command palette** *(~340 LOC)* — §1 (P0-1)
+
+New `src/hooks/useGlobalShortcuts.ts` (~70): single keydown listener, ordered table,
+exported `isTypingContext`; delete `useKillShortcut` (App.tsx:62–86), re-register kill on
+Ctrl+Shift+K. New `src/palette/fuzzy.ts` (~40) + `src/components/CommandPalette.tsx`
+(~200): overlay, prefix grammar, grouped rows, verb table, repos cache-on-open. App.tsx
+mounts the palette + registry (~30).
+
+*DOM ACs:* §1.7 in full.
+*Screenshots:* `feedback2-G-palette-mixed.png` (open palette, mixed groups, W2 fixture,
+selection ring visible), `feedback2-G-palette-verbs.png` (`>` prefix, verb list with
+Cancel-run present for a selected non-terminal run).
+*Checklist:* EC15, EC21, EC22.
+*Preserved:* kill-run behavior (relocated chord, identical guards + silent-fail contract);
+Chat zero-requests-on-mount (C1); all existing modal-local Escape/Enter handlers; the
+board's attention ordering (reused, not re-derived).
+
+---
+
+**Slice H — Keyboard gate triage** *(~280 LOC)* — §2 (P0-2)
+
+`useTriageCursor` hook (~90) mounted by HomeBoard + ProjectDashboard; card/row focus +
+ring + `data-kbd-selected`; `a`/`r`/Enter actions calling the EXISTING GateChip request
+paths (extracted into `src/board/gateActions.ts` so chip and key share one
+implementation, ~60); inline reject-note input (~70); hint row (~20).
+
+*DOM ACs:* §2.6 in full.
+*Screenshots:* `feedback2-H-triage-cursor.png` (needs-you band, second card ring-selected,
+hint row visible), `feedback2-H-reject-note.png` (inline note open and focused on the
+selected card).
+*Checklist:* EC21, EC22, EC15.
+*Preserved:* attention model and band order (C3); GateChip mouse path byte-identical in
+behavior; complex-gate boundary (`isSimpleGate` unmoved); §3.3 error-adjacency.
+
+---
+
+**Slice CREW-1 — run file + diff routes** *(~300 LOC, in `wicked-crew` — cross-repo
+prerequisite, its own PR against the crew repo)* — §3.3 (P0-3's wire)
+
+Extract `allowedRootsFor(view, repos)` from the `POST /open` handler (routes.ts:334–350);
+add `GET /runs/:id/files` (~90: containment, size cap, binary sniff) and
+`GET /runs/:id/diff` (~110: execCapped git diff + untracked-file hunks, output cap);
+route tests for the §3.7 crew-side ACs (~100, excluded from the LOC count per rules).
+Publishes the two response shapes into `wicked-crew-api-types`.
+
+*ACs:* §3.7's crew-side list. No screenshots (daemon work).
+*Preserved:* `POST /open` behavior identical (shared helper, no semantic change);
+`isInsideRoot` untouched; per-route audit posture (GET-only, no audit events needed).
+
+---
+
+**Slice I — In-studio file & diff viewer** *(~330 LOC — depends on CREW-1)* — §3 (P0-3)
+
+`src/components/FileViewer.tsx` (~200: overlay, tabs, line numbers, truncation/binary
+banners, 404-fallback to openPath); diff line classifier + comment dimmer
+`src/viewer/colorize.ts` (~60, pure functions); FilesPanel row rewiring (~50: row click →
+viewer, hover icons for open-external/copy, header [Full diff] button); two client
+methods in `api/client.ts` (~20).
+
+*DOM ACs:* §3.7's studio-side list.
+*Screenshots:* `feedback2-I-diff-view.png` (viewer open on the fixture's modified file,
+Diff tab, colored hunks), `feedback2-I-file-truncated.png` (File tab on the >512 KB
+fixture file with the truncation banner).
+*Checklist:* EC15, EC23; the no-grammar-library grep is this slice's §2.3-precedent gate.
+*Preserved:* openPath external launch + copy-path (now hover affordances, same calls);
+FilesPanel's modified/deleted/referenced classification untouched; RightPanel accordion
+behavior.
+
+---
+
+**Slice J — Project pivot + global search + gap notes** *(~330 LOC)* — §4 (P1-4),
+§5 (P1-5), §10.1, §10.2
+
+ProjectSwitcher `variant="crumb"` + keyboard-focusable rows (~60); ProjectShell header
+trigger + dashboard row (~40); palette search mode: `?` prefix + `Cmd+Shift+F`, corpus
+label + why-popover, claims/prompts fetch-on-entry, prose substring pass (~150); LiveFeed
+line anchors (~30); ProjectDashboard repos row (~50).
+
+*DOM ACs:* §4.4, §5.5, §10.1, §10.2 in full.
+*Screenshots:* `feedback2-J-crumb-pivot.png` (context header dropdown open inside Build,
+current project checked), `feedback2-J-search-corpus.png` (search mode with corpus label
+and a gate hit), `feedback2-J-dashboard-repos.png` (dashboard with the bound-repo chip
+row).
+*Checklist:* EC22, EC24, EC15.
+*Preserved:* mode-verb retention semantics of `modePath`; dashboard 2×2 tile grid (§4.1
+shape); feed block budget (C6); ProjectSwitcher's existing call sites (new props optional).
+
+---
+
+**Slice K — Chat columns + version compare** *(~300 LOC)* — §6 (P1-6), §7 (P2-7)
+
+GroupChat: round-grouping selector + grid renderer + toggle (~140, transcript-render
+only); DocumentCanvas/VersionStrip: compare state, split panes, `vs:` dropdown, overlay
+sub-mode + opacity slider, disabled-with-reason on v1-only docs (~160).
+
+*DOM ACs:* §6.5, §7.5 in full.
+*Screenshots:* `feedback2-K-chat-columns.png` (3-seat round side-by-side, one empty cell),
+`feedback2-K-compare-split.png` (v3 ↔ v2 split with strip toolbar), `feedback2-K-compare-
+overlay.png` (overlay mode, slider at 50%).
+*Checklist:* EC18 (amended per §12.1), EC15; C1 (zero requests from the toggle — asserted).
+*Preserved:* send path, seat warming, chips logic (§6.3); version selection as navigation
+(`?v=N`); canvas-first drawer behavior; strip's fork/anchor/Themes/Export affordances.
+
+---
+
+**Slice L — Desktop notifications + batch gates** *(~300 LOC)* — §8 (P2-8), §9 (P2-9)
+
+`useNotifPrefsStore` (appearance-store shape, `studio.notifications` key, ~60); settings
+group UI + permission flow (~70); notification+chime trigger in the ingest fold +
+WebAudio chime (~60); batch selection on the §H cursor (`x`, checkboxes, ineligible
+marker, ~50); batch bar + sequential fan-out + per-id failure rows (~60).
+
+*DOM ACs:* §8.4, §9.5 in full.
+*Screenshots:* `feedback2-L-notif-settings.png` (settings group, permission state line),
+`feedback2-L-batch-bar.png` (two gates selected, batch bar docked, one ineligible marker
+visible).
+*Checklist:* EC21, EC25, EC15.
+*Preserved:* in-app GateNotifications toasts (untouched — the desktop layer is additive
+and hidden-tab-only); per-decision audit trail (fan-out uses the single audited route);
+notification store's 10-entry cap and kinds.
+
+### 12.4 Sequencing
+
+```
+G  (registry + palette)          ← first: H, J build on the registry/palette
+├─ H  (triage)                   ← needs G's registry + guard
+│  └─ L  (batch rides H's cursor; notifications independent half can't split — L after H)
+├─ J  (pivot + search rides G's palette)
+CREW-1 (wicked-crew PR)          ← parallel with G/H/J from day one
+  └─ I  (viewer)                 ← the ONLY studio slice gated on crew; degrades per §3.7
+                                    if a daemon predates the routes
+K  (chat columns + compare)      ← independent of everything; parallel any time
+
+Hard chain: G → H → L;  G → J;  CREW-1 → I.  K floats.
+```
+
+**Done means:** all seven slices merged (six studio + CREW-1 in wicked-crew); every named
+screenshot captured at 1440×900 and passing its checklist items; the W1–W6 walkthroughs
+re-run green; plus **W7 — the FDE hour:** from a cold tab: Cmd+K → type a run fragment →
+Enter lands on the run; j/k/a clears one gate and r-with-note rejects another without
+touching the mouse; a modified file's diff is read INSIDE the studio; the operator pivots
+project without leaving Build; a hidden-tab gate raises a desktop notification whose
+click lands on `#gate`; three routine gates clear in one batch action.
+
+---
+
+## 13 Out of scope (named)
+
+- **Indexed full-text search** (`GET /search`, §5.4) — specced, deferred; v1's corpus
+  label exists precisely so this absence is honest.
+- **Batch gate daemon route** (`POST /runs/gates`, §9.4) — specced, deferred; fan-out is
+  the operator-approved default and the audit-preserving one.
+- **True syntax highlighting** in the viewer (§3.5) — the named upgrade path (lazy
+  per-language tokenizer) awaits a round that demands it; diff-coloring answers this
+  round's question.
+- **DOM-level document diffing** inside compare panes (§7.3) — needs bridge cooperation;
+  the studio does not reach into version HTML.
+- **Notification kinds beyond `awaitingHuman`** (failures, completions) and per-project
+  notification muting — settings-arc work; the wire (`studio.notifications`) is shaped to
+  grow (`kinds: []` future field) without migration.
+- **Palette extensibility** (workflow verbs, governance verbs, per-repo verbs) — the verb
+  table is data, adding rows is cheap, but each verb must name its mechanism per §1.3's
+  rule; none are pre-approved in bulk.
+- **Customizable keybindings** — one binding story (§1.2) ships; a rebinding UI is a
+  settings arc of its own and must not precede a proven default.
+- **Mobile/narrow-viewport treatments** of the palette, viewer, and compare — the
+  1440×900 operator viewport governs this round (and the standing rule applies: a phone
+  gets a purpose-built view, not a shrunk desktop).
+
+---
+
+## 14 Traceability
+
+| Operator item | Sections | Slices | Wire verdict summary |
+|---|---|---|---|
+| P0-1 palette | §1 | G | CLIENT-DERIVABLE (stores) + EXISTS `GET /repos` |
+| P0-2 triage | §2 | H | EXISTS `POST /runs/:id/gate` (amend audited on reject) |
+| P0-3 viewer | §3 | CREW-1 → I | NEEDS-CREW-ENDPOINT `GET /runs/:id/files`, `GET /runs/:id/diff` (specced §3.3, modeled on /open containment + execCapped) |
+| P1-4 pivot | §4 | J | CLIENT-DERIVABLE (projects store) |
+| P1-5 search | §5 | J | CLIENT-DERIVABLE (runs/gates) + EXISTS `GET /governance/claims`, `GET /repos`, scoped `GET /projects/:id/prompts`; full-text = deferred NEEDS-CREW-ENDPOINT |
+| P1-6 chat columns | §6 | K | CLIENT-DERIVABLE (transcript state) |
+| P2-7 version diff | §7 | K | EXISTS (two `interactiveDocUrl` panes) |
+| P2-8 notifications | §8 | L | CLIENT-DERIVABLE (`awaitingHuman` already ingested) + EXISTS `PUT /settings` (`studio.notifications`) |
+| P2-9 batch gates | §9 | L | EXISTS per-run gate POST, client fan-out (bulk-archive precedent); batch route deferred |
+| gap: feed deep-links | §10.1 | J | CLIENT-DERIVABLE (run id on element) |
+| gap: dashboard repos | §10.2 | J | CLIENT-DERIVABLE (members already fetched; drop one filter) |
