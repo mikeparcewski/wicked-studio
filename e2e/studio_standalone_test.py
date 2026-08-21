@@ -910,8 +910,16 @@ try:
         )
         advanced_ok, advance_ms = within(
             page,
+            # Since DES-UXFIX-001 slices 1/2 (post-slice-F) a completed run can demote
+            # its project into the QUIET band, whose one-line card variant renders NO
+            # run chips — so "advanced on the board" is EITHER the chip leaving
+            # awaiting_human OR the chip unmounting with its card demoted to quiet.
+            # (A still-waiting gate is a top signal that keeps the card active, so a
+            # vanished chip cannot hide an unanswered gate.) The REST read below pins
+            # the actual terminal status either way.
             """id => { const chip = document.querySelector(`[data-testid="run-chip"][data-run-id="${id}"]`);
-                       return !!chip && chip.dataset.status !== 'awaiting_human'; }""",
+                       if (chip) return chip.dataset.status !== 'awaiting_human';
+                       return !!document.querySelector('[data-testid="project-card"][data-variant="quiet"]'); }""",
             simple_run,
             budget_ms=20000,  # gate decision → resume → run-list reconcile (400 ms debounce)
         )
@@ -2073,6 +2081,11 @@ try:
         page.wait_for_function(
             """() => document.querySelector('[data-testid="version-strip"]')
                  ?.getAttribute('data-hidden') === 'true'""", timeout=10000)
+        # The hide is a CSS transition: data-hidden flips first and opacity ANIMATES
+        # to 0, so wait for the settled style rather than racing the fade.
+        page.wait_for_function(
+            """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]'))
+                 .opacity === '0'""", timeout=10000)
         strip_hidden_css = page.evaluate(
             """() => { const s = getComputedStyle(document.querySelector('[data-testid="version-strip"]'));
                        return { opacity: s.opacity, pointerEvents: s.pointerEvents }; }""")
@@ -2211,7 +2224,17 @@ try:
         drawer_w = page.evaluate(
             """() => document.querySelector('[data-testid="thread-drawer"]')
                  .getBoundingClientRect().width""")
-        reflow_ok = canvas_w_open < canvas_w - 300 and abs(drawer_w - 440) < 2
+        drawer_left = page.evaluate(
+            """() => document.querySelector('[data-testid="thread-drawer"]')
+                 .getBoundingClientRect().left""")
+        canvas_right = page.evaluate(
+            """() => document.querySelector('[data-testid="video-canvas"]')
+                 .getBoundingClientRect().right""")
+        # REFLOW means the canvas shrank and sits BESIDE the drawer, not under it.
+        # (The old `- 300` shrink threshold was calibrated before slice A's rail
+        # widths and missed by <1px; the non-overlap check is the actual claim.)
+        reflow_ok = (canvas_w_open < canvas_w - 200 and abs(drawer_w - 440) < 2
+                     and canvas_right <= drawer_left + 1)
         page.screenshot(path=str(SHOTS / "slice13-storyboard.png"), full_page=True)
 
         # ── AC (§7.3): the strip auto-hides after 3s idle; proximity wakes it ──────
@@ -2221,6 +2244,10 @@ try:
         page.wait_for_function(
             """() => document.querySelector('[data-testid="version-strip"]')
                  ?.getAttribute('data-hidden') === 'true'""", timeout=10000)
+        # The hide is a CSS transition — wait for the settled style, not the fade.
+        page.wait_for_function(
+            """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]'))
+                 .opacity === '0'""", timeout=10000)
         strip_hidden_opacity = page.evaluate(
             """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]')).opacity""")
         page.screenshot(path=str(SHOTS / "slice13-chapter-seek.png"), full_page=True)
