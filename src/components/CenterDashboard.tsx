@@ -941,7 +941,17 @@ export function CenterDashboard({
         {/* ── 2. Gate inbox — only when gates are pending (§2.7 rule 5, W4) ───── */}
         {openGates.length > 0 && (
           <div data-testid="gate-inbox" style={{ marginBottom: '24px' }}>
-            <p style={{ ...sectionLabel, color: '#ffda19', marginBottom: '10px' }}>
+            {/* Sentence case (the wireframe's "⏸ 1 gate needs you"), not the
+                uppercased section-label treatment: this line is a headline. */}
+            <p
+              style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                color: '#ffda19',
+                ...mono,
+                margin: '0 0 10px',
+              }}
+            >
               {`⏸ ${openGates.length} gate${openGates.length === 1 ? ' needs' : 's need'} you`}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

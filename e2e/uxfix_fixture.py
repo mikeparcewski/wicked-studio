@@ -20,6 +20,11 @@ must not lose:
 Mutable switches (flipped over POST /__fixture between page loads):
   orphan          — whether the orphan run rides the run list (default True)
   q3_gate_age_ms  — the r-q3 gate's receivedAt age (default 30s)
+  no_runs         — GET /runs answers [] (slice 5's empty Build state; default False)
+  usage_ws        — /ws pushes ONE cliUsage frame for r-upload on connect, so the
+                    Build stats footer has real data to gate on (default False)
+  long_prompt     — one extra run with a very long problem rides the run list, to
+                    prove intent-phrase truncation in pixels (default False)
 
 A rig that never flips them gets the default W2 board.
 """
@@ -55,7 +60,8 @@ def iso(ms: int) -> str:
 
 
 # Mutable fixture switches, flipped over POST /__fixture between page loads.
-state = {"orphan": True, "q3_gate_age_ms": 30 * SEC}
+state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
+         "no_runs": False, "usage_ws": False, "long_prompt": False}
 state_lock = threading.Lock()
 
 
@@ -120,6 +126,16 @@ RUNS = [
 ORPHAN = session("r-orphan", "executing", "stranded work from another client",
                  "stranded work from another client")
 
+# The long-prompt run (slice 5, F7): its problem is a full paragraph, so the Build
+# runs list must render the INTENT PHRASE (truncated, leading) and never the raw
+# prompt string. Rides the list only when the `long_prompt` switch is flipped.
+LONG_PROMPT = (
+    "refactor the ingestion pipeline so that every incoming webhook payload is "
+    "validated against the registered JSON schema, quarantined on mismatch, and "
+    "replayed from the dead-letter store once the schema catches up with the producer"
+)
+LONG_RUN = session("r-long", "executing", LONG_PROMPT, "wire the schema validation")
+
 # The durable-log tails (D3 step 2): the ONE honest clock for a failure's age.
 RUN_EVENTS = {
     "r-legacy": [{"type": "sessionStarted", "session": "r-legacy", "ts": NOW0 - 8 * DAY - MIN},
@@ -181,7 +197,18 @@ class W2Handler(SimpleHTTPRequestHandler):
             ("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
              f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n").encode())
         self.wfile.flush()
+        with state_lock:
+            push_usage = state["usage_ws"]
         try:
+            # Slice-5 switch: the Build stats footer folds cliUsage events, so the
+            # frame is pushed ONCE per connection (never in the loop — a repeated
+            # cliUsage would compound the totals).
+            if push_usage:
+                self.wfile.write(ws_frame({
+                    "type": "cliUsage", "session": "r-upload", "ord": 0,
+                    "inputTokens": 84000, "outputTokens": 14000, "costUsd": 0.42,
+                }))
+                self.wfile.flush()
             while True:
                 self.wfile.write(ws_frame({
                     "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
@@ -199,7 +226,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             return True
         if path == "/api/v1/runs":
             with state_lock:
-                runs = RUNS + ([ORPHAN] if state["orphan"] else [])
+                if state["no_runs"]:
+                    runs = []
+                else:
+                    runs = RUNS + ([ORPHAN] if state["orphan"] else []) \
+                        + ([LONG_RUN] if state["long_prompt"] else [])
             self._json(200, {"runs": runs})
             return True
         if path == "/api/v1/projects":
