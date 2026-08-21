@@ -30,6 +30,11 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     rig posts one mid-page to prove the live feed updates from the
                     shared store within the 2s AC — a NEW line, not the loop's
                     repeated one.
+  demo            — whether q3-review-deck's doc registry carries the recorded
+                    `checkout-demo` (kind "demo") plus its spec / recording /
+                    frames, so Video mode has a §5.6 surface to render (vision
+                    slice 4; default False — the board rigs' doc tiles must not
+                    grow a tile they never asserted).
 
 A rig that never flips them gets the default W2 board.
 """
@@ -68,7 +73,7 @@ def iso(ms: int) -> str:
 # Mutable fixture switches, flipped over POST /__fixture between page loads.
 state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
-         "extra_narration": []}
+         "extra_narration": [], "demo": False}
 state_lock = threading.Lock()
 
 
@@ -156,6 +161,84 @@ NOTES_DOCS = [
     {"name": "todo", "kind": "doc", "head": 1, "versions": 1, "updated_at": iso(NOW0 - 3 * DAY)},
 ]
 
+# ── The vision-slice-4 Video surface (DES-VISION-001 §5.6): one recorded demo ──
+#
+# The interactive bridge, reduced to what Video mode reads through crew's proxy:
+# a `kind: "demo"` doc in q3-review-deck's registry, its spec (4 ordered steps —
+# the §5.6 wireframe's `1 2 3 4` storyboard), the latest recording (a GIF, so no
+# ffmpeg/mp4 machinery is faked), a 1-version manifest, and the frames
+# themselves. All behind the `demo` switch so the board rigs' doc tiles never
+# grow a tile they did not assert. Frames are drawn lazily with Pillow (already
+# a rig prerequisite since vision slice 1) and cached per process.
+
+DEMO_NAME = "checkout-demo"
+DEMO_DOC = {"name": DEMO_NAME, "kind": "demo", "head": 1, "versions": 1,
+            "updated_at": iso(NOW0 - 5 * MIN)}
+DEMO_STEPS = [
+    {"index": 0, "title": "Open the storefront", "timestamp": 0,
+     "thumbnail": f"/d/{DEMO_NAME}/demo/thumb-0.png"},
+    {"index": 1, "title": "Add a hoodie to the cart", "timestamp": 6,
+     "thumbnail": f"/d/{DEMO_NAME}/demo/thumb-1.png"},
+    {"index": 2, "title": "Enter the card details", "timestamp": 13,
+     "thumbnail": f"/d/{DEMO_NAME}/demo/thumb-2.png"},
+    {"index": 3, "title": "Confirm the order", "timestamp": 21,
+     "thumbnail": f"/d/{DEMO_NAME}/demo/thumb-3.png"},
+]
+DEMO_SPEC = {"steps": DEMO_STEPS, "target_url": "https://shop.example/"}
+DEMO_RECORDING = {"version": 1, "gif_url": f"/d/{DEMO_NAME}/demo/v1.gif"}
+DEMO_MANIFEST = {"head": 1, "kind": "demo", "versions": [
+    {"version": 1, "parent": None, "feedback_file": None, "html_file": "v1.html",
+     "created_at": iso(NOW0 - 5 * MIN), "meta": {}}]}
+
+_demo_frames: dict = {}
+
+
+def demo_frame(name: str) -> bytes:
+    """Draw one demo frame (the recording GIF or a chapter thumbnail) with
+    Pillow, lazily, cached. A browser-window pastiche of the recorded shop —
+    light, so the player reads as CONTENT against the app's dark chrome."""
+    cached = _demo_frames.get(name)
+    if cached is not None:
+        return cached
+    import io
+
+    from PIL import Image, ImageDraw
+
+    if name == "v1.gif":
+        w, h = 960, 540
+        img = Image.new("RGB", (w, h), (244, 241, 234))
+        d = ImageDraw.Draw(img)
+        d.rectangle([0, 0, w, 44], fill=(255, 253, 247), outline=(221, 214, 196))
+        for i in range(3):  # traffic lights
+            d.ellipse([14 + i * 20, 16, 26 + i * 20, 28], fill=(200, 196, 186))
+        d.rounded_rectangle([120, 10, w - 120, 34], radius=12, fill=(238, 234, 224))
+        d.text((136, 15), "shop.example / checkout", fill=(120, 116, 106))
+        d.text((64, 84), "The Hoodie Shop", fill=(27, 27, 27))
+        d.rectangle([64, 130, 448, 420], fill=(255, 253, 247), outline=(221, 214, 196))
+        d.rectangle([96, 160, 416, 330], fill=(230, 226, 214))
+        d.text((96, 350), "Heavyweight hoodie", fill=(27, 27, 27))
+        d.text((96, 372), "$68", fill=(74, 70, 60))
+        d.rounded_rectangle([512, 200, 800, 248], radius=8, fill=(27, 98, 74))
+        d.text((560, 216), "Add to cart", fill=(255, 255, 255))
+        d.text((512, 280), "Step 2 of 4 - adding the hoodie", fill=(120, 116, 106))
+        buf = io.BytesIO()
+        img.save(buf, format="GIF")
+        body = buf.getvalue()
+    else:  # thumb-<n>.png
+        n = int(name.split("-")[1].split(".")[0])
+        img = Image.new("RGB", (296, 168), (244, 241, 234))
+        d = ImageDraw.Draw(img)
+        d.rectangle([0, 0, 296, 22], fill=(255, 253, 247), outline=(221, 214, 196))
+        d.rectangle([24, 44, 272, 132], fill=(255, 253, 247), outline=(221, 214, 196))
+        d.rounded_rectangle([24 + n * 30, 140, 80 + n * 30, 158], radius=6, fill=(27, 98, 74))
+        d.text((36, 52), DEMO_STEPS[n]["title"], fill=(27, 27, 27))
+        d.text((36, 76), f"step {n + 1}", fill=(120, 116, 106))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        body = buf.getvalue()
+    _demo_frames[name] = body
+    return body
+
 # The chat surface (slice 4, §2.4): a four-seat roster and instant-warm chat
 # endpoints. Seats warm the moment they are asked — determinism over realism —
 # and the daemon's real semantics are kept where the client depends on them:
@@ -197,6 +280,12 @@ docs_created: dict = {}
 
 ws_lock = threading.Lock()
 ws_queue: list = []
+# The NEWEST /ws connection owns the one-shot queues. A rig that navigates
+# between routes leaves the previous page's handler thread looping until its
+# next write raises — and that zombie's drain would STEAL queued frames from
+# the live page's socket (it drains before it writes, so the frames die with
+# it). Each connection takes a generation number; only the newest drains.
+ws_gen = [0]
 
 
 def queue_interactive(event_type: str, payload: dict) -> None:
@@ -267,6 +356,9 @@ class W2Handler(SimpleHTTPRequestHandler):
         self.wfile.flush()
         with state_lock:
             push_usage = state["usage_ws"]
+        with ws_lock:
+            ws_gen[0] += 1
+            my_gen = ws_gen[0]
         try:
             # Slice-5 switch: the Build stats footer folds cliUsage events, so the
             # frame is pushed ONCE per connection (never in the loop — a repeated
@@ -278,16 +370,26 @@ class W2Handler(SimpleHTTPRequestHandler):
                 }))
                 self.wfile.flush()
             while True:
+                # Drain the one-shot queues ONLY as the newest connection (see
+                # ws_gen above) — a superseded handler keeps streaming the
+                # narration loop until its socket dies, but must not steal
+                # frames meant for the live page.
+                with ws_lock:
+                    newest = ws_gen[0] == my_gen
                 # Drain the interactive frames the document journey queued (slice 6) —
                 # the client folds them into the doc thread off this one subscription.
-                with ws_lock:
-                    pending, ws_queue[:] = list(ws_queue), []
+                pending: list = []
+                if newest:
+                    with ws_lock:
+                        pending, ws_queue[:] = list(ws_queue), []
                 for frame in pending:
                     self.wfile.write(ws_frame(frame))
                 # Drain any one-shot narration lines a rig posted mid-page (vision
                 # slice 2: prove a NEW delta reaches the live feed within 2s).
-                with state_lock:
-                    extra, state["extra_narration"] = list(state["extra_narration"]), []
+                extra: list = []
+                if newest:
+                    with state_lock:
+                        extra, state["extra_narration"] = list(state["extra_narration"]), []
                 for line in extra:
                     self.wfile.write(ws_frame({
                         "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
@@ -350,7 +452,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                      "versions": len(vs), "updated_at": vs[-1]["created_at"]}
                     for doc, vs in docs_created.get(pid, {}).items()
                 ]
-            self._json(200, (NOTES_DOCS if pid == "notes" else []) + created)
+            with state_lock:
+                demo_on = state["demo"]
+            seeds = NOTES_DOCS if pid == "notes" else []
+            if demo_on and pid == "q3-review-deck":
+                seeds = seeds + [DEMO_DOC]
+            self._json(200, seeds + created)
             return True
         # The rest of the interactive surface the Document journey reads (slice 6).
         if self._interactive_get(path):
@@ -398,12 +505,41 @@ class W2Handler(SimpleHTTPRequestHandler):
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/versions$", path)
         if m:
             pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            with state_lock:
+                demo_on = state["demo"]
+            if demo_on and doc == DEMO_NAME:
+                self._json(200, DEMO_MANIFEST)
+                return True
             versions = doc_versions(pid, doc)
             if not versions:
                 self._json(404, {"error": f"no versions for {doc}"})
                 return True
             self._json(200, {"head": max(e["version"] for e in versions),
                              "kind": "doc", "versions": versions})
+            return True
+        # The vision-slice-4 demo surface (§5.6), behind the `demo` switch:
+        # spec, latest recording, and the frames the recording/storyboard show.
+        m = re.match(
+            r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/demo/(spec|recordings)$", path)
+        if m:
+            with state_lock:
+                demo_on = state["demo"]
+            if not demo_on or urllib.parse.unquote(m.group(2)) != DEMO_NAME:
+                self._json(404, {"error": f"no demo at {path}"})
+                return True
+            self._json(200, DEMO_SPEC if m.group(3) == "spec" else DEMO_RECORDING)
+            return True
+        m = re.match(
+            r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/demo/(v1\.gif|thumb-[0-3]\.png)$",
+            path)
+        if m:
+            body = demo_frame(m.group(3))
+            self.send_response(200)
+            self.send_header(
+                "Content-Type", "image/gif" if m.group(3).endswith(".gif") else "image/png")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return True
         # /api/v1/projects/<pid>/interactive/d/<doc>/doc/<v> — the rendered document.
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/doc/(\d+)$", path)
