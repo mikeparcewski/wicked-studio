@@ -59,7 +59,9 @@ const CSS = {
   },
   grid: {
     display: 'grid', gap: 'var(--space-3)', marginTop: 'var(--space-4)',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+    // §4.1's 2x2: two columns at the page's 1080px max (auto-fit's only job is
+    // the 1-column fallback below ~430px tiles — never a 3+1 row).
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
   },
   tile: {
     background: 'var(--surface-card)', boxShadow: 'var(--shadow-card)',
