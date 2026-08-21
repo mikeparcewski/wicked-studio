@@ -895,6 +895,19 @@ def start_server(port: int, dist: Path) -> str:
     return f"http://127.0.0.1:{port}"
 
 
+def wake_strip(page) -> None:
+    """DES-FEEDBACK-001 §7.3: the version strip auto-hides after 3s idle (opacity 0,
+    pointer-events none) and wakes on bottom-edge proximity. Rigs park the mouse
+    there before strip interactions so a click never races the hide timer."""
+    vp = page.viewport_size or {"width": 1280, "height": 720}
+    page.mouse.move(vp["width"] // 2, vp["height"] - 60)
+    page.mouse.move(vp["width"] // 2, vp["height"] - 40)
+    page.wait_for_function(
+        """() => { const s = document.querySelector('[data-testid="version-strip"]');
+                   return !!s && s.getAttribute('data-hidden') === 'false'; }""",
+        timeout=10000)
+
+
 def set_fixture(origin: str, **kwargs) -> None:
     """Flip the mutable switches over POST /__fixture between page loads."""
     req = urllib.request.Request(f"{origin}/__fixture", method="POST",

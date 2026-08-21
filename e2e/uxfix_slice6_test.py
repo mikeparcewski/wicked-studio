@@ -15,11 +15,16 @@ The journey is W3's, driven through the REAL composer on the empty `scratch`
 project: create a deck from a brief, watch v1 land, continue with a change,
 watch v2 land — then walk the relationship in both directions.
 
-What it asserts (design §4.3, the slice-6 DOM AC):
-  1. The spine (§2.6 rules 1+2): the version strip renders BELOW the row
-     holding canvas AND thread — its box extends under the thread (measured
-     from getBoundingClientRect, not inferred) — with the caption naming what
-     selecting does, and no dead middle column between the panes.
+What it asserts (design §4.3, the slice-6 DOM AC — the GEOMETRY half re-scoped
+by DES-FEEDBACK-001 §7.3, which made Document mode canvas-first):
+  1. The spine (§2.6 rules 1+2, as §7.3 re-drew them): the version strip floats
+     INSIDE the canvas container over its bottom edge (measured from
+     getBoundingClientRect, not inferred), the canvas and the OPEN thread
+     drawer are non-overlapping siblings in one row, the caption still names
+     what selecting does, and there is no dead middle column between the panes.
+     (The thread is open throughout this journey: it starts on the picker,
+     whose empty state points at it, and the drawer state survives the
+     navigation the composer makes.)
   2. Thread tags: each message that produced a version carries
      data-testid="thread-version-tag" with its data-version, reading
      "▤ v<N> landed"; a tag click navigates to that version (?v=N) and the
@@ -55,6 +60,7 @@ from uxfix_fixture import (
     SHOTS,
     ensure_build,
     start_server,
+    wake_strip,
 )
 
 W2_PORT = int(os.environ.get("W2_PORT", "4334"))
@@ -146,21 +152,29 @@ with sync_playwright() as p:
     # The canvas is LOADED (its named loading state has retired) before any capture.
     page.locator('[data-testid="doc-canvas-loading"]').wait_for(state="detached", timeout=30000)
 
-    # AC 1 — the spine: strip below the row holding canvas AND thread, spanning both.
+    # AC 1 — the spine, in the §7.3 canvas-first geometry: the strip floats INSIDE
+    # the canvas container over its bottom edge; the canvas and the OPEN thread
+    # drawer are non-overlapping siblings in one row (no dead middle column).
+    wake_strip(page)  # the strip auto-hides after 3s idle — measure it awake
     spine = page.evaluate(
         """() => {
              const strip = document.querySelector('[data-testid="version-strip"]');
-             const row = strip?.previousElementSibling;
+             const container = document.querySelector('[data-testid="document-canvas"]');
              const canvas = document.querySelector('[data-testid="doc-canvas"]');
+             const drawer = document.querySelector('[data-testid="thread-drawer"]');
              const thread = document.querySelector('[data-testid="thread"]');
              const caption = document.querySelector('[data-testid="version-spine-caption"]');
              const themes = document.querySelector('[data-testid="version-strip"] [data-testid="themes-open"]');
              const exportMenu = document.querySelector('[data-testid="version-strip"] [data-testid="export-menu"]');
-             const sr = strip?.getBoundingClientRect(), tr = thread?.getBoundingClientRect();
+             const sr = strip?.getBoundingClientRect(), cr = container?.getBoundingClientRect();
+             const kr = canvas?.getBoundingClientRect(), dr = drawer?.getBoundingClientRect();
              return {
-               rowHoldsCanvasAndThread: !!row && row.contains(canvas) && row.contains(thread),
-               stripBelowRow: !!row && row.nextElementSibling === strip,
-               stripSpansUnderThread: !!sr && !!tr && sr.right > tr.left + 100 && sr.top >= tr.bottom - 2,
+               stripInsideCanvasContainer: !!container && container.contains(strip),
+               stripOverBottomEdge: !!sr && !!cr && Math.abs(sr.bottom - cr.bottom) < 3
+                 && sr.left >= cr.left - 1 && sr.right <= cr.right + 1,
+               drawerHoldsThread: !!drawer && drawer.contains(thread),
+               canvasBesideDrawer: !!kr && !!dr && kr.right <= dr.left + 1
+                 && dr.right - dr.left > 300,
                captionText: caption ? caption.textContent : null,
                themesOnStrip: !!themes, exportOnStrip: !!exportMenu,
                entries: document.querySelectorAll('[data-testid="version-entry"]').length,
@@ -169,8 +183,9 @@ with sync_playwright() as p:
     )
     report["steps"]["slice6_spine"] = {
         "ok": all([
-            spine["rowHoldsCanvasAndThread"], spine["stripBelowRow"],
-            spine["stripSpansUnderThread"], spine["themesOnStrip"], spine["exportOnStrip"],
+            spine["stripInsideCanvasContainer"], spine["stripOverBottomEdge"],
+            spine["drawerHoldsThread"], spine["canvasBesideDrawer"],
+            spine["themesOnStrip"], spine["exportOnStrip"],
             "scrolls the thread" in (spine["captionText"] or ""),
             spine["entries"] == 2,
         ]),
@@ -219,6 +234,7 @@ with sync_playwright() as p:
         """() => document.querySelector('[data-testid="doc-message"][data-version="1"]')
                   ?.getAttribute('data-message-id')"""
     )
+    wake_strip(page)
     page.locator('[data-testid="version-entry"][data-version="1"] [data-testid="version-select"]').click()
     page.locator('[data-testid="doc-canvas"][data-version="1"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas-loading"]').wait_for(state="detached", timeout=30000)
@@ -257,6 +273,7 @@ with sync_playwright() as p:
     }
 
     # ── Scene D: Themes explains itself, and a pick becomes the composer chip ─────
+    wake_strip(page)
     page.locator('[data-testid="themes-open"]').click()
     page.locator('[data-testid="themes-panel"]').wait_for(timeout=30000)
     page.locator('[data-testid="theme-row"]').first.wait_for(timeout=30000)
@@ -274,6 +291,7 @@ with sync_playwright() as p:
     )
     page.screenshot(path=str(SHOTS / "uxfix-6-themes.png"))
 
+    wake_strip(page)  # the panel rides the strip — keep it awake for the pick
     page.locator('[data-testid="theme-row"][data-theme="stripe-ish"]').click()
     page.locator('[data-testid="context-chip"][data-chip-value="stripe-ish"]').wait_for(timeout=30000)
     picked = page.evaluate(

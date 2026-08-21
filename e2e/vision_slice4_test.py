@@ -18,8 +18,13 @@ same branch converts):
      (`POST /api/v1/chats`) fires on mount;
   4. the version strip's active dot computed `background` resolves from
      `var(--accent)`; the Themes popover `data-testid="themes-explanation"`
-     is non-empty; selecting a storyboard chapter applies `border-color`
-     from `--accent`.
+     is non-empty. (The storyboard-chapter accent AC retired with the
+     client-side player: DES-FEEDBACK-001 §7.4 made the storyboard the
+     BRIDGE's version HTML, framed in a sandboxed iframe — chapters and
+     their selection styling live inside that HTML now, out of the studio's
+     token system. Scene 4 asserts the studio-side §7.4 surface instead:
+     the iframe at the real /doc/:version route, the token-built canvas
+     framing and version strip, and EC18's canvas-first geometry.)
 
 Plus the slice's checklist reads (§6.1): EC7 (the mode surfaces keep their
 UXFIX composition), EC10, EC11 (no ornament), EC13 (two typefaces — intent
@@ -64,6 +69,7 @@ from uxfix_fixture import (
     ensure_build,
     set_fixture,
     start_server,
+    wake_strip,
 )
 
 VISION_PORT = int(os.environ.get("VISION_PORT", "4343"))
@@ -308,6 +314,7 @@ with sync_playwright() as p:
     v1_msg_id = page.evaluate(
         """() => document.querySelector('[data-testid="doc-message"][data-version="1"]')
                   ?.getAttribute('data-message-id')""")
+    wake_strip(page)  # §7.3: the strip auto-hides after 3s idle — wake before driving it
     page.locator('[data-testid="version-entry"][data-version="1"] [data-testid="version-select"]').click()
     flash_on = settled(
         """id => { const el = document.querySelector(`[data-message-id="${id}"]`);
@@ -323,6 +330,7 @@ with sync_playwright() as p:
     page.locator('[data-testid="doc-canvas"][data-version="1"]').wait_for(timeout=30000)
 
     # Themes: the popover opens WITH its explanation (the §6.3 AC's testid).
+    wake_strip(page)
     page.locator('[data-testid="themes-open"]').click()
     page.locator('[data-testid="themes-panel"]').wait_for(timeout=30000)
     themes = page.evaluate(
@@ -333,6 +341,7 @@ with sync_playwright() as p:
                size: ex ? getComputedStyle(ex).fontSize : null,
              }; }""")
     page.keyboard.press("Escape")
+    wake_strip(page)
     page.locator('[data-testid="themes-open"]').click()  # toggle shut for the capture
 
     # Back to v2 for the named capture (the slice entry: v2 selected, tags visible).
@@ -357,89 +366,92 @@ with sync_playwright() as p:
         "Inter" in (themes["font"] or ""),
         themes["size"] == "13px",
     ])
+    wake_strip(page)  # the named capture shows the strip, not its idle fade
     page.screenshot(path=str(VSHOTS / "vision-5-document.png"))
     report["steps"]["document_surface"] = {
         "ok": doc_ok, **doc, "v1_message_id": v1_msg_id,
         "flash_on": flash_on, "flash_off": flash_off, "themes_explanation": themes,
     }
 
-    # ══ Scene 4 — Video (§5.6): storyboard chapters + the accent selection ═════
+    # ══ Scene 4 — Video, REWIRED by DES-FEEDBACK-001 §7.4: the framed storyboard ═
+    # The client-side player (chapter cards, demo-gif, spec state) is GONE — it
+    # spoke routes the real bridge never served. The §5.6 claim this scene still
+    # makes is token-side and studio-side: the demo surface frames the demo's
+    # version HTML (the bridge-built storyboard) in a fully sandboxed iframe at
+    # the real /doc/:version route, inside the same token-built canvas framing
+    # as Document mode, addressed by the same version strip — and the §7.3
+    # canvas-first geometry (EC18) holds on this 1440px viewport.
     set_fixture(ORIGIN, demo=True)
     page.goto(f"{ORIGIN}/p/q3-review-deck/video/checkout-demo", wait_until="domcontentloaded")
-    page.locator('[data-testid="chapter-card"][data-index="3"]').wait_for(timeout=30000)
-    page.locator('[data-testid="demo-gif"]').wait_for(timeout=30000)
+    player_el = page.locator('[data-testid="demo-player"]')
+    player_el.wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
-    # Every drawn frame is actually decoded before the capture.
-    settled("""() => Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)""")
+    # The storyboard rendered INSIDE the frame: its chapters, thumbnails decoded.
+    sb = page.frame_locator('[data-testid="demo-player"]')
+    sb.locator(".ch").nth(3).wait_for(timeout=30000)
 
     video = page.evaluate(
         f"""() => {{
              const probes = ({PROBES})();
-             const board = document.querySelector('[data-testid="demo-storyboard"]');
-             const card = i => document.querySelector(`[data-testid="chapter-card"][data-index="${{i}}"]`);
-             const sel = card(0), other = card(2);
-             const caption = sel ? sel.querySelector('span:last-child') : null;
-             const title = sel ? sel.querySelector('span:not(:last-child)') : null;
+             const frame = document.querySelector('[data-testid="demo-player"]');
+             const canvas = document.querySelector('[data-testid="video-canvas"]');
+             const strip = document.querySelector('[data-testid="version-strip"]');
+             const drawer = document.querySelector('[data-testid="thread-drawer"]');
+             const cs = canvas ? getComputedStyle(canvas) : null;
+             const cr = canvas ? canvas.getBoundingClientRect() : null;
              return {{
                probes,
-               boardBg: board ? getComputedStyle(board).backgroundColor : null,
-               cards: document.querySelectorAll('[data-testid="chapter-card"]').length,
-               selBorder: sel ? getComputedStyle(sel).borderTopColor : null,
-               selBorderWidth: sel ? getComputedStyle(sel).borderTopWidth : null,
-               selBg: sel ? getComputedStyle(sel).backgroundColor : null,
-               selSelected: sel ? sel.getAttribute('data-selected') : null,
-               otherBorder: other ? getComputedStyle(other).borderTopColor : null,
-               captionFont: caption ? getComputedStyle(caption).fontFamily : null,
-               captionColor: caption ? getComputedStyle(caption).color : null,
-               captionSize: caption ? getComputedStyle(caption).fontSize : null,
-               titleFont: title ? getComputedStyle(title).fontFamily : null,
-               playerKind: document.querySelector('[data-testid="demo-player"]')
-                 ?.getAttribute('data-player-kind'),
-               thumbsLoaded: Array.from(document.querySelectorAll('[data-testid="chapter-thumbnail"]'))
-                 .every(i => i.complete && i.naturalWidth > 0),
+               tag: frame ? frame.tagName : null,
+               src: frame ? frame.getAttribute('src') : null,
+               sandbox: frame ? frame.getAttribute('sandbox') : null,
+               version: frame ? frame.getAttribute('data-version') : null,
+               canvasBorder: cs ? cs.borderTopColor : null,
+               canvasBg: cs ? cs.backgroundColor : null,
+               canvasRatio: cr ? cr.width / 1440 : null,
+               drawerClosed: !drawer,
+               stripBg: strip ? getComputedStyle(strip).backgroundColor : null,
+               stripEntries: document.querySelectorAll('[data-testid="version-entry"]').length,
+               headSelected: !!document.querySelector(
+                 '[data-testid="version-entry"][data-version="1"][data-selected="true"]'),
              }}; }}""")
     pv = video["probes"]
-    # The AC's verb: SELECTING a chapter applies border-color from --accent.
-    # The recolor is a --dur-base TRANSITION (§5.4's grammar carried to §5.6),
-    # so the computed value is read after it settles, not mid-interpolation.
-    page.locator('[data-testid="chapter-card"][data-index="2"]').click()
-    recolored = settled(
-        """accent => getComputedStyle(document.querySelector(
-             '[data-testid="chapter-card"][data-index="2"]')).borderTopColor === accent""",
-        pv["accent"], timeout=5000,
-    )
-    picked = page.evaluate(
-        """() => { const c = document.querySelector('[data-testid="chapter-card"][data-index="2"]');
-             const prev = document.querySelector('[data-testid="chapter-card"][data-index="0"]');
-             return {
-               selected: c.getAttribute('data-selected'),
-               border: getComputedStyle(c).borderTopColor,
-               prevSelected: prev.getAttribute('data-selected'),
-               prevBorder: getComputedStyle(prev).borderTopColor,
-             }; }""")
+    # In-frame: 4 chapters in spec order, every image decoded (thumbnails + recording).
+    chapters_in_frame = sb.locator(".ch").count()
+    chapter_texts = [sb.locator(".ch").nth(i).inner_text() for i in range(chapters_in_frame)]
+    sb_frame = next(f for f in page.frames if "/d/checkout-demo/doc/" in (f.url or ""))
+    frame_imgs_ok = False
+    try:
+        sb_frame.wait_for_function(
+            "() => Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)",
+            timeout=15000)
+        frame_imgs_ok = True
+    except Exception:
+        pass
     video_ok = all([
-        video["cards"] == 4,
-        video["boardBg"] == pv["surfaceRail"],
-        video["selSelected"] == "true",
-        video["selBorder"] == pv["accent"],
-        video["selBorderWidth"] == "2px",
-        video["selBg"] == pv["surfaceRaised"],
-        video["otherBorder"] != pv["accent"],
-        "JetBrains Mono" in (video["captionFont"] or ""),          # EC13
-        video["captionColor"] == pv["inkDim"],
-        video["captionSize"] == "10px",
-        "Inter" in (video["titleFont"] or ""),
-        video["playerKind"] == "gif",
-        video["thumbsLoaded"],
-        recolored,
-        picked["selected"] == "true",
-        picked["border"] == pv["accent"],                          # AC 4 (chapter)
-        picked["prevSelected"] == "false",
-        picked["prevBorder"] != pv["accent"],
+        video["tag"] == "IFRAME",
+        (video["src"] or "").endswith("/interactive/d/checkout-demo/doc/1"),
+        video["sandbox"] == "allow-scripts",
+        video["version"] == "1",
+        video["canvasBorder"] == pv["surfaceRaised"],              # EC15: token framing
+        video["canvasBg"] == pv["surfaceBase"],
+        video["canvasRatio"] is not None and video["canvasRatio"] > 0.8,  # EC18
+        video["drawerClosed"],
+        video["stripBg"] == pv["surfaceRail"],
+        video["stripEntries"] == 1,
+        video["headSelected"],
+        chapters_in_frame == 4,
+        all(t in " / ".join(chapter_texts) for t in
+            ("Open the storefront", "Add a hoodie to the cart",
+             "Enter the card details", "Confirm the order")),
+        frame_imgs_ok,
     ])
-    # Capture with chapter 3 selected — the click IS the state the shot shows.
+    wake_strip(page)  # the named capture shows the strip addressing the storyboard
     page.screenshot(path=str(VSHOTS / "vision-5-video.png"))
-    report["steps"]["video_surface"] = {"ok": video_ok, **video, "picked": picked}
+    report["steps"]["video_surface"] = {
+        "ok": video_ok, **{k: v for k, v in video.items() if k != "probes"},
+        "chapters_in_frame": chapters_in_frame, "chapter_texts": chapter_texts,
+        "frame_images_decoded": frame_imgs_ok,
+    }
 
     browser.close()
 
