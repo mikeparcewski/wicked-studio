@@ -28,8 +28,9 @@ What it asserts (design §4.3, the slice-3 DOM AC):
   4. /runs remains reachable via data-testid="rail-all-runs": a real <a
      href="/runs"> whose click lands the SPA on /runs (the flat-list escape
      hatch), with the board unmounted.
-  5. A rail project row enters the project shell, Chat mode default (§1.5):
-     clicking q3-review-deck lands on /p/q3-review-deck/chat.
+  5. A rail project row enters the project — re-scoped by DES-FEEDBACK-001
+     §4.1 (slice D): clicking q3-review-deck lands on the PROJECT DASHBOARD at
+     /p/q3-review-deck (context before actions), not a remembered mode.
 
 Captures (§4.0 contract: 1440x900 viewport, device_scale_factor=1, waits on
 data-testid, never a sleep) into e2e/shots/uxfix/ — gitignored evidence:
@@ -175,11 +176,15 @@ with sync_playwright() as p:
         """() => window.location.pathname === '/runs'
               && !document.querySelector('[data-testid="project-board"]')""")
 
-    # ── AC 5: a rail project row enters the shell, Chat mode default (§1.5) ────
+    # ── AC 5 (re-scoped by DES-FEEDBACK-001 §4.1, slice D): a rail project row
+    #    enters the project — which now means the PROJECT DASHBOARD, not the
+    #    last-used mode. Context before actions; the mode is chosen there. ──────
     page.goto(f"{ORIGIN}/", wait_until="domcontentloaded")
     page.locator('[data-testid="rail-project"][data-project-id="q3-review-deck"]').wait_for(timeout=30000)
     page.locator('[data-testid="rail-project"][data-project-id="q3-review-deck"]').click()
-    shell_ok = settled("""() => window.location.pathname === '/p/q3-review-deck/chat'""")
+    shell_ok = settled(
+        """() => window.location.pathname === '/p/q3-review-deck'
+              && !!document.querySelector('[data-testid="project-dashboard"]')""")
 
     ctx.close()
     browser.close()
