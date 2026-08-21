@@ -478,7 +478,11 @@ try:
 
     report["steps"]["project_shell"] = {
         "ok": all([
-            tab_labels == ["Chat", "Build", "Document", "Video"],
+            # Since DES-VISION-001 slice 3 each tab carries its board glyph before the
+            # label (the §2.5 rule-4 shared glyph set), so the label is the LAST text
+            # line — the same tolerance uxfix_slice2's spine assertion applies.
+            [t.split("\n")[-1].strip() for t in tab_labels]
+                == ["Chat", "Build", "Document", "Video"],
             tabs_live_ok, surface_named_ok, build_url_ok, back_ok, redirect_ok, run_open,
             project_redirect_ok,
         ]),
