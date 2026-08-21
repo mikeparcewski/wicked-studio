@@ -111,6 +111,14 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
     if (el === null) return;
     const measure = (): void => setBox({ w: el.clientWidth, h: el.clientHeight });
     measure();
+    // The wall's width changes WITHOUT a window resize — the live feed mounts
+    // beside it when the first run starts (§1.3) — so observe the element
+    // itself; the window listener is the jsdom fallback.
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, []);

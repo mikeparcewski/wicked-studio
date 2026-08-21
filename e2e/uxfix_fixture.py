@@ -25,6 +25,11 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     Build stats footer has real data to gate on (default False)
   long_prompt     — one extra run with a very long problem rides the run list, to
                     prove intent-phrase truncation in pixels (default False)
+  extra_narration — a list of strings; each is drained ONCE by the /ws loop as a
+                    `unitOutputDelta` for r-upload (default []). The vision-slice-2
+                    rig posts one mid-page to prove the live feed updates from the
+                    shared store within the 2s AC — a NEW line, not the loop's
+                    repeated one.
 
 A rig that never flips them gets the default W2 board.
 """
@@ -62,7 +67,8 @@ def iso(ms: int) -> str:
 
 # Mutable fixture switches, flipped over POST /__fixture between page loads.
 state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
-         "no_runs": False, "usage_ws": False, "long_prompt": False}
+         "no_runs": False, "usage_ws": False, "long_prompt": False,
+         "extra_narration": []}
 state_lock = threading.Lock()
 
 
@@ -278,6 +284,15 @@ class W2Handler(SimpleHTTPRequestHandler):
                     pending, ws_queue[:] = list(ws_queue), []
                 for frame in pending:
                     self.wfile.write(ws_frame(frame))
+                # Drain any one-shot narration lines a rig posted mid-page (vision
+                # slice 2: prove a NEW delta reaches the live feed within 2s).
+                with state_lock:
+                    extra, state["extra_narration"] = list(state["extra_narration"]), []
+                for line in extra:
+                    self.wfile.write(ws_frame({
+                        "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
+                        "text": str(line) + "\n",
+                    }))
                 self.wfile.write(ws_frame({
                     "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
                     "text": NARRATION + "\n",
