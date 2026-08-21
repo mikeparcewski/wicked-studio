@@ -173,6 +173,11 @@ with sync_playwright() as p:
 
     page.goto(f"{ORIGIN}/theme", wait_until="domcontentloaded")
     page.locator('[data-testid="brand-learn"]').wait_for(timeout=30000)
+    # Pin the proxy project this rig asserts against: the form DEFAULTS to the
+    # first root-bound project, and the W2 fixture now has more than one
+    # (q3-review-deck gained a root for the slice-D dashboard tiles), so the
+    # rig picks `notes` explicitly — same journey, deterministic wire.
+    page.locator('[data-testid="learn-project"]').select_option("notes")
     page.add_style_tag(content=HIDE_GATE_TOASTS + "\n" + FREEZE_MOTION)
     try:
         page.wait_for_function("() => document.fonts.status === 'loaded'", timeout=20000)
