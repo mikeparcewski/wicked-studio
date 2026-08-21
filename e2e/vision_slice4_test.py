@@ -13,9 +13,14 @@ same branch converts):
   2. a run row's computed `border-left-color` matches `--status-gate` when
      that run is at `awaiting_human` (and, same mechanism: `--status-run`
      while executing, `--status-fail` when failed);
-  3. the Chat mode first-run state shows the instruction text and
-     `data-testid="add-agents"` is present but NO openChat request
-     (`POST /api/v1/chats`) fires on mount;
+  3. the Chat mode first-run state shows the instruction text and NO openChat
+     request (`POST /api/v1/chats`) fires on mount. (RE-SCOPED to the
+     DES-FEEDBACK-001 §6 chips reality, which slice C shipped: the pre-slice-C
+     `add-agents` opt-in this AC originally pinned no longer exists — the
+     default agent chips render from `DEFAULT_CHAT_AGENTS` with a `✕` each,
+     and the `[+ Add]` affordance (`data-testid="add-agent"`, dashed border,
+     --ink-dim) opens the roster picker. Zero-requests-on-mount is UNCHANGED —
+     the chips render from the cached roster / fallback constant, §6.1.);
   4. the version strip's active dot computed `background` resolves from
      `var(--accent)`; the Themes popover `data-testid="themes-explanation"`
      is non-empty. (The storyboard-chapter accent AC retired with the
@@ -31,7 +36,7 @@ UXFIX composition), EC10, EC11 (no ornament), EC13 (two typefaces — intent
 labels sans, status words/narration/stamps mono), EC15 (computed styles
 resolve from the tokens), and the §6.3 preservation lists (Build purpose
 always visible, no campaigns panel, intent labels never raw prompts; Chat
-single-agent default with the Add-agents opt-in; Document three-pane +
+zero-requests-on-mount with the §6 default chips; Document three-pane +
 cross-link; Video narration naming its subject). The §5.5 cross-link flash
 (wk-anchor-flash, one run) is asserted live.
 
@@ -169,7 +174,13 @@ with sync_playwright() as p:
         f"""() => {{
              const probes = ({PROBES})();
              const instruction = document.querySelector('[data-testid="chat-firstrun-instruction"]');
-             const add = document.querySelector('[data-testid="add-agents"]');
+             // The §6 chips reality (DES-FEEDBACK-001, slice C): default agent
+             // chips + the separate [+ Add] affordance — the pre-slice-C
+             // "add-agents" opt-in this scene originally pinned is gone.
+             const chipsBar = document.querySelector('[data-testid="agent-chips-bar"]');
+             const chips = Array.from(document.querySelectorAll('[data-testid="agent-chip"]'));
+             const add = document.querySelector('[data-testid="add-agent"]');
+             const addCs = add ? getComputedStyle(add) : null;
              const composer = document.querySelector('textarea.wk-composer');
              const cs = composer ? getComputedStyle(composer) : null;
              return {{
@@ -177,8 +188,13 @@ with sync_playwright() as p:
                instructionText: instruction ? instruction.textContent : null,
                instructionColor: instruction ? getComputedStyle(instruction).color : null,
                instructionFont: instruction ? getComputedStyle(instruction).fontFamily : null,
-               addAgentsPresent: !!add,
-               addAgentsColor: add ? getComputedStyle(add).color : null,
+               chipsBarCount: chipsBar ? chipsBar.getAttribute('data-count') : null,
+               chipAgents: chips.map(c => c.getAttribute('data-agent')),
+               chipFont: chips[0] ? getComputedStyle(chips[0]).fontFamily : null,
+               chipColor: chips[0] ? getComputedStyle(chips[0]).color : null,
+               addAgentPresent: !!add,
+               addAgentColor: addCs ? addCs.color : null,
+               addAgentBorderStyle: addCs ? addCs.borderTopStyle : null,
                composerBg: cs ? cs.backgroundColor : null,
                composerRadius: cs ? cs.borderRadius : null,
              }}; }}""")
@@ -191,12 +207,19 @@ with sync_playwright() as p:
         (chat["instructionText"] or "").strip() != "",
         chat["instructionColor"] == pr["inkBody"],
         "Inter" in (chat["instructionFont"] or ""),
-        chat["addAgentsPresent"],
-        chat["addAgentsColor"] == pr["accent"],
+        # §6.2: three default chips render immediately from the cache/fallback.
+        chat["chipsBarCount"] == "3",
+        chat["chipAgents"] == ["writer", "reviewer", "planner"],
+        # EC13: chip text in the sans; §6.3 anatomy — [+ Add] dashed, --ink-dim.
+        "Inter" in (chat["chipFont"] or ""),
+        chat["chipColor"] == pr["inkBody"],
+        chat["addAgentPresent"],
+        chat["addAgentColor"] == pr["inkDim"],
+        chat["addAgentBorderStyle"] == "dashed",
         chat["composerBg"] == pr["surfaceRaised"],
         chat["composerRadius"] == "16px",
         pr["accentDim"] in ring and pr["accent"] not in ring,
-        len(chat_posts) == 0,  # AC 3: NO openChat fired on mount
+        len(chat_posts) == 0,  # AC 3 (unchanged): NO openChat fired on mount
     ])
     page.screenshot(path=str(VSHOTS / "vision-4-chat-firstrun.png"))
     report["steps"]["chat_firstrun"] = {
