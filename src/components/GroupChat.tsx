@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { Project } from '../api/types.js';
+import type { Project, RosterSeat } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
+import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
 import { Markdown } from './Markdown.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
@@ -15,13 +16,38 @@ import { ProjectSwitcher } from './ProjectSwitcher.js';
  * live until "Close" (or daemon shutdown) — leaving the page keeps them warm.
  *
  * NOTHING warms on mount (DES-UXFIX-001 §2.4, F6). First-run is a calm teaching
- * state: one line on what Chat is, a focused composer, and ONE disclosure —
- * "Add agents". The first send warms the one default agent; "Add agents" warms
- * the whole roster and turns the header into the multi-agent chip strip. The
- * warm-and-rejoin machinery (FINDING-027) is preserved verbatim — it just runs
- * on opt-in, not on mount: a stored chat the daemon still holds is rejoined
- * exactly as before, because warm seats someone paid for must not be orphaned.
+ * state: one line on what Chat is, a focused composer, and the DEFAULT agent
+ * chips (DES-FEEDBACK-001 §6.2): the agents that WILL join, rendered
+ * synchronously from the cached roster (never fetched on mount — §6.1's
+ * reconciliation of "agents by default" with zero-requests-on-mount), each
+ * removable for this run via its ✕, extendable via [+ Add] (the roster
+ * picker — its fetch rides that user action). The first send warms exactly
+ * the selected set. The warm-and-rejoin machinery (FINDING-027) is preserved
+ * verbatim — it still runs on opt-in, not on mount: a stored chat the daemon
+ * still holds is rejoined exactly as before, because warm seats someone paid
+ * for must not be orphaned.
  */
+
+/**
+ * The hardcoded fallback default set (§6.2) — used ONLY when the roster cache
+ * is empty (nothing has fetched the roster yet this session). These are the
+ * ONLY hardcoded agent names in the agent layer; everything else comes from
+ * the roster cache or user action.
+ */
+export const DEFAULT_CHAT_AGENTS = ['writer', 'reviewer', 'planner'];
+
+/**
+ * The default chip selection for a chat being created (§6.2): the cached
+ * roster when the app has one (fetched at startup by the launch form, or by
+ * any other roster consumer), else the hardcoded fallback trio. Synchronous
+ * by construction — reading it can never fire a request.
+ */
+function defaultSelection(): string[] {
+  const cached = getCachedRoster();
+  return cached !== null && cached.length > 0
+    ? cached.map((s) => s.key)
+    : [...DEFAULT_CHAT_AGENTS];
+}
 
 /**
  * Seat identity under the token contract (DES-VISION-001 §2.11): every chip and
@@ -130,6 +156,19 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
   const chatIdRef = useRef<string | null>(null);
   chatIdRef.current = chatId;
 
+  // ── Default agent chips (DES-FEEDBACK-001 §6, slice C) ─────────────────────
+  // The agents that will join on the first send: defaults (cached roster or
+  // the fallback trio) + picker additions − ✕ removals. Per-run only, never
+  // persisted (§6.2). Initialized synchronously — zero requests (§6.1).
+  const [selectedAgents, setSelectedAgents] = useState<string[]>(defaultSelection);
+  const selectedAgentsRef = useRef<string[]>(selectedAgents);
+  selectedAgentsRef.current = selectedAgents;
+  // [+ Add] opens the roster picker; ITS roster read is allowed to fetch —
+  // opening the picker is a user action, not a mount (§2.4).
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerRoster, setPickerRoster] = useState<RosterSeat[]>(() => getCachedRoster() ?? []);
+  const pickerAnchorRef = useRef<HTMLDivElement>(null);
+
   // ── Project binding (DES-FEEDBACK-001 §5, slice B) ─────────────────────────
   // `null` = Unfiled: no `projectId` key in the open body, the backend default.
   // The list loads on the dropdown's first OPEN (§2.4: zero requests on mount).
@@ -151,6 +190,38 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
         projectsRequested.current = false; // transient — retry on the next open
       });
   }
+
+  /** Toggle the roster picker; on first open with a cold cache, fetch (a user action — §2.4-safe). */
+  function togglePicker(): void {
+    const opening = !pickerOpen;
+    setPickerOpen(opening);
+    if (!opening) return;
+    const cached = getCachedRoster();
+    if (cached !== null) {
+      setPickerRoster(cached);
+      return;
+    }
+    api
+      .getRoster()
+      .then(({ roster }) => {
+        setCachedRoster(roster);
+        setPickerRoster(roster);
+      })
+      .catch(() => {
+        /* transient — the picker shows its empty state; the next open retries */
+      });
+  }
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function onOutside(e: MouseEvent): void {
+      if (pickerAnchorRef.current && !pickerAnchorRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [pickerOpen]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -181,6 +252,10 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     // The project selection belongs to the chat being CREATED — a repo switch
     // starts a new create flow, so the binding resets to Unfiled (§5.1).
     setSelectedProjectId(null);
+    // So does the chip selection (§6.2: per-run, never persisted): the new
+    // repo's create flow starts from the defaults again.
+    setSelectedAgents(defaultSelection());
+    setPickerOpen(false);
     // The id goes too, and it is the one reset that is not cosmetic. Resolving the new repo's chat
     // is ASYNC — a stored id costs a probe round-trip — and until it lands, a `chatId` still holding
     // the PREVIOUS repo's chat is actively wrong in three places: the event-stream guard below would
@@ -303,14 +378,15 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
 
   /**
    * Warm seats — the §2.4 opt-in, and the ONLY place a chat is minted or opened.
-   * `'one'` is the first send's path (the single default agent — the first
-   * council-enabled roster seat); `'all'` is the "Add agents" disclosure (the
-   * whole roster, exactly what the pre-slice-4 mount warmed). Reuses the live
+   * `agents` is the chip selection (DES-FEEDBACK-001 §6.2: defaults + picker
+   * additions − ✕ removals) and goes into the open body's `clis` array exactly
+   * as the pre-slice-C opt-in sent it — the wire shape is unchanged. No roster
+   * fetch here any more: the selection IS the answer (§6.1). Reuses the live
    * chat id when there is one: `chat_open` ensures per seat, so warming MORE
    * seats into an existing chat reuses the warm ones and adds only the missing.
    * Returns the seat keys that came up ready.
    */
-  async function armChat(scope: 'one' | 'all'): Promise<string[]> {
+  async function armChat(agents: string[]): Promise<string[]> {
     setArming(true);
     try {
       // The chat id is minted CLIENT-side and set before the open call: seats warm
@@ -323,22 +399,12 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
         chatIdRef.current = id;
         writeStoredChatId(repoId, id);
       }
-      const roster = await api
-        .getRoster()
-        .then(({ roster: r }) => r)
-        .catch(() => []);
-      // A repo switch mid-arm resets `chatIdRef` (the mount effect) — every await
-      // below re-checks it so nothing is attributed to a repo we already left.
-      if (chatIdRef.current !== id) return [];
-      const keys = roster.flatMap((s) => (typeof s.key === 'string' ? [s.key] : []));
-      const one = roster.find((s) => s.enabled_for_council)?.key ?? keys[0];
-      const chosen = scope === 'one' ? (one !== undefined ? [one] : []) : keys;
       // Optimistic chips: each seat being warmed shows as warming while the open is in
       // flight; ready/failed events (and the open response) correct them as truth arrives.
       setSeats((prev) => ({
         ...prev,
         ...Object.fromEntries(
-          chosen.filter((k) => prev[k] !== 'ready').map((k) => [k, 'warming' as SeatState]),
+          agents.filter((k) => prev[k] !== 'ready').map((k) => [k, 'warming' as SeatState]),
         ),
       }));
       try {
@@ -348,11 +414,12 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
         // switcher's selection; Unfiled omits the key (the backend default).
         const boundProject = projectId ?? selectedProjectRef.current;
         if (boundProject) body.projectId = boundProject;
-        // 'all' omits `clis` on purpose — the daemon warms its own full roster, exactly
-        // as the pre-slice-4 mount did. 'one' names the single default agent; with no
-        // roster answer it also omits, and the daemon's roster decides.
-        if (scope === 'one' && chosen.length > 0) body.clis = chosen;
+        // An empty selection omits `clis` — the daemon warms its own default
+        // roster (the pre-existing wire semantics for an absent array).
+        if (agents.length > 0) body.clis = agents;
         const { seats: opened } = await api.openChat(body);
+        // A repo switch mid-arm resets `chatIdRef` (the mount effect) — re-check
+        // after the await so nothing is attributed to a repo we already left.
         if (chatIdRef.current !== id) return [];
         const st: Record<string, SeatState> = {};
         const errs: Record<string, string> = {};
@@ -362,7 +429,20 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
         }
         setSeats((prev) => ({ ...prev, ...st }));
         setSeatErrors((prev) => ({ ...prev, ...errs }));
-        return opened.filter((s) => s.ok).map((s) => s.cliKey);
+        const ready = opened.filter((s) => s.ok).map((s) => s.cliKey);
+        // §6.2 recoverable error: a default chip may name an agent the daemon no
+        // longer has (stale cache or a fallback name with no seat behind it).
+        // When NOTHING came up, say WHICH names were rejected — the chips bar is
+        // back on screen (no seat is ready), so the user can remove the stale
+        // chip and send again; the retry re-arms into the same chat id.
+        if (ready.length === 0 && opened.length > 0) {
+          const rejected = opened.map((s) => `"${s.cliKey}"`).join(', ');
+          setOpenError(
+            `The daemon rejected agent${opened.length > 1 ? 's' : ''} ${rejected} — ` +
+              `remove the stale chip${opened.length > 1 ? 's' : ''} (✕) and send again.`,
+          );
+        }
+        return ready;
       } catch (e: unknown) {
         // The id stays stored on purpose: an open that failed at the HTTP layer may still have
         // warmed seats server-side, and dropping the id here would orphan exactly what
@@ -380,16 +460,20 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     // `resolving` waits out the rejoin probe: until it answers, "no chat id" does NOT
     // mean first-run, and treating it as one would mint over the stored id (FINDING-027).
     if (text === '' || ended || arming || resolving) return;
-    const firstSend = chatIdRef.current === null;
     let warm = Object.entries(seats)
       .filter(([, st]) => st === 'ready')
       .map(([k]) => k);
-    if (!firstSend && warm.length === 0) return;
+    // Nothing ready with nothing selected: nobody would receive this (§6.2's
+    // selection is the send's audience) — the disabled Send already says so.
+    if (warm.length === 0 && chatIdRef.current === null && selectedAgentsRef.current.length === 0) return;
     setInput('');
     setMessages((prev) => [...prev, { kind: 'user', text }]);
-    if (firstSend) {
-      // Typing IS the opt-in (§2.4): the first send warms the one default agent.
-      warm = await armChat('one');
+    if (warm.length === 0) {
+      // Typing IS the opt-in (§2.4): the first send warms the SELECTED agents —
+      // the §6.2 chips (defaults + additions − removals). Also the retry path
+      // after a rejected open (stale default chip): the re-arm reuses the same
+      // chat id with the corrected selection, so recovery is just "send again".
+      warm = await armChat(selectedAgentsRef.current);
       if (warm.length === 0) return; // armChat surfaced why (openError / failed chip)
     }
     const id = chatIdRef.current;
@@ -446,9 +530,12 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
   // V8: a teardown control exists only once there is something armed to tear down —
   // warm agents, or a kept-on-error chat id the operator may want to disconnect.
   const closable = chatId !== null && (anyReady || openError !== null);
-  // The ONE disclosure (§2.4): shown until the roster is warmed in (0 seats =
-  // first-run, 1 seat = the single default agent the first send warmed).
-  const showAddAgents = !ended && Object.keys(seats).length <= 1;
+  // The §6.2 default chips: shown while the send's audience is still the chip
+  // SELECTION — before anything is warm (and not mid-arm, when the header's
+  // warming seat chips take over, nor mid-probe, when this may not be first-run
+  // at all). After a fully rejected open the bar returns: no seat is ready, and
+  // removing the stale chip + sending again is the §6.2 recovery path.
+  const showChipsBar = !ended && !resolving && !arming && !anyReady;
   // Not first-run while the rejoin probe is unresolved — teaching "nothing here yet"
   // over a chat that may be about to pop back in would be a lie held for milliseconds.
   const firstRun =
@@ -576,6 +663,122 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
             onClose={() => setShowNewProject(false)}
           />
         )}
+        {/* §6.2/§6.3: the default agent chips — the agents that WILL join the
+            first send. Rendered from the cached roster / fallback constant,
+            never a fetch (§6.1). Each chip is an agent that IS included; the
+            ✕ removes it for THIS run only. [+ Add] is the separate affordance
+            (dashed vs solid, --ink-dim vs --ink-body) opening the roster
+            picker. Chip text reads in the SANS (EC13: labels in sans — these
+            are selection labels, not narration data). */}
+        {showChipsBar && (
+          <div
+            data-testid="agent-chips-bar"
+            data-count={selectedAgents.length}
+            className="flex items-center gap-1.5 flex-wrap pb-2"
+          >
+            {selectedAgents.map((key) => (
+              <span
+                key={key}
+                data-testid="agent-chip"
+                data-agent={key}
+                className="wk-disclose inline-flex items-center gap-1"
+                style={{
+                  background: 'var(--surface-raised)',
+                  // §6.2 writes `border: 1px solid rgba(255,255,255,0.08)` literally;
+                  // that raw color would fail the §2.11 no-raw-color lint (ERROR), so
+                  // the hairline rides the token that carries that role one step above
+                  // a raised surface — --surface-overlay — exactly as the composer and
+                  // the Close pill already draw theirs.
+                  border: '1px solid var(--surface-overlay)',
+                  borderRadius: 'var(--radius-full)',
+                  color: 'var(--ink-body)',
+                  fontSize: 'var(--text-xs)',
+                  fontFamily: 'var(--font-sans)',
+                  padding: '3px 8px 3px 6px',
+                }}
+              >
+                <button
+                  type="button"
+                  aria-label={`Remove ${key}`}
+                  title={`Remove ${key} from this chat`}
+                  onClick={() => setSelectedAgents((prev) => prev.filter((a) => a !== key))}
+                  // §6.3: 12×12, transparent, --ink-dim → --ink-high on hover
+                  // (the wk-chip-x pair in global.css — hover needs CSS).
+                  className="wk-chip-x inline-flex items-center justify-center leading-none"
+                  style={{ width: '12px', height: '12px', background: 'transparent', border: 'none', padding: 0, fontSize: 'var(--text-2xs)', cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+                {key}
+              </span>
+            ))}
+            <div ref={pickerAnchorRef} className="relative inline-block">
+              <button
+                type="button"
+                data-testid="add-agent"
+                aria-haspopup="listbox"
+                aria-expanded={pickerOpen}
+                title="Add an agent from the roster to this chat"
+                onClick={togglePicker}
+                className="inline-flex items-center"
+                style={{
+                  background: 'transparent',
+                  border: '1px dashed var(--surface-overlay)',
+                  borderRadius: 'var(--radius-full)',
+                  color: 'var(--ink-dim)',
+                  fontSize: 'var(--text-xs)',
+                  fontFamily: 'var(--font-sans)',
+                  padding: '3px 8px',
+                  cursor: 'pointer',
+                }}
+              >
+                + Add
+              </button>
+              {pickerOpen && (
+                <div
+                  role="listbox"
+                  data-testid="agent-picker"
+                  className="absolute left-0 bottom-full mb-1 w-48 rounded-lg py-1 z-50 max-h-64 overflow-y-auto"
+                  style={{
+                    background: 'var(--surface-raised)',
+                    border: '1px solid var(--surface-overlay)',
+                    boxShadow: 'var(--shadow-raised)',
+                  }}
+                >
+                  {pickerRoster.length === 0 ? (
+                    <p className="px-3 py-1.5 text-xs font-mono italic m-0" style={{ color: 'var(--ink-dim)' }}>
+                      No roster loaded
+                    </p>
+                  ) : (
+                    pickerRoster.map((seat) => {
+                      const included = selectedAgents.includes(seat.key);
+                      return (
+                        <button
+                          key={seat.key}
+                          type="button"
+                          role="option"
+                          aria-selected={included}
+                          disabled={included}
+                          data-testid="agent-picker-option"
+                          data-agent-key={seat.key}
+                          onClick={() => {
+                            setSelectedAgents((prev) => (prev.includes(seat.key) ? prev : [...prev, seat.key]));
+                            setPickerOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs font-mono truncate transition-colors hover:bg-surface-card disabled:opacity-40"
+                          style={{ color: included ? 'var(--ink-dim)' : 'var(--ink-body)' }}
+                        >
+                          {seat.key}
+                          {included ? ' ✓' : ''}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <div className="flex gap-2">
           <textarea
             value={input}
@@ -601,30 +804,18 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
           <button
             type="button"
             onClick={() => void send()}
-            // Before any chat exists, typing is how the first agent warms — so text alone
-            // enables Send. Once a chat exists, sending needs a ready seat, as before.
-            // (`resolving`: the stored chat is still being checked — not first-run yet.)
-            disabled={input.trim() === '' || arming || resolving || (chatId !== null && !anyReady)}
+            // Typing is how the selected agents warm — so text alone enables Send,
+            // including the §6.2 retry after a rejected open (send re-arms). The
+            // holds: `resolving` (the stored chat is still being probed — not
+            // first-run yet), `arming` (an open is in flight), and an EMPTY chip
+            // selection with nothing warm (nobody would receive the message).
+            disabled={input.trim() === '' || arming || resolving || (showChipsBar && selectedAgents.length === 0)}
             className="px-4 text-sm font-semibold disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)', borderRadius: 'var(--radius-xl)' }}
           >
             Send
           </button>
         </div>
-        {showAddAgents && (
-          <button
-            type="button"
-            data-testid="add-agents"
-            disabled={arming || resolving}
-            title="Warm every agent on the roster into this chat — replies stream side by side"
-            onClick={() => void armChat('all')}
-            // §5.3: low-key but ON-ACCENT — color alone signals it's interactive.
-            className="mt-2 text-[11px] px-1 py-1 disabled:opacity-40"
-            style={{ background: 'transparent', color: 'var(--accent)', border: 'none', cursor: 'pointer' }}
-          >
-            + Add agents
-          </button>
-        )}
       </div>
     </div>
   );
