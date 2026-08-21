@@ -184,3 +184,56 @@ describe('the ACTIVE variant — rich, but an empty region is OMITTED (§2.1.1)'
     expect(within(card()).getByTestId('live-line')).toBeInTheDocument();
   });
 });
+
+describe('the vision-slice-2 card language (DES-VISION-001 §5.1)', () => {
+  it('the card is token-built: --surface-card ground, --shadow-card, mono narration (EC13/EC15)', () => {
+    render(
+      <ProjectCard
+        item={item('upload-endpoint', {
+          runs: [run('r-live', 'executing')],
+          attention: 'running', band: 'needs-you', score: 40,
+          signal: { kind: 'running', at: Date.now(), runId: 'r-live' },
+        })}
+        navigate={() => {}}
+      />,
+    );
+    expect(card().style.background).toBe('var(--surface-card)');
+    expect(card().style.boxShadow).toBe('var(--shadow-card)');
+    // Narration is DATA — the mono face at body ink (§1.5 rule 3).
+    const line = within(card()).getByTestId('live-line');
+    expect(line.style.fontFamily).toBe('var(--font-mono)');
+    expect(line.style.color).toBe('var(--ink-body)');
+  });
+
+  it('the 2px status bar tops the ACTIVE card in the leading signal\'s color (§1.4)', () => {
+    render(
+      <ProjectCard
+        item={item('q3-review-deck', {
+          runs: [run('r-gate', 'awaiting_human')],
+          attention: 'gate', band: 'needs-you', score: 100,
+          signal: { kind: 'gate', at: Date.now(), runId: 'r-gate' },
+        })}
+        navigate={() => {}}
+      />,
+    );
+    expect(card().style.borderTop).toBe('2px solid var(--status-gate)');
+    cleanup();
+
+    render(
+      <ProjectCard
+        item={item('auth-refactor', {
+          runs: [run('r-fail', 'failed')],
+          attention: 'failing', band: 'needs-you', score: 66,
+          signal: { kind: 'failing', at: Date.now(), runId: 'r-fail' },
+        })}
+        navigate={() => {}}
+      />,
+    );
+    expect(card().style.borderTop).toBe('2px solid var(--status-fail)');
+    cleanup();
+
+    // A QUIET card carries no bar — the bar is the ACTIVE card's signal (§5.1).
+    render(<ProjectCard item={item('smoke-tests')} navigate={() => {}} />);
+    expect(card().style.borderTop).toBe('');
+  });
+});

@@ -26,29 +26,35 @@ import { isSimpleGate, useGateStore, type OpenGate } from '../store/gates.js';
 /** One-shot focus intent for the thread's gate card, read by `SteeringGate`. */
 export const GATE_HASH = '#gate';
 
-const S = {
-  accent: '#ffda19',
-  green:  '#3fb950',
-  red:    '#f85149',
-  muted:  'rgba(230,237,243,0.55)',
-};
-
+// DES-VISION-001 §5.1: the gate chip is STATUS furniture, not accent — amber
+// `--status-gate` on `--status-gate-dim`, with the answer buttons in the run
+// (emerald) and fail (red) status pairs. Every color is a semantic token (§2.11).
 const BTN: React.CSSProperties = {
-  fontSize: '10px', fontFamily: 'monospace', borderRadius: '4px', padding: '2px 6px',
-  border: '1px solid transparent', cursor: 'pointer', flexShrink: 0,
+  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', borderRadius: 'var(--radius-sm)',
+  padding: '2px 6px', border: '1px solid transparent', cursor: 'pointer', flexShrink: 0,
 };
 
 const CSS = {
   wrap: { display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, flexWrap: 'nowrap' },
-  label: { fontSize: '10px', fontFamily: 'monospace', color: S.accent, fontWeight: 700 },
-  approve: { ...BTN, background: 'rgba(63,185,80,0.15)', borderColor: 'rgba(63,185,80,0.35)', color: S.green },
-  reject:  { ...BTN, background: 'rgba(248,81,73,0.12)', borderColor: 'rgba(248,81,73,0.3)', color: S.red },
+  label: {
+    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+    color: 'var(--status-gate)', fontWeight: 'var(--weight-bold)',
+  },
+  approve: {
+    ...BTN, background: 'var(--status-run-dim)',
+    borderColor: 'var(--status-run-dim)', color: 'var(--status-run)',
+  },
+  reject: {
+    ...BTN, background: 'var(--status-fail-dim)',
+    borderColor: 'var(--status-fail-dim)', color: 'var(--status-fail)',
+  },
   open: {
-    ...BTN, textDecoration: 'none', background: 'rgba(255,218,25,0.12)',
-    borderColor: 'rgba(255,218,25,0.35)', color: S.accent,
+    ...BTN, textDecoration: 'none', background: 'var(--status-gate-dim)',
+    borderColor: 'var(--status-gate-dim)', color: 'var(--status-gate)',
   },
   error: {
-    fontSize: '10px', fontFamily: 'monospace', color: S.red, maxWidth: '92px', flexShrink: 1,
+    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--status-fail)',
+    maxWidth: '92px', flexShrink: 1,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
 } as const satisfies Record<string, React.CSSProperties>;
@@ -110,7 +116,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
   if (answered !== null) {
     return (
       <span style={CSS.wrap} data-testid={`gate-answered-${runId}`}>
-        <span style={{ ...CSS.label, color: S.muted, fontWeight: 400 }}>{answered} · advancing…</span>
+        <span style={{ ...CSS.label, color: 'var(--ink-muted)', fontWeight: 'var(--weight-normal)' }}>{answered} · advancing…</span>
       </span>
     );
   }

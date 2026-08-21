@@ -49,21 +49,33 @@ function clamp(line: string): string {
 }
 
 /**
- * The newest line of a delta buffer worth showing, or `null` when the buffer holds
- * only noise. ANSI is stripped; `\r` counts as a line break because a progress bar
+ * The newest `max` DISTINCT lines of a delta buffer worth showing, newest first —
+ * the live feed's per-block window (DES-VISION-001 §1.3: "the last 2 narration
+ * lines"). ANSI is stripped; `\r` counts as a line break because a progress bar
  * redraws in place — the segment after the last `\r` is that line's newest state,
- * not a continuation of it.
+ * not a continuation of it. Duplicates are folded because a worker that re-emits
+ * the same status every second is saying ONE thing, not two.
  */
-export function lastMeaningfulLine(text: string | undefined): string | null {
-  if (text === undefined || text === '') return null;
+export function lastMeaningfulLines(text: string | undefined, max: number): string[] {
+  if (text === undefined || text === '' || max < 1) return [];
   const lines = text.replace(ANSI, '').split(/[\r\n]+/);
-  for (let i = lines.length - 1; i >= 0; i--) {
+  const found: string[] = [];
+  for (let i = lines.length - 1; i >= 0 && found.length < max; i--) {
     const line = (lines[i] ?? '').trim();
     // Pure punctuation / box drawing / bars carry no subject, so they are not a status.
     if (line === '' || !/[\p{L}\p{N}]/u.test(line) || PROGRESS.test(line)) continue;
-    return clamp(line);
+    const clamped = clamp(line);
+    if (!found.includes(clamped)) found.push(clamped);
   }
-  return null;
+  return found;
+}
+
+/**
+ * The newest line of a delta buffer worth showing, or `null` when the buffer holds
+ * only noise — the card's one-line reduction of the same window.
+ */
+export function lastMeaningfulLine(text: string | undefined): string | null {
+  return lastMeaningfulLines(text, 1)[0] ?? null;
 }
 
 /** The unit the run is on — the one whose buffer and phase the card is about. */

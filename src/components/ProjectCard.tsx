@@ -30,6 +30,12 @@ import { STATUS_STYLE } from './RunCard.js';
  * (slice 6) — the same stores the run view reads, fed by the app's ONE `/ws`
  * subscription (§3.5). A card therefore updates in place while the user is looking
  * at a different card, with no second socket and no polling anywhere on this route.
+ *
+ * Visual language is DES-VISION-001 §5.1 (vision slice 2): every color resolves
+ * from a semantic token (§2.11 — lint-enforced at ERROR for this file), the card
+ * is `--surface-card` under `--shadow-card`, the ACTIVE card carries a 2px
+ * status bar along its top whose color IS the leading signal kind (§1.4), and
+ * narration reads in `--font-mono` against the sans labels (§1.5 rule 3).
  */
 
 /** ACTIVE-card slot height in px — the NEEDS YOU band's windowing depends on it.
@@ -37,13 +43,15 @@ import { STATUS_STYLE } from './RunCard.js';
  *  chips + a tile row + the action row), so the bottom-anchored actions inside
  *  `overflow: hidden` are never clipped. The card itself sizes to content and
  *  treats this as a `maxHeight`, so a light card is short, not hollow — the
- *  SLOT stays fixed for the windowing math, the pixels do not. */
-export const ACTIVE_CARD_H = 330;
+ *  SLOT stays fixed for the windowing math, the pixels do not. (Vision slice 2:
+ *  +6px over the pre-token slot — `--space-4` padding is 16px, was 14px, and the
+ *  2px status bar rides inside the border-box.) */
+export const ACTIVE_CARD_H = 336;
 
 /** QUIET-card slot height in px — one summary line plus the action row, with
  *  room for the first-run 2×2 sublabelled grid (§2.2) in the same slot. Also a
  *  `maxHeight`: a compact quiet card renders at its natural ~one-line height. */
-export const QUIET_CARD_H = 112;
+export const QUIET_CARD_H = 118;
 
 /** How recently a project must have been created for its empty card to read as
  *  "a genuinely brand-new project a user just created" (§2.1.2) and show the
@@ -56,22 +64,26 @@ const MAX_CHIPS = 2;
 /** Live lines per card. Fixed height, so extra runs report as a count, not a list. */
 const MAX_LINES = 2;
 
-const S = {
-  border: 'rgba(230,237,243,0.1)',
-  ink:    '#e6edf3',
-  muted:  'rgba(230,237,243,0.55)',
-  faint:  'rgba(230,237,243,0.3)',
-  accent: '#ffda19',
+/** Attention → dot colour — shared with the rail (slice 3), so the same signal
+ *  reads as the same colour on the board card and the sidebar's project list.
+ *  Values are semantic tokens (DES-VISION-001 §2.6): status colors are a
+ *  separate layer from the accent, and they are NOT customizable. */
+export const ATTENTION_DOT: Record<Attention, string> = {
+  gate:    'var(--status-gate)',
+  failing: 'var(--status-fail)',
+  running: 'var(--status-run)',
+  drafts:  'var(--ink-muted)',
+  quiet:   'var(--ink-dim)',
 };
 
-/** Attention → dot colour — shared with the rail (slice 3), so the same signal
- *  reads as the same colour on the board card and the sidebar's project list. */
-export const ATTENTION_DOT: Record<Attention, string> = {
-  gate:    '#ffda19',
-  failing: '#f85149',
-  running: '#79c0ff',
-  drafts:  'rgba(230,237,243,0.45)',
-  quiet:   'rgba(230,237,243,0.2)',
+/** Signal kind → the 2px status-bar color on an ACTIVE card's top (§1.4): the
+ *  bar IS the color of the leading signal. Shared with the live feed's block
+ *  dots, so the same signal reads identically on the wall and in the feed. */
+export const SIGNAL_BAR: Record<SignalKind, string> = {
+  gate:    'var(--status-gate)',
+  failing: 'var(--status-fail)',
+  running: 'var(--status-run)',
+  drafts:  'var(--status-done)',
 };
 
 /** The pill's word for the signal that put the card in NEEDS YOU — user words
@@ -85,40 +97,49 @@ const PILL: Record<SignalKind, string> = {
 
 const CSS = {
   card: {
-    boxSizing: 'border-box', overflow: 'hidden', background: '#161b22',
-    border: `1px solid ${S.border}`, borderRadius: '10px', padding: '14px',
+    boxSizing: 'border-box', overflow: 'hidden', background: 'var(--surface-card)',
+    boxShadow: 'var(--shadow-card)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)',
     display: 'flex', flexDirection: 'column',
     // Anchors the live edge, and the radius above clips its ends (see LiveEdge).
     position: 'relative',
   },
-  header: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 },
+  header: { display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 },
   name: {
-    fontSize: '13px', fontWeight: 700, color: S.ink, textDecoration: 'none',
+    fontSize: 'var(--text-md)', fontWeight: 'var(--weight-semi)', color: 'var(--ink-high)',
+    textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  repo: {
+    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+    color: 'var(--ink-dim)', flexShrink: 0,
+  },
+  tile: {
+    flex: 1, minWidth: 0, background: 'transparent',
+    border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)', padding: '5px 7px',
+  },
+  tileName: {
+    fontSize: 'var(--text-xs)', color: 'var(--ink-body)', margin: 0,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
-  repo: { fontSize: '10px', fontFamily: 'monospace', color: S.faint, flexShrink: 0 },
-  tile: {
-    flex: 1, minWidth: 0, background: 'rgba(230,237,243,0.04)',
-    border: `1px solid ${S.border}`, borderRadius: '6px', padding: '5px 7px',
-  },
-  tileName: { fontSize: '11px', color: S.ink, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   chip: {
     display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none',
-    fontSize: '11px', fontFamily: 'monospace', color: S.muted, borderRadius: '5px', padding: '3px 7px',
+    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
+    borderRadius: 'var(--radius-sm)', padding: '3px 7px',
   },
   quick: {
     display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none',
-    background: 'rgba(230,237,243,0.05)', border: `1px solid ${S.border}`,
-    borderRadius: '6px', color: S.ink, fontSize: '11px',
+    background: 'var(--surface-raised)', border: 'none',
+    borderRadius: 'var(--radius-md)', color: 'var(--ink-high)', fontSize: 'var(--text-xs)',
     overflow: 'hidden', whiteSpace: 'nowrap', minWidth: 0,
   },
+  // Narration is DATA: it reads in the mono face at body ink (§1.5 rule 3, §1.4).
   line: {
     display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 2px',
-    fontSize: '11px', color: S.muted,
+    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   pulse: {
-    width: '5px', height: '5px', borderRadius: '50%', background: '#79c0ff', flexShrink: 0,
+    width: '5px', height: '5px', borderRadius: 'var(--radius-full)',
+    background: 'var(--status-run)', flexShrink: 0,
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
@@ -170,11 +191,14 @@ function QuickActions({ projectId, link, detail }: {
             }}
           >
             <span aria-hidden style={{ flexShrink: 0 }}>{spec.glyph}</span>
-            <span style={{ fontWeight: 600, flexShrink: 0 }}>{spec.label}</span>
+            <span style={{ fontWeight: 'var(--weight-semi)', flexShrink: 0 }}>{spec.label}</span>
             {detail && (
               <span
                 data-testid="quick-action-sublabel"
-                style={{ color: S.faint, fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                style={{
+                  color: 'var(--ink-dim)', fontSize: 'var(--text-2xs)',
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
               >
                 {spec.sublabel}
               </span>
@@ -206,7 +230,12 @@ function DocTile({ projectId, name, kind, head, when }: {
         <span aria-hidden style={{ marginRight: '4px' }}>{kind === 'demo' ? '▶' : '▤'}</span>
         {name}
       </p>
-      <p style={{ fontSize: '10px', color: S.faint, margin: '2px 0 0', fontFamily: 'monospace' }}>
+      <p
+        style={{
+          fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', margin: '2px 0 0',
+          fontFamily: 'var(--font-mono)',
+        }}
+      >
         {Number.isNaN(when) ? 'not yet edited' : `${ago(when)} ago`}
       </p>
       {/* The card exports the HEAD — the only version a surface that shows none can mean. */}
@@ -276,7 +305,10 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
     <span
       data-testid="project-status-dot"
       aria-hidden
-      style={{ width: '8px', height: '8px', borderRadius: '50%', background: ATTENTION_DOT[attention], flexShrink: 0 }}
+      style={{
+        width: '8px', height: '8px', borderRadius: 'var(--radius-full)',
+        background: ATTENTION_DOT[attention], flexShrink: 0,
+      }}
     />
   );
   const name = <a {...link(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>;
@@ -302,14 +334,21 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
               data-testid="quiet-summary"
               data-invitation="true"
               // EC1: the ONE obvious next action — the brightest thing on the card.
-              style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '11px', fontWeight: 600, color: S.accent, textDecoration: 'none' }}
+              // The ACCENT, not a status color: an invitation is an affordance (§2.5).
+              style={{
+                marginLeft: 'auto', flexShrink: 0, fontSize: 'var(--text-xs)',
+                fontWeight: 'var(--weight-semi)', color: 'var(--accent)', textDecoration: 'none',
+              }}
             >
               Start by describing what you want →
             </a>
           ) : (
             <p
               data-testid="quiet-summary"
-              style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '11px', color: S.faint, margin: 0 }}
+              style={{
+                marginLeft: 'auto', flexShrink: 0, fontSize: 'var(--text-xs)',
+                color: 'var(--ink-dim)', margin: 0,
+              }}
             >
               Quiet — last active {ago(signal?.at ?? project.updated_at)} ago
             </p>
@@ -324,7 +363,17 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
 
   // ── ACTIVE (§2.1.1): rich, but a region with no content is OMITTED (F1) ──
   return (
-    <section {...cardData} style={{ ...CSS.card, maxHeight: `${ACTIVE_CARD_H}px` }}>
+    <section
+      {...cardData}
+      style={{
+        ...CSS.card,
+        maxHeight: `${ACTIVE_CARD_H}px`,
+        // The 2px status bar (DES-VISION-001 §1.4/§5.1): the card's leading
+        // signal kind, as color, along the whole top edge — glanceable from
+        // across the wall, where the pill's word needs focus to read.
+        borderTop: `2px solid ${signal !== null ? SIGNAL_BAR[signal.kind] : 'var(--status-done)'}`,
+      }}
+    >
       {/* The card's own state signal, read from the RUNS rather than from `attention`:
           a project bucketed as `failing` can still have something executing on it, and
           the edge answers "is work moving here", not "which bucket did this sort into". */}
@@ -340,9 +389,11 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
             data-testid="attention-pill"
             data-kind={signal.kind}
             style={{
-              marginLeft: 'auto', flexShrink: 0, fontSize: '10px', fontWeight: 700,
-              letterSpacing: '0.06em', textTransform: 'uppercase', color: ATTENTION_DOT[attention],
-              border: `1px solid ${S.border}`, borderRadius: '999px', padding: '1px 8px',
+              marginLeft: 'auto', flexShrink: 0, fontSize: 'var(--text-2xs)',
+              fontWeight: 'var(--weight-bold)', letterSpacing: '0.06em',
+              textTransform: 'uppercase', color: ATTENTION_DOT[attention],
+              border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-full)',
+              padding: '1px 8px',
             }}
           >
             {PILL[signal.kind]}
@@ -364,7 +415,10 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
             </p>
           )}
           {live.length > MAX_LINES && (
-            <span data-testid="live-overflow" style={{ fontSize: '11px', color: S.muted }}>
+            <span
+              data-testid="live-overflow"
+              style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
+            >
               {live.length - MAX_LINES} more running
             </span>
           )}
@@ -393,12 +447,13 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
                     ...CSS.chip, flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative',
                     // Clears the strip so a phase label never sits on top of it.
                     paddingLeft: '10px',
-                    border: `1px solid ${waiting ? 'rgba(255,218,25,0.3)' : S.border}`,
-                    background: waiting ? 'rgba(255,218,25,0.1)' : 'transparent',
+                    // A waiting gate is amber-status furniture (§5.1): dim fill, full-token text.
+                    border: `1px solid ${waiting ? 'var(--status-gate-dim)' : 'var(--surface-raised)'}`,
+                    background: waiting ? 'var(--status-gate-dim)' : 'transparent',
                   }}
                 >
                   <LiveEdge state={edgeStateOf([session.status])} />
-                  <span style={{ color: style?.color ?? S.faint }}>{phase}</span>
+                  <span style={{ color: style?.color ?? 'var(--ink-dim)' }}>{phase}</span>
                   {/* Elapsed exists only where the wire carries a timestamp: `AgentSession`
                       has no `started_at`, so a gate's daemon-cached `receivedAt` is the one
                       honest clock on this surface. */}
@@ -413,7 +468,10 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
             );
           })}
           {runs.length > MAX_CHIPS && (
-            <span data-testid="run-overflow" style={{ fontSize: '11px', color: S.muted }}>
+            <span
+              data-testid="run-overflow"
+              style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
+            >
               {runs.length - MAX_CHIPS} more
             </span>
           )}
@@ -439,7 +497,13 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
             />
           ))}
           {docs.length > MAX_TILES && (
-            <span data-testid="doc-overflow" style={{ alignSelf: 'center', fontSize: '11px', color: S.muted, flexShrink: 0 }}>
+            <span
+              data-testid="doc-overflow"
+              style={{
+                alignSelf: 'center', fontSize: 'var(--text-xs)',
+                color: 'var(--ink-muted)', flexShrink: 0,
+              }}
+            >
               {docs.length - MAX_TILES} more
             </span>
           )}

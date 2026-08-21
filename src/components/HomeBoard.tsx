@@ -4,6 +4,7 @@ import { windowRows } from '../board/boardWindow.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { modePath } from '../hooks/useRoute.js';
+import { LiveFeed } from './LiveFeed.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 
 /**
@@ -22,11 +23,18 @@ import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js'
  * WINDOWED against the ONE shared scroller (`boardWindow.ts`): cards are a
  * fixed height, only the rows the viewport can show (plus overscan) are
  * mounted, and the container never grows past the viewport.
+ *
+ * Vision slice 2 (DES-VISION-001 §1.3/§5.1): the route is now the status wall
+ * (left, ~68%) beside the LIVE FEED (right, ~32%) — the one place cross-project
+ * narration aggregates — and every color on the surface resolves from a semantic
+ * token (§2.11, lint-enforced at ERROR for this file).
  */
 
-const GAP = 14;
-/** Below this the grid drops a column rather than squeezing a card unreadable. */
-const MIN_COL = 320;
+/** Card gap — §1.3's composition (blocks and cards sit 8px apart, `--space-2`). */
+const GAP = 8;
+/** Below this the grid drops a column rather than squeezing a card unreadable —
+ *  §1.3's `minmax(280px, 1fr)`: 3 ACTIVE cards up on the ~980px wall at 1440. */
+const MIN_COL = 280;
 /** Used when the container has not been measured yet (first paint, jsdom). */
 const FALLBACK_W = 1200;
 const FALLBACK_H = 900;
@@ -36,27 +44,23 @@ const BAND_H = 34;
 /** Collapsed QUIET shows at most this many one-line chips (D5). */
 const QUIET_PREVIEW = 6;
 
-const S = {
-  ink:    '#e6edf3',
-  muted:  'rgba(230,237,243,0.55)',
-  faint:  'rgba(230,237,243,0.3)',
-  red:    '#f85149',
-  accent: '#ffda19',
-  border: 'rgba(230,237,243,0.1)',
-};
-
+// DES-VISION-001 §5.1's token map for this surface: page = `--surface-base`,
+// cards = `--surface-card` (in ProjectCard), feed = `--surface-rail`, all text
+// off the ink ramp, status colors only where they mean status.
 const CSS = {
   bandLabel: {
-    fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+    fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)',
+    letterSpacing: '0.08em', textTransform: 'uppercase',
     margin: '0 0 10px',
   },
   toggle: {
     background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-    fontSize: '11px', fontFamily: 'monospace', color: S.muted,
+    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
   },
   chip: {
     display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none',
-    fontSize: '11px', color: S.muted, border: `1px solid ${S.border}`, borderRadius: '6px',
+    fontSize: 'var(--text-xs)', color: 'var(--ink-muted)',
+    border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)',
     padding: '4px 10px', whiteSpace: 'nowrap',
   },
 } as const satisfies Record<string, React.CSSProperties>;
@@ -107,6 +111,14 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
     if (el === null) return;
     const measure = (): void => setBox({ w: el.clientWidth, h: el.clientHeight });
     measure();
+    // The wall's width changes WITHOUT a window resize — the live feed mounts
+    // beside it when the first run starts (§1.3) — so observe the element
+    // itself; the window listener is the jsdom fallback.
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, []);
@@ -151,15 +163,24 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
   });
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    // §1.3's composition: the status wall (left) beside the live feed (right).
+    <div className="flex flex-1 overflow-hidden" style={{ background: 'var(--surface-base)' }}>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <header
         style={{
           display: 'flex', alignItems: 'baseline', gap: '12px', flexShrink: 0,
-          padding: '20px 24px 12px',
+          padding: 'var(--space-5) var(--space-6) var(--space-3)',
         }}
       >
-        <h1 style={{ fontSize: '16px', fontWeight: 700, color: S.ink, margin: 0 }}>Projects</h1>
-        <p style={{ fontSize: '12px', color: S.muted, margin: 0 }}>
+        <h1
+          style={{
+            fontSize: 'var(--text-md)', fontWeight: 'var(--weight-bold)',
+            color: 'var(--ink-high)', margin: 0,
+          }}
+        >
+          Projects
+        </h1>
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', margin: 0 }}>
           Sorted by what needs you first.
         </p>
         {/* The flat run list this board replaced stays reachable (§1.5 escape hatch). */}
@@ -167,7 +188,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
           href="/runs"
           onClick={(e) => { e.preventDefault(); navigate('/runs'); }}
           data-testid="all-runs-link"
-          style={{ marginLeft: 'auto', fontSize: '12px', color: S.muted }}
+          style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
         >
           All runs ›
         </a>
@@ -181,22 +202,22 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
         data-needs-you={needsYou.length}
         data-quiet={quiet.length}
         data-rendered={mounted}
-        style={{ flex: 1, overflowY: 'auto', padding: '0 24px 24px' }}
+        style={{ flex: 1, overflowY: 'auto', padding: '0 var(--space-6) var(--space-6)' }}
       >
         {loading && (
-          <p style={{ fontSize: '13px', color: S.faint, fontFamily: 'monospace' }}>Loading projects…</p>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>Loading projects…</p>
         )}
         {!loading && error !== null && (
-          <p style={{ fontSize: '13px', color: S.red }}>Could not load projects: {error}</p>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--status-fail)' }}>Could not load projects: {error}</p>
         )}
         {!loading && error === null && items.length === 0 && (
-          <div style={{ padding: '40px 0' }}>
-            <p style={{ fontSize: '14px', color: S.muted, margin: '0 0 4px' }}>No projects yet</p>
+          <div style={{ padding: 'var(--space-10) 0' }}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-muted)', margin: '0 0 4px' }}>No projects yet</p>
             <a
               href="/projects"
               onClick={(e) => { e.preventDefault(); navigate('/projects'); }}
               data-testid="create-first-project"
-              style={{ fontSize: '12px', color: S.ink }}
+              style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-high)' }}
             >
               Create your first project ›
             </a>
@@ -205,10 +226,12 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
 
         {items.length > 0 && (
           <section data-testid="band-needs-you" data-count={needsYou.length}>
-            <p style={{ ...CSS.bandLabel, color: S.accent }}>Needs you</p>
+            {/* Amber names the band because amber MEANS "you are the blocker"
+                (§2.6) — a status color, not the accent (§1.5 rule 2). */}
+            <p style={{ ...CSS.bandLabel, color: 'var(--status-gate)' }}>Needs you</p>
             {needsYou.length === 0 ? (
               // The all-quiet state (§3.1): calm is one line, not a wall of absence.
-              <p data-testid="board-all-quiet" style={{ fontSize: '12px', color: S.muted, margin: '0 0 6px' }}>
+              <p data-testid="board-all-quiet" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', margin: '0 0 6px' }}>
                 Nothing needs you right now.
               </p>
             ) : (
@@ -232,7 +255,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
             style={{ marginTop: '18px' }}
           >
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-              <p style={{ ...CSS.bandLabel, color: S.faint, margin: 0 }}>Quiet ({quiet.length})</p>
+              <p style={{ ...CSS.bandLabel, color: 'var(--ink-dim)', margin: 0 }}>Quiet ({quiet.length})</p>
               <button
                 type="button"
                 data-testid="band-quiet-toggle"
@@ -266,9 +289,9 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
                     data-score={i.score.toFixed(2)}
                     style={CSS.chip}
                   >
-                    <span aria-hidden style={{ color: S.faint }}>○</span>
+                    <span aria-hidden style={{ color: 'var(--ink-dim)' }}>○</span>
                     {i.project.name}
-                    <span style={{ color: S.faint }}>
+                    <span style={{ color: 'var(--ink-dim)' }}>
                       · {ago(i.signal?.at ?? i.project.updated_at)}
                     </span>
                   </a>
@@ -289,7 +312,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
             style={{ marginTop: '18px' }}
           >
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-              <p style={{ ...CSS.bandLabel, color: S.faint, margin: 0 }}>
+              <p style={{ ...CSS.bandLabel, color: 'var(--ink-dim)', margin: 0 }}>
                 Not in a project ({unfiled.length})
               </p>
               <button
@@ -312,7 +335,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
                     style={{ ...CSS.chip, alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
                   >
                     {v.session.problem}
-                    <span style={{ color: S.faint }}>· {v.session.status}</span>
+                    <span style={{ color: 'var(--ink-dim)' }}>· {v.session.status}</span>
                   </a>
                 ))}
               </div>
@@ -320,6 +343,11 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
           </section>
         )}
       </div>
+      </div>
+
+      {/* The live feed (§1.3 right column): all projects with moving runs,
+          narrating off the SAME runtime store the cards read — zero new sockets. */}
+      <LiveFeed items={items} navigate={navigate} />
     </div>
   );
 }
