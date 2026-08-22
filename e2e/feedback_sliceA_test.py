@@ -1,27 +1,35 @@
 #!/usr/bin/env python3
 """
-feedback_sliceA_test.py — the DES-FEEDBACK-001 slice-A gate: the nav
-restructure (§1, §8.3 slice A), against the shared frozen-NOW0 W2 fixture
-(uxfix_fixture.py) — messy reality, so the rail's runs section has real rows.
+feedback_sliceA_test.py — the DES-FEEDBACK-001 slice-A gate, RE-SCOPED by
+DES-FEEDBACK-003 §8.7 (slice M): the rail slice A built (QUICK verbs, inline
+runs, bottom settings section) is superseded by the five-path accordion rail
+(§3), so this rig now pins what slice A's affordances BECAME — never the
+retired zones themselves. Same shared frozen-NOW0 W2 fixture
+(uxfix_fixture.py) — messy reality, so the accordions have real rows.
 
-The slice DOM ACs, verbatim from §8.3:
+The re-scoped ACs (§8.7's amendment row, against §3.6):
 
-  1. `[data-testid="rail-quick"]` header text is "QUICK";
-  2. `[data-testid="new-project"]` button is present and clicking it opens
-     `[data-testid="new-project-modal"]`;
-  3. no `+` glyph is rendered inside `[data-testid="rail-actions"]` (EC20:
-     no "+" character in any child element);
-  4. `[data-testid="rail-settings-section"]` is collapsed by default and
-     expands on click;
-  5. `[data-testid="rail-runs"]` is present and non-empty when runs exist.
+  1. The five heading rows render — `rail-heading-projects|make|chat|repos|
+     settings` — and Settings is icon-less (no `heading-dashboard` /
+     `heading-new` child) while the other four carry both.
+  2. One-open (EC26): clicking two different titles in sequence leaves at
+     most one `[data-testid^="rail-heading-"]` with `aria-expanded="true"`.
+  3. EC20 (amended): no `+` glyph inside accordion CONTENTS — the
+     heading-level ＋ icons are the sanctioned spelling now.
+  4. The settings menuitem list re-asserts inside the Settings ACCORDION:
+     ≥7 menuitems including Theme and System, plus the version line.
+  5. The modal AC carries over: Projects' ＋ opens
+     `[data-testid="new-project-modal"]`, the name fills, Build is the start
+     default, Create enables, Escape closes.
+  6. Supersession: `rail-quick`, `rail-actions`, `rail-runs`,
+     `rail-settings-section` are ABSENT (§8.1).
 
-Plus the §8.3 preservation list: rail project + repo taxonomies unchanged
-(attention order intact), AppChrome connection dot + logo slot unchanged —
-and the chrome gear GONE (§4.4).
+Plus the preservation list carried from slice A: the Projects accordion lists
+the BOARD's attention order (the same axis, C3), AppChrome connection dot +
+logo slot unchanged — and the chrome gear still GONE (§4.4).
 
 Captures (§8.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/vision/:
-  feedback-A-rail-expanded.png     the full rail: QUICK, runs, projects, repos,
-                                   settings collapsed
+  feedback-A-rail-expanded.png     the five-path rail, Projects expanded
   feedback-A-new-project-modal.png the new-project modal open, name filled
 
 Finally: `npm run lint` must exit 0 with zero raw-color findings (EC15 is
@@ -53,6 +61,7 @@ ORIGIN = f"http://127.0.0.1:{FEEDBACK_PORT}"
 VSHOTS = REPO / "e2e" / "shots" / "vision"
 
 EXPECTED_PROJECT_ORDER = ["q3-review-deck", "api-migration", "auth-refactor", "upload-endpoint"]
+HEADING_KEYS = ["projects", "make", "chat", "repos", "settings"]
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -103,81 +112,105 @@ with sync_playwright() as p:
               && document.fonts.check('12px "JetBrains Mono"')""",
         timeout=20000,
     )
-    # Settle: rail projects reach the W2 attention order (preservation) and the
-    # runs section has rows (AC 5's precondition — the fixture always has runs).
-    rail_settled = settled(
+    # Settle: the board reaches the W2 attention order — the Projects accordion
+    # reads the SAME model, so the board settling settles the rail's source.
+    board_settled = settled(
         """expected => { const ids = Array.from(document.querySelectorAll(
-               '[data-testid="rail-section-projects"] [data-testid="rail-project"]'))
-               .map(r => r.dataset.projectId);
-             return JSON.stringify(ids) === JSON.stringify(expected)
-                 && document.querySelectorAll('[data-testid="rail-runs"] [data-testid="rail-run"]').length > 0; }""",
+               '[data-testid="band-needs-you"] [data-testid="project-card"]'))
+               .map(c => c.dataset.projectId);
+             return JSON.stringify(ids) === JSON.stringify(expected); }""",
         EXPECTED_PROJECT_ORDER,
     )
 
-    # ── ACs 1/3/5 + preservation, read off the settled DOM in one pass ────────
+    # ── ACs 1/6 + preservation, read off the settled DOM in one pass ──────────
     dom = page.evaluate(
-        """() => {
+        """keys => {
              const q = s => document.querySelector(s);
-             const runs = Array.from(document.querySelectorAll(
-               '[data-testid="rail-runs"] [data-testid="rail-run"]'));
+             const anatomy = {};
+             for (const k of keys) {
+               const h = q(`[data-testid="rail-heading-${k}"]`);
+               anatomy[k] = h === null ? null : {
+                 dash: !!h.querySelector('[data-testid="heading-dashboard"]'),
+                 plus: !!h.querySelector('[data-testid="heading-new"]'),
+               };
+             }
              return {
-               quickHeader: q('[data-testid="rail-quick"]')?.textContent ?? null,
-               actionLabels: Array.from(document.querySelectorAll(
-                 '[data-testid="rail-actions"] button')).map(b => b.getAttribute('aria-label')),
-               actionsText: q('[data-testid="rail-actions"]')?.textContent ?? null,
-               plusInActions: Array.from(q('[data-testid="rail-actions"]')?.querySelectorAll('*') ?? [])
-                 .some(el => (el.textContent ?? '').includes('+')),
-               runsPresent: !!q('[data-testid="rail-runs"]'),
-               runRows: runs.map(r => ({ id: r.dataset.runId, status: r.dataset.status })),
-               allRunsInSection: !!q('[data-testid="rail-runs"] [data-testid="rail-all-runs"]'),
-               settingsOpenDefault: q('[data-testid="rail-settings-section"]')?.dataset.open ?? null,
-               settingsMenuItems: document.querySelectorAll(
-                 '[data-testid="rail-settings-section"] [role="menuitem"]').length,
-               // §8.3 preserved: taxonomies + chrome anatomy (gear GONE, §4.4).
-               projectsSection: !!q('[data-testid="rail-section-projects"]'),
-               reposSection: !!q('[data-testid="rail-section-repos"]'),
+               anatomy,
+               quick: !!q('[data-testid="rail-quick"]'),
+               actions: !!q('[data-testid="rail-actions"]'),
+               runs: !!q('[data-testid="rail-runs"]'),
+               settingsSection: !!q('[data-testid="rail-settings-section"]'),
                logoSlot: !!q('[data-testid="logo-slot"]'),
                connectionDot: q('[data-testid="connection-dot"]')?.dataset.state ?? null,
                chromeGear: !!q('[data-testid="chrome-settings"]'),
-             }; }""")
+             }; }""",
+        HEADING_KEYS,
+    )
+    a = dom["anatomy"]
+    headings_ok = all(a[k] is not None for k in HEADING_KEYS)
+    settings_iconless_ok = headings_ok and not a["settings"]["dash"] and not a["settings"]["plus"]
+    four_icons_ok = headings_ok and all(
+        a[k]["dash"] and a[k]["plus"] for k in ("projects", "make", "chat", "repos"))
+    superseded_ok = not (dom["quick"] or dom["actions"] or dom["runs"] or dom["settingsSection"])
+    preserved_ok = dom["logoSlot"] and dom["connectionDot"] == "connected" and not dom["chromeGear"]
 
-    quick_ok = dom["quickHeader"] == "QUICK"
-    order_ok = dom["actionLabels"] == ["Project", "Build", "Chat", "Repository"]
-    ec20_ok = (not dom["plusInActions"]) and "+" not in (dom["actionsText"] or "")
-    runs_ok = dom["runsPresent"] and len(dom["runRows"]) > 0 and dom["allRunsInSection"]
-    # §1.4 ordering: active rows lead, terminal rows trail.
-    TERMINAL = {"completed", "cancelled", "failed"}
-    statuses = [r["status"] for r in dom["runRows"]]
-    first_terminal = next((i for i, s in enumerate(statuses) if s in TERMINAL), len(statuses))
-    runs_order_ok = all(s in TERMINAL for s in statuses[first_terminal:])
-    preserved_ok = (dom["projectsSection"] and dom["reposSection"] and dom["logoSlot"]
-                    and dom["connectionDot"] == "connected" and not dom["chromeGear"])
+    # ── AC 2 (EC26) + the preserved attention order, via two title clicks ──────
+    page.locator('[data-testid="rail-title-projects"]').click()
+    projects_open = settled(
+        """expected => { const open = Array.from(document.querySelectorAll(
+               '[data-testid^="rail-heading-"]'))
+               .filter(h => h.getAttribute('aria-expanded') === 'true');
+             if (open.length !== 1 || open[0].dataset.testid !== 'rail-heading-projects') return false;
+             const ids = Array.from(document.querySelectorAll(
+               '[data-testid="rail-heading-projects"] [data-testid="rail-project"]'))
+               .map(r => r.dataset.projectId);
+             return JSON.stringify(ids.slice(0, 4)) === JSON.stringify(expected); }""",
+        EXPECTED_PROJECT_ORDER,
+        timeout=10000,
+    )
 
-    # ── AC 4: settings collapsed by default, expands on click ─────────────────
-    settings_default_collapsed = dom["settingsOpenDefault"] == "false" and dom["settingsMenuItems"] == 0
-
-    # ── Capture 1: the full rail — QUICK, runs, projects, repos, settings
-    #    collapsed — BEFORE any state-mutating interaction. ─────────────────────
+    # ── Capture 1: the five-path rail, Projects expanded ───────────────────────
     page.locator('[data-testid="left-rail"]').screenshot(
         path=str(VSHOTS / "feedback-A-rail-expanded.png"))
 
-    page.locator('[data-testid="rail-settings-toggle"]').click()
-    settings_expands = settled(
-        """() => { const s = document.querySelector('[data-testid="rail-settings-section"]');
-                   return !!s && s.dataset.open === 'true'
-                       && s.querySelectorAll('[role="menuitem"]').length >= 7; }""",
+    # ── AC 4: the settings menuitem list, inside the Settings ACCORDION ────────
+    page.locator('[data-testid="rail-title-settings"]').click()
+    settings_open = settled(
+        """() => { const open = Array.from(document.querySelectorAll(
+                     '[data-testid^="rail-heading-"]'))
+                     .filter(h => h.getAttribute('aria-expanded') === 'true');
+                   return open.length === 1
+                       && open[0].dataset.testid === 'rail-heading-settings'
+                       && open[0].querySelectorAll('[role="menuitem"]').length >= 7; }""",
         timeout=5000,
     )
-    # Both the Theme and the System shortcuts ride the section (§1.2: it carries
-    # what the retired AppChrome dropdown carried).
+    ec26_state = page.evaluate(
+        """() => Array.from(document.querySelectorAll('[data-testid^="rail-heading-"]'))
+              .filter(h => h.getAttribute('aria-expanded') === 'true').length""")
+    ec26_ok = settings_open and ec26_state == 1
     settings_entries = page.evaluate(
         """() => Array.from(document.querySelectorAll(
-             '[data-testid="rail-settings-section"] [role="menuitem"]')).map(b => b.textContent)""")
+             '[data-testid="rail-heading-settings"] [role="menuitem"]')).map(b => b.textContent)""")
     settings_entries_ok = "Theme" in settings_entries and "System" in settings_entries
-    page.locator('[data-testid="rail-settings-toggle"]').click()  # back to collapsed
+    version_line_ok = page.evaluate(
+        """() => /v\\d+\\.\\d+\\.\\d+/.test(document.querySelector(
+             '[data-testid="rail-heading-settings"]')?.textContent ?? '')""")
 
-    # ── AC 2: the Project quick action opens the modal; fill the name ─────────
-    page.locator('[data-testid="new-project"]').click()
+    # ── AC 3 (EC20 amended): no `+` inside the open accordion's CONTENTS ───────
+    # The heading-level ＋ (U+FF0B) is sanctioned; the ASCII `+` glyph must not
+    # ride inside contents. Check the two accordions this page opened.
+    ec20_ok = page.evaluate(
+        """() => { const openIds = ['projects', 'settings'];
+                   return openIds.every(k => {
+                     const h = document.querySelector(`[data-testid="rail-heading-${k}"]`);
+                     const rows = h?.querySelectorAll('[role="menuitem"], [data-testid="rail-project"]') ?? [];
+                     return Array.from(rows).every(r => !(r.textContent ?? '').includes('+'));
+                   }); }""")
+
+    page.locator('[data-testid="rail-title-settings"]').click()  # back to closed
+
+    # ── AC 5: Projects' ＋ opens the modal; fill the name ──────────────────────
+    page.locator('[data-testid="rail-heading-projects"] [data-testid="heading-new"]').click()
     modal_opens = settled(
         """() => !!document.querySelector('[data-testid="new-project-modal"]')""",
         timeout=5000,
@@ -205,32 +238,32 @@ with sync_playwright() as p:
     browser.close()
 
 report["steps"]["dom_acs"] = {
-    "ok": all([fonts_ok, rail_settled, quick_ok, order_ok, ec20_ok, runs_ok,
-               runs_order_ok, settings_default_collapsed, settings_expands,
-               settings_entries_ok, modal_ok, modal_closes, preserved_ok]),
+    "ok": all([fonts_ok, board_settled, headings_ok, settings_iconless_ok,
+               four_icons_ok, superseded_ok, preserved_ok, projects_open,
+               ec26_ok, settings_entries_ok, version_line_ok, ec20_ok,
+               modal_ok, modal_closes]),
     "web_fonts_loaded": fonts_ok,
-    "rail_settled_w2": rail_settled,
-    "ac1_quick_header": quick_ok,
-    "quick_action_order": dom["actionLabels"],
-    "quick_action_order_ok": order_ok,
-    "ac3_ec20_no_plus_in_actions": ec20_ok,
-    "ac5_runs_nonempty": runs_ok,
-    "run_rows": dom["runRows"],
-    "runs_active_before_terminal": runs_order_ok,
-    "ac4_settings_collapsed_default": settings_default_collapsed,
-    "ac4_settings_expands_on_click": settings_expands,
-    "settings_entries": settings_entries,
-    "settings_carries_theme_and_system": settings_entries_ok,
-    "ac2_modal_opens_name_filled": modal_ok,
+    "board_settled_w2": board_settled,
+    "ac1_five_headings": headings_ok,
+    "ac1_settings_iconless": settings_iconless_ok,
+    "ac1_four_headings_carry_both_icons": four_icons_ok,
+    "ac6_superseded_testids_absent": superseded_ok,
+    "preserved_chrome_no_gear": preserved_ok,
+    "projects_accordion_attention_order": projects_open,
+    "ac2_ec26_one_open_after_two_clicks": ec26_ok,
+    "ac4_settings_entries": settings_entries,
+    "ac4_settings_carries_theme_and_system": settings_entries_ok,
+    "ac4_version_line": version_line_ok,
+    "ac3_ec20_no_plus_in_contents": ec20_ok,
+    "ac5_modal_opens_name_filled": modal_ok,
     "modal_closes_on_escape": modal_closes,
-    "preserved_taxonomies_chrome": preserved_ok,
-    "dom": dom,
+    "anatomy": dom["anatomy"],
     "console_errors": console_errors[:10],
     "screenshots": [str(VSHOTS / n) for n in
                     ("feedback-A-rail-expanded.png", "feedback-A-new-project-modal.png")],
 }
 if not report["steps"]["dom_acs"]["ok"]:
-    fail("dom_acs_verdict", "slice-A DOM assertions did not all hold — see dom_acs")
+    fail("dom_acs_verdict", "re-scoped slice-A DOM assertions did not all hold — see dom_acs")
 
 # ── 4. Lint posture: exit 0, zero raw-color findings (EC15 error repo-wide) ───
 r = subprocess.run([NPM, "run", "lint"], cwd=REPO,
