@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { clearBatchSelection, toggleBatchSelect, useBatchGateStore } from '../board/batchGates.js';
 import { decideGate, gateOpenPath } from '../board/gateActions.js';
 import { isSimpleGate, type OpenGate } from '../store/gates.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
@@ -73,7 +74,13 @@ export function useTriageCursor(
     }
     setSelectedKey(null);
     setNoteFor(null);
+    clearBatchSelection(); // §9.2: pivoting projects is a surface change too
   }, [resetKey]);
+
+  // Slice L (§9.2): the batch selection dies with the surface — a route
+  // change unmounts the cursor's owner, and a selection must never survive
+  // onto a surface that does not render its checkboxes.
+  useEffect(() => clearBatchSelection, []);
 
   const focusSelected = (): void => {
     const key = selRef.current;
@@ -163,6 +170,25 @@ export function useTriageCursor(
           }
         },
       },
+      // Slice L (§9.2): `x` (or Space) toggles the cursor row's gate into the
+      // batch selection. Only a SIMPLE gate may enter (§7.11 — a complex gate
+      // cannot be batch-answered for the same reason its chip has no inline
+      // buttons); on a complex or gateless row the key yields silently.
+      ...(['x', ' '] as const).map((key): ShortcutEntry => ({
+        id: `batch-toggle-${key === ' ' ? 'space' : key}`,
+        chord: { key },
+        description: 'Select the gate for batch resolution',
+        guard: () => {
+          const item = current();
+          return item !== null && item.runId !== null && isSimpleGate(item.gate);
+        },
+        handler: (e) => {
+          const item = current();
+          if (item === null || item.runId === null) return;
+          e.preventDefault(); // Space must select, never scroll
+          toggleBatchSelect(item.runId);
+        },
+      })),
       {
         id: 'triage-open',
         chord: { key: 'enter' },
@@ -178,14 +204,17 @@ export function useTriageCursor(
       {
         id: 'triage-clear',
         chord: { key: 'escape' },
-        description: 'Clear the triage cursor',
+        description: 'Clear the triage cursor and batch selection',
         // DES-FEEDBACK-003 §5.7 Escape precedence (palette → sheet → triage):
         // while the runs sheet is up, this entry YIELDS so the sheet's own
         // registry entry closes it first — the selection survives the press.
-        guard: () => selRef.current !== null && !useRunsPanelStore.getState().expanded,
+        guard: () =>
+          (selRef.current !== null || useBatchGateStore.getState().selected.length > 0) &&
+          !useRunsPanelStore.getState().expanded,
         handler: () => {
           setNoteFor(null);
           setSelectedKey(null);
+          clearBatchSelection(); // §9.5: removes the bar, fires nothing
         },
       },
     ];

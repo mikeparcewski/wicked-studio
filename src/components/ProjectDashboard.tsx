@@ -10,6 +10,7 @@ import { useTriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useGateStore } from '../store/gates.js';
 import { useProjectsStore } from '../store/projects.js';
 import { getCachedRepos } from '../store/repoCache.js';
+import { BatchGateBar, BatchSelectBox } from './BatchGateBar.js';
 import { GateChip } from './GateChip.js';
 import { GateRejectNote } from './GateRejectNote.js';
 import { MODE_LABEL } from './ProjectShell.js';
@@ -303,6 +304,10 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         )}
       </header>
 
+      {/* Slice L (§9.2): the batch bar docks above the tiles while ≥1 simple
+          gate is selected — the same bar (and fan-out) as the home board. */}
+      <BatchGateBar navigate={navigate} />
+
       <div style={CSS.grid}>
         {/* ── Tile 1: runs, attention-ordered, each a link into its mode view ── */}
         <section data-testid="dashboard-runs" data-count={myRuns.length} style={CSS.tile}>
@@ -406,6 +411,8 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
                       <GateRejectNote runId={id} onClose={cursor.closeNote} />
                     ) : (
                       <>
+                        {/* Slice L (§9.2): checkbox / ↗ marker, once ≥1 selected. */}
+                        <BatchSelectBox runId={id} gate={gate} />
                         <span
                           title={gate?.prompt}
                           style={{

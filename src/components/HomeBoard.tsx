@@ -6,6 +6,7 @@ import type { Navigate } from '../hooks/useRoute.js';
 import { modePath, projectPath } from '../hooks/useRoute.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useGateStore } from '../store/gates.js';
+import { BatchGateBar } from './BatchGateBar.js';
 import { LiveFeed } from './LiveFeed.js';
 import { NarrativeBand } from './NarrativeBand.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
@@ -256,6 +257,10 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
           All runs ›
         </a>
       </header>
+
+      {/* Slice L (§9.2): the batch bar docks above the board while ≥1 simple
+          gate is selected — approve/reject fan-out, per-id honesty rows. */}
+      <BatchGateBar navigate={navigate} />
 
       <div
         ref={scroller}

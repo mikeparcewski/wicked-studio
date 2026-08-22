@@ -5,6 +5,7 @@ import { modePath, MODES, projectPath, type Navigate } from '../hooks/useRoute.j
 import type { Attention, BoardProject } from '../hooks/useBoardModel.js';
 import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore } from '../store/runtime.js';
+import { BatchSelectBox } from './BatchGateBar.js';
 import { ExportMenu } from './ExportMenu.js';
 import { GateChip } from './GateChip.js';
 import { GateRejectNote } from './GateRejectNote.js';
@@ -286,6 +287,9 @@ export function ProjectCard({
   // Relayed interactive status for THIS project — one line, plus the tile date it implies.
   const activity = useRuntimeStore((s) => s.docActivity[project.id]);
   const live = runs.filter(isLive);
+  // Slice L (§9.2): the card's batch-selectable gate is its LEADING waiting
+  // run — the same run the triage cursor's `x` toggles (TriageItem.runId).
+  const leadingWaiting = runs.find((v) => v.session.status === 'awaiting_human')?.session.id;
   const empty = runs.length === 0 && docs.length === 0;
   /** The §2.1.2 exception: empty AND just created — not merely empty. */
   const firstRun = empty && Date.now() - project.created_at < FIRST_RUN_MS;
@@ -475,6 +479,12 @@ export function ProjectCard({
               // the run link, and beside it a chip carrying its own controls. Nesting
               // buttons inside the link would be neither valid nor operable.
               <div key={session.id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {/* Slice L (§9.2): the selection slot — checkbox for a simple
+                    gate, the ↗ needs-the-thread marker for a complex one;
+                    renders only once ≥1 gate is selected anywhere. */}
+                {waiting && session.id === leadingWaiting && (
+                  <BatchSelectBox runId={session.id} gate={gate} />
+                )}
                 <a
                   {...link(modePath(project.id, 'build', session.id))}
                   data-testid="run-chip"
