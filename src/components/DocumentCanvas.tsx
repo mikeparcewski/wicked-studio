@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getVersions, interactiveDocUrl, listDocs } from '../api/interactive.js';
+import { useDocsCache } from '../store/docsCache.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
@@ -37,7 +38,11 @@ function byRecency(a: DocSummary, b: DocSummary): number {
 }
 
 function DocPicker({ projectId, navigate }: { projectId: string; navigate: Navigate }): React.ReactElement {
-  const [docs, failure, retry] = useLoad(() => listDocs(projectId), [projectId]);
+  const [docs, failure, retry] = useLoad(
+    // The landed list feeds the session doc cache too (slice O §4.2.2).
+    () => listDocs(projectId).then((d) => { useDocsCache.getState().deposit(projectId, d); return d; }),
+    [projectId],
+  );
 
   if (failure) return <Failed surface="doc" subject="this project's documents" failure={failure} onRetry={retry} />;
   if (docs === null) return <Loading surface="doc" subject="this project's documents" />;

@@ -522,9 +522,25 @@ REPO_CONTRIBUTORS = [
 # GET /chats/<id> answers an EMPTY seat list (a 200, not a 404) for a chat this
 # fixture has never been told about, which is the "reclaimed" signal the rejoin
 # probe distinguishes from an error.
+# Each seat carries the REAL crew#274 additions the daemon's /roster serves
+# (routes.ts:308): `health: SeatHealth` (status + bounded error excerpt +
+# since/lastErrorAt) and the `signed_in` heuristic. `pi` deliberately carries
+# NEITHER — the additive-wire case (a daemon predating crew#274) the slice-O
+# health registry must render as unknown, never as a fabricated "active".
+CODEX_HEALTH_MESSAGE = ("quota exceeded: the monthly usage limit for this "
+                        "seat has been reached upstream")
 ROSTER = [
-    {"key": k, "display_name": k, "binary": k, "enabled_for_council": True}
-    for k in ("claude", "codex", "agy", "pi")
+    {"key": "claude", "display_name": "claude", "binary": "claude",
+     "enabled_for_council": True, "signed_in": True,
+     "health": {"status": "active", "since": iso(NOW0 - 2 * DAY)}},
+    {"key": "codex", "display_name": "codex", "binary": "codex",
+     "enabled_for_council": True, "signed_in": False,
+     "health": {"status": "inactive", "message": CODEX_HEALTH_MESSAGE,
+                "since": iso(NOW0 - 2 * HOUR), "lastErrorAt": iso(NOW0 - 2 * HOUR)}},
+    {"key": "agy", "display_name": "agy", "binary": "agy",
+     "enabled_for_council": True, "signed_in": True,
+     "health": {"status": "active", "since": iso(NOW0 - 2 * DAY)}},
+    {"key": "pi", "display_name": "pi", "binary": "pi", "enabled_for_council": True},
 ]
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"

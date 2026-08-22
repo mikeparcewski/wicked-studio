@@ -6,6 +6,8 @@ import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useProjectsStore } from '../store/projects.js';
 import { AppChrome } from './AppChrome.js';
+import { isChatRun } from './ChatsPage.js';
+import { HealthRailSection } from './HealthRailSection.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { NotificationBell } from './NotificationBell.js';
@@ -91,10 +93,9 @@ export function headingForPath(pathname: string): PathKey | null {
   return null;
 }
 
-/** The Chat predicate — ChatsPage's filter VERBATIM (§3.3: runs with no
- *  workflow stamp are chats there and must not double-list under Make). */
-const isChatRun = (v: SessionView): boolean =>
-  !v.session.workflow_id || v.session.workflow_id === 'chat';
+// The Chat predicate — ChatsPage's filter VERBATIM (§3.3: runs with no
+// workflow stamp are chats there and must not double-list under Make);
+// imported from its one source so the partition cannot drift.
 
 const RUN_TERMINAL = new Set(['completed', 'cancelled', 'failed']);
 
@@ -455,6 +456,13 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
   const [hovered, setHovered] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [makePickerOpen, setMakePickerOpen] = useState(false);
+  // The rail-foot health section (§6.2, slice O) — controlled here so the
+  // chrome's connection dot can expand it (its old popover retired, §8.2).
+  const [healthOpen, setHealthOpen] = useState(false);
+  const onDotClick = (): void => {
+    setCollapsed(false);
+    setHealthOpen(true);
+  };
   // §7.3 auto-collapse: entering an immersive mode stashes the user's state and
   // collapses; leaving restores it. `null` = nothing stashed. The user can still
   // re-expand mid-mode — this fires only on the transition, never per render.
@@ -532,7 +540,7 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
       {/* The app chrome (DES-VISION-001 §6.3 slice 3): logo slot + product name
           + connection dot — untouched by the round-4 re-architecture (§8.2). */}
       <div className={`flex shrink-0 ${isExpanded ? 'items-center pr-2' : 'flex-col items-center pt-2 gap-1'}`}>
-        <AppChrome collapsed={!isExpanded} navigate={navigate} />
+        <AppChrome collapsed={!isExpanded} navigate={navigate} onDotClick={onDotClick} />
         <button
           type="button"
           onClick={() => setCollapsed(v => !v)}
@@ -690,6 +698,12 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             </a>
           ))}
         </div>
+      )}
+
+      {/* The rail's FOOT — the slot Settings vacated (§8.1): the health
+          registry, dressed exactly like the section it replaces (§6.2). */}
+      {isExpanded && (
+        <HealthRailSection open={healthOpen} onToggle={() => setHealthOpen((v) => !v)} />
       )}
 
       {/* The new-project flow (§1.3), opened from Projects' ＋ (§3.1). */}

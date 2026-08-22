@@ -9,6 +9,7 @@ import {
   type Band,
   type Signal,
 } from '../board/boardAttention.js';
+import { useDocsCache } from '../store/docsCache.js';
 import { useGateStore, type OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
@@ -162,12 +163,18 @@ const EMPTY: Bindings = { runIds: new Set(), repo: null, docs: [], attachedAt: {
  */
 function mirrorMembership(projects: Project[], bindings: Record<string, Bindings>): void {
   const map: Record<string, string> = {};
+  const clocks: Record<string, number> = {};
   for (const p of projects) {
     const b = bindings[p.id];
     if (b === undefined) continue;
     for (const id of b.runIds) map[id] = p.name;
+    Object.assign(clocks, b.attachedAt);
   }
-  useMembershipStore.getState().setProjectNames(map);
+  const store = useMembershipStore.getState();
+  store.setProjectNames(map);
+  // The attach clocks ride the same mirror (slice O): the Make dashboard's
+  // tiles bucket on them with zero requests of their own (§4.2.1).
+  store.setAttachedAt(clocks);
 }
 
 async function loadBindings(p: Project, repoNames: Map<string, string>): Promise<Bindings> {
@@ -175,7 +182,13 @@ async function loadBindings(p: Project, repoNames: Map<string, string>): Promise
     api.listProjectMembers(p.id).then((r) => r.members).catch((): ProjectMember[] => []),
     // No interactive root ⇒ no bridge to ask. A project WITH one whose bridge cannot be
     // started (§7.12) simply shows no tiles rather than failing the whole board.
-    interactiveRootOf(p) ? listDocs(p.id).catch((): DocSummary[] => []) : Promise.resolve([]),
+    // A landed doc list is DEPOSITED into the session cache (slice O §4.2.2):
+    // the Make dashboard lists what the session has loaded, never refetching.
+    interactiveRootOf(p)
+      ? listDocs(p.id)
+          .then((d) => { useDocsCache.getState().deposit(p.id, d); return d; })
+          .catch((): DocSummary[] => [])
+      : Promise.resolve([]),
   ]);
   const repoRef = members.find((m) => m.member_kind === 'crew.repo')?.member_ref ?? null;
   const runMembers = members.filter((m) => RUN_KINDS.has(m.member_kind));

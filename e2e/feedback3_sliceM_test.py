@@ -259,9 +259,11 @@ with sync_playwright() as p:
     # ── AC 5 (▦): Make's ▦ lands on a real /make page — never a 404 ────────────
     page.goto(f"{ORIGIN}/", wait_until="domcontentloaded")
     page.locator('[data-testid="rail-heading-make"] [data-testid="heading-dashboard"]').click()
+    # (Amended by slice O: the placeholder retired — the ▦ lands on the real
+    # combined list + reporting dashboard, DES-FEEDBACK-003 §4.2.)
     make_dash_ok = settled(
         """() => window.location.pathname === '/make'
-              && !!document.querySelector('[data-testid="make-placeholder"]')""")
+              && !!document.querySelector('[data-testid="make-dashboard"]')""")
     make_dash_territory_ok = expanded() == ["make"]
 
     # ── AC 7: fetch-on-expand, at most one GET /repos, no poll ─────────────────

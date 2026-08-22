@@ -12,15 +12,20 @@ interface Props {
 const terminal = (s: string): boolean =>
   ['completed', 'failed', 'cancelled'].includes(s);
 
+/**
+ * The Chat predicate — exported so Make's complement is VERBATIM this filter
+ * (DES-FEEDBACK-003 §4.2/§3.3: every run under exactly one path): chat runs
+ * are 'chat'-stamped runs plus legacy runs with no workflow stamp.
+ */
+export const isChatRun = (v: SessionView): boolean =>
+  !v.session.workflow_id || v.session.workflow_id === 'chat';
+
 export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const { range, setRange, filter: filterByRange } = useTimeRange('30d');
 
   // Strict filter: include 'chat' runs and legacy runs with no workflow stamp as a transitional fallback.
-  const allChats = useMemo(
-    () => runs.filter((v) => !v.session.workflow_id || v.session.workflow_id === 'chat'),
-    [runs],
-  );
+  const allChats = useMemo(() => runs.filter(isChatRun), [runs]);
 
   const chats = useMemo(() => filterByRange(allChats), [allChats, filterByRange]);
 

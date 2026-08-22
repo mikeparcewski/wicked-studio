@@ -1,5 +1,3 @@
-import { useEffect, useRef, useState } from 'react';
-import { api } from '../api/client.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useAppearanceStore } from '../theming/appearance.js';
 import { prefersReducedMotion } from './LiveEdge.js';
@@ -30,14 +28,20 @@ import { WickedLogo } from './WickedLogo.js';
  * is the STATUS layer, not the accent (§2.6): live = run-emerald, connecting =
  * gate-amber, lost = fail-red. The reconnecting pulse is the ONE loop the
  * motion grammar allows (§1.6) — it is state communication, and it stops for
- * `prefers-reduced-motion`. The health popover it opens is the same one the
- * rail's old pill owned — moved, not removed.
+ * `prefers-reduced-motion`.
+ *
+ * The health POPOVER retired (DES-FEEDBACK-003 §6.2/§8.2, slice O): the dot
+ * stays as glanceable ws state, and clicking it now expands the rail-foot
+ * HealthRailSection (one surface for health detail, not two) — CheckRow and
+ * the `getHealth()` fetch moved there verbatim.
  */
 
 interface Props {
   /** The rail's collapsed state: icon-only column instead of the header row. */
   collapsed: boolean;
   navigate: (path: string) => void;
+  /** Clicking the dot expands the rail-foot Health section (§6.2, slice O). */
+  onDotClick?: () => void;
 }
 
 const DOT_COLOR = {
@@ -52,60 +56,23 @@ const DOT_WORD = {
   disconnected: 'offline',
 } as const;
 
-interface HealthInfo {
-  status: string;
-  version: string;
-  ping: string;
-}
-
-function CheckRow({ label, ok, detail }: { label: string; ok: boolean | null; detail: string }): React.ReactElement {
-  const icon = ok === null ? '·' : ok ? '✓' : '✗';
-  const color = ok === null ? 'var(--ink-dim)' : ok ? 'var(--status-run)' : 'var(--status-fail)';
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '5px' }}>
-      <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{icon}</span>
-      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)', flex: 1 }}>{label}</span>
-      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>{detail}</span>
-    </div>
-  );
-}
-
-/** The connection status dot + the health popover (moved from the rail pill). */
-function ConnectionDot({ collapsed }: { collapsed: boolean }): React.ReactElement {
+/**
+ * The connection status dot — glanceable ws state. Its old health popover is
+ * RETIRED (§8.2): a click hands off to the rail-foot Health section instead.
+ */
+function ConnectionDot({ collapsed, onClick }: { collapsed: boolean; onClick?: (() => void) | undefined }): React.ReactElement {
   const wsStatus = useConnectionStore((s) => s.status);
-  const [open, setOpen] = useState(false);
-  const [health, setHealth] = useState<HealthInfo | null>(null);
-  const [healthError, setHealthError] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setHealth(null);
-    setHealthError(false);
-    api.getHealth()
-      .then((h) => setHealth(h))
-      .catch(() => setHealthError(true));
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onOutside(e: MouseEvent): void {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('click', onOutside);
-    return () => document.removeEventListener('click', onOutside);
-  }, [open]);
 
   const pillLabel =
     wsStatus === 'connected' ? 'Connected' :
     wsStatus === 'connecting' ? 'Connecting' : 'Disconnected';
 
   return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+    <div style={{ position: 'relative', flexShrink: 0 }}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        title={`Connection: ${pillLabel}`}
+        onClick={onClick}
+        title={`Connection: ${pillLabel} — health details below`}
         aria-label={`Connection: ${pillLabel}`}
         style={{
           display: 'flex', alignItems: 'center', gap: '5px', background: 'transparent',
@@ -129,39 +96,11 @@ function ConnectionDot({ collapsed }: { collapsed: boolean }): React.ReactElemen
           </span>
         )}
       </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
-          background: 'var(--surface-overlay)', border: '1px solid var(--surface-raised)',
-          borderRadius: 'var(--radius-md)', padding: 'var(--space-3) 14px', minWidth: '220px',
-          boxShadow: 'var(--shadow-overlay)',
-        }}>
-          <p style={{
-            fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semi)', textTransform: 'uppercase',
-            letterSpacing: '0.1em', color: 'var(--ink-dim)', marginBottom: 'var(--space-2)',
-            fontFamily: 'var(--font-mono)',
-          }}>
-            Health checks
-          </p>
-          <CheckRow label="WebSocket" ok={wsStatus === 'connected'} detail={pillLabel} />
-          {healthError ? (
-            <CheckRow label="API server" ok={false} detail="unreachable" />
-          ) : health ? (
-            <>
-              <CheckRow label="API server" ok={health.status === 'ok'} detail={health.status} />
-              <CheckRow label="wicked-core" ok detail={health.version} />
-            </>
-          ) : (
-            <CheckRow label="API server" ok={null} detail="checking…" />
-          )}
-        </div>
-      )}
     </div>
   );
 }
 
-export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
+export function AppChrome({ collapsed, navigate, onDotClick }: Props): React.ReactElement {
   const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
 
   // The §3.1 slot: 32×32 exactly, clearspace by margin, contain-fit custom
@@ -195,7 +134,7 @@ export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-1)' }}
       >
         {logoSlot}
-        <ConnectionDot collapsed />
+        <ConnectionDot collapsed onClick={onDotClick} />
       </div>
     );
   }
@@ -222,7 +161,7 @@ export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
       >
         wicked-studio
       </button>
-      <ConnectionDot collapsed={false} />
+      <ConnectionDot collapsed={false} onClick={onDotClick} />
     </div>
   );
 }
