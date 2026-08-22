@@ -28,7 +28,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const calledUrl = (): string => String(fetchMock.mock.calls[0][0]);
+const calledUrl = (): string => String(fetchMock.mock.calls[0]?.[0]);
 
 describe('api.getRunFile — GET /runs/:id/files?path=<absolute>', () => {
   it('encodes the run id and the path into the query', async () => {

@@ -68,8 +68,8 @@ describe('classifyDiff — the stateful unified-diff classifier', () => {
   it('a header-block "--- a/…" line is a file header, not a deletion', () => {
     const diff = ['diff --git a/f b/f', '--- a/f', '+++ b/f', '@@ -1 +1 @@', '-gone'].join('\n');
     const lines = classifyDiff(diff);
-    expect(lines[1].kind).toBe('file');
-    expect(lines[4].kind).toBe('del');
+    expect(lines[1]?.kind).toBe('file');
+    expect(lines[4]?.kind).toBe('del');
   });
 
   it('binary-file notices and rename headers classify as metadata', () => {
