@@ -144,14 +144,18 @@ export function CommandPalette({
   const projects = useProjectsStore((s) => s.projects);
   const gates = useGateStore((s) => s.gates);
 
-  // Open: remember focus, reset the query, focus the input; fetch the repo list
-  // only when the cache is cold (§1.4 — first open fires exactly one GET /repos;
-  // a warm cache fetches nothing at all).
+  // Open: remember focus and focus the input; fetch the repo list only when the
+  // cache is cold (§1.4 — first open fires exactly one GET /repos; a warm cache
+  // fetches nothing at all). The query resets on CLOSE, not open, so a reopen
+  // renders empty from its first frame — a keystroke racing the open can never
+  // append to the previous session's text.
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setQuery('');
+      setSel(0);
+      return;
+    }
     restoreRef.current = document.activeElement as HTMLElement | null;
-    setQuery('');
-    setSel(0);
     inputRef.current?.focus();
     if (repoCache === null) {
       api
