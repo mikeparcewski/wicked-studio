@@ -20,6 +20,7 @@ import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { RuleManager } from './components/RuleManager.js';
+import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
@@ -487,16 +488,23 @@ export function App(): React.ReactElement {
     return runSurface();
   }
 
+  // DES-FEEDBACK-001 §7.3 / DES-FEEDBACK-003 §5.5: Document and Video are
+  // canvas-first — the rail auto-collapses on entry, and the runs bottom
+  // sheet auto-collapses on the same transition (EC27).
+  const immersive = projectId !== null && (mode === 'document' || mode === 'video');
+
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-base">
-      {/* DES-FEEDBACK-001 §7.3: Document and Video are canvas-first — the rail
-          auto-collapses to icons on entry and restores on exit. */}
+    // §5.2: the root reserves the bar's 28px as padding — the collapsed bar is
+    // a ROW, not an overlay, so every surface (board, dashboards, canvas — and
+    // with it the version strip's proximity-sensor band, which ends at the
+    // canvas edge) ends ABOVE the bar. Nothing is ever covered while collapsed.
+    <div className="flex h-screen overflow-hidden bg-surface-base" style={{ paddingBottom: RUNS_BAR_PX }}>
       <LeftSidebar
         runs={runs}
         navigate={navigate}
         pathname={pathname}
         runPath={runPath}
-        immersive={projectId !== null && (mode === 'document' || mode === 'video')}
+        immersive={immersive}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -520,6 +528,11 @@ export function App(): React.ReactElement {
         selectedRun={selected}
         onKill={(id) => void onKill(id)}
       />
+
+      {/* The runs bottom panel (DES-FEEDBACK-003 §5, slice N): a fourth reader
+          of the SAME `useRuns()` array plus the client-held stores — zero new
+          requests, zero new sockets. Fixed at the viewport bottom, everywhere. */}
+      <RunsBottomPanel runs={runs} runPath={runPath} navigate={navigate} immersive={immersive} />
 
       {/* Gate toasts — renders above everything; scoped to the current run. NOT on the
           orchestrator board: there every waiting gate is already an answerable chip on

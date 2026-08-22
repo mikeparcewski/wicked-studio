@@ -110,6 +110,18 @@ code, pre, .font-mono {
   .wk-palette-in { animation: none; }
 }
 
+/* The runs bottom sheet's rise (DES-FEEDBACK-003 §5.6): --dur-fast --ease-out,
+   one run, no loop — the gates pulse is the bar's only loop (§5.3). */
+@keyframes wk-sheet-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.wk-sheet-in { animation: wk-sheet-in var(--dur-fast) var(--ease-out); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-sheet-in { animation: none; }
+}
+
 @keyframes wk-feed-in {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: none; }

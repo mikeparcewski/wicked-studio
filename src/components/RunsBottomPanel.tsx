@@ -1,0 +1,364 @@
+import { useEffect, useMemo, useRef } from 'react';
+import type { SessionStatus, SessionView } from '../api/types.js';
+import { GATE_HASH } from '../board/gateActions.js';
+import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
+import { useGateStore } from '../store/gates.js';
+import { useMembershipStore } from '../store/membership.js';
+import { useRunsPanelStore } from '../store/runsPanel.js';
+import { useRuntimeStore, type LoggedEvent } from '../store/runtime.js';
+import { prefersReducedMotion } from './LiveEdge.js';
+import { phaseWord, recentRuns, RUN_DOT } from './RunsSection.js';
+
+/**
+ * The runs bottom panel (DES-FEEDBACK-003 §5, slice N) — the runs' home after
+ * the rail lost its RunsSection mount (§8.1). Two physical modes (§5.2):
+ *
+ *  - COLLAPSED (default): a fixed 28px bar across the viewport bottom — a
+ *    reserved ROW, not an overlay: App's root gains `padding-bottom: 28px`
+ *    (RUNS_BAR_PX), so no surface is ever covered while collapsed (EC27).
+ *  - EXPANDED: an overlay sheet rising from the bar to min(340px, 42vh) —
+ *    overlays content rather than reflowing it, so layout math stays
+ *    identical everywhere. Collapse: the ▾, Escape (registry-routed, §5.7),
+ *    or clicking outside the sheet.
+ *
+ * Every stat is CLIENT-DERIVABLE from stores the app already holds (§5.3):
+ * the `runs` prop (App's one `useRuns()`), the gate store, and the runtime
+ * store's cliUsage fold — zero new requests, zero new sockets (§5.1, C8).
+ * Row grammar (dot / phase word / ordering) is the RunsSection library,
+ * reused verbatim (§5.5). z-order: above surface content, below the palette,
+ * modals, and gate toasts (§5.2); the sheet captures no keys beyond Escape.
+ */
+
+/** §5.2: the collapsed bar's exact height — App reserves this as padding. */
+export const RUNS_BAR_PX = 28;
+
+/** §5.4: the sheet lists up to 20 runs, scrolling internally past 8. */
+const SHEET_MAX = 20;
+
+const TERMINAL: ReadonlySet<SessionStatus> = new Set(['completed', 'cancelled', 'failed']);
+
+export interface RunStats {
+  /** Non-terminal, non-gate statuses (the RunsSection TERMINAL set). */
+  working: number;
+  /** `awaiting_human` in `runs` — agrees with the gate store by construction. */
+  gates: number;
+  /** `status === 'failed'` in the default (non-archived) listing — the label
+   *  says "failed", scoped by what `/runs` returns; no invented 24h clock. */
+  failed: number;
+}
+
+/** §5.3's stat derivations, spelled once and unit-tested. */
+export function runStats(runs: SessionView[]): RunStats {
+  let working = 0;
+  let gates = 0;
+  let failed = 0;
+  for (const v of runs) {
+    const s = v.session.status;
+    if (s === 'awaiting_human') gates += 1;
+    else if (s === 'failed') failed += 1;
+    else if (!TERMINAL.has(s)) working += 1;
+  }
+  return { working, gates, failed };
+}
+
+/**
+ * The TokenBurnSparkline fold (§5.3): real reported `cliUsage` dollars from
+ * the runtime store's per-run logs — "observed" is in the label because that
+ * is what it is. A `costUsd: null` frame never entered the log, so an unknown
+ * cost can never fold to $0.00. Also folded per run for the sheet rows (§5.4:
+ * shown only when non-zero — never $0.00 for "unknown").
+ */
+export function observedSpend(logs: Record<string, LoggedEvent[]>): {
+  total: number;
+  frames: number;
+  byRun: Record<string, number>;
+} {
+  let total = 0;
+  let frames = 0;
+  const byRun: Record<string, number> = {};
+  for (const [runId, log] of Object.entries(logs)) {
+    for (const entry of log) {
+      if (entry.type === 'cliUsage' && typeof entry.costUsd === 'number') {
+        total += entry.costUsd;
+        frames += 1;
+        byRun[runId] = (byRun[runId] ?? 0) + entry.costUsd;
+      }
+    }
+  }
+  return { total, frames, byRun };
+}
+
+/** "waiting 12m" — the gate row's wait age off the gate store's frame ts (§5.4). */
+export function waitingWord(ageMs: number): string {
+  const s = Math.max(0, Math.floor(ageMs / 1000));
+  if (s < 60) return `waiting ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `waiting ${m}m`;
+  return `waiting ${Math.floor(m / 60)}h`;
+}
+
+/** One collapsed-bar stat segment: glyph in its status token, text muted (§5.3). */
+function Segment({ glyph, color, text, pulse = false }: {
+  glyph: string;
+  color: string;
+  text: string;
+  pulse?: boolean;
+}): React.ReactElement {
+  return (
+    <span className="flex items-center gap-1 shrink-0">
+      <span
+        aria-hidden
+        style={{
+          color,
+          // §5.3: the ⏸ segment pulses ONLY while a gate is waiting — the
+          // AppChrome dot's exact grammar, honoring prefers-reduced-motion.
+          animation: pulse && !prefersReducedMotion() ? 'wk-live-pulse 2s ease-in-out infinite' : undefined,
+        }}
+      >
+        {glyph}
+      </span>
+      <span style={{ color: 'var(--ink-muted)' }}>{text}</span>
+    </span>
+  );
+}
+
+interface Props {
+  runs: SessionView[];
+  runPath: (id: string) => string;
+  navigate: (path: string) => void;
+  /** True inside Document/Video — entering auto-collapses the sheet (EC27). */
+  immersive: boolean;
+}
+
+export function RunsBottomPanel({ runs, runPath, navigate, immersive }: Props): React.ReactElement {
+  const expanded = useRunsPanelStore((s) => s.expanded);
+  const gates = useGateStore((s) => s.gates);
+  const logs = useRuntimeStore((s) => s.logs);
+  const projectNameByRun = useMembershipStore((s) => s.projectNameByRun);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const stats = useMemo(() => runStats(runs), [runs]);
+  const spend = useMemo(() => observedSpend(logs), [logs]);
+  const rows = useMemo(() => recentRuns(runs, SHEET_MAX), [runs]);
+  const quiet = stats.working === 0 && stats.gates === 0 && stats.failed === 0;
+
+  // EC27: entering an immersive mode collapses an open sheet — the canvas-first
+  // principle, same transition the rail collapses on. Fires on the transition
+  // only; the operator can still re-expand manually (an explicit gesture wins).
+  useEffect(() => {
+    if (immersive) useRunsPanelStore.getState().collapse();
+  }, [immersive]);
+
+  // §5.7 Escape precedence, through the ONE slice-G registry (EC21, C9): the
+  // palette owns Escape while open (the registry yields wholesale); the triage
+  // cursor's own Escape entry yields while this sheet is up (useTriageCursor
+  // reads this store), so palette → sheet → triage holds regardless of which
+  // surface registered first. Stable entries — guards read through the store.
+  const escapeEntries = useMemo<ShortcutEntry[]>(
+    () => [
+      {
+        id: 'runs-sheet-close',
+        chord: { key: 'escape' },
+        description: 'Collapse the runs sheet',
+        guard: () => useRunsPanelStore.getState().expanded,
+        handler: () => useRunsPanelStore.getState().collapse(),
+      },
+    ],
+    [],
+  );
+  useGlobalShortcuts(escapeEntries);
+
+  // §5.2: clicking outside the sheet collapses it.
+  useEffect(() => {
+    if (!expanded) return;
+    function onOutside(e: MouseEvent): void {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        useRunsPanelStore.getState().collapse();
+      }
+    }
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [expanded]);
+
+  const allRuns = (testId: string): React.ReactElement => (
+    <a
+      href="/runs"
+      data-testid={testId}
+      onClick={(e) => {
+        // A real link (§5.3) — the ONE escape hatch to the flat list, not an
+        // expand gesture, so the click must not bubble into the toggle.
+        e.preventDefault();
+        e.stopPropagation();
+        navigate('/runs');
+      }}
+      className="shrink-0 transition-opacity hover:opacity-80"
+      style={{ color: 'var(--accent)', textDecoration: 'none' }}
+    >
+      All runs ›
+    </a>
+  );
+
+  const summary = (
+    <>
+      <Segment glyph="●" color="var(--status-run)" text={`${stats.working} working`} />
+      <Segment glyph="⏸" color="var(--status-gate)" text={`${stats.gates} gates`} pulse={stats.gates > 0} />
+      <Segment glyph="✗" color="var(--status-fail)" text={`${stats.failed} failed`} />
+      {spend.frames > 0 && (
+        // Rendered only once a cliUsage frame has been observed — never a
+        // fabricated $0.00 for "unknown" (the slice-E wire-honesty rule).
+        <Segment glyph="◔" color="var(--accent)" text={`$${spend.total.toFixed(2)} observed`} />
+      )}
+    </>
+  );
+
+  return (
+    <div ref={rootRef}>
+      {/* ── The collapsed bar: a reserved 28px row, fixed at the bottom (§5.2) ── */}
+      <div
+        data-testid="runs-bottom-bar"
+        data-expanded={String(expanded)}
+        data-working={stats.working}
+        data-gates={stats.gates}
+        data-failed={stats.failed}
+        className="fixed bottom-0 left-0 right-0 flex items-center font-mono"
+        style={{
+          height: RUNS_BAR_PX,
+          zIndex: 40, // above surface content; below the palette/modals/toasts (z-50)
+          background: 'var(--surface-rail)',
+          borderTop: '1px solid var(--surface-raised)',
+          fontSize: 'var(--text-2xs)',
+        }}
+      >
+        <button
+          type="button"
+          data-testid="runs-bar-toggle"
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Collapse the runs sheet' : 'Expand the runs sheet'}
+          onClick={() => useRunsPanelStore.getState().toggle()}
+          className="flex flex-1 items-center gap-3 h-full px-3 text-left min-w-0"
+          style={{ background: 'transparent', fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)' }}
+        >
+          <span aria-hidden style={{ color: 'var(--ink-dim)' }}>{expanded ? '▾' : '▴'}</span>
+          {quiet ? (
+            // Zero-states compress (§5.3): calm is one phrase, not four zeros.
+            <span style={{ color: 'var(--ink-dim)' }}>nothing running</span>
+          ) : (
+            summary
+          )}
+        </button>
+        <div className="px-3">{allRuns('runs-bar-all')}</div>
+      </div>
+
+      {/* ── The expanded sheet: an overlay guest, never a reflow (§5.2/§5.4) ── */}
+      {expanded && (
+        <div
+          data-testid="runs-bottom-sheet"
+          className="wk-sheet-in fixed left-0 right-0 flex flex-col"
+          style={{
+            bottom: RUNS_BAR_PX,
+            height: 'min(340px, 42vh)',
+            zIndex: 40,
+            background: 'var(--surface-overlay)',
+            boxShadow: 'var(--shadow-overlay)',
+            borderTop: '1px solid var(--surface-raised)',
+          }}
+        >
+          <div
+            className="flex items-center gap-3 px-3 py-2 shrink-0 font-mono"
+            style={{ fontSize: 'var(--text-2xs)', borderBottom: '1px solid var(--surface-raised)' }}
+          >
+            <span style={{ color: 'var(--ink-high)', fontWeight: 'var(--weight-semi)' }}>Runs</span>
+            {!quiet && summary}
+            <span className="flex-1" />
+            {allRuns('runs-sheet-all')}
+            <button
+              type="button"
+              data-testid="runs-sheet-collapse"
+              aria-label="Collapse the runs sheet"
+              onClick={() => useRunsPanelStore.getState().collapse()}
+              className="shrink-0 px-1"
+              style={{ background: 'transparent', color: 'var(--ink-muted)', cursor: 'pointer' }}
+            >
+              ▾
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto py-1">
+            {rows.length === 0 && (
+              <p className="px-3 py-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-sans)' }}>
+                No runs yet.
+              </p>
+            )}
+            {rows.map((view) => {
+              const id = view.session.id;
+              const gated = view.session.status === 'awaiting_human';
+              // A waiting gate row deep-links to its gate (§5.4) — the fastest
+              // path from "the bar pulsed" to "answering".
+              const href = gated ? `${runPath(id)}${GATE_HASH}` : runPath(id);
+              const gate = gates[id];
+              const cost = spend.byRun[id] ?? 0;
+              return (
+                <a
+                  key={id}
+                  href={href}
+                  data-testid="runs-sheet-row"
+                  data-run-id={id}
+                  data-status={view.session.status}
+                  title={view.session.problem}
+                  onClick={(e) => {
+                    // Row click navigates to the run page and the sheet
+                    // collapses — the destination owns the viewport now (§5.4).
+                    // Real link semantics: middle-click still works via href.
+                    e.preventDefault();
+                    useRunsPanelStore.getState().collapse();
+                    navigate(href);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1 min-w-0 transition-colors"
+                  style={{ background: 'transparent', textDecoration: 'none' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-card)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span
+                    aria-hidden
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: RUN_DOT[view.session.status] ?? 'var(--ink-dim)' }}
+                  />
+                  <span
+                    className="truncate leading-tight"
+                    style={{ maxWidth: '48ch', fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-sans)' }}
+                  >
+                    {view.session.problem}
+                  </span>
+                  <span
+                    data-testid="runs-sheet-row-project"
+                    className="truncate shrink-0"
+                    style={{ maxWidth: '20ch', fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-sans)' }}
+                  >
+                    {projectNameByRun[id] ?? ''}
+                  </span>
+                  <span className="flex-1" />
+                  <span
+                    className="shrink-0 font-mono"
+                    style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)' }}
+                  >
+                    {phaseWord(view)}
+                  </span>
+                  {gated && gate !== undefined && (
+                    <span className="shrink-0 font-mono" style={{ fontSize: 'var(--text-2xs)', color: 'var(--status-gate)' }}>
+                      {waitingWord(Date.now() - gate.receivedAt)} ↵
+                    </span>
+                  )}
+                  {cost > 0 && (
+                    <span className="shrink-0 font-mono" style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)' }}>
+                      ${cost.toFixed(2)}
+                    </span>
+                  )}
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
