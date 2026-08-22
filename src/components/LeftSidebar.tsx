@@ -300,7 +300,7 @@ function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }:
         >
           <span
             aria-hidden
-            data-testid="rail-heading-chevron"
+            data-testid="rail-chevron"
             className="inline-block leading-none"
             style={{
               transition: 'transform var(--dur-fast)',
