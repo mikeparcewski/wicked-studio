@@ -10,6 +10,7 @@ import {
   type Signal,
 } from '../board/boardAttention.js';
 import { useGateStore, type OpenGate } from '../store/gates.js';
+import { useProjectsStore } from '../store/projects.js';
 import { useRuntimeStore } from '../store/runtime.js';
 
 /**
@@ -237,6 +238,10 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
       // Cards render as soon as the projects are known; tiles and chips fill in behind
       // them, so a slow bridge never holds the whole board on a spinner (§3.3).
       setProjects(active);
+      // Mirror into the shared projects store (a store WRITE of already-fetched
+      // data, no extra request) so the command palette's corpus (DES-FEEDBACK-002
+      // §1.4 — "already loaded by the board/shell") is true on the board too.
+      useProjectsStore.setState({ projects: active });
       setLoading(false);
       const entries = await Promise.all(
         active.map(async (p) => [p.id, await loadBindings(p, repoNames.current)] as const),
