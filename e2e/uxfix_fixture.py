@@ -98,6 +98,14 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False,
          "repo": False, "metrics_ws": False,
+         # Slice I (DES-FEEDBACK-002 §3): the in-studio file/diff viewer corpus.
+         #   viewer      — r-upload gains a workdir + file events, and the crew#305
+         #                 routes (GET /runs/:id/files, GET /runs/:id/diff) answer
+         #                 with the REAL contract shapes (default False).
+         #   file_routes — when False the two routes answer Fastify's DEFAULT
+         #                 unknown-route 404 body (a daemon predating crew#305),
+         #                 so the rig can prove the studio's openPath fallback.
+         "viewer": False, "file_routes": True,
          # theme-learn readback (interactive#181): how long after a successful
          # theme.requested the learned tokens become readable (the 404→200
          # ripening the studio poll rides). reset_learn clears learned state.
@@ -215,6 +223,106 @@ LONG_PROMPT = (
     "replayed from the dead-letter store once the schema catches up with the producer"
 )
 LONG_RUN = session("r-long", "executing", LONG_PROMPT, "wire the schema validation")
+
+# ── The slice-I viewer corpus (DES-FEEDBACK-002 §3, crew#305) ─────────────────
+#
+# Behind the `viewer` switch. Everything below speaks the REAL crew wire:
+# `RunFileContent` / `RunDiff` verbatim (wicked-crew-api-types 0.7.0), the
+# routes' exact error LADDER and strings (routes.ts crew#305): 404 `unknown
+# run: <id>` / `no such file: <path>`, 400 non-absolute / repeated `path`,
+# 403 outside every allowed root, 409 workdir-less. The diff is a real
+# `git diff --no-color --no-ext-diff HEAD` shape including an untracked file
+# appended as an all-addition `--no-index` hunk — with one added line whose
+# own text begins `++` (so it renders `+++ …`), the adversarial case the
+# studio's stateful classifier must color as an ADDITION, not a header.
+
+VIEWER_WORKDIR = "/w2/upload"
+VIEWER_FILE_TS = f"{VIEWER_WORKDIR}/src/middleware.ts"
+VIEWER_FILE_BIG = f"{VIEWER_WORKDIR}/src/generated.ts"
+VIEWER_FILE_BIN = f"{VIEWER_WORKDIR}/assets/logo.png"
+VIEWER_FILE_403 = "/outside/secret.txt"
+
+MIDDLEWARE_TS = """\
+// Token-bucket rate limiting for the upload endpoint.
+import { TokenBucket } from './bucket.js';
+
+export interface Opts {
+  capacity: number;
+  refillPerSec: number;
+}
+
+export function rateLimit(opts: Opts) {
+  const bucket = new TokenBucket(opts);
+  return async (req, res, next) => {
+    if (!bucket.take(req.ip)) {
+      return res.status(429).end();
+    }
+    next();
+  };
+}
+"""
+
+VIEWER_FILES = {
+    VIEWER_FILE_TS: {"path": VIEWER_FILE_TS, "content": MIDDLEWARE_TS,
+                     "size": len(MIDDLEWARE_TS.encode()), "truncated": False, "binary": False},
+    # >512 KB: `content` holds only the first 512 KB (stood in by a short head
+    # here — the CONTRACT fields are what the rig asserts), `size` is the FULL
+    # byte count, `truncated: true`.
+    VIEWER_FILE_BIG: {"path": VIEWER_FILE_BIG,
+                      "content": "// AUTO-GENERATED — first 512 KB of the bundle\n"
+                                 + "export const table = [\n" + "  0,\n" * 40,
+                      "size": 716800, "truncated": True, "binary": False},
+    # NUL in the first 8 KB: `binary: true`, `content: ""` — never mojibake.
+    VIEWER_FILE_BIN: {"path": VIEWER_FILE_BIN, "content": "",
+                      "size": 20480, "truncated": False, "binary": True},
+}
+
+_DIFF_MIDDLEWARE = """\
+diff --git a/src/middleware.ts b/src/middleware.ts
+index 3f9c2ab..8d41e0f 100644
+--- a/src/middleware.ts
++++ b/src/middleware.ts
+@@ -10,7 +10,10 @@ export function rateLimit(opts: Opts) {
+   const bucket = new TokenBucket(opts);
+   return async (req, res, next) => {
+-    next();
++    if (!bucket.take(req.ip)) {
++      return res.status(429).end();
++    }
++    next();
+   };
+ }
+"""
+
+# The untracked file appended as an all-addition --no-index hunk (§3.3) — its
+# second added line's own text begins "++", so the diff line begins "+++":
+# the classifier trap.
+_DIFF_UNTRACKED = """\
+diff --git a/dev/null b/notes/plan.md
+new file mode 100644
+index 0000000..9c4e21f
+--- /dev/null
++++ b/notes/plan.md
+@@ -0,0 +1,3 @@
++rate-limit rollout plan
++++ staged: bucket first, then 429s   <- content starts with ++
++done when p99 < 40ms
+"""
+
+VIEWER_DIFF_WHOLE = _DIFF_MIDDLEWARE + _DIFF_UNTRACKED
+VIEWER_DIFF_BY_PATH = {VIEWER_FILE_TS: _DIFF_MIDDLEWARE}
+
+# The run-model events that put the corpus files on the Files panel: unit 0
+# wrote middleware.ts + generated.ts (Write hook fire ⇒ modified set), unit 1
+# only READ the binary + the outside path (referenced set ⇒ File tab default).
+VIEWER_EVENTS = [
+    {"type": "dataUsed", "session": "r-upload", "ord": 0,
+     "files": [VIEWER_FILE_TS, VIEWER_FILE_BIG]},
+    {"type": "governanceHookFired", "session": "r-upload", "ord": 0,
+     "attempt": 0, "toolName": "Write", "decision": "allow"},
+    {"type": "dataUsed", "session": "r-upload", "ord": 1,
+     "files": [VIEWER_FILE_BIN, VIEWER_FILE_403]},
+]
 
 # The durable-log tails (D3 step 2): the ONE honest clock for a failure's age.
 RUN_EVENTS = {
@@ -672,7 +780,20 @@ class W2Handler(SimpleHTTPRequestHandler):
                 else:
                     runs = RUNS + ([ORPHAN] if state["orphan"] else []) \
                         + ([LONG_RUN] if state["long_prompt"] else [])
+                viewer_on = state["viewer"]
+            if viewer_on:
+                # Slice I: the live run gains a workdir (the diff route's 409
+                # gate reads it; AgentSession carries it on the wire).
+                runs = json.loads(json.dumps(runs))
+                for r in runs:
+                    if r["session"]["id"] == "r-upload":
+                        r["session"]["workdir"] = VIEWER_WORKDIR
             self._json(200, {"runs": runs})
+            return True
+        # Slice I: the crew#305 file/diff routes (real contract, switch-gated).
+        m = re.match(r"^/api/v1/runs/([^/]+)/(files|diff)$", path)
+        if m:
+            self._viewer_routes(urllib.parse.unquote(m.group(1)), m.group(2))
             return True
         if path == "/api/v1/projects":
             self._json(200, {"projects": PROJECTS})
@@ -761,12 +882,74 @@ class W2Handler(SimpleHTTPRequestHandler):
         # /api/v1/runs/<id>/events
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "events":
             rid = urllib.parse.unquote(parts[4])
-            self._json(200, {"events": RUN_EVENTS.get(rid, [])})
+            events = list(RUN_EVENTS.get(rid, []))
+            with state_lock:
+                viewer_on = state["viewer"]
+            if viewer_on and rid == "r-upload":
+                events = events + VIEWER_EVENTS
+            self._json(200, {"events": events})
             return True
         if path.startswith("/api/v1/"):
             self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             return True
         return False
+
+    def _viewer_routes(self, rid: str, leaf: str) -> None:
+        """The crew#305 file/diff routes with their REAL validation ladder and
+        error strings (routes.ts). With `file_routes` off (or the whole corpus
+        off) they answer Fastify's DEFAULT unknown-route 404 body — exactly what
+        a daemon predating crew#305 sends — so the studio's fallback detection
+        sees the same wire it would in production."""
+        with state_lock:
+            viewer_on = state["viewer"] and state["file_routes"]
+            orphan_on = state["orphan"]
+        if not viewer_on:
+            self._json(404, {"message": f"Route GET:{self.path} not found",
+                             "error": "Not Found", "statusCode": 404})
+            return
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query,
+                                      keep_blank_values=True)
+        paths = query.get("path", [])
+        known = {r["session"]["id"] for r in RUNS} | ({"r-orphan"} if orphan_on else set())
+        # The shared resolveRunPath ladder: 404 unknown run → 400 repeated /
+        # non-absolute → 403 outside every allowed root.
+        if rid not in known:
+            self._json(404, {"error": f"unknown run: {rid}"})
+            return
+        if len(paths) > 1:
+            self._json(400, {"error": "`path` may be given at most once"})
+            return
+        qpath = paths[0].strip() if paths else None
+        if qpath == "":
+            qpath = None
+        workdir = VIEWER_WORKDIR if rid == "r-upload" else None
+        if qpath is not None:
+            if not qpath.startswith("/"):
+                self._json(400, {"error": "`path` must be an absolute path"})
+                return
+            roots = [workdir] if workdir else []
+            if not any(qpath == r or qpath.startswith(r + "/") for r in roots):
+                self._json(403, {"error": "path is outside every allowed root (the "
+                                          "run's workdir/write roots and the registered repos)"})
+                return
+        if leaf == "files":
+            if qpath is None:
+                self._json(400, {"error": "`path` query parameter is required"})
+                return
+            served = VIEWER_FILES.get(qpath)
+            if served is None:
+                self._json(404, {"error": f"no such file: {qpath}"})
+                return
+            self._json(200, served)
+            return
+        # leaf == "diff"
+        if workdir is None:
+            self._json(409, {"error": f"run {rid} has no workdir — nothing to diff"})
+            return
+        if qpath is not None:
+            self._json(200, {"diff": VIEWER_DIFF_BY_PATH.get(qpath, ""), "truncated": False})
+            return
+        self._json(200, {"diff": VIEWER_DIFF_WHOLE, "truncated": False})
 
     def _interactive_get(self, path: str) -> bool:
         """GET half of the slice-6 bridge surface (DES-UXFIX-001 §2.6)."""

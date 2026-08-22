@@ -51,7 +51,7 @@ describe('interactiveRootOf', () => {
   it('treats an absent, blank, or non-string root as unbound', () => {
     expect(interactiveRootOf(project({ id: 'c' }))).toBeNull();
     expect(interactiveRootOf(project({ id: 'd', interactiveRoot: '   ' }))).toBeNull();
-    expect(interactiveRootOf(project({ id: 'e', interactiveRoot: 42 }))).toBeNull();
+    expect(interactiveRootOf(project({ id: 'e', interactiveRoot: 42 as unknown as string }))).toBeNull();
   });
 });
 
