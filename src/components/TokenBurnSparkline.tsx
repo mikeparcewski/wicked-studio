@@ -26,9 +26,17 @@ const GRAD_ID = 'wk-burn-grad';
 
 interface Props {
   now?: number;
+  /** Dashboard reuse (DES-FEEDBACK-003 §4): the surface's §4 table row names
+   *  the question (EC19); "observed" stays in every title — wire honesty. */
+  question?: string;
+  title?: string;
 }
 
-export function TokenBurnSparkline({ now }: Props): React.ReactElement {
+export function TokenBurnSparkline({
+  now,
+  question = 'What am I spending, is it accelerating?',
+  title = 'Token burn (observed)',
+}: Props): React.ReactElement {
   const logs = useRuntimeStore((s) => s.logs);
   const at = now ?? Date.now();
 
@@ -66,8 +74,8 @@ export function TokenBurnSparkline({ now }: Props): React.ReactElement {
   return (
     <MetricTile
       testId="token-burn-sparkline"
-      question="What am I spending, is it accelerating?"
-      title="Token burn (observed)"
+      question={question}
+      title={title}
       value={steps.length === 0 ? 'no usage yet' : `$${total.toFixed(2)}`}
       data={{ 'data-total': total.toFixed(4), 'data-points': steps.length }}
     >

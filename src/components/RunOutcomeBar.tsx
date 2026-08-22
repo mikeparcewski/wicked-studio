@@ -51,9 +51,17 @@ interface Props {
   attachedAt: Record<string, number>;
   /** Injectable clock for tests; defaults to the real one. */
   now?: number;
+  /** Dashboard reuse (DES-FEEDBACK-003 §4): each surface's own §4 table row
+   *  names its question/title (EC19); defaults stay the home bar's. */
+  question?: string;
+  title?: string;
 }
 
-export function RunOutcomeBar({ runs, attachedAt, now }: Props): React.ReactElement {
+export function RunOutcomeBar({
+  runs, attachedAt, now,
+  question = 'Is the system healthy right now?',
+  title = 'Runs (24h)',
+}: Props): React.ReactElement {
   const at = now ?? Date.now();
   const { windows, counts, unplaced } = useMemo(() => {
     const buckets = Array.from({ length: WINDOWS }, () => ({ run: 0, gate: 0, fail: 0, done: 0 }));
@@ -93,8 +101,8 @@ export function RunOutcomeBar({ runs, attachedAt, now }: Props): React.ReactElem
   return (
     <MetricTile
       testId="run-outcome-bar"
-      question="Is the system healthy right now?"
-      title="Runs (24h)"
+      question={question}
+      title={title}
       value={value}
       data={{ 'data-total': inWindow, 'data-unplaced': unplaced }}
     >

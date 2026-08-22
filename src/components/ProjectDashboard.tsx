@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import { listDocs, type DocSummary } from '../api/interactive.js';
+import { useDocsCache } from '../store/docsCache.js';
 import type { SessionView } from '../api/types.js';
 import { compareScored, scoreOf, type Signal, type SignalKind } from '../board/boardAttention.js';
 import { interactiveRootOf } from '../hooks/useBoardModel.js';
@@ -149,7 +150,10 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
     if (project === null || interactiveRootOf(project) === null) return;
     let cancelled = false;
     listDocs(projectId)
-      .then((d) => { if (!cancelled) setDocs(d); })
+      .then((d) => {
+        useDocsCache.getState().deposit(projectId, d); // slice O §4.2.2: the session doc cache
+        if (!cancelled) setDocs(d);
+      })
       .catch(() => { /* bridge cold/unreachable — no doc tiles, never an error wall */ });
     return () => { cancelled = true; };
   }, [projectId, project]);

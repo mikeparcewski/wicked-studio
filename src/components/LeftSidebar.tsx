@@ -6,6 +6,7 @@ import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useProjectsStore } from '../store/projects.js';
 import { AppChrome } from './AppChrome.js';
+import { isChatRun } from './ChatsPage.js';
 import { HealthRailSection } from './HealthRailSection.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
 import { NewProjectModal } from './NewProjectModal.js';
@@ -92,10 +93,9 @@ export function headingForPath(pathname: string): PathKey | null {
   return null;
 }
 
-/** The Chat predicate — ChatsPage's filter VERBATIM (§3.3: runs with no
- *  workflow stamp are chats there and must not double-list under Make). */
-const isChatRun = (v: SessionView): boolean =>
-  !v.session.workflow_id || v.session.workflow_id === 'chat';
+// The Chat predicate — ChatsPage's filter VERBATIM (§3.3: runs with no
+// workflow stamp are chats there and must not double-list under Make);
+// imported from its one source so the partition cannot drift.
 
 const RUN_TERMINAL = new Set(['completed', 'cancelled', 'failed']);
 
