@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CenterDashboard } from './components/CenterDashboard.js';
+import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
 import { ChatsPage } from './components/ChatsPage.js';
 import { CoverageView } from './components/CoverageView.js';
 import { DomainModelBrowser } from './components/DomainModelBrowser.js';
@@ -26,6 +27,7 @@ import { WorkPage } from './components/WorkPage.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { useEventStream } from './hooks/useEventStream.js';
+import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useLegacyRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
@@ -55,35 +57,8 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
   'sessionCompleted',
 ]);
 
-/**
- * Ctrl+K keyboard shortcut — kill the selected run when it is not in a terminal state.
- * Wired here (global handler) so it works regardless of which panel has focus.
- */
-function useKillShortcut(
-  runId: string | null,
-  runs: { session: { id: string; status: string } }[],
-  onKill: (id: string) => Promise<void>,
-): void {
-  useEffect(() => {
-    if (!runId) return;
-    function handler(e: KeyboardEvent): void {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k' && runId) {
-        const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase() ?? '';
-        const editable = (e.target as HTMLElement | null)?.isContentEditable ?? false;
-        if (tag === 'input' || tag === 'textarea' || tag === 'select' || editable) return;
-        const run = runs.find((r) => r.session.id === runId);
-        if (!run) return;
-        const terminal = ['completed', 'cancelled', 'failed'].includes(run.session.status);
-        if (!terminal) {
-          e.preventDefault();
-          void onKill(runId);
-        }
-      }
-    }
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [runId, runs, onKill]);
-}
+/** Terminal run states — a run here can no longer be cancelled. */
+const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, navigate, search } = useRoute();
@@ -206,9 +181,37 @@ export function App(): React.ReactElement {
     [refresh],
   );
 
-  useKillShortcut(runId, runs, onKill);
-
   const selected = runs.find((v) => v.session.id === runId) ?? null;
+
+  // ── DES-FEEDBACK-002 §1.2 (slice G): shortcut registry + command palette ────
+  // Cmd/Ctrl+K and Ctrl/Cmd+P open the palette (the unconditional, safe action
+  // gets the prime chord); kill-run relocates to Ctrl/Cmd+Shift+K with its
+  // guards and silent-fail contract intact, and also rides the palette as the
+  // `> Cancel run` verb. One listener, one guard — `useGlobalShortcuts`.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const paletteOpenRef = useRef(paletteOpen);
+  useEffect(() => {
+    paletteOpenRef.current = paletteOpen;
+    setShortcutsPaletteOpen(paletteOpen);
+  }, [paletteOpen]);
+
+  const shortcutEntries = useMemo(
+    () =>
+      paletteShortcutEntries({
+        isOpen: () => paletteOpenRef.current,
+        setOpen: setPaletteOpen,
+        killEligible: () => {
+          if (!runId) return false;
+          const run = runs.find((r) => r.session.id === runId);
+          return run !== undefined && !TERMINAL_STATES.includes(run.session.status);
+        },
+        kill: () => {
+          if (runId) void onKill(runId);
+        },
+      }),
+    [runId, runs, onKill],
+  );
+  useGlobalShortcuts(shortcutEntries);
 
   // ── Repo graph modal — opened from RepoDetailPage via onOpenGraph ───────────
   const [graphModalRepo, setGraphModalRepo] = useState<RepoEntry | null>(null);
@@ -486,6 +489,19 @@ export function App(): React.ReactElement {
       {selected !== null && (
         <RightPanel view={selected} />
       )}
+
+      {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus
+          from already-loaded stores + the runs prop; repos cached on first open. */}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        runs={runs}
+        navigate={navigate}
+        runPath={runPath}
+        projectId={projectId}
+        selectedRun={selected}
+        onKill={(id) => void onKill(id)}
+      />
 
       {/* Gate toasts — renders above everything; scoped to the current run. NOT on the
           orchestrator board: there every waiting gate is already an answerable chip on

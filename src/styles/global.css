@@ -98,6 +98,18 @@ code, pre, .font-mono {
    line fades in at the top of its block (120ms), a NEW project block fades in
    (220ms). One run each — content-keyed elements remount only on change, and
    nothing here loops (§1.6's rule). */
+/* The command palette's entrance (DES-FEEDBACK-002 §1.6): fade + 4px rise at
+   --dur-fast --ease-out, one run, nothing loops (§1.6's grammar). */
+@keyframes wk-palette-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+.wk-palette-in { animation: wk-palette-in var(--dur-fast) var(--ease-out); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-palette-in { animation: none; }
+}
+
 @keyframes wk-feed-in {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: none; }

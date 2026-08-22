@@ -1,0 +1,506 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
+import type { RepoEntry, SessionView } from '../api/types.js';
+import { api } from '../api/client.js';
+import { fuzzyMatch } from '../palette/fuzzy.js';
+import { modePath, projectPath, type Navigate } from '../hooks/useRoute.js';
+import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
+import { useProjectsStore } from '../store/projects.js';
+import { useGateStore } from '../store/gates.js';
+import { useAppearanceStore } from '../theming/appearance.js';
+import { GATE_HASH } from './GateChip.js';
+import { NewProjectModal } from './NewProjectModal.js';
+import { Modal } from './Modal.js';
+import { Terminal } from './Terminal.js';
+
+/**
+ * The universal command palette (DES-FEEDBACK-002 §1, slice G): Cmd+K / Ctrl+K /
+ * Ctrl+P open it; fuzzy search over projects (`p:`), runs & open gates (`run:`),
+ * repositories (`repo:`) and quick verbs (`>`); selecting navigates (the board's
+ * real-link contract) or executes the verb.
+ *
+ * The corpus steals nothing (§1.4): projects and gates come from already-loaded
+ * stores, runs from App's one `useRuns()`; only the repo list is fetched — once,
+ * on the first OPEN (a user gesture, never a mount), then cached for the session.
+ */
+
+const TERMINAL: ReadonlySet<string> = new Set(['completed', 'cancelled', 'failed']);
+const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
+
+type Group = 'runs' | 'projects' | 'repos' | 'verbs';
+
+const GROUP_LABEL: Record<Group, string> = {
+  runs: 'RUNS & GATES',
+  projects: 'PROJECTS',
+  repos: 'REPOSITORIES',
+  verbs: 'VERBS',
+};
+
+interface Entry {
+  id: string;
+  group: Group;
+  /** Fuzzy-matched text. Verbs match on the name after the `>`. */
+  label: string;
+  /** Mono dim context (project/status/branch). */
+  context: string;
+  /** Real-link target (href + onClick-preventDefault, deep-linkable). */
+  href?: string;
+  /** Verb execution — runs instead of navigation. */
+  action?: () => void;
+  /** Group-internal rank: lower first (gates before active before terminal). */
+  rank: number;
+}
+
+/** Session-scoped repo cache (§1.4): filled on first open, then warm. */
+let repoCache: RepoEntry[] | null = null;
+
+export function clearPaletteRepoCache(): void {
+  repoCache = null;
+}
+
+/**
+ * The two global chords App registers (§1.2) — exported so the wiring the app
+ * mounts is the wiring the unit tests exercise. Order matters: the palette
+ * toggle first (and it alone survives `paletteOpen`), the relocated kill-run
+ * (Ctrl+Shift+K, same guards + silent-fail contract as the old `useKillShortcut`)
+ * after it.
+ */
+export function paletteShortcutEntries(opts: {
+  isOpen: () => boolean;
+  setOpen: (open: boolean) => void;
+  killEligible: () => boolean;
+  kill: () => void;
+}): ShortcutEntry[] {
+  const toggle = (e: KeyboardEvent): void => {
+    e.preventDefault(); // Ctrl+P must suppress browser print
+    opts.setOpen(!opts.isOpen());
+  };
+  return [
+    {
+      id: 'palette-toggle-k',
+      chord: { key: 'k', ctrlOrMeta: true },
+      description: 'Open the command palette',
+      handler: toggle,
+      allowWhilePaletteOpen: true,
+    },
+    {
+      id: 'palette-toggle-p',
+      chord: { key: 'p', ctrlOrMeta: true },
+      description: 'Open the command palette',
+      handler: toggle,
+      allowWhilePaletteOpen: true,
+    },
+    {
+      id: 'kill-run',
+      chord: { key: 'k', ctrlOrMeta: true, shift: true },
+      description: 'Cancel the selected run',
+      guard: opts.killEligible,
+      handler: (e) => {
+        e.preventDefault();
+        opts.kill();
+      },
+    },
+  ];
+}
+
+/** Accent-highlight the fuzzy-matched characters (§1.5 — the row's only accent). */
+function highlight(label: string, positions: number[]): React.ReactNode {
+  if (positions.length === 0) return label;
+  const set = new Set(positions);
+  return label.split('').map((ch, i) =>
+    set.has(i) ? (
+      <span key={i} style={{ color: 'var(--accent)', fontWeight: 'var(--weight-semi)' }}>
+        {ch}
+      </span>
+    ) : (
+      ch
+    ),
+  );
+}
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  runs: SessionView[];
+  navigate: Navigate;
+  runPath: (id: string) => string;
+  projectId: string | null;
+  selectedRun: SessionView | null;
+  onKill: (id: string) => void;
+}
+
+export function CommandPalette({
+  open, onClose, runs, navigate, runPath, projectId, selectedRun, onKill,
+}: Props): React.ReactElement | null {
+  const [query, setQuery] = useState('');
+  const [sel, setSel] = useState(0);
+  const [repos, setRepos] = useState<RepoEntry[]>(repoCache ?? []);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
+
+  const projects = useProjectsStore((s) => s.projects);
+  const gates = useGateStore((s) => s.gates);
+
+  // Open: remember focus and focus the input; fetch the repo list only when the
+  // cache is cold (§1.4 — first open fires exactly one GET /repos; a warm cache
+  // fetches nothing at all). The query resets on CLOSE, not open, so a reopen
+  // renders empty from its first frame — a keystroke racing the open can never
+  // append to the previous session's text.
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+      setSel(0);
+      return;
+    }
+    restoreRef.current = document.activeElement as HTMLElement | null;
+    inputRef.current?.focus();
+    if (repoCache === null) {
+      api
+        .listRepos()
+        .then(({ repos: r }) => {
+          repoCache = r;
+          setRepos(r);
+        })
+        .catch(() => {
+          /* no repo surface — the group just stays empty this session */
+        });
+    } else {
+      setRepos(repoCache);
+    }
+  }, [open]);
+
+  const close = (): void => {
+    onClose();
+    restoreRef.current?.focus?.();
+  };
+
+  // ── The corpus (§1.3/§1.4): stores + props only — zero fetching here ────────
+  const { scope, needle } = useMemo(() => {
+    const q = query.trimStart();
+    if (q.startsWith('>')) return { scope: 'verbs' as const, needle: q.slice(1).trim() };
+    if (q.startsWith('p:')) return { scope: 'projects' as const, needle: q.slice(2).trim() };
+    if (q.startsWith('run:')) return { scope: 'runs' as const, needle: q.slice(4).trim() };
+    if (q.startsWith('repo:')) return { scope: 'repos' as const, needle: q.slice(5).trim() };
+    return { scope: 'all' as const, needle: q.trim() };
+  }, [query]);
+
+  const rows = useMemo(() => {
+    const status = selectedRun?.session.status ?? '';
+    const entries: Entry[] = [];
+
+    // Runs & gates — a gated run IS its gate row (deep link to #gate); rank:
+    // gates first (attention order — the list is already daemon-sorted), then
+    // active runs, terminal runs after (§1.3 prefix table).
+    for (const v of runs) {
+      const id = v.session.id;
+      const gated = v.session.status === 'awaiting_human' || gates[id] !== undefined;
+      entries.push({
+        id: `run-${id}`,
+        group: 'runs',
+        label: v.session.problem,
+        context: gated ? 'gate' : v.session.status,
+        href: gated ? `${runPath(id)}${GATE_HASH}` : runPath(id),
+        rank: gated ? 0 : ACTIVE.has(v.session.status) ? 1 : 2,
+      });
+    }
+
+    // Projects — the store the board/shell already loaded; the synthesized
+    // Unfiled bucket never renders (F5). Recency-ordered (`updated_at`): the
+    // store-reachable order — the board's decayed attention needs membership
+    // joins the palette must not fetch.
+    const visible = projects.filter((p) => p.id !== 'default' && p.status === 'active');
+    const byRecency = [...visible].sort((a, b) => b.updated_at - a.updated_at);
+    byRecency.forEach((p, i) =>
+      entries.push({
+        id: `project-${p.id}`,
+        group: 'projects',
+        label: p.name,
+        context: 'project',
+        href: projectPath(p.id),
+        rank: i,
+      }),
+    );
+
+    for (const r of repos) {
+      entries.push({
+        id: `repo-${r.id}`,
+        group: 'repos',
+        label: r.name,
+        context: r.default_branch,
+        href: `/repo-detail/${encodeURIComponent(r.id)}`,
+        rank: 0,
+      });
+    }
+
+    // Verbs (§1.3's table — each names its existing mechanism, none invents one).
+    const verbs: Array<{ name: string; action: () => void; when?: boolean }> = [
+      {
+        name: 'New Build',
+        action: () => navigate(projectId !== null ? `${modePath(projectId, 'build')}/new` : '/runs/new'),
+      },
+      {
+        name: 'New Chat',
+        action: () => navigate(projectId !== null ? `${modePath(projectId, 'chat')}/new` : '/chat/new'),
+      },
+      { name: 'New Project', action: () => setShowNewProject(true) },
+      {
+        name: 'Toggle Theme',
+        action: () => {
+          const cur = useAppearanceStore.getState().appearance.theme;
+          useAppearanceStore.getState().update({ theme: cur === 'dark' ? 'light' : 'dark' });
+        },
+      },
+      { name: 'Open Terminal', action: () => setShowTerminal(true) },
+      {
+        name: 'Cancel run',
+        when: selectedRun !== null && !TERMINAL.has(status),
+        action: () => {
+          if (selectedRun !== null) onKill(selectedRun.session.id);
+        },
+      },
+      {
+        name: 'Approve gate',
+        when: status === 'awaiting_human',
+        action: () => {
+          if (selectedRun !== null) void api.confirmGate(selectedRun.session.id, { approve: true });
+        },
+      },
+      {
+        name: 'Reject gate',
+        when: status === 'awaiting_human',
+        action: () => {
+          if (selectedRun !== null) void api.confirmGate(selectedRun.session.id, { approve: false });
+        },
+      },
+    ];
+    verbs.forEach((v, i) => {
+      if (v.when === false) return;
+      entries.push({ id: `verb-${v.name}`, group: 'verbs', label: v.name, context: 'verb', action: v.action, rank: i });
+    });
+
+    // Scope, fuzzy-rank, group (§1.3's group order; §1.5's scorer).
+    const scoped = scope === 'all' ? entries : entries.filter((en) => en.group === scope);
+    const matched = scoped
+      .map((en) => ({ en, m: fuzzyMatch(needle, en.label) }))
+      .filter((x): x is { en: Entry; m: { score: number; positions: number[] } } => x.m !== null);
+    const order: Group[] = ['runs', 'projects', 'repos', 'verbs'];
+    matched.sort((a, b) => {
+      const g = order.indexOf(a.en.group) - order.indexOf(b.en.group);
+      if (g !== 0) return g;
+      if (b.m.score !== a.m.score) return b.m.score - a.m.score;
+      return a.en.rank - b.en.rank;
+    });
+    return matched;
+  }, [runs, projects, repos, gates, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
+
+  // Clamp the selection whenever the row set changes.
+  const selIx = Math.min(sel, Math.max(0, rows.length - 1));
+
+  useEffect(() => {
+    listRef.current
+      ?.querySelector('[data-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [selIx, rows]);
+
+  const activate = (row: (typeof rows)[number] | undefined): void => {
+    if (row === undefined) return;
+    close();
+    if (row.en.action !== undefined) row.en.action();
+    else if (row.en.href !== undefined) navigate(row.en.href);
+  };
+
+  // §1.2 precedence: list-navigation keys are handled by the palette's focused
+  // input — including the toggle chords, which the registry cannot see from
+  // inside a typing context.
+  const onKeyDown = (e: React.KeyboardEvent): void => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'k' || e.key === 'p')) {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSel(Math.min(selIx + 1, rows.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSel(Math.max(selIx - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      activate(rows[selIx]);
+    } else if (e.key === 'Tab') {
+      // Cycle to the next group's first row (the hint row's "tab cycle groups").
+      e.preventDefault();
+      const cur = rows[selIx]?.en.group;
+      const next = rows.findIndex((r, i) => i > selIx && r.en.group !== cur);
+      setSel(next >= 0 ? next : 0);
+    }
+  };
+
+  return (
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex justify-center"
+          style={{ background: 'var(--scrim)', paddingTop: '15vh' }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) close();
+          }}
+        >
+          <div
+            data-testid="command-palette"
+            className="wk-palette-in flex flex-col self-start overflow-hidden"
+            style={{
+              width: 560,
+              maxHeight: 420,
+              background: 'var(--surface-overlay)',
+              boxShadow: 'var(--shadow-overlay)',
+              borderRadius: 'var(--radius-xl)',
+            }}
+          >
+            {/* input row */}
+            <div
+              className="flex items-center gap-2 px-4 py-3 shrink-0"
+              style={{ background: 'var(--surface-raised)' }}
+            >
+              <Search size={14} style={{ color: 'var(--ink-dim)' }} aria-hidden />
+              <input
+                ref={inputRef}
+                data-testid="palette-input"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setSel(0);
+                }}
+                onKeyDown={onKeyDown}
+                placeholder="type to search…  p: run: repo: >"
+                aria-label="Command palette search"
+                className="flex-1 bg-transparent outline-none"
+                style={{
+                  fontSize: 'var(--text-md)',
+                  fontFamily: 'var(--font-sans)',
+                  color: 'var(--ink-high)',
+                }}
+              />
+              <span
+                className="font-mono"
+                style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)' }}
+              >
+                esc
+              </span>
+            </div>
+
+            {/* grouped results */}
+            <div ref={listRef} role="listbox" aria-label="Palette results" className="flex-1 overflow-y-auto py-1">
+              {rows.length === 0 && (
+                <p
+                  className="px-4 py-3"
+                  style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-dim)' }}
+                >
+                  nothing matches
+                </p>
+              )}
+              {rows.map((row, i) => {
+                const first = i === 0 || rows[i - 1]?.en.group !== row.en.group;
+                const shared = {
+                  'data-testid': 'palette-row',
+                  'data-group': row.en.group,
+                  'data-selected': i === selIx ? 'true' : 'false',
+                  role: 'option',
+                  'aria-selected': i === selIx,
+                  onClick: (e: React.MouseEvent) => {
+                    e.preventDefault();
+                    activate(row);
+                  },
+                  onMouseEnter: () => setSel(i),
+                  className: 'flex w-full items-baseline gap-3 px-4 py-1.5 text-left',
+                  style: {
+                    background: i === selIx ? 'var(--accent-subtle)' : 'transparent',
+                    outline: i === selIx ? '2px solid var(--accent)' : 'none',
+                    outlineOffset: -2,
+                  } as React.CSSProperties,
+                } as const;
+                const body = (
+                  <>
+                    <span
+                      className="min-w-0 flex-1 truncate"
+                      style={{
+                        fontSize: 'var(--text-sm)',
+                        fontFamily: 'var(--font-sans)',
+                        color: 'var(--ink-high)',
+                      }}
+                    >
+                      {row.en.group === 'verbs' ? '> ' : ''}
+                      {highlight(row.en.label, row.m.positions)}
+                    </span>
+                    <span
+                      className="shrink-0 font-mono"
+                      style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
+                    >
+                      {row.en.context}
+                    </span>
+                  </>
+                );
+                return (
+                  <div key={row.en.id}>
+                    {first && (
+                      <p
+                        className="px-4 pt-2 pb-1 uppercase"
+                        style={{
+                          fontSize: 'var(--text-2xs)',
+                          fontWeight: 'var(--weight-medium)',
+                          color: 'var(--ink-dim)',
+                          letterSpacing: '0.08em',
+                        }}
+                      >
+                        {GROUP_LABEL[row.en.group]}
+                      </p>
+                    )}
+                    {row.en.href !== undefined ? (
+                      <a {...shared} href={row.en.href}>
+                        {body}
+                      </a>
+                    ) : (
+                      <button {...shared} type="button">
+                        {body}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* hint row */}
+            <p
+              className="px-4 py-2 shrink-0 font-mono"
+              style={{
+                fontSize: 'var(--text-2xs)',
+                color: 'var(--ink-dim)',
+                borderTop: '1px solid var(--surface-raised)',
+              }}
+            >
+              ↑↓ navigate · ↵ open · tab cycle groups · esc close
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* `> New Project` — the slice-A modal, unchanged */}
+      {showNewProject && (
+        <NewProjectModal navigate={(p: string) => navigate(p)} onClose={() => setShowNewProject(false)} />
+      )}
+
+      {/* `> Open Terminal` — the RightPanel pair (Modal + governed Terminal) */}
+      {showTerminal && (
+        <Modal title="Operator shell" onClose={() => setShowTerminal(false)} disableEscapeKey>
+          <Terminal cwd={selectedRun?.session.workdir ?? '.'} governed />
+        </Modal>
+      )}
+    </>
+  );
+}
