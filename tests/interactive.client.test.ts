@@ -12,6 +12,7 @@ import {
   BridgeUnavailableError,
   ServiceHintError,
   createDoc,
+  getLearnedTheme,
   getSources,
   listDemos,
   getVersions,
@@ -358,9 +359,10 @@ describe('happy-path shapes', () => {
   });
 
   it('requestThemeLearn speaks the CORRECTED wire: theme.requested over POST /api/events (issue #65)', async () => {
-    // The bridge has no theme route at all — no learn endpoint, no registry. The real
-    // learn trigger is the UI-emittable `wicked.interactive.theme.requested` bus command
-    // (materializeThemeRequested), doc-scoped exactly like demo.requested.
+    // The bridge has no learn endpoint and no theme registry. The real learn trigger is
+    // the UI-emittable `wicked.interactive.theme.requested` bus command
+    // (materializeThemeRequested), doc-scoped exactly like demo.requested; what it
+    // produced is read back per-doc via getLearnedTheme (interactive#181, below).
     const calls = stubFetch({ ok: true, event_id: 'e1', correlation_id: 'c1' });
     await requestThemeLearn(PROJECT, DOC, { kind: 'url', url: 'https://acme.example' });
     expect(calls[0]!.init?.method).toBe('POST');
@@ -379,5 +381,42 @@ describe('happy-path shapes', () => {
     const body = JSON.parse(calls[0]!.init?.body as string);
     expect(body.payload).toEqual({ document_id: DOC, path: '/brand/guide.pdf' });
     expect(body.payload).not.toHaveProperty('url');
+  });
+
+  // ── getLearnedTheme — the interactive#181 readback ──────────────────────────
+
+  it('getLearnedTheme GETs the per-doc readback route and returns the body verbatim', async () => {
+    const learned = {
+      document_id: DOC,
+      learned_at: '2026-08-21T12:00:00.000Z',
+      tokens: {
+        name: 'acme-brand',
+        colors: { background: '#f8fafc', primary: '#0a2a5e' },
+        fonts: { heading: 'Georgia', body: 'Georgia', mono: 'Menlo' },
+      },
+    };
+    const calls = stubFetch(learned);
+    const result = await getLearnedTheme(PROJECT, DOC);
+    expect(calls[0]!.init?.method ?? 'GET').toBe('GET');
+    expect(calls[0]!.url).toBe(
+      `${apiBase()}/projects/${PROJECT}/interactive/d/${DOC}/api/theme/learned`,
+    );
+    expect(result).toEqual(learned); // tokens are the learned.theme.json VERBATIM
+  });
+
+  it("getLearnedTheme resolves null on the route's own 404 {error:'no learned theme'}", async () => {
+    // The 404-with-JSON body is the not-learned-yet signal (also the corrupt-file
+    // degradation) — the poll's "keep waiting", never an exception.
+    stubFetch({ error: 'no learned theme' }, 404);
+    await expect(getLearnedTheme(PROJECT, DOC)).resolves.toBeNull();
+  });
+
+  it('getLearnedTheme still throws on any OTHER failure — unknown doc, dead bridge', async () => {
+    // An unknown doc is an express-default 404 (no JSON error to match) — a real error.
+    stubFetch('Cannot GET /d/absent/api/theme/learned', 404);
+    await expect(getLearnedTheme(PROJECT, 'absent')).rejects.toThrow(/404/);
+    // A dead bridge stays the typed 503, exactly as every other wrapper.
+    stubFetch({ code: 'bridge_unavailable', hint: 'npm i -g wicked-interactive' }, 503);
+    await expect(getLearnedTheme(PROJECT, DOC)).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 });

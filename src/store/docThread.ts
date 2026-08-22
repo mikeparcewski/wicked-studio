@@ -97,10 +97,21 @@ export function threadKey(projectId: string, docId: string): string {
 
 // ── Store ────────────────────────────────────────────────────────────────────
 
+/** One bridge-reported failure line (`status.posted {state:"error"}`), per thread.
+ *  Consumers compare entry IDENTITY (a new object per error), so "did a NEW error
+ *  arrive since I started?" needs no clock — snapshot the entry, watch it change. */
+export interface ThreadError { text: string }
+
 interface DocThreadStore {
   messages: Record<string, DocMsg[]>;
   /** What the stream last said the generation is doing, per thread. */
   genState: Record<string, GenState>;
+  /** The newest `status.posted {state:"error"}` line, per thread — what the
+   *  brand-learn poll (learnPoll.ts) reads to surface the bridge's ASYNC
+   *  refusals (the SSRF guard's, a failed grab) while it waits on the
+   *  readback route. The transcript keeps carrying the same line as a
+   *  narration message; this is an index into it, not a second author. */
+  lastError: Record<string, ThreadError>;
   /** The user message a landing version will be tagged with (§7.6, client half). */
   anchor: Record<string, string>;
   /**
@@ -145,6 +156,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
   genState: {},
   anchor: {},
   landed: {},
+  lastError: {},
 
   ingest: (event) => {
     const frame = frameOf(event);
@@ -174,14 +186,20 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         }
         const done = state === 'complete' || state === 'error';
         const next: GenState = done ? 'terminal' : was === 'gated' ? 'gated' : 'generating';
+        // An error line is ALSO indexed as the thread's newest failure (a fresh
+        // object each time — see ThreadError), so waiters can spot its arrival.
+        const failed = state === 'error' && text !== null
+          ? { lastError: { ...s.lastError, [key]: { text } } }
+          : {};
         // §3.2/§3.3: filler never reaches the transcript — rotating flavour text and a
         // subject-less `Working…` are both dropped AT THE SEAM, so an upstream bridge that
         // still speaks either cannot put it on screen. A filtered frame still carries the
         // state transition it rode in on: dropping the LINE is not dropping the fact.
-        if (text === null || isFiller(text)) return { genState: { ...s.genState, [key]: next } };
+        if (text === null || isFiller(text)) return { genState: { ...s.genState, [key]: next }, ...failed };
         return {
           messages: append(messages, key, { kind: 'narration', id: nextMsgId(), text }),
           genState: { ...s.genState, [key]: next },
+          ...failed,
         };
       }
 
@@ -306,6 +324,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       const genState = { ...s.genState }; delete genState[key];
       const anchor = { ...s.anchor }; delete anchor[key];
       const landed = { ...s.landed }; delete landed[key];
-      return { messages, genState, anchor, landed };
+      const lastError = { ...s.lastError }; delete lastError[key];
+      return { messages, genState, anchor, landed, lastError };
     }),
 }));

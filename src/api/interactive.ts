@@ -341,7 +341,9 @@ export interface LearnThemeBody {
  * Consequences the caller must design to:
  *   - the learn is DOC-SCOPED: the learned tokens land at `<doc>/theme/learned.theme.json`
  *     and every subsequent version of THAT document wears them (theme-source.js). There
- *     is no cross-doc theme registry, no theme id, and no route that reads a theme back.
+ *     is no cross-doc theme registry and no theme id; what a learn produced for THIS doc
+ *     is readable back at `GET /d/:docId/api/theme/learned` (interactive#181 —
+ *     `getLearnedTheme` below), which is what the /theme page's brand-learn flow polls.
  *   - the ack is an EventAck, not a result: progress and refusals (including the SSRF
  *     guard's) arrive async as the bridge's own `status.posted` messages in the thread.
  */
@@ -357,6 +359,46 @@ export function requestThemeLearn(
       ...(body.kind === 'url' ? { url: body.url } : { path: body.path }),
     },
   });
+}
+
+/**
+ * `GET /d/:docId/api/theme/learned` — the learned-theme READBACK
+ * (wicked-interactive#181, the wire studio#73 was waiting for).
+ *
+ * What the doc's learn produced, served through the bridge's own apply-seam
+ * resolver (`resolveLearnedTheme`), so this body is exactly what every new
+ * version of the doc will wear: `{document_id, learned_at, tokens}` where
+ * `tokens` is `<doc>/theme/learned.theme.json` VERBATIM — nested
+ * `{name, colors:{background,surface,primary,secondary,accent,text_primary,…},
+ * fonts:{heading,body,mono}, …}`, partials legal. `learned_at` is the file's
+ * mtime (advisory; null when unstattable).
+ *
+ * Resolves `null` on the route's own `404 {"error":"no learned theme"}` —
+ * the doc exists but no learn has landed (or the file is corrupt, which the
+ * apply seam degrades past identically). Every OTHER failure still throws:
+ * an unknown doc is an express-default 404 with no JSON error to match, a
+ * dead bridge is the usual typed 503.
+ */
+export function getLearnedTheme(
+  projectId: string,
+  docId: string,
+): Promise<LearnedTheme | null> {
+  return iFetch<LearnedTheme>(`${docBase(projectId, docId)}/api/theme/learned`)
+    .catch((e: unknown) => {
+      if (e instanceof Error && e.message === 'API 404: no learned theme') return null;
+      throw e;
+    });
+}
+
+/** `GET /d/:docId/api/theme/learned`'s 200 body (interactive#181). */
+export interface LearnedTheme {
+  document_id: string;
+  /** ISO mtime of the learned file — advisory, null when unstattable. */
+  learned_at: string | null;
+  /** The learned.theme.json object verbatim. The bridge owns this vocabulary
+   *  (it is the same object `themed()` applies), so studio reads it TOLERANTLY
+   *  — `adaptLearnedTokens` narrows it — rather than pinning a shape here. */
+  tokens: Record<string, unknown>;
 }
 
 /**
