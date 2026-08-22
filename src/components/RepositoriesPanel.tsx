@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { Project, RepoEntry, SessionView } from '../api/types.js';
+import { useMembershipStore } from '../store/membership.js';
+import { TileBand } from './DashboardTiles.js';
+import { MetricTile } from './MetricTile.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 
@@ -35,20 +38,144 @@ const inputCss: React.CSSProperties = {
   width: '100%',
 };
 
-function StatCard({ label, value, hint }: { label: string; value: number; hint?: string }): React.ReactElement {
+// ── The §4.4 reporting tiles (DES-FEEDBACK-003, slice P) ──────────────────────
+//
+// Every number derives from data this page ALREADY fetches (its own
+// `GET /repos` + `GET /runs`) or the membership mirror the board model keeps
+// warm — the tiles never cost a request. Runs are placed in time on the
+// membership attach clock (the one honest per-run clock; `AgentSession`
+// carries no timestamps), exactly as every other dashboard buckets; runs the
+// mirror cannot place inside the window are excluded, never painted at an
+// invented time. Per-repo language bars stay on the detail page (§4.4: a
+// cross-repo language wall answers no asked question — rejected per EC19).
+
+const DAY_MS = 86_400_000;
+const TILE_W = 168;
+const TILE_H = 26;
+const TOP_REPOS = 6;
+
+/** Group in-window runs by `repo_ref`, joined to display names via the page's
+ *  repo list; count desc. Runs without a repo_ref or an in-window attach
+ *  clock are excluded (and reported by the callers' data attributes). */
+function groupByRepo(
+  runs: SessionView[],
+  repos: RepoEntry[],
+  attachedAt: Record<string, number>,
+  windowMs: number,
+  at: number,
+): Array<{ id: string; name: string; count: number }> {
+  const names = new Map(repos.map((r) => [r.id, r.name]));
+  const counts = new Map<string, number>();
+  for (const v of runs) {
+    const ref = v.session.repo_ref;
+    if (ref === null) continue;
+    const clock = attachedAt[v.session.id];
+    if (clock === undefined || clock < at - windowMs || clock > at) continue;
+    counts.set(ref, (counts.get(ref) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, name: names.get(id) ?? id, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+/** §4.4 row 1 — "Where is the work concentrating?": 7d runs per repo, top 6,
+ *  horizontal bars. */
+function RunsPerRepoTile({ runs, repos, attachedAt, now }: {
+  runs: SessionView[];
+  repos: RepoEntry[];
+  attachedAt: Record<string, number>;
+  now?: number;
+}): React.ReactElement {
+  const at = now ?? Date.now();
+  const grouped = useMemo(
+    () => groupByRepo(runs, repos, attachedAt, 7 * DAY_MS, at),
+    [runs, repos, attachedAt, at],
+  );
+  const top = grouped.slice(0, TOP_REPOS);
+  const placed = grouped.reduce((a, g) => a + g.count, 0);
+  const max = top[0]?.count ?? 0;
+  const rowH = TILE_H / Math.max(1, top.length);
   return (
-    <div
-      className="rounded-2xl p-5 flex flex-col gap-1"
-      style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+    <MetricTile
+      testId="runs-per-repo-tile"
+      question="Where is the work concentrating?"
+      title="Runs per repo (7d)"
+      value={top.length === 0 ? 'no repo-linked runs in 7d' : `${top[0]!.name} leads (${top[0]!.count})`}
+      data={{ 'data-total': placed, 'data-repos': grouped.length }}
     >
-      <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'var(--ink-dim)' }}>
-        {label}
-      </p>
-      <p className="text-3xl font-mono font-bold" style={{ color: 'var(--ink-high)' }}>{value}</p>
-      {hint && (
-        <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{hint}</p>
+      {top.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
+          No runs carried a repo in the last 7 days.
+        </p>
+      ) : (
+        <svg
+          width="100%"
+          height={TILE_H}
+          viewBox={`0 0 ${TILE_W} ${TILE_H}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={`runs per repo, 7d: ${top.map((g) => `${g.name} ${g.count}`).join(', ')}`}
+          style={{ display: 'block' }}
+        >
+          {top.map((g, i) => (
+            <rect
+              key={g.id}
+              x={0}
+              y={i * rowH + 1}
+              width={(g.count / max) * TILE_W}
+              height={Math.max(2, rowH - 2)}
+              rx={1}
+              fill="var(--accent)"
+            >
+              <title>{`${g.name}: ${g.count}`}</title>
+            </rect>
+          ))}
+        </svg>
       )}
-    </div>
+    </MetricTile>
+  );
+}
+
+/** §4.4 row 3 — "Is any repo a failure hotspot?": 24h failed runs by repo. */
+function FailingReposTile({ runs, repos, attachedAt, now }: {
+  runs: SessionView[];
+  repos: RepoEntry[];
+  attachedAt: Record<string, number>;
+  now?: number;
+}): React.ReactElement {
+  const at = now ?? Date.now();
+  const failing = useMemo(
+    () => groupByRepo(
+      runs.filter((v) => v.session.status === 'failed'),
+      repos, attachedAt, DAY_MS, at,
+    ),
+    [runs, repos, attachedAt, at],
+  );
+  const failures = failing.reduce((a, g) => a + g.count, 0);
+  return (
+    <MetricTile
+      testId="failing-repos-tile"
+      question="Is any repo a failure hotspot?"
+      title="Failing repos (24h)"
+      value={failing.length === 0 ? 'none' : `${failures} failed in ${failing.length} repo${failing.length === 1 ? '' : 's'}`}
+      data={{ 'data-count': failing.length, 'data-failures': failures }}
+    >
+      {failing.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
+          No repo-linked failures in the last 24h.
+        </p>
+      ) : (
+        <p
+          style={{
+            margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--status-fail)',
+            fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {failing.map((g) => `${g.name} (${g.count})`).join(' · ')}
+        </p>
+      )}
+    </MetricTile>
   );
 }
 
@@ -58,7 +185,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [trackedCount, setTrackedCount] = useState(0);
+  // Attach clocks off the membership mirror (the board model keeps it warm) —
+  // a store read, never a request (§4.4: tiles derive from data already held).
+  const attachedAt = useMembershipStore((s) => s.attachedAtByRun);
 
   const [rerunning, setRerunning] = useState<Record<string, boolean>>({});
   const [rerunError, setRerunError] = useState<Record<string, string>>({});
@@ -103,14 +232,6 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (repos.length === 0) { setTrackedCount(0); return; }
-    let cancelled = false;
-    Promise.all(repos.map(r => api.getRepoGraph(r.id).then(({ graph }) => graph != null).catch(() => false)))
-      .then(flags => { if (!cancelled) setTrackedCount(flags.filter(Boolean).length); });
-    return () => { cancelled = true; };
-  }, [repos]);
 
   function deriveName(value: string): void {
     if (nameEditedRef.current) return;
@@ -357,20 +478,32 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
       </div>
 
       <div className="px-8 pb-10">
-        {/* ── Stats row ── */}
+        {/* ── The reporting band (§4.4, EC19/EC28): three tiles ABOVE the
+               register, from data this page already fetched + the membership
+               mirror — never a new request. The old stat cards (numbers
+               without named questions) are superseded by this band; their
+               Total Repos count lives on in the repo-count tile, and the
+               Tracked card's per-repo graph fan-out on mount is retired with
+               it (a mount cost the fetch budget bans). ── */}
         {!loading && !error && (
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <StatCard label="Total Repos" value={repos.length} hint="registered with wicked-crew" />
-            <StatCard
-              label="Active Runs"
-              value={activeRuns.length}
-              hint={activeRuns.length === 1 ? '1 run in progress' : `${activeRuns.length} runs in progress`}
-            />
-            <StatCard
-              label="Tracked"
-              value={trackedCount}
-              hint="onboarded and graph-indexed"
-            />
+          <div className="mb-6">
+            <TileBand testId="repos-dashboard-tiles">
+              <RunsPerRepoTile runs={runs} repos={repos} attachedAt={attachedAt} />
+              <MetricTile
+                testId="repo-count-tile"
+                question="Is the estate growing?"
+                title="Repositories"
+                value={repos.length === 0 ? 'none registered' : `${repos.length} registered`}
+                data={{ 'data-count': repos.length }}
+              >
+                <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
+                  {repos.length === 0
+                    ? 'Register the first repository to grow the estate.'
+                    : `newest: ${relativeTime(Math.max(...repos.map((r) => r.registered_at)))}`}
+                </p>
+              </MetricTile>
+              <FailingReposTile runs={runs} repos={repos} attachedAt={attachedAt} />
+            </TileBand>
           </div>
         )}
 
@@ -411,7 +544,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
           </p>
         ) : (
           /* Repo cards grid */
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4" data-testid="repos-list">
             {filteredRepos.map((repo) => {
               const activeCount = repoActiveRunCount(repo.id);
               const isRerunning = rerunning[repo.id] ?? false;
@@ -419,6 +552,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
               return (
                 <div
                   key={repo.id}
+                  data-testid="repo-card"
+                  data-repo-id={repo.id}
                   className="rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-colors"
                   style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
                   onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
