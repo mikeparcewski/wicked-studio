@@ -1,7 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { Project } from '../api/types.js';
+import type { Project, SessionView } from '../api/types.js';
+import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
+import { useGateStore } from '../store/gates.js';
 import { useProjectsStore } from '../store/projects.js';
+import { GatesWaitingTile, TileBand } from './DashboardTiles.js';
+import { MetricTile } from './MetricTile.js';
+import { ProjectSparkline } from './ProjectSparkline.js';
+import { RunOutcomeBar } from './RunOutcomeBar.js';
 
 const S = {
   bg:     'var(--surface-base)',
@@ -132,7 +138,69 @@ function CreateProjectForm({ onCreated, onCancel }: { onCreated: (p: Project) =>
   );
 }
 
-function ProjectCard({ project, onClick }: { project: Project; onClick: () => void }): React.ReactElement {
+// ── The attention-split tile (DES-FEEDBACK-003 §4.1 row 1, slice P) ───────────
+
+const SPLIT_W = 168;
+const SPLIT_H = 26;
+const BAR_H = 10;
+
+/**
+ * "How much of my estate needs me?" — the board model's OWN bands, counted,
+ * as a proportional bar (needs-you vs quiet). The bands are read, never
+ * re-derived (C3): `/projects` reports the split; the wall itself stays on `/`
+ * (§4.1's landing-vs-register line — this dashboard never re-implements bands).
+ */
+function AttentionSplitTile({ items }: { items: BoardProject[] }): React.ReactElement {
+  const needsYou = items.filter((i) => i.band === 'needs-you').length;
+  const quiet = items.length - needsYou;
+  const total = items.length;
+  return (
+    <MetricTile
+      testId="attention-split-tile"
+      question="How much of my estate needs me?"
+      title="Attention split"
+      value={total === 0 ? 'no projects yet' : `${needsYou} need you · ${quiet} quiet · ${total} total`}
+      data={{ 'data-needs-you': needsYou, 'data-quiet': quiet, 'data-total': total }}
+    >
+      {total === 0 ? (
+        <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
+          Nothing on the board yet.
+        </p>
+      ) : (
+        <svg
+          width="100%"
+          height={SPLIT_H}
+          viewBox={`0 0 ${SPLIT_W} ${SPLIT_H}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={`attention split: ${needsYou} need you, ${quiet} quiet, of ${total}`}
+          style={{ display: 'block' }}
+        >
+          {needsYou > 0 && (
+            <rect
+              x={0} y={(SPLIT_H - BAR_H) / 2}
+              width={(needsYou / total) * SPLIT_W} height={BAR_H} rx={2}
+              fill="var(--status-gate)"
+            />
+          )}
+          {quiet > 0 && (
+            <rect
+              x={(needsYou / total) * SPLIT_W} y={(SPLIT_H - BAR_H) / 2}
+              width={(quiet / total) * SPLIT_W} height={BAR_H} rx={2}
+              fill="var(--ink-dim)"
+            />
+          )}
+        </svg>
+      )}
+    </MetricTile>
+  );
+}
+
+function ProjectCard({ project, onClick, sparkline }: {
+  project: Project;
+  onClick: () => void;
+  sparkline?: React.ReactNode;
+}): React.ReactElement {
   const [hovered, setHovered] = useState(false);
   const isArchived = project.status === 'archived';
   const isDefault = project.id === 'default';
@@ -140,6 +208,9 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
   return (
     <button
       type="button"
+      data-testid="project-card"
+      data-project-id={project.id}
+      data-status={project.status}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -181,6 +252,14 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
                 default
               </span>
             )}
+            {/* The 7-day activity sparkline (§4.1) — the list half of
+                "combined list and reporting". Absent when the board holds no
+                in-window runs for this project (absence stays absent). */}
+            {sparkline != null && (
+              <span style={{ marginLeft: 'auto', flexShrink: 0, display: 'inline-flex' }}>
+                {sparkline}
+              </span>
+            )}
           </div>
           {project.description && (
             <p style={{
@@ -202,22 +281,66 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
 }
 
 interface Props {
+  runs: SessionView[];
   navigate: (path: string) => void;
 }
 
-export function ProjectsPage({ navigate }: Props): React.ReactElement {
-  const { projects, loading, error, load, addProject } = useProjectsStore();
+export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
+  // The COMPLETE register (DES-FEEDBACK-003 §4.1: "/projects is the REGISTER —
+  // every project, complete") is held locally: the shared projects store is
+  // also the board model's mirror target (active, non-default only), so a
+  // store read here could lose the archived rows to a mirror write mid-race.
+  // One GET, page-owned; creates land in both the register and the store.
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    api.listProjects()
+      .then(({ projects: all }) => { if (!cancelled) { setProjects(all); setLoading(false); } })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // The reporting half (§4.1): the board's own model — bands read, never
+  // re-derived (C3); its per-project attach clocks feed the row sparklines
+  // and, merged, the 24h outcome bar (the honest clock, reused).
+  const board = useBoardModel(runs);
+  const byProjectId = useMemo(
+    () => new Map(board.items.map((i) => [i.project.id, i])),
+    [board.items],
+  );
+  const attachedAt = useMemo(() => {
+    const merged: Record<string, number> = {};
+    for (const item of board.items) Object.assign(merged, item.attachedAt);
+    return merged;
+  }, [board.items]);
+  const gates = useGateStore((s) => s.gates);
+  const openGates = useMemo(() => Object.values(gates), [gates]);
 
   const active = projects.filter((p) => p.status === 'active');
   const archived = projects.filter((p) => p.status === 'archived');
 
   function handleCreated(p: Project): void {
-    addProject(p);
+    setProjects((prev) => [p, ...prev.filter((x) => x.id !== p.id)]);
+    useProjectsStore.getState().addProject(p); // keep the shared corpus warm
     setShowCreate(false);
+  }
+
+  /** The row's 7-day sparkline off the board item — null when the board holds
+   *  no entry (archived / default / still loading): absence stays absent. */
+  function sparklineFor(p: Project): React.ReactNode {
+    const item = byProjectId.get(p.id);
+    if (item === undefined) return null;
+    return <ProjectSparkline runs={item.runs} attachedAt={item.attachedAt} />;
   }
 
   return (
@@ -242,6 +365,21 @@ export function ProjectsPage({ navigate }: Props): React.ReactElement {
         >
           <IconPlus /> New project
         </button>
+      </div>
+
+      {/* ── The reporting band (§4.1, EC28): three tiles ABOVE the register,
+             every number derived from state the app already holds. ── */}
+      <div style={{ marginBottom: '16px' }}>
+        <TileBand testId="projects-dashboard-tiles">
+          <AttentionSplitTile items={board.items} />
+          <RunOutcomeBar runs={runs} attachedAt={attachedAt} title="Run outcomes (24h)" />
+          <GatesWaitingTile
+            gates={openGates}
+            question="Am I the blocker anywhere?"
+            title="Gates waiting"
+            testId="gates-waiting-tile"
+          />
+        </TileBand>
       </div>
 
       {showCreate && (
@@ -275,11 +413,12 @@ export function ProjectsPage({ navigate }: Props): React.ReactElement {
       )}
 
       {active.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+        <div data-testid="projects-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
           {active.map((p) => (
             <ProjectCard
               key={p.id}
               project={p}
+              sparkline={sparklineFor(p)}
               onClick={() => navigate(`/projects/${encodeURIComponent(p.id)}`)}
             />
           ))}
@@ -306,6 +445,7 @@ export function ProjectsPage({ navigate }: Props): React.ReactElement {
                 <ProjectCard
                   key={p.id}
                   project={p}
+                  sparkline={sparklineFor(p)}
                   onClick={() => navigate(`/projects/${encodeURIComponent(p.id)}`)}
                 />
               ))}
