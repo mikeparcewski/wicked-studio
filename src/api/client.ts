@@ -522,6 +522,13 @@ export const api = {
   listProjectMembers: (id: string) =>
     apiFetch<{ members: ProjectMember[] }>(`/projects/${encodeURIComponent(id)}/members`),
 
+  /** The project's open prompt inbox (durable interaction requests) — the
+   *  per-project wire used the way it scales (DES-FEEDBACK-002 §5.2): search
+   *  mode queries it for the CURRENT project only, never as a cross-project
+   *  fan-out. */
+  listProjectPrompts: (id: string) =>
+    apiFetch<import('./types.js').ProjectPrompts>(`/projects/${encodeURIComponent(id)}/prompts`),
+
   /** Attach a member (run, chat, repo, doc …) to a project. */
   attachProjectMember: (id: string, body: AttachMemberBody) =>
     apiFetch<{ member: ProjectMember }>(`/projects/${encodeURIComponent(id)}/members`, {

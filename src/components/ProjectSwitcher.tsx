@@ -11,6 +11,17 @@ import type { Project } from '../api/types.js';
  * `onSelect(null)` means Unfiled — no `project_id` in the eventual POST body,
  * the backend default (§5.1). The component owns no data fetch: the caller
  * passes the projects it already has.
+ *
+ * Slice J (DES-FEEDBACK-002 §4) adds the header-flavored dress: a
+ * `variant="crumb"` trigger — SAME behavior, breadcrumb typography instead of
+ * the form-field box — for the project-context header's 1-click pivot. The
+ * crumb is a pivot between projects, not a binding field, so it renders no
+ * Unfiled row (Unfiled is not a project you can stand in) and marks the
+ * current project with a ✓; an optional `⌂ Project dashboard` last row keeps
+ * the dashboard reachable from the dropdown. The keyboard repair (§4.3) lands
+ * for EVERY call site: ArrowDown/ArrowUp walk the rows with real DOM focus
+ * (EC22 — the `--accent` ring rides `.wk-switcher-row` in global.css), and
+ * Escape closes and restores focus to the trigger.
  */
 
 interface Props {
@@ -31,12 +42,26 @@ interface Props {
   /** Open the list ABOVE the field — for fields docked at the viewport bottom
    *  (Chat's composer), where a downward list would fall below the fold. */
   dropUp?: boolean;
+  /** The trigger's dress (DES-FEEDBACK-002 §4.2): `field` is the slice-A/B
+   *  form-field box; `crumb` is the context header's breadcrumb typography —
+   *  same behavior, no Unfiled row, current project checked. */
+  variant?: 'field' | 'crumb';
+  /** The trigger's testid — the context header keeps `project-name` (§4.4). */
+  triggerTestId?: string;
+  /** When set, the dropdown's last row is `⌂ Project dashboard` — a real link
+   *  (`href`) that also navigates in-app via `onGo` (§4.2). */
+  dashboard?: { href: string; onGo: () => void };
 }
 
-export function ProjectSwitcher({ current, projects, onSelect, onNewProject, locked = false, onOpen, dropUp = false }: Props): React.ReactElement {
+export function ProjectSwitcher({
+  current, projects, onSelect, onNewProject, locked = false, onOpen, dropUp = false,
+  variant = 'field', triggerTestId = 'project-field', dashboard,
+}: Props): React.ReactElement {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -53,11 +78,38 @@ export function ProjectSwitcher({ current, projects, onSelect, onNewProject, loc
 
   const pick = (id: string | null): void => { onSelect(id); setOpen(false); setFilter(''); };
 
+  // §4.3's keyboard repair, every call site: the rows are real buttons/anchors,
+  // and the arrows move real DOM focus among them (EC22 — the cursor IS focus).
+  const onListKeyDown = (e: React.KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      setFilter('');
+      triggerRef.current?.focus();
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const rows = Array.from(
+      listRef.current?.querySelectorAll<HTMLElement>('.wk-switcher-row') ?? [],
+    );
+    if (rows.length === 0) return;
+    const at = rows.findIndex((r) => r === document.activeElement);
+    const next = e.key === 'ArrowDown'
+      ? rows[Math.min(at + 1, rows.length - 1)]
+      : at <= 0 ? rows[0] : rows[at - 1];
+    next?.focus();
+  };
+
+  const crumb = variant === 'crumb';
+
   return (
-    <div ref={ref} className="relative inline-block" data-testid="project-switcher">
+    <div ref={ref} className="relative inline-block" data-testid="project-switcher" onKeyDown={onListKeyDown}>
       <button
+        ref={triggerRef}
         type="button"
-        data-testid="project-field"
+        data-testid={triggerTestId}
         data-locked={locked ? 'true' : 'false'}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -66,19 +118,36 @@ export function ProjectSwitcher({ current, projects, onSelect, onNewProject, loc
           if (!open) onOpen?.();
           setOpen(!open);
         }}
-        className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80"
-        style={{
-          background: 'var(--surface-raised)', border: '1px solid var(--surface-raised)',
-          color: 'var(--ink-body)', fontFamily: 'var(--font-sans)',
-          cursor: locked ? 'default' : 'pointer',
-        }}
+        className={crumb
+          ? 'wk-crumb-trigger flex items-center gap-1 p-0'
+          : 'flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80'}
+        style={crumb
+          ? {
+              // The context header's CRUMB spec (§4.3): sans, sm, medium, muted —
+              // the exact dress the plain project-name link wore before slice J.
+              background: 'transparent', border: 'none',
+              fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)',
+              fontFamily: 'var(--font-sans)', color: 'var(--ink-muted)',
+              cursor: locked ? 'default' : 'pointer',
+            }
+          : {
+              background: 'var(--surface-raised)', border: '1px solid var(--surface-raised)',
+              color: 'var(--ink-body)', fontFamily: 'var(--font-sans)',
+              cursor: locked ? 'default' : 'pointer',
+            }}
       >
         <span className="truncate" style={{ maxWidth: '24ch' }}>{current?.name ?? 'Unfiled'}</span>
-        {!locked && <span aria-hidden style={{ color: 'var(--ink-dim)' }}>▾</span>}
+        {!locked && (
+          <span aria-hidden className={crumb ? 'wk-crumb-caret' : undefined}
+            style={{ color: crumb && open ? 'var(--ink-high)' : 'var(--ink-dim)' }}>
+            ▾
+          </span>
+        )}
       </button>
 
       {open && (
         <div
+          ref={listRef}
           role="listbox"
           data-testid="project-switcher-list"
           className={`absolute left-0 w-56 rounded-lg py-1 z-50 max-h-64 overflow-y-auto ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}
@@ -99,42 +168,70 @@ export function ProjectSwitcher({ current, projects, onSelect, onNewProject, loc
               style={{ color: 'var(--ink-body)', borderColor: 'var(--ink-dim)', caretColor: 'var(--accent)' }}
             />
           </div>
-          <button
-            type="button"
-            role="option"
-            aria-selected={current === null}
-            data-testid="project-switcher-unfiled"
-            onClick={() => pick(null)}
-            className="w-full text-left px-3 py-1.5 text-xs font-mono transition-colors hover:bg-surface-card"
-            style={{ color: current === null ? 'var(--ink-high)' : 'var(--ink-muted)' }}
-          >
-            Unfiled
-          </button>
-          {visible.map((p) => (
+          {/* No Unfiled row in the crumb (§4.2): a pivot between projects, not a
+              binding field — Unfiled is not a project you can stand in. */}
+          {!crumb && (
             <button
-              key={p.id}
               type="button"
               role="option"
-              aria-selected={current?.id === p.id}
-              data-testid="project-switcher-option"
-              data-project-id={p.id}
-              onClick={() => pick(p.id)}
-              className="w-full text-left px-3 py-1.5 text-xs font-mono truncate transition-colors hover:bg-surface-card"
-              style={{ color: current?.id === p.id ? 'var(--ink-high)' : 'var(--ink-muted)' }}
+              aria-selected={current === null}
+              data-testid="project-switcher-unfiled"
+              onClick={() => pick(null)}
+              className="wk-switcher-row w-full text-left px-3 py-1.5 text-xs font-mono transition-colors hover:bg-surface-card"
+              style={{ color: current === null ? 'var(--ink-high)' : 'var(--ink-muted)' }}
             >
-              {p.name}
+              Unfiled
             </button>
-          ))}
+          )}
+          {visible.map((p) => {
+            const isCurrent = current?.id === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="option"
+                aria-selected={isCurrent}
+                data-testid="project-switcher-option"
+                data-project-id={p.id}
+                onClick={() => pick(p.id)}
+                className="wk-switcher-row w-full text-left px-3 py-1.5 text-xs font-mono truncate transition-colors hover:bg-surface-card"
+                style={{ color: isCurrent ? 'var(--ink-high)' : 'var(--ink-muted)' }}
+              >
+                {p.name}
+                {/* The current project renders with a ✓ (§4.2) — `--accent`,
+                    selecting it is a no-op close (the caller ignores same-id). */}
+                {crumb && isCurrent && (
+                  <span aria-hidden style={{ color: 'var(--accent)', marginLeft: '6px' }}>✓</span>
+                )}
+              </button>
+            );
+          })}
           {onNewProject !== undefined && (
             <button
               type="button"
               data-testid="project-switcher-add"
               onClick={() => { setOpen(false); onNewProject(); }}
-              className="w-full text-left px-3 py-1.5 text-xs font-mono transition-opacity hover:opacity-80"
+              className="wk-switcher-row w-full text-left px-3 py-1.5 text-xs font-mono transition-opacity hover:opacity-80"
               style={{ color: 'var(--accent)', borderTop: '1px solid var(--surface-card)' }}
             >
               + New project
             </button>
+          )}
+          {/* The dashboard link the name used to be does not vanish (§4.2): the
+              dropdown's last row keeps it — a REAL link, middle-clickable. */}
+          {dashboard !== undefined && (
+            <a
+              data-testid="switcher-dashboard-row"
+              href={dashboard.href}
+              onClick={(e) => { e.preventDefault(); setOpen(false); setFilter(''); dashboard.onGo(); }}
+              className="wk-switcher-row block w-full text-left px-3 py-1.5 text-xs font-mono transition-opacity hover:opacity-80"
+              style={{
+                color: 'var(--ink-muted)', textDecoration: 'none',
+                borderTop: '1px solid var(--surface-card)',
+              }}
+            >
+              ⌂ Project dashboard
+            </a>
           )}
         </div>
       )}

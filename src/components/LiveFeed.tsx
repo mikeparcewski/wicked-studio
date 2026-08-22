@@ -48,20 +48,32 @@ const CSS = {
     fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', textDecoration: 'none',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
+  // Base ink lives on `.wk-feed-link` (global.css) so the §10.1 hover lift —
+  // --ink-body → --ink-high — can win; the failure line overrides it inline.
   line: {
-    fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--ink-body)',
+    fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
     margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
-type Link = (path: string) => { href: string; onClick: (e: React.MouseEvent) => void };
+/** Real-link props for a run's view (§10.1): href + in-app onClick. */
+type Link = (runId: string) => { href: string; onClick: (e: React.MouseEvent) => void };
+
+/** Real-link props for an arbitrary path (the block header's project link). */
+type PathLink = (path: string) => { href: string; onClick: (e: React.MouseEvent) => void };
 
 /**
  * One moving run's narration window: the newest distinct lines of its active
  * unit's delta buffer, newest first; before any output has streamed, the run's
  * headline (§3.4(b)) — a truthful subject, never a blank block.
+ *
+ * Since slice J (DES-FEEDBACK-002 §10.1) every line is the same real link the
+ * failure line already was: an anchor to the run's view — middle-clickable,
+ * deep-linkable. The operator sees a run narrating and CAN click the words.
+ * No underline at rest (mono narration must not read as prose links); hover
+ * lifts the ink and fades in the ↗ at line-end (`.wk-feed-link`, global.css).
  */
-function RunLines({ view, max }: { view: SessionView; max: number }): React.ReactElement {
+function RunLines({ view, max, link }: { view: SessionView; max: number; link: Link }): React.ReactElement {
   const runId = view.session.id;
   const ord = activeUnit(view)?.ord ?? 0;
   const text = useRuntimeStore((s) => s.outputs[outputKey(runId, ord)]);
@@ -73,16 +85,18 @@ function RunLines({ view, max }: { view: SessionView; max: number }): React.Reac
       {shown.map((line) => (
         // Keyed by content: a NEW line remounts and plays the §1.6 fade-in once;
         // a repeated frame carrying the same status is the same element, no motion.
-        <p
+        <a
           key={line}
+          {...link(runId)}
           data-testid="feed-line"
           data-run-id={runId}
           title={line}
-          className="wk-feed-line"
+          className="wk-feed-line wk-feed-link"
           style={CSS.line}
         >
           {line}
-        </p>
+          <span aria-hidden className="wk-feed-goto">↗</span>
+        </a>
       ))}
     </>
   );
@@ -94,10 +108,13 @@ function FeedBlock({ item, navigate }: { item: BoardProject; navigate: Navigate 
   const failing = signal !== null && signal.kind === 'failing'
     ? runs.find((v) => v.session.status === 'failed')
     : undefined;
-  const link: Link = (path) => ({
+  const pathLink: PathLink = (path) => ({
     href: path,
     onClick: (e) => { e.preventDefault(); navigate(path); },
   });
+  // §10.1: MOVING runs are build runs today — the run-kind rule applies if the
+  // feed ever narrates a chat thread.
+  const runLink: Link = (runId) => pathLink(modePath(project.id, 'build', runId));
   return (
     <section
       data-testid={`live-feed-block-${project.id}`}
@@ -109,26 +126,30 @@ function FeedBlock({ item, navigate }: { item: BoardProject; navigate: Navigate 
           aria-hidden
           style={{ ...CSS.dot, background: signal !== null ? SIGNAL_BAR[signal.kind] : 'var(--ink-dim)' }}
         />
-        <a {...link(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>
+        {/* The block header keeps its project-level link — two altitudes, both real. */}
+        <a {...pathLink(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>
       </p>
       {moving.slice(0, MAX_RUNS).map((v, i) => (
-        <RunLines key={v.session.id} view={v} max={i === 0 ? MAX_LINES : 1} />
+        <RunLines key={v.session.id} view={v} max={i === 0 ? MAX_LINES : 1} link={runLink} />
       ))}
       {failing !== undefined && signal !== null && (
-        <p
+        // §10.1: the whole failure line is now the run link (anchors don't
+        // nest); `[open run]` stays as the visible affordance inside it.
+        <a
+          {...runLink(failing.session.id)}
           data-testid="feed-line"
           data-run-id={failing.session.id}
+          className="wk-feed-link"
           style={{ ...CSS.line, color: 'var(--status-fail)' }}
         >
           failed {ago(signal.at)} ago
-          <a
-            {...link(modePath(project.id, 'build', failing.session.id))}
+          <span
             data-testid="feed-open-run"
             style={{ marginLeft: '6px', color: 'var(--status-fail)', textDecoration: 'underline' }}
           >
             [open run]
-          </a>
-        </p>
+          </span>
+        </a>
       )}
     </section>
   );

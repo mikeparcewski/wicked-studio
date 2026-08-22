@@ -9,6 +9,7 @@ import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import { useTriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useGateStore } from '../store/gates.js';
 import { useProjectsStore } from '../store/projects.js';
+import { getCachedRepos } from '../store/repoCache.js';
 import { GateChip } from './GateChip.js';
 import { GateRejectNote } from './GateRejectNote.js';
 import { MODE_LABEL } from './ProjectShell.js';
@@ -123,6 +124,10 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   // honest per-run clock this wire carries; `AgentSession` has no timestamps).
   const [memberKinds, setMemberKinds] = useState<Record<string, string>>({});
   const [attachedAt, setAttachedAt] = useState<Record<string, number>>({});
+  // Slice J (DES-FEEDBACK-002 §10.2): the same read already returns the
+  // project's `crew.repo` members — the wire grammar names the kind — and the
+  // RUN_KINDS filter used to drop them on the floor. Zero new requests.
+  const [repoRefs, setRepoRefs] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
     api.listProjectMembers(projectId)
@@ -130,13 +135,19 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         if (cancelled) return;
         const kinds: Record<string, string> = {};
         const at: Record<string, number> = {};
+        const repos: string[] = [];
         for (const m of members) {
+          if (m.member_kind === 'crew.repo') {
+            repos.push(m.member_ref);
+            continue;
+          }
           if (!RUN_KINDS.has(m.member_kind)) continue;
           kinds[m.member_ref] = m.member_kind;
           at[m.member_ref] = m.attached_at;
         }
         setMemberKinds(kinds);
         setAttachedAt(at);
+        setRepoRefs(repos);
       })
       .catch(() => { /* members unreadable — the tiles simply stay empty */ });
     return () => { cancelled = true; };
@@ -260,6 +271,36 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         <p style={CSS.meta} data-testid="dashboard-meta">
           last activity {ago(lastActivity)} ago · {openRuns.length} open {openRuns.length === 1 ? 'run' : 'runs'}
         </p>
+        {/* ── Slice J (§10.2): bound repos in the header's meta-line region —
+            not a fifth tile (the 2×2 grid is a load-bearing §4.1 shape). Names
+            resolve from the SAME session repo cache the palette holds (§1.4) —
+            never a fetch; an unresolvable ref renders the raw ref in --ink-dim
+            (membership is the truth even when the repo listing lags). Zero
+            repos = the row is absent (empty-state budget). ── */}
+        {repoRefs.length > 0 && (
+          <p data-testid="dashboard-repos" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', margin: '6px 0 0' }}>
+            {repoRefs.map((ref) => {
+              const known = getCachedRepos()?.find((r) => r.id === ref || r.name === ref);
+              return (
+                <a
+                  key={ref}
+                  {...link(`/repo-detail/${encodeURIComponent(known?.id ?? ref)}`)}
+                  data-testid="dashboard-repo"
+                  data-repo-ref={ref}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
+                    color: known !== undefined ? 'var(--ink-muted)' : 'var(--ink-dim)',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <span aria-hidden>⬡</span>
+                  {known?.name ?? ref}
+                </a>
+              );
+            })}
+          </p>
+        )}
       </header>
 
       <div style={CSS.grid}>

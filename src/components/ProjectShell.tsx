@@ -8,6 +8,7 @@ import {
 } from '../store/readiness.js';
 import { InstallGate } from './InstallGate.js';
 import { ModeSwitcher } from './ModeSwitcher.js';
+import { ProjectSwitcher } from './ProjectSwitcher.js';
 
 // The shell's breadcrumb bar is chrome (DES-VISION-001 §5.2: breadcrumb, mode
 // switcher, mode surface, connection status) — token-resolved per §2.11.
@@ -75,7 +76,8 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
     [navigate, projectId],
   );
 
-  const name = projects.find((p) => p.id === projectId)?.name ?? projectId;
+  const project = projects.find((p) => p.id === projectId) ?? null;
+  const name = project?.name ?? projectId;
 
   // ── The merged readiness model (§5.6, slice 17) ───────────────────────────
   usePreflight(projectId);
@@ -117,16 +119,40 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
         >
           ‹ Projects
         </button>
-        {/* The project name is CONTEXT, not the current focus (§4.2): muted ink,
-            and a real link — deep-linkable, middle-clickable — to the dashboard. */}
+        {/* The project name is CONTEXT, not the current focus (§4.2): muted ink —
+            and since slice J (DES-FEEDBACK-002 §4) it is the ProjectSwitcher's
+            trigger in the crumb dress: 1-click pivot to a sibling project
+            RETAINING the current mode verb. Selecting a sibling navigates to
+            `modePath(nextId, mode)` — the SAME verb, no artifact id (the
+            artifact belongs to the old project; carrying it would 404 or worse,
+            silently show the wrong project's run). Selecting the current
+            project is a no-op close. Zero requests: the projects store is
+            already warm (loaded above) — no `onOpen` is passed. */}
+        <ProjectSwitcher
+          variant="crumb"
+          triggerTestId="project-name"
+          current={project ?? { id: projectId, name, description: null, status: 'active', scope: '', created_at: 0, updated_at: 0 }}
+          projects={projects}
+          onSelect={(nextId) => {
+            if (nextId === null || nextId === projectId) return;
+            navigate(modePath(nextId, mode));
+          }}
+          dashboard={{
+            href: projectPath(projectId),
+            onGo: () => navigate(projectPath(projectId)),
+          }}
+        />
+        {/* The deep-linkable-real-link contract (DES-FEEDBACK-001 §4.2) the
+            name used to carry: a small ⌂ directly after it stays a REAL link —
+            middle-clickable — to the project dashboard. */}
         <a
-          data-testid="project-name"
+          data-testid="project-home"
           href={projectPath(projectId)}
           onClick={(e) => { e.preventDefault(); navigate(projectPath(projectId)); }}
           title={`${name} — project dashboard`}
-          style={{ ...CRUMB, color: S.muted, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          style={{ ...CRUMB, color: S.dim, textDecoration: 'none' }}
         >
-          {name}
+          ⌂
         </a>
         <span aria-hidden style={{ ...CRUMB, color: S.dim }}>›</span>
         <span data-testid="context-mode" style={{ ...CRUMB, color: S.ink }}>

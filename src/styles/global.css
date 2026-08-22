@@ -183,3 +183,24 @@ code, pre, .font-mono {
 /* Slice-H inline reject note (DES-FEEDBACK-002 §2.3/§2.5): the placeholder
    reads --ink-dim — a pseudo-element needs CSS, so the rule lives here. */
 .wk-reject-note::placeholder { color: var(--ink-dim); }
+
+/* Slice-J switcher keyboard repair (DES-FEEDBACK-002 §4.3, EC22): the arrows
+   move REAL DOM focus among the dropdown's rows, and focus wears the visible
+   --accent ring — the cursor is focus, on every ProjectSwitcher call site. */
+.wk-switcher-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Slice-J feed deep-links (DES-FEEDBACK-002 §10.1): every narration line is a
+   real link to its run. No underline at rest — mono narration must not read
+   as prose links — the affordance whisper is the hover ink lift plus an ↗
+   glyph fading in at --dur-instant at line-end. */
+.wk-feed-link       { color: var(--ink-body); text-decoration: none; display: block; }
+.wk-feed-link:hover { color: var(--ink-high); }
+.wk-feed-goto {
+  opacity: 0;
+  transition: opacity var(--dur-instant) var(--ease-out);
+  margin-left: 4px;
+}
+.wk-feed-link:hover .wk-feed-goto { opacity: 1; }
