@@ -11,6 +11,7 @@ import { useAppearanceStore } from '../theming/appearance.js';
 import { decideGate, GATE_HASH } from '../board/gateActions.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { Modal } from './Modal.js';
+import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { Terminal } from './Terminal.js';
 
 /**
@@ -134,6 +135,10 @@ export function CommandPalette({
   const [repos, setRepos] = useState<RepoEntry[]>(getCachedRepos() ?? []);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
+  // `> New Document` / `> New Video` outside a project (DES-FEEDBACK-003 §8.4):
+  // a doc lives in a project, so the verb opens the same project-picker stage
+  // the Make ＋ fork uses (§3.4) before navigating into the mode.
+  const [pickProjectFor, setPickProjectFor] = useState<'document' | 'video' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
@@ -233,6 +238,30 @@ export function CommandPalette({
       {
         name: 'New Chat',
         action: () => navigate(projectId !== null ? `${modePath(projectId, 'chat')}/new` : '/chat/new'),
+      },
+      // The §3.4 fork's other two tines (DES-FEEDBACK-003 §8.4, slice N): the
+      // palette and Make's ＋ agree on what can be made. Inside a project shell
+      // the verb lands directly in the mode; outside, a doc cannot be Unfiled,
+      // so the same project-picker mechanism as the Make ＋ runs first.
+      {
+        name: 'New Document',
+        action: () => {
+          if (projectId !== null) navigate(modePath(projectId, 'document'));
+          else {
+            if (projects.length === 0) void useProjectsStore.getState().load();
+            setPickProjectFor('document');
+          }
+        },
+      },
+      {
+        name: 'New Video',
+        action: () => {
+          if (projectId !== null) navigate(modePath(projectId, 'video'));
+          else {
+            if (projects.length === 0) void useProjectsStore.getState().load();
+            setPickProjectFor('video');
+          }
+        },
       },
       { name: 'New Project', action: () => setShowNewProject(true) },
       {
@@ -485,6 +514,31 @@ export function CommandPalette({
       {/* `> New Project` — the slice-A modal, unchanged */}
       {showNewProject && (
         <NewProjectModal navigate={(p: string) => navigate(p)} onClose={() => setShowNewProject(false)} />
+      )}
+
+      {/* `> New Document` / `> New Video` outside a project — the Make ＋ fork's
+          project-picker stage (§3.4/§8.4): pick a project, land in its mode. */}
+      {pickProjectFor !== null && (
+        <Modal
+          title={pickProjectFor === 'video' ? 'New video' : 'New document'}
+          onClose={() => setPickProjectFor(null)}
+        >
+          <div className="flex flex-col gap-2" data-testid="palette-project-stage">
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-sans)', margin: 0 }}>
+              {`A ${pickProjectFor} lives in a project — pick one:`}
+            </p>
+            <ProjectSwitcher
+              current={null}
+              projects={projects}
+              onSelect={(pid) => {
+                if (pid === null) return; // a document cannot be Unfiled (§3.4)
+                const m = pickProjectFor;
+                setPickProjectFor(null);
+                navigate(modePath(pid, m));
+              }}
+            />
+          </div>
+        </Modal>
       )}
 
       {/* `> Open Terminal` — the RightPanel pair (Modal + governed Terminal) */}

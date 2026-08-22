@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { decideGate, gateOpenPath } from '../board/gateActions.js';
 import { isSimpleGate, type OpenGate } from '../store/gates.js';
+import { useRunsPanelStore } from '../store/runsPanel.js';
 import type { Navigate } from './useRoute.js';
 import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
 
@@ -178,7 +179,10 @@ export function useTriageCursor(
         id: 'triage-clear',
         chord: { key: 'escape' },
         description: 'Clear the triage cursor',
-        guard: () => selRef.current !== null,
+        // DES-FEEDBACK-003 §5.7 Escape precedence (palette → sheet → triage):
+        // while the runs sheet is up, this entry YIELDS so the sheet's own
+        // registry entry closes it first — the selection survives the press.
+        guard: () => selRef.current !== null && !useRunsPanelStore.getState().expanded,
         handler: () => {
           setNoteFor(null);
           setSelectedKey(null);

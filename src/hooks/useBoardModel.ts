@@ -10,6 +10,7 @@ import {
   type Signal,
 } from '../board/boardAttention.js';
 import { useGateStore, type OpenGate } from '../store/gates.js';
+import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useRuntimeStore } from '../store/runtime.js';
 
@@ -152,6 +153,23 @@ interface Bindings {
 
 const EMPTY: Bindings = { runIds: new Set(), repo: null, docs: [], attachedAt: {} };
 
+/**
+ * Mirror the run→project join into the shared membership store (DES-FEEDBACK-003
+ * §5.4): the runs bottom panel shows each sheet row's project name but may fire
+ * zero requests (§5.1), so the board model — the ONE reader of the members wire —
+ * publishes the join it already fetched. Same pattern as the `useProjectsStore`
+ * mirror above: a store write of already-fetched data, never a new request.
+ */
+function mirrorMembership(projects: Project[], bindings: Record<string, Bindings>): void {
+  const map: Record<string, string> = {};
+  for (const p of projects) {
+    const b = bindings[p.id];
+    if (b === undefined) continue;
+    for (const id of b.runIds) map[id] = p.name;
+  }
+  useMembershipStore.getState().setProjectNames(map);
+}
+
 async function loadBindings(p: Project, repoNames: Map<string, string>): Promise<Bindings> {
   const [members, docs] = await Promise.all([
     api.listProjectMembers(p.id).then((r) => r.members).catch((): ProjectMember[] => []),
@@ -246,7 +264,11 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
       const entries = await Promise.all(
         active.map(async (p) => [p.id, await loadBindings(p, repoNames.current)] as const),
       );
-      if (!cancelled) setBindings(Object.fromEntries(entries));
+      if (!cancelled) {
+        const next = Object.fromEntries(entries);
+        setBindings(next);
+        mirrorMembership(active, next);
+      }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -268,7 +290,11 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
       const entries = await Promise.all(
         projects.map(async (p) => [p.id, await loadBindings(p, repoNames.current)] as const),
       );
-      if (!cancelled) setBindings(Object.fromEntries(entries));
+      if (!cancelled) {
+        const next = Object.fromEntries(entries);
+        setBindings(next);
+        mirrorMembership(projects, next);
+      }
     })();
     return () => { cancelled = true; };
   }, [runs, projects, bindings]);
