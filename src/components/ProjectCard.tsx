@@ -7,6 +7,7 @@ import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { ExportMenu } from './ExportMenu.js';
 import { GateChip } from './GateChip.js';
+import { GateRejectNote } from './GateRejectNote.js';
 import { ProjectSparkline } from './ProjectSparkline.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
@@ -268,9 +269,18 @@ function LiveLine({ view }: { view: SessionView }): React.ReactElement {
 interface Props {
   item: BoardProject;
   navigate: Navigate;
+  /** Slice H (DES-FEEDBACK-002 §2.2): the triage cursor sits on this card —
+   *  `data-kbd-selected`, real DOM focus, and the `--accent` ring (EC22). */
+  kbdSelected?: boolean;
+  /** The run whose inline reject note is open (§2.3) — replaces its chip row. */
+  rejectNoteFor?: string | null;
+  /** Close the reject note (Escape inside it, or after Enter submits). */
+  onRejectNoteClose?: (() => void) | undefined;
 }
 
-export function ProjectCard({ item, navigate }: Props): React.ReactElement {
+export function ProjectCard({
+  item, navigate, kbdSelected = false, rejectNoteFor = null, onRejectNoteClose,
+}: Props): React.ReactElement {
   const { project, repo, runs, docs, attention, band, score, signal } = item;
   const gates = useGateStore((s) => s.gates);
   // Relayed interactive status for THIS project — one line, plus the tile date it implies.
@@ -373,6 +383,12 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
   return (
     <section
       {...cardData}
+      // Slice H (§2.2, EC22): the triage cursor is REAL focus — the card takes
+      // programmatic focus (tabIndex -1, never in the tab order) and the ring
+      // is a 2px `--accent` outline (outline, not border: no layout shift).
+      tabIndex={-1}
+      data-kbd-item={project.id}
+      {...(kbdSelected ? { 'data-kbd-selected': 'true' } : {})}
       style={{
         ...CSS.card,
         maxHeight: `${ACTIVE_CARD_H}px`,
@@ -380,6 +396,8 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
         // signal kind, as color, along the whole top edge — glanceable from
         // across the wall, where the pill's word needs focus to read.
         borderTop: `2px solid ${signal !== null ? SIGNAL_BAR[signal.kind] : 'var(--status-done)'}`,
+        outline: kbdSelected ? '2px solid var(--accent)' : 'none',
+        outlineOffset: '2px',
       }}
     >
       {/* The card's own state signal, read from the RUNS rather than from `attention`:
@@ -441,6 +459,17 @@ export function ProjectCard({ item, navigate }: Props): React.ReactElement {
             const gate = gates[session.id];
             const phase = units[session.unit_ix]?.stage ?? units[units.length - 1]?.stage ?? 'planning';
             const waiting = session.status === 'awaiting_human';
+            // Slice H (§2.3): while this run's reject note is open it REPLACES
+            // the chip row; Escape inside it restores the row, firing nothing.
+            if (rejectNoteFor === session.id && waiting) {
+              return (
+                <GateRejectNote
+                  key={session.id}
+                  runId={session.id}
+                  onClose={onRejectNoteClose ?? (() => undefined)}
+                />
+              );
+            }
             return (
               // A waiting gate is ANSWERABLE, not a badge (§1.4) — so the row is a row:
               // the run link, and beside it a chip carrying its own controls. Nesting

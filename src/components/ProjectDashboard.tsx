@@ -5,9 +5,11 @@ import type { SessionView } from '../api/types.js';
 import { compareScored, scoreOf, type Signal, type SignalKind } from '../board/boardAttention.js';
 import { interactiveRootOf } from '../hooks/useBoardModel.js';
 import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
+import { useTriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useGateStore } from '../store/gates.js';
 import { useProjectsStore } from '../store/projects.js';
 import { GateChip } from './GateChip.js';
+import { GateRejectNote } from './GateRejectNote.js';
 import { MODE_LABEL } from './ProjectShell.js';
 import { ago, ATTENTION_DOT } from './ProjectCard.js';
 import { RunSparkline } from './RunSparkline.js';
@@ -211,6 +213,27 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   /** Where a run row opens: its OWN mode view — Chat for a chat thread, Build otherwise. */
   const runModeOf = (id: string): Mode => (memberKinds[id] === 'crew.chat' ? 'chat' : 'build');
 
+  // ── Slice H (DES-FEEDBACK-002 §2.2): the triage cursor walks the gate-inbox
+  // rows — the tile the surface already renders, in its order. `resetKey`
+  // clears the cursor when the dashboard pivots projects without unmounting.
+  const inboxRows = waiting.slice(0, MAX_ROWS);
+  const triageItems = useMemo<TriageItem[]>(
+    () =>
+      inboxRows.map(({ view }) => {
+        const id = view.session.id;
+        return {
+          key: id,
+          runId: id,
+          gate: gates[id],
+          openPath: modePath(projectId, runModeOf(id), id),
+          projectId,
+        };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- inboxRows/runModeOf derive from these
+    [waiting, gates, memberKinds, projectId],
+  );
+  const cursor = useTriageCursor(triageItems, navigate, projectId);
+
   return (
     <div data-testid="project-dashboard" data-project-id={projectId} style={CSS.page}>
       {/* ── Project header: name, the four mode verbs, the meta line (§4.1) ── */}
@@ -313,22 +336,44 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
             <p style={CSS.empty}>Nothing is waiting on you.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {waiting.slice(0, MAX_ROWS).map(({ view }) => {
+              {inboxRows.map(({ view }) => {
                 const id = view.session.id;
                 const gate = gates[id];
+                const selected = cursor.selectedKey === id;
                 return (
-                  <div key={id} data-testid="dashboard-gate" data-run-id={id} style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                    <span
-                      title={gate?.prompt}
-                      style={{
-                        flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap', fontSize: 'var(--text-xs)',
-                        fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
-                      }}
-                    >
-                      {gate?.prompt ?? view.session.problem}
-                    </span>
-                    <GateChip runId={id} projectId={projectId} gate={gate} navigate={navigate} />
+                  <div
+                    key={id}
+                    data-testid="dashboard-gate"
+                    data-run-id={id}
+                    // Slice H (§2.2, EC22): the cursor is real focus — the row
+                    // takes programmatic focus and the 2px `--accent` ring.
+                    tabIndex={-1}
+                    data-kbd-item={id}
+                    {...(selected ? { 'data-kbd-selected': 'true' } : {})}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0,
+                      outline: selected ? '2px solid var(--accent)' : 'none',
+                      outlineOffset: '2px',
+                    }}
+                  >
+                    {cursor.noteFor === id ? (
+                      // §2.3: the open reject note replaces the chip row.
+                      <GateRejectNote runId={id} onClose={cursor.closeNote} />
+                    ) : (
+                      <>
+                        <span
+                          title={gate?.prompt}
+                          style={{
+                            flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap', fontSize: 'var(--text-xs)',
+                            fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
+                          }}
+                        >
+                          {gate?.prompt ?? view.session.problem}
+                        </span>
+                        <GateChip runId={id} projectId={projectId} gate={gate} navigate={navigate} />
+                      </>
+                    )}
                   </div>
                 );
               })}

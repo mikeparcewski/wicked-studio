@@ -3,7 +3,9 @@ import type { SessionView } from '../api/types.js';
 import { windowRows } from '../board/boardWindow.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import type { Navigate } from '../hooks/useRoute.js';
-import { modePath } from '../hooks/useRoute.js';
+import { modePath, projectPath } from '../hooks/useRoute.js';
+import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
+import { useGateStore } from '../store/gates.js';
 import { GateLatencyChart } from './GateLatencyChart.js';
 import { LiveFeed } from './LiveFeed.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
@@ -81,14 +83,18 @@ interface Props {
   navigate: Navigate;
 }
 
-/** One band's windowed grid — same math as the pre-band board, used twice (D6). */
-function BandGrid({ items, columns, rowH, firstRow, lastRow, navigate }: {
+/** One band's windowed grid — same math as the pre-band board, used twice (D6).
+ *  The NEEDS-YOU instance also carries the slice-H triage cursor (§2.2): the
+ *  selected card's ring, its open reject note. QUIET passes nothing — the
+ *  cursor never enters the quiet band. */
+function BandGrid({ items, columns, rowH, firstRow, lastRow, navigate, cursor }: {
   items: BoardProject[];
   columns: number;
   rowH: number;
   firstRow: number;
   lastRow: number;
   navigate: Navigate;
+  cursor?: TriageCursor;
 }): React.ReactElement {
   const rows = Math.ceil(items.length / columns);
   const visible = lastRow < firstRow ? [] : items.slice(firstRow * columns, (lastRow + 1) * columns);
@@ -102,7 +108,14 @@ function BandGrid({ items, columns, rowH, firstRow, lastRow, navigate }: {
         }}
       >
         {visible.map((item) => (
-          <ProjectCard key={item.project.id} item={item} navigate={navigate} />
+          <ProjectCard
+            key={item.project.id}
+            item={item}
+            navigate={navigate}
+            kbdSelected={cursor?.selectedKey === item.project.id}
+            rejectNoteFor={cursor?.noteFor ?? null}
+            onRejectNoteClose={cursor?.closeNote}
+          />
         ))}
       </div>
     </div>
@@ -140,6 +153,29 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
 
   const needsYou = items.filter((i) => i.band === 'needs-you');
   const quiet = items.filter((i) => i.band === 'quiet');
+
+  // ── Slice H (DES-FEEDBACK-002 §2): the keyboard triage cursor ──────────────
+  // The cursor walks the NEEDS-YOU cards in the order the band already renders
+  // (attention order — reused, never re-derived). Each card's actionable gate
+  // is its LEADING waiting run — the same run whose chip leads the card.
+  const gates = useGateStore((s) => s.gates);
+  const triageItems = useMemo<TriageItem[]>(
+    () =>
+      needsYou.map((i) => {
+        const waiting = i.runs.find((v) => v.session.status === 'awaiting_human');
+        return {
+          key: i.project.id,
+          runId: waiting?.session.id ?? null,
+          gate: waiting === undefined ? undefined : gates[waiting.session.id],
+          // Enter opens what clicking the card's name opens: the dashboard.
+          openPath: projectPath(i.project.id),
+          projectId: i.project.id,
+        };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- needsYou derives from items
+    [items, gates],
+  );
+  const cursor = useTriageCursor(triageItems, navigate);
 
   const columns = Math.max(1, Math.floor((box.w || FALLBACK_W) / (MIN_COL + GAP)));
   // Each band windows over its OWN variant's fixed height (DES-UXFIX-001 §2.1.1,
@@ -277,7 +313,21 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
                 firstRow={needsWin.firstRow}
                 lastRow={needsWin.lastRow}
                 navigate={navigate}
+                cursor={cursor}
               />
+            )}
+            {/* Slice H (§2.5): the key hint, visible only while a cursor is
+                active — the band teaches the keys exactly when they matter. */}
+            {cursor.selectedKey !== null && (
+              <p
+                data-testid="triage-hint"
+                style={{
+                  fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)',
+                  fontFamily: 'var(--font-mono)', margin: '8px 0 0',
+                }}
+              >
+                j/k select · a approve · r reject · ↵ open
+              </p>
             )}
           </section>
         )}

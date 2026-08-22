@@ -8,7 +8,7 @@ import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useGateStore } from '../store/gates.js';
 import { useAppearanceStore } from '../theming/appearance.js';
-import { GATE_HASH } from './GateChip.js';
+import { decideGate, GATE_HASH } from '../board/gateActions.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { Modal } from './Modal.js';
 import { Terminal } from './Terminal.js';
@@ -261,18 +261,21 @@ export function CommandPalette({
           if (selectedRun !== null) onKill(selectedRun.session.id);
         },
       },
+      // The gate verbs answer through the ONE shared action module (slice H,
+      // §2.3): same POST, same double-submit guard, same §3.3 states as the
+      // GateChip's buttons and the triage keys.
       {
         name: 'Approve gate',
         when: status === 'awaiting_human',
         action: () => {
-          if (selectedRun !== null) void api.confirmGate(selectedRun.session.id, { approve: true });
+          if (selectedRun !== null) void decideGate(selectedRun.session.id, { approve: true });
         },
       },
       {
         name: 'Reject gate',
         when: status === 'awaiting_human',
         action: () => {
-          if (selectedRun !== null) void api.confirmGate(selectedRun.session.id, { approve: false });
+          if (selectedRun !== null) void decideGate(selectedRun.session.id, { approve: false });
         },
       },
     ];

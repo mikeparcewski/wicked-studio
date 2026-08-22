@@ -1,7 +1,12 @@
-import { useState } from 'react';
-import { api } from '../api/client.js';
-import { modePath, type Navigate } from '../hooks/useRoute.js';
-import { isSimpleGate, useGateStore, type OpenGate } from '../store/gates.js';
+import {
+  decideGate,
+  GATE_HASH,
+  gateOpenPath,
+  IDLE_GATE_ACTION,
+  useGateActionStore,
+} from '../board/gateActions.js';
+import type { Navigate } from '../hooks/useRoute.js';
+import { isSimpleGate, type OpenGate } from '../store/gates.js';
 
 /**
  * A waiting gate on a board card, rendered as an ANSWERABLE chip rather than a
@@ -23,8 +28,10 @@ import { isSimpleGate, useGateStore, type OpenGate } from '../store/gates.js';
  * NAMES the error with the controls still adjacent — clicking again is the retry.
  */
 
-/** One-shot focus intent for the thread's gate card, read by `SteeringGate`. */
-export const GATE_HASH = '#gate';
+/** One-shot focus intent for the thread's gate card, read by `SteeringGate`.
+ *  (Slice H moved the definition into `gateActions.ts` — the shared action
+ *  module — and this re-export keeps the chip's old importers working.) */
+export { GATE_HASH };
 
 // DES-VISION-001 §5.1: the gate chip is STATUS furniture, not accent — amber
 // `--status-gate` on `--status-gate-dim`, with the answer buttons in the run
@@ -68,15 +75,16 @@ interface Props {
 }
 
 export function GateChip({ runId, projectId, gate, navigate }: Props): React.ReactElement {
-  const clearGate = useGateStore((s) => s.clearGate);
-  const [busy, setBusy] = useState(false);
-  const [answered, setAnswered] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // The decision state is SHARED with the palette verbs and the triage keys
+  // (slice H, §2.3): one `decideGate` per gate, whoever fires it — so a
+  // keyboard approve shows its "answering…"/answered/error states right here
+  // on the chip, and the double-submit guard holds across input methods.
+  const { busy, answered, error } = useGateActionStore((s) => s.byGate[runId]) ?? IDLE_GATE_ACTION;
 
   if (!isSimpleGate(gate)) {
     // The gate MESSAGE is the destination, not just the run — the hash is what tells
     // the thread's gate card to scroll itself in and take focus.
-    const path = `${modePath(projectId, 'build', runId)}${GATE_HASH}`;
+    const path = gateOpenPath(projectId, runId);
     return (
       <span style={CSS.wrap}>
         <span style={CSS.label}>gate</span>
@@ -93,25 +101,11 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
     );
   }
 
-  async function answer(approve: boolean): Promise<void> {
-    // The one double-submit guard: a second click while the first POST is open, or
-    // after it landed, is dropped rather than sent (a re-sent gate decision is a 409
-    // at best and a second, unintended decision at worst).
-    if (busy || answered !== null) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api.confirmGate(runId, { approve });
-      setAnswered(approve ? 'approved' : 'rejected');
-      // Prune the local gate immediately; the run's own status follows from the
-      // daemon's frame, which is what actually moves the card (§1.4 live).
-      clearGate(runId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+  // The double-submit guard, the gate-store prune, and the §3.3 error naming
+  // all live in `decideGate` now — one implementation for every input method.
+  const answer = (approve: boolean): void => {
+    void decideGate(runId, { approve });
+  };
 
   if (answered !== null) {
     return (
@@ -132,7 +126,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
       <button
         type="button"
         data-testid={`gate-approve-${runId}`}
-        onClick={() => void answer(true)}
+        onClick={() => answer(true)}
         disabled={busy}
         title={error !== null ? 'Retry approve' : gate?.prompt ?? 'Approve this gate'}
         style={{ ...CSS.approve, opacity: busy ? 0.5 : 1 }}
@@ -142,7 +136,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
       <button
         type="button"
         data-testid={`gate-reject-${runId}`}
-        onClick={() => void answer(false)}
+        onClick={() => answer(false)}
         disabled={busy}
         title={error !== null ? 'Retry reject' : 'Reject this gate'}
         style={{ ...CSS.reject, opacity: busy ? 0.5 : 1 }}
