@@ -296,6 +296,30 @@ export const api = {
     }),
 
   /**
+   * A capped, contained file read from the run's allowed roots (crew#305:
+   * `GET /runs/:id/files?path=<absolute>`). 512 KB cap (`truncated: true` past
+   * it, first 512 KB served), NUL-in-first-8KB binary sniff (`binary: true`,
+   * `content: ""`). Error ladder: 404 unknown run / missing file, 400
+   * non-absolute or repeated `path`, 403 outside every allowed root.
+   */
+  getRunFile: (runId: string, path: string) =>
+    apiFetch<import('./types.js').RunFileContent>(
+      `/runs/${encodeURIComponent(runId)}/files?path=${encodeURIComponent(path)}`,
+    ),
+
+  /**
+   * The run worktree's unified diff against HEAD (crew#305: `GET /runs/:id/diff`,
+   * staged + unstaged, untracked appended as all-addition hunks), whole-tree or
+   * narrowed to one absolute in-worktree `path`. 1 MB output cap (`truncated`).
+   * `diff: ""` = clean tree — a real answer, not an error. 409 when the run has
+   * no workdir or it was reaped; 507 past the server's execution buffer.
+   */
+  getRunDiff: (runId: string, path?: string) =>
+    apiFetch<import('./types.js').RunDiff>(
+      `/runs/${encodeURIComponent(runId)}/diff${path === undefined ? '' : `?path=${encodeURIComponent(path)}`}`,
+    ),
+
+  /**
    * Inject a message into one or all active agent sessions (POST /runs/:id/inject).
    * `target` is either `"all"` (broadcast) or a session-specific discriminator.
    * Used by the manager dashboard's send-to-agents panel (crew#73).

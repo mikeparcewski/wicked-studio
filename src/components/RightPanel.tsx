@@ -5,6 +5,7 @@ import { useRunModel } from '../hooks/useRunModel.js';
 import type { RunModel } from '../hooks/useRunModel.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
 import { Burn } from './Burn.js';
+import { FileViewer } from './FileViewer.js';
 import { CoverageView } from './CoverageView.js';
 import { DataUsed } from './DataUsed.js';
 import { DecisionsLedger } from './DecisionsLedger.js';
@@ -54,6 +55,11 @@ type FileFeedback = 'opened' | 'copied' | 'open-failed';
 
 function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; runId: string }): React.ReactElement {
   const [feedback, setFeedback] = useState<FileFeedback | null>(null);
+  // Slice I (DES-FEEDBACK-002 §3.4): the row itself opens the INLINE viewer;
+  // external-open (↗) and copy (⧉) move to hover-revealed row-end icons —
+  // the same api.openPath / clipboard calls as before, byte-identical behavior.
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const rowRef = useRef<HTMLButtonElement | null>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current); }, []);
   const parts = path.replace(/\\/g, '/').split('/');
@@ -101,16 +107,31 @@ function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; 
       });
   }
 
+  /** Escape / ✕ closes; focus returns to the row (§3.7). */
+  function closeViewer(): void {
+    setViewerOpen(false);
+    rowRef.current?.focus();
+  }
+
+  /** A daemon WITHOUT the crew#305 routes: fall back to today's exact
+   *  behavior — the external open (which itself copy-falls-back on 404). */
+  function handleUnsupported(): void {
+    setViewerOpen(false);
+    rowRef.current?.focus();
+    handleOpen();
+  }
+
   return (
-    <li title={path} className="flex items-start gap-1.5 min-w-0">
+    <li title={path} className="group flex items-start gap-1.5 min-w-0">
       <span className="shrink-0 mt-0.5 text-[9px] font-mono select-none" style={{ color: glyphColor }}>
         {glyph}
       </span>
       <button
         type="button"
-        onClick={handleOpen}
+        ref={rowRef}
+        onClick={() => setViewerOpen(true)}
         className="min-w-0 flex-1 leading-5 font-mono text-[10px] break-all text-left transition-opacity hover:opacity-70"
-        title={`Open with system default app: ${path}`}
+        title={`View ${path}`}
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
       >
         {dir && <span style={{ color: 'var(--ink-dim)' }}>{dir}</span>}
@@ -129,20 +150,45 @@ function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; 
       </button>
       <button
         type="button"
+        onClick={handleOpen}
+        aria-label={`Open externally: ${path}`}
+        title={`Open with system default app: ${path}`}
+        className="shrink-0 mt-0.5 text-[9px] font-mono leading-5 transition-opacity hover:opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-dim)' }}
+      >
+        ↗
+      </button>
+      <button
+        type="button"
         onClick={handleCopy}
         aria-label={`Copy path ${path}`}
         title="Copy path"
-        className="shrink-0 mt-0.5 text-[9px] font-mono leading-5 transition-opacity hover:opacity-70"
+        className="shrink-0 mt-0.5 text-[9px] font-mono leading-5 transition-opacity hover:opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-dim)' }}
       >
         ⧉
       </button>
+      {viewerOpen && (
+        <FileViewer
+          runId={runId}
+          path={path}
+          defaultTab={opKind !== undefined ? 'diff' : 'file'}
+          onClose={closeViewer}
+          onUnsupported={handleUnsupported}
+        />
+      )}
     </li>
   );
 }
 
 function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
   const runId = model.session.id;
+  // Slice I: the per-run [Full diff] button at the panel header (§3.4) — the
+  // same viewer, whole-worktree diff (no path). Opens on the click, never
+  // prefetches.
+  const [fullDiffOpen, setFullDiffOpen] = useState(false);
+  const [fullDiffUnsupported, setFullDiffUnsupported] = useState(false);
+  const fullDiffBtnRef = useRef<HTMLButtonElement | null>(null);
   // Build sets of "write units" and "delete units" from governance hook fires.
   // governanceHookFired events carry toolName but not file paths, so we use a unit's
   // entire filesRead set as a proxy for "files touched by write operations".
@@ -196,6 +242,25 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Panel header: the whole-run diff affordance (§3.4) */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          ref={fullDiffBtnRef}
+          data-testid="files-full-diff"
+          onClick={() => { setFullDiffUnsupported(false); setFullDiffOpen(true); }}
+          className="text-[10px] font-mono px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
+          style={{ color: 'var(--accent)', background: 'var(--accent-subtle)' }}
+        >
+          Full diff
+        </button>
+        {fullDiffUnsupported && (
+          <span className="text-[9px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+            diff unavailable — this daemon predates the diff route
+          </span>
+        )}
+      </div>
+
       {/* Modified / Created section */}
       {(hasModified || isActive) && (
         <div>
@@ -236,6 +301,19 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
       <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
         {allFiles.size} file{allFiles.size !== 1 ? 's' : ''} total
       </p>
+
+      {fullDiffOpen && (
+        <FileViewer
+          runId={runId}
+          defaultTab="diff"
+          onClose={() => { setFullDiffOpen(false); fullDiffBtnRef.current?.focus(); }}
+          onUnsupported={() => {
+            setFullDiffOpen(false);
+            setFullDiffUnsupported(true);
+            fullDiffBtnRef.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }
