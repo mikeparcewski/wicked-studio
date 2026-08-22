@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import type { SessionView } from '../api/types.js';
-import { useTimeRange } from '../hooks/useTimeRange.js';
+import { useTimeRange, type TimeRange } from '../hooks/useTimeRange.js';
+import { useGateStore } from '../store/gates.js';
+import { useMembershipStore } from '../store/membership.js';
+import { GatesWaitingTile, TileBand } from './DashboardTiles.js';
+import { MetricTile } from './MetricTile.js';
+import { RunSparkline } from './RunSparkline.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 
 interface Props {
@@ -20,6 +25,63 @@ const terminal = (s: string): boolean =>
 export const isChatRun = (v: SessionView): boolean =>
   !v.session.workflow_id || v.session.workflow_id === 'chat';
 
+// ── The chats-over-time tile (DES-FEEDBACK-003 §4.3 row 1, slice P) ───────────
+
+const RANGE_DAYS: Record<TimeRange, number> = { '30d': 30, '60d': 60, '90d': 90 };
+const BUCKETS = 12;
+const DAY_MS = 86_400_000;
+
+/**
+ * "Is conversation increasing or drying up?" — the range-filtered chat runs,
+ * bucketed over the range's span on the membership attach clock (the one
+ * honest per-run clock; `AgentSession` carries no timestamps — the same
+ * wire-honesty note RunOutcomeBar carries). Chats the mirror cannot place in
+ * the window (unfiled, or older than the range) are excluded from the bars
+ * and counted in `data-unplaced` rather than painted at an invented time.
+ * Reads the mirror + the `runs` prop only: zero requests.
+ */
+function ChatsOverTimeTile({ chats, range, now }: {
+  chats: SessionView[];
+  range: TimeRange;
+  now?: number;
+}): React.ReactElement {
+  const attachedAt = useMembershipStore((s) => s.attachedAtByRun);
+  const at = now ?? Date.now();
+  const days = RANGE_DAYS[range];
+  const { counts, placed } = useMemo(() => {
+    const span = days * DAY_MS;
+    const start = at - span;
+    const buckets = new Array<number>(BUCKETS).fill(0);
+    let inWindow = 0;
+    for (const v of chats) {
+      const clock = attachedAt[v.session.id];
+      if (clock === undefined || clock < start || clock > at) continue;
+      const ix = Math.min(BUCKETS - 1, Math.floor(((clock - start) / span) * BUCKETS));
+      buckets[ix] = (buckets[ix] ?? 0) + 1;
+      inWindow += 1;
+    }
+    return { counts: buckets, placed: inWindow };
+  }, [chats, attachedAt, at, days]);
+
+  return (
+    <MetricTile
+      testId="chats-over-time-tile"
+      question="Is conversation increasing or drying up?"
+      title={`Chats (${range})`}
+      value={placed === 0 ? `no placed chats in ${range}` : `${placed} in ${range}`}
+      data={{ 'data-total': placed, 'data-unplaced': chats.length - placed }}
+    >
+      {placed === 0 ? (
+        <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
+          No chats with an attach clock in the window.
+        </p>
+      ) : (
+        <RunSparkline counts={counts} width={168} height={26} color="var(--accent)" />
+      )}
+    </MetricTile>
+  );
+}
+
 export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const { range, setRange, filter: filterByRange } = useTimeRange('30d');
@@ -31,13 +93,14 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
 
   const active = useMemo(() => chats.filter(v => !terminal(v.session.status)), [chats]);
 
-  // Avg units per chat session (round to 1 decimal)
-  const avgUnits = useMemo(() => {
-    if (chats.length === 0) return '—';
-    const total = chats.reduce((sum, v) => sum + v.units.length, 0);
-    const avg = total / chats.length;
-    return avg % 1 === 0 ? String(avg) : avg.toFixed(1);
-  }, [chats]);
+  // Gates from chats (§4.3 row 3): the gate store filtered to THIS partition —
+  // "Did a conversation stall on me?" is asked of every chat, not just the
+  // range-filtered slice, so the filter is the partition predicate alone.
+  const gates = useGateStore((s) => s.gates);
+  const chatGates = useMemo(() => {
+    const ids = new Set(allChats.map((v) => v.session.id));
+    return Object.values(gates).filter((g) => ids.has(g.runId));
+  }, [gates, allChats]);
 
   const filtered = useMemo(
     () => query
@@ -78,36 +141,38 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
         </div>
       </div>
 
-      {/* ── Stat cards ── */}
-      <div className="px-8 grid grid-cols-3 gap-4">
-        {([
-          { label: 'Total Chats', value: String(chats.length),  accent: undefined   },
-          { label: 'Active',      value: String(active.length), accent: 'var(--status-run)'   },
-          { label: 'Avg Units',   value: avgUnits,              accent: 'var(--accent)'   },
-        ] as const).map(s => (
-          <div
-            key={s.label}
-            className="rounded-2xl px-6 py-4"
-            style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+      {/* ── The reporting band (DES-FEEDBACK-003 §4.3, slice P): the page's
+             derived numbers promoted into the shared MetricTile dress, ABOVE
+             the untouched list (EC28); every tile answers its named question
+             (EC19); the old stat cards are superseded by this band. ── */}
+      <div className="px-8">
+        <TileBand testId="chats-dashboard-tiles">
+          <ChatsOverTimeTile chats={chats} range={range} />
+          <MetricTile
+            testId="chats-active-tile"
+            question="How many threads are warm?"
+            title="Active now"
+            value={`${active.length} of ${chats.length}`}
+            data={{ 'data-count': active.length }}
           >
             <p
-              className="text-xs font-mono uppercase tracking-widest"
-              style={{ color: 'var(--ink-dim)' }}
+              className="text-lg font-semibold leading-none"
+              style={{ margin: 0, color: active.length > 0 ? 'var(--status-run)' : 'var(--ink-dim)' }}
             >
-              {s.label}
+              {active.length}
             </p>
-            <p
-              className="text-3xl font-semibold mt-1"
-              style={{ color: s.accent ?? 'var(--ink-high)' }}
-            >
-              {s.value}
-            </p>
-          </div>
-        ))}
+          </MetricTile>
+          <GatesWaitingTile
+            gates={chatGates}
+            question="Did a conversation stall on me?"
+            title="Gates from chats"
+            testId="chats-gates-tile"
+          />
+        </TileBand>
       </div>
 
-      {/* ── List / Empty state ── */}
-      <div className="px-8 pb-8 flex flex-col gap-2">
+      {/* ── List / Empty state (untouched below the band, §4.3) ── */}
+      <div className="px-8 pb-8 flex flex-col gap-2" data-testid="chats-list">
         {filtered.length === 0 ? (
           <div
             className="rounded-2xl p-10 text-center"
@@ -137,6 +202,8 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
             <button
               key={v.session.id}
               type="button"
+              data-testid="chat-row"
+              data-run-id={v.session.id}
               onClick={() => onSelect(v.session.id)}
               className="w-full text-left rounded-2xl px-5 py-4 transition-colors"
               style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}

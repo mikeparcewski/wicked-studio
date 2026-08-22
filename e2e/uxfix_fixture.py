@@ -52,6 +52,15 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     5-frame burn drains (slice E's token-burn tile; default
                     False). Same real frame shape as usage_ws; drip-fed so
                     the cumulative fold has more than one arrival instant.
+  chat_runs       — 2 chat runs ride GET /runs (DES-FEEDBACK-003 §10.2): a
+                    'chat'-stamped live thread (crew.chat member of notes,
+                    real attach clock) and a legacy unstamped thread awaiting
+                    a human with a cached gate but no membership (default
+                    False — the slice-P /chats dashboard rig's partition +
+                    unplaced-honesty cases).
+  repo_refs       — r-upload / r-auth / r-smoke1 gain repo_ref "studio-api"
+                    on the runs wire (flip `repo` on with it; default False —
+                    the slice-P /repos tiles' grouping cases).
   learn_delay_s   — how long after a successful theme.requested the learned
                     tokens ripen into GET /d/<doc>/api/theme/learned
                     (interactive#181; default 0.75 — long enough for the
@@ -98,6 +107,18 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False,
          "repo": False, "metrics_ws": False,
+         # Slice P (DES-FEEDBACK-003 §10.2 fixture additions, switch-gated so
+         # no standing rig's board grows rows it never asserted):
+         #   chat_runs — 2 chat runs ride GET /runs: one 'chat'-stamped live
+         #               thread (a notes member, real attach clock) and one
+         #               legacy UNSTAMPED thread awaiting a human with a
+         #               cached gate but no membership (the unplaced-honesty
+         #               case). Default False.
+         #   repo_refs — r-upload / r-auth / r-smoke1 gain repo_ref
+         #               "studio-api" (flip `repo` on with it so the id
+         #               resolves), giving §4.4's runs-per-repo / failing-
+         #               repos tiles something true to group. Default False.
+         "chat_runs": False, "repo_refs": False,
          # Slice I (DES-FEEDBACK-002 §3): the in-studio file/diff viewer corpus.
          #   viewer      — r-upload gains a workdir + file events, and the crew#305
          #                 routes (GET /runs/:id/files, GET /runs/:id/diff) answer
@@ -213,6 +234,28 @@ RUNS = [
 ]
 ORPHAN = session("r-orphan", "executing", "stranded work from another client",
                  "stranded work from another client")
+
+# ── Slice P (DES-FEEDBACK-003 §10.2): the two chat runs, behind `chat_runs` ───
+#
+# The /chats dashboard's partition + honesty cases: CHAT_LIVE is a
+# 'chat'-stamped live thread attached to `notes` (a real clock for the
+# chats-over-time tile); CHAT_GATED is a legacy thread with NO workflow stamp
+# (isChatRun's other arm) awaiting a human — it has a cached gate but no
+# membership, so it is the tile's honest UNPLACED count, while its gate still
+# lands on the gates-from-chats tile.
+CHAT_LIVE = session("r-chat-live", "executing",
+                    "talk through the uploader design", "chat turn")
+CHAT_LIVE["session"]["workflow_id"] = "chat"
+CHAT_GATED = session("r-chat-gated", "awaiting_human",
+                     "which auth flow should we take?", "chat turn")
+CHAT_GATED["session"]["workflow_id"] = None
+CHAT_GATE_PROMPT = "Pick the auth flow the chat should explore"
+ATTACHED_AT["r-chat-live"] = NOW0 - 10 * MIN
+
+# Slice P: which runs the `repo_refs` switch stamps onto the registered repo —
+# a live one and a 6-day-old one for the 7d grouping, plus a fresh failure for
+# the 24h hotspot tile. Clocks are the ATTACHED_AT ones already served above.
+REPO_REF_RUNS = {"r-upload", "r-auth", "r-smoke1"}
 
 # The long-prompt run (slice 5, F7): its problem is a full paragraph, so the Build
 # runs list must render the INTENT PHRASE (truncated, leading) and never the raw
@@ -795,15 +838,20 @@ class W2Handler(SimpleHTTPRequestHandler):
                     runs = []
                 else:
                     runs = RUNS + ([ORPHAN] if state["orphan"] else []) \
-                        + ([LONG_RUN] if state["long_prompt"] else [])
+                        + ([LONG_RUN] if state["long_prompt"] else []) \
+                        + ([CHAT_LIVE, CHAT_GATED] if state["chat_runs"] else [])
                 viewer_on = state["viewer"]
-            if viewer_on:
-                # Slice I: the live run gains a workdir (the diff route's 409
-                # gate reads it; AgentSession carries it on the wire).
+                repo_refs_on = state["repo_refs"]
+            if viewer_on or repo_refs_on:
                 runs = json.loads(json.dumps(runs))
                 for r in runs:
-                    if r["session"]["id"] == "r-upload":
+                    # Slice I: the live run gains a workdir (the diff route's
+                    # 409 gate reads it; AgentSession carries it on the wire).
+                    if viewer_on and r["session"]["id"] == "r-upload":
                         r["session"]["workdir"] = VIEWER_WORKDIR
+                    # Slice P: repo-linked runs for the /repos tiles (§4.4).
+                    if repo_refs_on and r["session"]["id"] in REPO_REF_RUNS:
+                        r["session"]["repo_ref"] = REPO_ID
             self._json(200, {"runs": runs})
             return True
         # Slice I: the crew#305 file/diff routes (real contract, switch-gated).
@@ -851,11 +899,19 @@ class W2Handler(SimpleHTTPRequestHandler):
         # /api/v1/projects/<id>/members
         if len(parts) == 6 and parts[3] == "projects" and parts[5] == "members":
             pid = urllib.parse.unquote(parts[4])
+            refs = list(MEMBERS.get(pid, []))
+            with state_lock:
+                chat_runs_on = state["chat_runs"]
+            # Slice P: the live chat thread is a `crew.chat` member of notes.
+            kinds = {}
+            if chat_runs_on and pid == "notes":
+                refs.append("r-chat-live")
+                kinds["r-chat-live"] = "crew.chat"
             self._json(200, {"members": [
-                {"id": f"{pid}:crew.run:{ref}", "project_id": pid, "member_kind": "crew.run",
-                 "member_ref": ref, "meta": None,
+                {"id": f"{pid}:{kinds.get(ref, 'crew.run')}:{ref}", "project_id": pid,
+                 "member_kind": kinds.get(ref, "crew.run"), "member_ref": ref, "meta": None,
                  "attached_at": ATTACHED_AT.get(ref, 1), "attached_by": "studio"}
-                for ref in MEMBERS.get(pid, [])
+                for ref in refs
             ]})
             return True
         # /api/v1/projects/<id>/interactive/api/docs — the registry: the notes seeds
@@ -892,6 +948,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
                                  "prompt": "How should the tables move?",
                                  "receivedAt": iso(NOW0 - 2 * MIN), "options": None})
+            elif rid == "r-chat-gated" and state["chat_runs"]:
+                # Slice P: the stalled chat's cached gate (§4.3 row 3).
+                self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
+                                 "prompt": CHAT_GATE_PROMPT,
+                                 "receivedAt": iso(NOW0 - 5 * MIN)})
             else:
                 self._json(404, {"error": f"no gate cached for {rid}"})
             return True

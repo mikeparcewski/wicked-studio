@@ -30,7 +30,8 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
   vi.spyOn(client.api, 'listRuns').mockResolvedValue({ runs: [] });
-  vi.spyOn(client.api, 'getRepoGraph').mockResolvedValue({ graph: null } as never);
+  // getRepoGraph is no longer mocked: the Tracked card's per-repo graph
+  // fan-out on mount retired with slice P (DES-FEEDBACK-003 §4.4).
   vi.spyOn(client.api, 'listProjects').mockResolvedValue({
     projects: [proj('q3-review-deck', 9), proj('api-migration', 5), proj('default', 99)],
   });

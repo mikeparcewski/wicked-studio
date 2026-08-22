@@ -433,7 +433,7 @@ export function App(): React.ReactElement {
     if (panel === 'projects') {
       return (
         <div className="flex-1 overflow-y-auto">
-          <ProjectsPage navigate={navigate} />
+          <ProjectsPage runs={runs} navigate={navigate} />
         </div>
       );
     }
