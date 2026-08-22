@@ -166,3 +166,7 @@ code, pre, .font-mono {
 @media (max-width: 899px) {
   .wk-metrics-mid { display: none !important; }
 }
+
+/* Slice-H inline reject note (DES-FEEDBACK-002 §2.3/§2.5): the placeholder
+   reads --ink-dim — a pseudo-element needs CSS, so the rule lives here. */
+.wk-reject-note::placeholder { color: var(--ink-dim); }
