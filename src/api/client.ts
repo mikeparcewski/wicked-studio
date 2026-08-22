@@ -495,6 +495,14 @@ export const api = {
       body: JSON.stringify({ 'studio.appearance': appearance }),
     }),
 
+  /** Slice L (DES-FEEDBACK-002 §8.2): `studio.notifications` rides the SAME
+   *  settings store, same namespaced-key contract as `studio.appearance`. */
+  putNotifSettings: (prefs: import('../store/notifPrefs.js').StudioNotifPrefs) =>
+    apiFetch<{ settings: Record<string, unknown> }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ 'studio.notifications': prefs }),
+    }),
+
   // ── Projects (DES-PROJECT-001) ───────────────────────────────────────────────
 
   /** All projects; `status=active` (default) or `archived` filters. Includes the synthesized "Unfiled" default. */

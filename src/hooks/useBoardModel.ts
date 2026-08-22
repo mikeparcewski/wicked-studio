@@ -163,15 +163,19 @@ const EMPTY: Bindings = { runIds: new Set(), repo: null, docs: [], attachedAt: {
  */
 function mirrorMembership(projects: Project[], bindings: Record<string, Bindings>): void {
   const map: Record<string, string> = {};
+  const ids: Record<string, string> = {};
   const clocks: Record<string, number> = {};
   for (const p of projects) {
     const b = bindings[p.id];
     if (b === undefined) continue;
-    for (const id of b.runIds) map[id] = p.name;
+    for (const id of b.runIds) { map[id] = p.name; ids[id] = p.id; }
     Object.assign(clocks, b.attachedAt);
   }
   const store = useMembershipStore.getState();
   store.setProjectNames(map);
+  // Slice L (DES-FEEDBACK-002 §8.2): the id join rides the same read — the
+  // desktop notification's click target resolves from it, zero new requests.
+  store.setProjectIds(ids);
   // The attach clocks ride the same mirror (slice O): the Make dashboard's
   // tiles bucket on them with zero requests of their own (§4.2.1).
   store.setAttachedAt(clocks);

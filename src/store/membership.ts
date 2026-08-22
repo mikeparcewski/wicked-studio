@@ -14,6 +14,15 @@ interface MembershipStore {
   /** run id → owning project's display name. Unlisted = unfiled/unknown. */
   projectNameByRun: Record<string, string>;
   /**
+   * run id → owning project's ID, off the SAME members read (slice L,
+   * DES-FEEDBACK-002 §8.2): the desktop notification's click must land on the
+   * run's gate — `gateOpenPath(projectId, runId)` — synchronously, from a
+   * context with no React tree (a `Notification.onclick`). Same mirror rule:
+   * only the board model writes; unlisted = unfiled (the click falls back to
+   * the legacy `/runs/:id` route, which resolves the project itself).
+   */
+  projectIdByRun: Record<string, string>;
+  /**
    * run id → membership `attached_at` (epoch ms) — the one honest per-run
    * clock (AgentSession carries no timestamps), merged across projects. The
    * Make dashboard's tiles bucket on it (DES-FEEDBACK-003 §4.2.1) exactly as
@@ -22,12 +31,15 @@ interface MembershipStore {
   attachedAtByRun: Record<string, number>;
   /** Replace the mirror wholesale (the board model re-reads memberships whole). */
   setProjectNames: (map: Record<string, string>) => void;
+  setProjectIds: (map: Record<string, string>) => void;
   setAttachedAt: (map: Record<string, number>) => void;
 }
 
 export const useMembershipStore = create<MembershipStore>((set) => ({
   projectNameByRun: {},
+  projectIdByRun: {},
   attachedAtByRun: {},
   setProjectNames: (map) => set({ projectNameByRun: map }),
+  setProjectIds: (map) => set({ projectIdByRun: map }),
   setAttachedAt: (map) => set({ attachedAtByRun: map }),
 }));
