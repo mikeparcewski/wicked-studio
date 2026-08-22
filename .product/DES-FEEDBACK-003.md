@@ -237,13 +237,20 @@ invented:
 | Heading | Rows (cap) | Row grammar | Source (wire verdict) |
 |---|---|---|---|
 | Projects | top 6 by attention + `view all ›` | ProjectRow — attention dot + name (LeftSidebar.tsx:173–201, reused verbatim) | `useBoardModel(runs)` — **CLIENT-DERIVABLE** (already the rail's source) |
-| Make | 5 most recent made things + `view all ›` | RunsSection's row grammar (status dot + label + phase word, RunsSection.tsx:60–108) applied to NON-CHAT runs; doc/demo rows appear per §4.2.2's scoped rule | `runs` prop filtered `workflow_id !== 'chat'` — **CLIENT-DERIVABLE**; docs: per-project only, labeled |
-| Chat | 5 most recent chats + `view all ›` | same row grammar on CHAT runs (`workflow_id === 'chat'` — the ChatsPage filter, ChatsPage.tsx:20–23) | `runs` prop — **CLIENT-DERIVABLE** |
+| Make | 5 most recent made things + `view all ›` | RunsSection's row grammar (status dot + label + phase word, RunsSection.tsx:60–108) applied to NON-CHAT runs; doc/demo rows appear per §4.2.2's scoped rule | `runs` prop filtered to the EXACT complement of the Chat predicate: `workflow_id && workflow_id !== 'chat'` — **CLIENT-DERIVABLE**; docs: per-project only, labeled |
+| Chat | 5 most recent chats + `view all ›` | same row grammar on chat-like runs (`!workflow_id \|\| workflow_id === 'chat'` — the ChatsPage filter VERBATIM, ChatsPage.tsx:20–23: runs with no workflow_id are chats there and must not double-list under Make) | `runs` prop — **CLIENT-DERIVABLE** |
 | Repositories | 4 repos + search + `view all ›` | the existing repo rows + search field (LeftSidebar.tsx:363–401 — moved inside, unchanged) | `api.listRepos()` — **EXISTS** (`GET /api/v1/repos`, routes.ts:368); the rail's existing 5s poll (LeftSidebar.tsx:235–250) becomes **fetch-on-expand + palette-cache reuse** (§1.4 of FEEDBACK-002) — expansion is a gesture, the poll retires |
 | Settings | the 7 shortcut rows + version line | slice-A rows verbatim | client-only |
 
 `view all ›` in every accordion is the SAME link as the heading's ▦ — two spellings of
 one target, the icon for the pointer, the row for the reader.
+
+**The Make/Chat partition invariant:** every run appears under exactly ONE of Make and
+Chat. The Chat predicate is ChatsPage's existing filter verbatim (which counts
+`workflow_id`-less runs as chats — ChatsPage.tsx:20–23); "non-chat" everywhere in this
+document (§3.3 Make row, §4.2, §5.1) means its exact complement,
+`workflow_id && workflow_id !== 'chat'` — never the naive `!== 'chat'`, which would
+double-list undefined-workflow runs in both paths.
 
 ### 3.4 Make's ＋ — the three-way fork, stated honestly
 
@@ -610,6 +617,9 @@ Expanded contents — **the health registry**:
   `--status-run`/`--status-fail`, `health.message` excerpt (truncated 40ch, full text
   on title) when inactive, `signed_in` as the quiet suffix. **Fetch on expand** —
   a gesture, like the popover it replaces; never polled, cached until next expand.
+  `health` is OPTIONAL on the wire (additive field, index.d.ts:256–260 — absent on a
+  daemon predating crew#274): an absent `health` renders a dim `·` glyph and no
+  message, never a fabricated "active".
 - The header itself carries a passive summary dot: `--status-fail` if any seat is
   inactive or the socket is down, else nothing — the rail's foot says "look inside"
   without being opened.
@@ -838,6 +848,24 @@ EC19 carries — every relocated element keeps its `data-question`.
   `/system` — reachable under the Settings HEADING now (path changed in the rail,
   route unchanged).
 
+### 8.7 E2E rigs re-scoped — the assertions that pin the old rail
+
+The Playwright rigs are the standing pins on the surfaces this round rewrites; each
+slice that breaks a pinned assertion AMENDS the rig in the same PR (the rig is part of
+the slice's diff, tests excluded from the LOC count per §10.0). Verified inventory:
+
+| Rig | Pinned assertions that break | Re-scoped by | Amendment |
+|---|---|---|---|
+| `e2e/feedback_sliceA_test.py` | `rail-quick` header, `rail-actions` verb order + EC20 no-`+` probe, `rail-runs` presence/rows, `rail-settings-section` collapsed-default + menuitem count | **M** | rewrite against §3.6: five heading rows, one-open assert, Settings icon-less; the settings menuitem list re-asserts inside the Settings ACCORDION; the modal AC (NewProjectModal via Projects' ＋) carries over |
+| `e2e/uxfix_slice3_test.py` | `rail-section-projects` / `rail-section-repos` standalone sections + rows; QUICK verb list inside `rail-actions` | **M** | project/repo row asserts move inside their headings' expanded accordions (new testids per §3.6); the QUICK assert is deleted — its affordance assert becomes the four `heading-new` icons |
+| `e2e/feedback_sliceE_test.py` | `metrics-bar` presence on `/` + its three-tile `data-question` map | **Q** | re-target to `narrative-band` per §7.6 (lede + river `data-question`s; RunOutcomeBar/TokenBurnSparkline re-asserted in the margin column; GateLatencyChart assert deleted from `/`) |
+| `e2e/vision_slice3_test.py` | line 222: reads `rail-actions` glyphs to cross-check the mode switcher | **M** | the cross-check re-reads the make-picker's three MODE_SPECS glyphs (§3.4) instead; the chrome asserts (logo slot, `connection-dot` `data-state`) are PRESERVED — slice O must keep them green (§8.2) |
+| `e2e/feedback2_sliceH_test.py` | — none: its surfaces are `band-needs-you` cards + dashboard gate rows + palette | untouched | must stay green UNAMENDED through M–Q (the §8.3 guarantee, asserted) |
+
+`§10.0`'s "W1–W7 re-run green" is read WITH this table: green after the named
+amendments land in their owning slices — a rig failing on a deliberately superseded
+testid is re-scoped in-PR, never skipped or deleted wholesale.
+
 ---
 
 ## 9 Constraint inventory — what every slice must hold
@@ -1020,8 +1048,12 @@ heading or the operator wait on a fetch they didn't gesture for.
 
 ---
 
-## 11 Out of scope (named)
+## 11 Open questions + out of scope (named)
 
+- **⚠ OPEN QUESTION (operator-owned, leads the list — §2.2): the "Make" reading.**
+  This document adopts Reading 1 (Make = Build ∪ Document ∪ Video). If Reading 2
+  (Make = Build renamed) was intended, §4.2 shrinks to a Build report and
+  Document/Video need a stated home — say the word before slice O builds `/make`.
 - **A crew/bridge cross-project made-artifacts index** (would make §4.2.2's fan-out
   button obsolete) — future NEEDS-CREW-ENDPOINT; the corpus label exists precisely
   so its absence is honest.
