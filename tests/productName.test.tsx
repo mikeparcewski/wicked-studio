@@ -21,7 +21,7 @@ const { LeftSidebar } = await import('../src/components/LeftSidebar.js');
 
 describe('visible product name', () => {
   it('the sidebar wordmark reads wicked-studio', async () => {
-    render(<LeftSidebar runs={[]} navigate={() => {}} />);
+    render(<LeftSidebar runs={[]} navigate={() => {}} pathname="/" />);
 
     // The wordmark is the home button next to the logo. `findByRole` also settles the
     // health/repos fetches the sidebar kicks off on mount. Matched exactly, so the old

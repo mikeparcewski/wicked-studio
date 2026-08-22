@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { RepoEntry, SessionView } from '../api/types.js';
-import { api } from '../api/client.js';
+import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { fuzzyMatch } from '../palette/fuzzy.js';
 import { modePath, projectPath, type Navigate } from '../hooks/useRoute.js';
 import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
@@ -51,12 +51,9 @@ interface Entry {
   rank: number;
 }
 
-/** Session-scoped repo cache (§1.4): filled on first open, then warm. */
-let repoCache: RepoEntry[] | null = null;
-
-export function clearPaletteRepoCache(): void {
-  repoCache = null;
-}
+/** Session-scoped repo cache (§1.4) — SHARED with the rail's Repositories
+ *  accordion since slice M (DES-FEEDBACK-003 §3.3): one gesture warms both. */
+export { clearRepoCache as clearPaletteRepoCache } from '../store/repoCache.js';
 
 /**
  * The two global chords App registers (§1.2) — exported so the wiring the app
@@ -134,7 +131,7 @@ export function CommandPalette({
 }: Props): React.ReactElement | null {
   const [query, setQuery] = useState('');
   const [sel, setSel] = useState(0);
-  const [repos, setRepos] = useState<RepoEntry[]>(repoCache ?? []);
+  const [repos, setRepos] = useState<RepoEntry[]>(getCachedRepos() ?? []);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -157,19 +154,11 @@ export function CommandPalette({
     }
     restoreRef.current = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
-    if (repoCache === null) {
-      api
-        .listRepos()
-        .then(({ repos: r }) => {
-          repoCache = r;
-          setRepos(r);
-        })
-        .catch(() => {
-          /* no repo surface — the group just stays empty this session */
-        });
-    } else {
-      setRepos(repoCache);
-    }
+    fetchReposCached()
+      .then(setRepos)
+      .catch(() => {
+        /* no repo surface — the group just stays empty this session */
+      });
   }, [open]);
 
   const close = (): void => {

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail';
+// `make` is the round-4 primary-path dashboard route (DES-FEEDBACK-003 §2.1) —
+// a CLIENT route (a new panel id in this union), not a wire. Slice M registers
+// it with a placeholder surface; the real dashboard is slice O (§4.2).
+export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make';
 
-const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail'];
+const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
@@ -166,6 +169,9 @@ export function useRoute(): Route & {
    *  address document versions; both pathname AND search update on navigate so
    *  components reading either field re-render on every navigation. */
   search: string;
+  /** The current pathname — the rail's route→heading map (DES-FEEDBACK-003
+   *  §3.2) reads it to derive which primary path owns the route. */
+  pathname: string;
 } {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [search, setSearch] = useState(() => window.location.search);
@@ -192,5 +198,5 @@ export function useRoute(): Route & {
 
   const panelPath = useCallback((p: Panel) => (p === 'home' ? '/' : `/${p}`), []);
 
-  return { ...parse(pathname), navigate, panelPath, search };
+  return { ...parse(pathname), navigate, panelPath, search, pathname };
 }
