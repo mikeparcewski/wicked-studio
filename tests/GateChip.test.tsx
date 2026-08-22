@@ -5,6 +5,7 @@ import { ProjectCard } from '../src/components/ProjectCard.js';
 import type { BoardProject } from '../src/hooks/useBoardModel.js';
 import type { Project, SessionStatus } from '../src/api/types.js';
 import * as client from '../src/api/client.js';
+import { useGateActionStore } from '../src/board/gateActions.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import { makeUnit, makeView } from './factories.js';
 
@@ -55,6 +56,9 @@ describe('board gate chips (§1.4 — answerable, not a badge)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     useGateStore.setState({ gates: {} });
+    // The decision state is module-shared since slice H (gateActions.ts) —
+    // reset it so one test's answered gate never bleeds into the next.
+    useGateActionStore.setState({ byGate: {} });
     vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' });
   });
 
