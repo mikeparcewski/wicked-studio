@@ -214,7 +214,7 @@ with sync_playwright() as p:
     presence: dict = {}
     for route, ready in [
         ("/projects", '[data-testid="runs-bottom-bar"]'),
-        ("/make", '[data-testid="make-placeholder"]'),
+        ("/make", '[data-testid="make-dashboard"]'),  # slice O: the real dashboard
         ("/repos", '[data-testid="runs-bottom-bar"]'),
         ("/p/q3-review-deck/build", '[data-testid="mode-switcher"]'),
     ]:
