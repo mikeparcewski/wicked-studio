@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getVersions, interactiveDocUrl, listDocs } from '../api/interactive.js';
 import { useDocsCache } from '../store/docsCache.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
+import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
 import { FeedbackOverlay } from './FeedbackOverlay.js';
@@ -113,6 +114,61 @@ function resolveVersion(manifest: VersionManifest, routed: number | null): numbe
     : manifest.head;
 }
 
+// ── Version compare (DES-FEEDBACK-002 §7, slice K) ───────────────────────────
+//
+// Compare is a LENS, not an address (§7.2): the LEFT pane stays the `?v=N`
+// navigation exactly as today; the comparand is ephemeral component state, reset
+// on exit, never a history entry — so the back button after entering compare
+// exits to the prior ROUTE, and deep links never carry a comparand. Both panes
+// are two instances of the already-real version URL (`interactiveDocUrl` —
+// wire verdict EXISTS, §7.1): zero new routes, zero new requests beyond the
+// second pane's own document load.
+//
+// EC18 as amended (§12.1 + DES-FEEDBACK-003 §8.6): the two panes TOGETHER are
+// the canvas — they render inside the same canvas REGION the single iframe
+// owned (which ends above the fixed bottom bar), so the >80%-width measurement
+// holds for the pane pair, each pane narrower by the operator's explicit trade.
+
+/**
+ * §7.2's default comparand: the selected version's PARENT — the manifest's
+ * lineage pointer, because "v(N) vs v(N−1)" is lineage-parent, not
+ * ordinal-minus-one, and for forked documents those differ. With no usable
+ * parent (v1, or a parent the manifest no longer lists) the nearest OTHER
+ * version stands in — closest below first, else closest above. Null only when
+ * there is nothing else to compare against (§7.5: the v1-only disabled case).
+ */
+export function defaultComparand(manifest: VersionManifest, selected: number): number | null {
+  const entry = manifest.versions.find((v) => v.version === selected);
+  const parent = entry?.parent ?? null;
+  if (parent !== null && parent !== selected
+      && manifest.versions.some((v) => v.version === parent)) {
+    return parent;
+  }
+  const others = manifest.versions.map((v) => v.version).filter((v) => v !== selected);
+  if (others.length === 0) return null;
+  const below = others.filter((v) => v < selected);
+  return below.length > 0 ? Math.max(...below) : Math.min(...others);
+}
+
+/** Pane-header dress (§7.4): --text-2xs --font-mono; the selected version's dot
+ *  is --accent (the strip's addressed-version grammar), the comparand's muted. */
+function PaneHeader({ label, accent }: { label: string; accent: boolean }): React.ReactElement {
+  return (
+    <span style={{
+      alignItems: 'center', color: accent ? 'var(--ink-high)' : 'var(--ink-muted)',
+      display: 'inline-flex', flexShrink: 0, gap: '5px',
+      fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', padding: '4px 8px',
+    }}>
+      <span style={{
+        background: accent ? 'var(--accent)' : 'var(--ink-muted)',
+        borderRadius: 'var(--radius-full)', display: 'inline-block',
+        flexShrink: 0, height: '6px', width: '6px',
+      }} />
+      {label}
+    </span>
+  );
+}
+
 function DocFrame({
   projectId, docId, version, navigate, threadOpen, onToggleThread, children,
 }: {
@@ -145,6 +201,37 @@ function DocFrame({
   // §7.3's strip presence: visible now, gone after 3s of idleness, back on proximity.
   const { hidden, wake } = useStripAutoHide();
 
+  // ── Compare state (DES-FEEDBACK-002 §7, slice K) — the lens, not an address ──
+  // `cmp` is the comparand version; null = solo canvas. The overlay refinement
+  // and its opacity are sub-state, reset with it on exit (§7.2).
+  const [cmp, setCmp] = useState<number | null>(null);
+  const [overlayOn, setOverlayOn] = useState(false);
+  const [overlayPct, setOverlayPct] = useState(50);
+  const cmpRef = useRef<number | null>(null);
+  cmpRef.current = cmp;
+  const exitCompare = (): void => {
+    setCmp(null);
+    setOverlayOn(false);
+    setOverlayPct(50);
+  };
+  // §7.2 exit paths: ✕ / the strip cluster — and Escape, registered through the
+  // ONE shortcut registry (EC21: no stray key listeners; the shared typing-context
+  // guard keeps the doc thread's composer keys untouched). The guard yields
+  // silently while not comparing, so later Escape entries (the runs sheet) still
+  // see the key.
+  const compareShortcuts = useMemo<ShortcutEntry[]>(() => [{
+    id: 'doc-compare-exit',
+    chord: { key: 'escape' },
+    description: 'Exit the version compare lens',
+    guard: () => cmpRef.current !== null,
+    handler: () => {
+      setCmp(null);
+      setOverlayOn(false);
+      setOverlayPct(50);
+    },
+  }], []);
+  useGlobalShortcuts(compareShortcuts);
+
   const subject = `“${docId}”`;
   // Failure / loading occupy the CANVAS pane only — the thread beside them stays up
   // (§1.2: the one conversation is always present), and with no manifest there is no
@@ -173,6 +260,22 @@ function DocFrame({
   // Version-addressed: the VersionStrip swaps this number through the route, nothing else.
   const src = interactiveDocUrl(projectId, docId, shown);
 
+  // The comparand the panes actually use, DERIVED each render: clicking a strip
+  // entry while comparing re-points the LEFT pane and keeps the comparand
+  // (§7.2) — unless the navigation lands ON the comparand (or a manifest
+  // re-read dropped it), where the default (lineage parent) stands in rather
+  // than comparing a version with itself.
+  const comparand = cmp === null
+    ? null
+    : cmp !== shown && manifest.versions.some((v) => v.version === cmp)
+      ? cmp
+      : defaultComparand(manifest, shown);
+  const comparing = comparand !== null;
+  // §7.5's disabled-with-reason: a v1-only document has nothing to compare.
+  const compareDisabledReason =
+    manifest.versions.length < 2 ? 'only one version exists' : null;
+  const parentOfShown = manifest.versions.find((v) => v.version === shown)?.parent ?? null;
+
   // A fork is committed by the service, so the strip re-reads the manifest (`retry`
   // is that same one load) and routes to the version the service reports — the UI
   // never invents the new version number or its parent.
@@ -194,41 +297,141 @@ function DocFrame({
           margin: '10px', background: 'var(--surface-base)',
         }}
       >
-      <iframe
-        // Keyed on the VERSION so a swap REPLACES the element instead of mutating its
-        // src. Mutating it navigates the frame, and a frame navigation lands in the
-        // joint session history — so Back undid the frame's move rather than the route's
-        // (§4.2: the version lives in the URL, and Back must rewind it in one press).
-        // A freshly created frame's first load replaces its own entry instead.
-        key={shown}
-        ref={setFrameEl}
-        data-testid="doc-canvas"
-        data-doc-id={docId}
-        data-version={shown}
-        src={src}
-        title={`Document ${docId}, version ${shown}`}
-        onLoad={() => { setLoaded(true); setLoadNonce((n) => n + 1); }}
-        // §5.5, §7.3: `allow-scripts` because documents ARE interactive HTML, and NOTHING
-        // else. `allow-same-origin` is not "not yet" here — it is gone, and the overlay
-        // below is what made removing it possible. Pinned by a regression test.
-        sandbox="allow-scripts"
-        style={{ border: 'none', display: 'block', height: '100%', width: '100%' }}
-      />
-      {/* The frame is in the DOM while it loads, so the named status sits over it. */}
-      {loaded ? null : (
-        <div style={{ background: 'var(--surface-base)', inset: 0, position: 'absolute' }}>
-          <Loading surface="doc" subject={subject} />
+      {comparing ? (
+        // §7.2 the compare lens: the two panes TOGETHER are the canvas (EC18 as
+        // amended — same region, same >80% width the single iframe had). Split
+        // is the primary; overlay stacks the same two iframes. Both srcs are the
+        // already-real version URL — the §7.1 EXISTS verdict, zero new wires.
+        <div
+          data-testid={overlayOn ? 'compare-overlay' : 'compare-split'}
+          style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}
+        >
+          {overlayOn ? (
+            <>
+              {/* One header row: which version is on top, and the opacity slider
+                  (§7.2: the slider states which version is on top). Slider tokens
+                  (§7.4): thumb --accent via accentColor, track --surface-raised. */}
+              <div style={{
+                alignItems: 'center', display: 'flex', flexShrink: 0, gap: '10px',
+                justifyContent: 'center', padding: '0 8px',
+              }}>
+                <PaneHeader label={`v${shown} (selected, under)`} accent />
+                <PaneHeader
+                  label={`v${comparand} (${comparand === parentOfShown ? 'parent' : 'vs'}, on top)`}
+                  accent={false}
+                />
+                <input
+                  type="range"
+                  data-testid="overlay-slider"
+                  min={0}
+                  max={100}
+                  value={overlayPct}
+                  onChange={(e) => setOverlayPct(Number(e.target.value))}
+                  title={`v${comparand} opacity: ${overlayPct}%`}
+                  style={{ accentColor: 'var(--accent)', background: 'var(--surface-raised)', width: '160px' }}
+                />
+              </div>
+              <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                {/* The under iframe takes no pointer events — they go to the top
+                    iframe only (§7.2). Keyed on version: a re-point REPLACES the
+                    element, never mutates src (the history rule the solo frame pins). */}
+                <iframe
+                  key={`under-${shown}`}
+                  data-testid="compare-pane"
+                  data-version={shown}
+                  data-layer="under"
+                  src={interactiveDocUrl(projectId, docId, shown)}
+                  title={`Document ${docId}, version ${shown}`}
+                  sandbox="allow-scripts"
+                  style={{ border: 'none', height: '100%', inset: 0, pointerEvents: 'none',
+                           position: 'absolute', width: '100%' }}
+                />
+                <iframe
+                  key={`top-${comparand}`}
+                  data-testid="compare-pane"
+                  data-version={comparand}
+                  data-layer="top"
+                  src={interactiveDocUrl(projectId, docId, comparand)}
+                  title={`Document ${docId}, version ${comparand}`}
+                  sandbox="allow-scripts"
+                  style={{ border: 'none', height: '100%', inset: 0, opacity: overlayPct / 100,
+                           position: 'absolute', width: '100%' }}
+                />
+              </div>
+            </>
+          ) : (
+            <div data-testid="compare-panes" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+              <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minWidth: 0 }}>
+                <PaneHeader label={`v${shown} (selected)`} accent />
+                <iframe
+                  key={`left-${shown}`}
+                  data-testid="compare-pane"
+                  data-version={shown}
+                  src={interactiveDocUrl(projectId, docId, shown)}
+                  title={`Document ${docId}, version ${shown}`}
+                  sandbox="allow-scripts"
+                  style={{ border: 'none', display: 'block', flex: 1, width: '100%' }}
+                />
+              </div>
+              {/* §7.4 divider between the panes. */}
+              <div style={{ background: 'var(--surface-raised)', flexShrink: 0, width: '1px' }} />
+              <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minWidth: 0 }}>
+                <PaneHeader
+                  label={`v${comparand} (${comparand === parentOfShown ? 'parent' : 'vs'})`}
+                  accent={false}
+                />
+                <iframe
+                  key={`right-${comparand}`}
+                  data-testid="compare-pane"
+                  data-version={comparand}
+                  src={interactiveDocUrl(projectId, docId, comparand)}
+                  title={`Document ${docId}, version ${comparand}`}
+                  sandbox="allow-scripts"
+                  style={{ border: 'none', display: 'block', flex: 1, width: '100%' }}
+                />
+              </div>
+            </div>
+          )}
         </div>
+      ) : (
+        <>
+          <iframe
+            // Keyed on the VERSION so a swap REPLACES the element instead of mutating its
+            // src. Mutating it navigates the frame, and a frame navigation lands in the
+            // joint session history — so Back undid the frame's move rather than the route's
+            // (§4.2: the version lives in the URL, and Back must rewind it in one press).
+            // A freshly created frame's first load replaces its own entry instead.
+            key={shown}
+            ref={setFrameEl}
+            data-testid="doc-canvas"
+            data-doc-id={docId}
+            data-version={shown}
+            src={src}
+            title={`Document ${docId}, version ${shown}`}
+            onLoad={() => { setLoaded(true); setLoadNonce((n) => n + 1); }}
+            // §5.5, §7.3: `allow-scripts` because documents ARE interactive HTML, and NOTHING
+            // else. `allow-same-origin` is not "not yet" here — it is gone, and the overlay
+            // below is what made removing it possible. Pinned by a regression test.
+            sandbox="allow-scripts"
+            style={{ border: 'none', display: 'block', height: '100%', width: '100%' }}
+          />
+          {/* The frame is in the DOM while it loads, so the named status sits over it. */}
+          {loaded ? null : (
+            <div style={{ background: 'var(--surface-base)', inset: 0, position: 'absolute' }}>
+              <Loading surface="doc" subject={subject} />
+            </div>
+          )}
+          {/* Point-and-comment (§4.3). A document whose bridge never answers leaves this
+              disabled-with-a-reason; the canvas above is unaffected either way. */}
+          <FeedbackOverlay
+            frame={frameEl}
+            loadNonce={loadNonce}
+            projectId={projectId}
+            docId={docId}
+            version={shown}
+          />
+        </>
       )}
-      {/* Point-and-comment (§4.3). A document whose bridge never answers leaves this
-          disabled-with-a-reason; the canvas above is unaffected either way. */}
-      <FeedbackOverlay
-        frame={frameEl}
-        loadNonce={loadNonce}
-        projectId={projectId}
-        docId={docId}
-        version={shown}
-      />
       {/* §7.3: while the strip is away, the bottom band listens for the mouse. */}
       <StripSensor hidden={hidden} wake={wake} />
       {/* pointerEvents none on the WRAPPER: the strip re-enables itself while visible;
@@ -244,6 +447,23 @@ function DocFrame({
           dimmed={hidden}
           onWake={wake}
           trailing={<ThreadToggle open={threadOpen} onToggle={onToggleThread} />}
+          // §7 (slice K): the strip WEARS the compare state this frame owns. The
+          // strip's auto-hide/wake and the thread drawer are untouched by compare
+          // — the panes live inside the same canvas container the sensor guards.
+          compare={{
+            active: comparing,
+            comparand,
+            disabledReason: compareDisabledReason,
+            overlay: overlayOn,
+            onToggle: () => {
+              if (comparing) { exitCompare(); return; }
+              const def = defaultComparand(manifest, shown);
+              if (def !== null) setCmp(def);
+            },
+            onComparand: setCmp,
+            onOverlay: setOverlayOn,
+            onExit: exitCompare,
+          }}
         />
       </div>
       </div>
