@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """
-feedback_sliceE_test.py — the DES-FEEDBACK-001 slice-E gate: home metrics bar
-(§2) + repo profile visuals (§3), against the shared W2 fixture
-(uxfix_fixture.py) with the `metrics_ws` + `repo` switches on.
+feedback_sliceE_test.py — the DES-FEEDBACK-001 slice-E gate, RE-SCOPED by
+DES-FEEDBACK-003 §8.7 (slice Q): the 64px metrics BAR on `/` is superseded by
+the narrative band (§7.3/§8.5), so the landing assertions re-target — the
+derivations all live on. Repo profile visuals (§3) are untouched. Runs against
+the shared W2 fixture (uxfix_fixture.py) with `metrics_ws` + `repo` on.
 
-The slice DOM ACs, verbatim from §8.3:
+The re-scoped landing ACs (§8.7 row Q → §7.6):
 
-  1. `[data-testid="metrics-bar"]` is present on the home board;
-  2. it contains `[data-testid="run-outcome-bar"]`,
-     `[data-testid="gate-latency-chart"]`, `[data-testid="token-burn-sparkline"]`
-     — each with a `data-question` attribute matching its §2.1 named question;
+  1. `[data-testid="narrative-band"]` is present on `/`; the old
+     `[data-testid="metrics-bar"]` is ABSENT (supersession);
+  2. the lede + river carry their §7.3 `data-question`s;
+     `run-outcome-bar` and `token-burn-sparkline` re-assert INSIDE the margin
+     column with their §2.1 questions; the GateLatencyChart assert is DELETED
+     from `/` (its question is answered by the river's gate marks — asserted
+     as the two waiting-gate diamonds);
   3. no `<script>` tags for chart libraries are in the page HTML;
-  4. every `fill`/`stroke` on chart elements resolves from `var()` references
-     (EC15) — EXCEPT the sanctioned linguist hexes on the repo page (§3.3, the
-     ONLY raw-color exemption in the codebase);
+  4. every `fill`/`stroke` on band chart elements resolves from `var()`
+     references (EC15) — EXCEPT the sanctioned linguist hexes on the repo
+     page (§3.3, the ONLY raw-color exemption in the codebase);
   5. `[data-testid="language-bar"]` is present on the repo profile page.
 
 Plus what the slice means beyond its testids:
@@ -22,10 +27,10 @@ Plus what the slice means beyond its testids:
     one per-run timestamp the wire carries), the burn tile folds REAL cliUsage
     frames (`costUsd: null` never becomes $0.00), the cadence chart lives at
     the git-history wire's own resolution (20 commits, %ar relative dates);
-  - the wall + live feed are UNCHANGED beneath the bar (the slice-2 NEEDS YOU
+  - the wall + live feed are UNCHANGED beneath the band (the slice-2 NEEDS YOU
     order and the live feed still hold — §8.3 preservation);
-  - the quiet-band rows carry the 7-day ProjectSparkline (--ink-dim bars);
-  - under 900px the gate-latency tile hides (§2.2).
+  - the quiet-band rows carry the 7-day ProjectSparkline (--ink-dim bars).
+  (The under-900px gate-tile probe died with the bar it probed — §8.5.)
 
 DELIBERATELY NOT frozen-clock: the burn + latency tiles fold ARRIVAL clocks
 (Date.now at ingest); freezing the page clock would collapse every arrival to
@@ -34,7 +39,7 @@ therefore approximate ("35s" not "30s") — every assertion is on structure, not
 rendered ages.
 
 Captures (§8.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/vision/:
-  feedback-E-home-metrics.png   the W2 board with the metrics bar populated
+  feedback-E-home-metrics.png   the W2 board with the narrative band populated
   feedback-E-repo-profile.png   the repo profile: language bar, cadence, hotspots
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
@@ -60,10 +65,12 @@ FEEDBACK_PORT = int(os.environ.get("FEEDBACK_PORT", "4355"))
 ORIGIN = f"http://127.0.0.1:{FEEDBACK_PORT}"
 VSHOTS = REPO / "e2e" / "shots" / "vision"
 
-# §2.1's named operator questions, verbatim (EC19).
+# The named operator questions, verbatim (EC19): the §7.3 band pair plus the
+# two §2.1 tiles that survive as its margin notes (DES-FEEDBACK-003 §8.5).
 QUESTIONS = {
+    "landing-lede": "What happened and what needs me?",
+    "activity-river": "What ran, when, and how did it end?",
     "run-outcome-bar": "Is the system healthy right now?",
-    "gate-latency-chart": "Am I answering gates quickly or letting things stall?",
     "token-burn-sparkline": "What am I spending, is it accelerating?",
 }
 
@@ -118,9 +125,9 @@ with sync_playwright() as p:
         except Exception:
             return False
 
-    # ══ Scene 1 — home board with the metrics bar (§2) ═════════════════════════
+    # ══ Scene 1 — home board with the narrative band (§8.7 re-scope → §7.6) ═══
     page.goto(f"{ORIGIN}/", wait_until="domcontentloaded")
-    page.locator('[data-testid="metrics-bar"]').wait_for(timeout=30000)
+    page.locator('[data-testid="narrative-band"]').wait_for(timeout=30000)
     page.locator('[data-testid="project-board"]').wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
 
@@ -132,14 +139,15 @@ with sync_playwright() as p:
     )
 
     # Settle: outcome bar bucketed off the members read (4 in-window W2 runs),
-    # both open gates reconciled into latency dots, and the burn drip drained
-    # (4 costed frames — the costUsd:null one must NOT count).
+    # both open gates reconciled into WAITING river gate marks (the §8.7
+    # re-target: the latency chart left the landing, the marks answer it),
+    # and the burn drip drained (4 costed frames — costUsd:null must NOT count).
     outcome_ok = settled(
         """() => document.querySelector('[data-testid="run-outcome-bar"]')
                    ?.getAttribute('data-total') === '4'""")
     gates_ok = settled(
-        """() => document.querySelector('[data-testid="gate-latency-chart"]')
-                   ?.getAttribute('data-open') === '2'""")
+        """() => document.querySelectorAll(
+                   '[data-testid="river-gate-mark"][data-waiting="true"]').length === 2""")
     burn_ok = settled(
         """() => document.querySelector('[data-testid="token-burn-sparkline"]')
                    ?.getAttribute('data-points') === '4'""")
@@ -155,7 +163,8 @@ with sync_playwright() as p:
 
     home = page.evaluate(
         """() => {
-             const bar = document.querySelector('[data-testid="metrics-bar"]');
+             const bar = document.querySelector('[data-testid="narrative-band"]');
+             const margin = document.querySelector('[data-testid="river-margin"]');
              const tile = (id) => bar ? bar.querySelector(`[data-testid="${id}"]`) : null;
              const shapes = bar ? Array.from(bar.querySelectorAll(
                'rect, circle, line, polyline, polygon, stop')) : [];
@@ -180,9 +189,12 @@ with sync_playwright() as p:
                .filter((src) => /chart|d3|recharts|echarts|plotly|highcharts/i.test(src));
              const barCs = bar ? getComputedStyle(bar) : null;
              return {
-               barPresent: !!bar,
-               barHeight: bar ? bar.getBoundingClientRect().height : null,
-               barAboveWall: (() => {
+               bandPresent: !!bar,
+               // Supersession (§7.6 AC 1): the old metrics bar is GONE from `/`,
+               // and so is the GateLatencyChart (dashboards keep the component).
+               oldBarAbsent: !document.querySelector('[data-testid="metrics-bar"]'),
+               latencyChartAbsent: !document.querySelector('[data-testid="gate-latency-chart"]'),
+               bandAboveWall: (() => {
                  const wall = document.querySelector('[data-testid="project-board"]');
                  return !!bar && !!wall
                    && bar.getBoundingClientRect().bottom <= wall.getBoundingClientRect().top + 1;
@@ -197,13 +209,15 @@ with sync_playwright() as p:
                  return c;
                })(),
                questions: Object.fromEntries(
-                 ['run-outcome-bar', 'gate-latency-chart', 'token-burn-sparkline']
+                 ['landing-lede', 'activity-river', 'run-outcome-bar', 'token-burn-sparkline']
                    .map((id) => [id, tile(id)?.getAttribute('data-question') ?? null])),
+               // §8.7: the two surviving tiles re-assert INSIDE the margin column.
+               outcomeInMargin: !!margin?.querySelector('[data-testid="run-outcome-bar"]'),
+               burnInMargin: !!margin?.querySelector('[data-testid="token-burn-sparkline"]'),
                outcomeRects: tile('run-outcome-bar')?.querySelectorAll('rect').length ?? 0,
                outcomeUnplaced: tile('run-outcome-bar')?.getAttribute('data-unplaced') ?? null,
-               gateDots: tile('gate-latency-chart')?.querySelectorAll('circle').length ?? 0,
-               thresholdDashed: tile('gate-latency-chart')
-                 ?.querySelector('line')?.getAttribute('stroke-dasharray') ?? null,
+               riverGateMarks: document.querySelectorAll(
+                 '[data-testid="river-gate-mark"][data-waiting="true"]').length,
                burnTotal: tile('token-burn-sparkline')?.getAttribute('data-total') ?? null,
                burnText: tile('token-burn-sparkline')?.textContent ?? '',
                rawPaints: raw,
@@ -214,7 +228,7 @@ with sync_playwright() as p:
            }"""
     )
 
-    # ── Capture 1: the home board with the metrics bar populated ───────────────
+    # ── Capture 1: the home board with the narrative band populated ────────────
     page.screenshot(path=str(VSHOTS / "feedback-E-home-metrics.png"))
 
     # ── The quiet-band 7-day sparkline (§2.1): expand QUIET, find smoke-tests —
@@ -257,18 +271,8 @@ with sync_playwright() as p:
         """() => { const s = document.querySelector('[data-testid="project-board"]');
                    if (s) s.scrollTop = 0; }""")
 
-    # ── §2.2: under 900px the gate-latency tile hides ──────────────────────────
-    page.set_viewport_size({"width": 860, "height": 900})
-    narrow = page.evaluate(
-        """() => {
-             const mid = document.querySelector('.wk-metrics-mid');
-             return {
-               midHidden: mid ? getComputedStyle(mid).display === 'none' : false,
-               barPresent: !!document.querySelector('[data-testid="metrics-bar"]'),
-             };
-           }"""
-    )
-    page.set_viewport_size({"width": 1440, "height": 900})
+    # (The under-900px gate-tile probe is DELETED with the tile it probed —
+    #  DES-FEEDBACK-003 §8.5: the GateLatencyChart left the landing.)
 
     # ══ Scene 2 — the repo profile (§3) ════════════════════════════════════════
     page.goto(f"{ORIGIN}/repo-detail/studio-api", wait_until="domcontentloaded")
@@ -323,26 +327,29 @@ with sync_playwright() as p:
     ctx.close()
     browser.close()
 
-report["steps"]["metrics_bar"] = {
+report["steps"]["narrative_band"] = {
     "ok": all([
         fonts_ok, outcome_ok, gates_ok, burn_ok,
-        home["barPresent"],
-        home["barHeight"] == 64,
-        home["barAboveWall"],
-        home["barBg"] == home["railBg"],  # --surface-rail band (§2.2)
+        home["bandPresent"],
+        home["oldBarAbsent"],            # §7.6 AC 1 — supersession
+        home["latencyChartAbsent"],      # §8.7 — the chart left the landing
+        home["bandAboveWall"],
+        home["barBg"] == home["railBg"],  # --surface-rail band (§7.5, chrome family)
         home["questions"] == QUESTIONS,   # EC19, verbatim
+        home["outcomeInMargin"],          # §8.5 — margin notes, same components
+        home["burnInMargin"],
         home["outcomeRects"] >= 3,        # run/gate/fail stacks over the 4 in-window runs
         home["outcomeUnplaced"] == "4",   # legacy(8d) + smokes(6d) + clockless orphan: excluded, counted
-        home["gateDots"] == 2,
-        home["thresholdDashed"] == "3 3",
+        home["riverGateMarks"] == 2,      # the latency question, answered by the river
         home["burnTotal"] == "0.4200",    # 0.04+0.11+0.09+0.18 — the null-cost frame did NOT fold
         "$0.42" in home["burnText"],
     ]),
     "web_fonts": fonts_ok,
     "outcome_settled": outcome_ok, "gates_settled": gates_ok, "burn_settled": burn_ok,
-    **{k: home[k] for k in ("barPresent", "barHeight", "barAboveWall", "barBg", "railBg",
-                            "questions", "outcomeRects", "outcomeUnplaced", "gateDots",
-                            "thresholdDashed", "burnTotal")},
+    **{k: home[k] for k in ("bandPresent", "oldBarAbsent", "latencyChartAbsent",
+                            "bandAboveWall", "barBg", "railBg", "questions",
+                            "outcomeInMargin", "burnInMargin", "outcomeRects",
+                            "outcomeUnplaced", "riverGateMarks", "burnTotal")},
     "screenshot": str(VSHOTS / "feedback-E-home-metrics.png"),
 }
 report["steps"]["no_chart_library_and_ec15"] = {
@@ -369,10 +376,6 @@ report["steps"]["quiet_sparkline"] = {
         all(f == "var(--ink-dim)" for f in quiet_spark["fills"]),
     ]),
     **quiet_spark,
-}
-report["steps"]["narrow_hides_gate_tile"] = {
-    "ok": narrow["midHidden"] and narrow["barPresent"],
-    **narrow,
 }
 report["steps"]["repo_profile"] = {
     "ok": all([
