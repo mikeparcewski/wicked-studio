@@ -1,41 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api/client.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
+import type { DocSummary } from '../api/interactive.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
-import { projectPath } from '../hooks/useRoute.js';
+import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute.js';
+import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
+import { useProjectsStore } from '../store/projects.js';
 import { AppChrome } from './AppChrome.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { NotificationBell } from './NotificationBell.js';
 import { ATTENTION_DOT } from './ProjectCard.js';
-import { RunsSection } from './RunsSection.js';
-import { SettingsRailSection } from './SettingsRailSection.js';
+import { ProjectSwitcher } from './ProjectSwitcher.js';
+import { phaseWord, RUN_DOT } from './RunsSection.js';
+import { SettingsShortcutRows } from './SettingsRailSection.js';
 
 /**
- * The rail, consolidated to TWO taxonomies (DES-UXFIX-001 §2.3, slice 3 — F4):
+ * The rail, re-architected around FIVE PRIMARY PATHS (DES-FEEDBACK-003 §2/§3,
+ * slice M): Projects / Make / Chat / Repositories / Settings, each a heading
+ * row with a strict ONE-OPEN accordion (EC26). Each heading (except Settings —
+ * the operator: "setting won't have the dashboard/icons") carries a ▦ dashboard
+ * link and a ＋ create action at heading level (EC20 as amended: heading-level
+ * ＋ icons are the sanctioned spelling; no `+` inside accordion contents).
  *
- *   1. PROJECTS — the same axis as the board, attention-ordered (§2.1.3) off the
- *      SAME model the board reads (`useBoardModel`), so the rail and the board
- *      agree on which project needs you first. Clicking one enters its shell
- *      (last-used mode, Chat default — §1.5).
- *   2. REPOSITORIES — the one cross-project axis a coder genuinely browses by.
- *      Unchanged in behaviour; keeps its search.
+ * What the rail STOPPED being (§1.2/§8.1): a launcher shelf (QUICK gone — the
+ * verbs live on the headings' ＋ and in the palette), a second home board (the
+ * inline runs section gone — run awareness moves to the bottom panel, slice N;
+ * until N lands the flat `/runs` route is the interim home of run lists), and
+ * a junk drawer (both standalone taxonomies fold into their headings).
  *
- * Chats and Work are GONE as rail sections: they were one object (a run) sliced
- * by an internal field (`workflow_id`, V5) into two visually identical truncated
- * lists. A run lives under its project now; the flat cross-project lists survive
- * only behind the single "All runs ›" escape hatch (§1.5).
- *
- * The creation verbs compress to one compact row in the mode spine's own words
- * (V9/V10: Build / Chat — the switcher's glyphs, not "Do Work" vs "New Chat")
- * plus Repository.
+ * Fetch discipline (§3.3): the accordion fetches on EXPAND only — the repo 5s
+ * poll RETIRED; the Repositories accordion shares the palette's session repo
+ * cache (one `GET /repos` per session, gesture-driven). Everything else reads
+ * data the app already holds (`runs` prop, board model, projects store).
  */
 
 interface Props {
   runs: SessionView[];
   navigate: (path: string) => void;
-  /** DES-FEEDBACK-001 §1.4: where a runs-section row navigates — the caller's
-   *  same routing as `selectRun`. Defaults to the flat `/runs/:id` route. */
+  /** The current pathname — drives the route→heading map (§3.2). */
+  pathname: string;
+  /** DES-FEEDBACK-001 §1.4: where a run row navigates — the caller's same
+   *  routing as `selectRun`. Defaults to the flat `/runs/:id` route. */
   runPath?: (id: string) => string;
   /** DES-FEEDBACK-001 §7.3: Document/Video are canvas-first, so entering them
    *  auto-collapses the rail to its icon state; leaving restores what the user had.
@@ -43,133 +48,76 @@ interface Props {
   immersive?: boolean;
 }
 
-// The rail is chrome (§5.1's token table: `--surface-rail → rail, chrome`), so
-// slice 3's chrome conversion moves the whole palette onto the semantic tokens
-// (§2.11) — the legacy teal shell retires with it. Links and the creation verbs
-// are the rail's interactive affordances: on-accent, the §5.3 "Add agents"
-// precedent (low-key but on-accent to signal interactivity).
+// The rail is chrome (`--surface-rail`); the token dress is §3.1/§3.5's.
 const S = {
-  bg:        'var(--surface-rail)',
-  border:    'var(--surface-raised)',
-  ink:       'var(--ink-body)',
-  muted:     'var(--ink-muted)',
-  faint:     'var(--ink-dim)',
-  hover:     'var(--surface-card)',
-  active:    'var(--surface-raised)',
-  accent:    'var(--accent)',
-  accentInk: 'var(--accent-fg)',
-  link:      'var(--accent)',
+  bg:      'var(--surface-rail)',
+  border:  'var(--surface-raised)',
+  ink:     'var(--ink-body)',
+  high:    'var(--ink-high)',
+  muted:   'var(--ink-muted)',
+  faint:   'var(--ink-dim)',
+  hover:   'var(--surface-card)',
+  accent:  'var(--accent)',
 };
 
-const SECTION_MAX = 4;
-/** Collapsed rail: at most this many project dots — a glance strip, not a list. */
-const COLLAPSED_MAX = 12;
+// ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-// ── Inline SVG icons ──────────────────────────────────────────────────────────
+export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'settings';
 
-function IconSearch(): React.ReactElement {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
-      <circle cx="10" cy="10" r="7" />
-      <line x1="15.5" y1="15.5" x2="21" y2="21" />
-    </svg>
-  );
+/** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
+ *  links `/system` in the collapsed column — it has no dashboard). */
+interface PathSpec { key: PathKey; title: string; glyph: string; dash: string | null; collapsedHref: string }
+const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     glyph: '◇', dash: '/projects', collapsedHref: '/projects' };
+const P_MAKE: PathSpec     = { key: 'make',     title: 'Make',         glyph: '⚒', dash: '/make',     collapsedHref: '/make' };
+const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         glyph: '💬', dash: '/chats',    collapsedHref: '/chats' };
+const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', glyph: '⬡', dash: '/repos',    collapsedHref: '/repos' };
+const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     glyph: '⚙', dash: null,        collapsedHref: '/system' };
+const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_SETTINGS];
+
+const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows', 'policies', 'rules']);
+
+/**
+ * The route→heading map (§3.2): which primary path owns a pathname. `/` and
+ * `/runs*` map to NONE — five closed headings, the rail's calmest reading.
+ * Exported pure so the default-expansion contract is unit-pinned.
+ */
+export function headingForPath(pathname: string): PathKey | null {
+  const [, first = '', second = ''] = pathname.split('/');
+  if (first === 'projects' || first === 'p') return 'projects';
+  if (first === 'make') return 'make';
+  if (first === 'chats' || (first === 'chat' && second === 'new')) return 'chat';
+  if (first === 'repos' || first === 'repo-detail') return 'repos';
+  if (SETTINGS_ROUTES.has(first)) return 'settings';
+  return null;
 }
+
+/** The Chat predicate — ChatsPage's filter VERBATIM (§3.3: runs with no
+ *  workflow stamp are chats there and must not double-list under Make). */
+const isChatRun = (v: SessionView): boolean =>
+  !v.session.workflow_id || v.session.workflow_id === 'chat';
+
+const RUN_TERMINAL = new Set(['completed', 'cancelled', 'failed']);
+
+/** Active before terminal, incoming order preserved (the RunsSection contract). */
+function orderRuns(runs: SessionView[]): SessionView[] {
+  const active = runs.filter((v) => !RUN_TERMINAL.has(v.session.status));
+  const terminal = runs.filter((v) => RUN_TERMINAL.has(v.session.status));
+  return [...active, ...terminal];
+}
+
+// Accordion caps (§3.3): shortcuts, never a second dashboard.
+const PROJECTS_MAX = 6;
+const MADE_MAX = 5;
+const CHATS_MAX = 5;
+const REPOS_MAX = 4;
+/** Of MADE_MAX, at most this many are doc/demo rows (per-project loaded docs
+ *  only — §4.2.2's scoped rule; the complete census lives on `/make`). */
+const MADE_DOCS_MAX = 2;
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-/** One QUICK action: the spine glyph and the mode's own word, each on its own
- *  line (DES-FEEDBACK-001 §1.2 — the `+` glyphs are GONE, EC20). `hint` (the
- *  MODE_SPECS sublabel) teaches what the verb produces, on hover. */
-function ActionLink({
-  glyph,
-  label,
-  hint,
-  testId,
-  onClick,
-  collapsed,
-}: {
-  glyph: React.ReactNode;
-  label: string;
-  hint?: string;
-  testId?: string;
-  onClick: () => void;
-  collapsed: boolean;
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      onClick={onClick}
-      aria-label={label}
-      title={hint !== undefined ? `${label} — ${hint}` : label}
-      className={`flex items-center gap-1.5 rounded text-sm font-semibold transition-opacity hover:opacity-70 ${
-        collapsed ? 'w-9 h-9 justify-center mx-auto' : 'px-1 py-1'
-      }`}
-      style={{ color: S.accent, background: 'transparent' }}
-    >
-      <span aria-hidden>{glyph}</span>
-      {!collapsed && <span>{label}</span>}
-    </button>
-  );
-}
-
-function SectionLabel({
-  label,
-  asLink,
-  onClick,
-  withSearch,
-  searchActive,
-  onToggleSearch,
-}: {
-  label: string;
-  asLink?: boolean;
-  onClick?: () => void;
-  withSearch?: boolean;
-  searchActive?: boolean;
-  onToggleSearch?: () => void;
-}): React.ReactElement {
-  const textEl = (
-    <span
-      className="text-[10px] font-semibold uppercase tracking-widest font-mono select-none"
-      style={{ color: asLink ? S.link : S.muted }}
-    >
-      {label}
-      {asLink && <span className="ml-1 opacity-70">›</span>}
-    </span>
-  );
-
-  return (
-    <div className="flex items-center px-3 pt-3 pb-1">
-      {asLink && onClick ? (
-        <button
-          type="button"
-          onClick={onClick}
-          className="transition-opacity hover:opacity-80"
-          style={{ background: 'transparent' }}
-        >
-          {textEl}
-        </button>
-      ) : (
-        textEl
-      )}
-      {withSearch && (
-        <button
-          type="button"
-          onClick={onToggleSearch}
-          aria-label="Search"
-          className="ml-auto transition-opacity hover:opacity-100"
-          style={{ color: searchActive ? S.accent : S.faint }}
-        >
-          <IconSearch />
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** One rail project row: the board's attention dot + the name. The row is the
- *  board card's one-glance summary, never a second place that explains it. */
+/** One rail project row: the board's attention dot + the name — reused verbatim
+ *  from the slice-3 taxonomy (§3.3: "ProjectRow, reused verbatim"). */
 function ProjectRow({ item, onOpen }: { item: BoardProject; onOpen: () => void }): React.ReactElement {
   const { project, attention, score, band } = item;
   return (
@@ -200,16 +148,309 @@ function ProjectRow({ item, onOpen }: { item: BoardProject; onOpen: () => void }
   );
 }
 
+/** One run row — the RunsSection row grammar (status dot + intent + phase word),
+ *  reused for the Make and Chat accordions (§3.3). */
+function RunRow({ view, onOpen }: { view: SessionView; onOpen: () => void }): React.ReactElement {
+  return (
+    <button
+      type="button"
+      data-testid="rail-run"
+      data-run-id={view.session.id}
+      data-status={view.session.status}
+      onClick={onOpen}
+      title={view.session.problem}
+      className="w-full text-left px-3 py-1 rounded-md transition-colors"
+      style={{ background: 'transparent' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = S.hover; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          aria-hidden
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: RUN_DOT[view.session.status] ?? 'var(--ink-dim)' }}
+        />
+        <span
+          className="truncate leading-tight"
+          style={{ maxWidth: '24ch', fontSize: 'var(--text-xs)', color: S.ink, fontFamily: 'var(--font-sans)' }}
+        >
+          {view.session.problem}
+        </span>
+        <span
+          className="ml-auto shrink-0"
+          style={{ fontSize: 'var(--text-2xs)', color: S.faint, fontFamily: 'var(--font-mono)' }}
+        >
+          {phaseWord(view)}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+/** `view all ›` — the SAME target as the heading's ▦, spelled for the reader
+ *  (§3.3); a real link, like every navigation affordance here. */
+function ViewAll({ href, navigate }: { href: string; navigate: (p: string) => void }): React.ReactElement {
+  return (
+    <a
+      href={href}
+      data-testid="rail-view-all"
+      onClick={(e) => { e.preventDefault(); navigate(href); }}
+      className="block px-3 pt-1 pb-1 text-[11px] font-mono transition-opacity hover:opacity-80"
+      style={{ color: S.accent, textDecoration: 'none' }}
+    >
+      view all ›
+    </a>
+  );
+}
+
+function EmptyRow({ label, href, navigate }: { label: string; href: string; navigate: (p: string) => void }): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(href)}
+      className="px-3 py-1 text-left text-[11px] italic font-mono transition-opacity hover:opacity-70"
+      style={{ color: S.faint }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** A doc/demo row in the Make accordion: `▤/▶ name · vN` (§3.1's anatomy),
+ *  from the doc lists the board model already loaded — never a new fetch. */
+function DocRow({ doc, projectId, projectName, navigate }: {
+  doc: DocSummary; projectId: string; projectName: string; navigate: (p: string) => void;
+}): React.ReactElement {
+  const mode: Mode = doc.kind === 'demo' ? 'video' : 'document';
+  return (
+    <button
+      type="button"
+      data-testid="rail-doc"
+      data-doc-kind={doc.kind}
+      onClick={() => navigate(versionPath(projectId, doc.name, null, mode))}
+      title={`${doc.name} · ${projectName}`}
+      className="w-full text-left px-3 py-1 rounded-md transition-colors"
+      style={{ background: 'transparent' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = S.hover; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span aria-hidden className="shrink-0" style={{ fontSize: 'var(--text-2xs)', color: S.faint }}>
+          {doc.kind === 'demo' ? '▶' : '▤'}
+        </span>
+        <span
+          className="truncate leading-tight"
+          style={{ maxWidth: '24ch', fontSize: 'var(--text-xs)', color: S.ink, fontFamily: 'var(--font-sans)' }}
+        >
+          {doc.name}
+        </span>
+        <span
+          className="ml-auto shrink-0"
+          style={{ fontSize: 'var(--text-2xs)', color: S.faint, fontFamily: 'var(--font-mono)' }}
+        >
+          v{doc.head}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+/** The heading row (§3.1): title button (chevron + word, toggles), ▦ dashboard
+ *  link, ＋ create — Settings renders the title only. The container carries the
+ *  testid + `aria-expanded` the EC26 assertions read. */
+function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }: {
+  path: PathSpec;
+  open: boolean;
+  onToggle: () => void;
+  onNew?: () => void;
+  navigate: (p: string) => void;
+  /** Accordion contents, rendered only while open. */
+  children?: React.ReactNode;
+  /** Anchored popover slot (Make's picker) — rendered inside the relative row. */
+  extra?: React.ReactNode;
+}): React.ReactElement {
+  const iconStyle: React.CSSProperties = {
+    color: S.faint,
+    fontSize: 'var(--text-xs)',
+    textDecoration: 'none',
+    outlineColor: S.accent,
+  };
+  const lift = (e: React.MouseEvent<HTMLElement>): void => { e.currentTarget.style.color = S.high; };
+  const drop = (e: React.MouseEvent<HTMLElement>): void => { e.currentTarget.style.color = S.faint; };
+  return (
+    <div data-testid={`rail-heading-${path.key}`} data-open={open} aria-expanded={open}>
+      <div className="relative flex items-center px-2 rounded-md transition-colors"
+        onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        <button
+          type="button"
+          data-testid={`rail-title-${path.key}`}
+          aria-expanded={open}
+          onClick={onToggle}
+          className="flex-1 min-w-0 flex items-center gap-2 px-1 py-1.5 text-left"
+          style={{
+            background: 'transparent',
+            color: open ? S.high : S.muted,
+            fontSize: 'var(--text-sm)',
+            fontFamily: 'var(--font-sans)',
+            fontWeight: 'var(--weight-semi)',
+            outlineColor: S.accent,
+          }}
+        >
+          <span
+            aria-hidden
+            data-testid="rail-heading-chevron"
+            className="inline-block leading-none"
+            style={{
+              transition: 'transform var(--dur-fast)',
+              transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+            }}
+          >
+            ›
+          </span>
+          <span className="truncate">{path.title}</span>
+        </button>
+        {path.dash !== null && (
+          <a
+            href={path.dash}
+            data-testid="heading-dashboard"
+            aria-label={`${path.title} dashboard`}
+            title={`${path.title} dashboard`}
+            onClick={(e) => { e.preventDefault(); navigate(path.dash as string); }}
+            className="w-7 h-7 shrink-0 flex items-center justify-center rounded transition-colors"
+            style={iconStyle}
+            onMouseEnter={lift}
+            onMouseLeave={drop}
+          >
+            ▦
+          </a>
+        )}
+        {onNew && (
+          <button
+            type="button"
+            data-testid="heading-new"
+            aria-label={`New ${path.title}`}
+            title={`New ${path.title}`}
+            onClick={onNew}
+            className="w-7 h-7 shrink-0 flex items-center justify-center rounded transition-colors"
+            style={{ ...iconStyle, background: 'transparent' }}
+            onMouseEnter={lift}
+            onMouseLeave={drop}
+          >
+            ＋
+          </button>
+        )}
+        {extra}
+      </div>
+      {open && (
+        <div className="flex flex-col pb-1" style={{ paddingLeft: 'var(--space-4)' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── The make-picker (§3.4): Make's ＋ forks three ways ─────────────────────────
+
+const MAKE_MODES: Mode[] = ['build', 'document', 'video'];
+
+function MakePicker({ navigate, onClose }: { navigate: (p: string) => void; onClose: () => void }): React.ReactElement {
+  /** null = the three rows; a mode = the project-picker stage (Document/Video). */
+  const [stage, setStage] = useState<Mode | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const projects = useProjectsStore((s) => s.projects);
+
+  useEffect(() => {
+    function onOutside(e: MouseEvent): void {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [onClose]);
+
+  const pick = (m: Mode): void => {
+    if (m === 'build') {
+      // The unbound launch form, Unfiled default — slice B semantics (§3.4).
+      onClose();
+      navigate('/runs/new');
+      return;
+    }
+    // A doc lives in a project — the bridge mounts per project (§3.4): pick one
+    // first. Entering the stage is the gesture that loads the list if cold.
+    if (projects.length === 0) void useProjectsStore.getState().load();
+    setStage(m);
+  };
+
+  const real = projects.filter((p) => p.id !== 'default');
+
+  return (
+    <div
+      ref={ref}
+      data-testid="make-picker"
+      role="menu"
+      className="absolute right-0 top-8 z-30 w-60 py-1"
+      style={{
+        background: 'var(--surface-raised)',
+        boxShadow: 'var(--shadow-raised)',
+        borderRadius: 'var(--radius-md)',
+      }}
+    >
+      {stage === null ? (
+        MAKE_MODES.map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="menuitem"
+            data-testid="make-picker-row"
+            data-mode={m}
+            onClick={() => pick(m)}
+            className="w-full flex items-baseline gap-2 px-3 py-1.5 text-left transition-colors"
+            style={{ background: 'transparent', outlineColor: S.accent }}
+            onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span aria-hidden style={{ fontSize: 'var(--text-xs)' }}>{MODE_SPECS[m].glyph}</span>
+            <span style={{ fontSize: 'var(--text-xs)', color: S.ink, fontFamily: 'var(--font-sans)', fontWeight: 'var(--weight-semi)' }}>
+              {MODE_SPECS[m].label}
+            </span>
+            <span className="truncate" style={{ fontSize: 'var(--text-2xs)', color: S.faint, fontFamily: 'var(--font-sans)' }}>
+              {MODE_SPECS[m].sublabel}
+            </span>
+          </button>
+        ))
+      ) : (
+        <div className="px-3 py-1.5 flex flex-col gap-1.5" data-testid="make-picker-project-stage">
+          <p style={{ fontSize: 'var(--text-2xs)', color: S.faint, fontFamily: 'var(--font-sans)', margin: 0 }}>
+            {real.length === 0
+              ? `A ${MODE_SPECS[stage].label.toLowerCase()} lives in a project — create a project first.`
+              : `A ${MODE_SPECS[stage].label.toLowerCase()} lives in a project — pick one:`}
+          </p>
+          <ProjectSwitcher
+            current={null}
+            projects={projects}
+            onSelect={(pid) => {
+              if (pid === null) return; // a document cannot be Unfiled (§3.4)
+              onClose();
+              navigate(modePath(pid, stage));
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 const flatRunPath = (id: string): string => `/runs/${encodeURIComponent(id)}`;
 
-export function LeftSidebar({ runs, navigate, runPath = flatRunPath, immersive = false }: Props): React.ReactElement {
+export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, immersive = false }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
-  // DES-FEEDBACK-001 §1.3: the QUICK section's Project action opens the
-  // new-project modal — an overlay, not a route.
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [makePickerOpen, setMakePickerOpen] = useState(false);
   // §7.3 auto-collapse: entering an immersive mode stashes the user's state and
   // collapses; leaving restores it. `null` = nothing stashed. The user can still
   // re-expand mid-mode — this fires only on the transition, never per render.
@@ -223,34 +464,53 @@ export function LeftSidebar({ runs, navigate, runPath = flatRunPath, immersive =
       setCollapsed(prev);
     }
   }, [immersive]);
-  const [searchOpen, setSearchOpen] = useState(false);
+
+  // ── The one-open accordion (§3.2, EC26): zero or one heading expanded. ──────
+  // Default derives from the route; the map re-fires ONLY when the mapped
+  // heading changes, so a manual collapse survives moves within one territory.
+  const mapped = headingForPath(pathname);
+  const [openHeading, setOpenHeading] = useState<PathKey | null>(mapped);
+  const lastMapped = useRef(mapped);
+  useEffect(() => {
+    if (mapped !== lastMapped.current) {
+      lastMapped.current = mapped;
+      setOpenHeading(mapped);
+    }
+  }, [mapped]);
+  const toggle = (k: PathKey): void => setOpenHeading((cur) => (cur === k ? null : k));
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [repos, setRepos] = useState<RepoEntry[]>([]);
-  // The board's own model, attention-ordered (§2.1.3) — the rail's Projects list
-  // is the board's first column, not a fourth taxonomy of its own.
+  const [repos, setRepos] = useState<RepoEntry[]>(() => getCachedRepos() ?? []);
+  // The board's own model, attention-ordered — the Projects accordion is the
+  // board's first column, not a taxonomy of its own (C3: reads, never re-sorts).
   const { items, loading, error } = useBoardModel(runs);
 
   const isExpanded = !collapsed || hovered;
 
+  // Fetch-on-expand (§3.3): expansion is the gesture; the 5s poll retired.
+  // The session cache is shared with the palette — cold: one GET; warm: none.
   useEffect(() => {
+    if (openHeading !== 'repos') return;
     let disposed = false;
-    let inFlight = false;
-    function load(): void {
-      if (inFlight) return;
-      inFlight = true;
-      api.listRepos().then(({ repos: rs }) => {
+    fetchReposCached()
+      .then((rs) => {
         if (disposed) return;
-        const sorted = [...rs].sort((a, b) => b.registered_at - a.registered_at);
-        setRepos(sorted);
-      }).catch(() => { /* sidebar — fail silently */ }).finally(() => { inFlight = false; });
-    }
-    load();
-    const id = setInterval(load, 5_000);
-    return () => { disposed = true; clearInterval(id); };
-  }, []);
+        setRepos([...rs].sort((a, b) => b.registered_at - a.registered_at));
+      })
+      .catch(() => { /* rail — fail silently */ });
+    return () => { disposed = true; };
+  }, [openHeading]);
 
   const q = searchQuery.trim().toLowerCase();
   const filteredRepos = q ? repos.filter(r => r.name.toLowerCase().includes(q)) : repos;
+
+  // The Make/Chat partition invariant (§3.3): every run under exactly ONE path.
+  const chatRuns = orderRuns(runs.filter(isChatRun)).slice(0, CHATS_MAX);
+  const madeDocs = items
+    .flatMap((item) => item.docs.map((doc) => ({ doc, projectId: item.project.id, projectName: item.project.name })))
+    .sort((a, b) => (b.doc.updated_at ?? '').localeCompare(a.doc.updated_at ?? ''))
+    .slice(0, MADE_DOCS_MAX);
+  const madeRuns = orderRuns(runs.filter((v) => !isChatRun(v))).slice(0, MADE_MAX - madeDocs.length);
 
   /** Enter a project: its DASHBOARD (DES-FEEDBACK-001 §4.1) — context before actions. */
   const openProject = (projectId: string): void => {
@@ -266,7 +526,7 @@ export function LeftSidebar({ runs, navigate, runPath = flatRunPath, immersive =
       onMouseLeave={() => setHovered(false)}
     >
       {/* The app chrome (DES-VISION-001 §6.3 slice 3): logo slot + product name
-          + connection dot + settings — the rail's header region, token-built. */}
+          + connection dot — untouched by the round-4 re-architecture (§8.2). */}
       <div className={`flex shrink-0 ${isExpanded ? 'items-center pr-2' : 'flex-col items-center pt-2 gap-1'}`}>
         <AppChrome collapsed={!isExpanded} navigate={navigate} />
         <button
@@ -280,106 +540,103 @@ export function LeftSidebar({ runs, navigate, runPath = flatRunPath, immersive =
         </button>
       </div>
 
-      {/* Notification bell — always visible (collapsed: icon-only with badge; expanded: label too) */}
+      {/* Notification bell — stays exactly where it is (§6.1, the operator's word). */}
       <div className={isExpanded ? 'px-4 pb-2' : 'flex justify-center pb-2'}>
         <NotificationBell navigate={navigate} collapsed={!isExpanded} />
       </div>
 
-      {/* QUICK — the creation verbs, VERTICAL under one section header
-          (DES-FEEDBACK-001 §1.2): Project first (opens the new-project flow),
-          then the mode spine's own words. No `+` glyphs anywhere (EC20). */}
-      {isExpanded && (
-        <div
-          data-testid="rail-quick"
-          className="px-4 pt-2 select-none"
-          style={{
-            fontSize: 'var(--text-2xs)',
-            fontWeight: 'var(--weight-medium)',
-            fontFamily: 'var(--font-sans)',
-            color: S.faint,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-          }}
-        >
-          QUICK
-        </div>
-      )}
-      <div
-        data-testid="rail-actions"
-        className={`flex ${!isExpanded ? 'flex-col px-2 items-center gap-2 mt-1' : 'flex-col items-start px-4 pt-0.5 pb-1 gap-0.5'}`}
-      >
-        <ActionLink glyph="◻" label="Project" hint="start a new project" testId="new-project" onClick={() => setNewProjectOpen(true)} collapsed={!isExpanded} />
-        <ActionLink glyph={MODE_SPECS.build.glyph} label="Build" hint={MODE_SPECS.build.sublabel} testId="new-run" onClick={() => navigate('/runs/new')} collapsed={!isExpanded} />
-        <ActionLink glyph={MODE_SPECS.chat.glyph} label="Chat" hint={MODE_SPECS.chat.sublabel} onClick={() => navigate('/chat/new')} collapsed={!isExpanded} />
-        <ActionLink glyph="⬡" label="Repository" onClick={() => navigate('/repos/new')} collapsed={!isExpanded} />
-      </div>
-
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto flex flex-col min-h-0 mt-2">
-        {isExpanded ? (
-          <>
-            {/* Search input (repositories) */}
-            {searchOpen && (
-              <div className="px-4 pb-2">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search repositories…"
-                  autoFocus
-                  className="w-full bg-transparent text-xs font-mono outline-none border-b"
-                  style={{ color: S.ink, borderColor: S.faint, caretColor: S.accent }}
-                />
-              </div>
-            )}
-
-            {/* ── Runs — the recent 5 inline, below QUICK (DES-FEEDBACK-001 §1.4),
-                   active before terminal, with the ONE "All runs ›" escape hatch
-                   riding at the section's bottom. Same `runs` prop — no new fetch. ── */}
-            <SectionLabel label="Runs" />
-            <RunsSection runs={runs} runPath={runPath} navigate={navigate} />
-
-            {/* ── Taxonomy 1: Projects — the board's axis, attention-ordered ── */}
-            <div data-testid="rail-section-projects">
-              <SectionLabel
-                label="Projects"
-                asLink
-                onClick={() => navigate('/projects')}
-              />
-              {/* Loading/error render nothing here — the board owns those states
-                  (§3.1); the rail never narrates absence it cannot yet know. */}
-              {!loading && error === null && (
-                <SectionList empty="No projects yet" viewAllPath="/projects" navigate={navigate}>
-                  {items.slice(0, SECTION_MAX).map(item => (
+      {isExpanded ? (
+        <div className="flex-1 overflow-y-auto flex flex-col min-h-0 px-2 pt-1" style={{ borderTop: `1px solid ${S.border}` }}>
+          {/* ── Projects ─────────────────────────────────────────────────────── */}
+          <RailHeading
+            path={P_PROJECTS}
+            open={openHeading === 'projects'}
+            onToggle={() => toggle('projects')}
+            onNew={() => setNewProjectOpen(true)}
+            navigate={navigate}
+          >
+            {/* Loading/error render nothing — the board owns those states; the
+                rail never narrates absence it cannot yet know. */}
+            {!loading && error === null && (
+              items.length === 0
+                ? <EmptyRow label="No projects yet" href="/projects" navigate={navigate} />
+                : items.slice(0, PROJECTS_MAX).map(item => (
                     <ProjectRow key={item.project.id} item={item} onOpen={() => openProject(item.project.id)} />
-                  ))}
-                </SectionList>
-              )}
-              {items.length > SECTION_MAX && (
-                <ViewAll onClick={() => navigate('/projects')} />
-              )}
-            </div>
+                  ))
+            )}
+            <ViewAll href="/projects" navigate={navigate} />
+          </RailHeading>
 
-            {/* ── Taxonomy 2: Repositories — the cross-project axis, with search ── */}
-            <div data-testid="rail-section-repos">
-              <SectionLabel
-                label="Repositories"
-                withSearch
-                searchActive={searchOpen}
-                onToggleSearch={() => { setSearchOpen(v => !v); if (searchOpen) setSearchQuery(''); }}
+          {/* ── Make — Build ∪ Document ∪ Video (§2.2 Reading 1) ─────────────── */}
+          <RailHeading
+            path={P_MAKE}
+            open={openHeading === 'make'}
+            onToggle={() => toggle('make')}
+            onNew={() => setMakePickerOpen(v => !v)}
+            navigate={navigate}
+            extra={makePickerOpen
+              ? <MakePicker navigate={navigate} onClose={() => setMakePickerOpen(false)} />
+              : undefined}
+          >
+            {madeRuns.length === 0 && madeDocs.length === 0
+              ? <EmptyRow label="Nothing made yet" href="/make" navigate={navigate} />
+              : (
+                <>
+                  {madeRuns.map((view) => (
+                    <RunRow key={view.session.id} view={view} onOpen={() => navigate(runPath(view.session.id))} />
+                  ))}
+                  {madeDocs.map(({ doc, projectId, projectName }) => (
+                    <DocRow key={`${projectId}:${doc.name}`} doc={doc} projectId={projectId} projectName={projectName} navigate={navigate} />
+                  ))}
+                </>
+              )}
+            <ViewAll href="/make" navigate={navigate} />
+          </RailHeading>
+
+          {/* ── Chat ─────────────────────────────────────────────────────────── */}
+          <RailHeading
+            path={P_CHAT}
+            open={openHeading === 'chat'}
+            onToggle={() => toggle('chat')}
+            onNew={() => navigate('/chat/new')}
+            navigate={navigate}
+          >
+            {chatRuns.length === 0
+              ? <EmptyRow label="No chat threads yet" href="/chats" navigate={navigate} />
+              : chatRuns.map((view) => (
+                  <RunRow key={view.session.id} view={view} onOpen={() => navigate(runPath(view.session.id))} />
+                ))}
+            <ViewAll href="/chats" navigate={navigate} />
+          </RailHeading>
+
+          {/* ── Repositories — rows + search moved inside (§3.3) ─────────────── */}
+          <RailHeading
+            path={P_REPOS}
+            open={openHeading === 'repos'}
+            onToggle={() => toggle('repos')}
+            onNew={() => navigate('/repos/new')}
+            navigate={navigate}
+          >
+            <div className="px-3 pb-1">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search repositories…"
+                className="w-full bg-transparent text-xs font-mono outline-none border-b"
+                style={{ color: S.ink, borderColor: S.faint, caretColor: S.accent }}
               />
-              <SectionList
-                empty="No repositories yet"
-                viewAllPath="/repos"
-                navigate={navigate}
-              >
-                {filteredRepos.slice(0, SECTION_MAX).map(repo => (
+            </div>
+            {filteredRepos.length === 0
+              ? <EmptyRow label="No repositories yet" href="/repos" navigate={navigate} />
+              : filteredRepos.slice(0, REPOS_MAX).map(repo => (
                   <button
                     key={repo.id}
                     type="button"
+                    data-testid="rail-repo"
                     onClick={() => navigate(`/repo-detail/${encodeURIComponent(repo.id)}`)}
                     title={repo.root_path}
-                    className="w-full text-left px-3 py-2 rounded-md transition-colors"
+                    className="w-full text-left px-3 py-1.5 rounded-md transition-colors"
                     style={{ background: 'transparent' }}
                     onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
@@ -394,89 +651,47 @@ export function LeftSidebar({ runs, navigate, runPath = flatRunPath, immersive =
                     </p>
                   </button>
                 ))}
-              </SectionList>
-              {filteredRepos.length > SECTION_MAX && (
-                <ViewAll onClick={() => navigate('/repos')} />
-              )}
-            </div>
+            <ViewAll href="/repos" navigate={navigate} />
+          </RailHeading>
 
-          </>
-        ) : (
-          /* Not expanded: attention dots for the top projects — same axis, same
-             order, same colours as the expanded list and the board. */
-          <div className="px-2 flex flex-col gap-0.5 mt-1">
-            {items.slice(0, COLLAPSED_MAX).map(item => (
-              <button
-                key={item.project.id}
-                type="button"
-                onClick={() => openProject(item.project.id)}
-                aria-label={item.project.name}
-                title={item.project.name}
-                className="w-9 h-9 mx-auto flex items-center justify-center rounded-md transition-colors"
-                style={{ background: 'transparent' }}
-                onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                <span
-                  className={`w-2.5 h-2.5 rounded-full ${item.attention === 'gate' || item.attention === 'running' ? 'animate-pulse' : ''}`}
-                  style={{ background: ATTENTION_DOT[item.attention] }}
-                />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+          {/* ── Settings — title only, no ▦/＋ (the operator's word, §3.1) ───── */}
+          <RailHeading
+            path={P_SETTINGS}
+            open={openHeading === 'settings'}
+            onToggle={() => toggle('settings')}
+            navigate={navigate}
+          >
+            <SettingsShortcutRows navigate={navigate} />
+          </RailHeading>
+        </div>
+      ) : (
+        /* Collapsed rail (§3.2): the five path glyphs stacked, each an icon
+           LINK to its dashboard route (Settings → /system); accordions don't
+           exist at this width. */
+        <div className="flex-1 px-2 flex flex-col gap-0.5 mt-1">
+          {PATHS.map((path) => (
+            <a
+              key={path.key}
+              href={path.collapsedHref}
+              data-testid="rail-collapsed-glyph"
+              aria-label={path.title}
+              title={path.title}
+              onClick={(e) => { e.preventDefault(); navigate(path.collapsedHref); }}
+              className="w-9 h-9 mx-auto flex items-center justify-center rounded-md transition-colors"
+              style={{ color: S.muted, textDecoration: 'none' }}
+              onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span aria-hidden style={{ fontSize: 'var(--text-sm)' }}>{path.glyph}</span>
+            </a>
+          ))}
+        </div>
+      )}
 
-      {/* ── Settings — the expand/collapse section at the rail's bottom
-             (DES-FEEDBACK-001 §1.2, §4.4): the retired AppChrome dropdown's
-             entries as an in-rail shortcut list, collapsed by default. ── */}
-      {isExpanded && <SettingsRailSection navigate={navigate} />}
-
-      {/* The new-project flow (§1.3), opened from QUICK's Project action. */}
+      {/* The new-project flow (§1.3), opened from Projects' ＋ (§3.1). */}
       {newProjectOpen && (
         <NewProjectModal navigate={navigate} onClose={() => setNewProjectOpen(false)} />
       )}
     </div>
-  );
-}
-
-function SectionList({
-  children,
-  empty,
-  viewAllPath,
-  navigate,
-}: {
-  children: React.ReactNode;
-  empty: string;
-  viewAllPath: string;
-  navigate: (p: string) => void;
-}): React.ReactElement {
-  const kids = Array.isArray(children) ? children.filter(Boolean) : (children ? [children] : []);
-  return (
-    <div className="px-2 flex flex-col gap-0.5">
-      {kids.length === 0 ? (
-        <button
-          type="button"
-          onClick={() => navigate(viewAllPath)}
-          className="px-2 py-1 text-left text-[11px] italic font-mono transition-opacity hover:opacity-70"
-          style={{ color: S.faint }}
-        >
-          {empty}
-        </button>
-      ) : kids}
-    </div>
-  );
-}
-
-function ViewAll({ onClick }: { onClick: () => void }): React.ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mx-4 mb-1 text-left text-[11px] font-mono transition-opacity hover:opacity-80"
-      style={{ color: S.link }}
-    >
-      view all
-    </button>
   );
 }

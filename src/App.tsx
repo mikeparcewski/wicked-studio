@@ -61,7 +61,7 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
 const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, navigate, search } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, navigate, search, pathname } = useRoute();
   const { runs, refresh } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestElicitation = useElicitationStore((s) => s.ingest);
@@ -435,6 +435,23 @@ export function App(): React.ReactElement {
         </div>
       );
     }
+    // `/make` — the Make path's dashboard route (DES-FEEDBACK-003 §2.1). The
+    // rail's ▦ links here from slice M on; the real combined list + reporting
+    // surface is slice O (§4.2) — until it lands this placeholder keeps the
+    // link honest (a page, never a 404).
+    if (panel === 'make') {
+      return (
+        <div className="flex-1 overflow-y-auto p-6" data-testid="make-placeholder">
+          <h1 style={{ color: 'var(--ink-high)', fontSize: 'var(--text-lg)', fontFamily: 'var(--font-sans)', fontWeight: 'var(--weight-semi)' }}>
+            Make
+          </h1>
+          <p className="mt-2" style={{ color: 'var(--ink-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-sans)' }}>
+            The combined list and reporting dashboard for made things — build runs,
+            documents, demos — lands here (DES-FEEDBACK-003 §4.2, slice O).
+          </p>
+        </div>
+      );
+    }
     // `/projects/:id` redirects into the shell (§1.5); this renders only for the tick
     // before the redirect lands, and is the fallback if the redirect never does.
     if (panel === 'project-detail' && projectId) {
@@ -477,6 +494,7 @@ export function App(): React.ReactElement {
       <LeftSidebar
         runs={runs}
         navigate={navigate}
+        pathname={pathname}
         runPath={runPath}
         immersive={projectId !== null && (mode === 'document' || mode === 'video')}
       />
