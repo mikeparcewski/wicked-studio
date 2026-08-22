@@ -79,6 +79,20 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     brand-learn rig to witness the 404→200 transition).
   reset_learn     — POST {"reset_learn": true} clears all learned-theme
                     readback state (back to the 404).
+  batch_gates     — two extra projects (batch-one/batch-two) each with one
+                    awaiting_human SIMPLE-gate run ride /projects, /runs,
+                    members and the cached-gate GET (slice L §9.5's "3 simple
+                    gates" board, with r-q3, beside the complex r-api).
+                    Default False.
+  gate_409        — run ids whose POST /runs/:id/gate answers the daemon's
+                    real 409 "not awaiting a human gate" (slice L's partial-
+                    failure case). Default [].
+  extra_gates     — a list of {session, ord?, prompt?}; each is drained ONCE
+                    by the /ws loop as an `awaitingHuman` frame (slice L §8.4:
+                    a gate ARRIVAL, the desktop-notification trigger).
+  notif_prefs     — replaces the settings store's `studio.notifications`
+                    (a dict; None REMOVES the key — the never-persisted
+                    default case), same channel as `appearance`.
 
 A rig that never flips them gets the default W2 board.
 """
@@ -158,7 +172,21 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # columns grid has a true empty cell to render. Default False: the
          # standing chat rigs (uxfix slice 4, feedback slice C) assert a
          # fan-out with NO replies, and must keep seeing exactly that.
-         "chat_replies": False}
+         "chat_replies": False,
+         # Slice L (DES-FEEDBACK-002 §9): the batch-gates corpus — two extra
+         # projects each holding one awaiting_human SIMPLE-gate run, so the
+         # board has §9.5's "3 simple gates" (with r-q3) beside the complex
+         # r-api. Switch-gated: no standing rig's board grows cards.
+         "batch_gates": False,
+         # Slice L (§9.5): run ids whose POST /runs/:id/gate answers the
+         # daemon's real 409 ("not awaiting a human gate") — the partial-
+         # failure case the batch bar must surface per-id.
+         "gate_409": [],
+         # Slice L (§8.4): one-shot awaitingHuman frames drained ONCE by the
+         # /ws loop (the extra_narration mechanism) — how a rig injects a gate
+         # ARRIVAL (the desktop-notification trigger), distinct from the
+         # cached-gate GET a page load reconciles.
+         "extra_gates": []}
 state_lock = threading.Lock()
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
@@ -297,6 +325,26 @@ RIVER_AUTH_EVENTS = [
     {"type": "sessionStarted", "session": "r-auth", "ts": NOW0 - 6 * HOUR},
     {"type": "sessionFailed", "session": "r-auth", "ts": NOW0 - 5 * HOUR},
 ]
+
+# ── Slice L (DES-FEEDBACK-002 §9): the batch-gates corpus, behind `batch_gates` ──
+#
+# Two extra projects, each with one awaiting_human run whose cached gate is
+# SIMPLE (no options field — the plain workflow gate), giving the board three
+# simple-gate needs-you cards (with r-q3) beside the complex r-api: §9.5's
+# fixture shape. Gate ages differ so the attention order is deterministic.
+BATCH_PROJECTS = [
+    project("batch-one", "batch-one", NOW0 - MIN),
+    project("batch-two", "batch-two", NOW0 - 3 * MIN),
+]
+BATCH_RUNS = [
+    session("r-batch1", "awaiting_human", "bump the API version", "bump the API version"),
+    session("r-batch2", "awaiting_human", "rotate the staging keys", "rotate the staging keys"),
+]
+BATCH_MEMBERS = {"batch-one": ["r-batch1"], "batch-two": ["r-batch2"]}
+BATCH_GATE_PROMPTS = {"r-batch1": ("Ship the version bump?", MIN),
+                      "r-batch2": ("Rotate the keys now?", 3 * MIN)}
+ATTACHED_AT["r-batch1"] = NOW0 - MIN
+ATTACHED_AT["r-batch2"] = NOW0 - 3 * MIN
 
 # Slice P: which runs the `repo_refs` switch stamps onto the registered repo —
 # a live one and a 6-day-old one for the 7d grouping, plus a fresh failure for
@@ -935,13 +983,23 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # Drain any one-shot narration lines a rig posted mid-page (vision
                 # slice 2: prove a NEW delta reaches the live feed within 2s).
                 extra: list = []
+                gates_extra: list = []
                 if newest:
                     with state_lock:
                         extra, state["extra_narration"] = list(state["extra_narration"]), []
+                        gates_extra, state["extra_gates"] = list(state["extra_gates"]), []
                 for line in extra:
                     self.wfile.write(ws_frame({
                         "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
                         "text": str(line) + "\n",
+                    }))
+                # Slice L (§8.4): one-shot awaitingHuman ARRIVALS a rig posted —
+                # the desktop-notification trigger is the live frame, never the
+                # cached-gate GET a page load reconciles.
+                for g in gates_extra:
+                    self.wfile.write(ws_frame({
+                        "type": "awaitingHuman", "session": g["session"],
+                        "ord": g.get("ord", 0), "prompt": g.get("prompt", "Approve?"),
                     }))
                 # One burn frame per tick until the slice-E drip drains.
                 if newest and burn_drip:
@@ -987,7 +1045,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                 else:
                     runs = RUNS + ([ORPHAN] if state["orphan"] else []) \
                         + ([LONG_RUN] if state["long_prompt"] else []) \
-                        + ([CHAT_LIVE, CHAT_GATED] if state["chat_runs"] else [])
+                        + ([CHAT_LIVE, CHAT_GATED] if state["chat_runs"] else []) \
+                        + (BATCH_RUNS if state["batch_gates"] else [])
                 viewer_on = state["viewer"]
                 repo_refs_on = state["repo_refs"]
             if viewer_on or repo_refs_on:
@@ -1008,7 +1067,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             self._viewer_routes(urllib.parse.unquote(m.group(1)), m.group(2))
             return True
         if path == "/api/v1/projects":
-            self._json(200, {"projects": PROJECTS})
+            with state_lock:
+                batch_on = state["batch_gates"]
+            self._json(200, {"projects": PROJECTS + (BATCH_PROJECTS if batch_on else [])})
             return True
         if path == "/api/v1/repos":
             with state_lock:
@@ -1056,6 +1117,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 chat_runs_on = state["chat_runs"]
                 river_on = state["river"]
                 repo_member_on = state["repo_member"]
+                batch_on = state["batch_gates"]
+            # Slice L: the batch corpus projects' runs.
+            if batch_on:
+                refs.extend(BATCH_MEMBERS.get(pid, []))
             # Slice P: the live chat thread is a `crew.chat` member of notes.
             kinds = {}
             if chat_runs_on and pid == "notes":
@@ -1118,6 +1183,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
                                  "prompt": CHAT_GATE_PROMPT,
                                  "receivedAt": iso(NOW0 - 5 * MIN)})
+            elif rid in BATCH_GATE_PROMPTS and state["batch_gates"]:
+                # Slice L: the batch corpus's SIMPLE cached gates (no options).
+                prompt, age = BATCH_GATE_PROMPTS[rid]
+                self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
+                                 "prompt": prompt, "receivedAt": iso(NOW0 - age)})
             else:
                 self._json(404, {"error": f"no gate cached for {rid}"})
             return True
@@ -1409,6 +1479,14 @@ class W2Handler(SimpleHTTPRequestHandler):
                     settings_store["studio.appearance"] = (
                         dict(DEFAULT_APPEARANCE) if body["appearance"] is None
                         else body["appearance"])
+                # Slice L: seed `studio.notifications` between page loads the
+                # same way (a dict replaces it; None removes the key — the
+                # "old daemon never persisted one" default case, §8.4).
+                if "notif_prefs" in body:
+                    if body["notif_prefs"] is None:
+                        settings_store.pop("studio.notifications", None)
+                    else:
+                        settings_store["studio.notifications"] = body["notif_prefs"]
                 state.update({k: v for k, v in body.items() if k in state})
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})
@@ -1421,6 +1499,13 @@ class W2Handler(SimpleHTTPRequestHandler):
         # chip click; the rigs assert the request BODY off the browser tap.
         parts = path.split("/")
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "gate":
+            rid = urllib.parse.unquote(parts[4])
+            with state_lock:
+                conflict = rid in state["gate_409"]
+            if conflict:
+                # Slice L (§9.5): the daemon's real 409 — the run stopped
+                # awaiting between the selection and the fan-out.
+                return self._json(409, {"error": "not awaiting a human gate"})
             return self._json(200, {"status": "resumed"})
         # POST /api/v1/chats — open a chat: warm the asked-for seats (or the whole
         # roster when `clis` is omitted, matching the daemon), every seat ok, instantly.
