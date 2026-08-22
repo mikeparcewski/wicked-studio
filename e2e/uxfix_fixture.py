@@ -986,6 +986,13 @@ class W2Handler(SimpleHTTPRequestHandler):
         # The slice-6 document journey's writes (create / fork / bus emit).
         if self._interactive_post(path, body if isinstance(body, dict) else {}):
             return None
+        # POST /api/v1/runs/<id>/gate — the steering-gate decision (slice H,
+        # DES-FEEDBACK-002 §2.3). The fixture accepts it so the answered state
+        # ("approved · advancing…") renders truthfully after a triage key or a
+        # chip click; the rigs assert the request BODY off the browser tap.
+        parts = path.split("/")
+        if len(parts) == 6 and parts[3] == "runs" and parts[5] == "gate":
+            return self._json(200, {"status": "resumed"})
         # POST /api/v1/chats — open a chat: warm the asked-for seats (or the whole
         # roster when `clis` is omitted, matching the daemon), every seat ok, instantly.
         if path == "/api/v1/chats":
