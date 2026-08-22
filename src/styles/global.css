@@ -198,9 +198,12 @@ code, pre, .font-mono {
    glyph fading in at --dur-instant at line-end. */
 .wk-feed-link       { color: var(--ink-body); text-decoration: none; display: block; }
 .wk-feed-link:hover { color: var(--ink-high); }
-.wk-feed-goto {
+/* The ↗ is a pseudo-element on purpose: it never pollutes the line's
+   textContent (narration is data), and it costs no DOM. */
+.wk-feed-link::after {
+  content: '↗';
   opacity: 0;
   transition: opacity var(--dur-instant) var(--ease-out);
   margin-left: 4px;
 }
-.wk-feed-link:hover .wk-feed-goto { opacity: 1; }
+.wk-feed-link:hover::after { opacity: 1; }

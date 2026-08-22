@@ -95,7 +95,6 @@ function RunLines({ view, max, link }: { view: SessionView; max: number; link: L
           style={CSS.line}
         >
           {line}
-          <span aria-hidden className="wk-feed-goto">↗</span>
         </a>
       ))}
     </>
