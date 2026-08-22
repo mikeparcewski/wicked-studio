@@ -332,6 +332,10 @@ function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }:
             data-testid="heading-new"
             aria-label={`New ${path.title}`}
             title={`New ${path.title}`}
+            // Keep the mousedown out of the make-picker's outside-close
+            // listener, so ＋ is a true toggle (open picker + click ＋ again
+            // = closed, not close-then-reopen).
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={onNew}
             className="w-7 h-7 shrink-0 flex items-center justify-center rounded transition-colors"
             style={{ ...iconStyle, background: 'transparent' }}

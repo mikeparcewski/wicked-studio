@@ -25,9 +25,13 @@ Plus the slice's checklist reads (§6.1): EC8 (the switcher looks like the
 spine — filled active segment, glyph+label segments, summary on screen), EC11
 (no ornament in the chrome), EC12 (the accent is none of the status colors;
 the dot speaks the status layer), EC15 (chrome computed styles resolve from
-tokens), and the §6.3 preservation list (UXFIX-001 §2.5: glyphs match the
-board quick actions, active summary always visible, unavailable modes stay
-rendered — never hidden). The §2.8 reconciliation is asserted too: the loaded
+tokens), and the §6.3 preservation list (UXFIX-001 §2.5: one glyph
+vocabulary, active summary always visible, unavailable modes stay rendered —
+never hidden). The rail-side glyph cross-check is RE-SCOPED by
+DES-FEEDBACK-003 §8.7 (slice M): QUICK's verbs are gone, so the spine glyphs
+are re-read off the make-picker's three MODE_SPECS rows (§3.4) — the chrome
+asserts (logo slot, connection-dot data-state) are PRESERVED and slice O must
+keep them green (§8.2). The §2.8 reconciliation is asserted too: the loaded
 sans is Inter (the token names it; the legacy Archivo load is gone).
 
 Captures (§6.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/vision/:
@@ -219,8 +223,6 @@ with sync_playwright() as p:
                glyphsPresent: ['💬','⚙','▤','▶'].every((g, i) => tabs[i].textContent.includes(g)),
                noneHidden: tabs.every(t => t.offsetParent !== null && !t.disabled),
                unavailableFlags: tabs.map(t => t.dataset.unavailable ?? null),
-               railActionGlyphs: (document.querySelector('[data-testid="rail-actions"]')
-                 ?.textContent ?? ''),
              }; }""")
     active_ok = (styles["activeBg"] == styles["accent"]
                  and styles["activeColor"] == styles["accentFg"]
@@ -234,14 +236,30 @@ with sync_playwright() as p:
                and styles["dotBg"] == styles["statusRun"])
     dot_ok = dot_connected and styles["dotState"] == "connected"
     # UXFIX-001 §2.5 preserved: four glyph+label segments (the board's own four
-    # glyphs — the rail's creation verbs carry two of them on this same page),
-    # the active summary ON SCREEN, no mode hidden or inert.
+    # glyphs), the active summary ON SCREEN, no mode hidden or inert.
     preserved_ok = (
         len(styles["tabTexts"]) == 4 and styles["glyphsPresent"]
         and styles["summaryVisible"]
         and (styles["summaryText"] or "").startswith("Governed code work")
-        and styles["noneHidden"]
-        and "⚙" in styles["railActionGlyphs"] and "💬" in styles["railActionGlyphs"])
+        and styles["noneHidden"])
+
+    # The rail-side vocabulary cross-check, re-scoped by DES-FEEDBACK-003 §8.7
+    # (slice M): QUICK's verbs are gone; the spine glyphs now ride the
+    # make-picker's three MODE_SPECS rows (§3.4). Open Make's ＋, read the three
+    # tines, close by clicking outside — the switcher must not have moved.
+    page.locator('[data-testid="rail-heading-make"] [data-testid="heading-new"]').click()
+    page.locator('[data-testid="make-picker"]').wait_for(timeout=5000)
+    picker_rows = page.evaluate(
+        """() => Array.from(document.querySelectorAll(
+             '[data-testid="make-picker"] [data-testid="make-picker-row"]'))
+             .map(r => ({ mode: r.dataset.mode, text: r.textContent ?? '' }))""")
+    picker_glyphs_ok = (
+        [r["mode"] for r in picker_rows] == ["build", "document", "video"]
+        and "⚙" in picker_rows[0]["text"] and "▤" in picker_rows[1]["text"]
+        and "▶" in picker_rows[2]["text"])
+    page.mouse.click(140, 850)  # an inert rail spot outside — closes the picker
+    picker_closed = settled(
+        """() => !document.querySelector('[data-testid="make-picker"]')""", timeout=5000)
 
     # ── The named steady-state screenshots (§6.3) — before the transition ─────
     page.locator('[data-testid="app-chrome"]').screenshot(
@@ -294,6 +312,7 @@ with sync_playwright() as p:
 
 report["steps"]["dom_acs"] = {
     "ok": all([fonts_ok, logo_ok, active_ok, ec12_ok, ec15_ok, dot_ok, preserved_ok,
+               picker_glyphs_ok, picker_closed,
                fill_moved, fill_mid, fill_settled, chat_active,
                len(console_errors) == 0]),
     "web_fonts_inter_and_mono": fonts_ok,
@@ -305,6 +324,9 @@ report["steps"]["dom_acs"] = {
     "ec15_chrome_from_tokens": ec15_ok,
     "connection_dot_state_matches_ws": dot_ok,
     "uxfix_2_5_preserved": preserved_ok,
+    "make_picker_spine_glyphs": picker_rows,
+    "make_picker_spine_glyphs_ok": picker_glyphs_ok,
+    "make_picker_closed_on_outside": picker_closed,
     "fill_transition_fired": fill_moved,
     "fill_mid_flight_captured": fill_mid,
     "fill_settled_on_target": fill_settled,
