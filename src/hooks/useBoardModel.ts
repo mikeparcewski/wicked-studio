@@ -207,6 +207,12 @@ export interface BoardModel {
   items: BoardProject[];
   /** Runs no non-default project claims — the "Not in a project" shelf (D4). */
   unfiled: SessionView[];
+  /**
+   * Backfilled durable-log tail per FAILED run id (D3 step 2) — the one honest
+   * failure clock. Exposed so the landing's activity river (DES-FEEDBACK-003
+   * §7.3) can place its ✗ marks on the clock this hook already fetched.
+   */
+  failedAt: Record<string, number>;
   loading: boolean;
   error: string | null;
 }
@@ -378,5 +384,5 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     return runs.filter((v) => !known.has(v.session.id));
   }, [runs, projects, bindings, loading]);
 
-  return { items, unfiled, loading, error };
+  return { items, unfiled, failedAt, loading, error };
 }

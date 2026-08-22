@@ -52,6 +52,14 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     5-frame burn drains (slice E's token-burn tile; default
                     False). Same real frame shape as usage_ws; drip-fed so
                     the cumulative fold has more than one arrival instant.
+  river           — the DES-FEEDBACK-003 §10.2 "24h-spread activity" variant
+                    for slice Q's landing river: the members wire serves
+                    SPREAD attach clocks (r-upload live 20h ago, r-auth 6h,
+                    the smokes 16h/10h — all inside the window), r-auth's
+                    durable tail moves its failure to 5h ago, and /ws pushes
+                    ONE `wicked.interactive.version.created` frame for
+                    q3-review-deck on connect (the doc-landed river mark).
+                    Default False — every standing rig keeps the W2 clocks.
   chat_runs       — 2 chat runs ride GET /runs (DES-FEEDBACK-003 §10.2): a
                     'chat'-stamped live thread (crew.chat member of notes,
                     real attach clock) and a legacy unstamped thread awaiting
@@ -119,6 +127,8 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #               resolves), giving §4.4's runs-per-repo / failing-
          #               repos tiles something true to group. Default False.
          "chat_runs": False, "repo_refs": False,
+         # Slice Q (DES-FEEDBACK-003 §10.2): the 24h-spread river variant.
+         "river": False,
          # Slice I (DES-FEEDBACK-002 §3): the in-studio file/diff viewer corpus.
          #   viewer      — r-upload gains a workdir + file events, and the crew#305
          #                 routes (GET /runs/:id/files, GET /runs/:id/diff) answer
@@ -251,6 +261,24 @@ CHAT_GATED = session("r-chat-gated", "awaiting_human",
 CHAT_GATED["session"]["workflow_id"] = None
 CHAT_GATE_PROMPT = "Pick the auth flow the chat should explore"
 ATTACHED_AT["r-chat-live"] = NOW0 - 10 * MIN
+
+# ── Slice Q (DES-FEEDBACK-003 §10.2): the 24h-spread river clocks ─────────────
+#
+# Served on the MEMBERS wire only while the `river` switch is on: observed
+# activity spread across the window so the lanes have a picture — one live run
+# spanning 20h and breaching "now" (r-upload), one failure at 6h→5h (r-auth,
+# tail below), and the two completed smokes inside the window (the lede's
+# "passed" counts). r-legacy stays 8 DAYS out — the entirely-outside case.
+RIVER_ATTACHED_AT = {
+    "r-upload": NOW0 - 20 * HOUR,
+    "r-auth": NOW0 - 6 * HOUR,
+    "r-smoke1": NOW0 - 16 * HOUR,
+    "r-smoke2": NOW0 - 10 * HOUR,
+}
+RIVER_AUTH_EVENTS = [
+    {"type": "sessionStarted", "session": "r-auth", "ts": NOW0 - 6 * HOUR},
+    {"type": "sessionFailed", "session": "r-auth", "ts": NOW0 - 5 * HOUR},
+]
 
 # Slice P: which runs the `repo_refs` switch stamps onto the registered repo —
 # a live one and a 6-day-old one for the 7d grouping, plus a fresh failure for
@@ -746,6 +774,7 @@ class W2Handler(SimpleHTTPRequestHandler):
         with state_lock:
             push_usage = state["usage_ws"]
             push_metrics = state["metrics_ws"]
+            push_river = state["river"]
         with ws_lock:
             ws_gen[0] += 1
             my_gen = ws_gen[0]
@@ -773,6 +802,17 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self.wfile.write(ws_frame({
                     "type": "cliUsage", "session": "r-upload", "ord": 0,
                     "inputTokens": 84000, "outputTokens": 14000, "costUsd": 0.42,
+                }))
+                self.wfile.flush()
+            # Slice Q: ONE relayed version.created on connect — the river's
+            # doc-landed mark on q3-review-deck's lane (arrival-clocked, §7.3).
+            if push_river:
+                self.wfile.write(ws_frame({
+                    "type": "interactiveEvent",
+                    "event": {"event_type": "wicked.interactive.version.created",
+                              "payload": {"project_id": "q3-review-deck",
+                                          "document_id": "q3-deck",
+                                          "version": 2, "kind": "generated"}},
                 }))
                 self.wfile.flush()
             while True:
@@ -902,15 +942,18 @@ class W2Handler(SimpleHTTPRequestHandler):
             refs = list(MEMBERS.get(pid, []))
             with state_lock:
                 chat_runs_on = state["chat_runs"]
+                river_on = state["river"]
             # Slice P: the live chat thread is a `crew.chat` member of notes.
             kinds = {}
             if chat_runs_on and pid == "notes":
                 refs.append("r-chat-live")
                 kinds["r-chat-live"] = "crew.chat"
+            # Slice Q: the 24h-spread clocks override the W2 defaults (river on).
+            clocks = {**ATTACHED_AT, **(RIVER_ATTACHED_AT if river_on else {})}
             self._json(200, {"members": [
                 {"id": f"{pid}:{kinds.get(ref, 'crew.run')}:{ref}", "project_id": pid,
                  "member_kind": kinds.get(ref, "crew.run"), "member_ref": ref, "meta": None,
-                 "attached_at": ATTACHED_AT.get(ref, 1), "attached_by": "studio"}
+                 "attached_at": clocks.get(ref, 1), "attached_by": "studio"}
                 for ref in refs
             ]})
             return True
@@ -962,8 +1005,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             events = list(RUN_EVENTS.get(rid, []))
             with state_lock:
                 viewer_on = state["viewer"]
+                river_on = state["river"]
             if viewer_on and rid == "r-upload":
                 events = events + VIEWER_EVENTS
+            # Slice Q: r-auth's durable tail matches its spread attach clock.
+            if river_on and rid == "r-auth":
+                events = list(RIVER_AUTH_EVENTS)
             self._json(200, {"events": events})
             return True
         if path.startswith("/api/v1/"):

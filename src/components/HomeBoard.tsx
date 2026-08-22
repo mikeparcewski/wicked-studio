@@ -6,12 +6,10 @@ import type { Navigate } from '../hooks/useRoute.js';
 import { modePath, projectPath } from '../hooks/useRoute.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useGateStore } from '../store/gates.js';
-import { GateLatencyChart } from './GateLatencyChart.js';
 import { LiveFeed } from './LiveFeed.js';
+import { NarrativeBand } from './NarrativeBand.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 import { ProjectSparkline } from './ProjectSparkline.js';
-import { RunOutcomeBar } from './RunOutcomeBar.js';
-import { TokenBurnSparkline } from './TokenBurnSparkline.js';
 
 /**
  * The orchestrator home board (DES-MERGE-001 §1.2/§1.4; bands per DES-UXFIX-001
@@ -35,12 +33,13 @@ import { TokenBurnSparkline } from './TokenBurnSparkline.js';
  * narration aggregates — and every color on the surface resolves from a semantic
  * token (§2.11, lint-enforced at ERROR for this file).
  *
- * Feedback slice E (DES-FEEDBACK-001 §2): a 64px METRICS BAR sits between the
- * chrome and the wall — three SVG-first tiles, each answering a §2.1 named
- * operator question (EC19), all derived from stores the page already holds
- * (zero new requests). The bar AUGMENTS the wall and the live feed; neither
- * changes beneath it. The gate-latency tile hides under 900px (§2.2 — the
- * least critical at a glance; `.wk-metrics-mid` in global.css).
+ * Feedback slice Q (DES-FEEDBACK-003 §7): slice E's 64px metrics bar is
+ * SUPERSEDED by the ~200px NARRATIVE BAND (§8.5) — a data-composed lede plus
+ * the per-project activity river, with the two surviving slice-E tiles as its
+ * margin notes (the GateLatencyChart leaves the landing; its question is
+ * answered by the river's gate marks, and the component survives for
+ * dashboards). Everything below the band — wall, bands, cursor, live feed —
+ * is byte-identical (§7.4, C3/C6).
  */
 
 /** Card gap — §1.3's composition (blocks and cards sit 8px apart, `--space-2`). */
@@ -123,7 +122,7 @@ function BandGrid({ items, columns, rowH, firstRow, lastRow, navigate, cursor }:
 }
 
 export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
-  const { items, unfiled, loading, error } = useBoardModel(runs);
+  const { items, unfiled, failedAt, loading, error } = useBoardModel(runs);
   const scroller = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [scrollTop, setScrollTop] = useState(0);
@@ -209,7 +208,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
     onClick: (e) => { e.preventDefault(); navigate(path); },
   });
 
-  // The run-outcome tile buckets on the one honest per-run clock the board
+  // The band's charts bucket on the one honest per-run clock the board
   // already fetched — the membership attach times, merged across projects.
   const attachedAt = useMemo(() => {
     const merged: Record<string, number> = {};
@@ -218,22 +217,15 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
   }, [items]);
 
   return (
-    // §1.3's composition — with slice E's metrics bar (§2.2) banded above it.
+    // §1.3's composition — with slice Q's narrative band (§7.3) above it.
     <div className="flex flex-1 flex-col overflow-hidden" style={{ background: 'var(--surface-base)' }}>
-      <div
-        data-testid="metrics-bar"
-        style={{
-          height: '64px', flexShrink: 0, display: 'flex', alignItems: 'stretch',
-          background: 'var(--surface-rail)', padding: '0 var(--space-3)',
-        }}
-      >
-        <RunOutcomeBar runs={runs} attachedAt={attachedAt} />
-        {/* Hidden under 900px (§2.2) — the media query lives in global.css. */}
-        <div className="wk-metrics-mid" style={{ display: 'flex', flex: 1, minWidth: 0 }}>
-          <GateLatencyChart />
-        </div>
-        <TokenBurnSparkline />
-      </div>
+      <NarrativeBand
+        items={items}
+        runs={runs}
+        attachedAt={attachedAt}
+        failedAt={failedAt}
+        navigate={navigate}
+      />
 
       <div className="flex min-w-0 flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

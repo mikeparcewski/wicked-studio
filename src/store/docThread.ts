@@ -102,6 +102,18 @@ export function threadKey(projectId: string, docId: string): string {
  *  arrive since I started?" needs no clock — snapshot the entry, watch it change. */
 export interface ThreadError { text: string }
 
+/**
+ * One OBSERVED version landing (DES-FEEDBACK-003 §7.3): the landing page's
+ * activity river marks "a doc/demo version landed" on the owning project's
+ * lane. The frame itself carries no timestamp, so the clock is the ARRIVAL
+ * time — the same honest stamp the runtime log and the gate store already use
+ * (observed by this page, never invented).
+ */
+export interface VersionLanding { projectId: string; version: number; kind: string; at: number }
+
+/** Ring cap on the observed-landings list — a lens over recent activity, not a ledger. */
+const LANDINGS_CAP = 200;
+
 interface DocThreadStore {
   messages: Record<string, DocMsg[]>;
   /** What the stream last said the generation is doing, per thread. */
@@ -121,6 +133,8 @@ interface DocThreadStore {
    * storyboard re-reads the service rather than showing the steps it was fed at mount.
    */
   landed: Record<string, number>;
+  /** Every version landing this page has observed, arrival-stamped (§7.3 river marks). */
+  landings: VersionLanding[];
   /** Fold one CoreEvent — every non-interactive frame is ignored. */
   ingest: (event: CoreEvent) => void;
   /** Append the user's message and make it the pending version anchor. */
@@ -156,6 +170,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
   genState: {},
   anchor: {},
   landed: {},
+  landings: [],
   lastError: {},
 
   ingest: (event) => {
@@ -270,6 +285,12 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
           messages: tagged,
           anchor,
           landed: { ...s.landed, [key]: version },
+          // The river's mark (§7.3): project id is the thread key's first
+          // segment (`threadKey` = `${projectId}:${docId}`), clock = arrival.
+          landings: [
+            ...s.landings,
+            { projectId: key.slice(0, key.indexOf(':')), version, kind, at: Date.now() },
+          ].slice(-LANDINGS_CAP),
           genState: generated ? { ...s.genState, [key]: 'terminal' } : s.genState,
         };
       }
