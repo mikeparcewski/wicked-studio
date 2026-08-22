@@ -216,8 +216,12 @@ with sync_playwright() as p:
              const mcs = mode ? getComputedStyle(mode) : null;
              return {
                height: h ? h.getBoundingClientRect().height : null,
-               nameText: name?.textContent ?? null,
-               nameHref: name?.getAttribute('href') ?? null,
+               nameText: name?.querySelector('span')?.textContent ?? name?.textContent ?? null,
+               // Slice J (DES-FEEDBACK-002 §4.2): the name is the switcher
+               // TRIGGER now; the deep-linkable dashboard href moved to the ⌂
+               // real link directly after it.
+               nameHref: document.querySelector('[data-testid="project-home"]')
+                 ?.getAttribute('href') ?? null,
                nameColor: ncs?.color ?? null,
                modeText: mode?.textContent ?? null,
                modeColor: mcs?.color ?? null,
@@ -234,8 +238,12 @@ with sync_playwright() as p:
     # ── Capture 2: Build mode with the context header ───────────────────────────
     page.screenshot(path=str(VSHOTS / "feedback-D-build-with-header.png"))
 
-    # ── AC 4: clicking the project name lands back on the dashboard ────────────
+    # ── AC 4 (as amended by DES-FEEDBACK-002 §4.2, slice J): the name now opens
+    # the project switcher; the dashboard stays one click away via the
+    # dropdown's ⌂ row (and the ⌂ real link asserted above as nameHref). ──────
     page.locator('[data-testid="project-name"]').click()
+    page.locator('[data-testid="switcher-dashboard-row"]').wait_for(timeout=30000)
+    page.locator('[data-testid="switcher-dashboard-row"]').click()
     page.locator('[data-testid="project-dashboard"]').wait_for(timeout=30000)
     back_path = page.evaluate("() => window.location.pathname")
 
@@ -248,7 +256,9 @@ with sync_playwright() as p:
         page.add_style_tag(content=HIDE_GATE_TOASTS)
         got = page.evaluate(
             """() => ({
-                 name: document.querySelector('[data-testid="project-name"]')?.textContent ?? null,
+                 // Slice J: the name span inside the switcher trigger (the raw
+                 // textContent would also carry the ▾ caret).
+                 name: document.querySelector('[data-testid="project-name"] span')?.textContent ?? null,
                  mode: document.querySelector('[data-testid="context-mode"]')?.textContent ?? null,
                  visible: (() => {
                    const h = document.querySelector('[data-testid="project-context-header"]');
