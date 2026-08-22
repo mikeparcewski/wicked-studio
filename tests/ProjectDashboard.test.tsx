@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ProjectDashboard } from '../src/components/ProjectDashboard.js';
+import { clearRepoCache, fetchReposCached } from '../src/store/repoCache.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useProjectsStore } from '../src/store/projects.js';
 import type { Project, ProjectMember, SessionStatus } from '../src/api/types.js';
@@ -14,12 +15,14 @@ import { makeUnit, makeView } from './factories.js';
 
 const listProjectMembers = vi.fn();
 const confirmGate = vi.fn();
+const listRepos = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
   api: {
     listProjects: () => Promise.resolve({ projects: [] }),
     listProjectMembers: (...a: unknown[]) => listProjectMembers(...a),
     confirmGate: (...a: unknown[]) => confirmGate(...a),
+    listRepos: (...a: unknown[]) => listRepos(...a),
   },
 }));
 
@@ -202,5 +205,54 @@ describe('ProjectDashboard (DES-FEEDBACK-001 §4.1, slice D)', () => {
     // Two buckets with counts ⇒ two bars; the max bucket (2) renders full height.
     expect(svg.querySelectorAll('rect')).toHaveLength(2);
     expect(screen.getByTestId('dashboard-activity')).toHaveTextContent('3 runs this week');
+  });
+});
+
+describe('bound repos row (DES-FEEDBACK-002 §10.2, slice J)', () => {
+  beforeEach(() => {
+    clearRepoCache();
+    listRepos.mockReset();
+    listRepos.mockResolvedValue({
+      repos: [{ id: 'studio-api', name: 'studio-api', root_path: '/x', default_branch: 'main', registered_at: 1 }],
+    });
+  });
+
+  it('a crew.repo member renders one chip linking to the repo page — name resolved from the warm §1.4 cache, ZERO new requests', async () => {
+    await fetchReposCached(); // the palette/rail gesture already warmed it
+    const fetchesBefore = listRepos.mock.calls.length;
+    listProjectMembers.mockResolvedValue({
+      members: [member('studio-api', 'crew.repo'), member('r-a', 'crew.run')],
+    });
+    render(<ProjectDashboard projectId="proj-1" runs={[run('r-a', 'executing')]} navigate={() => {}} />);
+
+    await waitFor(() => expect(screen.getByTestId('dashboard-repos')).toBeInTheDocument());
+    const chips = screen.getAllByTestId('dashboard-repo');
+    expect(chips).toHaveLength(1);
+    expect(chips[0]).toHaveAttribute('href', '/repo-detail/studio-api');
+    expect(chips[0]).toHaveTextContent('studio-api');
+    // Zero new requests: the SAME membership read, the SAME repo cache.
+    expect(listRepos.mock.calls.length).toBe(fetchesBefore);
+    // And the repo member never leaks into the runs tile.
+    expect(screen.getByTestId('dashboard-runs')).toHaveAttribute('data-count', '1');
+  });
+
+  it('a cold cache renders the raw ref in --ink-dim — membership is the truth, still a link, still no fetch', async () => {
+    listProjectMembers.mockResolvedValue({ members: [member('studio-api', 'crew.repo')] });
+    render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
+
+    await waitFor(() => expect(screen.getByTestId('dashboard-repos')).toBeInTheDocument());
+    const chip = screen.getByTestId('dashboard-repo');
+    expect(chip).toHaveTextContent('studio-api'); // the raw ref
+    expect(chip).toHaveAttribute('href', '/repo-detail/studio-api');
+    expect((chip as HTMLElement).style.color).toBe('var(--ink-dim)');
+    expect(listRepos).not.toHaveBeenCalled();
+  });
+
+  it('with no crew.repo member the testid is ABSENT — the empty-state budget', async () => {
+    listProjectMembers.mockResolvedValue({ members: [member('r-a', 'crew.run')] });
+    render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
+
+    await waitFor(() => expect(listProjectMembers).toHaveBeenCalled());
+    expect(screen.queryByTestId('dashboard-repos')).toBeNull();
   });
 });

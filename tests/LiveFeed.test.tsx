@@ -153,8 +153,32 @@ describe('LiveFeed — the home route heartbeat (vision slice 2)', () => {
     });
     const fresh = block('p-fresh') as HTMLElement;
     expect(fresh).toHaveTextContent(/failed \d+[smhd] ago/);
-    expect(within(fresh).getByTestId('feed-open-run'))
-      .toHaveAttribute('href', '/p/p-fresh/build/run-f');
+    // Slice J (DES-FEEDBACK-002 §10.1): the whole failure LINE is the run link
+    // now (anchors don't nest); [open run] stays as the visible affordance.
+    const failLine = within(fresh).getByTestId('feed-line');
+    expect(failLine.tagName).toBe('A');
+    expect(failLine).toHaveAttribute('href', '/p/p-fresh/build/run-f');
+    expect(within(failLine).getByTestId('feed-open-run')).toBeInTheDocument();
     expect(block('p-stale')).toBeNull();
+  });
+
+  it('every narration line is a real link to its run — href ends with data-run-id (§10.1, slice J)', async () => {
+    projects = [project('p-b')];
+    members = { 'p-b': [member('p-b', 'run-b')] };
+    await board([running('run-b')]);
+
+    push({ type: 'unitOutputDelta', session: 'run-b', ord: 0, text: 'wiring the anchor\n' } as CoreEvent);
+
+    await vi.waitFor(() => {
+      expect(block('p-b') as HTMLElement).toHaveTextContent('wiring the anchor');
+    });
+    const lines = within(block('p-b') as HTMLElement).getAllByTestId('feed-line');
+    for (const line of lines) {
+      expect(line.tagName).toBe('A');
+      const runId = line.getAttribute('data-run-id') ?? '';
+      expect(runId).not.toBe('');
+      expect(line.getAttribute('href') ?? '').toMatch(new RegExp(`/${runId}$`));
+      expect(line.className).toContain('wk-feed-link');
+    }
   });
 });

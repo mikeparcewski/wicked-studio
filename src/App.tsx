@@ -191,6 +191,9 @@ export function App(): React.ReactElement {
   // guards and silent-fail contract intact, and also rides the palette as the
   // `> Cancel run` verb. One listener, one guard — `useGlobalShortcuts`.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // §5.2 (slice J): Cmd+Shift+F opens the palette in SEARCH mode — the seed is
+  // the pre-typed `?` prefix; the plain toggles seed nothing.
+  const [paletteSeed, setPaletteSeed] = useState('');
   const paletteOpenRef = useRef(paletteOpen);
   useEffect(() => {
     paletteOpenRef.current = paletteOpen;
@@ -201,7 +204,14 @@ export function App(): React.ReactElement {
     () =>
       paletteShortcutEntries({
         isOpen: () => paletteOpenRef.current,
-        setOpen: setPaletteOpen,
+        setOpen: (next: boolean) => {
+          setPaletteSeed('');
+          setPaletteOpen(next);
+        },
+        openSearch: () => {
+          setPaletteSeed('?');
+          setPaletteOpen(true);
+        },
         killEligible: () => {
           if (!runId) return false;
           const run = runs.find((r) => r.session.id === runId);
@@ -513,7 +523,8 @@ export function App(): React.ReactElement {
           from already-loaded stores + the runs prop; repos cached on first open. */}
       <CommandPalette
         open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
+        onClose={() => { setPaletteOpen(false); setPaletteSeed(''); }}
+        seed={paletteSeed}
         runs={runs}
         navigate={navigate}
         runPath={runPath}

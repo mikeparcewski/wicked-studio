@@ -69,6 +69,10 @@ Mutable switches (flipped over POST /__fixture between page loads):
   repo_refs       — r-upload / r-auth / r-smoke1 gain repo_ref "studio-api"
                     on the runs wire (flip `repo` on with it; default False —
                     the slice-P /repos tiles' grouping cases).
+  repo_member     — upload-endpoint gains ONE `crew.repo` member (studio-api)
+                    on the members wire (DES-FEEDBACK-002 §10.2 — the slice-J
+                    dashboard bound-repos row; flip `repo` on with it so the
+                    name resolves from the palette cache; default False).
   learn_delay_s   — how long after a successful theme.requested the learned
                     tokens ripen into GET /d/<doc>/api/theme/learned
                     (interactive#181; default 0.75 — long enough for the
@@ -127,6 +131,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #               resolves), giving §4.4's runs-per-repo / failing-
          #               repos tiles something true to group. Default False.
          "chat_runs": False, "repo_refs": False,
+         # Slice J (DES-FEEDBACK-002 §10.2): upload-endpoint gains ONE
+         # crew.repo member (studio-api) on the members wire — the dashboard's
+         # bound-repos row corpus. Switch-gated so no standing rig's member
+         # list grows a kind it never asserted. Default False.
+         "repo_member": False,
          # Slice Q (DES-FEEDBACK-003 §10.2): the 24h-spread river variant.
          "river": False,
          # Slice I (DES-FEEDBACK-002 §3): the in-studio file/diff viewer corpus.
@@ -394,6 +403,45 @@ VIEWER_EVENTS = [
     {"type": "dataUsed", "session": "r-upload", "ord": 1,
      "files": [VIEWER_FILE_BIN, VIEWER_FILE_403]},
 ]
+
+# ── Slice J (DES-FEEDBACK-002 §5): the search-mode wires ──────────────────────
+#
+# GET /governance/claims — the decisions corpus (real `GovernanceClaim` shape,
+# wicked-crew-api-types): one claim NAMES a client-held run in its scope (the
+# hit navigates to the run), one names only a repo (the hit falls back to
+# /policies). Served unconditionally: the studio only reads it on the search
+# gesture, so no standing rig sees a new request.
+GOVERNANCE_CLAIMS = [
+    {"claim_id": "clm-w2-001", "scope": "run:r-upload", "phase": "build",
+     "policy_ids": ["pol-rate-limit"], "decision": "allow", "obligations": [],
+     "evaluated_context_ref": "ctx-upload-0",
+     "criteria": "rate-limiting middleware guards the upload endpoint",
+     "evaluator_identity": "conformance", "evaluated_at": (NOW0 - HOUR) // 1000},
+    {"claim_id": "clm-w2-002", "scope": "repo:studio-api", "phase": "design",
+     "policy_ids": ["pol-authz-review"], "decision": "deny",
+     "obligations": ["schedule an authz review"],
+     "evaluated_context_ref": "ctx-repo-1",
+     "criteria": "the schema rollback plan is missing from the design",
+     "evaluator_identity": "conformance", "evaluated_at": (NOW0 - 2 * HOUR) // 1000},
+]
+
+# GET /projects/<id>/prompts — the per-project open prompt inbox (real
+# `InteractionRequest` shape). Only the projects whose runs hold open gates
+# have entries; an unknown project answers an empty inbox (the daemon's shape).
+PROJECT_PROMPTS = {
+    "q3-review-deck": [
+        {"id": "ir-q3-0", "session_id": "r-q3", "kind": "gate", "ord": 0,
+         "reviewing_ord": None, "prompt": "Approve the deck outline?",
+         "status": "open", "answer": None,
+         "created_at": NOW0 - 30 * SEC, "resolved_at": None},
+    ],
+    "api-migration": [
+        {"id": "ir-api-0", "session_id": "r-api", "kind": "gate", "ord": 0,
+         "reviewing_ord": None, "prompt": "How should the tables move?",
+         "status": "open", "answer": None,
+         "created_at": NOW0 - 2 * MIN, "resolved_at": None},
+    ],
+}
 
 # The durable-log tails (D3 step 2): the ONE honest clock for a failure's age.
 RUN_EVENTS = {
@@ -930,6 +978,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/roster":
             self._json(200, {"roster": ROSTER})
             return True
+        # Slice J (§5.2): the decisions corpus — read on the search GESTURE only.
+        if path == "/api/v1/governance/claims":
+            self._json(200, {"claims": GOVERNANCE_CLAIMS})
+            return True
         # /api/v1/chats/<id> — seats of a chat. Empty for a chat we never opened
         # (the daemon does not 404 an unknown id; empty means reclaimed/none).
         if path.startswith("/api/v1/chats/") and len(path.split("/")) == 5:
@@ -943,11 +995,16 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 chat_runs_on = state["chat_runs"]
                 river_on = state["river"]
+                repo_member_on = state["repo_member"]
             # Slice P: the live chat thread is a `crew.chat` member of notes.
             kinds = {}
             if chat_runs_on and pid == "notes":
                 refs.append("r-chat-live")
                 kinds["r-chat-live"] = "crew.chat"
+            # Slice J (§10.2): upload-endpoint's bound repo, a `crew.repo` member.
+            if repo_member_on and pid == "upload-endpoint":
+                refs.append(REPO_ID)
+                kinds[REPO_ID] = "crew.repo"
             # Slice Q: the 24h-spread clocks override the W2 defaults (river on).
             clocks = {**ATTACHED_AT, **(RIVER_ATTACHED_AT if river_on else {})}
             self._json(200, {"members": [
@@ -956,6 +1013,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                  "attached_at": clocks.get(ref, 1), "attached_by": "studio"}
                 for ref in refs
             ]})
+            return True
+        # Slice J (§5.2): the scoped per-project prompt inbox.
+        if len(parts) == 6 and parts[3] == "projects" and parts[5] == "prompts":
+            pid = urllib.parse.unquote(parts[4])
+            self._json(200, {"projectId": pid, "prompts": PROJECT_PROMPTS.get(pid, [])})
             return True
         # /api/v1/projects/<id>/interactive/api/docs — the registry: the notes seeds
         # plus whatever the slice-6 journey has created in this server's lifetime.

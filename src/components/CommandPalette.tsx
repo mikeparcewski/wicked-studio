@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
-import type { RepoEntry, SessionView } from '../api/types.js';
+import type { GovernanceClaim, InteractionRequest, RepoEntry, SessionView } from '../api/types.js';
+import { api } from '../api/client.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
-import { fuzzyMatch } from '../palette/fuzzy.js';
+import { fuzzyMatch, type FuzzyResult } from '../palette/fuzzy.js';
 import { modePath, projectPath, type Navigate } from '../hooks/useRoute.js';
 import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
+import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useGateStore } from '../store/gates.js';
 import { useAppearanceStore } from '../theming/appearance.js';
@@ -28,13 +30,21 @@ import { Terminal } from './Terminal.js';
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'cancelled', 'failed']);
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
 
-type Group = 'runs' | 'projects' | 'repos' | 'verbs';
+type Group =
+  | 'runs' | 'projects' | 'repos' | 'verbs'
+  // §5.2 search mode's corpora — grouped exactly as the corpus label names them.
+  | 'search-runs' | 'search-gates' | 'search-decisions' | 'search-repos' | 'search-prompts';
 
 const GROUP_LABEL: Record<Group, string> = {
   runs: 'RUNS & GATES',
   projects: 'PROJECTS',
   repos: 'REPOSITORIES',
   verbs: 'VERBS',
+  'search-runs': 'RUNS',
+  'search-gates': 'OPEN GATES',
+  'search-decisions': 'DECISIONS',
+  'search-repos': 'REPOSITORIES',
+  'search-prompts': 'PROMPTS: THIS PROJECT',
 };
 
 interface Entry {
@@ -50,7 +60,36 @@ interface Entry {
   action?: () => void;
   /** Group-internal rank: lower first (gates before active before terminal). */
   rank: number;
+  /** Search hits: a status dot (token) or glyph before the label. */
+  dot?: string;
+  glyph?: string;
+  /** Search hits: the mono snippet line (§5.3) + its matched positions. */
+  snippet?: string;
+  snippetPositions?: number[];
 }
+
+/**
+ * §5.2's prose matcher: a plain case-insensitive SUBSTRING pass for prose
+ * fields (run problems, gate prompts, claim subjects) — subsequence matching
+ * on prose produces false-positive noise; substring on prose + fuzzy on
+ * identifiers is the honest pairing. Positions feed the same accent-render
+ * seam the fuzzy scorer uses.
+ */
+export function substringMatch(needle: string, haystack: string): FuzzyResult | null {
+  if (needle === '') return { score: 0, positions: [] };
+  const at = haystack.toLowerCase().indexOf(needle.toLowerCase());
+  if (at === -1) return null;
+  return { score: 1, positions: Array.from({ length: needle.length }, (_, i) => at + i) };
+}
+
+/** Search-hit status dots — the board's status layer, read as tokens (EC15). */
+const SEARCH_DOT: Record<string, string> = {
+  awaiting_human: 'var(--status-gate)',
+  failed: 'var(--status-fail)',
+  planning: 'var(--status-run)',
+  distributing: 'var(--status-run)',
+  executing: 'var(--status-run)',
+};
 
 /** Session-scoped repo cache (§1.4) — SHARED with the rail's Repositories
  *  accordion since slice M (DES-FEEDBACK-003 §3.3): one gesture warms both. */
@@ -66,6 +105,8 @@ export { clearRepoCache as clearPaletteRepoCache } from '../store/repoCache.js';
 export function paletteShortcutEntries(opts: {
   isOpen: () => boolean;
   setOpen: (open: boolean) => void;
+  /** §5.2: open the palette in SEARCH mode (the `?` prefix pre-typed). */
+  openSearch: () => void;
   killEligible: () => boolean;
   kill: () => void;
 }): ShortcutEntry[] {
@@ -89,6 +130,17 @@ export function paletteShortcutEntries(opts: {
       allowWhilePaletteOpen: true,
     },
     {
+      // §5.2: global search is the palette's DEEP MODE — Cmd+Shift+F opens the
+      // palette with the `?` prefix pre-typed (registered in the §1.2 table).
+      id: 'palette-search',
+      chord: { key: 'f', ctrlOrMeta: true, shift: true },
+      description: 'Global search',
+      handler: (e) => {
+        e.preventDefault(); // suppress the browser's find-in-page variants
+        opts.openSearch();
+      },
+    },
+    {
       id: 'kill-run',
       chord: { key: 'k', ctrlOrMeta: true, shift: true },
       description: 'Cancel the selected run',
@@ -99,6 +151,22 @@ export function paletteShortcutEntries(opts: {
       },
     },
   ];
+}
+
+/** §5.3: snippet matches lift to `--ink-high` — the snippet line is muted mono,
+ *  so the matched substring reads as the found thing, not as the accent. */
+function highlightSnippet(text: string, positions: number[]): React.ReactNode {
+  if (positions.length === 0) return text;
+  const set = new Set(positions);
+  return text.split('').map((ch, i) =>
+    set.has(i) ? (
+      <span key={i} style={{ color: 'var(--ink-high)' }}>
+        {ch}
+      </span>
+    ) : (
+      ch
+    ),
+  );
 }
 
 /** Accent-highlight the fuzzy-matched characters (§1.5 — the row's only accent). */
@@ -125,10 +193,12 @@ interface Props {
   projectId: string | null;
   selectedRun: SessionView | null;
   onKill: (id: string) => void;
+  /** Pre-typed query on OPEN (§5.2: Cmd+Shift+F seeds `?` — search mode). */
+  seed?: string;
 }
 
 export function CommandPalette({
-  open, onClose, runs, navigate, runPath, projectId, selectedRun, onKill,
+  open, onClose, runs, navigate, runPath, projectId, selectedRun, onKill, seed = '',
 }: Props): React.ReactElement | null {
   const [query, setQuery] = useState('');
   const [sel, setSel] = useState(0);
@@ -159,11 +229,16 @@ export function CommandPalette({
     }
     restoreRef.current = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
+    // §5.2: Cmd+Shift+F opens WITH the `?` prefix pre-typed — same overlay,
+    // deep mode. A plain toggle seeds '' and lands in the normal grammar.
+    if (seed !== '') setQuery(seed);
     fetchReposCached()
       .then(setRepos)
       .catch(() => {
         /* no repo surface — the group just stays empty this session */
       });
+    // `seed` is read only at the open edge — a re-render must not re-seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const close = (): void => {
@@ -174,6 +249,7 @@ export function CommandPalette({
   // ── The corpus (§1.3/§1.4): stores + props only — zero fetching here ────────
   const { scope, needle } = useMemo(() => {
     const q = query.trimStart();
+    if (q.startsWith('?')) return { scope: 'search' as const, needle: q.slice(1).trim() };
     if (q.startsWith('>')) return { scope: 'verbs' as const, needle: q.slice(1).trim() };
     if (q.startsWith('p:')) return { scope: 'projects' as const, needle: q.slice(2).trim() };
     if (q.startsWith('run:')) return { scope: 'runs' as const, needle: q.slice(4).trim() };
@@ -181,7 +257,154 @@ export function CommandPalette({
     return { scope: 'all' as const, needle: q.trim() };
   }, [query]);
 
+  // ── §5.2 search mode: the gesture-fetched legs ──────────────────────────────
+  // ENTERING search mode fires at most two GETs (`/governance/claims`, plus
+  // `/repos` if the palette cache was cold — already handled by the open
+  // effect above), both cached for the session and refreshed on the next
+  // entry. Keystrokes fire nothing — filtering below is in-memory. Inside a
+  // project shell it ALSO queries the CURRENT project's prompt inbox (one
+  // request, labeled) — the per-project wire used the way it scales, never a
+  // cross-project fan-out.
+  const searchMode = open && scope === 'search';
+  const [claims, setClaims] = useState<GovernanceClaim[]>([]);
+  const [prompts, setPrompts] = useState<InteractionRequest[]>([]);
+  const [showWhy, setShowWhy] = useState(false);
+  const projectNameByRun = useMembershipStore((s) => s.projectNameByRun);
+  useEffect(() => {
+    if (!searchMode) {
+      setShowWhy(false);
+      return;
+    }
+    let cancelled = false;
+    api.listClaims()
+      .then(({ claims: got }) => { if (!cancelled) setClaims(got); })
+      .catch(() => { /* no conformance store — the decisions group stays empty */ });
+    if (projectId !== null) {
+      api.listProjectPrompts(projectId)
+        .then(({ prompts: got }) => { if (!cancelled) setPrompts(got); })
+        .catch(() => { /* inbox unreadable — the prompts group stays empty */ });
+    } else {
+      setPrompts([]);
+    }
+    return () => { cancelled = true; };
+  }, [searchMode, projectId]);
+
   const rows = useMemo(() => {
+    // ── §5.2 search mode: the honest v1 corpus, grouped as the label names it.
+    // Substring on prose (problems, prompts, claim subjects), fuzzy on names
+    // (repos) — and NOTHING is fetched from here: claims/prompts arrived on
+    // entry, runs/gates/repos are the already-held stores.
+    if (scope === 'search') {
+      const hits: Array<{ en: Entry; m: FuzzyResult }> = [];
+      // Runs — all non-archived (the default `GET /runs` listing; archived
+      // runs are named in the not-searched clause).
+      runs.forEach((v, i) => {
+        if (v.session.archived_at != null) return;
+        const m = substringMatch(needle, v.session.problem);
+        if (m === null) return;
+        const id = v.session.id;
+        hits.push({
+          en: {
+            id: `s-run-${id}`,
+            group: 'search-runs',
+            label: v.session.problem,
+            context: projectNameByRun[id] ?? v.session.status,
+            href: runPath(id),
+            rank: i,
+            dot: SEARCH_DOT[v.session.status] ?? 'var(--ink-dim)',
+          },
+          m,
+        });
+      });
+      // Open gates — the event-sourced `awaitingHuman` prompts (§5.1).
+      Object.values(gates).forEach((g, i) => {
+        const m = substringMatch(needle, g.prompt);
+        if (m === null) return;
+        hits.push({
+          en: {
+            id: `s-gate-${g.runId}`,
+            group: 'search-gates',
+            label: g.prompt,
+            context: projectNameByRun[g.runId] ?? 'gate',
+            href: `${runPath(g.runId)}${GATE_HASH}`,
+            rank: i,
+            glyph: '⏸',
+          },
+          m,
+        });
+      });
+      // Decisions — governance claims: substring on the subject (criteria),
+      // fuzzy on the policy ids (identifiers); the hit navigates to the run
+      // when the claim names one the client holds, else to /policies.
+      claims.forEach((c, i) => {
+        const subject = substringMatch(needle, c.criteria);
+        const ident = subject === null ? fuzzyMatch(needle, c.policy_ids.join(' ')) : null;
+        if (subject === null && ident === null) return;
+        const named = runs.find(
+          (v) => c.scope.includes(v.session.id) || c.evaluated_context_ref.includes(v.session.id),
+        );
+        hits.push({
+          en: {
+            id: `s-claim-${c.claim_id}`,
+            group: 'search-decisions',
+            label: `${c.policy_ids[0] ?? c.claim_id} · ${c.decision}`,
+            context: c.phase,
+            href: named !== undefined ? runPath(named.session.id) : '/policies',
+            rank: i,
+            glyph: '§',
+            snippet: c.criteria,
+            snippetPositions: subject?.positions ?? [],
+          },
+          m: subject ?? { score: ident?.score ?? 0, positions: [] },
+        });
+      });
+      // Repos — names are identifiers: the §1.5 fuzzy scorer.
+      repos.forEach((r) => {
+        const m = fuzzyMatch(needle, r.name);
+        if (m === null) return;
+        hits.push({
+          en: {
+            id: `s-repo-${r.id}`,
+            group: 'search-repos',
+            label: r.name,
+            context: r.default_branch,
+            href: `/repo-detail/${encodeURIComponent(r.id)}`,
+            rank: 0,
+            glyph: '⬡',
+          },
+          m,
+        });
+      });
+      // Prompts — THIS project only (the scoped wire, §5.2).
+      prompts.forEach((p, i) => {
+        if (p.status !== 'open') return;
+        const m = substringMatch(needle, p.prompt);
+        if (m === null) return;
+        hits.push({
+          en: {
+            id: `s-prompt-${p.id}`,
+            group: 'search-prompts',
+            label: p.prompt,
+            context: p.kind,
+            href: `${runPath(p.session_id)}${p.kind === 'gate' ? GATE_HASH : ''}`,
+            rank: i,
+            glyph: '✉',
+          },
+          m,
+        });
+      });
+      const searchOrder: Group[] = [
+        'search-runs', 'search-gates', 'search-decisions', 'search-repos', 'search-prompts',
+      ];
+      hits.sort((a, b) => {
+        const g = searchOrder.indexOf(a.en.group) - searchOrder.indexOf(b.en.group);
+        if (g !== 0) return g;
+        if (b.m.score !== a.m.score) return b.m.score - a.m.score;
+        return a.en.rank - b.en.rank;
+      });
+      return hits;
+    }
+
     const status = selectedRun?.session.status ?? '';
     const entries: Entry[] = [];
 
@@ -315,7 +538,7 @@ export function CommandPalette({
       return a.en.rank - b.en.rank;
     });
     return matched;
-  }, [runs, projects, repos, gates, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
+  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -377,7 +600,8 @@ export function CommandPalette({
             data-testid="command-palette"
             className="wk-palette-in flex flex-col self-start overflow-hidden"
             style={{
-              width: 560,
+              // §5.2: search is the palette's deep mode — wider result rows.
+              width: searchMode ? 680 : 560,
               maxHeight: 420,
               background: 'var(--surface-overlay)',
               boxShadow: 'var(--shadow-overlay)',
@@ -399,7 +623,7 @@ export function CommandPalette({
                   setSel(0);
                 }}
                 onKeyDown={onKeyDown}
-                placeholder="type to search…  p: run: repo: >"
+                placeholder="type to search…  p: run: repo: > ?"
                 aria-label="Command palette search"
                 className="flex-1 bg-transparent outline-none"
                 style={{
@@ -415,6 +639,51 @@ export function CommandPalette({
                 esc
               </span>
             </div>
+
+            {/* §5.2/EC24: the corpus label is a first-class UI element, ALWAYS
+                visible in search mode — what IS and IS NOT searched, with the
+                wire truth one [why?] away. The not-searched clause earns the
+                attention color: an honesty marker. */}
+            {searchMode && (
+              <div
+                data-testid="search-corpus-label"
+                style={{
+                  padding: '6px 16px', flexShrink: 0,
+                  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-sans)',
+                  borderBottom: '1px solid var(--surface-raised)',
+                }}
+              >
+                <p style={{ margin: 0, color: 'var(--ink-dim)' }}>
+                  Searching: runs (all non-archived) · open gates · decisions (governance claims) · repos
+                  {projectId !== null ? ' · prompts: this project' : ''}
+                </p>
+                <p style={{ margin: 0, color: 'var(--status-gate)' }}>
+                  Not searched: archived runs, transcripts, historical events —{' '}
+                  <button
+                    type="button"
+                    data-testid="search-why"
+                    aria-expanded={showWhy}
+                    onClick={() => setShowWhy((v) => !v)}
+                    style={{
+                      background: 'transparent', border: 'none', padding: 0,
+                      color: 'var(--status-gate)', cursor: 'pointer',
+                      fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-sans)',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    [why?]
+                  </button>
+                </p>
+                {showWhy && (
+                  <p
+                    data-testid="search-why-popover"
+                    style={{ margin: '4px 0 0', color: 'var(--ink-muted)' }}
+                  >
+                    The crew daemon has no search index yet; the studio searches what it holds.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* grouped results */}
             <div ref={listRef} role="listbox" aria-label="Palette results" className="flex-1 overflow-y-auto py-1">
@@ -439,7 +708,7 @@ export function CommandPalette({
                     activate(row);
                   },
                   onMouseEnter: () => setSel(i),
-                  className: 'flex w-full items-baseline gap-3 px-4 py-1.5 text-left',
+                  className: 'block w-full px-4 py-1.5 text-left',
                   style: {
                     background: i === selIx ? 'var(--accent-subtle)' : 'transparent',
                     outline: i === selIx ? '2px solid var(--accent)' : 'none',
@@ -448,23 +717,55 @@ export function CommandPalette({
                 } as const;
                 const body = (
                   <>
-                    <span
-                      className="min-w-0 flex-1 truncate"
-                      style={{
-                        fontSize: 'var(--text-sm)',
-                        fontFamily: 'var(--font-sans)',
-                        color: 'var(--ink-high)',
-                      }}
-                    >
-                      {row.en.group === 'verbs' ? '> ' : ''}
-                      {highlight(row.en.label, row.m.positions)}
+                    <span className="flex w-full min-w-0 items-baseline gap-3">
+                      {/* §5.2 hit anatomy: a status dot for runs, a glyph for
+                          gates/decisions/repos/prompts — before the label. */}
+                      {row.en.dot !== undefined && (
+                        <span
+                          aria-hidden
+                          style={{
+                            width: '6px', height: '6px', flexShrink: 0,
+                            borderRadius: 'var(--radius-full)', alignSelf: 'center',
+                            background: row.en.dot,
+                          }}
+                        />
+                      )}
+                      {row.en.glyph !== undefined && (
+                        <span aria-hidden className="shrink-0" style={{ color: 'var(--ink-dim)' }}>
+                          {row.en.glyph}
+                        </span>
+                      )}
+                      <span
+                        className="min-w-0 flex-1 truncate"
+                        style={{
+                          fontSize: 'var(--text-sm)',
+                          fontFamily: 'var(--font-sans)',
+                          color: 'var(--ink-high)',
+                        }}
+                      >
+                        {row.en.group === 'verbs' ? '> ' : ''}
+                        {highlight(row.en.label, row.m.positions)}
+                      </span>
+                      <span
+                        className="shrink-0 font-mono"
+                        style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
+                      >
+                        {row.en.context}
+                      </span>
                     </span>
-                    <span
-                      className="shrink-0 font-mono"
-                      style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
-                    >
-                      {row.en.context}
-                    </span>
+                    {/* §5.3: the snippet line — muted mono, matches in --ink-high. */}
+                    {row.en.snippet !== undefined && (
+                      <span
+                        data-testid="search-snippet"
+                        className="block w-full truncate"
+                        style={{
+                          fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
+                          color: 'var(--ink-muted)',
+                        }}
+                      >
+                        {highlightSnippet(row.en.snippet, row.en.snippetPositions ?? [])}
+                      </span>
+                    )}
                   </>
                 );
                 return (

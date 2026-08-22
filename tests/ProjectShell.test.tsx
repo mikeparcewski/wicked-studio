@@ -17,6 +17,10 @@ beforeEach(() => {
     projects: [{
       id: 'proj-1', name: 'Merge the skins', description: null, status: 'active',
       scope: 'project:proj-1', created_at: 1, updated_at: 1,
+    }, {
+      // The pivot target (slice J §4.2): a sibling the crumb switcher lists.
+      id: 'proj-2', name: 'The other project', description: null, status: 'active',
+      scope: 'project:proj-2', created_at: 1, updated_at: 2,
     }],
     loading: false,
     error: null,
@@ -104,17 +108,56 @@ describe('ProjectShell (DES-MERGE-001 §1.2)', () => {
     },
   );
 
-  it('the header project name links back to the project dashboard (§4.2)', () => {
+  // Superseded by DES-FEEDBACK-002 §4.2 (slice J): the name is now the
+  // ProjectSwitcher's trigger; the dashboard stays reachable two REAL ways —
+  // the ⌂ link right after the name, and the dropdown's last row.
+  it('the header keeps the dashboard reachable: the ⌂ real link and the dropdown row (§4.2, slice J)', () => {
     const navigate = vi.fn();
     render(
       <ProjectShell projectId="proj-1" mode="build" artifactId={null} navigate={navigate}>
         <p>surface</p>
       </ProjectShell>,
     );
-    const crumb = screen.getByTestId('project-name');
-    expect(crumb).toHaveAttribute('href', '/p/proj-1');
-    fireEvent.click(crumb);
+    const home = screen.getByTestId('project-home');
+    expect(home).toHaveAttribute('href', '/p/proj-1');
+    fireEvent.click(home);
     expect(navigate).toHaveBeenCalledWith('/p/proj-1');
+
+    fireEvent.click(screen.getByTestId('project-name'));
+    const row = screen.getByTestId('switcher-dashboard-row');
+    expect(row).toHaveAttribute('href', '/p/proj-1');
+    fireEvent.click(row);
+    expect(navigate).toHaveBeenLastCalledWith('/p/proj-1');
+  });
+
+  it('the name is the mode-retaining pivot: choosing a sibling lands on ITS same mode verb, no artifact (§4.2/§4.4)', () => {
+    const navigate = vi.fn();
+    render(
+      <ProjectShell projectId="proj-1" mode="document" artifactId="doc-3" navigate={navigate}>
+        <p>surface</p>
+      </ProjectShell>,
+    );
+    fireEvent.click(screen.getByTestId('project-name'));
+    expect(screen.getByTestId('project-switcher-list')).toBeInTheDocument();
+    // No Unfiled row in the crumb — a pivot between projects, not a binding field.
+    expect(screen.queryByTestId('project-switcher-unfiled')).toBeNull();
+    fireEvent.click(screen.getByTestId('project-switcher-list')
+      .querySelector('[data-project-id="proj-2"]') as HTMLElement);
+    expect(navigate).toHaveBeenCalledWith('/p/proj-2/document');
+  });
+
+  it('selecting the CURRENT project is a no-op close (§4.2)', () => {
+    const navigate = vi.fn();
+    render(
+      <ProjectShell projectId="proj-1" mode="build" artifactId={null} navigate={navigate}>
+        <p>surface</p>
+      </ProjectShell>,
+    );
+    fireEvent.click(screen.getByTestId('project-name'));
+    fireEvent.click(screen.getByTestId('project-switcher-list')
+      .querySelector('[data-project-id="proj-1"]') as HTMLElement);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('project-switcher-list')).toBeNull();
   });
 
   it('no longer writes a last-used-mode memory — the dashboard replaced the redirect (slice D)', () => {
