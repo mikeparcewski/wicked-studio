@@ -775,3 +775,243 @@ emits when a seat dies mid-reply (C6's failed-with-reason scope). Each probe's o
 recorded in the doc as the decision for its dependent slice; where a probe reveals a
 genuine bridge gap the operator decides whether wicked-interactive grows the surface
 (a new brief item, not silently assumed here). ~150 LOC of probes + spec notes.
+
+---
+
+## 9 Supersession & reconciliation — what this round touches on the existing frame
+
+This round is **repair, not rearrangement** — it deliberately supersedes almost nothing:
+
+- **FailureBanner** (UXFIX-era) demotes from the whole story to the headline above the
+  unit spine (§1.3) — the component survives, its monopoly ends.
+- **`/runs`** retires into a redirect; `/work` becomes canonical (§7.4). The bottom
+  sheet's and landing's "All runs ›" targets re-point — the slice-N sheet itself is
+  untouched.
+- **GateNotifications** gains dismiss/expiry/layout-safety (§7.1); the gate experience
+  itself (brief §0-protected) is untouched — the toast lifecycle changes, never the gate.
+- **The composer** (slices B/C-era) gains preflight + top-level gate posture (§7.8) and
+  launch-time navigation (§7.6); its + drawer, roster, and project binding contracts are
+  preserved.
+- **rosterCache seeding order** (slice C) is corrected in place: warm roster beats the
+  fallback trio (§7.9-1) — the zero-mount-request budget holds unchanged.
+- Everything in the brief's §0 protect-list: untouched by construction (§0.1).
+
+Reconciliation with the standing docs: DES-FEEDBACK-002/003's landed behaviors (registry
+keys, bottom panel, dashboards, narrative landing) are this round's substrate; where a
+slice touches their surfaces the §11.2 rig re-scopes name the exact assertions that move.
+
+## 10 Constraint inventory — what every slice must hold
+
+- Wire honesty (§0.2) — FATAL contract probes for any new wire; fixtures speak real shapes
+  only; NEEDS-* work lands as §8 prerequisites before dependent client work.
+- Design tokens only (no-raw-color = lint ERROR + build-failing PostCSS twin); the
+  linguist palette remains the sole sanctioned exemption.
+- EC15/EC18/EC21/EC24/EC27/EC30 and the whole existing EC ledger stay green; EC31–EC45
+  (§12) extend it.
+- Zero-requests-on-mount budgets where established (chat §2.4, palette, panels, health
+  EC30); new fetches are gesture-gated or ride existing loads (§3.3's one audit fetch per
+  detail view is the declared exception, named in its AC).
+- All keyboard work through the one shortcut registry (EC21: one window-level listener).
+- ≤350-LOC slices, named 1440×900 screenshots, preserved lists, adversarial verification
+  with negative checks vs main, request-tap fetch budgets, pixel judgment — the standing
+  slice discipline, unchanged.
+- The six journeys are the acceptance test (§0.3): every slice names its journey repairs;
+  the campaign's DoD is the re-review, not the AC ledger.
+
+## 11 Slice plan
+
+### 11.0 Inherited rules (DES-VISION-001 §6.0, FEEDBACK-003 §10.0 — unchanged)
+
+One slice = one PR through the full merge protocol; each ≤~350 production LOC (overruns
+disclosed and partitionable); each carries its named shots, unit tests, a rig, its rig
+re-scopes as dedicated commits, and survives adversarial verification before landing.
+
+### 11.1 Slices
+
+**Cross-repo prerequisites (§8):** CREW-UX-1 (~120 LOC, crew), CREW-UX-2 (~80 LOC, crew),
+CREW-UX-3 (~40 LOC, crew), BRIDGE-UX-1 (~150 LOC probes, contract check). Each its own PR
+in its own repo.
+
+**Studio slices (15):**
+
+**Slice R — failure forensics: the post-mortem run page** *(~340 LOC)* — §1.3(1,2,3)
+Unit spine for all terminal statuses; VerdictDetail incl. the vacuous-default-allow label
+and the retention empty state; FailureBanner demotion. *Repairs journey 1 ("a failed run
+diagnosed from its page in under two minutes").* Shots: `ux-R-failed-postmortem.png`,
+`ux-R-verdict-empty.png`.
+
+**Slice R2 — the diff pipeline + evidence wiring** *(~300 LOC)* — §1.3(4)
+Named-cause 409 cards; the zero-request hang fix + timeout/error branch; evidence links →
+FileViewer; the honest HEAD-baseline note until CREW-UX-1, then `?base=merge-base`
+adoption. Depends: CREW-UX-1 for the final baseline (ships before it with the note).
+*Repairs journey 1.* Shots: `ux-R2-diff-cause.png`, `ux-R2-diff-baseline.png`.
+
+**Slice S — project scoping that means it** *(~330 LOC)* — §2.3
+Entry-point binding audit (shared ambient-project helper), membership-join scoping for
+project views + footer counters, CREW-UX-2 adoption when landed. Depends: CREW-UX-2 for
+the DTO echo (ships before it on the join). *Repairs journey 2 ("a project's Build tab
+showing exactly its runs").* Shots: `ux-S-project-scoped.png`.
+
+**Slice T — thread truth: visible sends, anchored versions, surviving reload** *(~350 LOC)* — §6.1, §6.3
+Generating/queued/failed send states; mandatory version anchors; session-storage stopgap
+with the promise-with-a-pointer copy; BRIDGE-UX-1 rehydration adoption when its probe
+lands the read. Depends: BRIDGE-UX-1 (probe outcomes). *Repairs journey 3 ("a document
+iterated twice with both edits landing and the thread surviving reload").* Shots:
+`ux-T-thread-states.png`, `ux-T-thread-reload.png`.
+
+**Slice U — the Unfiled path** *(~180 LOC)* — §6.2
+Probe-gated: make-Unfiled-work against the default mount, or remove-with-reason. Depends:
+BRIDGE-UX-1 probe 3. *Repairs journey 3's entry.* Shot: `ux-U-unfiled.png`.
+
+**Slice V — provenance + retry** *(~320 LOC)* — §3.3, §4.3
+The provenance line (run detail + notifications, honest degradation); Retry-as-prefill;
+CREW-UX-3 lineage adoption when landed. Depends: CREW-UX-3 for lineage only. *Repairs
+journeys 1 and 6 (attribution fear).* Shots: `ux-V-provenance.png`, `ux-V-retry.png`.
+
+**Slice W — one selector per metric** *(~280 LOC)* — §5.3
+`src/board/metrics.ts`; window labels as a class; the named offender re-points;
+silent-filter declarations. *Repairs journey 6 ("every count on one screen consistent").*
+Shot: `ux-W-windows.png`.
+
+**Slice X — act-feedback: export + theme-learn** *(~260 LOC)* — §7.2
+Point-of-action pending/ready states; learn in-flight + bounded timeout with honest
+retry copy. *Repairs journey 3's export/learn steps.* Shots: `ux-X-export-ready.png`,
+`ux-X-learn-timeout.png`.
+
+**Slice X2 — affordance honesty + the copy pass** *(~300 LOC)* — §7.3, §7.10
+The apiFetch error-translation layer; disabled-state operator copy; quoted-name
+extraction; display names/paths/grammar/hydration fixes. *Repairs every journey's copy
+encounters.* Shot: `ux-X2-copy.png`.
+
+**Slice Y — one canonical runs surface** *(~180 LOC)* — §7.4
+All-runs affordances → /work; /runs redirect; context-sensitive filters. *Repairs
+journey 1's navigation.* Shot: `ux-Y-work-canonical.png`.
+
+**Slice Y2 — run identity** *(~280 LOC)* — §7.5
+Synthesized titles + attach-clock timestamps on every run row; event-log-derived
+times/duration on detail with honest absent states. *Repairs journeys 1 and 6
+(indistinguishable rows).* Shots: `ux-Y2-run-rows.png`, `ux-Y2-run-times.png`.
+
+**Slice Z — live execution + bookmarkability** *(~330 LOC)* — §7.6
+Launch navigates to the run URL; unitOutputDelta live region on the run view and Term
+tab; honest live-output label. *Repairs journey 2 ("is progress legible").* Shots:
+`ux-Z-live-output.png`.
+
+**Slice AA — toast lifecycle** *(~200 LOC)* — §7.1
+Dismiss/expiry/layout-safety; cross-project gates announce in the bar, not over the
+canvas. *Repairs journey 3's interception.* Shot: `ux-AA-toast-dismiss.png`.
+
+**Slice AB — chat repair** *(~350 LOC)* — §7.9
+Roster-true chips; draft-surviving failures; seat states; chunk routing; /chats
+listing + zombie cleanup; the conversation→action prefill bridge. Depends: BRIDGE-UX-1
+probe 4 for mid-stream reasons. *Repairs journey 4 ("a chat whose first send succeeds and
+whose session is findable afterward").* Shots: `ux-AB-chat-states.png`,
+`ux-AB-chats-list.png`.
+
+**Slice AC — keyboard coherence + composer preflight** *(~350 LOC)* — §7.7, §7.8
+The '?' overlay from the registry; gate-panel a/r; the one Escape contract; shell focus;
+preflight warn-and-block + auto-attach + top-level gate posture + action previews.
+*Repairs journeys 2 and 6 ("'?' answering the keyboard question").* Shots:
+`ux-AC-shortcut-overlay.png`, `ux-AC-preflight.png`.
+
+### 11.2 Rigs re-scoped — the assertions this round rewrites
+
+- `feedback3_sliceN_test.py` + landing rigs: "All runs ›" target assertions re-point to
+  /work (slice Y's dedicated commit).
+- The uxfix/vision rigs pinning FailureBanner-only failed views: re-scoped to the unit
+  spine + banner headline (slice R).
+- Any rig asserting toast presence at fixed coordinates: re-scoped to the dismissible
+  contract (slice AA).
+- `feedback_sliceC` chip-seeding assertions: re-scoped to roster-first seeding with the
+  cold-cache fallback (slice AB).
+- The composer rigs (`feedback_sliceB`, `feedback2_sliceL` batch entry): gate-posture
+  default assertion updates (slice AC).
+- **Verify at slice time:** the exact assertion lines per rig — the lost original
+  enumerated them; each owning slice's §8.7-style dedicated commit re-derives its list.
+
+### 11.3 Sequencing
+
+**CREW-UX-2 executes first, before every studio slice** — it is the smallest prerequisite
+(~80 LOC) and it unblocks A2, the books-truthfulness spine on which journeys 2 and 6 are
+graded; landing it first means slice S ships once, on the DTO echo, instead of shipping
+the join and reworking. Then:
+
+1. **CREW-UX-2** → **S** (books truthful) · in parallel: **BRIDGE-UX-1** (probes decide
+   T/U/AB shapes) and **CREW-UX-1** (diff baseline).
+2. **R → R2** (forensics; R2 adopts CREW-UX-1 when landed) · **V** after CREW-UX-3
+   (lineage; the provenance line itself has no prerequisite and may ship inside V early).
+3. **T → U** (artifact loop, probe-shaped) · **W, Y, Y2** (numbers + identity + surface —
+   independent, parallelizable).
+4. **Z, AA, X, X2** (visibility, toast, act-feedback, copy) in any order.
+5. **AB** (chat, after probe 4) · **AC** last among features (its overlay documents every
+   key the earlier slices added).
+6. **The re-review**: the six journeys re-run cold — the campaign's gate, not a slice.
+
+## 12 New experience-checklist items (extends EC17–EC30)
+
+- **EC31 — Failed runs render their evidence.** Every terminal status renders the unit
+  spine; a failed run's transcript is at most one click away. (§1)
+- **EC32 — Verdict cards never render blank.** An absent evaluator record says "no
+  evaluator record survives for this run" — absence is stated, never faked or blanked. (§1)
+- **EC33 — No raw wire error reaches the DOM.** Every daemon refusal surfaces as a
+  named cause or the honest translated fallback. (§1, §7.10)
+- **EC34 — Counts equal their rows.** A count rendered beside a list equals the rows
+  beneath it, set-equal, on the same paint. (§2, §5)
+- **EC35 — Every run carries provenance.** "Launched by X via Y" renders on run detail
+  and run notifications, degrading honestly, never absent. (§3)
+- **EC36 — Every send resolves visibly.** A thread send becomes a generating state, then
+  an anchored version, a queued state, or a visible failure — never silence; no version
+  marker without its causing message. (§6.1)
+- **EC37 — Feedback at the point of action.** The control you clicked answers — pending,
+  ready, or failed — where you clicked it. (§7.2)
+- **EC38 — Toasts never intercept.** Announcements are dismissible, expire, and reserve
+  no pointer surface beyond their cards. (§7.1)
+- **EC39 — Every count names its window.** "24h", "all", "this session" — the unlabeled
+  number is a defect class. (§5)
+- **EC40 — Runs are identifiable in every list.** Timestamp + synthesized title on every
+  run row; identical prompts never render identical rows. (§7.5)
+- **EC41 — Running means visible.** Between start and verdict, something true streams on
+  the run's own page. (§7.6)
+- **EC42 — '?' answers the keyboard question.** Everywhere; and one Escape contract
+  closes every layer. (§7.7)
+- **EC43 — Launches name their blast radius.** Repo-less code intents warn; named actions
+  preview what they do and write. (§7.8)
+- **EC44 — Chat seats are honest.** Roster-true defaults, explicit seat states, no
+  unfindable "working" counters. (§7.9)
+- **EC45 — Disabled controls say why.** In operator language, with the next step. (§7.3)
+
+## 13 Open questions + out of scope (named)
+
+- **⚠ OPEN QUESTION (leads the list — §6.2): Unfiled documents.** This document adopts "make Unfiled work" against the synthesized `default` project. BRIDGE-UX-1's probe decides whether the bridge can host an unfiled doc; if not, U falls back to "remove Unfiled from the doc picker with an honest reason." Confirm before slice U builds.
+- **⚠ Mid-run thread sends (§6.1):** the design promises "queued-behind-current-run." BRIDGE-UX-1 must confirm the bridge queues rather than drops; if it drops, the client rejects the send *visibly* instead — no faked queue.
+- **⚠ Gate-posture default (§7.8):** this document flips the shipped composer default from "none" to `human_confirm` on the first gate-bearing phase, per the product's own tagline — operator-confirmable before slice AC builds.
+- **A cross-project made-artifacts index** — out of scope; the membership mirror + `GET /projects/:id/members` is the honest v1.
+- **Per-seat *mid-stream* chat failure reasons (§7.9):** open-time seat results exist (`POST /chats`); mid-stream lifecycle needs BRIDGE-UX-1's answer before AB promises live per-seat "failed-with-reason."
+- **Streaming beyond the current relay (§7.6):** the studio consumes `unitOutputDelta` as relayed; richer per-phase streaming is a future crew concern, not invented here.
+- **A durable `started_at`/`ended_at` on the run DTO:** not requested; C2 derives duration from the event log, which is honest today. A DTO field is a follow-up only if the event-log derivation proves too costly.
+- **Removing the chrome connection dot / mobile treatments / route renames** — unchanged from DES-FEEDBACK-003 §11; the 1440×900 operator viewport governs.
+
+---
+
+## 14 Traceability
+
+| Brief item (verbatim fragment) | Sections | Slices | Wire verdict summary |
+|---|---|---|---|
+| A1 "why did this fail" / "Completed runs render unit output; failed runs render none" | §1 | R, R2, CREW-UX-1 | EXISTS `/runs/:id/units/:unitKey/output` (830) + `/runs/:id/events` (1207) + `/runs/:id/files` (423); **NEEDS-CREW-ENDPOINT** branch-vs-base (CREW-UX-1); brief's output NEEDS-BACKEND **corrected → CLIENT** |
+| A2 "project binding must persist … project views must mean it" | §2 | S, CREW-UX-2 | EXISTS `/projects/:id/members` + composer already sends `projectId` (ChatInput:46/136); **NEEDS-CREW-ENDPOINT** `project_id` on run DTO (CREW-UX-2) |
+| A3 "launched by X via Y" | §3 | V | **EXISTS** `GET /audit?runId=` (266) — brief's NEEDS-BACKEND **corrected → EXISTS** (not wired client-side) |
+| A4 "close the triage loop: Retry" | §4 | V, CREW-UX-3 | EXISTS `POST /runs` prefill from `SessionView`; **NEEDS-CREW-ENDPOINT** `retryOf` lineage (CREW-UX-3) |
+| A5 "reconcile the numbers" | §5 | W | **CLIENT-DERIVABLE** (one selector/metric; window labels); burn feed verified single-source (no second wire) |
+| B1 "thread iteration silently drops requests" | §6.1 | T, BRIDGE-UX-1 | **bridge verification** (BRIDGE-UX-1); client makes every send visible |
+| B2 "Unfiled path is a dead end in Make → Document" | §6.2 | U, BRIDGE-UX-1 | make-work vs remove-with-reason gated on BRIDGE-UX-1 probe |
+| B3 "document thread does not survive reload" | §6.3 | T, BRIDGE-UX-1 | **NEEDS-BRIDGE** thread-history read (BRIDGE-UX-1); honest stopgap meanwhile |
+| B4 "cross-project gate toast hijacks the workspace" | §7.1 | AA | **CLIENT** (layering) |
+| B5 "act-and-nothing-happens: export + theme-learn" | §7.2 | X | **CLIENT** (point-of-action states + timeout); learn terminal-error gap rides BRIDGE-UX-1 (verify at slice time) |
+| B6 "doc affordances that gaslight" | §7.3 | X2 | **CLIENT** (copy + name extraction) |
+| C1 "one canonical runs surface" | §7.4 | Y | **CLIENT** (routing) |
+| C2 "run identity: timestamps, durations, titles" | §7.5 | Y2 | **CLIENT** (event-log times, attach-clock rows, synthesized titles); DTO timestamp confirmed absent |
+| C3 "execution visibility + bookmarkability" | §7.6 | Z | **CLIENT** over the existing /ws relay (`unitOutputDelta`) |
+| C4 "keyboard coherence" | §7.7 | AC | **CLIENT** (registry-rendered overlay, one Escape contract) |
+| C5 "preflight intelligence" | §7.8 | AC | **CLIENT** (composer already holds project repos; gate control exists in the + drawer) |
+| C6 "chat: roster-true defaults, routing, persistence, zombies" | §7.9 | AB, BRIDGE-UX-1 | roster/routing/states/draft **CLIENT**; listing + mid-stream lifecycle ride BRIDGE-UX-1 (verify at slice time) |
+| D "hygiene" | §7.10 | X2 | **CLIENT** (translation layer, names, paths, grammar, hydration) |
