@@ -172,11 +172,12 @@ code, pre, .font-mono {
   .wk-anchor-flash { animation: none; }
 }
 
-/* Slice-E metrics bar (DES-FEEDBACK-001 §2.2): under 900px the gate-latency
-   tile — the least critical at a glance — hides, and the two remaining tiles
-   share the band. A media query needs CSS, so the rule lives here. */
-@media (max-width: 899px) {
-  .wk-metrics-mid { display: none !important; }
+/* Slice-Q activity river (DES-FEEDBACK-003 §7.3): a STILL-WAITING gate mark is
+   the landing's one loop — it pulses until answered. Reduced motion gets a
+   solid, full-opacity diamond instead (same contract as the live edge above). */
+.wk-river-gate-waiting { animation: wk-live-pulse 2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .wk-river-gate-waiting { animation: none; opacity: 1; }
 }
 
 /* Slice-H inline reject note (DES-FEEDBACK-002 §2.3/§2.5): the placeholder

@@ -189,7 +189,9 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
     await vi.waitFor(() => {
       expect(needsYouIds()).toEqual(['ancient-gate', 'fresh-failure']);
     });
-    const gateCard = document.querySelector('[data-project-id="ancient-gate"]');
+    // Scoped to the CARD: slice Q's river lanes above the wall carry the same
+    // data-project-id (the card itself is unchanged — C3/C6).
+    const gateCard = document.querySelector('[data-testid="project-card"][data-project-id="ancient-gate"]');
     expect(gateCard).toHaveAttribute('data-score', '100.00');
     expect(gateCard).toHaveAttribute('data-signal', 'gate');
   });
