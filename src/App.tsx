@@ -6,6 +6,7 @@ import { CoverageView } from './components/CoverageView.js';
 import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { HomeBoard } from './components/HomeBoard.js';
+import { MakeDashboard } from './components/MakeDashboard.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
@@ -436,20 +437,12 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/make` — the Make path's dashboard route (DES-FEEDBACK-003 §2.1). The
-    // rail's ▦ links here from slice M on; the real combined list + reporting
-    // surface is slice O (§4.2) — until it lands this placeholder keeps the
-    // link honest (a page, never a 404).
+    // `/make` — the Make path's combined list + reporting dashboard
+    // (DES-FEEDBACK-003 §4.2, slice O; the slice-M placeholder retired).
     if (panel === 'make') {
       return (
-        <div className="flex-1 overflow-y-auto p-6" data-testid="make-placeholder">
-          <h1 style={{ color: 'var(--ink-high)', fontSize: 'var(--text-lg)', fontFamily: 'var(--font-sans)', fontWeight: 'var(--weight-semi)' }}>
-            Make
-          </h1>
-          <p className="mt-2" style={{ color: 'var(--ink-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-sans)' }}>
-            The combined list and reporting dashboard for made things — build runs,
-            documents, demos — lands here (DES-FEEDBACK-003 §4.2, slice O).
-          </p>
+        <div className="flex-1 overflow-y-auto" data-testid="make-dashboard">
+          <MakeDashboard runs={runs} navigate={navigate} runPath={runPath} />
         </div>
       );
     }
