@@ -375,3 +375,403 @@ Window labels: `--text-2xs --ink-dim` mono suffixes, the same dress the landing'
   outside `src/board/metrics.ts`.
 - A dashboard header's `data-count` equals its list's rendered row count on the same
   paint (set-equality assert, the "ACTIVE RUNS (0) over two rows" regression pin).
+
+---
+
+## 6 B1–B3 — The artifact loop must be reliable (CRITICAL cluster)
+
+### 6.1 B1 — Thread iteration silently drops requests (CRITICAL)
+
+**Brief (quoted):** *"a change request typed while the initial generation was finishing
+was ignored, yet the thread rendered '▤ v2 landed' directly beneath it … A second request
+sent while fully idle never spawned a run at all: no Generating state, no error, no run on
+the project dashboard. … every thread send must visibly become a run or visibly fail —
+queued-behind-current-run state included; version markers must anchor to the message that
+caused them."*
+
+**Current state:** the doc thread store (`src/store/docThread.ts`, 351 lines) is a
+client-side projection of `wicked.interactive.*` bus frames; a version marker is appended
+on a `version.created` frame (`docThread.ts:62` `VERSION`) but is **not correlated to the
+originating user message** — so a `v2` marker can render beneath an unrelated request. A
+send while a run is in flight, and a send while idle, both route through
+`src/api/interactive.ts` (483 lines) with no visible queued/failed state on the thread.
+
+**Wire verdict:** the interactive bridge is the transform boundary here. Whether a mid-run
+send is dropped by the bridge or the client must be **verified against the live bridge**,
+not assumed — flagged in §8.4 as a bridge-contract probe (the brief's own
+"NEEDS-BACKEND: whether mid-run sends are dropped by the bridge or the client").
+
+ASSUMPTION[external-transform] library=wicked-interactive transform=a thread send is converted into a doc-version run and emitted back as `wicked.interactive.version.created`; a send issued while a prior run is in flight may be dropped rather than queued confidence=needs-research :: the brief observed a mid-run send producing no run and an idle send producing no run; the design requires every send to become a run or a visible failure, so the bridge's mid-run-send behavior (queue vs drop) must be confirmed by a FATAL contract probe before the client can promise "queued-behind-current-run"
+
+**Design:** every thread send transitions to an explicit **Generating** state and MUST
+resolve to one of: a version marker *anchored to that message*, a **queued-behind-current
+-run** state (when a run is in flight), or a **visible failure** with a retry. Version
+markers correlate to the causing message id (the store carries `version?` on user frames,
+`docThread.ts:35` — the anchor is made mandatory for newly created docs). No marker
+renders under an unrelated request.
+
+**DOM ACs:** a send while idle renders `[data-testid="thread-generating"]` then either a
+`[data-testid="version-marker"]` whose `data-caused-by` equals the send's message id, or
+`[data-testid="thread-send-failed"]`; a send while a run is in flight renders
+`[data-testid="thread-queued"]`; **no `version-marker` renders with a `data-caused-by`
+that does not match a preceding user message** (the gaslight regression this pins).
+
+### 6.2 B2 — The Unfiled path is a dead end in Make → Document (CRITICAL)
+
+**Brief (quoted):** *"The picker pre-selects 'Unfiled,' but choosing it (mouse or
+keyboard) closes the popover and nothing happens — no error, no advance… make Unfiled work
+or remove it from the picker with an honest reason; a pre-selected default that is also a
+silent dead end is the worst of both."*
+
+**Current state:** the Make ＋ Document/Video tines route through the project-picker stage
+(slice M's `MakePicker` → slice B's `ProjectSwitcher`); selecting a real project navigates
+to that project's document surface, but the Unfiled option closes the popover without
+navigating — documents are created against a per-project bridge mount, and no mount exists
+for "no project."
+
+**Wire verdict:** documents live behind per-project bridge mounts
+(`/api/v1/projects/:projectId/interactive/*` — the crew proxy). Whether the bridge can
+host an unfiled document at all (e.g. against the synthesized `default` project's mount)
+is **NEEDS-BRIDGE** — a §8.4 probe, decided before the slice builds.
+
+**Design (probe-gated, two honest outcomes):** this document adopts **"make Unfiled
+work"** as the primary reading — the picker's Unfiled routes to the `default` project's
+mount (the daemon's own unfiled home), the doc is created there, and the surface labels it
+the way run surfaces label Unfiled runs. If BRIDGE-UX-1's probe shows the bridge cannot
+host it, slice U falls back to the brief's alternative: **remove Unfiled from the doc
+picker** and replace it with the honest reason inline — "documents live in a project;
+pick one or create one" — with the project-create row one keystroke away. Either outcome
+kills the silent dead end; which one ships is decided by the probe, not preference
+(§13, first open question).
+
+**DOM ACs:** selecting Unfiled in the Make→Document picker either navigates to a document
+surface within the interaction (primary) or the option is absent and
+`[data-testid="picker-unfiled-reason"]` renders the honest copy (fallback) — in no build
+does selecting a rendered Unfiled option close the popover with no effect (the dead-end
+regression pin, asserted by driving both mouse and keyboard selection).
+
+### 6.3 B3 — The document thread does not survive reload (CRITICAL)
+
+**Brief (quoted):** *"After a page refresh the thread shows the empty state; the brief,
+version markers, in-flight theme-learn narration, and the export Download link are all
+gone… every version's 'In thread' anchor is disabled with the tooltip '…Documents created
+before the merge have no anchor' — on a document created minutes earlier."*
+
+**Current state:** the doc thread is a session-memory projection of live bus frames
+(`docThread.ts`) with no rehydration source; a reload rebuilds the store empty, which also
+breaks the version strip's "In thread" anchors for docs created this session (the anchor
+data died with the tab).
+
+**Wire verdict:** **NEEDS-BRIDGE** — a thread-history read surface on the interactive
+bridge (the bridge holds the doc, its versions, and the announce stream; whether it
+retains a readable thread transcript is BRIDGE-UX-1's second probe). No such route is
+assumed; §8.4 specs the probe and the proposed read shape.
+
+**Design:** two layers. (1) **The stopgap ships first and states its contract** — the
+thread panel persists its projection to session-scoped storage keyed by doc id, so a
+same-session reload restores what this browser saw: the interim empty state reads
+**"Showing what this session observed. Messages from before this session — and from other
+sessions — return when thread history lands (BRIDGE-UX-1)"** — a promise with a pointer,
+never a shrug; version anchors survive reload for anything the session witnessed.
+(2) **Full persistence** lands when BRIDGE-UX-1 confirms (or grows) the thread-history
+read: the store rehydrates from the bridge on mount, anchors hold for every version, and
+the stopgap label retires.
+
+**DOM ACs:** create a doc, send one message, reload — the thread renders the message and
+its version marker (not the empty state), and the version strip's "In thread" button for
+that version is enabled and scrolls; the stopgap banner renders the exact promise copy
+while BRIDGE-UX-1 is unlanded; after a fresh-session load (cleared session storage), the
+banner explains what is missing rather than presenting emptiness as "no messages."
+
+---
+
+## 7 B4–B6, C1–C6, D — the terminal-feel completions
+
+### 7.1 B4 — A cross-project gate toast hijacks the workspace (MAJOR)
+
+**Brief (quoted):** *"pins bottom-right at z-50 with no dismiss control and physically
+intercepts clicks on the composer, Send, and Export buttons (30s of blocked pointer
+events observed)."*
+
+**Current state:** `GateNotifications` renders fixed bottom-right at z-50 with a single
+"Review →" action — no dismiss, no timeout, and a hit-box that overlays working surfaces
+(the same interception class slice F fixed for the version strip).
+
+**Design:** toasts become **dismissible, self-expiring, and layout-safe**: an ✕ on every
+toast; auto-dismiss after a bounded dwell (the gate itself stays in the status bar's gate
+count and the bottom panel — the toast is an announcement, not the record); the toast
+container reserves no pointer surface beyond its visible cards; and cross-project gate
+toasts respect context — inside a project shell, another project's gate announces in the
+bottom bar count and the bell, not as an overlaying card mid-canvas. Wire: **CLIENT**
+(layering + lifecycle only).
+
+**DOM ACs:** every `[data-testid="gate-notification"]` contains a `[data-testid="toast-dismiss"]`; with a toast visible, a click at the composer's Send coordinates reaches Send (hit-test assert — the interception pin); a gate arriving from another project while inside `/p/:id/*` increments the bottom-bar gate count without rendering an overlay card over the mode surface.
+
+### 7.2 B5 — Act-and-nothing-happens: export + theme-learn feedback (MAJOR)
+
+**Brief (quoted):** *"Clicking HTML export fires the API call but nothing visible happens
+at the button… a theme learn from a trivial URL narrated 'Grabbing the page…' then hung
+10+ minutes with no progress, timeout, or error."*
+
+**Design:** point-of-action feedback becomes a contract: the export control renders its
+own pending → ready states (spinner on the clicked control; on completion, the control
+itself becomes the download affordance — the thread message remains, but the click site
+answers); theme-learn gains a visible in-flight state in the Themes popover, staged
+progress from the bridge's own status frames, and a bounded client timeout that resolves
+to an honest error with retry ("the learn did not report back — the bridge may still be
+working; retry or check the thread") rather than eternal narration. Wire: **CLIENT** for
+feedback/timeout; the bridge's own progress frames are the existing announce stream
+(no new wires; if the bridge emits no terminal error for a failed learn, that gap rides
+BRIDGE-UX-1's lifecycle probe — **verify at slice time**).
+
+**DOM ACs:** clicking an export format renders `[data-testid="export-pending"]` on that
+control and resolves to `[data-testid="export-ready"]` (a real download affordance) at the
+click site; a theme learn renders `[data-testid="learn-inflight"]` in the Themes popover
+and, on fixture-simulated silence, `[data-testid="learn-timeout"]` with retry within the
+budget — never an unresolved "Grabbing…" past it.
+
+### 7.3 B6 — Doc affordances that gaslight (MINOR)
+
+**Brief (quoted):** *"Point-and-comment — named in the mode's own description — is
+disabled on a system-generated doc with the tooltip 'this document did not answer the
+instrument bridge'… quoted names are slugified into the whole sentence."*
+
+**Design:** disabled-state copy in operator language with a next step ("Comments need the
+document's preview to finish loading — reopen the document or regenerate this version"),
+never wire jargon (the raw phrase "instrument bridge" is retired from user copy); the
+create flows extract quoted names ("uxr-quarterly-brief" in a sentence becomes the name,
+the sentence becomes the brief) with the parse shown before submit. Wire: **CLIENT**.
+
+**DOM ACs:** the Comment button's disabled title matches the operator-language copy (the
+string "instrument bridge" appears nowhere in the DOM); a create submitted as
+`a deck named "uxr-x"` yields a doc named `uxr-x` with the remainder as its brief
+(fixture-asserted parse).
+
+### 7.4 C1 — One canonical runs surface (MAJOR)
+
+**Brief (quoted):** *"Every 'All runs ›' affordance lands on /runs: done-only, no
+timestamps, no filters — 13 failed runs invisible. The real console (/work) hides behind a
+small 'view all →'."*
+
+**Design:** `/work` (the real console: Active/Completed/Failed filters, search, success
+rate — `src/components/WorkPage.tsx`) becomes the one canonical runs surface: every
+"All runs ›" affordance (bottom bar, landing, rail history) targets `/work`; `/runs`
+redirects there (its done-only listing retires); entry is context-sensitive — arriving
+from a failure context (FailureBanner link, a failed notification) lands with the Failed
+filter active. Wire: **CLIENT** (routing + filter params).
+
+**DOM ACs:** every anchor whose text matches /All runs/ resolves to `/work` (DOM-wide
+assert); navigating `/runs` lands on `/work`; following a failed run's "All runs" entry
+point renders the Failed filter active (`data-filter="failed"`).
+
+### 7.5 C2 — Run identity: timestamps, durations, titles (MAJOR)
+
+**Brief (quoted):** *"Five visually identical rows… no run start/end times or unit
+durations anywhere; retries are indistinguishable; 'what happened overnight, in what
+order' is unanswerable."*
+
+**Wire verdict:** `AgentSession` carries **no timestamps** (verified: no
+created/started/ended fields on the DTO — the round-4 landing already worked around this
+with the membership attach clock). The event log (`GET /runs/:id/events`, routes.ts:1207)
+carries per-event times for runs it retains — **CLIENT** derivation on detail views; list
+rows use the attach clock already mirrored. A durable `started_at` on the DTO stays a
+non-requested follow-up (§13), consistent with the prior round's honest-clocks doctrine.
+
+**Design:** run detail renders started/ended/duration derived from its event log (labeled
+"observed" where the clock is arrival-stamped — the house grammar); every run list row
+(palette, /work, bottom sheet, search) renders the attach-clock timestamp and a
+**synthesized display title**: truncated intent + short-id + attempt ordinal
+(`fix the auth flow · 3eda21 · #2`), so five identical prompts stop being quintuplets.
+Model-generated titles are explicitly out of scope this round (§13).
+
+**DOM ACs:** run detail renders `[data-testid="run-times"]` with start/end/duration for a
+fixture run with events (and the honest absent state for one without); every run row in
+palette results, /work, and the bottom sheet carries `[data-testid="run-title"]` composed
+title + `[data-testid="run-when"]`; two fixture runs with identical prompts render
+distinguishable titles (short-id assert).
+
+### 7.6 C3 — Execution visibility during runs + bookmarkability (MAJOR)
+
+**Brief (quoted):** *"Between 'Run started' and the verdict nothing streams; the Term tab
+is an empty shell during runs; after Send the URL stays /build/new so a refresh mid-run
+drops to a blank composer."*
+
+**Design:** (1) on launch, the composer **navigates to the run's URL** — the run is
+bookmarkable from second zero, and a mid-run refresh lands on the live run view, not a
+blank composer; (2) the run view streams what the daemon already relays — `unitOutputDelta`
+frames render as the live transcript region for the executing unit (the LiveFeed proves
+the deltas flow; the run page simply never subscribed), with the honest label the deltas
+deserve ("live output — the full transcript lands when the unit completes"); (3) the Term
+tab during a live run shows the same live region rather than an empty shell, with the
+operator shell as the labeled secondary. Richer per-phase streaming beyond the current
+relay is explicitly **not invented here** (§13 — a crew concern). Wire: **CLIENT** over
+the existing /ws relay.
+
+**DOM ACs:** submitting the composer changes `location.pathname` to the run's URL before
+first paint of the run view (history assert: back returns to the composer); with the
+fixture dripping `unitOutputDelta` frames, `[data-testid="live-output"]` renders text
+within one frame cycle and grows monotonically; a reload mid-drip re-renders the run view
+(not the composer) with the live region resuming.
+
+### 7.7 C4 — Keyboard coherence (MAJOR)
+
+**Brief (quoted):** *"'?' is dead everywhere; the legend appears only after a lucky
+keypress; 'a' approves from the board but is a silent no-op on the gate panel itself;
+Escape closes some modals but not the Operator shell or the bell; the shell doesn't take
+focus on open."*
+
+**Design:** through the one §G registry: **'?'** opens a global shortcut overlay
+(grouped: triage / palette / gates / panels, rendered from the registry's own
+registrations so it never drifts); the gate panel honors **a / r** (same `decideGate`
+path — the panel is the one place approve matters most); **Escape** closes every layer
+by one contract (overlay → palette → sheet → modal/popover → triage selection — extending
+the slice-N precedence chain to shell modal and bell popover); multi-select extends with
+x/Space across cards; the Operator shell takes focus on open (first keystroke never
+swallowed). Wire: **CLIENT**.
+
+**DOM ACs:** '?' renders `[data-testid="shortcut-overlay"]` on every route (board, project
+shell, doc surface — asserted on each); with the gate panel focused, 'a' fires the same
+`POST /runs/:id/gate` the button fires (tap, exactly once); Escape closes the shell modal
+and the bell popover (regression pins); the shell's input is `document.activeElement`
+within the open frame.
+
+### 7.8 C5 — Preflight intelligence in the composer (MAJOR)
+
+**Brief (quoted):** *"A code intent can launch from a repo-less project and burn money on
+a guaranteed opaque failure; a bound repo still doesn't auto-attach; gates default to
+None against the product's own tagline; 'Run Onboarding'-class actions carry no
+cost/duration/destructiveness preview."*
+
+**Design:** the composer gains a preflight row: launching a code-shaped intent with no
+repo attached renders a **warn-and-block with override** ("No repository attached — the
+run cannot produce reviewable work. Attach one, or launch anyway"); a project's bound repo
+(membership crew.repo) **auto-attaches** with a visible chip (removable — auto is a
+default, not a lock); the gate control surfaces at top level beside the roster (the +
+drawer keeps the full matrix) with the default posture revisited against the tagline —
+the shipped default becomes `human_confirm` on the first gate-bearing phase, changeable
+per-launch (§13 flags this as an operator-confirmable default). Named actions (Run
+Onboarding, annotation workflows) carry a preview line: what it does, what it writes,
+rough duration. Wire: **CLIENT** (the composer already knows the project's repos; the
+drawer proves the controls exist).
+
+**DOM ACs:** a code-intent launch attempt with no repo renders
+`[data-testid="preflight-block"]` and fires zero `POST /runs` until override; entering the
+composer from a repo-bound project renders the repo chip attached
+(`data-auto-attached="true"`, removable); the gate control is present at top level
+(`[data-testid="gate-posture"]`) and its shipped default is not "none"; each named action
+carries `[data-testid="action-preview"]`.
+
+### 7.9 C6 — Chat: roster-true defaults, stream routing, persistence, zombies (MAJOR)
+
+**Brief (quoted):** *"The default chips are rejected by the daemon on every fresh chat so
+the first send always fails (and the failed send clears the composer); only 1 of 6 seats
+replies, the rest go mute-red with no reason or retry; reply chunks splice mid-word into
+the wrong bubble; sessions are invisible in /chats even while streaming and unrecoverable
+after tab close; abandoned tabs leak zombie 'working' agents into global counters."*
+
+**Design:** five repairs on one surface. (1) **Roster-true defaults**: seat chips seed
+from the live roster cache (slice C's `rosterCache` — the fallback trio applies only when
+the cache is genuinely cold AND the roster is unreachable; a warm roster always wins), so
+the first send names seats the daemon accepts. (2) **A failed send never clears the
+composer** — the draft survives, the failure renders inline with retry. (3) **Chunk→bubble
+routing** keys on the frame's seat + turn correlation rather than arrival order (the
+splice is a client correlation bug — **verify at slice time** against the fixture's real
+fan-out frames). (4) **Explicit seat states**: connecting / working / replied /
+failed-with-reason (open-time failures carry the daemon's own reason from `POST /chats`;
+mid-stream lifecycle beyond that rides BRIDGE-UX-1's probe — the state machine ships, the
+mid-stream *reasons* wait for the wire). (5) **Persistence + zombie cleanup**: sessions
+list in /chats from their first frame (live ones flagged "streaming now"); tab close ends
+or orphan-surfaces the session so every global "working" count remains clickable to a
+findable source — the zombie counter with no referent is the regression this kills. The
+conversation→action bridge (promote a chat into a build/doc with the transcript as
+context) rides the composer's existing prefill machinery. Wire: chat listing/lifecycle is
+**NEEDS-BRIDGE/CREW** in part — §8.4's fourth probe decides how much the daemon already
+tracks (**verify at slice time**: /chats reported "0 of 0" during a live stream in the
+review, which suggests the tracking gap is real).
+
+**DOM ACs:** a fresh /chat/new's chips equal the fixture roster's accepted seats and the
+first send yields ≥1 reply frame with zero rejected-chip errors; a fixture-failed send
+leaves the composer text intact and renders inline retry; each reply chunk lands in the
+bubble matching its seat+turn (fixture drips interleaved frames — no mid-word splices
+across bubbles); seat chips render explicit state badges incl. failed-with-reason for an
+open-time rejection; /chats lists a streaming fixture session while it streams; closing
+the tab (context.close in the rig) leaves no orphan increment in the bottom bar's working
+count on a fresh page.
+
+### 7.10 D — Hygiene (small, highest trust-per-line)
+
+**Brief (quoted):** *"DTO debug notes, issue numbers, raw 'API 409:' strings, proj_ ids as
+titles, and 5-line absolute paths make the product read unfinished."*
+
+**Design:** one copy pass, mechanically checkable: an error-translation layer at the
+`apiFetch` boundary (raw `API NNN:` strings never reach the DOM — every surfaced error is
+named-cause or the generic honest fallback "the daemon refused this — {translated}");
+project display names everywhere a `proj_…` id currently renders (titles, breadcrumbs,
+rail highlights); repo-relative paths in Files panels (the 5-line /private/var wrap
+retires); internal notes ("work_output pending daemon surface", "(core#24/#26)") removed
+from user copy; grammar fixes ("New Project", "New Repository"); fresh-entity hydration
+(a just-created project renders its name and a sane age immediately; /system permission
+state reads correctly on load; contributor identity de-duplicates). Wire: **CLIENT**.
+
+**DOM ACs:** a DOM-wide rig assert that the strings `API 4`, `API 5`, `DTO`, `proj_` (as
+a rendered title), and `/private/var` never appear in user-visible text across the rig's
+route walk; a created project renders its display name in rail + breadcrumb without
+reload; the two grammar strings render corrected.
+
+---
+
+## 8 Cross-repo prerequisite slices (NEEDS-CREW-ENDPOINT — specced, flagged, never assumed)
+
+House rule (brief §constraints): these are flagged cross-repo slices with schemas specced
+before any client work; each lands as its own wicked-crew (or contract-check) PR through
+the full merge protocol, and the dependent studio slices name them as prerequisites.
+
+### 8.1 CREW-UX-1 — branch-vs-base diff baseline (unblocks A1)
+
+**Gap (verified):** `worktreeDiff` runs `git diff --no-color --no-ext-diff HEAD`
+(crew `api/run-files.ts:111`) — uncommitted changes only; a run's committed work is
+invisible, producing the "no changes to a committed file" gaslight.
+
+**Spec:** `GET /api/v1/runs/:id/diff?base=<ref>` — `base` optional; when present and equal
+to the literal `merge-base`, the diff runs `git diff --no-color --no-ext-diff
+$(git merge-base <default-branch> HEAD)`; when an explicit ref, containment applies (the
+ref must resolve inside the run's repo — never an arbitrary command surface). Response
+shape unchanged (`RunDiff {diff, truncated}`); 400 on an unresolvable base with a named
+error. Same caps/ladders as the existing route (byte-accurate 1MB, 409 workdir cases,
+507 over-buffer). ~120 LOC + containment tests in the crew route suite.
+
+### 8.2 CREW-UX-2 — `project_id` on the run DTO (unblocks A2 run-detail chip, A4 project prefill)
+
+**Gap (verified):** `AgentSession` (`crew-api-types/index.d.ts:141`) carries no project
+field, though the membership record holds the truth and attaches atomically at launch
+(`LaunchSchema.projectId`, routes.ts:148).
+
+**Spec:** `AgentSession.project_id?: string | null` — populated by the crew server from
+the membership record at DTO assembly (the daemon-side join the client currently
+re-derives); `null` = genuinely unfiled. api-types minor bump; additive and
+backward-compatible (optional field — old clients unaffected). ~80 LOC incl. the
+list-endpoint join and tests pinning member-attach → DTO echo.
+
+### 8.3 CREW-UX-3 — `retryOf` lineage (unblocks A4 lineage, A3 retry channel)
+
+**Gap (verified):** no `retryOf` anywhere in crew src (grep-empty); lineage cannot be
+recorded, only inferred from prompt equality (dishonest).
+
+**Spec:** `LaunchSchema.retryOf?: string` (must name an existing run id — 400 otherwise);
+persisted on the session record and echoed as `AgentSession.retry_of?: string`; the audit
+entry's detail carries it so provenance (§3) renders "retry of {short-id}" from the system
+of record. api-types minor bump. ~40 LOC + schema/audit tests.
+
+### 8.4 BRIDGE-UX-1 — interactive-bridge contract verification (unblocks B1, B3, B2 fallback, C6 mid-stream)
+
+Not a new bridge feature — a **probe slice**: the existing
+`e2e/interactive_wire_contract_test.py` grows FATAL probes against the real bridge for the
+four open questions this design is gated on: (1) **mid-run sends** — queue or drop (B1's
+"queued-behind-current-run" promise vs visible-reject fallback); (2) **thread-history
+read** — does any real surface return a doc's announce history (B3's full persistence vs
+stopgap-only); (3) **unfiled docs** — can the default project's mount host a doc (B2's
+make-work vs remove-with-reason); (4) **per-seat mid-stream lifecycle** — what the bridge
+emits when a seat dies mid-reply (C6's failed-with-reason scope). Each probe's outcome is
+recorded in the doc as the decision for its dependent slice; where a probe reveals a
+genuine bridge gap the operator decides whether wicked-interactive grows the surface
+(a new brief item, not silently assumed here). ~150 LOC of probes + spec notes.
