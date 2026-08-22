@@ -414,3 +414,358 @@ decoration — it answers no question the operator has asked; rejected per EC19)
   .../interactive/api/docs` requests on click and zero before (request interception).
 - Navigation: each rail ▦ lands on its dashboard; each dashboard's list rows navigate
   to their existing targets (spot-asserted per path).
+
+---
+
+## 5 The runs bottom panel
+
+**Operator:** *"I want to move runs to a bottom panel fixed that shows stats for
+anything running and when you click it expands to show a list of runs and it's stats;
+click on it opens up the run page; this will be fixed at bottom of screen"*
+
+### 5.1 Current state — where run awareness lives today
+
+Three places, none of them the operator's: the rail's inline RunsSection
+(LeftSidebar.tsx:336–340 — REMOVED by this section), the home board's cards/feed
+(stay — they are the board, not "runs UI"), and the flat `/runs` list (stays as the
+escape hatch). The `runs` prop is App's one `useRuns()` (App.tsx:65) — the panel is a
+fourth reader of the SAME array plus the gate store; **zero new requests, zero new
+sockets**.
+
+### 5.2 Geometry — a reserved row, an overlay sheet
+
+The panel is two physical modes with one rule each:
+
+- **Collapsed (default): a fixed 28px bar** across the full viewport bottom
+  (`position: fixed; bottom: 0; left: 0; right: 0; height: 28px`). It is NOT an
+  overlay: the app root (`App.tsx:474`, the `h-screen` flex row) gains
+  `padding-bottom: 28px`, so every surface — board, dashboards, canvas — ends above
+  it. Nothing is ever covered while collapsed.
+- **Expanded: an overlay sheet** rising from the bar to `min(340px, 42vh)`
+  (`--surface-overlay`, `--shadow-overlay`, top border `1px solid
+  var(--surface-raised)`). Expansion OVERLAYS content rather than reflowing it —
+  layout math stays identical everywhere, which is what makes the immersive story
+  (§5.5) simple. Collapse: the bar's `▾`, Escape, or clicking outside the sheet.
+
+z-order (stated so it cannot be improvised): bar and sheet sit above surface content,
+below the command palette, modals, and gate toasts. The sheet never captures keys
+beyond Escape — no j/k here in v1 (§5.6).
+
+### 5.3 Collapsed anatomy — "stats for anything running"
+
+```
+▴  ● 3 working   ⏸ 2 gates   ✗ 1 failed   ◔ $0.42 observed          All runs ›
+```
+
+One line, `--text-2xs --font-mono`, each segment a stat the studio can defend:
+
+| Segment | Derivation | Verdict |
+|---|---|---|
+| `● N working` | non-terminal, non-gate statuses in `runs` (the RunsSection TERMINAL set, RunsSection.tsx:20) | **CLIENT-DERIVABLE** |
+| `⏸ N gates` | `awaiting_human` count in `runs` (agrees with the gate store by construction — both fold the same frames) | **CLIENT-DERIVABLE** |
+| `✗ N failed` | `status === 'failed'` in the default (non-archived) listing — the label says "failed", scoped by what `/runs` returns; no invented 24h clock (sessions carry no `created_at` on the wire — the slice-E lesson, TokenBurnSparkline.tsx:11–21) | **CLIENT-DERIVABLE** |
+| `◔ $ observed` | the TokenBurnSparkline fold (cliUsage frames, runtime store) — "observed" is in the label because that is what it is | **CLIENT-DERIVABLE** |
+
+Color: each segment's glyph in its status token (`--status-run`, `--status-gate`,
+`--status-fail`, `--accent` for spend), text `--ink-muted`. Zero-states compress: a
+fully quiet system shows `▴ nothing running · All runs ›` — calm is one phrase, not
+four zeros. The `⏸ gates` segment pulses ONLY when a gate is waiting
+(`wk-live-pulse`, honoring `prefers-reduced-motion` — the AppChrome dot's exact
+grammar, AppChrome.tsx:121–124).
+
+Clicking anywhere on the bar (except `All runs ›`, a real link to `/runs`) expands.
+
+### 5.4 Expanded anatomy — "a list of runs and it's stats; click on it opens up the run page"
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Runs   ● 3 working · ⏸ 2 gates · ✗ 1 failed          All runs ›        ▾   │
+│  ────────────────────────────────────────────────────────────────────────────│
+│  ⏸ Migrate auth tables      api-migration    gate       waiting 12m      ↵  │
+│  ● Add rate-limiting        api-migration    working 2/4   $0.18            │
+│  ● Regenerate q3 deck       q3-review-deck   working 1/2   $0.06            │
+│  ✗ Fix flaky test           smoke-suite      failed                          │
+│  ○ Update readme            api-migration    done                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+- Order: the RunsSection contract carries over — active before terminal, daemon
+  recency within groups (`recentRuns`, RunsSection.tsx:48–52, reused with a higher
+  cap: the sheet lists up to 20, scrolling internally past 8).
+- Per-run stats, each from data in hand: status dot + phase word
+  (`phaseWord`, RunsSection.tsx:34–45 — reused), project name (resolved via the board
+  model's membership, `--ink-dim`), gate wait age (from the gate store's frame `ts`),
+  observed per-run spend (runtime-store cliUsage frames for that run, shown only when
+  non-zero — never $0.00 for "unknown").
+- **Row click navigates to the run page** — `runPath(id)` (App.tsx:147–153: inside a
+  project shell stays in the shell; outside, `/runs/:id`) — and the sheet collapses
+  to the bar (the destination owns the viewport now). Rows are real links
+  (href + preventDefault — middle-click works).
+- A waiting gate row carries the run's gate chip target: its link lands on the run
+  with `#gate` (the GATE_HASH contract) — the fastest path from "the bar pulsed" to
+  "answering".
+
+### 5.5 Reconciliation — EC18, the version strip, the feed, and slice H
+
+- **EC18 (canvas geometry):** the collapsed bar shaves 28px from every viewport.
+  EC18's >80%-width measurement is untouched (width, not height); the canvas region
+  now ends at the bar, and the Document/Video **version strip** (sticky at the
+  canvas's own bottom, FEEDBACK-001 §7.3) sits ABOVE the bar by construction — the
+  bar is outside the canvas container, a reserved row, so strip and bar never
+  overlap and never fight for the proximity-reveal sensor (the 80px mousemove zone
+  ends at the canvas edge). EC27 (§10.1) pins this: in immersive modes the panel
+  renders COLLAPSED-ONLY by default — entering Document/Video collapses an open
+  sheet (the canvas-first principle: the rail already auto-collapses on the same
+  transition, LeftSidebar.tsx:216–225); the operator can still expand it manually
+  (an explicit gesture wins), where it overlays the canvas as any sheet would.
+- **The LiveFeed stays.** The operator moved RUNS UI; the feed is the home board's
+  narration column (HomeBoard.tsx:438), a different altitude (what is being SAID vs
+  what is RUNNING). Notifications likewise stay (§6.1). No duplication: the bar
+  shows counts, the feed shows words, the bell shows events needing acknowledgment.
+- **Slice H (triage cursor):** H's surfaces are the board cards and the project
+  dashboard's gate rows — both keep their cursor unchanged. The bottom panel is NOT
+  a cursor surface in v1: adding a third j/k plane would need focus-arbitration
+  rules the operator hasn't asked for. Named in §11; the sheet's rows are
+  mouse/tab-reachable links meanwhile (EC22's ring applies to Tab focus).
+- **Slice A's RunsSection:** superseded — the component's row grammar and helpers
+  (`recentRuns`, `phaseWord`, `RUN_DOT`) are REUSED by the panel; the rail mount is
+  deleted (§8.1).
+
+### 5.6 Token usage
+
+Bar: `--surface-rail` background (it is chrome), top border `--surface-raised`.
+Sheet: `--surface-overlay` + `--shadow-overlay`. Rows: the RunsSection tokens
+verbatim (dot = RUN_DOT map, intent `--text-xs --ink-body --font-sans`, phase
+`--text-2xs --ink-dim --font-mono`). Motion: sheet rise `--dur-fast --ease-out`,
+no loop; the gates pulse per §5.3.
+
+### 5.7 DOM ACs
+
+- `[data-testid="runs-bottom-bar"]` is present on `/`, `/projects`, `/make`,
+  `/repos`, inside `/p/:id/build` AND inside `/p/:id/document` (fixed = everywhere);
+  its computed `position` is `fixed`, bottom `0`.
+- With the W2 fixture: the bar's segments show the fixture's true counts
+  (`data-working`, `data-gates`, `data-failed` attributes match the runs array);
+  with an all-terminal fixture the bar reads the quiet phrase.
+- Clicking the bar renders `[data-testid="runs-bottom-sheet"]`; row count ≤ 20;
+  active rows precede terminal rows; each row is an `<a>` whose href resolves per
+  `runPath`.
+- Clicking a working run's row navigates to the run page and the sheet unmounts;
+  middle-click leaves the page (href asserted).
+- A gated row's href ends with `#gate`.
+- Entering `/p/:id/document` with the sheet open collapses it (EC27); the version
+  strip's bounding box bottom ≤ the bar's top (no overlap, asserted at 1440×900).
+- The panel fires zero network requests — ever (interception across mount, expand,
+  collapse).
+- `[data-testid="rail-runs"]` no longer exists anywhere (supersession).
+- Escape closes the sheet; with the palette open, Escape closes the PALETTE only
+  (registry precedence asserted).
+
+---
+
+## 6 Notifications stay; health moves to the rail's foot
+
+**Operator:** *"the notifications should stay where it is, but move health down to
+where settings was and behaving the same (just with it's health registry)"*
+
+### 6.1 Notifications — explicitly untouched
+
+The NotificationBell keeps its exact slot below the chrome (LeftSidebar.tsx:283–286),
+its badge, its panel, and its store. Gate toasts (`GateNotifications`, App.tsx:510)
+and the notification store's kinds/cap are untouched. This section exists so the
+supersession audit can point at it: NOTHING in round 4 moves the bell.
+
+### 6.2 Health — the rail-foot section
+
+**Current state:** health lives in the chrome — the connection dot opens a popover
+with three check rows (WebSocket / API server / wicked-core version) fetched from
+`GET /api/v1/health` on open (AppChrome.tsx:74–162; **EXISTS**, routes.ts:250). The
+seat-level health registry exists on the wire but the studio never shows it:
+`GET /api/v1/roster` returns every council seat with `health: SeatHealth` (status
+active/inactive + bounded error excerpt + since/lastErrorAt) and `signed_in`
+(**EXISTS**, routes.ts:308, crew#274; SeatHealth in crew-api-types index.d.ts:235–243).
+
+**Design — `HealthRailSection`, the SettingsRailSection pattern verbatim** ("behaving
+the same" is the operator's spec, and slice A's section is the named referent):
+an expand/collapse block at the rail's very bottom (the slot Settings vacated when it
+became a primary path, §2.1), collapsed by default, chevron rotation, header
+`--ink-muted` closed / `--ink-high` open — SettingsRailSection.tsx:32–69's exact
+dress with `♥ Health` in place of `⚙ Settings`.
+
+Expanded contents — **the health registry**:
+
+```
+▾ ♥ Health
+    WebSocket        ✓  connected
+    API server       ✓  ok · 0.6.0
+    ── seats ─────────────────────
+    claude           ✓  active · signed in
+    codex            ✗  quota exceeded (2h ago)
+    antigravity      ✓  active · signed in
+```
+
+- Rows 1–2: the existing CheckRow component and its `getHealth()` fetch
+  (AppChrome.tsx:61–71, 81–88 — moved, not rewritten).
+- Seat rows: one per RosterSeat — name (`display_name`), status glyph in
+  `--status-run`/`--status-fail`, `health.message` excerpt (truncated 40ch, full text
+  on title) when inactive, `signed_in` as the quiet suffix. **Fetch on expand** —
+  a gesture, like the popover it replaces; never polled, cached until next expand.
+- The header itself carries a passive summary dot: `--status-fail` if any seat is
+  inactive or the socket is down, else nothing — the rail's foot says "look inside"
+  without being opened.
+
+**The chrome dot stays; the popover retires.** The dot is glanceable state (ws status)
+and the operator moved "health" — the registry/affordance — not the glance. Clicking
+the dot now expands the Health section (and scrolls the rail to it) instead of opening
+its own popover; one surface for health detail, not two. (If the operator meant the
+dot too, deleting it is a 5-line follow-up — flagged in open questions.)
+
+### 6.3 DOM ACs
+
+- `[data-testid="rail-health-section"]` renders at the rail bottom with
+  `data-open="false"` by default; the old `rail-settings-section` testid is gone
+  from that slot (Settings is a heading now, §3).
+- Expanding fires exactly one `GET /health` and one `GET /roster` (interception);
+  collapsing and re-expanding refetches (staleness by gesture); zero health/roster
+  requests fire on app mount (the §1.4/EC30 gesture rule).
+- With a fixture roster carrying one `health.status: "inactive"` seat: the seat row
+  shows `✗` + the message excerpt, and `[data-testid="rail-health-summary-dot"]`
+  renders on the collapsed header in `var(--status-fail)` (EC15).
+- Clicking `[data-testid="connection-dot"]` expands the health section; no popover
+  element mounts (the old popover testid/DOM is absent).
+- NotificationBell's testid, position (directly under the chrome), and badge behavior
+  are byte-identical to main (snapshot + DOM-order assert).
+
+---
+
+## 7 The landing page — from metrics to narrative
+
+**Operator:** *"## Separately — The landing page is still far from graphical and
+telling a story of what's happening"*
+
+### 7.1 Why round 3's answer bounced
+
+Slice E answered "needs visuals" with a 64px metrics bar of three small tiles
+(HomeBoard.tsx:224–236). Accurate, wire-honest — and 64 pixels of the story told as
+accountancy. The operator's restatement adds two words that indict it: **"graphical"**
+(the tiles are small multiples, not a picture) and **"telling a story"** (three
+disconnected numbers have no plot). This is the second push on the same surface; the
+design must change ALTITUDE, not add a fourth tile.
+
+### 7.2 The story spine
+
+A story of a working system has three acts, and they map exactly onto data the studio
+already holds:
+
+| Act | Question | Data (all client-held) |
+|---|---|---|
+| **What happened** | "What did the system do while I wasn't looking?" | terminal runs + their outcomes; observed spend; doc versions landed (runtime/docThread stores) |
+| **What's happening** | "What is moving right now?" | non-terminal runs, unit progress, live narration (runtime store) |
+| **What needs you** | "Where am I the blocker?" | gate store + failed runs (the board's needs-you band — already built) |
+
+The landing page becomes those three acts IN ORDER, top to bottom. Act 3 already
+exists (the needs-you band + cards + triage cursor — untouched, C3). Acts 1 and 2 are
+the new build: the **narrative band** replaces the metrics bar.
+
+### 7.3 The narrative band (~200px, replaces the 64px metrics bar)
+
+```
+1440×900 — landing, narrative band
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ [logo] wicked-studio                                                  ● live   │ chrome
+├────────────────────────────────────────────────────────────────────────────────┤
+│  While you were away: 4 runs finished — 3 passed, 1 failed —                    │
+│  and 2 gates are waiting on you.                            $0.42 observed     │  the lede
+│                                                                                 │
+│  api-migration   ────▮▮▮▮▮▮▮▮▮────────▶●━━━━━━━━━━▶      ⏸                    │
+│  q3-review-deck  ──────────▮▮▮▮▮──▤────────●━━━━▶                              │  activity
+│  smoke-suite     ──▮▮▮────────────────✗───────────────────                     │  river
+│  (5 quiet)       ································································│
+│                  ├──────────┼──────────┼──────────┼──────────┤                 │
+│                  -24h       -18h       -12h       -6h        now               │
+├────────────────────────────────────────────────────────────────────────────────┤
+│  NEEDS YOU                                                     │  Live         │
+│  [cards — unchanged, triage cursor unchanged]                  │  [feed —      │
+│  QUIET (12)                                                    │   unchanged]  │
+└────────────────────────────────────────────────────────────────┴────────────────┘
+```
+
+**Element 1 — the lede.** One sentence, composed from data, `--text-md --font-sans
+--ink-high`, the page's largest text: `While you were away: {N} runs finished — {p}
+passed, {f} failed — and {g} gates are waiting on you.` Grammar rules: segments with
+zero count drop out ("and 2 gates are waiting on you" vanishes when g=0); the
+all-quiet system reads `All quiet. {N} projects, nothing running, nothing waiting.`
+Each number is a real link (finished → `/runs`, gates → the needs-you band anchor,
+spend → `/make`). "While you were away" is honest because its window is stated by the
+river below it (the last 24h of observed activity); no fake "since your last visit"
+clock is invented — the daemon has no such wire. The lede carries
+`data-question="What happened and what needs me?"` (EC19).
+
+**Element 2 — the activity river.** The graphical center the operator is asking for:
+a per-project laned timeline of the last 24h, full band width, SVG-first (no library —
+the §2.3 precedent at larger scale):
+
+- **One lane per project with activity in-window** (attention-ordered — the board's
+  own order, C3), capped at 6 lanes + a `({n} quiet)` collapsed lane; lane label =
+  project name, `--text-xs --font-mono --ink-muted`, → project dashboard link.
+- **A run = a horizontal span** in the lane: x from first observed activity to last
+  (or `now` for live runs). The honest clock, stated: spans derive from the
+  membership attach times + runtime-store frame timestamps the board already merges
+  (HomeBoard.tsx:214–219) — observed activity, not invented `created_at`. Span fill:
+  `--status-run-dim` body with a `--status-run` leading edge while live;
+  terminal spans in `--status-done`/`--status-fail-dim` per outcome.
+- **Event marks on the spans:** gate opened = `⏸`-diamond in `--status-gate` (still
+  waiting → it pulses, the one loop, reduced-motion honored); failure = `✗` in
+  `--status-fail`; doc/demo version landed = `▤`/`▶` tick in `--ink-muted` (from the
+  docThread/runtime stores' interactive frames — already ingested, App.tsx:91–94).
+- **Live runs breach the "now" edge** with an arrowhead — the picture says "still
+  moving" without animation.
+- **Interaction:** every span and mark is a real link (run page; gate marks →
+  `#gate`); hover raises a title tooltip (intent · phase · project). The river
+  carries `data-question="What ran, when, and how did it end?"`.
+- Axis: 4 dim gridlines + relative labels, `--text-2xs --ink-dim --font-mono`.
+
+**Element 3 — the margin column.** Right of the river (~160px): observed spend
+(the TokenBurnSparkline, moved here — same component), and the outcome split
+(RunOutcomeBar, same). The two surviving slice-E tiles fold INTO the narrative band as
+its margin notes; the GateLatencyChart retires from the landing (its question — "am I
+answering gates quickly?" — is answered by gate marks' positions on the river; the
+component remains for dashboards). Net: the metrics bar as a distinct band is GONE
+(§8.5), its derivations all live on.
+
+### 7.4 What the band does NOT do
+
+No auto-scrolling, no replay animation, no timeline scrubbing (a lens, not a player);
+no per-unit resolution (the run page owns that); no synthetic history — a fresh page
+load shows the river only from what stores hold + what the board fetch merged, and
+says so in the axis label ("observed") the first session. Wall + feed structure below
+is untouched (C6): bands, cards, cursor, feed all byte-identical.
+
+### 7.5 Token usage
+
+Band background `--surface-rail` (chrome family, like the bar it replaces). Lede per
+§7.3; links get the standing real-link dress (no underline at rest, `--ink-high` on
+hover). River: all fills/strokes from status tokens as named above; lane separators
+`1px solid var(--surface-raised)`. The band is the ONE place on the landing where
+`--text-md` appears above the fold besides the H1 — hierarchy by scale, not ornament
+(EC11).
+
+### 7.6 DOM ACs
+
+- `[data-testid="narrative-band"]` replaces `[data-testid="metrics-bar"]` on `/`
+  (old testid absent — supersession).
+- With the W2 fixture: `[data-testid="landing-lede"]` text matches the fixture's
+  true counts (computed, not snapshotted); each numeric segment is an `<a>`; with an
+  all-quiet fixture the lede reads the quiet phrase and no zero-count segment
+  renders.
+- `[data-testid="activity-river"]` renders ≤6 `[data-testid="river-lane"]` elements
+  in board attention order; a live fixture run's span reaches the right edge and
+  carries the arrowhead marker; a waiting gate renders
+  `[data-testid="river-gate-mark"]` whose computed fill resolves from
+  `var(--status-gate)` (EC15); clicking it navigates to the run + `#gate`.
+- The lede and river carry their `data-question` attributes (EC19).
+- Zero requests attributable to the band fire beyond what the board already fetches
+  (interception — the band is a pure re-reader).
+- The needs-you band, quiet band, triage hint, and LiveFeed testids all render
+  unchanged below the band (C3/C6 regression assert).
+- No `<script>` chart library; all river geometry is inline SVG (grep).
