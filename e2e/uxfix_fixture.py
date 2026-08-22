@@ -149,7 +149,16 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # theme-learn readback (interactive#181): how long after a successful
          # theme.requested the learned tokens become readable (the 404→200
          # ripening the studio poll rides). reset_learn clears learned state.
-         "learn_delay_s": 0.75}
+         "learn_delay_s": 0.75,
+         # Slice K (DES-FEEDBACK-002 §6): the multi-agent chat-reply drip.
+         # When on, POST /chats/<id>/messages queues one REAL chatReply frame
+         # per warm seat over /ws (the daemon's fan-out shape: type/chat/
+         # cliKey/text/ok), and after the FIRST round one seat dies with a
+         # real chatSessionFailed — so round 2's warm set shrinks and the
+         # columns grid has a true empty cell to render. Default False: the
+         # standing chat rigs (uxfix slice 4, feedback slice C) assert a
+         # fan-out with NO replies, and must keep seeing exactly that.
+         "chat_replies": False}
 state_lock = threading.Lock()
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
@@ -743,6 +752,29 @@ docs_lock = threading.Lock()
 # pid -> docId -> [version entries, manifest-shaped]. Grown by create/fork below.
 docs_created: dict = {}
 
+# ── Slice K (DES-FEEDBACK-002 §6): per-chat reply bookkeeping ─────────────────
+# Which seats each fixture chat warmed, which have since failed, and how many
+# sends it has taken — so the switch-gated reply drip fans out to exactly the
+# seats the daemon would (warm minus failed), never to an invented roster.
+chat_state_lock = threading.Lock()
+chat_warm_seats: dict = {}   # chat_id -> [cliKey, warm order]
+chat_dead_seats: dict = {}   # chat_id -> set of cliKeys that chatSessionFailed
+chat_send_count: dict = {}   # chat_id -> number of message fan-outs so far
+
+# The reply prose per seat — short and distinct, so the columns screenshot reads
+# as three agents disagreeing about the same prompt, not lorem ipsum.
+CHAT_REPLY_LINES = {
+    "claude": "I'd extract the fetch layer first — the retries belong in one place.",
+    "codex": "Start by moving the types out; the refactor falls out of the seams.",
+    "agy": "The seam is the adapter here — invert it and the rest is mechanical.",
+    "pi": "Sketch the interface first; implementations follow.",
+    # The cold-cache fallback trio (DEFAULT_CHAT_AGENTS) — what a first-run
+    # chat warms when nothing has fetched the roster yet this session.
+    "writer": "Draft it end to end first; structure emerges from the prose.",
+    "reviewer": "Name the invariants before touching code — tests pin them.",
+    "planner": "Split it: fetch layer this week, the adapter swap next.",
+}
+
 ws_lock = threading.Lock()
 ws_queue: list = []
 # The NEWEST /ws connection owns the one-shot queues. A rig that navigates
@@ -751,6 +783,20 @@ ws_queue: list = []
 # the live page's socket (it drains before it writes, so the frames die with
 # it). Each connection takes a generation number; only the newest drains.
 ws_gen = [0]
+# Slice K: chat frames BROADCAST to every open /ws connection — the daemon fans
+# CoreEvents out to all subscribers, and the studio opens one socket per
+# useEventStream consumer (App's fold AND GroupChat's own), so newest-only
+# delivery would hand the chat frames to whichever socket connected last and
+# starve the surface that filters them by chat id. Each connection registers
+# its own queue on connect and removes it when its socket dies.
+ws_chat_queues: list = []
+
+
+def broadcast_chat(frame: dict) -> None:
+    """Queue one chat frame for EVERY live /ws connection (the daemon's fan-out)."""
+    with ws_lock:
+        for q in ws_chat_queues:
+            q.append(frame)
 
 
 def queue_interactive(event_type: str, payload: dict) -> None:
@@ -823,9 +869,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             push_usage = state["usage_ws"]
             push_metrics = state["metrics_ws"]
             push_river = state["river"]
+        my_chat_queue: list = []
         with ws_lock:
             ws_gen[0] += 1
             my_gen = ws_gen[0]
+            ws_chat_queues.append(my_chat_queue)
         # Slice-E burn drip: the REAL cliUsage frame shape (costUsd dollars when
         # the CLI reports them, null when unknown — the null one must never fold
         # to $0), one frame per loop tick so the cumulative curve has more than
@@ -878,6 +926,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                         pending, ws_queue[:] = list(ws_queue), []
                 for frame in pending:
                     self.wfile.write(ws_frame(frame))
+                # Slice K: drain THIS connection's chat broadcast (every open
+                # socket gets these — see broadcast_chat above).
+                with ws_lock:
+                    chat_pending, my_chat_queue[:] = list(my_chat_queue), []
+                for frame in chat_pending:
+                    self.wfile.write(ws_frame(frame))
                 # Drain any one-shot narration lines a rig posted mid-page (vision
                 # slice 2: prove a NEW delta reaches the live feed within 2s).
                 extra: list = []
@@ -900,6 +954,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 time.sleep(1.0)
         except OSError:
             pass
+        finally:
+            # A dead socket must stop receiving broadcasts — and must not pin
+            # frames other connections already consumed copies of.
+            with ws_lock:
+                if my_chat_queue in ws_chat_queues:
+                    ws_chat_queues.remove(my_chat_queue)
         self.close_connection = True
 
     def _api(self, path: str) -> bool:
@@ -1366,14 +1426,45 @@ class W2Handler(SimpleHTTPRequestHandler):
         # roster when `clis` is omitted, matching the daemon), every seat ok, instantly.
         if path == "/api/v1/chats":
             clis = body.get("clis") or [s["key"] for s in ROSTER]
+            chat_id = body.get("chatId") or "fixture-chat"
+            with chat_state_lock:
+                chat_warm_seats[chat_id] = list(clis)
+                chat_dead_seats.setdefault(chat_id, set())
+                chat_send_count.setdefault(chat_id, 0)
             return self._json(201, {
-                "chatId": body.get("chatId") or "fixture-chat",
+                "chatId": chat_id,
                 "seats": [{"cliKey": k, "ok": True} for k in clis],
             })
         # POST /api/v1/chats/<id>/messages — accept the fan-out; replies would
-        # stream over /ws, which this fixture leaves to the narration loop.
+        # stream over /ws, which this fixture leaves to the narration loop —
+        # UNLESS the slice-K `chat_replies` switch is on: then each send queues
+        # one REAL chatReply frame per live seat (the daemon's shape verbatim),
+        # and after round 1 the LAST-warmed seat dies with a chatSessionFailed,
+        # so the next round's warm set truly shrinks (the empty-cell case).
         parts = path.split("/")
         if len(parts) == 6 and parts[3] == "chats" and parts[5] == "messages":
+            with state_lock:
+                replies_on = state["chat_replies"]
+            if replies_on:
+                chat_id = urllib.parse.unquote(parts[4])
+                with chat_state_lock:
+                    warm = chat_warm_seats.get(chat_id, [])
+                    dead = chat_dead_seats.setdefault(chat_id, set())
+                    live = [k for k in warm if k not in dead]
+                    chat_send_count[chat_id] = chat_send_count.get(chat_id, 0) + 1
+                    round_n = chat_send_count[chat_id]
+                    kill = warm[-1] if round_n == 1 and len(warm) >= 2 else None
+                    if kill is not None:
+                        dead.add(kill)
+                for k in live:
+                    line = CHAT_REPLY_LINES.get(k, "Agreed — start small.")
+                    broadcast_chat({"type": "chatReply", "chat": chat_id,
+                                    "cliKey": k, "ok": True,
+                                    "text": f"{line} (round {round_n})"})
+                if kill is not None:
+                    broadcast_chat({"type": "chatSessionFailed", "chat": chat_id,
+                                    "cliKey": kill,
+                                    "reason": "session exited unexpectedly (fixture)"})
             return self._json(200, {"seats": []})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
 

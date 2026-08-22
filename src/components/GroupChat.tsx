@@ -102,18 +102,86 @@ function clearStoredChatId(repoId?: string | null): void {
   }
 }
 
-interface UserMsg {
+export interface UserMsg {
   kind: 'user';
   text: string;
 }
-interface SeatMsg {
+export interface SeatMsg {
   kind: 'seat';
   cliKey: string;
   text: string;
   pending: boolean;
   ok: boolean;
 }
-type Msg = UserMsg | SeatMsg;
+export type Msg = UserMsg | SeatMsg;
+
+// ── Chat layout: list vs columns (DES-FEEDBACK-002 §6, slice K) ──────────────
+//
+// A round = a user message plus every seat message before the next user message
+// (§6.1: the flat `messages` array already groups naturally — a send appends one
+// UserMsg then N pending SeatMsgs that fill in place). Columns mode re-renders
+// each round as a grid; the grouping below is PURE derivation over transcript
+// state — it can never fire a request (§6.3: the toggle reads and re-arranges
+// `messages` only).
+
+export type ChatLayout = 'list' | 'columns';
+
+export interface ChatRound {
+  user: UserMsg | null;
+  seats: SeatMsg[];
+}
+
+/** §6.1's grouping rule: a new round starts at each user message; replies to
+ *  DIFFERENT prompts (non-siblings) land in different rounds and stay linear —
+ *  only same-round (same-prompt) replies ever sit side by side. */
+export function groupRounds(messages: Msg[]): ChatRound[] {
+  const rounds: ChatRound[] = [];
+  for (const m of messages) {
+    if (m.kind === 'user') {
+      rounds.push({ user: m, seats: [] });
+    } else {
+      let last = rounds[rounds.length - 1];
+      if (last === undefined) {
+        // Defensive: a seat message with no user message before it (cannot
+        // happen via `send`, but the grouping must not throw on it).
+        last = { user: null, seats: [] };
+        rounds.push(last);
+      }
+      last.seats.push(m);
+    }
+  }
+  return rounds;
+}
+
+/** §6.2: column order is stable across rounds — first-seen seat order — so the
+ *  same agent is always in the same column. */
+export function seatColumnOrder(messages: Msg[]): string[] {
+  const order: string[] = [];
+  for (const m of messages) {
+    if (m.kind === 'seat' && !order.includes(m.cliKey)) order.push(m.cliKey);
+  }
+  return order;
+}
+
+/** §6.2: the choice persists per-session — a reading posture, not configuration,
+ *  so it is deliberately NOT a crew setting (a settings write would violate the
+ *  surface's request frugality). sessionStorage, wrapped like the chat id above:
+ *  private-mode browsers degrade to per-mount state, never to a broken surface. */
+const CHAT_LAYOUT_KEY = 'wicked.chat.layout';
+function readStoredLayout(): ChatLayout {
+  try {
+    return sessionStorage.getItem(CHAT_LAYOUT_KEY) === 'columns' ? 'columns' : 'list';
+  } catch {
+    return 'list';
+  }
+}
+function writeStoredLayout(layout: ChatLayout): void {
+  try {
+    sessionStorage.setItem(CHAT_LAYOUT_KEY, layout);
+  } catch {
+    /* non-fatal — see readStoredChatId */
+  }
+}
 
 interface Props {
   repoId?: string | null;
@@ -155,6 +223,16 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatIdRef = useRef<string | null>(null);
   chatIdRef.current = chatId;
+
+  // ── Transcript layout (DES-FEEDBACK-002 §6, slice K) ────────────────────────
+  // List is the default; columns re-arranges rounds side by side. Initialized
+  // synchronously from sessionStorage — reading it can never fire a request, and
+  // switching it touches nothing but how `messages` is rendered (§6.3).
+  const [layout, setLayout] = useState<ChatLayout>(readStoredLayout);
+  function chooseLayout(next: ChatLayout): void {
+    setLayout(next);
+    writeStoredLayout(next);
+  }
 
   // ── Default agent chips (DES-FEEDBACK-001 §6, slice C) ─────────────────────
   // The agents that will join on the first send: defaults (cached roster or
@@ -526,6 +604,90 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     </span>
   );
 
+  // §6.2: the toggle is visible only when the chat has ≥2 distinct REPLYING
+  // seats — a single-agent transcript has nothing to compare, and the toggle
+  // would be dead chrome. Derived from the transcript, zero requests.
+  const seatOrder = seatColumnOrder(messages);
+  const showLayoutToggle = seatOrder.length >= 2;
+  const rounds = layout === 'columns' ? groupRounds(messages) : [];
+
+  // §6.4: the segmented pair in the mode-switcher grammar — active segment
+  // --surface-raised + --ink-high, inactive --ink-muted.
+  const layoutSegment = (value: ChatLayout, glyph: string, label: string): React.ReactElement => (
+    <button
+      key={value}
+      type="button"
+      data-testid={`chat-layout-${value}`}
+      aria-pressed={layout === value}
+      title={value === 'columns'
+        ? 'Arrange each prompt’s agent replies side by side'
+        : 'Show the transcript as one linear column'}
+      // The composer must keep focus and its draft across a layout switch
+      // (§6.5): preventDefault on mousedown stops the click from stealing focus.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => chooseLayout(value)}
+      style={{
+        background: layout === value ? 'var(--surface-raised)' : 'transparent',
+        border: 'none',
+        borderRadius: 'var(--radius-md)',
+        color: layout === value ? 'var(--ink-high)' : 'var(--ink-muted)',
+        cursor: 'pointer',
+        fontFamily: 'var(--font-sans)',
+        fontSize: 'var(--text-2xs)',
+        lineHeight: 1.6,
+        padding: '1px 7px',
+      }}
+    >
+      {glyph} {label}
+    </button>
+  );
+
+  /** The list-mode bubbles, verbatim (§6.3: list mode is untouched); columns
+   *  mode reuses the same bubble tokens with the avatar promoted to a header. */
+  const userBubble = (m: UserMsg, key: React.Key): React.ReactElement => (
+    // §5.3 token usage: user messages are transparent — the hairline
+    // keeps the bubble shape without claiming a surface of its own.
+    <div
+      key={key}
+      className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[13px]"
+      style={{ background: 'transparent', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+    >
+      {m.text}
+    </div>
+  );
+
+  const bubbleBody = (m: SeatMsg): React.ReactElement => (
+    <div
+      // §5.3 token usage: agent bubbles sit on --surface-card; the
+      // border speaks status while a reply is pending or failed.
+      className="rounded-xl px-4 py-2 text-[13px] min-w-[60px]"
+      style={{
+        background: 'var(--surface-card)',
+        border: `1px solid ${m.pending ? 'var(--status-run-dim)' : m.ok ? 'var(--surface-raised)' : 'var(--status-fail-dim)'}`,
+      }}
+    >
+      {m.pending && m.text === '' ? (
+        <span className="opacity-50 font-mono text-[11px] animate-pulse">thinking…</span>
+      ) : (
+        <Markdown>{m.text}</Markdown>
+      )}
+    </div>
+  );
+
+  /** §6.2 column header: the seat chip in the existing chip dress — monogram
+   *  avatar + cliKey, SEAT_CHIP tokens verbatim. */
+  const columnHeader = (cliKey: string): React.ReactElement => (
+    <span className="inline-flex items-center gap-1.5 min-w-0">
+      <span
+        className="shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-mono font-bold"
+        style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg }}
+      >
+        {cliKey.slice(0, 2).toUpperCase()}
+      </span>
+      <span className="truncate text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>{cliKey}</span>
+    </span>
+  );
+
   const anyReady = Object.values(seats).some((st) => st === 'ready');
   // V8: a teardown control exists only once there is something armed to tear down —
   // warm agents, or a kept-on-error chat id the operator may want to disconnect.
@@ -557,6 +719,25 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
         <div className="flex items-center gap-1.5 flex-wrap">
           {Object.entries(seats).map(([k, st]) => seatChip(k, st))}
         </div>
+        {/* §6.2: the layout toggle sits right of the seat chips — a two-state
+            segmented pair, present only with ≥2 distinct replying seats. */}
+        {showLayoutToggle && (
+          <div
+            data-testid="chat-layout-toggle"
+            data-layout={layout}
+            role="group"
+            aria-label="Transcript layout"
+            className="inline-flex items-center gap-0.5 shrink-0"
+            style={{
+              border: '1px solid var(--surface-raised)',
+              borderRadius: 'var(--radius-md)',
+              padding: '1px',
+            }}
+          >
+            {layoutSegment('list', '≡', 'list')}
+            {layoutSegment('columns', '⫼', 'columns')}
+          </div>
+        )}
         <div className="flex-1" />
         {closable && (
           <button
@@ -594,43 +775,74 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
             </p>
           </div>
         )}
-        {messages.map((m, i) =>
-          m.kind === 'user' ? (
-            // §5.3 token usage: user messages are transparent — the hairline
-            // keeps the bubble shape without claiming a surface of its own.
-            <div
-              key={i}
-              className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[13px]"
-              style={{ background: 'transparent', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-            >
-              {m.text}
-            </div>
-          ) : (
-            <div key={i} className="self-start max-w-[80%] flex gap-2">
-              <span
-                className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-mono font-bold mt-0.5"
-                style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg }}
-              >
-                {m.cliKey.slice(0, 2).toUpperCase()}
-              </span>
-              <div
-                // §5.3 token usage: agent bubbles sit on --surface-card; the
-                // border speaks status while a reply is pending or failed.
-                className="rounded-xl px-4 py-2 text-[13px] min-w-[60px]"
-                style={{
-                  background: 'var(--surface-card)',
-                  border: `1px solid ${m.pending ? 'var(--status-run-dim)' : m.ok ? 'var(--surface-raised)' : 'var(--status-fail-dim)'}`,
-                }}
-              >
-                {m.pending && m.text === '' ? (
-                  <span className="opacity-50 font-mono text-[11px] animate-pulse">thinking…</span>
-                ) : (
-                  <Markdown>{m.text}</Markdown>
-                )}
+        {layout === 'columns' && showLayoutToggle
+          ? // §6.2 columns mode: each round renders its user bubble (unchanged)
+            // then a grid of the round's replies — one column per seat, order
+            // stable across rounds (first-seen), an empty dimmed cell where a
+            // seat did not answer this round (absence is information). The grid
+            // scrolls horizontally INSIDE its round container past 3 columns —
+            // the page never scrolls horizontally. No motion is added here, so
+            // the arrangement is reduced-motion safe by construction.
+            rounds.map((round, ri) => (
+              <div key={ri} data-testid="chat-round" className="flex flex-col gap-3">
+                {round.user !== null && userBubble(round.user, 'u')}
+                <div
+                  data-testid="chat-round-grid"
+                  data-columns={seatOrder.length}
+                  style={{
+                    display: 'grid',
+                    gap: '8px',
+                    gridTemplateColumns: `repeat(${seatOrder.length}, minmax(260px, 1fr))`,
+                    overflowX: 'auto',
+                  }}
+                >
+                  {seatOrder.map((cliKey) => {
+                    const reply = round.seats.find((s) => s.cliKey === cliKey);
+                    return reply === undefined ? (
+                      <div
+                        key={cliKey}
+                        data-testid="chat-cell-empty"
+                        data-agent={cliKey}
+                        className="flex flex-col gap-1.5 min-w-0"
+                      >
+                        {columnHeader(cliKey)}
+                        <div
+                          className="rounded-xl px-4 py-2 text-[13px] font-mono"
+                          style={{ border: '1px dashed var(--surface-raised)', color: 'var(--ink-dim)' }}
+                        >
+                          —
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        key={cliKey}
+                        data-testid="chat-cell"
+                        data-agent={cliKey}
+                        className="flex flex-col gap-1.5 min-w-0"
+                      >
+                        {columnHeader(cliKey)}
+                        {bubbleBody(reply)}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ),
-        )}
+            ))
+          : messages.map((m, i) =>
+              m.kind === 'user' ? (
+                userBubble(m, i)
+              ) : (
+                <div key={i} className="self-start max-w-[80%] flex gap-2">
+                  <span
+                    className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-mono font-bold mt-0.5"
+                    style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg }}
+                  >
+                    {m.cliKey.slice(0, 2).toUpperCase()}
+                  </span>
+                  {bubbleBody(m)}
+                </div>
+              ),
+            )}
         <div ref={bottomRef} />
       </div>
 
