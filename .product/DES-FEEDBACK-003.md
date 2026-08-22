@@ -769,3 +769,294 @@ hover). River: all fills/strokes from status tokens as named above; lane separat
 - The needs-you band, quiet band, triage hint, and LiveFeed testids all render
   unchanged below the band (C3/C6 regression assert).
 - No `<script>` chart library; all river geometry is inline SVG (grep).
+
+---
+
+## 8 Supersession audit — what this replaces, and where in-flight work re-scopes
+
+Round 4 removes and relocates. Every casualty is enumerated here with its landing
+place; slice builders on FEEDBACK-002's in-flight slices (I–L) re-scope against this
+table, not by discovery.
+
+### 8.1 Removed from the rail (slice A supersessions)
+
+| Affordance | Was (slice A) | Becomes | Fate of the code |
+|---|---|---|---|
+| QUICK header + 4 verbs | LeftSidebar.tsx:288–315 | ＋ icons on the four headings (§3.1); Make's ＋ carries the Build/Document/Video fork (§3.4); Project's ＋ keeps NewProjectModal | `ActionLink` deleted; NewProjectModal reused unchanged |
+| RunsSection mount | LeftSidebar.tsx:336–340 | the runs bottom panel (§5) | component file becomes the panel's row library (`recentRuns`, `phaseWord`, `RUN_DOT` reused); the rail mount deleted |
+| SettingsRailSection placement | rail bottom, LeftSidebar.tsx:430–433 | Settings PRIMARY heading (§3.1, icon-less); its rows/version line move into that accordion | `SETTINGS_ITEMS` reused; the bottom slot goes to HealthRailSection (§6.2) |
+| Projects/Repositories standalone taxonomies | LeftSidebar.tsx:342–401 | accordion contents of their headings (§3.3), row components reused | repo 5s poll (LeftSidebar.tsx:235–250) RETIRED → fetch-on-expand + palette cache |
+| EC20 ("no + in QUICK") | FEEDBACK-001 §8.2 | re-scoped: no `+` inside accordion CONTENTS; heading-level ＋ icons are the operator's own ask (§3.1) | checklist text amended (§10.1) |
+
+### 8.2 AppChrome (VISION slice 3 / slice A supersessions)
+
+| Affordance | Was | Becomes |
+|---|---|---|
+| Connection dot | chrome, AppChrome.tsx:74–131 | STAYS (glance state) — click now expands the Health section (§6.2) |
+| Health popover | AppChrome.tsx:133–159 | RETIRED → HealthRailSection contents (CheckRow + `getHealth()` fetch move there); the popover DOM is deleted |
+| NotificationBell | below chrome | UNTOUCHED (operator: "should stay where it is") |
+
+### 8.3 Slice H (triage) — surfaces reconciled
+
+H's cursor walks needs-you CARDS (HomeBoard) and gate-inbox rows (ProjectDashboard) —
+**both survive unchanged** (§5.5, §7.4). What H must NOT assume anymore: that the rail
+lists runs (it doesn't — a test asserting `rail-runs` breaks) and that the metrics bar
+sits above the board (the narrative band does; the triage hint and bands are below it
+exactly as before). The bottom panel is explicitly NOT a cursor surface in v1 (§11).
+
+### 8.4 Slice G (palette) — vocabulary reconciled
+
+The palette's verbs keep their spellings — `> New Build`, `> New Chat`, `> New
+Project` (CommandPalette.tsx:241–284): "Make" is a PATH name (a place), while the
+verbs name what gets made (an action) — Build remains the honest word for a code run,
+and it matches the mode tab the verb lands on. Two additions ride the next palette
+touch (slice N here, not a G re-open): `> New Document` and `> New Video` (the §3.4
+fork's other two tines, same project-picker mechanism), so the palette and Make's ＋
+agree on what can be made. The prefix grammar and search mode (J) are untouched.
+
+### 8.5 Slice E (metrics) — derivations live, band dies
+
+The 64px metrics-bar BAND on the landing is superseded by the narrative band (§7.3).
+Component fates: `RunOutcomeBar` → landing margin column + Projects/Make dashboards;
+`TokenBurnSparkline` → landing margin + Make dashboard; `GateLatencyChart` → OFF the
+landing, available to dashboards; `ProjectSparkline` → quiet chips (unchanged) +
+Projects dashboard rows; `MetricTile` → the dashboard tile dress everywhere (§4).
+EC19 carries — every relocated element keeps its `data-question`.
+
+### 8.6 In-flight slices (FEEDBACK-002 I–L) — re-scope notes
+
+- **Slice I (file viewer):** unaffected (RightPanel + overlay; the bottom bar's 28px
+  is outside the viewer's `82vh` overlay math — no change).
+- **Slice J (crumb pivot + search):** unaffected in behavior; its search-mode corpus
+  label precedent (EC24) is now ALSO the Make dashboard's pattern (§4.2.2) — one
+  grammar, two sites.
+- **Slice K (chat columns + compare):** compare panes measure EC18 as amended by
+  FEEDBACK-002 §12.1 — the region now additionally ends above the fixed bar (§5.5's
+  geometry note); no other change.
+- **Slice L (notifications + batch):** desktop notifications are additive and stay;
+  batch gates ride H's cursor, which is untouched. L's settings group lands in
+  `/system` — reachable under the Settings HEADING now (path changed in the rail,
+  route unchanged).
+
+---
+
+## 9 Constraint inventory — what every slice must hold
+
+| # | Constraint | Guarded by | How this document honors it |
+|---|---|---|---|
+| C1 | Chat: zero requests on mount | DES-UXFIX-001 §2.4 | untouched — no section changes GroupChat; rail accordion fetches on EXPAND only (§3.3) |
+| C2 | Tokens only; linguist palette sole exemption | DES-VISION-001 §2.11 | every "token usage" subsection; the river's colors are the status layer by construction (§7.5) |
+| C3 | Attention model untouched | DES-VISION-001 §1.4 / UXFIX | §3.3 (accordion reads the board model), §7.3 (river lanes in board order), §7.4 (bands byte-identical) |
+| C4 | Canvas-first (EC18) | FEEDBACK-001 §7.3 | §5.5: the bar is a reserved row outside the canvas; sheet auto-collapses entering immersive modes (EC27) |
+| C5 | Charts answer named questions (EC19) | FEEDBACK-001 §2.1 | §4's per-tile question tables; §7.3's lede + river questions; GateLatencyChart removed from landing WITH its question re-answered (§7.3 element 3) |
+| C6 | Wall + feed structure | DES-VISION-001 §5.1 | §7.4 — wall, feed, bands, cursor all unchanged below the narrative band |
+| C7 | Keyboard a11y — visible focus, no key theft | EC21/EC22 | §3.2 (tabbable headings, aria-expanded), §5.7 (Escape precedence), no new unmodified keys anywhere |
+| C8 | No invented wire | house rule §0 | zero new endpoints this round; the two honesty labels (§4.2.2, §5.3 "observed"/"failed" scoping) make wire limits operator-visible |
+| C9 | One shortcut registry | FEEDBACK-002 §1.2 (EC21) | the accordion and panel add NO global keys; Escape-for-sheet registers through the registry AFTER the palette entry |
+
+---
+
+## 10 Slice plan
+
+### 10.0 Inherited rules (DES-VISION-001 §6.0, FEEDBACK-001 §8.0, FEEDBACK-002 §12.0 — unchanged)
+
+- Each PR ≤350 LOC production diff (tests excluded from the count, never from the PR)
+- Each PR independently mergeable and revertable
+- Merge protocol: branch → open → wait 6–8 min for bots + CI → address → merge
+- Every slice gated by named screenshots at 1440×900 via the Playwright harness
+- Every slice preserves all VISION/UXFIX/FEEDBACK-001/-002 behaviors it touches
+- Token discipline (EC15): the no-raw-color ERROR lint + PostCSS twin stay green
+
+### 10.1 New experience-checklist items (extends EC17–EC25)
+
+- **EC26 — One heading open.** At most one primary-nav heading has
+  `aria-expanded="true"`; the route→heading map governs the default; Settings never
+  renders dashboard/new icons. (§3.2)
+- **EC27 — The bar is a row, the sheet is a guest.** The runs bottom bar is a
+  reserved 28px row (never covers content); the expanded sheet is an overlay that
+  auto-collapses on entering Document/Video; the version strip and the bar never
+  overlap. (§5.2, §5.5)
+- **EC28 — Dashboards are combined list + reporting.** Each path dashboard renders
+  its tile band (every tile with `data-question`) ABOVE its list; no dashboard
+  re-implements another surface's bands. (§4)
+- **EC29 — The landing narrates from live data.** The lede's every number derives
+  from store state (no static copy, no invented clock); zero-count segments drop
+  out; the quiet phrase renders on quiet systems. (§7.3)
+- **EC30 — Health is fetched by gesture.** `GET /health` and `GET /roster` fire only
+  on an explicit expand (or dot click), never on mount, never on a timer. (§6.2)
+- **EC20 (amended)** — scope moves from "no `+` in QUICK" (QUICK is gone) to: no `+`
+  glyph inside accordion CONTENTS; heading-level ＋ icons are the sanctioned
+  spelling. (§3.1, §8.1)
+- **EC18 (amended, second)** — the canvas region additionally ends above the fixed
+  28px bar; the >80%-width measurement is unchanged. (§5.5)
+
+### 10.2 Fixture additions (extends W2)
+
+- A roster fixture with 3 seats, one `health.status: "inactive"` with a message
+  (health registry rows, summary dot).
+- A 24h-spread activity fixture: 3 projects with runs whose observed frames span the
+  window — one live run breaching "now", one waiting gate, one failure, one doc
+  version landed (river marks; lede counts).
+- ≥6 non-chat runs across projects + 2 chat runs (Make/Chat accordions and
+  dashboards; bottom-panel ordering).
+- An all-terminal variant (quiet lede, quiet bar phrase).
+
+### 10.3 Slices
+
+---
+
+**Slice M — Primary-nav accordion rail** *(~340 LOC)* — §1, §2, §3
+
+LeftSidebar rewrite around five `RailHeading` rows (~120: title/▦/＋ anatomy,
+one-open state, route→heading map, collapsed-rail glyph column); accordion contents
+wiring reusing ProjectRow / RunsSection row grammar / repo rows / SETTINGS_ITEMS
+(~130); make-picker popover (~50); deletion of QUICK, rail RunsSection mount, repo
+poll, SettingsRailSection mount (~40 net removals). `/make` panel id registered in
+useRoute's union with a placeholder surface (the real dashboard is slice O — the rail
+must not link at a 404).
+
+*DOM ACs:* §3.6 in full.
+*Screenshots:* `feedback3-M-rail-headings.png` (five headings, Make expanded, W2
+fixture), `feedback3-M-make-picker.png` (＋ popover open, 3 rows),
+`feedback3-M-rail-collapsed.png` (48px glyph column).
+*Checklist:* EC15, EC20(amended), EC22, EC26.
+*Preserved:* NotificationBell slot/behavior; immersive auto-collapse (slice F);
+NewProjectModal; board attention order (accordion reads, never re-sorts); no global
+key changes (C9).
+
+---
+
+**Slice N — Runs bottom panel** *(~300 LOC)* — §5
+
+`RunsBottomPanel.tsx` (~200: fixed bar + stat segments + sheet + rows off the
+RunsSection helpers); App.tsx mount + 28px padding + immersive auto-collapse hook
+(~40); Escape registration through the registry after the palette entry (~10);
+palette verb additions `> New Document` / `> New Video` (§8.4, ~50).
+
+*DOM ACs:* §5.7 in full.
+*Screenshots:* `feedback3-N-bar-collapsed.png` (bar with live counts under the
+board), `feedback3-N-sheet-open.png` (sheet, active-before-terminal rows),
+`feedback3-N-bar-immersive.png` (Document mode: canvas, version strip, bar — no
+overlap).
+*Checklist:* EC15, EC21 (no key theft), EC27, EC18(amended).
+*Preserved:* `/runs` escape hatch; runPath shell semantics (App.tsx:147–153); H's
+cursor surfaces; LiveFeed; gate toasts.
+
+---
+
+**Slice O — Health rail-foot + Make dashboard** *(~330 LOC)* — §6.2, §4.2
+
+`HealthRailSection.tsx` (~110: section dress from SettingsRailSection, CheckRow
+move, roster fetch-on-expand, summary dot); AppChrome popover retirement + dot→
+section wiring (~30 net); `MakeDashboard.tsx` (~160: tile band off existing
+components, non-chat-run list, per-project docs section, corpus label + why-popover
++ explicit fan-out button); route wiring (~30).
+
+*DOM ACs:* §6.3 and §4.2's rows in §4.5.
+*Screenshots:* `feedback3-O-health-open.png` (registry expanded, one inactive seat),
+`feedback3-O-make-dashboard.png` (tiles + corpus label + list, W2 fixture).
+*Checklist:* EC15, EC24 (corpus label), EC28, EC30.
+*Preserved:* connection dot glyph/state contract (`data-state` untouched);
+NotificationBell; `getHealth` response handling (moved verbatim).
+
+---
+
+**Slice P — Projects / Chat / Repositories dashboard reporting** *(~300 LOC)* — §4.1, §4.3, §4.4
+
+Three tile bands on the three existing pages (~90 each: composition of MetricTile +
+RunOutcomeBar + ProjectSparkline + new small derivations), ProjectsPage rows gain the
+sparkline (~30). No list behavior changes on any of the three.
+
+*DOM ACs:* §4.5 for the three paths.
+*Screenshots:* `feedback3-P-projects-dashboard.png`, `feedback3-P-chats-dashboard.png`,
+`feedback3-P-repos-dashboard.png` (each: tile band above the untouched list).
+*Checklist:* EC15, EC19, EC28.
+*Preserved:* ChatsPage filter/time-range/search; RepositoriesPanel register flow;
+ProjectsPage create/archive; all existing list testids.
+
+---
+
+**Slice Q — Narrative landing** *(~350 LOC)* — §7
+
+`NarrativeBand.tsx` (~60: lede composer + quiet grammar + links);
+`ActivityRiver.tsx` (~200: lanes, spans off the board's merged clocks, marks, axis,
+links); margin column (~30: relocated RunOutcomeBar + TokenBurnSparkline);
+HomeBoard.tsx swap metrics bar → band (~40 net; GateLatencyChart unmounted from `/`,
+component kept).
+
+*DOM ACs:* §7.6 in full.
+*Screenshots:* `feedback3-Q-landing-story.png` (full landing: lede, river with a live
+run + gate mark, bands below — the money shot), `feedback3-Q-landing-quiet.png`
+(all-quiet fixture: quiet lede, calm river).
+*Checklist:* EC11, EC15, EC19, EC29; C3/C6 regression asserts.
+*Preserved:* needs-you/quiet bands, triage cursor + hint, LiveFeed, windowing math,
+all-quiet one-liner, unfiled shelf.
+
+### 10.4 Sequencing
+
+```
+M  (rail)            ← first: everything visible hangs off the new frame
+├─ N  (bottom panel) ← removes the rail's runs section M leaves orphaned*;
+│                       M ships with the rail runs ALREADY gone (M deletes the
+│                       mount), so N follows M closely — the gap where runs live
+│                       only at /runs should span days, not weeks
+├─ O  (health + /make) ← M creates the empty Health slot and the /make link
+Q  (landing)         ← independent of M/N/O; parallel any time
+P  (dashboards)      ← independent; parallel any time after M (visual parity check
+                        against M's rail is the only soft tie)
+
+Hard chain: M → N, M → O.  P and Q float.
+```
+
+**Done means:** all five slices merged; every named screenshot captured at 1440×900
+and passing its checklist items; W1–W7 walkthroughs re-run green; plus **W8 — the
+round-4 walkthrough:** from a cold tab on `/`: the lede states the fixture's truth
+and its gate link lands on the needs-you band; the rail shows five closed headings —
+expanding Make collapses nothing else (nothing was open), its ＋ forks three ways,
+its ▦ lands on a Make dashboard whose corpus label names its limits; a run is
+reached in two clicks from the bottom bar; the health section names the sick seat
+that the chrome dot hinted at; and at no point does the rail show more than one open
+heading or the operator wait on a fetch they didn't gesture for.
+
+---
+
+## 11 Out of scope (named)
+
+- **A crew/bridge cross-project made-artifacts index** (would make §4.2.2's fan-out
+  button obsolete) — future NEEDS-CREW-ENDPOINT; the corpus label exists precisely
+  so its absence is honest.
+- **Cursor keys on the bottom sheet** (j/k inside the run list) — a third cursor
+  plane needs focus-arbitration design; the sheet is link-navigable meanwhile
+  (§5.5).
+- **Persisted accordion preference** (remembering a manually-opened heading across
+  sessions) — the route→heading map is the v1 behavior; a `studio.*` settings key is
+  a follow-up if the operator asks.
+- **"Since your last visit" as a real clock** for the lede — needs a durable
+  last-seen marker (a settings write per page-load is not worth it unasked); the
+  24h observed window is the honest v1.
+- **River zoom/scrub/replay** (§7.4) — the river is a lens, not a player.
+- **Removing the chrome connection dot** — kept as glance state pending the
+  operator's word (§6.2, open question).
+- **Mobile/narrow treatments** of the accordion, bar, and river — the 1440×900
+  operator viewport governs; the standing rule applies (a phone gets a purpose-built
+  view, not a shrunk desktop).
+- **Renaming routes to match "Make"** (`/runs/new`, `modePath(...,'build')`) — URLs
+  are API surface for bookmarks/tests; the nav word changes, the route grammar does
+  not, this round.
+
+---
+
+## 12 Traceability
+
+| Operator item (verbatim fragment) | Sections | Slices | Wire verdict summary |
+|---|---|---|---|
+| "left nav … too much going on" / "Primary nav will be simple" | §1 | M | client-only |
+| "Primary paths: Projects, Make, Chat, Repositories, Settings" | §2 | M | client routes; `/make` new panel id |
+| "dashboard icon … a combined list and reporting dashboard" | §3.1, §4 | M (icons), O (`/make`), P (three upgrades) | CLIENT-DERIVABLE + EXISTS `GET /repos` (routes.ts:368); docs corpus labeled (§4.2.2) |
+| "new would create a new thing" | §3.1, §3.4 | M | existing create routes + NewProjectModal; make-picker client-only |
+| "clicking on the header (actual title) would expand it" / "only one heading can be expanded at a time" | §3.2 | M | client-only (EC26) |
+| "setting won't have the dashboard/icons" | §3.1 | M | client-only |
+| "move runs to a bottom panel fixed … stats … expands … opens up the run page … fixed at bottom" | §5 | N | CLIENT-DERIVABLE (runs prop, gate store, runtime store) — zero requests |
+| "notifications should stay where it is" | §6.1 | — (no work) | — |
+| "move health down to where settings was … behaving the same (just with it's health registry)" | §6.2 | O | EXISTS `GET /health` (routes.ts:250), `GET /roster` + SeatHealth (routes.ts:308, crew#274) — fetch on gesture |
+| "landing page is still far from graphical and telling a story of what's happening" | §7 | Q | CLIENT-DERIVABLE (board clocks, runtime/gate/docThread stores) — zero new requests |
