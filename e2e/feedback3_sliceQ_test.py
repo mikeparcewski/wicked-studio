@@ -313,10 +313,16 @@ with sync_playwright() as p:
     offenders = sorted({p for p in api_requests if not p.startswith(ALLOWED_API)})
 
     # ── The gate mark is a real link: click → the run, at the gate (§7.6) ──────
+    # The href carries `#gate`; on arrival the SteeringGate CONSUMES the hash
+    # (one-shot focus intent, SteeringGate.tsx) after focusing the question —
+    # so the landing proof is: right run path + the hash gone + the gate
+    # message holding focus.
+    gate_href = page.locator(
+        '[data-testid="river-gate-mark"][data-run-id="r-q3"]').get_attribute("href")
     page.locator('[data-testid="river-gate-mark"][data-run-id="r-q3"]').click()
     nav_ok = settled(
         """() => location.pathname === '/p/q3-review-deck/build/r-q3'
-              && location.hash === '#gate'""")
+              && location.hash === ''""") and gate_href == "/p/q3-review-deck/build/r-q3#gate"
 
     # ══ Scene 2 — the all-quiet fixture (quiet lede, calm river) ═══════════════
     set_fixture(ORIGIN, no_runs=True, river=False, metrics_ws=False)
@@ -396,7 +402,7 @@ report["steps"]["river"] = {
         "gateMarkPulses", "failMarks", "versionMarkKind", "versionOnQ3",
         "liveSpanLive", "liveHasArrow", "arrowReachesEdge", "svgOnly")},
 }
-report["steps"]["gate_mark_link"] = {"ok": nav_ok, "navigated": nav_ok}
+report["steps"]["gate_mark_link"] = {"ok": nav_ok, "navigated": nav_ok, "href": gate_href}
 report["steps"]["margin_notes"] = {
     "ok": burn_ok,
     "burn_settled": burn_ok,
