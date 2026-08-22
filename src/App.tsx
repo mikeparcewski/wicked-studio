@@ -42,6 +42,8 @@ import { useDocThreadStore } from './store/docThread.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
+import { useNotifPrefsStore } from './store/notifPrefs.js';
+import { notifyGateIfUnfocused } from './board/desktopNotify.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -93,6 +95,9 @@ export function App(): React.ReactElement {
       // Relayed interactive frames feed BOTH altitudes off the one subscription (§3.4):
       // the runtime store's board headline above, the doc transcript here.
       ingestDocThread(event);
+      // Slice L (DES-FEEDBACK-002 §8.2): the desktop layer folds off the SAME
+      // subscription — hidden-tab-only, opt-in, permission-gated, never prompts.
+      notifyGateIfUnfocused(event);
       if (LIFECYCLE_EVENTS.has(event.type)) refresh();
     },
     [ingestGate, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, refresh],
@@ -105,6 +110,10 @@ export function App(): React.ReactElement {
   // overrides on <html> — the cascade seam tokens.css declares for this.
   useEffect(() => {
     void useAppearanceStore.getState().load();
+    // Slice L: `studio.notifications` rides the same settings store — read
+    // once at startup; the defaults (Off) stand if the surface is absent.
+    // Never touches the Notification API (EC25: no prompt on load).
+    void useNotifPrefsStore.getState().load();
   }, []);
 
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).

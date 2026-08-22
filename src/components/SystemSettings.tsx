@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
+import { NotificationSettings } from './NotificationSettings.js';
 import { Terminal } from './Terminal.js';
 
 const CLI_DEFAULTS_KEY = 'wicked_default_clis';
@@ -185,6 +186,11 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           Theme ›
         </a>
       </div>
+
+      {/* Slice L (DES-FEEDBACK-002 §8.2): the desktop-notification opt-in —
+          crew-persisted (`studio.notifications`), permission asked only on
+          the toggle's own gesture (EC25). */}
+      <NotificationSettings />
 
       <section
         className="rounded-xl px-5 mb-6"
