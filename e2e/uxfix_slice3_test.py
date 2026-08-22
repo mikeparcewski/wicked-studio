@@ -1,40 +1,45 @@
 #!/usr/bin/env python3
 """
-uxfix_slice3_test.py — the DES-UXFIX-001 slice-3 gate: the rail consolidated to
-TWO taxonomies (§2.3, F4), proven in a real browser against the W2
-messy-reality fixture (§4.2).
+uxfix_slice3_test.py — the DES-UXFIX-001 slice-3 gate, RE-SCOPED by
+DES-FEEDBACK-003 §8.7 (slice M): the standalone rail taxonomies this rig
+pinned (`rail-section-projects` / `rail-section-repos`) folded into the
+five-path accordion's Projects and Repositories headings, and the QUICK verb
+list became the headings' ＋ icons. What slice 3 actually established — the
+rail agrees with the board's attention order, the retired Chats/Work
+vocabulary stays dead, /runs stays reachable, a project row enters the
+project — is re-asserted against the new anatomy. Same rig pattern: the
+SHARED deterministic fixture server in `uxfix_fixture.py`, no switches
+flipped, so it sees the default W2 board (orphan present, 30s q3 gate).
 
-Same rig pattern as the slice-1/2 gates: the SHARED deterministic fixture
-server in `uxfix_fixture.py` serves the `dist-sameorigin/` build plus every
-endpoint the home route reads, all timestamps computed from one frozen NOW0,
-the live run narrating over the rig's own /ws. No crew daemon is involved
-anywhere. This rig never flips the fixture switches, so it sees the default W2
-board (orphan present, 30s q3 gate).
-
-What it asserts (design §4.3, the slice-3 DOM AC):
-  1. The rail contains data-testid="rail-section-projects" AND
-     "rail-section-repos", and NO rail-section-chats / rail-section-work; the
-     retired section labels and their empty strings ("Chats", "Work",
-     "No chats yet", "No work yet") appear nowhere in the rail's text, and the
-     old near-synonym verbs ("Do Work", "New Chat") appear nowhere on the page.
-  2. Projects lists ATTENTION-ORDERED: the rail's rows settle to the same
-     decayed-score order as the board's NEEDS YOU band — q3-review-deck (gate
-     30s) → api-migration (gate 2m) → auth-refactor (failed 12m) →
-     upload-endpoint (live) — capped at SECTION_MAX (4 of the fixture's 28)
-     with a "view all". legacy-spike (8-day failure, the R3 trap) is NOT among
-     them: the rail agrees with the board, read from the same DOM.
-  3. The creation verbs speak the mode spine (V9/V10): Build / Chat /
-     Repository inside data-testid="rail-actions".
-  4. /runs remains reachable via data-testid="rail-all-runs": a real <a
-     href="/runs"> whose click lands the SPA on /runs (the flat-list escape
-     hatch), with the board unmounted.
-  5. A rail project row enters the project — re-scoped by DES-FEEDBACK-001
-     §4.1 (slice D): clicking q3-review-deck lands on the PROJECT DASHBOARD at
-     /p/q3-review-deck (context before actions), not a remembered mode.
+What it asserts (slice-3 DOM ACs, as amended by §8.7):
+  1. The rail carries the Projects and Repositories HEADINGS (and no retired
+     rail-section-chats / rail-section-work, nor the superseded standalone
+     rail-section-projects / rail-section-repos); the retired section labels
+     and their empty strings ("Chats", "Work", "No chats yet", "No work yet")
+     appear nowhere in the rail's text, and the old near-synonym verb labels
+     ("Do Work", "New Repository") appear nowhere on the page — the headings'
+     ＋ icons carry aria-labels in the §3.1 "New <path>" grammar instead
+     ("New Chat" is that grammar's honest spelling for Chat's ＋ now, so it
+     leaves the banned list).
+  2. The Projects ACCORDION lists ATTENTION-ORDERED rows: expanded, its rows
+     settle to the same decayed-score order as the board's NEEDS YOU band —
+     q3-review-deck → api-migration → auth-refactor → upload-endpoint —
+     capped (≤6 of the fixture's 28) with a "view all ›". legacy-spike (the
+     R3 trap) never cracks the needs-you window (the leading 4): the rail
+     agrees with the board, read from the same DOM.
+  3. The creation affordances are the four heading-level ＋ icons (§8.7: the
+     QUICK assert's replacement) — one per non-Settings heading, none on
+     Settings.
+  4. /runs remains reachable — the flat list renders at its route with the
+     board unmounted. (The rail affordance is slice N's bottom-panel
+     "All runs ›"; between M and N the route itself is the escape hatch.)
+  5. A Projects-accordion row enters the project — the PROJECT DASHBOARD at
+     /p/q3-review-deck (DES-FEEDBACK-001 §4.1, slice D), not a remembered
+     mode.
 
 Captures (§4.0 contract: 1440x900 viewport, device_scale_factor=1, waits on
 data-testid, never a sleep) into e2e/shots/uxfix/ — gitignored evidence:
-  uxfix-3-rail.png   the consolidated rail beside the settled W2 board
+  uxfix-3-rail.png   the five-path rail, Projects expanded, beside the W2 board
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
 SKIP_STUDIO_BUILD=1. Env knobs: W2_PORT (default 4332), SKIP_STUDIO_BUILD.
@@ -79,14 +84,11 @@ from playwright.sync_api import sync_playwright  # noqa: E402 (import after serv
 SHOTS.mkdir(parents=True, exist_ok=True)
 
 EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor", "upload-endpoint"]
-RAIL_ROWS = """() => Array.from(document.querySelectorAll(
-    '[data-testid="rail-section-projects"] [data-testid="rail-project"]'))
-    .map(r => r.dataset.projectId)"""
 # Retired vocabulary that must not survive inside the rail (AC 1). "Chats" and
 # "Work" are checked against the RAIL's text only — the board legitimately
 # renders run problems containing the word "work" in prose.
 RAIL_BANNED = ["Chats", "Work", "No chats yet", "No work yet"]
-PAGE_BANNED = ["Do Work", "New Chat", "New Repository"]
+PAGE_BANNED = ["Do Work", "New Repository"]
 
 console_errors: list[str] = []
 
@@ -109,16 +111,9 @@ with sync_playwright() as p:
         except Exception:
             return False
 
-    # ── AC 2: settle on the DECAYED verdict — the rail's rows reach the same
-    # order as the board's NEEDS YOU band (legacy-spike demoted by its 8-day
-    # durable-log tail, the gate leading regardless). Wait on BOTH surfaces.
-    rail_order_ok = settled(
-        """expected => { const ids = Array.from(document.querySelectorAll(
-               '[data-testid="rail-section-projects"] [data-testid="rail-project"]'))
-               .map(r => r.dataset.projectId);
-             return JSON.stringify(ids) === JSON.stringify(expected); }""",
-        EXPECTED_ORDER,
-    )
+    # ── AC 2: expand Projects; settle on the DECAYED verdict — the accordion's
+    # rows reach the same order as the board's NEEDS YOU band (legacy-spike
+    # demoted by its 8-day durable-log tail, the gate leading regardless).
     board_order_ok = settled(
         """expected => { const ids = Array.from(document.querySelectorAll(
                '[data-testid="band-needs-you"] [data-testid="project-card"]'))
@@ -126,26 +121,43 @@ with sync_playwright() as p:
              return JSON.stringify(ids) === JSON.stringify(expected); }""",
         EXPECTED_ORDER,
     )
-    rail_rows = page.evaluate(RAIL_ROWS)
-    # The rail and the board AGREE (§2.3: "the same axis as the board").
+    page.locator('[data-testid="rail-title-projects"]').click()
+    rail_order_ok = settled(
+        """expected => { const ids = Array.from(document.querySelectorAll(
+               '[data-testid="rail-heading-projects"] [data-testid="rail-project"]'))
+               .map(r => r.dataset.projectId);
+             return JSON.stringify(ids.slice(0, 4)) === JSON.stringify(expected); }""",
+        EXPECTED_ORDER,
+    )
+    rail_rows = page.evaluate(
+        """() => Array.from(document.querySelectorAll(
+             '[data-testid="rail-heading-projects"] [data-testid="rail-project"]'))
+             .map(r => r.dataset.projectId)""")
+    # The rail and the board AGREE (§2.3: "the same axis as the board") — the
+    # accordion's leading rows are the needs-you band verbatim.
     rail_matches_board = page.evaluate(
         """() => { const rail = Array.from(document.querySelectorAll(
-                     '[data-testid="rail-section-projects"] [data-testid="rail-project"]'))
+                     '[data-testid="rail-heading-projects"] [data-testid="rail-project"]'))
                      .map(r => r.dataset.projectId);
                    const board = Array.from(document.querySelectorAll(
                      '[data-testid="band-needs-you"] [data-testid="project-card"]'))
                      .map(c => c.dataset.projectId);
-                   return JSON.stringify(rail) === JSON.stringify(board); }""")
-    capped_ok = len(rail_rows) == 4 and "legacy-spike" not in rail_rows
+                   return JSON.stringify(rail.slice(0, board.length)) === JSON.stringify(board); }""")
+    # The R3 trap re-stated for the §3.3 cap of 6: legacy-spike (8-day failure,
+    # project touched an hour ago) may trail at the accordion's tail but must
+    # never crack the needs-you window the board leads with.
+    capped_ok = len(rail_rows) <= 6 and "legacy-spike" not in rail_rows[:4]
     view_all_ok = page.evaluate(
-        """() => Array.from(document.querySelectorAll(
-              '[data-testid="rail-section-projects"] button'))
-              .some(b => (b.textContent ?? '').trim() === 'view all')""")
+        """() => { const v = document.querySelector(
+                     '[data-testid="rail-heading-projects"] [data-testid="rail-view-all"]');
+                   return !!v && v.getAttribute('href') === '/projects'; }""")
 
-    # ── AC 1: two taxonomies, and only two ─────────────────────────────────────
+    # ── AC 1: the two headings carry the taxonomies; retired vocabulary dead ───
     sections_ok = page.evaluate(
-        """() => !!document.querySelector('[data-testid="rail-section-projects"]')
-              && !!document.querySelector('[data-testid="rail-section-repos"]')
+        """() => !!document.querySelector('[data-testid="rail-heading-projects"]')
+              && !!document.querySelector('[data-testid="rail-heading-repos"]')
+              && !document.querySelector('[data-testid="rail-section-projects"]')
+              && !document.querySelector('[data-testid="rail-section-repos"]')
               && !document.querySelector('[data-testid="rail-section-chats"]')
               && !document.querySelector('[data-testid="rail-section-work"]')""")
     rail_text = page.evaluate(
@@ -154,32 +166,31 @@ with sync_playwright() as p:
     body_text = page.evaluate("() => document.body.innerText")
     page_banned_hits = [s for s in PAGE_BANNED if s in body_text]
 
-    # ── AC 3: the creation verbs are the mode spine's words — re-scoped to
-    #    DES-FEEDBACK-001 §1.2 (slice A): a VERTICAL QUICK list with Project
-    #    leading; the spine verbs (Build/Chat/Repository) are all still there.
-    verbs_ok = page.evaluate(
-        """() => { const labels = Array.from(document.querySelectorAll(
-                     '[data-testid="rail-actions"] button'))
-                     .map(b => b.getAttribute('aria-label'));
-                   return JSON.stringify(labels)
-                       === JSON.stringify(['Project', 'Build', 'Chat', 'Repository']); }""")
+    # ── AC 3 (§8.7): the creation affordances are the four heading ＋ icons ────
+    plus_labels = page.evaluate(
+        """() => Array.from(document.querySelectorAll('[data-testid="heading-new"]'))
+              .map(b => b.getAttribute('aria-label'))""")
+    verbs_ok = plus_labels == ["New Projects", "New Make", "New Chat", "New Repositories"]
+    settings_plus_absent = page.evaluate(
+        """() => !document.querySelector(
+             '[data-testid="rail-heading-settings"] [data-testid="heading-new"]')""")
 
-    # ── Capture: the consolidated rail beside the settled W2 board (§4.0) ──────
-    page.locator('[data-testid="rail-all-runs"]').wait_for(timeout=10000)
+    # ── Capture: the five-path rail, Projects expanded, beside the W2 board ────
+    page.locator('[data-testid="rail-heading-projects"] [data-testid="rail-view-all"]').wait_for(timeout=10000)
     page.locator('[data-testid="left-rail"]').screenshot(path=str(SHOTS / "uxfix-3-rail.png"))
 
-    # ── AC 4: the ONE escape hatch — a real link that lands on /runs ───────────
-    hatch_href = page.evaluate(
-        """() => document.querySelector('[data-testid="rail-all-runs"]')?.getAttribute('href')""")
-    page.locator('[data-testid="rail-all-runs"]').click()
+    # ── AC 4: /runs remains reachable — the flat list at its own route ─────────
+    # (The rail affordance is slice N's bottom panel; the route is the M→N
+    # interim escape hatch, per §10.4's sequencing note.)
+    page.goto(f"{ORIGIN}/runs", wait_until="domcontentloaded")
     hatch_ok = settled(
         """() => window.location.pathname === '/runs'
               && !document.querySelector('[data-testid="project-board"]')""")
 
-    # ── AC 5 (re-scoped by DES-FEEDBACK-001 §4.1, slice D): a rail project row
-    #    enters the project — which now means the PROJECT DASHBOARD, not the
-    #    last-used mode. Context before actions; the mode is chosen there. ──────
+    # ── AC 5 (re-scoped by DES-FEEDBACK-001 §4.1, slice D): a Projects-accordion
+    #    row enters the project — the PROJECT DASHBOARD, not a remembered mode. ──
     page.goto(f"{ORIGIN}/", wait_until="domcontentloaded")
+    page.locator('[data-testid="rail-title-projects"]').click()
     page.locator('[data-testid="rail-project"][data-project-id="q3-review-deck"]').wait_for(timeout=30000)
     page.locator('[data-testid="rail-project"][data-project-id="q3-review-deck"]').click()
     shell_ok = settled(
@@ -193,22 +204,23 @@ report["steps"]["slice3_rail"] = {
     "ok": all([
         rail_order_ok, board_order_ok, rail_matches_board, capped_ok, view_all_ok,
         sections_ok, not rail_banned_hits, not page_banned_hits, verbs_ok,
-        hatch_href == "/runs", hatch_ok, shell_ok,
+        settings_plus_absent, hatch_ok, shell_ok,
     ]),
     "rail_projects_order": rail_rows,
     "expected_order": EXPECTED_ORDER,
     "rail_order_ok": rail_order_ok,
     "board_order_ok": board_order_ok,
     "rail_matches_board_needs_you": rail_matches_board,
-    "capped_at_section_max_no_stale": capped_ok,
-    "view_all_present": view_all_ok,
-    "two_taxonomies_no_chats_no_work": sections_ok,
+    "capped_no_stale": capped_ok,
+    "view_all_shares_dashboard_target": view_all_ok,
+    "headings_carry_taxonomies_no_retired_sections": sections_ok,
     "rail_banned_strings_found": rail_banned_hits,
     "page_banned_strings_found": page_banned_hits,
-    "creation_verbs_mode_spine": verbs_ok,
-    "all_runs_href": hatch_href,
-    "all_runs_lands_on_flat_list": hatch_ok,
-    "project_row_enters_shell_chat_default": shell_ok,
+    "heading_new_labels": plus_labels,
+    "creation_affordances_four_plus_icons": verbs_ok,
+    "settings_has_no_plus": settings_plus_absent,
+    "runs_route_reachable_flat_list": hatch_ok,
+    "project_row_enters_dashboard": shell_ok,
     "console_errors": console_errors[:10],
     "screenshots": [str(SHOTS / "uxfix-3-rail.png")],
 }
