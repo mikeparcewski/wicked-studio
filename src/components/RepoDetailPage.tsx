@@ -181,6 +181,15 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
               >
                 {onboarding ? 'Starting…' : '↺ Run Onboarding'}
               </button>
+              {/* §7.8 (slice AC, EC43): named actions preview what they do and write. */}
+              <span
+                data-testid="action-preview"
+                className="text-[10px] font-mono"
+                style={{ color: 'var(--ink-dim)' }}
+              >
+                re-indexes this repo as a governed run (index → annotate → domain) —
+                rewrites its code graph + domain model; typically minutes
+              </span>
               <button
                 type="button"
                 onClick={() => onOpenGraph()}

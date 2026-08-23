@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { clearBatchSelection, toggleBatchSelect, useBatchGateStore } from '../board/batchGates.js';
 import { decideGate, gateOpenPath } from '../board/gateActions.js';
 import { isSimpleGate, type OpenGate } from '../store/gates.js';
+import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
 import type { Navigate } from './useRoute.js';
 import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
@@ -129,13 +130,14 @@ export function useTriageCursor(
     };
 
     return [
-      { id: 'triage-next-j', chord: { key: 'j' }, description: 'Select the next card', handler: move(1) },
-      { id: 'triage-next-down', chord: { key: 'arrowdown' }, description: 'Select the next card', handler: move(1) },
-      { id: 'triage-prev-k', chord: { key: 'k' }, description: 'Select the previous card', handler: move(-1) },
-      { id: 'triage-prev-up', chord: { key: 'arrowup' }, description: 'Select the previous card', handler: move(-1) },
+      { id: 'triage-next-j', chord: { key: 'j' }, group: 'triage', description: 'Select the next card', handler: move(1) },
+      { id: 'triage-next-down', chord: { key: 'arrowdown' }, group: 'triage', description: 'Select the next card', handler: move(1) },
+      { id: 'triage-prev-k', chord: { key: 'k' }, group: 'triage', description: 'Select the previous card', handler: move(-1) },
+      { id: 'triage-prev-up', chord: { key: 'arrowup' }, group: 'triage', description: 'Select the previous card', handler: move(-1) },
       {
         id: 'triage-approve',
         chord: { key: 'a' },
+        group: 'gates',
         description: 'Approve the selected gate',
         guard: gated,
         handler: (e) => {
@@ -155,6 +157,7 @@ export function useTriageCursor(
       {
         id: 'triage-reject',
         chord: { key: 'r' },
+        group: 'gates',
         description: 'Reject the selected gate with a note',
         guard: gated,
         handler: (e) => {
@@ -177,6 +180,7 @@ export function useTriageCursor(
       ...(['x', ' '] as const).map((key): ShortcutEntry => ({
         id: `batch-toggle-${key === ' ' ? 'space' : key}`,
         chord: { key },
+        group: 'gates',
         description: 'Select the gate for batch resolution',
         guard: () => {
           const item = current();
@@ -192,6 +196,7 @@ export function useTriageCursor(
       {
         id: 'triage-open',
         chord: { key: 'enter' },
+        group: 'triage',
         description: 'Open the selected card',
         guard: () => selRef.current !== null,
         handler: (e) => {
@@ -204,13 +209,18 @@ export function useTriageCursor(
       {
         id: 'triage-clear',
         chord: { key: 'escape' },
+        group: 'triage',
         description: 'Clear the triage cursor and batch selection',
-        // DES-FEEDBACK-003 §5.7 Escape precedence (palette → sheet → triage):
-        // while the runs sheet is up, this entry YIELDS so the sheet's own
-        // registry entry closes it first — the selection survives the press.
+        // §7.7 Escape chain (overlay → palette → sheet → modal/popover →
+        // triage): the triage selection is the LAST rung — this entry yields
+        // while the '?' overlay, the runs sheet, or the bell popover is up so
+        // their own entries close them first; the selection survives the press.
         guard: () =>
           (selRef.current !== null || useBatchGateStore.getState().selected.length > 0) &&
-          !useRunsPanelStore.getState().expanded,
+          !useRunsPanelStore.getState().expanded &&
+          !useLayerStore.getState().shortcutOverlayOpen &&
+          !useLayerStore.getState().bellOpen &&
+          !anyModalOpen(),
         handler: () => {
           setNoteFor(null);
           setSelectedKey(null);

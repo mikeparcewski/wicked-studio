@@ -124,11 +124,17 @@ with sync_playwright() as p:
                // EC7 preserved: the surface says what it is for, in one line.
                teachesItself: (document.body.innerText || '').includes(
                  'Describe your goal. The council elects a CLI'),
+               // DES-UX-001 §7.8 (slice AC re-scope): the gate control sits at
+               // top level and its SHIPPED default is not "none" — human_confirm
+               // before the first gate-bearing unit (§13's adopted position).
+               gatePosture: q('[data-testid="gate-posture"]')?.value ?? null,
              }; }""")
 
     ac1_unfiled = (closed["fieldText"] or "").strip().startswith("Unfiled") \
         and closed["locked"] == "false" and not closed["listOpen"]
     intent_ok = closed["intentPlaceholder"] == "What do you need built?" and closed["rowFirst"]
+    # Slice AC (§7.8/§13): the composer's top-level gate-posture default.
+    gate_posture_ok = closed["gatePosture"] == "before"
 
     # ── Capture 1: the Unfiled default, BEFORE any interaction ────────────────
     page.screenshot(path=str(VSHOTS / "feedback-B-build-unfiled.png"))
@@ -183,12 +189,15 @@ with sync_playwright() as p:
     report["steps"]["build_unfiled"] = {
         "ok": all([fonts_ok, ac1_unfiled, intent_ok, list_opens, ac2_names,
                    default_hidden, ac4_add, anatomy_ok, select_ok, unfiled_back,
-                   closed["teachesItself"]]),
+                   closed["teachesItself"], gate_posture_ok]),
         "web_fonts_loaded": fonts_ok,
         "ac1_field_defaults_unfiled": ac1_unfiled,
         "field_text": closed["fieldText"],
         "intent_input_preserved": intent_ok,
         "ec7_surface_teaches_itself": closed["teachesItself"],
+        # DES-UX-001 slice AC re-scope (§11.2): the shipped gate-posture default.
+        "gate_posture_default_not_none": gate_posture_ok,
+        "gate_posture_value": closed["gatePosture"],
         "ac2_dropdown_lists_projects": ac2_names,
         "dropdown_names_head": dropdown["names"][:8],
         "synthesized_default_hidden": default_hidden,

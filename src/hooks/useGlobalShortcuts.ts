@@ -21,11 +21,16 @@ export interface ShortcutChord {
   shift?: boolean;
 }
 
+/** The '?' overlay's section headings (DES-UX-001 §7.7, slice AC). */
+export type ShortcutGroup = 'triage' | 'palette' | 'gates' | 'panels';
+
 export interface ShortcutEntry {
   id: string;
   chord: ShortcutChord;
-  /** Human-readable, for future discoverability surfaces. */
+  /** Human-readable — rendered verbatim by the '?' overlay (§7.7). */
   description: string;
+  /** Overlay section (§7.7). Untagged entries land under "panels". */
+  group?: ShortcutGroup;
   /** Extra availability gate, evaluated after the typing guard. `false` means
    *  the entry YIELDS silently — no preventDefault, no handler (the kill
    *  shortcut's silent-fail contract). */
@@ -60,11 +65,27 @@ export function chordMatches(e: KeyboardEvent, chord: ShortcutChord): boolean {
 /** The ordered handler table — registration order is precedence. */
 const table: ShortcutEntry[] = [];
 
+/**
+ * The overlay's corpus (§7.7, EC42): a snapshot of what is REGISTERED right
+ * now — the '?' overlay renders from this, never from a hand-kept list, so a
+ * key that exists is documented and a key that unmounted disappears with its
+ * surface. Read on open; entries are live references, never mutated here.
+ */
+export function listShortcuts(): readonly ShortcutEntry[] {
+  return [...table];
+}
+
 /** §1.2: while open, the palette owns the keyboard; the table yields. */
 let paletteOpen = false;
 
 export function setShortcutsPaletteOpen(open: boolean): void {
   paletteOpen = open;
+}
+
+/** §7.7 chain: the modal family's local listeners yield while the palette is
+ *  open (palette closes before modal/popover) — this is their read. */
+export function isShortcutsPaletteOpen(): boolean {
+  return paletteOpen;
 }
 
 function dispatch(e: KeyboardEvent): void {

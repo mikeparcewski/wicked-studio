@@ -5,6 +5,7 @@ import { observedSpend, runStats, WINDOW_LABEL_STYLE, windowWord } from '../boar
 import { sessionProjectId } from '../hooks/ambientProject.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useGateStore } from '../store/gates.js';
+import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
@@ -164,8 +165,14 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
       {
         id: 'runs-sheet-close',
         chord: { key: 'escape' },
+        group: 'panels',
         description: 'Collapse the runs sheet',
-        guard: () => useRunsPanelStore.getState().expanded,
+        // §7.7 chain: the '?' overlay closes before the sheet (slice AC), and
+        // a modal's scrim sits above the sheet — the modal closes first.
+        guard: () =>
+          useRunsPanelStore.getState().expanded &&
+          !useLayerStore.getState().shortcutOverlayOpen &&
+          !anyModalOpen(),
         handler: () => useRunsPanelStore.getState().collapse(),
       },
     ],

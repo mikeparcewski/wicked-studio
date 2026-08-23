@@ -384,7 +384,6 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         <Modal
           title={`Sign in — ${signInSeat.display_name}`}
           onClose={() => setSignInSeat(null)}
-          disableEscapeKey
         >
           <div className="flex flex-col gap-3">
             <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>

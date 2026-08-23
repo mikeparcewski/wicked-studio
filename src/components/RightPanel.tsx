@@ -627,7 +627,6 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
               ? (liveUnitOrd !== null ? "This run's live output" : "This run's transcript")
               : 'Operator shell'}
             onClose={() => { setTermOpen(false); setTermShell(false); }}
-            disableEscapeKey
           >
             {showTranscript ? (
               <RunTranscriptView

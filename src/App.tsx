@@ -26,6 +26,7 @@ import { ChatPanel } from './components/ChatPanel.js';
 import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { WorkPage } from './components/WorkPage.js';
+import { ShortcutOverlay } from './components/ShortcutOverlay.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
@@ -583,6 +584,11 @@ export function App(): React.ReactElement {
       {panel !== 'home' && (
         <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={runs} />
       )}
+
+      {/* The '?' shortcut overlay (DES-UX-001 §7.7, EC42) — every route: this
+          root renders on all of them, and the overlay's corpus is the registry
+          itself, so each surface documents exactly the keys it registered. */}
+      <ShortcutOverlay />
 
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (

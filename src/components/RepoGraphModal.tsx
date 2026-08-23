@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { RepoEntry, CodeGraphNode, CodeGraphEdge, CodeGraphData, DomainGraph, DomainCoverage } from '../api/types.js';
 import { CytoGraph } from './CytoGraph.js';
 import { HotspotsView } from './HotspotsView.js';
+import { useModalEscape } from './Modal.js';
 
 interface Props {
   repo: RepoEntry;
@@ -466,11 +467,8 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
     }
   }
 
-  useEffect(() => {
-    function handler(e: KeyboardEvent): void { if (e.key === 'Escape') onClose(); }
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+  // §7.7 (slice AC): the shared modal-family Escape — one press, one layer.
+  useModalEscape(onClose);
 
   useEffect(() => {
     setLoading(true);
@@ -779,6 +777,11 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                   >
                     {annotating ? 'Starting…' : 'Run annotation workflow →'}
                   </button>
+                  {/* §7.8 (slice AC, EC43): the named action's blast radius. */}
+                  <p data-testid="action-preview" className="text-[10px] font-mono" style={{ color: T.faint }}>
+                    launches the annotation workflow as a governed run — writes behavior
+                    annotations into this repo's domain model; typically minutes
+                  </p>
                   {annotateError && (
                     <p className="text-[11px] font-mono" style={{ color: T.deny }}>{annotateError}</p>
                   )}
