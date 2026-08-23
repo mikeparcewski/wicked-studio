@@ -115,6 +115,14 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     ≥1 fetch and reach its own timeout branch). Both failed
                     runs gain one `dataUsed` file so the Files panel offers
                     [Full diff]. Default False.
+  timeline        — the slice-BB run-evidence-timeline corpus (DES-UX-002 §2):
+                    GET /runs/r-auth/events serves the FULL recorded chronology
+                    (real event_to_json shapes + RecordedEvent ts/seq) —
+                    sessionStarted, workflowSelected, unitPlanned ×2, the
+                    survey's dispatch/output, and the review's gateEscalated →
+                    unitReworkAmended → re-dispatch → gateEvaluated deny arc,
+                    ending sessionFailed. Ride it WITH `forensics` (units +
+                    output wires). Default False.
   project_dto     — the slice-S CREW-UX-2 corpus (DES-UX-001 §2.3): every run
                     DTO carries `project_id` (api-types 0.8.0 — a string echoed
                     from the membership record, or null = GENUINELY unfiled),
@@ -277,6 +285,15 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # module docstring. Default False: no standing rig's failed runs
          # change shape.
          "forensics": False,
+         # Slice BB (DES-UX-002 §2): the run-evidence-timeline corpus — r-auth's
+         # durable tail becomes the FULL recorded chronology (real event_to_json
+         # shapes with RecordedEvent's ts+seq): sessionStarted, workflowSelected,
+         # unitPlanned ×2, dispatch/output for the survey, dispatch + the
+         # gateEscalated -> unitReworkAmended -> re-dispatch -> gateEvaluated
+         # deny arc for the review, sessionFailed. Meant to ride WITH `forensics`
+         # (the units + output wires). Default False: sliceR's tail keeps its
+         # historical 4-event shape.
+         "timeline": False,
          # Slice V (DES-UX-001 §3/§4): the provenance + retry corpus.
          #   provenance — GET /audit?runId= gains REAL AuditEntry rows for
          #                r-auth and r-retry (actor{id,kind,trust} + the
@@ -902,6 +919,65 @@ FORENSICS_AUTH_EVENTS = [
 FORENSICS_LEGACY_EVENTS = [
     {"type": "dataUsed", "session": "r-legacy", "ord": 0,
      "files": ["/w2/legacy/importer.py"], "ts": NOW0 - 8 * DAY - 30 * SEC},
+]
+
+# ── Slice BB (DES-UX-002 §2): the timeline corpus, behind `timeline` ──────────
+#
+# r-auth's WHOLE durable tail as core's event log would replay it: every frame
+# is the REAL event_to_json shape (wicked-core event.rs — camelCase keys:
+# sessionStarted's workflowId/cliCount/entityMode; unitPlanned's stage/role/
+# gate/skillRef/hasValidatorPin/executorType; unitReworkAmended's amendment +
+# updatedDescription — the wire spelling of §2.2's "amended_description"),
+# wearing RecordedEvent's ts + seq envelope. The story stays r-auth's true one
+# (survey done -> review gate-denied -> failed), now with the §2.3 arc the
+# timeline renders: escalation, the operator's amendment, the re-dispatch, and
+# the standing FORENSICS_GATE_DENY as the deciding verdict.
+
+TIMELINE_AMENDMENT = (
+    "Keep the token-refresh path: preserve the expired-access + valid-refresh "
+    "branch and re-run auth.refresh.spec before resubmitting."
+)
+TIMELINE_T0 = NOW0 - 13 * MIN
+
+
+def _timeline_planned(ord_: int, desc: str, stage: str, seq: int, ts: int) -> dict:
+    return {"type": "unitPlanned", "session": "r-auth", "ord": ord_,
+            "description": desc, "stage": stage, "role": None, "gate": None,
+            "skillRef": None, "hasValidatorPin": True, "executorType": "cli",
+            "ts": ts, "seq": seq}
+
+
+TIMELINE_AUTH_EVENTS = [
+    {"type": "sessionStarted", "session": "r-auth",
+     "problem": "refactor the auth middleware", "workflowId": "wf-w2",
+     "cliCount": 1, "governed": True, "entityMode": "shared",
+     "ts": TIMELINE_T0, "seq": 1},
+    {"type": "workflowSelected", "session": "r-auth", "workflowId": "wf-w2",
+     "unitCount": 2, "ts": TIMELINE_T0 + SEC, "seq": 2},
+    _timeline_planned(0, "survey the auth middleware surface", "recon", 3,
+                      TIMELINE_T0 + 2 * SEC),
+    _timeline_planned(1, "review the middleware refactor", "review", 4,
+                      TIMELINE_T0 + 2 * SEC),
+    {"type": "unitDispatched", "session": "r-auth", "ord": 0, "attempt": 0,
+     "ts": TIMELINE_T0 + 3 * SEC, "seq": 5},
+    {"type": "unitOutputCaptured", "session": "r-auth", "ord": 0, "attempt": 0,
+     "outputBytes": len(FORENSICS_SURVEY_OUTPUT.encode()), "stepStatus": "ok",
+     "governed": True, "ts": TIMELINE_T0 + 20 * SEC, "seq": 6},
+    {"type": "unitDispatched", "session": "r-auth", "ord": 1, "attempt": 0,
+     "ts": TIMELINE_T0 + 21 * SEC, "seq": 7},
+    {"type": "gateEscalated", "session": "r-auth", "ord": 1,
+     "condition": FORENSICS_GATE_DENY["criterion"],
+     "verdictSummary": "agent judge: fail — the token-refresh path is dropped",
+     "ts": TIMELINE_T0 + 35 * SEC, "seq": 8},
+    {"type": "unitReworkAmended", "session": "r-auth", "ord": 1,
+     "amendment": TIMELINE_AMENDMENT,
+     "updatedDescription": f"review the middleware refactor — {TIMELINE_AMENDMENT}",
+     "ts": TIMELINE_T0 + 40 * SEC, "seq": 9},
+    {"type": "unitDispatched", "session": "r-auth", "ord": 1, "attempt": 1,
+     "ts": TIMELINE_T0 + 41 * SEC, "seq": 10},
+    {**FORENSICS_GATE_DENY, "seq": 11},
+    {"type": "sessionFailed", "session": "r-auth", "ord": 1,
+     "ts": NOW0 - 12 * MIN, "seq": 12},
 ]
 
 # How long r-legacy's /diff HANGS before releasing its (daemon) thread with a
@@ -1845,6 +1921,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 viewer_on = state["viewer"]
                 river_on = state["river"]
                 forensics_on = state["forensics"]
+                timeline_on = state["timeline"]
             if viewer_on and rid == "r-upload":
                 events = events + VIEWER_EVENTS
             # Slice Q: r-auth's durable tail matches its spread attach clock.
@@ -1857,6 +1934,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 events = events + FORENSICS_AUTH_EVENTS
             if forensics_on and rid == "r-legacy":
                 events = events + FORENSICS_LEGACY_EVENTS
+            # Slice BB: the timeline corpus SUPERSEDES r-auth's assembled tail —
+            # the full recorded chronology, seq-ordered, deny verdict included.
+            if timeline_on and rid == "r-auth":
+                events = list(TIMELINE_AUTH_EVENTS)
             self._json(200, {"events": events})
             return True
         # Slice R: the REAL unit-transcript wire (routes.ts crew — the studio's
