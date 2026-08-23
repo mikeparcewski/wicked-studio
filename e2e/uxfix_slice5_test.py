@@ -17,7 +17,8 @@ What it asserts (design §4.3, the slice-5 DOM AC):
      OMITTED (empty-state budget — the purpose IS the empty state, §3.4); the
      ONE primary action is "+ Build something" — the only accent-filled control
      inside the surface (EC1 within the mode surface).
-  2. Build with work (usage_ws + long_prompt): rows are labelled by
+  2. Build with work (usage_ws + long_prompt; on the FLAT `/runs` home since
+     DES-UX-001 slice S scoped project Build tabs to their own runs): rows are labelled by
      INTENT phrase, never the raw prompt (the long-prompt run truncates with
      the intent leading; the full prompt survives on the row's title) and never
      by the engine's workflow id; statuses read in user words (working · phase
@@ -152,10 +153,14 @@ with sync_playwright() as p:
     }
 
     # ── Scene B: Build with work — one intent-labelled list, inbox, footer ────
+    # Re-scoped by DES-UX-001 slice S (§2.3 rule 2): a project's Build tab now
+    # shows EXACTLY its runs, so the whole-fixture list this scene asserts
+    # lives on the FLAT run home (`/runs`) — the same surface, unscoped, where
+    # every global-list assertion below keeps its original meaning.
     set_fixture(ORIGIN, no_runs=False, usage_ws=True, long_prompt=True)
     page2 = ctx.new_page()
     page2.on("console", lambda m: console_errors.append(m.text) if m.type == "error" else None)
-    page2.goto(f"{ORIGIN}/p/q3-review-deck/build", wait_until="domcontentloaded")
+    page2.goto(f"{ORIGIN}/runs", wait_until="domcontentloaded")
     page2.locator('[data-testid="build-purpose"]').wait_for(timeout=30000)
     page2.locator('[data-testid="gate-inbox"]').wait_for(timeout=30000)
     page2.locator('[data-testid="build-stats-footer"]').wait_for(timeout=30000)  # ws cliUsage
