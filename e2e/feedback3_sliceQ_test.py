@@ -367,7 +367,9 @@ report["steps"]["lede"] = {
     "ok": all([
         fonts_ok, lede_ok, spend_ok,
         home["ledeQuestion"] == "What happened and what needs me?",
-        home["ledeLinkHrefs"] == ["/runs", "#needs-you"],
+        # Slice Y (DES-UX-001 §7.4): the all-runs number re-points to /work —
+        # the ONE canonical runs surface; the bare /runs listing is retired.
+        home["ledeLinkHrefs"] == ["/work", "#needs-you"],
         home["spendHref"] == "/make",
     ]),
     "web_fonts": fonts_ok, "lede_settled": lede_ok, "spend_settled": spend_ok,

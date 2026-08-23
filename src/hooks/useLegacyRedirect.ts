@@ -49,6 +49,11 @@ interface LegacyRoute {
  *
  *   /projects/:id  →  /p/:id                    (the project dashboard, §4.1)
  *   /runs/:id      →  /p/<project>/build/:id   (when the run is filed under one)
+ *   /runs          →  /work                     (DES-UX-001 §7.4, slice Y: the bare
+ *                     listing retires — /work is the ONE canonical runs surface.
+ *                     /runs/:id and /runs/new stay routable; only the listing goes.
+ *                     Query params carry over, so a failure-context entry like
+ *                     /runs?filter=failed lands with the Failed filter active.)
  *
  * A bare `/p/:id` is NOT redirected any more — it IS the project dashboard
  * (DES-FEEDBACK-001 §4.1, slice D). The last-used-mode redirect is gone.
@@ -71,7 +76,13 @@ export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void 
       return;
     }
 
-    if (panel !== 'runs' || runId === null || showLaunch) return;
+    if (panel !== 'runs' || showLaunch) return;
+    if (runId === null) {
+      // §7.4 (slice Y): the bare `/runs` listing retires into a redirect — `/work`
+      // is canonical. The search string rides along (context-sensitive filters).
+      navigate(`/work${window.location.search}`, { replace: true });
+      return;
+    }
     let cancelled = false;
     void resolveRunProject(runId)
       .then((pid) => {

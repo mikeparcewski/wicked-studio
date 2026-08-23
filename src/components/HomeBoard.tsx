@@ -247,10 +247,11 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
         <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', margin: 0 }}>
           Sorted by what needs you first.
         </p>
-        {/* The flat run list this board replaced stays reachable (§1.5 escape hatch). */}
+        {/* The flat run list stays reachable (§1.5 escape hatch) — at /work,
+            the ONE canonical runs surface (DES-UX-001 §7.4, slice Y). */}
         <a
-          href="/runs"
-          onClick={(e) => { e.preventDefault(); navigate('/runs'); }}
+          href="/work"
+          onClick={(e) => { e.preventDefault(); navigate('/work'); }}
           data-testid="all-runs-link"
           style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
         >

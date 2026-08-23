@@ -58,11 +58,13 @@ export function composeLede(c: LedeCounts): { quiet: boolean; segments: LedeSegm
       c.passed > 0 ? `${c.passed} passed` : null,
       c.failed > 0 ? `${c.failed} failed` : null,
     ].filter((s) => s !== null).join(', ');
-    segments.push({ text: `${plural(c.finished, 'run')} finished — ${split}`, href: '/runs' });
+    // Every all-runs number lands on /work — the ONE canonical runs surface
+    // (DES-UX-001 §7.4, slice Y; the bare /runs listing retired into a redirect).
+    segments.push({ text: `${plural(c.finished, 'run')} finished — ${split}`, href: '/work' });
   } else if (c.gates === 0) {
     // Nothing finished, nothing waiting — but something is moving: say that,
     // with the number still derived (EC29), never an empty "away:" stub.
-    segments.push({ text: `nothing finished — ${plural(c.live, 'run')} still moving`, href: '/runs' });
+    segments.push({ text: `nothing finished — ${plural(c.live, 'run')} still moving`, href: '/work' });
   }
   if (c.gates > 0) {
     if (c.finished > 0) segments.push({ text: ' — and ', href: null });

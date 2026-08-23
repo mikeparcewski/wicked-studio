@@ -30,9 +30,10 @@ What it asserts (slice-3 DOM ACs, as amended by §8.7):
   3. The creation affordances are the four heading-level ＋ icons (§8.7: the
      QUICK assert's replacement) — one per non-Settings heading, none on
      Settings.
-  4. /runs remains reachable — the flat list renders at its route with the
+  4. the flat list remains reachable — /runs now REDIRECTS to /work, the ONE
+     canonical runs surface (DES-UX-001 §7.4, slice Y), which renders with the
      board unmounted. (The rail affordance is slice N's bottom-panel
-     "All runs ›"; between M and N the route itself is the escape hatch.)
+     "All runs ›"; the redirect replaces the old bare listing.)
   5. A Projects-accordion row enters the project — the PROJECT DASHBOARD at
      /p/q3-review-deck (DES-FEEDBACK-001 §4.1, slice D), not a remembered
      mode.
@@ -179,12 +180,12 @@ with sync_playwright() as p:
     page.locator('[data-testid="rail-heading-projects"] [data-testid="rail-view-all"]').wait_for(timeout=10000)
     page.locator('[data-testid="left-rail"]').screenshot(path=str(SHOTS / "uxfix-3-rail.png"))
 
-    # ── AC 4: /runs remains reachable — the flat list at its own route ─────────
-    # (The rail affordance is slice N's bottom panel; the route is the M→N
-    # interim escape hatch, per §10.4's sequencing note.)
+    # ── AC 4 (re-scoped by DES-UX-001 §7.4, slice Y): the flat list remains
+    #    reachable, but /runs is now a replace-redirect onto /work — the ONE
+    #    canonical runs surface — with the board unmounted. ──
     page.goto(f"{ORIGIN}/runs", wait_until="domcontentloaded")
     hatch_ok = settled(
-        """() => window.location.pathname === '/runs'
+        """() => window.location.pathname === '/work'
               && !document.querySelector('[data-testid="project-board"]')""")
 
     # ── AC 5 (re-scoped by DES-FEEDBACK-001 §4.1, slice D): a Projects-accordion

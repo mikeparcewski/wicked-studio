@@ -136,12 +136,13 @@ describe('the collapsed bar (§5.3)', () => {
     expect(bar.textContent).not.toContain('working');
   });
 
-  it('the All runs link is a real /runs link that never expands the sheet', () => {
+  // Slice Y (DES-UX-001 §7.4): the target re-pointed to /work, the canonical surface.
+  it('the All runs link is a real /work link that never expands the sheet', () => {
     const { navigate } = mount();
     const link = screen.getByTestId('runs-bar-all');
-    expect(link.getAttribute('href')).toBe('/runs');
+    expect(link.getAttribute('href')).toBe('/work');
     fireEvent.click(link);
-    expect(navigate).toHaveBeenCalledWith('/runs');
+    expect(navigate).toHaveBeenCalledWith('/work');
     expect(screen.queryByTestId('runs-bottom-sheet')).toBeNull();
   });
 });
