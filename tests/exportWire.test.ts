@@ -47,7 +47,7 @@ function reply(file: string): Record<string, string> {
 }
 
 beforeEach(() => {
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
   postExport.mockResolvedValue(reply('launch-deck_v3.pdf'));
 });
 afterEach(() => { vi.clearAllMocks(); });

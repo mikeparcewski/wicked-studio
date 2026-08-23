@@ -55,7 +55,7 @@ function manifest(versions: VersionEntry[]): VersionManifest {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
 });
 
 describe('VersionStrip — the §5.5 tokens', () => {

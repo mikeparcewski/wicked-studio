@@ -287,6 +287,38 @@ export function postExport(
   );
 }
 
+/**
+ * One line of `GET /d/:docId/api/conversation` — the doc's announce history
+ * (user chat + agent narration, error states included), read from disk
+ * (`conversation.jsonl`) so it survives a full bridge restart. Fidelity is
+ * PINNED by BRIDGE-UX-1 probe 2 (§8.4.1): `{role, text, ts[, state]}` ONLY —
+ * `source_message_id` is dropped at append and `version.created` never enters
+ * the transcript, so version anchors CANNOT be rehydrated from this surface;
+ * they stay the session-storage stopgap (threadStopgap.ts).
+ */
+export interface ConversationEntry {
+  role: string;
+  text: string;
+  ts?: string | number;
+  /** Set on error narration (`status.posted {state:"error"}` at append time). */
+  state?: string;
+}
+
+/**
+ * `GET /d/:docId/api/conversation` — the §6.3 thread-history read (BRIDGE-UX-1
+ * probe 2: a REAL surface, verified against the live bridge). The ONE sanctioned
+ * doc-open fetch slice T adds: called once per thread per session, only while
+ * the client projection is empty. Entries the wire returns malformed are
+ * dropped rather than rendered under a guessed shape.
+ */
+export function getConversation(projectId: string, docId: string): Promise<ConversationEntry[]> {
+  return iFetch<unknown>(`${docBase(projectId, docId)}/api/conversation`)
+    .then((body) => (Array.isArray(body) ? body : []).filter((e): e is ConversationEntry =>
+      typeof e === 'object' && e !== null
+      && typeof (e as ConversationEntry).role === 'string'
+      && typeof (e as ConversationEntry).text === 'string'));
+}
+
 /** `GET /d/:docId/api/sources` — attached reference files and their index status. */
 export function getSources(projectId: string, docId: string): Promise<SourceEntry[]> {
   return iFetch<{ sources: SourceEntry[] }>(`${docBase(projectId, docId)}/api/sources`)

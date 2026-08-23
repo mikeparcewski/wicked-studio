@@ -82,7 +82,7 @@ beforeEach(() => {
   getLearnedTheme.mockReset().mockResolvedValue(LEARNED);
   vi.mocked(api.putAppearanceSettings).mockClear();
   useAppearanceStore.setState({ appearance: DEFAULT_APPEARANCE, loaded: true });
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {}, lastError: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastError: {} });
   useProjectsStore.setState({
     projects: [
       project('default'),

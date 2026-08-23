@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { postFork } from '../api/interactive.js';
 import type { ForkResult, VersionEntry, VersionManifest } from '../api/interactive.js';
 import { versionPath, type Navigate } from '../hooks/useRoute.js';
+import { threadKey, useDocThreadStore, type DocMsg } from '../store/docThread.js';
 import { ExportMenu } from './ExportMenu.js';
 import { ThemesMenu } from './ThemesMenu.js';
 import { scrollThreadToMessage } from './threadAnchor.js';
@@ -44,10 +45,14 @@ const S = {
   danger:   'var(--status-fail)',
 };
 
-/** §7.6: no anchor recorded ⇒ nothing to scroll to, and the reason is the tooltip. */
+/** §7.6: no anchor known ⇒ nothing to scroll to, and the reason is the tooltip.
+ *  DES-UX-001 §6.3: the transcript read carries no version anchors (BRIDGE-UX-1
+ *  §8.4.1), so anchors survive only for what this session observed. */
 const NO_ANCHOR_TITLE =
-  'This version was committed without a source message, so there is nothing to scroll to. '
-  + 'Documents created before the merge have no anchor.';
+  'The message that produced this version is not known to this session, so there is '
+  + 'nothing to scroll to. The transcript carries no version anchors (BRIDGE-UX-1) — '
+  + 'they survive for what this session observed; documents created before the merge '
+  + 'have no anchor.';
 
 /** Compact, locale-formatted; an unparseable stamp falls back to what the manifest said. */
 function stamp(iso: string): string {
@@ -71,9 +76,29 @@ function forkedFrom(entry: VersionEntry): number | null {
   return entry.parent !== null && entry.parent !== entry.version - 1 ? entry.parent : null;
 }
 
-function anchorOf(entry: VersionEntry): string | null {
-  return entry.meta?.sourceMessageId ?? null;
+/**
+ * The version→message anchor, resolved CLIENT-side (DES-UX-001 §6.1/§6.3, slice T).
+ * BRIDGE-UX-1 probe 1 (§8.4.1) pinned that the bridge DROPS `source_message_id` —
+ * the manifest's `meta.sourceMessageId` is aspirational, not wire truth — so the
+ * real anchor is the thread's own tagged message: the docThread store correlates
+ * landings to sends by order live, and rehydrates the tags from the session-storage
+ * stopgap after a reload. `meta` stays the first look for any bridge that does echo
+ * it; the store map is what actually answers today.
+ */
+function anchorOf(entry: VersionEntry, byVersion: Map<number, string>): string | null {
+  return entry.meta?.sourceMessageId ?? byVersion.get(entry.version) ?? null;
 }
+
+/** version → the id of the user message tagged with it, from one thread's transcript. */
+function anchorsFrom(msgs: DocMsg[]): Map<number, string> {
+  const map = new Map<number, string>();
+  for (const m of msgs) {
+    if (m.kind === 'user' && m.version !== undefined) map.set(m.version, m.id);
+  }
+  return map;
+}
+
+const NO_MSGS: DocMsg[] = [];
 
 const ACTION: React.CSSProperties = {
   background: 'transparent', border: `1px solid ${S.border}`, borderRadius: 'var(--radius-sm)',
@@ -144,13 +169,17 @@ export function VersionStrip({
 }: VersionStripProps): React.ReactElement {
   const [forking, setForking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The thread's own version→message tags (§6.1/§6.3): the anchor source that is
+  // actually on the wire's side of truth — see anchorOf.
+  const msgs = useDocThreadStore((s) => s.messages[threadKey(projectId, docId)] ?? NO_MSGS);
+  const anchorsByVersion = useMemo(() => anchorsFrom(msgs), [msgs]);
 
   function select(entry: VersionEntry): void {
     navigate(versionPath(projectId, docId, entry.version, mode));
     // The cross-link rides ALONG with the selection (§7.6) — the frame swap does not
     // depend on it, so a thread that is not on screen (Document mode's own thread is
     // slice 10) costs the user nothing.
-    const anchor = anchorOf(entry);
+    const anchor = anchorOf(entry, anchorsByVersion);
     if (anchor !== null) scrollThreadToMessage(anchor);
   }
 
@@ -200,7 +229,7 @@ export function VersionStrip({
       {[...manifest.versions].sort(byVersion).map((entry) => {
         const isSelected = entry.version === selected;
         const branchOf = forkedFrom(entry);
-        const anchor = anchorOf(entry);
+        const anchor = anchorOf(entry, anchorsByVersion);
         return (
           <div
             key={entry.version}

@@ -49,7 +49,7 @@ function thread(key = KEY): DocMsg[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
   createDoc.mockResolvedValue({ name: DEMO, head: 1, kind: 'demo' });
   requestRecord.mockResolvedValue({ queued: true });
   postEvent.mockResolvedValue({ ok: true, event_id: 'e1', correlation_id: 'c1' });
@@ -125,7 +125,7 @@ describe('case 1 — the ask opens the wizard, and nothing is created until it s
     expect(thread()[0]).toMatchObject({ kind: 'user', text: expect.stringContaining('1. the storefront — open it') });
     expect(thread()[1]?.kind).toBe('narration');
     // §7.6: the message the composer minted BEFORE the wizard is the version's anchor.
-    expect(useDocThreadStore.getState().anchor[KEY]).toBe(thread()[0]?.id);
+    expect(useDocThreadStore.getState().pending[KEY]).toContain(thread()[0]?.id);
   });
 
   it('cancelling creates nothing and leaves the composer where it was', async () => {

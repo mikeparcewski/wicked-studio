@@ -90,7 +90,7 @@ describe('submitFeedbackBatch — §7.7: the client authors BOTH writes', () => 
     expect(injectDocMessage).toHaveBeenCalledWith(PROJECT, DOC, text, msgId);
     // §7.6: the same id is the pending version anchor, so the version this feedback
     // produces tags the message that asked for it.
-    expect(useDocThreadStore.getState().anchor[KEY]).toBe(msgId);
+    expect(useDocThreadStore.getState().pending[KEY]).toContain(msgId);
   });
 
   it('a batch of one is still one message and one event', async () => {

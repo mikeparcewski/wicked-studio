@@ -69,7 +69,7 @@ beforeEach(() => {
   Object.defineProperty(window, 'location', {
     value: new URL('http://127.0.0.1:7788/'), writable: true, configurable: true,
   });
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 

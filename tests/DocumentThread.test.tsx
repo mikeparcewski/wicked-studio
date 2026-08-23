@@ -61,7 +61,7 @@ async function send(text: string): Promise<void> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {} });
   createDoc.mockResolvedValue({ name: DOC, head: 0, generating: true });
   postFork.mockResolvedValue({ version: 4, parent: 3 });
   postEvent.mockResolvedValue({ ok: true, event_id: 'e1', correlation_id: 'c1' });

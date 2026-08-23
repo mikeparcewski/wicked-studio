@@ -12,7 +12,8 @@
 
 import { create } from 'zustand';
 import { isFiller } from './narration.js';
-import type { ExportFormat } from '../api/interactive.js';
+import { recordAnchor, type StoredAnchor } from '../interactive/threadStopgap.js';
+import type { ConversationEntry, ExportFormat } from '../api/interactive.js';
 import type { CoreEvent } from '../api/types.js';
 
 // ── Transcript ───────────────────────────────────────────────────────────────
@@ -32,8 +33,13 @@ export type DocMsg =
   // sending each comment separately would produce N versions and N runs). `notRecorded`
   // is §7.7's failure shape: the bus event landed and the document still updates, but the
   // inject that puts this message in the run did not — retryable, never silent.
+  // `failed` is DES-UX-001 §6.1's visible-failure state: the send itself was refused
+  // before the bridge accepted it — retryable, never silent (EC36). `restored` marks a
+  // message rehydrated from `GET /d/:doc/api/conversation` (§6.3): the wire carries no
+  // message ids, so a restored message's id is minted fresh and its version anchor (if
+  // any) came from the session-storage stopgap, not the transcript.
   | { kind: 'user';      id: string; text: string; version?: number;
-      items?: FeedbackItem[]; notRecorded?: boolean }
+      items?: FeedbackItem[]; notRecorded?: boolean; failed?: boolean; restored?: boolean }
   | { kind: 'narration'; id: string; text: string }
   // `href` + `file` make an agent message DOWNLOADABLE (§4.4): an export is an ordinary
   // message from the service, carrying its artifact — never a toast, never a second origin.
@@ -124,8 +130,18 @@ interface DocThreadStore {
    *  readback route. The transcript keeps carrying the same line as a
    *  narration message; this is an index into it, not a second author. */
   lastError: Record<string, ThreadError>;
-  /** The user message a landing version will be tagged with (§7.6, client half). */
-  anchor: Record<string, string>;
+  /**
+   * The FIFO of user-message ids awaiting a landed version, per thread
+   * (DES-UX-001 §6.1 + §8.4.1 probe 1). The bridge QUEUES sends — every
+   * `chat.posted` acks 200 and lands durably in send order — but `version.created`
+   * carries no `source_message_id`, so the anchor is a CLIENT-side correlation
+   * by order: the oldest pending send is the one the next generated version
+   * answers. Head of the queue = the message being worked (`thread-generating`);
+   * the rest are queued behind the current run (`thread-queued`).
+   */
+  pending: Record<string, string[]>;
+  /** Threads whose rehydration read (§6.3) has run — once per thread per session. */
+  hydrated: Record<string, boolean>;
   /**
    * The newest version the stream has landed, per thread. The transcript tags its anchor
    * message (§7.6) and does not otherwise care; a mode SURFACE does — a re-authored demo
@@ -137,10 +153,26 @@ interface DocThreadStore {
   landings: VersionLanding[];
   /** Fold one CoreEvent — every non-interactive frame is ignored. */
   ingest: (event: CoreEvent) => void;
-  /** Append the user's message and make it the pending version anchor. */
+  /** Append the user's message and enqueue it as a pending version anchor (§6.1). */
   addUserMsg: (key: string, id: string, text: string, items?: FeedbackItem[]) => void;
   /** Flag/clear §7.7's "not recorded in the run" chip on one already-rendered message. */
   markNotRecorded: (key: string, id: string, notRecorded: boolean) => void;
+  /** §6.1's visible failure: the send was refused — drop it from the pending queue
+   *  and mark the message failed, so it renders `thread-send-failed` with a retry. */
+  markSendFailed: (key: string, id: string) => void;
+  /** Re-arm a failed send: clear the flag and re-enqueue at the TAIL — a retry is a
+   *  new send in queue order, never a jump back to its original position. */
+  retrySend: (key: string, id: string) => void;
+  /**
+   * §6.3 rehydration, from `GET /d/:doc/api/conversation` (BRIDGE-UX-1 probe 2):
+   * rebuild the transcript TEXT from the wire — user lines as user messages,
+   * agent narration as narration (the §3.2 filler seam still applies) — and
+   * re-attach version anchors from the session-storage stopgap by user-message
+   * ordinal (the only correlation the wire supports). Applies only while the
+   * projection is empty; a thread with live messages keeps them and just marks
+   * itself hydrated, so the read never doubles what this session already saw.
+   */
+  hydrate: (key: string, entries: ConversationEntry[], anchors: StoredAnchor[]) => void;
   /** Append a client-authored informative line (§3.3) — an action the user took. */
   addNarration: (key: string, text: string) => void;
   /**
@@ -168,7 +200,8 @@ function append(messages: Record<string, DocMsg[]>, key: string, msg: DocMsg): R
 export const useDocThreadStore = create<DocThreadStore>((set) => ({
   messages: {},
   genState: {},
-  anchor: {},
+  pending: {},
+  hydrated: {},
   landed: {},
   landings: [],
   lastError: {},
@@ -177,6 +210,10 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
     const frame = frameOf(event);
     if (frame === null) return;
     const { key, type, payload } = frame;
+    // The anchor the VERSION branch tags, surfaced out of the reducer so the
+    // session-storage stopgap (§6.3) records it OUTSIDE the state update.
+    let taggedOrd: number | null = null;
+    let taggedVersion = 0;
 
     set((s) => {
       const messages = s.messages;
@@ -206,15 +243,33 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         const failed = state === 'error' && text !== null
           ? { lastError: { ...s.lastError, [key]: { text } } }
           : {};
+        // §6.1 (EC36): a run that DIES takes its backlog with it — every send still
+        // pending resolves to the VISIBLE failed state (with its retry) rather than
+        // a chip that generates forever. Probe 4 (§8.4.1): the death is one
+        // doc-scoped `status.posted {state:"error"}`; nothing else will answer them.
+        const backlog = state === 'error' ? new Set(s.pending[key] ?? []) : null;
+        const base = backlog === null || backlog.size === 0
+          ? messages
+          : {
+              ...messages,
+              [key]: (messages[key] ?? []).map((m) =>
+                m.kind === 'user' && backlog.has(m.id) ? { ...m, failed: true } : m),
+            };
+        const pending = backlog !== null && backlog.size > 0
+          ? { pending: { ...s.pending, [key]: [] } }
+          : {};
         // §3.2/§3.3: filler never reaches the transcript — rotating flavour text and a
         // subject-less `Working…` are both dropped AT THE SEAM, so an upstream bridge that
         // still speaks either cannot put it on screen. A filtered frame still carries the
         // state transition it rode in on: dropping the LINE is not dropping the fact.
-        if (text === null || isFiller(text)) return { genState: { ...s.genState, [key]: next }, ...failed };
+        if (text === null || isFiller(text)) {
+          return { messages: base, genState: { ...s.genState, [key]: next }, ...failed, ...pending };
+        }
         return {
-          messages: append(messages, key, { kind: 'narration', id: nextMsgId(), text }),
+          messages: append(base, key, { kind: 'narration', id: nextMsgId(), text }),
           genState: { ...s.genState, [key]: next },
           ...failed,
+          ...pending,
         };
       }
 
@@ -265,25 +320,45 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       // message that triggered it, so slice 9's strip has a message to scroll to. The
       // service half writes the same id into `versions.json`; this is what makes the
       // anchor resolvable in the session that produced it.
+      // §6.1 + §8.4.1 probe 1: `version.created` carries NO source_message_id, so
+      // the anchor is a client-side ORDER correlation — the bridge queues sends
+      // FIFO, so the landed version answers the OLDEST pending send. A `generated`
+      // landing consumes that anchor; a fork tags it but leaves it pending (the
+      // generation that follows the fork is what answers it, §7.10). No pending
+      // send ⇒ nothing is tagged: a marker never renders under an unrelated
+      // request (the EC36 gaslight pin).
       if (type === VERSION) {
         const raw = payload.version;
         const version = typeof raw === 'number' ? raw : Number(pick(payload, 'version') ?? NaN);
         const kind = pick(payload, 'kind') ?? '';
         if (!Number.isInteger(version)) return s;
-        const anchorId = s.anchor[key];
+        const queue = s.pending[key] ?? [];
+        const anchorId = queue.length > 0 ? queue[0] : undefined;
         const generated = GENERATED.has(kind);
+        const thread = messages[key] ?? [];
         const tagged = anchorId === undefined
           ? messages
           : {
               ...messages,
-              [key]: (messages[key] ?? []).map((m) =>
+              [key]: thread.map((m) =>
                 m.kind === 'user' && m.id === anchorId ? { ...m, version } : m),
             };
-        const anchor = { ...s.anchor };
-        if (generated) delete anchor[key];
+        if (anchorId !== undefined && generated) {
+          // The session-storage stopgap's address (§6.3): the tagged message's
+          // 1-based ordinal among USER messages — the only spelling that survives
+          // a reload, because message ids are minted per session.
+          let ord = 0;
+          for (const m of thread) {
+            if (m.kind === 'user') ord += 1;
+            if (m.kind === 'user' && m.id === anchorId) { taggedOrd = ord; break; }
+          }
+          taggedVersion = version;
+        }
         return {
           messages: tagged,
-          anchor,
+          pending: generated && anchorId !== undefined
+            ? { ...s.pending, [key]: queue.slice(1) }
+            : s.pending,
           landed: { ...s.landed, [key]: version },
           // The river's mark (§7.3): project id is the thread key's first
           // segment (`threadKey` = `${projectId}:${docId}`), clock = arrival.
@@ -291,19 +366,76 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
             ...s.landings,
             { projectId: key.slice(0, key.indexOf(':')), version, kind, at: Date.now() },
           ].slice(-LANDINGS_CAP),
-          genState: generated ? { ...s.genState, [key]: 'terminal' } : s.genState,
+          // Terminal only when nothing is queued behind the landing (§6.1): a
+          // queued send means the bridge is still working the thread's backlog.
+          genState: generated && queue.length <= 1
+            ? { ...s.genState, [key]: 'terminal' }
+            : s.genState,
         };
       }
 
       return s;
     });
+    if (taggedOrd !== null) recordAnchor(key, taggedOrd, taggedVersion);
   },
 
   addUserMsg: (key, id, text, items) =>
     set((s) => ({
       messages: append(s.messages, key, { kind: 'user', id, text, ...(items ? { items } : {}) }),
-      anchor: { ...s.anchor, [key]: id },
+      pending: { ...s.pending, [key]: [...(s.pending[key] ?? []), id] },
     })),
+
+  markSendFailed: (key, id) =>
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [key]: (s.messages[key] ?? []).map((m) =>
+          m.kind === 'user' && m.id === id ? { ...m, failed: true } : m),
+      },
+      pending: { ...s.pending, [key]: (s.pending[key] ?? []).filter((p) => p !== id) },
+    })),
+
+  retrySend: (key, id) =>
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [key]: (s.messages[key] ?? []).map((m) =>
+          m.kind === 'user' && m.id === id ? { ...m, failed: false } : m),
+      },
+      pending: { ...s.pending, [key]: [...(s.pending[key] ?? []).filter((p) => p !== id), id] },
+    })),
+
+  hydrate: (key, entries, anchors) =>
+    set((s) => {
+      // Once per thread per session, and never over a live projection: the read
+      // restores what the wire holds, it must not double what this tab saw.
+      if (s.hydrated[key] === true) return s;
+      if ((s.messages[key] ?? []).length > 0) return { hydrated: { ...s.hydrated, [key]: true } };
+      const byOrd = new Map(anchors.map((a) => [a.ord, a.version]));
+      const restored: DocMsg[] = [];
+      let ord = 0;
+      for (const e of entries) {
+        const text = typeof e.text === 'string' ? e.text.trim() : '';
+        if (text === '') continue;
+        if (e.role === 'user') {
+          ord += 1;
+          const version = byOrd.get(ord);
+          restored.push({
+            kind: 'user', id: nextMsgId(), text, restored: true,
+            ...(version === undefined ? {} : { version }),
+          });
+        } else if (!isFiller(text)) {
+          // Agent narration (including error states) at the same seam live frames
+          // cross: filler is dropped here too — one rule, both sources (§3.2).
+          restored.push({ kind: 'narration', id: nextMsgId(), text });
+        }
+      }
+      if (restored.length === 0) return { hydrated: { ...s.hydrated, [key]: true } };
+      return {
+        messages: { ...s.messages, [key]: restored },
+        hydrated: { ...s.hydrated, [key]: true },
+      };
+    }),
 
   markNotRecorded: (key, id, notRecorded) =>
     set((s) => ({
@@ -343,9 +475,10 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
     set((s) => {
       const messages = { ...s.messages }; delete messages[key];
       const genState = { ...s.genState }; delete genState[key];
-      const anchor = { ...s.anchor }; delete anchor[key];
+      const pending = { ...s.pending }; delete pending[key];
+      const hydrated = { ...s.hydrated }; delete hydrated[key];
       const landed = { ...s.landed }; delete landed[key];
       const lastError = { ...s.lastError }; delete lastError[key];
-      return { messages, genState, anchor, landed, lastError };
+      return { messages, genState, pending, hydrated, landed, lastError };
     }),
 }));

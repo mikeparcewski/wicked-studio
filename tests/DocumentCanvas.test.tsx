@@ -319,7 +319,7 @@ describe('DocumentCanvas — canvas-first: drawer + floating strip (DES-FEEDBACK
   const thread = <aside data-testid="fake-thread">the thread pane</aside>;
 
   beforeEach(() => {
-    useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+    useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
   });
 
   it('AC: with a doc open the thread drawer is CLOSED by default and the strip lives INSIDE the canvas container', async () => {

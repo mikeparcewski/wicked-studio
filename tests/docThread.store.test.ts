@@ -41,7 +41,7 @@ function state(): string | undefined {
 }
 
 beforeEach(() => {
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {} });
 });
 
 describe('composer state mapping (§2.2)', () => {
