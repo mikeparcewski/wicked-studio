@@ -623,14 +623,21 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
   addNarration: (key, text) =>
     set((s) => ({ messages: append(s.messages, key, { kind: 'narration', id: nextMsgId(), text }) })),
 
-  addAgentMsg: (key, author, text, artifact) =>
+  addAgentMsg: (key, author, text, artifact) => {
     set((s) => ({
       messages: append(s.messages, key, {
         kind: 'agent', id: nextMsgId(), author, text,
         ...(artifact === undefined ? {} : { href: artifact.href }),
         ...(artifact?.file === undefined ? {} : { file: artifact.file }),
       }),
-    })),
+    }));
+    // Round-3 minor: a downloadable artifact message (an export) is state the
+    // announce history does not carry — record it so the reload restores it.
+    if (artifact !== undefined) {
+      recordExport(key, { text, href: artifact.href,
+                          ...(artifact.file === undefined ? {} : { file: artifact.file }) });
+    }
+  },
 
   addActionable: (key, text, hint, retry) =>
     set((s) => ({
