@@ -381,6 +381,20 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
                     </span>
                   </a>
                 ))}
+                {/* Slice W (DES-UX-001 §5.3, EC34): the preview's cap is a
+                    SILENT filter no longer — a "Quiet (9)" head over six chips
+                    says what it holds back, in the same breath. */}
+                {quiet.length > QUIET_PREVIEW && (
+                  <span
+                    data-testid="quiet-preview-cap"
+                    style={{
+                      fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)',
+                      fontFamily: 'var(--font-mono)', alignSelf: 'center',
+                    }}
+                  >
+                    showing {QUIET_PREVIEW} of {quiet.length}
+                  </span>
+                )}
               </div>
             )}
           </section>
