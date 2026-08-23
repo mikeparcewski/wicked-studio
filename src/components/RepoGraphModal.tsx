@@ -586,13 +586,15 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
     );
   }
 
-  const localNodes = codeData
-    ? codeData.nodes.filter((n) => {
-        if (!n.file || n.file.startsWith('node_modules/')) return false;
-        if (hideTests && isTestFile(n.file)) return false;
-        return true;
-      })
+  const allLocalNodes = codeData
+    ? codeData.nodes.filter((n) => !!n.file && !n.file.startsWith('node_modules/'))
     : [];
+  const localNodes = hideTests
+    ? allLocalNodes.filter((n) => !isTestFile(n.file ?? ''))
+    : allLocalNodes;
+  // Slice W (§5.3): the hidden-tests default is a SILENT filter no longer —
+  // the count pill declares what it holds back, in the same breath.
+  const hiddenTests = allLocalNodes.length - localNodes.length;
   const codeEmpty = localNodes.length === 0;
 
   // ── Shared tab pill renderer ────────────────────────────────────────────
@@ -682,10 +684,14 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
           {/* Node / edge counts */}
           {codeData && graphType === 'code' && (
             <span
+              data-testid="graph-node-stats"
+              data-hidden-tests={hiddenTests}
               className="text-[10px] font-mono px-2 py-0.5 rounded"
               style={{ background: 'var(--surface-rail)', color: T.muted }}
             >
-              {localNodes.length} nodes · {codeData.stats.edgeCount} edges
+              {localNodes.length} nodes
+              {hiddenTests > 0 ? ` (${hiddenTests} test ${hiddenTests === 1 ? 'file' : 'files'} hidden)` : ''}
+              {' · '}{codeData.stats.edgeCount} edges
             </span>
           )}
 

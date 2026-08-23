@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef } from 'react';
-import type { SessionStatus, SessionView } from '../api/types.js';
+import type { SessionView } from '../api/types.js';
 import { GATE_HASH } from '../board/gateActions.js';
+import { observedSpend, runStats, WINDOW_LABEL_STYLE, windowWord } from '../board/metrics.js';
 import { sessionProjectId } from '../hooks/ambientProject.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
-import { useRuntimeStore, type LoggedEvent } from '../store/runtime.js';
+import { useRuntimeStore } from '../store/runtime.js';
 import { prefersReducedMotion } from './LiveEdge.js';
 import { phaseWord, recentRuns, RUN_DOT } from './RunsSection.js';
 
@@ -37,58 +38,10 @@ export const RUNS_BAR_PX = 28;
 /** §5.4: the sheet lists up to 20 runs, scrolling internally past 8. */
 const SHEET_MAX = 20;
 
-const TERMINAL: ReadonlySet<SessionStatus> = new Set(['completed', 'cancelled', 'failed']);
-
-export interface RunStats {
-  /** Non-terminal, non-gate statuses (the RunsSection TERMINAL set). */
-  working: number;
-  /** `awaiting_human` in `runs` — agrees with the gate store by construction. */
-  gates: number;
-  /** `status === 'failed'` in the default (non-archived) listing — the label
-   *  says "failed", scoped by what `/runs` returns; no invented 24h clock. */
-  failed: number;
-}
-
-/** §5.3's stat derivations, spelled once and unit-tested. */
-export function runStats(runs: SessionView[]): RunStats {
-  let working = 0;
-  let gates = 0;
-  let failed = 0;
-  for (const v of runs) {
-    const s = v.session.status;
-    if (s === 'awaiting_human') gates += 1;
-    else if (s === 'failed') failed += 1;
-    else if (!TERMINAL.has(s)) working += 1;
-  }
-  return { working, gates, failed };
-}
-
-/**
- * The TokenBurnSparkline fold (§5.3): real reported `cliUsage` dollars from
- * the runtime store's per-run logs — "observed" is in the label because that
- * is what it is. A `costUsd: null` frame never entered the log, so an unknown
- * cost can never fold to $0.00. Also folded per run for the sheet rows (§5.4:
- * shown only when non-zero — never $0.00 for "unknown").
- */
-export function observedSpend(logs: Record<string, LoggedEvent[]>): {
-  total: number;
-  frames: number;
-  byRun: Record<string, number>;
-} {
-  let total = 0;
-  let frames = 0;
-  const byRun: Record<string, number> = {};
-  for (const [runId, log] of Object.entries(logs)) {
-    for (const entry of log) {
-      if (entry.type === 'cliUsage' && typeof entry.costUsd === 'number') {
-        total += entry.costUsd;
-        frames += 1;
-        byRun[runId] = (byRun[runId] ?? 0) + entry.costUsd;
-      }
-    }
-  }
-  return { total, frames, byRun };
-}
+// Slice W (DES-UX-001 §5.3): the stat derivations moved to THE one metrics
+// module — this surface renders `runStats` / `observedSpend` and may not fold
+// stores inline. Re-exported so standing importers keep one source.
+export { observedSpend, runStats, type RunStats } from '../board/metrics.js';
 
 /** "waiting 12m" — the gate row's wait age off the gate store's frame ts (§5.4). */
 export function waitingWord(ageMs: number): string {
@@ -239,10 +192,22 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
       <Segment glyph="●" color="var(--status-run)" text={`${stats.working} working`} />
       <Segment glyph="⏸" color="var(--status-gate)" text={`${stats.gates} gates`} pulse={stats.gates > 0} />
       <Segment glyph="✗" color="var(--status-fail)" text={`${stats.failed} failed`} />
+      {/* EC39 (slice W): the three counts share one window and SAY it — the
+          unwindowed listing, "all" — so "2 failed" here beside a "1 failed
+          (24h)" elsewhere reads as two labeled truths, not a contradiction. */}
+      <span data-testid="runs-bar-window" data-window="all" style={WINDOW_LABEL_STYLE}>
+        {windowWord('all')}
+      </span>
       {spend.frames > 0 && (
         // Rendered only once a cliUsage frame has been observed — never a
         // fabricated $0.00 for "unknown" (the slice-E wire-honesty rule).
-        <Segment glyph="◔" color="var(--accent)" text={`$${spend.total.toFixed(2)} observed`} />
+        <>
+          <Segment glyph="◔" color="var(--accent)" text={`$${spend.total.toFixed(2)} observed`} />
+          {/* EC39: the spend's window — what THIS page observed this session. */}
+          <span data-testid="runs-bar-spend-window" data-window="session" style={WINDOW_LABEL_STYLE}>
+            {windowWord('session')}
+          </span>
+        </>
       )}
     </>
   );
@@ -254,6 +219,7 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
         data-testid="runs-bottom-bar"
         data-expanded={String(expanded)}
         data-scope={scopeProjectId === null ? 'global' : 'project'}
+        data-window="all"
         data-working={stats.working}
         data-gates={stats.gates}
         data-failed={stats.failed}
@@ -305,6 +271,13 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
             style={{ fontSize: 'var(--text-2xs)', borderBottom: '1px solid var(--surface-raised)' }}
           >
             <span style={{ color: 'var(--ink-high)', fontWeight: 'var(--weight-semi)' }}>Runs</span>
+            {/* §5.3 (slice W): the sheet's cap is a SILENT filter no longer —
+                when the list is clipped it says so in the same breath. */}
+            {scopedRuns.length > rows.length && (
+              <span data-testid="runs-sheet-cap" style={WINDOW_LABEL_STYLE}>
+                showing {rows.length} of {scopedRuns.length}
+              </span>
+            )}
             {!quiet && summary}
             <span className="flex-1" />
             {allRuns('runs-sheet-all')}

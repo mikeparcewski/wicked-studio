@@ -124,13 +124,15 @@ describe('run rows are labelled by intent, not raw prompt (F7)', () => {
     for (const t of texts) expect(t).not.toMatch(/executing|distributing|awaiting_human/);
   });
 
-  it('caps the list and defers the rest to "view all →"', () => {
+  it('caps the list, DECLARES the cap, and defers the rest to view all (slice W §5.3)', () => {
     const many = Array.from({ length: 12 }, (_, i) =>
       makeView({ id: `r-${i}`, problem: `task ${i}`, status: 'completed' }),
     );
     dash(many);
     expect(screen.getAllByTestId('build-run-row')).toHaveLength(9);
-    expect(screen.getByText('view all →')).toBeTruthy();
+    // The cap is a silent filter no longer: the clipped list says what it
+    // holds back in the same breath as the affordance to see the rest.
+    expect(screen.getByTestId('build-runs-cap').textContent).toBe('showing 9 of 12 — view all →');
   });
 });
 

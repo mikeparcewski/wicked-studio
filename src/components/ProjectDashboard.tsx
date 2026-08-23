@@ -4,6 +4,7 @@ import { listDocs, type DocSummary } from '../api/interactive.js';
 import { useDocsCache } from '../store/docsCache.js';
 import type { SessionView } from '../api/types.js';
 import { compareScored, scoreOf, type Signal, type SignalKind } from '../board/boardAttention.js';
+import { WINDOW_LABEL_STYLE } from '../board/metrics.js';
 import { sessionProjectId } from '../hooks/ambientProject.js';
 import { interactiveRootOf } from '../hooks/useBoardModel.js';
 import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
@@ -319,8 +320,21 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
 
       <div style={CSS.grid}>
         {/* ── Tile 1: runs, attention-ordered, each a link into its mode view ── */}
-        <section data-testid="dashboard-runs" data-count={myRuns.length} style={CSS.tile}>
-          <p style={CSS.tileHead}>Active runs ({openRuns.length})</p>
+        {/* Slice W (§5.3, EC34): the header counts the SAME collection its rows
+            render — the old "Active runs (open-count)" over an all-runs list was
+            the "ACTIVE RUNS (0) over two rows" contradiction class. `data-count`
+            is the RENDERED row count (set-equal on the same paint); the cap
+            declares itself in the head, and the window is named (EC39). */}
+        <section
+          data-testid="dashboard-runs"
+          data-count={Math.min(myRuns.length, MAX_ROWS)}
+          data-window="all"
+          style={CSS.tile}
+        >
+          <p style={CSS.tileHead}>
+            Runs ({myRuns.length > MAX_ROWS ? `${MAX_ROWS} of ${myRuns.length}` : myRuns.length}){' '}
+            <span data-testid="dashboard-runs-window" style={WINDOW_LABEL_STYLE}>all</span>
+          </p>
           {myRuns.length === 0 ? (
             <p style={CSS.empty}>No runs yet — Build starts one.</p>
           ) : (
@@ -360,8 +374,12 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         </section>
 
         {/* ── Tile 2: documents, from the one listDocs the Document mode makes ── */}
-        <section data-testid="dashboard-docs" data-count={docs.length} style={CSS.tile}>
-          <p style={CSS.tileHead}>Documents ({docs.length})</p>
+        <section data-testid="dashboard-docs" data-count={Math.min(docs.length, MAX_ROWS)} style={CSS.tile}>
+          {/* EC34 (slice W): head + data-count name the RENDERED rows; the cap
+              declares itself in the same breath ("N of M", plus "more" below). */}
+          <p style={CSS.tileHead}>
+            Documents ({docs.length > MAX_ROWS ? `${MAX_ROWS} of ${docs.length}` : docs.length})
+          </p>
           {docs.length === 0 ? (
             <p style={CSS.empty}>No documents yet — Document drafts one.</p>
           ) : (
@@ -389,8 +407,10 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         </section>
 
         {/* ── Tile 3: the gate inbox — the SAME answerable chip as the board (§4.1) ── */}
-        <section data-testid="dashboard-gates" data-count={waiting.length} style={CSS.tile}>
-          <p style={CSS.tileHead}>Gate inbox ({waiting.length})</p>
+        <section data-testid="dashboard-gates" data-count={Math.min(waiting.length, MAX_ROWS)} style={CSS.tile}>
+          <p style={CSS.tileHead}>
+            Gate inbox ({waiting.length > MAX_ROWS ? `${MAX_ROWS} of ${waiting.length}` : waiting.length})
+          </p>
           {waiting.length === 0 ? (
             <p style={CSS.empty}>Nothing is waiting on you.</p>
           ) : (

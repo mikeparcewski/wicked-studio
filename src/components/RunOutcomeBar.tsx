@@ -1,6 +1,11 @@
 import { useMemo } from 'react';
 import type { SessionView } from '../api/types.js';
+import { outcomeOf, outcomeTotals24h, WINDOW_24H_MS, type Outcome } from '../board/metrics.js';
 import { MetricTile } from './MetricTile.js';
+
+// Slice W (DES-UX-001 §5.3): the outcome mapping + windowed totals moved to
+// THE one metrics module; this tile renders them. Re-exported for importers.
+export { outcomeOf } from '../board/metrics.js';
 
 /**
  * Run outcome bar (DES-FEEDBACK-001 §2.1/§2.3, slice E): the home metrics-bar
@@ -22,13 +27,11 @@ import { MetricTile } from './MetricTile.js';
  */
 
 const WINDOWS = 12;
-const WINDOW_MS = 2 * 3_600_000; // 2h × 12 = the 24h span
+const WINDOW_MS = WINDOW_24H_MS / WINDOWS; // 2h × 12 = the shared 24h span
 /** ViewBox geometry — stretched to the tile via preserveAspectRatio="none". */
 const W = 168;
 const H = 26;
 const COL_GAP = 2;
-
-type Outcome = 'run' | 'gate' | 'fail' | 'done';
 
 /** Stack order bottom→top, with the fill token each segment means. */
 const SEGMENTS: ReadonlyArray<{ key: Outcome; fill: string }> = [
@@ -37,13 +40,6 @@ const SEGMENTS: ReadonlyArray<{ key: Outcome; fill: string }> = [
   { key: 'fail', fill: 'var(--status-fail)' },
   { key: 'done', fill: 'var(--status-done)' },
 ];
-
-export function outcomeOf(status: string): Outcome {
-  if (status === 'awaiting_human') return 'gate';
-  if (status === 'failed' || status === 'cancelled') return 'fail';
-  if (status === 'completed') return 'done';
-  return 'run';
-}
 
 interface Props {
   runs: SessionView[];
@@ -63,26 +59,24 @@ export function RunOutcomeBar({
   title = 'Runs (24h)',
 }: Props): React.ReactElement {
   const at = now ?? Date.now();
-  const { windows, counts, unplaced } = useMemo(() => {
+  // Slice W (§5.3): the COUNTS are the shared selector's — `outcomeTotals24h`,
+  // the same numbers `failedCount24h` reports everywhere. Only the per-2h
+  // bucket PLACEMENT (chart geometry) is derived here, on the same clock rule.
+  const counts = useMemo(() => outcomeTotals24h(runs, attachedAt, at), [runs, attachedAt, at]);
+  const { windows } = useMemo(() => {
     const buckets = Array.from({ length: WINDOWS }, () => ({ run: 0, gate: 0, fail: 0, done: 0 }));
-    const totals = { run: 0, gate: 0, fail: 0, done: 0 };
-    let outside = 0;
     const start = at - WINDOWS * WINDOW_MS;
     for (const v of runs) {
       if (v.session.archived_at != null) continue;
       const clock = attachedAt[v.session.id];
-      if (clock === undefined || clock < start || clock > at) {
-        outside += 1;
-        continue;
-      }
+      if (clock === undefined || clock < start || clock > at) continue;
       const ix = Math.min(WINDOWS - 1, Math.floor((clock - start) / WINDOW_MS));
-      const outcome = outcomeOf(v.session.status);
       const bucket = buckets[ix];
-      if (bucket !== undefined) bucket[outcome] += 1;
-      totals[outcome] += 1;
+      if (bucket !== undefined) bucket[outcomeOf(v.session.status)] += 1;
     }
-    return { windows: buckets, counts: totals, unplaced: outside };
+    return { windows: buckets };
   }, [runs, attachedAt, at]);
+  const unplaced = counts.unplaced;
 
   const inWindow = counts.run + counts.gate + counts.fail + counts.done;
   const colMax = windows.reduce((m, w) => Math.max(m, w.run + w.gate + w.fail + w.done), 0);
@@ -104,7 +98,7 @@ export function RunOutcomeBar({
       question={question}
       title={title}
       value={value}
-      data={{ 'data-total': inWindow, 'data-unplaced': unplaced }}
+      data={{ 'data-total': inWindow, 'data-unplaced': unplaced, 'data-window': '24h' }}
     >
       {inWindow === 0 ? (
         // Honest emptiness: no bars, one quiet line — never a wall of zero-height

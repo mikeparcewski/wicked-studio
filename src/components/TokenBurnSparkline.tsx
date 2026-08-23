@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { burnSteps, windowWord } from '../board/metrics.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { MetricTile } from './MetricTile.js';
 
@@ -40,23 +41,10 @@ export function TokenBurnSparkline({
   const logs = useRuntimeStore((s) => s.logs);
   const at = now ?? Date.now();
 
-  const { steps, total } = useMemo(() => {
-    const usages: Array<{ ts: number; cost: number }> = [];
-    for (const log of Object.values(logs)) {
-      for (const entry of log) {
-        if (entry.type === 'cliUsage' && typeof entry.costUsd === 'number') {
-          usages.push({ ts: entry.ts, cost: entry.costUsd });
-        }
-      }
-    }
-    usages.sort((a, b) => a.ts - b.ts);
-    let sum = 0;
-    const cumulative = usages.map((u) => {
-      sum += u.cost;
-      return { ts: u.ts, total: sum };
-    });
-    return { steps: cumulative, total: sum };
-  }, [logs]);
+  // Slice W (§5.3): the fold is the metrics module's `burnSteps` — the same
+  // frame predicate as `observedSpend`, so this curve's endpoint and the
+  // spend notes beside it are the same number by construction.
+  const { steps, total } = useMemo(() => burnSteps(logs), [logs]);
 
   // x spans first-observed → now, so the newest edge of the area is "now" and a
   // flattening slope reads as spending slowing down.
@@ -76,8 +64,9 @@ export function TokenBurnSparkline({
       testId="token-burn-sparkline"
       question={question}
       title={title}
-      value={steps.length === 0 ? 'no usage yet' : `$${total.toFixed(2)}`}
-      data={{ 'data-total': total.toFixed(4), 'data-points': steps.length }}
+      // EC39 (slice W): the total names its window — what THIS page observed.
+      value={steps.length === 0 ? 'no usage yet' : `$${total.toFixed(2)} · ${windowWord('session')}`}
+      data={{ 'data-total': total.toFixed(4), 'data-points': steps.length, 'data-window': 'session' }}
     >
       {steps.length === 0 ? (
         // Honest emptiness: the wire reports cost per cliUsage frame and none

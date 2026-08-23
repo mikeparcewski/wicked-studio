@@ -220,7 +220,10 @@ report["steps"]["slice5_build_runs"] = {
         "How should the tables move?" in (working["gateInbox"] or ""),
         "Approve" in (working["gateInbox"] or ""),
         # The stat row survives only as the data-gated footer — real numbers, no `—`.
-        working["footer"] == "3 steps in flight · $0.42 · 98.0k tokens",
+        # Slice W (DES-UX-001 §5.3, EC39) re-scope: the footer now NAMES its
+        # window (the range the pills select) as a dim-mono suffix.
+        (working["footer"] or "").startswith("3 steps in flight · $0.42 · 98.0k tokens"),
+        (working["footer"] or "").endswith("30d"),
     ]),
     "rows": row_texts,
     "footer": working["footer"],
