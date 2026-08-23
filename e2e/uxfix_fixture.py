@@ -25,11 +25,13 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     Build stats footer has real data to gate on (default False)
   long_prompt     — one extra run with a very long problem rides the run list, to
                     prove intent-phrase truncation in pixels (default False)
-  extra_narration — a list of strings; each is drained ONCE by the /ws loop as a
-                    `unitOutputDelta` for r-upload (default []). The vision-slice-2
-                    rig posts one mid-page to prove the live feed updates from the
-                    shared store within the 2s AC — a NEW line, not the loop's
-                    repeated one.
+  extra_narration — a list; each entry is drained ONCE by the /ws loop as a
+                    `unitOutputDelta` (default []). A plain string keeps the
+                    historical target (r-upload ord 0 — the vision-slice-2 rig
+                    posts one mid-page to prove the live feed updates from the
+                    shared store within the 2s AC); a dict {session, ord?, text}
+                    targets any run — the slice-Z rig (DES-UX-001 §7.6) drips
+                    frames at the run it just launched over POST /runs.
   demo            — whether q3-review-deck's doc registry carries the recorded
                     `checkout-demo` (kind "demo") plus its spec / recording /
                     frames, so Video mode has a §5.6 surface to render (vision
@@ -1392,11 +1394,24 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # sessionFailed that mints a run_failed notification row).
                 for frame in frames_extra:
                     self.wfile.write(ws_frame(frame))
+                # A plain string keeps the historical shape (r-upload ord 0 —
+                # every standing rig); a dict targets {session, ord?, text} so
+                # the slice-Z rig can drip REAL frames at a run it just
+                # launched over POST /runs (DES-UX-001 §7.6 / EC41: the live
+                # region on the run's OWN page, not only the standing r-upload).
                 for line in extra:
-                    self.wfile.write(ws_frame({
-                        "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
-                        "text": str(line) + "\n",
-                    }))
+                    if isinstance(line, dict):
+                        self.wfile.write(ws_frame({
+                            "type": "unitOutputDelta",
+                            "session": line["session"],
+                            "ord": line.get("ord", 0),
+                            "text": str(line.get("text", "")) + "\n",
+                        }))
+                    else:
+                        self.wfile.write(ws_frame({
+                            "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
+                            "text": str(line) + "\n",
+                        }))
                 # Slice L (§8.4): one-shot awaitingHuman ARRIVALS a rig posted —
                 # the desktop-notification trigger is the live frame, never the
                 # cached-gate GET a page load reconciles.
