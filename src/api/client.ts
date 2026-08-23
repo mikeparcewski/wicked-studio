@@ -20,7 +20,7 @@ import type {
   UpdateProjectBody,
 } from './types.js';
 
-import { ApiError } from './errors.js';
+import { ApiError, apiStatus } from './errors.js';
 
 export type * from './types.js';
 export { ApiError, apiStatus, apiWire, isRouteAbsent, translateWireError } from './errors.js';
@@ -233,8 +233,9 @@ export const api = {
       return await apiFetch<ElicitationInfo>(`/runs/${encodeURIComponent(id)}/elicitation`);
     } catch (e) {
       // A 404 is the normal "nothing pending" answer, not a failure. Anything else propagates —
-      // swallowing a 500 here would show an empty panel for a broken daemon.
-      if (e instanceof Error && /\b404\b/.test(e.message)) return null;
+      // swallowing a 500 here would show an empty panel for a broken daemon. Matched on the
+      // typed status (slice X2, EC33): the translated message no longer carries the number.
+      if (apiStatus(e) === 404) return null;
       throw e;
     }
   },

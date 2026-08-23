@@ -78,3 +78,30 @@ describe('api.getRunDiff — GET /runs/:id/diff[?path=<absolute>]', () => {
     expect((err as ApiError).wire).toBe('run r-1 has no workdir — nothing to diff');
   });
 });
+
+describe('api.getElicitation — 404 means "nothing pending", matched on the typed status', () => {
+  it('answers null on the daemon 404 even though the translated message names no number', async () => {
+    // Regression pin (slice X2 verification): the old `/\b404\b/.test(e.message)`
+    // matcher went dead once the message became the translated sentence — the
+    // nothing-pending answer must ride ApiError.status, not the display string.
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      text: () => Promise.resolve(JSON.stringify({ error: 'Not Found' })),
+    });
+    await expect(api.getElicitation('r-1')).resolves.toBeNull();
+  });
+
+  it('a 500 still propagates — a broken daemon never renders as an empty panel', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: () => Promise.resolve(JSON.stringify({ error: 'boom' })),
+    });
+    const err = await api.getElicitation('r-1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(500);
+  });
+});

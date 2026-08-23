@@ -54,6 +54,16 @@ describe('parseCreateAsk (§7.3 quoted-name extraction)', () => {
   it('an empty quoted span is no name', () => {
     expect(parseCreateAsk('a deck named "" about nothing')).toBeNull();
   });
+
+  it('apostrophe contractions never false-parse as a quoted name', () => {
+    expect(parseCreateAsk("summarize last week's numbers, don't include drafts")).toBeNull();
+    expect(parseCreateAsk('summarize last week’s numbers, don’t include drafts')).toBeNull();
+  });
+
+  it('"renamed" is not the naming cue — the quoted span still parses alone', () => {
+    const p = parseCreateAsk('a doc renamed "x-1" please');
+    expect(p).toEqual({ name: 'x-1', brief: 'a doc renamed please' });
+  });
 });
 
 describe('compactPath (§7.10 — the 5-line wrap retires)', () => {
