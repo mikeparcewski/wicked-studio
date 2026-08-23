@@ -151,7 +151,9 @@ describe('VersionStrip — the version → message cross-link (§7.6)', () => {
     for (const button of screen.getAllByTestId('version-scroll')) {
       expect(button).toBeDisabled();
       expect(button.getAttribute('title') ?? '').toMatch(/no source message|nothing to scroll to/i);
-      expect(button.getAttribute('title') ?? '').toMatch(/before the merge/i);
+      // Round-3 copy pass: operator language — the reason names the service
+      // capability, no spec refs, no merge-history jargon.
+      expect(button.getAttribute('title') ?? '').toMatch(/does not yet record version anchors/i);
     }
   });
 
