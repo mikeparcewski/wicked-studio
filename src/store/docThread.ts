@@ -164,6 +164,9 @@ interface DocThreadStore {
    * A thread that has never heard anything has no entry.
    */
   lastSignalAt: Record<string, number>;
+  /** Deferred continuation dividers (§7.10, the J3 bookkeeping pin), per thread:
+   *  each waits for the wire to show its version exists. See `expectDivider`. */
+  expectedDividers: Record<string, { msgId: string; version: number }[]>;
   /**
    * The newest version the stream has landed, per thread. The transcript tags its anchor
    * message (§7.6) and does not otherwise care; a mode SURFACE does — a re-authored demo
@@ -208,8 +211,15 @@ interface DocThreadStore {
                 artifact?: { href: string; file?: string }) => void;
   /** Append an §3.3 ACTIONABLE line — a failure that names its fix, and what to retry. */
   addActionable: (key: string, text: string, hint: string, retry?: ExportRetry) => void;
-  /** The version divider a fork+inject continuation renders behind (§7.10). */
-  addDivider: (key: string, version: number) => void;
+  /**
+   * Register the version divider a fork+inject continuation WILL render behind
+   * (§7.10) — deferred to the wire (the J3 bookkeeping pin): "continues as vN"
+   * is an anchor, and no anchor may render before the thread has OBSERVED that
+   * version exist. The divider is inserted immediately above the continuation
+   * message by the first `version.created` arrival at or past `version`; a
+   * continuation whose run never lands anything never grows a divider.
+   */
+  expectDivider: (key: string, msgId: string, version: number) => void;
   setGenState: (key: string, state: GenState) => void;
   clear: (key: string) => void;
 }
@@ -228,6 +238,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
   landings: [],
   lastError: {},
   lastSignalAt: {},
+  expectedDividers: {},
 
   ingest: (event) => {
     const frame = frameOf(event);
@@ -361,9 +372,26 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         const queue = s.pending[key] ?? [];
         const anchorId = queue.length > 0 ? queue[0] : undefined;
         const generated = GENERATED.has(kind);
-        const thread = messages[key] ?? [];
+        // §7.10 deferred dividers (the J3 bookkeeping pin): this arrival is the
+        // proof-of-existence a registered continuation waited for. Each divider
+        // whose version the wire has now reached is inserted immediately above
+        // its continuation message — never earlier than this moment.
+        const expected = s.expectedDividers[key] ?? [];
+        const due = expected.filter((e) => version >= e.version);
+        let thread = messages[key] ?? [];
+        for (const e of due) {
+          const divider: DocMsg = { kind: 'divider', id: nextMsgId(), version: e.version };
+          const at = thread.findIndex((m) => m.kind === 'user' && m.id === e.msgId);
+          thread = at === -1
+            ? [...thread, divider]
+            : [...thread.slice(0, at), divider, ...thread.slice(at)];
+        }
+        const dividers = due.length === 0
+          ? {}
+          : { expectedDividers: { ...s.expectedDividers,
+                                  [key]: expected.filter((e) => version < e.version) } };
         const tagged = anchorId === undefined
-          ? messages
+          ? (due.length === 0 ? messages : { ...messages, [key]: thread })
           : {
               ...messages,
               [key]: thread.map((m) =>
@@ -382,6 +410,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         }
         return {
           messages: tagged,
+          ...dividers,
           pending: generated && anchorId !== undefined
             ? { ...s.pending, [key]: queue.slice(1) }
             : s.pending,
@@ -495,8 +524,13 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       }),
     })),
 
-  addDivider: (key, version) =>
-    set((s) => ({ messages: append(s.messages, key, { kind: 'divider', id: nextMsgId(), version }) })),
+  expectDivider: (key, msgId, version) =>
+    set((s) => ({
+      expectedDividers: {
+        ...s.expectedDividers,
+        [key]: [...(s.expectedDividers[key] ?? []), { msgId, version }],
+      },
+    })),
 
   setGenState: (key, state) => set((s) => ({ genState: { ...s.genState, [key]: state } })),
 
@@ -509,6 +543,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       const landed = { ...s.landed }; delete landed[key];
       const lastError = { ...s.lastError }; delete lastError[key];
       const lastSignalAt = { ...s.lastSignalAt }; delete lastSignalAt[key];
-      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt };
+      const expectedDividers = { ...s.expectedDividers }; delete expectedDividers[key];
+      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers };
     }),
 }));

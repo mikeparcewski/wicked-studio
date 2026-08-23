@@ -553,7 +553,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
       if (state === 'terminal') {
         const from = selectedVersion ?? (await getVersions(projectId, docId)).head;
         const forked = await postFork(projectId, docId, from, msgId);
-        store.addDivider(key, forked.version);
+        // §7.10 + the J3 bookkeeping pin: the "continues as vN" divider is an
+        // ANCHOR, so it renders only when the wire shows vN exists — registered
+        // here, inserted above this message by the version.created arrival.
+        store.expectDivider(key, msgId, forked.version);
         store.addUserMsg(key, msgId, body);
         store.setGenState(key, 'generating');
         // §6.1 (EC36): once the message is ON the thread, a refused send fails
