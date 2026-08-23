@@ -288,6 +288,20 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # rows join GET /projects. Default False: no standing rig's project
          # list grows a row it never asserted.
          "project_create": False,
+         # Slice X (DES-UX-001 §7.2): how long POST /d/:doc/api/export takes
+         # before answering the REAL {format, path, file, download} shape —
+         # 0 (default) keeps it instant; >0 lets a rig witness export-pending.
+         "export_delay_ms": 0,
+         # Slice X (§7.2 / DES-MERGE-001 §4.4): when True, a pptx export
+         # answers the bridge's real lazy-dependency refusal — server.js's
+         # catch is `400 {error: e.message}` with pptx.js's install command
+         # in the message (no separate hint field on this wire).
+         "export_pptx_missing": False,
+         # Slice X (§7.2): when True, theme.requested still acks {ok,...} but
+         # the bridge then says NOTHING — no status frame, no theme.learned,
+         # no readback ripening. The brief's real failure mode (a learn that
+         # hangs silently), for the client's bounded-timeout branch.
+         "learn_silent": False,
          }
 state_lock = threading.Lock()
 
@@ -1254,6 +1268,30 @@ def schedule_doc_run(pid: str, doc: str, delay_s: float, fixed_version: int | No
     threading.Timer(max(fire_at - time.time(), 0.0), land).start()
 
 
+# ── Slice X (DES-UX-001 §7.2): the REAL export wire, as server.js serves it ───
+#
+# POST /api/export (per-doc mount) answers `{format, path, file, download}` with
+# `download` bridge-root-relative (`/d/<doc>/api/export/file/<name>` — req.baseUrl
+# is the doc mount), and GET /api/export/file/:name serves the bytes with a
+# Content-Disposition attachment. The pptx lazy-dependency refusal is the bridge's
+# real catch shape: `400 {error}` carrying pptx.js's install command in the message.
+# Standing rigs never POST this route, so serving it changes no standing board.
+exports_lock = threading.Lock()
+exports_created: dict = {}  # (pid, doc, file) -> format
+
+PPTX_MISSING_ERROR = "PowerPoint export needs python-pptx — run: pip install python-pptx"
+
+
+def export_bytes(doc: str, version: int, fmt: str) -> bytes:
+    """The artifact's bytes — enough to make the download REAL (a saved file with
+    content), without faking a renderer the fixture does not have."""
+    if fmt == "html":
+        return doc_html(doc, version).encode()
+    if fmt == "pdf":
+        return b"%PDF-1.4\n% wicked-studio fixture export of " + doc.encode() + b"\n%%EOF\n"
+    return b"PK\x03\x04 wicked-studio fixture pptx export of " + doc.encode()
+
+
 def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "doc"
 
@@ -1827,6 +1865,32 @@ class W2Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return True
+        # Slice X (§7.2): GET /d/<doc>/api/export/file/<name> — the artifact bytes,
+        # exactly as server.js serves them (Content-Disposition attachment), so the
+        # click site's ready affordance is a REAL download on the one origin (§5.3).
+        m = re.match(
+            r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/export/file/([^/]+)$", path)
+        if m:
+            pid, doc, name = (urllib.parse.unquote(g) for g in m.groups())
+            with exports_lock:
+                fmt = exports_created.get((pid, doc, name))
+            if fmt is None:
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"not found")
+                return True
+            version_m = re.search(r"_v(\d+)\.", name)
+            body = export_bytes(doc, int(version_m.group(1)) if version_m else 1, fmt)
+            ctype = {"pdf": "application/pdf",
+                     "pptx": "application/vnd.openxmlformats-officedocument"
+                             ".presentationml.presentation"}.get(fmt, "text/html; charset=utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return True
         # /api/v1/projects/<pid>/interactive/d/<doc>/doc/<v> — the rendered document.
         # A DEMO's version HTML is its STORYBOARD (DES-FEEDBACK-001 §7.4): chapters and
         # the embedded recording live IN the document, exactly as the real bridge's
@@ -1915,6 +1979,40 @@ class W2Handler(SimpleHTTPRequestHandler):
         if m:
             self._json(404, {"error": f"no such route on the bridge: {path}"})
             return True
+        # Slice X (§7.2): POST /d/<doc>/api/export — the real export wire (see the
+        # module-level note). `export_delay_ms` slows the render so a rig can
+        # witness the pending state; `export_pptx_missing` answers the real 400.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/export$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            version = body.get("version")
+            fmt = str(body.get("format") or "html").lower()
+            if not isinstance(version, int):
+                self._json(400, {"error": "version (number) required"})
+                return True
+            if fmt not in ("html", "pdf", "pptx"):
+                self._json(400, {"error": "format must be html, pdf, or pptx"})
+                return True
+            with state_lock:
+                delay_ms = int(state["export_delay_ms"])
+                pptx_missing = bool(state["export_pptx_missing"])
+            if delay_ms > 0:
+                time.sleep(delay_ms / 1000.0)  # the render, slowed for the rig
+            if fmt == "pptx" and pptx_missing:
+                self._json(400, {"error": PPTX_MISSING_ERROR})
+                return True
+            file = f"{doc}_v{version}.{fmt}"
+            with exports_lock:
+                exports_created[(pid, doc, file)] = fmt
+            download = f"/d/{doc}/api/export/file/{urllib.parse.quote(file)}"
+            result = {"format": fmt, "path": f"/docs/{doc}/exports/{file}",
+                      "file": file, "download": download}
+            # The bridge announces the artifact on the bus too (export.generated);
+            # the client deduplicates the echo on `href` (docThread.ts EXPORTED).
+            queue_interactive("wicked.interactive.export.generated", {
+                "project_id": pid, "document_id": doc, "version": version, **result})
+            self._json(200, result)
+            return True
         # POST /api/v1/projects/<pid>/interactive/api/events — the inject wire (§5.4).
         # A chat.posted steer regenerates the doc's head version: narrate, then land it.
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/events$", path)
@@ -1929,6 +2027,15 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("event_type") == "wicked.interactive.theme.requested" and doc:
                 url = str(payload.get("url") or "").strip()
                 file_path = str(payload.get("path") or "").strip()
+                with state_lock:
+                    silent = bool(state["learn_silent"])
+                if silent:
+                    # Slice X (§7.2): the ack lands, then NOTHING — no status
+                    # frame, no readback. The client's bounded timeout is the
+                    # only thing standing between the user and eternal narration.
+                    self._json(200, {"ok": True, "event_id": "evt-fixture",
+                                     "correlation_id": "c-fixture"})
+                    return True
                 reason = ssrf_reject_reason(url) if url and not file_path else None
                 if reason is not None:
                     queue_interactive("wicked.interactive.status.posted", {

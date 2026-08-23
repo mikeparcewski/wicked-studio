@@ -312,23 +312,27 @@ with sync_playwright() as p:
     wake_strip(page)  # the panel rides the strip — keep it awake for the submit
     page.locator('[data-testid="themes-input"]').fill("https://acme.example/brand")
     page.locator('[data-testid="themes-submit"]').click()
-    # A queued learn closes the popover (the ack resolved), and the submission is a
-    # MESSAGE (§2.3): the ask lands in the thread verbatim.
-    page.locator('[data-testid="themes-panel"]').wait_for(state="detached", timeout=30000)
-    page.locator('[data-testid="doc-message"]').last.wait_for(timeout=30000)
+    # DES-UX-001 §7.2 (slice X, EC37) SUPERSEDES the close-on-submit here: the popover
+    # now STAYS OPEN and answers — in-flight, then done when the readback ripens. The
+    # submission is still a MESSAGE (§2.3): the ask lands in the thread verbatim.
+    page.locator('[data-testid="learn-inflight"]').wait_for(timeout=30000)
+    page.locator('[data-testid="doc-message"]',
+                 has_text="Learn a theme from https://acme.example/brand") \
+        .first.wait_for(timeout=30000)
     learned = page.evaluate(
         """() => ({
              askInThread: Array.from(document.querySelectorAll('[data-testid="doc-message"]'))
                .some(m => (m.textContent || '').includes('Learn a theme from https://acme.example/brand')),
-             panelClosed: !document.querySelector('[data-testid="themes-panel"]'),
+             panelAnswers: !!document.querySelector('[data-testid="themes-panel"]'),
              chipCount: document.querySelectorAll('[data-chip-kind="theme"]').length,
            })"""
     )
+    page.locator('[data-testid="learn-done"]').wait_for(timeout=90000)
     # The ASYNC guard (issue #65): a link-local source is refused by the SERVICE, in
     # its own status line, arriving over the bus — never an HTTP 4xx on the ack. The
-    # fixture emits exactly the frame materializeThemeRequested writes.
+    # fixture emits exactly the frame materializeThemeRequested writes. The panel is
+    # still open (slice X) — editing the input starts the fresh ask.
     wake_strip(page)
-    page.locator('[data-testid="themes-open"]').click()
     page.locator('[data-testid="themes-input"]').fill("http://169.254.169.254/")
     page.locator('[data-testid="themes-submit"]').click()
     page.locator('[data-testid="doc-narration"]', has_text="Couldn't grab that URL") \
@@ -352,7 +356,7 @@ with sync_playwright() as p:
             themes["rowCount"] == 0,          # the invented library's rows are gone
             themes["chipCount"] == 0,
             learned["askInThread"],
-            learned["panelClosed"],
+            learned["panelAnswers"],  # slice X (§7.2): the popover stays and answers
             learned["chipCount"] == 0,        # no pick, so no chip — ever
             len(theme_events) == 2,           # the good learn + the refused one
             (theme_events[0] or {}).get("payload", {}).get("document_id") not in (None, ""),
