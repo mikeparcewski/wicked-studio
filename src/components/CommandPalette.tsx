@@ -15,6 +15,7 @@ import { decideGate, GATE_HASH } from '../board/gateActions.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { Modal } from './Modal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
+import { INTENT_MAX, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
 
 /**
@@ -67,6 +68,9 @@ interface Entry {
   /** Search hits: the mono snippet line (§5.3) + its matched positions. */
   snippet?: string;
   snippetPositions?: number[];
+  /** Run rows only (§7.5, slice Y2): the attach-clock word — presence marks the
+   *  row's label as the synthesized `run-title` (EC40). */
+  when?: string;
 }
 
 /**
@@ -271,6 +275,9 @@ export function CommandPalette({
   const [prompts, setPrompts] = useState<InteractionRequest[]>([]);
   const [showWhy, setShowWhy] = useState(false);
   const projectNameByRun = useMembershipStore((s) => s.projectNameByRun);
+  // §7.5 (slice Y2): the attach clock for run rows — the mirror the board
+  // model already writes; a store read, never a fetch (§1.4's budget holds).
+  const attachedAtByRun = useMembershipStore((s) => s.attachedAtByRun);
   useEffect(() => {
     if (!searchMode) {
       setShowWhy(false);
@@ -304,17 +311,24 @@ export function CommandPalette({
         const m = substringMatch(needle, v.session.problem);
         if (m === null) return;
         const id = v.session.id;
+        // §7.5 (slice Y2): the row displays the SYNTHESIZED title while the
+        // match stays on the full problem (prose corpus, §5.2). Highlight
+        // positions survive only when they land inside the displayed intent
+        // fragment — a hit past the truncation is a real hit with no honest
+        // highlight, never a misplaced one.
+        const intentLen = Math.min(v.session.problem.length, INTENT_MAX);
         hits.push({
           en: {
             id: `s-run-${id}`,
             group: 'search-runs',
-            label: v.session.problem,
+            label: runTitle(v.session),
             context: projectNameByRun[id] ?? v.session.status,
             href: runPath(id),
             rank: i,
             dot: SEARCH_DOT[v.session.status] ?? 'var(--ink-dim)',
+            when: runWhenWord(attachedAtByRun[id], Date.now()),
           },
-          m,
+          m: m.positions.every((p) => p < intentLen) ? m : { score: m.score, positions: [] },
         });
       });
       // Open gates — the event-sourced `awaitingHuman` prompts (§5.1).
@@ -418,10 +432,13 @@ export function CommandPalette({
       entries.push({
         id: `run-${id}`,
         group: 'runs',
-        label: v.session.problem,
+        // §7.5 (slice Y2, EC40): the synthesized title IS the matched label
+        // here — typing a short-id now finds its run.
+        label: runTitle(v.session),
         context: gated ? 'gate' : v.session.status,
         href: gated ? `${runPath(id)}${GATE_HASH}` : runPath(id),
         rank: gated ? 0 : ACTIVE.has(v.session.status) ? 1 : 2,
+        when: runWhenWord(attachedAtByRun[id], Date.now()),
       });
     }
 
@@ -541,7 +558,7 @@ export function CommandPalette({
       return a.en.rank - b.en.rank;
     });
     return matched;
-  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
+  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -739,6 +756,7 @@ export function CommandPalette({
                         </span>
                       )}
                       <span
+                        {...(row.en.when !== undefined ? { 'data-testid': 'run-title' } : {})}
                         className="min-w-0 flex-1 truncate"
                         style={{
                           fontSize: 'var(--text-sm)',
@@ -749,6 +767,17 @@ export function CommandPalette({
                         {row.en.group === 'verbs' ? '> ' : ''}
                         {highlight(row.en.label, row.m.positions)}
                       </span>
+                      {/* §7.5 (slice Y2): run rows carry the attach clock. */}
+                      {row.en.when !== undefined && (
+                        <span
+                          data-testid="run-when"
+                          title={WHEN_TITLE}
+                          className="shrink-0 font-mono"
+                          style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
+                        >
+                          {row.en.when}
+                        </span>
+                      )}
                       <span
                         className="shrink-0 font-mono"
                         style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}

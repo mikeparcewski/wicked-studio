@@ -1,5 +1,7 @@
 import type { SessionStatus, SessionView } from '../api/types.js';
+import { useMembershipStore } from '../store/membership.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
+import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 
 interface Props {
   view: SessionView;
@@ -22,9 +24,12 @@ const TITLE_MAX = 35;
 export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactElement {
   const { session, units } = view;
   const isActive = selectedRunId === session.id;
-  const title = session.problem.length > TITLE_MAX
-    ? session.problem.slice(0, TITLE_MAX) + '…'
-    : session.problem;
+  // §7.5 (slice Y2, EC40): the synthesized display title — truncated intent +
+  // short-id + attempt ordinal — so identical prompts never render identical
+  // rows. The short-id moves INTO the title; the meta line gains the attach
+  // clock (the membership mirror — a store read, never a fetch).
+  const title = runTitle(session, TITLE_MAX);
+  const attachedAt = useMembershipStore((s) => s.attachedAtByRun[session.id]);
   const unitCount = units.length;
   const pulse = session.status === 'awaiting_human' || session.status === 'executing'
     || session.status === 'distributing' || session.status === 'planning';
@@ -51,6 +56,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
           {spec.glyph}
         </span>
         <span
+          data-testid="run-title"
           className="flex-1 truncate text-xs leading-tight font-mono"
           style={{ color: isActive ? 'var(--ink-high)' : 'var(--ink-muted)' }}
           title={session.problem}
@@ -63,7 +69,8 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
         />
       </div>
       <p className="text-[10px] mt-0.5 font-mono" style={{ color: 'var(--ink-dim)' }}>
-        {spec.label} · {unitCount} task{unitCount === 1 ? '' : 's'} · {session.id.slice(0, 8)}
+        {spec.label} · {unitCount} task{unitCount === 1 ? '' : 's'} ·{' '}
+        <span data-testid="run-when" title={WHEN_TITLE}>{runWhenWord(attachedAt, Date.now())}</span>
       </p>
     </button>
   );

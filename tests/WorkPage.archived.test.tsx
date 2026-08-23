@@ -52,10 +52,12 @@ describe('WorkPage — Archived chip (crew#265)', () => {
     listRuns.mockResolvedValue({ runs: [live, archived] });
     renderPage();
     await userEvent.click(screen.getByRole('button', { name: /^Archived/ }));
-    await waitFor(() => expect(screen.getByText('campaign leftover')).toBeInTheDocument());
+    // Slice Y2 (DES-UX-001 §7.5): rows render the SYNTHESIZED title —
+    // intent · short-id · #ordinal — so the lookups match on the intent lead.
+    await waitFor(() => expect(screen.getByText(/campaign leftover · old-1/)).toBeInTheDocument());
     expect(listRuns).toHaveBeenCalledWith(true);
     // The live run appears once (its normal group), not duplicated into the archived group.
-    expect(screen.getAllByText('live work')).toHaveLength(1);
+    expect(screen.getAllByText(/live work · live-1/)).toHaveLength(1);
     expect(screen.getByRole('button', { name: /^Archived 1$/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -64,9 +66,9 @@ describe('WorkPage — Archived chip (crew#265)', () => {
     archiveRun.mockResolvedValue({ runId: 'old-1', archived: false });
     renderPage();
     await userEvent.click(screen.getByRole('button', { name: /^Archived/ }));
-    await waitFor(() => expect(screen.getByText('campaign leftover')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/campaign leftover · old-1/)).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'Unarchive' }));
     expect(archiveRun).toHaveBeenCalledWith('old-1', false);
-    await waitFor(() => expect(screen.queryByText('campaign leftover')).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/campaign leftover/)).toBeNull());
   });
 });

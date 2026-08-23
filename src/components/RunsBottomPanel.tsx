@@ -10,6 +10,7 @@ import { useProjectsStore } from '../store/projects.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { prefersReducedMotion } from './LiveEdge.js';
+import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { phaseWord, recentRuns, RUN_DOT } from './RunsSection.js';
 
 /**
@@ -99,6 +100,10 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
   const logs = useRuntimeStore((s) => s.logs);
   const projectNameByRun = useMembershipStore((s) => s.projectNameByRun);
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
+  // §7.5 (slice Y2): the attach clock for the sheet rows — the same mirror the
+  // Make dashboard buckets on. A store read: the §5.1 zero-new-requests budget
+  // holds unchanged.
+  const attachedAtByRun = useMembershipStore((s) => s.attachedAtByRun);
   const projects = useProjectsStore((s) => s.projects);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -335,11 +340,22 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
                     className="w-2 h-2 rounded-full shrink-0"
                     style={{ background: RUN_DOT[view.session.status] ?? 'var(--ink-dim)' }}
                   />
+                  {/* §7.5 (EC40): the synthesized title — identical prompts
+                      never render identical rows — plus the attach clock. */}
                   <span
+                    data-testid="run-title"
                     className="truncate leading-tight"
                     style={{ maxWidth: '48ch', fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-sans)' }}
                   >
-                    {view.session.problem}
+                    {runTitle(view.session)}
+                  </span>
+                  <span
+                    data-testid="run-when"
+                    title={WHEN_TITLE}
+                    className="shrink-0 font-mono"
+                    style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)' }}
+                  >
+                    {runWhenWord(attachedAtByRun[id], Date.now())}
                   </span>
                   <span
                     data-testid="runs-sheet-row-project"
