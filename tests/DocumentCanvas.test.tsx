@@ -416,6 +416,11 @@ describe('DocumentCanvas — canvas-first: drawer + floating strip (DES-FEEDBACK
       act(() => { vi.advanceTimersByTime(3100); });
       expect(strip).toHaveAttribute('data-hidden', 'true');
       expect(strip.style.opacity).toBe('0');
+      // Round-3 J3: hit targets survive the visible fade — pointer events
+      // retire only after STRIP_FADE_GRACE_MS, so a mid-fade click still
+      // lands on the control instead of falling through to the sensor.
+      expect(strip.style.pointerEvents).toBe('auto');
+      act(() => { vi.advanceTimersByTime(400); }); // past the fade grace
       expect(strip.style.pointerEvents).toBe('none');
 
       const sensor = screen.getByTestId('strip-sensor');

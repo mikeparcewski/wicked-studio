@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { postFork } from '../api/interactive.js';
 import type { ForkResult, VersionEntry, VersionManifest } from '../api/interactive.js';
 import { versionPath, type Navigate } from '../hooks/useRoute.js';
@@ -50,8 +50,8 @@ const S = {
  *  §8.4.1), so anchors survive only for what this session observed. */
 const NO_ANCHOR_TITLE =
   'The message that produced this version is not known to this session, so there is '
-  + 'nothing to scroll to. The transcript carries no version anchors (BRIDGE-UX-1) — '
-  + 'they survive for what this session observed; documents created before the merge '
+  + 'nothing to scroll to. The document service does not yet record version anchors '
+  + 'in the transcript — they survive for what this session observed; older documents '
   + 'have no anchor.';
 
 /** Compact, locale-formatted; an unparseable stamp falls back to what the manifest said. */
@@ -166,12 +166,26 @@ export interface VersionStripProps {
   compare?: CompareControl;
 }
 
+/** How long the strip stays CLICKABLE after auto-hide dims it — the fade itself
+ *  (--dur-base, 220ms) plus a beat. Round-3 J3: while the strip is still visibly
+ *  fading, its controls look present; retiring their hit targets at t=0 sent the
+ *  click through to the sensor beneath, where it died silently. */
+export const STRIP_FADE_GRACE_MS = 320;
+
 export function VersionStrip({
   projectId, docId, manifest, selected, navigate, onForked,
   mode = 'document', dimmed = false, onWake, onHold, trailing, compare,
 }: VersionStripProps): React.ReactElement {
   const [forking, setForking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Inert only once the fade has FINISHED: a mid-fade strip is still visible, so
+  // it keeps its hit targets (and a click on it wakes it) for the grace window.
+  const [inert, setInert] = useState(false);
+  useEffect(() => {
+    if (!dimmed) { setInert(false); return; }
+    const timer = setTimeout(() => { setInert(true); }, STRIP_FADE_GRACE_MS);
+    return () => { clearTimeout(timer); };
+  }, [dimmed]);
   // The thread's own version→message tags (§6.1/§6.3): the anchor source that is
   // actually on the wire's side of truth — see anchorOf.
   const msgs = useDocThreadStore((s) => s.messages[threadKey(projectId, docId)] ?? NO_MSGS);
@@ -204,6 +218,9 @@ export function VersionStrip({
       data-testid="version-strip"
       data-hidden={dimmed ? 'true' : 'false'}
       onMouseMove={onWake}
+      // Round-3 J3: a press on a fading (still-clickable) strip is an interaction —
+      // it wakes the strip, so the control under the finger is fully present again.
+      onPointerDown={onWake}
       // The spine's drawn connection (DES-UXFIX-001 §2.6) now speaks the brand
       // accent's subtle tier — connective tissue, not a status signal (§2.5).
       // DES-FEEDBACK-001 §7.3: when dimmed, the strip retires visually AND as a
@@ -213,7 +230,9 @@ export function VersionStrip({
         borderTop: '2px solid var(--accent-subtle)',
         display: 'flex', flexShrink: 0, gap: '8px', padding: '10px 12px',
         opacity: dimmed ? 0 : 1,
-        pointerEvents: dimmed ? 'none' : 'auto',
+        // Hit targets retire only when the strip has actually FADED (round-3 J3):
+        // pointerEvents none at dim-time sent mid-fade clicks to the sensor below.
+        pointerEvents: dimmed && inert ? 'none' : 'auto',
         transition: 'opacity var(--dur-base)',
       }}
     >

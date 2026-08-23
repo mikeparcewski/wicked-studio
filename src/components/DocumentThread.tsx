@@ -21,8 +21,14 @@ import { GENERATING_SILENCE_BUDGET_MS, nextMsgId, threadKey, useDocThreadStore, 
 //              the doc's generation run opens with this message as its first line.
 //   generating → STEER: `wicked.interactive.chat.posted` injects into the live agent.
 //   gated      → ANSWER: the question is answerable in the transcript, where it was asked.
-//   terminal   → CONTINUE: fork + inject as ONE atomic composer action (§7.10). The thread
-//              renders the linked run as a continuation — a version divider, no new header.
+//   terminal   → CONTINUE (§7.10, round-3 contract): a PLAIN send — nothing selected, or
+//              the head selected — is the ask alone (`chat.posted`); the REVISED version
+//              arrives when the answerer lands one, and only then is anything tagged.
+//              The client never mints a version for a plain send: the pre-fix fork-per-send
+//              committed a byte-identical copy before any work existed (the round-2 J3
+//              fabricated-versions finding). Fork survives ONLY for the genuine branch
+//              gesture — sending from an explicitly selected OLDER version — and even
+//              there the "continues as vN" divider stays the deferred wire-proof anchor.
 //
 // There is no dead composer state and no synthetic liveness: no whimsy filler (filtered in
 // the store, §3.2), no `status.requested` heartbeat (never emitted at all).
@@ -502,6 +508,23 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
 
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }); }, [messages.length]);
 
+  // Page teardown flag: a reload/navigation ABORTS every in-flight send fetch,
+  // and that rejection is not a refusal — the bridge usually took the message
+  // (its line is on the wire). Marking it refused here would PERSIST a fabricated
+  // failure into the stopgap for the next load to restore. `pageshow` re-arms
+  // after a bfcache resurrection, where this document lives on.
+  const unloading = useRef(false);
+  useEffect(() => {
+    const hide = (): void => { unloading.current = true; };
+    const show = (): void => { unloading.current = false; };
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
+    return () => {
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+    };
+  }, []);
+
   const gate = state === 'gated'
     ? [...messages].reverse().find((m): m is Extract<DocMsg, { kind: 'gate' }> => m.kind === 'gate') ?? null
     : null;
@@ -547,20 +570,42 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         return;
       }
 
-      // 4 — CONTINUE (§7.10). Fork + inject is ONE composer action: the branch lands, the
-      // divider marks it, and the same message steers the run that continues from it. The
-      // seam is hidden in the UI; underneath it is still two governed runs (§2.4).
+      // 4 — CONTINUE (§7.10, round-3 contract). A PLAIN send (no version selected, or
+      // the head selected) never forks: the ask rides `chat.posted` alone, and the
+      // revised version arrives when the answerer lands one — the round-2 J3 pin
+      // (fork-per-send minted a byte-identical version before any work existed).
+      // Fork remains ONLY the genuine branch gesture: sending from an explicitly
+      // selected OLDER version.
       if (state === 'terminal') {
-        const from = selectedVersion ?? (await getVersions(projectId, docId)).head;
-        const forked = await postFork(projectId, docId, from, msgId);
+        const head = selectedVersion === null
+          ? null
+          : (await getVersions(projectId, docId)).head;
+        const branching = selectedVersion !== null && selectedVersion !== head;
+        if (!branching) {
+          store.addUserMsg(key, msgId, body);
+          store.setGenState(key, 'generating');
+          // §6.1 (EC36): once the message is ON the thread, a refused send fails
+          // THERE — the failed chip with its retry, never a silent transcript row.
+          try {
+            await injectDocMessage(projectId, docId, body, msgId);
+          } catch {
+            failVisibly(msgId);
+          }
+          setText('');
+          // A head-pinned route (?v=head) un-pins so the canvas follows the version
+          // the answer lands; a bare route already follows the head.
+          if (selectedVersion !== null) navigate(versionPath(projectId, docId, null));
+          return;
+        }
+        // The BRANCH gesture: fork from the older selected version, then steer the
+        // run that continues from it — still one composer action (§2.4 underneath).
+        const forked = await postFork(projectId, docId, selectedVersion, msgId);
         // §7.10 + the J3 bookkeeping pin: the "continues as vN" divider is an
         // ANCHOR, so it renders only when the wire shows vN exists — registered
         // here, inserted above this message by the version.created arrival.
         store.expectDivider(key, msgId, forked.version);
         store.addUserMsg(key, msgId, body);
         store.setGenState(key, 'generating');
-        // §6.1 (EC36): once the message is ON the thread, a refused send fails
-        // THERE — the failed chip with its retry, never a silent transcript row.
         try {
           await injectDocMessage(projectId, docId, body, msgId);
         } catch {
@@ -595,11 +640,17 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   }
 
   /** §6.1's visible failure: the message stays on the thread wearing the failed
-   *  chip; the working state retires when nothing else is pending behind it. */
+   *  chip; the working state retires when nothing else is pending behind it.
+   *  `refused: true` — the bridge never accepted the send, so the stopgap must
+   *  persist its text for the failure to survive a reload (round-3 finding 4). */
   function failVisibly(msgId: string): void {
     if (key === null) return;
+    // A rejection during page teardown is the ABORT of the unload, not the
+    // bridge refusing: leave the send exactly as persisted (pending, its own
+    // clock) — the next load's hydrate restores its honest unresolved state.
+    if (unloading.current) return;
     const store = useDocThreadStore.getState();
-    store.markSendFailed(key, msgId);
+    store.markSendFailed(key, msgId, true);
     if ((useDocThreadStore.getState().pending[key] ?? []).length === 0
         && useDocThreadStore.getState().genState[key] === 'generating') {
       store.setGenState(key, 'terminal');
@@ -696,8 +747,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
                        margin: 0, fontFamily: 'var(--font-sans)' }}
             >
               Thread restored from the document’s transcript. Version markers show what
-              this session observed — markers from before this session return when the
-              transcript carries version anchors (BRIDGE-UX-1 §8.4.1).
+              this session observed — markers from before this session return once the
+              document service records which message produced each version.
             </p>
           )}
         {messages.length === 0 && (

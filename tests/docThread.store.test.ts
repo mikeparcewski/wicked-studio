@@ -367,3 +367,132 @@ describe('the signal clock (§6.1 honesty budget)', () => {
     expect(retried !== undefined && retried.kind === 'user' && typeof retried.sentAt).toBe('number');
   });
 });
+
+// ── Round-3 J3: unbound-doc frames key to the Unfiled mount ───────────────────
+
+describe('unbound-doc frames (the round-2 first-generation fix)', () => {
+  it('a doc-naming frame with NO project keys to the Unfiled (default) mount, never dropped', () => {
+    const key = threadKey('default', DOC);
+    ingest({
+      type: 'interactiveEvent',
+      event: {
+        event_type: 'wicked.interactive.version.created',
+        // The real bridge stamps project_id ONLY on bound docs (serviceEmit);
+        // an Unfiled doc's payloads carry none — pre-fix these were dropped,
+        // leaving the open canvas on the v0 placeholder after v1 landed.
+        payload: { document_id: DOC, version: 1, parent: 0, kind: 'generated' },
+      },
+    } as unknown as CoreEvent);
+    expect(useDocThreadStore.getState().landed[key]).toBe(1);
+    expect(useDocThreadStore.getState().lastSignalAt[key]).toBeGreaterThan(0);
+  });
+
+  it('a frame naming no document is still dropped — the fallback never invents a doc', () => {
+    const before = Object.keys(useDocThreadStore.getState().landed).sort();
+    ingest({
+      type: 'interactiveEvent',
+      event: {
+        event_type: 'wicked.interactive.version.created',
+        payload: { version: 1, kind: 'generated' },
+      },
+    } as unknown as CoreEvent);
+    expect(Object.keys(useDocThreadStore.getState().landed).sort()).toEqual(before);
+  });
+});
+
+// ── Round-3 J3 finding 4: unresolved sends survive the reload ─────────────────
+
+describe('send-state persistence (round-3 finding 4)', () => {
+  beforeEach(() => { window.sessionStorage.clear(); });
+
+  it('an accepted-but-unanswered send persists as pending and resumes on hydrate — with its ORIGINAL clock', async () => {
+    const { readSendStates } = await import('../src/interactive/threadStopgap.js');
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, 'dmsg-p1', 'make me a deck');
+    const persisted = readSendStates(KEY);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]).toMatchObject({ ord: 1, state: 'pending' });
+    const sentAt = persisted[0]!.sentAt;
+    expect(sentAt).toBeGreaterThan(0);
+
+    // A fresh session (new store keys) hydrates the wire's text + the stopgap's sends.
+    useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {} });
+    useDocThreadStore.getState().hydrate(
+      KEY, [{ role: 'user', text: 'make me a deck', ts: 't1' }], [], persisted, []);
+    const msgs = messages();
+    expect(msgs[0]).toMatchObject({ kind: 'user', restored: true, sentAt });
+    expect(useDocThreadStore.getState().pending[KEY]).toHaveLength(1);
+    // Unresolved sends mean the thread is still GENERATING — never quietly terminal.
+    expect(useDocThreadStore.getState().genState[KEY]).toBe('generating');
+  });
+
+  it('a landing consumes the persisted pending record', () => {
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, 'dmsg-p2', 'make me a deck');
+    ingest(frame('wicked.interactive.version.created', { version: 1, parent: null, kind: 'generated' }));
+    return import('../src/interactive/threadStopgap.js').then(({ readSendStates }) => {
+      expect(readSendStates(KEY)).toHaveLength(0);
+    });
+  });
+
+  it('a REFUSED send persists its TEXT and re-renders failed (with retry) after hydrate', async () => {
+    const { readSendStates } = await import('../src/interactive/threadStopgap.js');
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, 'dmsg-ok', 'the brief');           // accepted, then answered
+    ingest(frame('wicked.interactive.version.created', { version: 1, parent: null, kind: 'generated' }));
+    store.addUserMsg(KEY, 'dmsg-ref', 'add a closing slide'); // refused by the bridge
+    store.markSendFailed(KEY, 'dmsg-ref', true);
+    const persisted = readSendStates(KEY);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]).toMatchObject({ ord: 1, state: 'failed', text: 'add a closing slide' });
+
+    // The wire holds only the ACCEPTED line; the refused one re-renders from the stopgap.
+    useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {} });
+    useDocThreadStore.getState().hydrate(
+      KEY, [{ role: 'user', text: 'the brief', ts: 't1' }], [{ ord: 1, version: 1 }], persisted, []);
+    const users = messages().filter((m): m is Extract<DocMsg, { kind: 'user' }> => m.kind === 'user');
+    expect(users).toHaveLength(2);
+    expect(users[0]).toMatchObject({ text: 'the brief', version: 1 });
+    expect(users[1]).toMatchObject({ text: 'add a closing slide', failed: true });
+    // Nothing pending — a refused send is failed, not in flight.
+    expect(useDocThreadStore.getState().pending[KEY] ?? []).toHaveLength(0);
+  });
+
+  it('the wire outranks a stale refusal: a "refused" send the wire ACCEPTED restores as ONE pending message', () => {
+    // The reload-teardown shape: the in-flight fetch was aborted by the unload,
+    // the catch persisted a refusal — but the bridge took the message (its line
+    // is on the wire). Hydrate must not render a duplicated, fabricated failure:
+    // the send restores from the wire line, PENDING, on its original clock.
+    const stale = [{ ord: 1, state: 'failed' as const, sentAt: 12345, text: 'add a roadmap slide' }];
+    useDocThreadStore.getState().hydrate(
+      KEY,
+      [{ role: 'user', text: 'the brief', ts: 't1' },
+       { role: 'user', text: 'add a roadmap slide', ts: 't2' }],
+      [{ ord: 1, version: 1 }], stale, []);
+    const users = messages().filter((m): m is Extract<DocMsg, { kind: 'user' }> => m.kind === 'user');
+    expect(users).toHaveLength(2); // no duplicate refused copy
+    expect(users[1]).toMatchObject({ text: 'add a roadmap slide', sentAt: 12345 });
+    expect(users[1]?.failed).not.toBe(true);
+    // Accepted and still unanswered ⇒ pending, and the thread is generating.
+    expect(useDocThreadStore.getState().pending[KEY] ?? []).toHaveLength(1);
+    expect(useDocThreadStore.getState().genState[KEY]).toBe('generating');
+  });
+
+  it('an export entry persists and is restored at the transcript tail', () => {
+    ingest(frame('wicked.interactive.export.generated', {
+      format: 'pdf', file: 'deck_v1.pdf', download: '/d/launch-deck/api/export/file/deck_v1.pdf',
+    }));
+    return import('../src/interactive/threadStopgap.js').then(({ readExports }) => {
+      const stored = readExports(KEY);
+      expect(stored).toHaveLength(1);
+      useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {} });
+      useDocThreadStore.getState().hydrate(
+        KEY, [{ role: 'user', text: 'the brief', ts: 't1' }], [], [], stored);
+      const tail = messages()[messages().length - 1];
+      expect(tail).toMatchObject({
+        kind: 'agent', author: 'export',
+        href: '/d/launch-deck/api/export/file/deck_v1.pdf', file: 'deck_v1.pdf',
+      });
+    });
+  });
+});

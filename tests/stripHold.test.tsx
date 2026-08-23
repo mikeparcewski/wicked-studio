@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { ExportMenu } from '../src/components/ExportMenu.js';
 import { STRIP_IDLE_MS, useStripAutoHide } from '../src/components/ThreadDrawer.js';
+import { useExportAnswers } from '../src/store/exportAnswers.js';
 
 const postExport = vi.fn();
 
@@ -26,6 +27,7 @@ vi.mock('../src/api/interactive.js', () => ({
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
+  useExportAnswers.getState().clear();
 });
 
 afterEach(() => {
@@ -61,7 +63,7 @@ describe('useStripAutoHide — the hold contract', () => {
 });
 
 describe('ExportMenu — holds its host while it owes (or shows) an answer', () => {
-  it('holds through pending AND the un-acted READY answer; a version change releases', async () => {
+  it('holds through pending, the un-acted READY answer, and a version change; ACTING releases', async () => {
     const onHold = vi.fn();
     let resolveExport: (v: unknown) => void = () => {};
     postExport.mockImplementation(() => new Promise((res) => { resolveExport = res; }));
@@ -83,8 +85,17 @@ describe('ExportMenu — holds its host while it owes (or shows) an answer', () 
     const calls = onHold.mock.calls.map((c) => c[0]);
     expect(calls.filter((v) => v === true).length - calls.filter((v) => v === false).length).toBe(1);
 
-    // Addressing another version retires the answer — the hold releases with it.
+    // Round-3 J3: addressing another version must NOT release the hold — the round-2
+    // finding was exactly this wipe (a head-follow landing re-addressed the menu and
+    // the un-acted answer, the only visible copy with the drawer closed, vanished).
     rerender(<ExportMenu projectId="p1" docId="roadmap" version={2} onHold={onHold} />);
+    const ready = screen.getByTestId('export-ready');
+    expect(ready).toHaveAttribute('data-version', '3');
+    const mid = onHold.mock.calls.map((c) => c[0]);
+    expect(mid.filter((v) => v === true).length - mid.filter((v) => v === false).length).toBe(1);
+
+    // ACTING on the answer (the download click) is what releases the hold.
+    act(() => { ready.click(); });
     const after = onHold.mock.calls.map((c) => c[0]);
     expect(after.filter((v) => v === true).length).toBe(after.filter((v) => v === false).length);
   });

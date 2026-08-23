@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getConversation, getVersions, interactiveDocUrl, listDocs } from '../api/interactive.js';
-import { readAnchors } from '../interactive/threadStopgap.js';
+import { readAnchors, readExports, readSendStates } from '../interactive/threadStopgap.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
@@ -199,7 +199,13 @@ function DocFrame({
   // guarantees a wid survives WITHIN a document's lineage, not that rects do).
   const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
   const [loadNonce, setLoadNonce] = useState(0);
-  useEffect(() => { setLoaded(false); }, [projectId, docId, version]);
+  // The RESOLVED version, computed before the hooks so the loading overlay is
+  // keyed to what the frame actually shows. Keying on the routed `version` prop
+  // missed every head-follow swap (routed null, head advanced on a landing): the
+  // remounted iframe painted blank with no named loading state — and the reverse
+  // race left a stale "Loading" overlay over an already-loaded frame.
+  const resolvedShown = manifest === null ? null : resolveVersion(manifest, version);
+  useEffect(() => { setLoaded(false); }, [projectId, docId, resolvedShown]);
   // §7.3's strip presence: visible now, gone after 3s of idleness, back on proximity.
   // `hold` (J3): a strip control holding an un-acted answer pins it visible.
   const { hidden, wake, hold } = useStripAutoHide();
@@ -516,10 +522,17 @@ export function DocumentCanvas({
     let cancelled = false;
     getConversation(projectId, docId)
       .then((entries) => {
-        if (!cancelled) useDocThreadStore.getState().hydrate(key, entries, readAnchors(key));
+        if (!cancelled) {
+          // Anchors, unresolved sends and export entries all ride the same
+          // session stopgap (round-3 J3 finding 4 + the export-persistence minor).
+          useDocThreadStore.getState().hydrate(
+            key, entries, readAnchors(key), readSendStates(key), readExports(key));
+        }
       })
       .catch(() => {
-        if (!cancelled) useDocThreadStore.getState().hydrate(key, [], []);
+        if (!cancelled) {
+          useDocThreadStore.getState().hydrate(key, [], [], readSendStates(key), readExports(key));
+        }
       });
     return () => { cancelled = true; };
   }, [projectId, docId]);

@@ -10,6 +10,7 @@ import { ProjectCard } from '../src/components/ProjectCard.js';
 import { VersionStrip } from '../src/components/VersionStrip.js';
 import type { BoardProject } from '../src/hooks/useBoardModel.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
+import { useExportAnswers } from '../src/store/exportAnswers.js';
 
 const postExport = vi.fn();
 const postFork = vi.fn();
@@ -97,6 +98,7 @@ async function press(format: string, scope?: HTMLElement): Promise<void> {
 beforeEach(() => {
   vi.clearAllMocks();
   useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
+  useExportAnswers.getState().clear();
   postExport.mockResolvedValue(reply('roadmap_v3.pdf'));
 });
 afterEach(cleanup);
@@ -151,7 +153,7 @@ describe('the version strip exports the SELECTED version (§4.4, §4.2)', () => 
     expect(screen.getAllByTestId('export-format')).toHaveLength(2);
   });
 
-  it('§7.2: a new version selection retires the previous READY answer', async () => {
+  it('round-3 J3: a new version selection KEEPS the un-acted READY answer, wearing its own version', async () => {
     const { rerender } = render(
       <VersionStrip projectId={PROJECT} docId={DOC} manifest={MANIFEST}
                     selected={3} navigate={() => {}} onForked={() => {}} />,
@@ -163,9 +165,18 @@ describe('the version strip exports the SELECTED version (§4.4, §4.2)', () => 
       <VersionStrip projectId={PROJECT} docId={DOC} manifest={MANIFEST}
                     selected={2} navigate={() => {}} onForked={() => {}} />,
     );
-    // A v3 artifact link must not sit under an "Export v2" label.
-    expect(screen.queryByTestId('export-ready')).toBeNull();
+    // The round-2 finding: selection moves (incl. head-follow landings) wiped the
+    // un-acted answer — with the drawer closed it then lived NOWHERE. It stays at
+    // the click site now, labeled with ITS version, so the old §7.2 mislabel rule
+    // still holds: a v3 artifact never sits under a bare "Export v2" label.
+    const ready = screen.getByTestId('export-ready');
+    expect(ready).toHaveAttribute('data-version', '3');
+    expect(ready).toHaveTextContent('v3');
+    // All three formats are offered for the NEWLY addressed version beside it.
     expect(screen.getAllByTestId('export-format')).toHaveLength(3);
+    // Acting on the answer (the download click) is what retires it.
+    await userEvent.setup().click(ready);
+    expect(screen.queryByTestId('export-ready')).toBeNull();
   });
 });
 

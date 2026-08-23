@@ -151,15 +151,23 @@ with sync_playwright() as p:
     page.locator('[data-testid="version-entry"][data-version="1"]').wait_for(timeout=30000)
     page.locator('[data-testid="thread"][data-composer-state="terminal"]').wait_for(timeout=30000)
 
-    # ── Scene B: continue — one composer action, v2 lands, everything advances ────
+    # ── Scene B: continue — ONE plain send, the ANSWERER lands v2, everything ─────
+    # advances (round-3 J3 re-scope: a plain continue-send no longer forks — the
+    # revised version arrives from the service, and NO continuation divider renders;
+    # the divider is the explicit-branch gesture's anchor, which this journey never
+    # makes).
     page.locator('[data-testid="doc-composer"]').fill("Tighten this headline")
     page.keyboard.press("Enter")
-    page.locator('[data-testid="version-divider"][data-version="2"]').wait_for(timeout=30000)
     page.locator('[data-testid="version-marker"][data-version="2"]').wait_for(timeout=30000)
     page.locator('[data-testid="version-entry"][data-version="2"][data-selected="true"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas"][data-version="2"]').wait_for(timeout=30000)
     # The canvas is LOADED (its named loading state has retired) before any capture.
     page.locator('[data-testid="doc-canvas-loading"]').wait_for(state="detached", timeout=30000)
+    no_divider = page.evaluate(
+        "() => document.querySelectorAll('[data-testid=\"version-divider\"]').length")
+    report["steps"]["slice6_plain_send_no_divider"] = {
+        "ok": no_divider == 0, "dividers": no_divider,
+    }
 
     # AC 1 — the spine, in the §7.3 canvas-first geometry: the strip floats INSIDE
     # the canvas container over its bottom edge; the canvas and the OPEN thread
@@ -373,16 +381,16 @@ with sync_playwright() as p:
         "spa_requests_to_the_target": ssrf_outbound,
     }
 
-    # ── The wire, as the tap saw it: create carried the anchor; fork carried the
-    # second anchor and branched from v1; the steer rode the inject event. ────────
+    # ── The wire, as the tap saw it (round-3 J3 re-scope): create carried the
+    # anchor; the continue rode the inject event ALONE — NO fork on a plain send
+    # (the pre-fix fork-per-send minted a byte-identical version before any work). ─
     creates = [b for (_m, q, b) in net if q.endswith("/interactive/api/docs")]
     forks = [b for (_m, q, b) in net if q.endswith("/api/fork")]
     events = [b for (_m, q, b) in net if q.endswith("/api/events")]
     report["steps"]["slice6_wire"] = {
         "ok": all([
             len(creates) == 1, bool((creates[0] or {}).get("source_message_id")),
-            len(forks) == 1, (forks[0] or {}).get("from") == 1,
-            bool((forks[0] or {}).get("source_message_id")),
+            len(forks) == 0,
             any((e or {}).get("event_type") == "wicked.interactive.chat.posted" for e in events),
         ]),
         "create_bodies": creates, "fork_bodies": forks, "event_types":

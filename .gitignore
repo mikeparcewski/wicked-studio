@@ -14,3 +14,4 @@ e2e/shots/
 # Scratch the run harness and the e2e gate write inside the checkout, never source.
 tmp/
 __pycache__/
+dist-realhost/
