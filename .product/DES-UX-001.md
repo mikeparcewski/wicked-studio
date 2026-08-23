@@ -776,6 +776,65 @@ recorded in the doc as the decision for its dependent slice; where a probe revea
 genuine bridge gap the operator decides whether wicked-interactive grows the surface
 (a new brief item, not silently assumed here). ~150 LOC of probes + spec notes.
 
+#### 8.4.1 Probe outcomes (BRIDGE-UX-1, recorded 2026-08-22)
+
+Probes landed in `e2e/interactive_wire_contract_test.py` §7 (`bridge_ux1_probe*` steps),
+run green against the real bridge (wicked-interactive @ `1cb2479`, 2026-08-21) with the
+bridge's crew lookups pinned to a dead port for hermeticity. Every pin is FATAL both ways:
+a surface a pin says is absent that starts answering fails the rig with adopt-first
+instructions — the pins are the machine half of this record.
+
+1. **Mid-run sends (→ B1, slice T): the bridge QUEUES — sends are never dropped and never
+   rejected.** A `chat.posted` fired while a command materializes on the doc FIFO answers
+   `200 {ok, event_id, correlation_id}` — the accept gate is run-state-independent (no
+   busy-reject exists anywhere on the wire) — and the send lands durably in the transcript
+   in send order (the bus is the queue). **Decision fixed:** T ships
+   "queued-behind-current-run" as the honest state; the visible-reject fallback is dead.
+   The wire carries no queue-position ack, so the queued rendering is client-side. Pinned
+   gap: `version.created`'s payload is `{version, parent, kind, html_file, document_id,
+   ts}` — **no `source_message_id`** (the client sends one; the bridge drops it, and the
+   `interactive.ts` comment claiming "the bridge writes meta.sourceMessageId at commit" is
+   aspirational, not wire truth). §6.1's mandatory version anchor therefore stays a
+   client-side correlation. Operator decision required only if server-side anchoring is
+   wanted: wicked-interactive would need to echo the causing message id on
+   `version.created`.
+
+2. **Thread-history read (→ B3, slice T): a REAL read surface EXISTS, with partial
+   fidelity.** `GET /d/:doc/api/conversation` returns the doc's announce history (user
+   chat + agent narration including error states) from disk (`conversation.jsonl`) and
+   survives a **full bridge restart** — not merely an SSE reconnect. Fidelity pinned:
+   entries are `{role, text, ts[, state]}` only — `source_message_id` is dropped at
+   append, and `version.created` never enters the transcript. **Decision fixed:** T's
+   full-persistence layer rehydrates the TEXT thread from `/api/conversation` on mount
+   (the stopgap's "messages from before this session" promise is servable now); version
+   anchors still rehydrate only from the session-storage stopgap. Operator decision
+   required for anchor-complete history: wicked-interactive would need message ids and/or
+   version markers in the transcript (or a version→message correlation on the manifest).
+
+3. **Unfiled docs (→ B2, slice U): make-Unfiled-work is VIABLE — the primary reading
+   holds.** `POST /api/docs` with no `project` field creates, mounts, serves, and lists a
+   project-unbound doc; crew's proxy synthesizes the `default` project's interactive
+   mount by design (`proxy-routes.ts` `rootFor()` skips the existence check for
+   `default`), so the picker's Unfiled can route there and create the doc unbound. A
+   refused bind (crew unreachable) is a loud 502 with **nothing created** (the doc 404s
+   afterward). Caveats recorded, not assumed: the bridge's own crew-projects picker proxy
+   filters `default` OUT of its list (`server.js` `/api/crew/projects`) — U must not
+   source the Unfiled row from that picker; and end-to-end creation THROUGH crew's
+   default mount was not driven by this rig (crew is outside its process) — slice U's own
+   rig verifies that hop at slice time.
+
+4. **Per-seat mid-stream lifecycle (→ C6, slice AB): DOES NOT EXIST on this wire.** Seat
+   identity appears nowhere in the vocabulary (`wicked.interactive.seat.*` → 400 unknown
+   type); the lifecycle types that do exist (`status.posted`, `error.raised`) are
+   agent/service-owned (UI forge → 403). A real mid-stream death (theme materializer
+   dying on an absent file) emits exactly one **doc-scoped** `status.posted
+   {state:"error", message}` — SSE-relayed and narrated into the transcript — with no
+   seat/turn fields. **Decision fixed:** AB's failed-with-reason ships scoped to
+   open-time seat results (`POST /chats`) plus doc-scoped error narration; live per-seat
+   "failed-with-reason" is a genuine gap — operator decision required: wicked-interactive
+   (or crew's chat surface, whichever owns the seat fan-out) would need per-seat
+   lifecycle frames before AB may promise it.
+
 ---
 
 ## 9 Supersession & reconciliation — what this round touches on the existing frame
