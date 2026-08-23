@@ -25,8 +25,10 @@ export function Modal({ title, onClose, children }: Props): React.ReactElement {
       if (useLayerStore.getState().shortcutOverlayOpen) return; // overlay closes first
       onClose();
     }
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    // CAPTURE phase: an embedded widget (xterm cancels the keydown it handles)
+    // must not be able to eat the contract — Escape closes the modal, always.
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>

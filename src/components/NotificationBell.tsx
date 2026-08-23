@@ -170,6 +170,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
       {/* Dropdown */}
       {open && (
         <div
+          data-testid="bell-popover"
           role="menu"
           aria-label="Notifications"
           style={{
