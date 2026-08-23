@@ -278,8 +278,12 @@ describe('the ▤ v<N> landed tag — the thread half of the doc↔canvas↔thre
     landVersion(7);
     mount(DOC);
 
-    const tag = screen.getByTestId('thread-version-tag');
+    const tag = screen.getByTestId('version-marker');
     expect(tag).toHaveAttribute('data-version', '7');
+    // DES-UX-001 §6.1 (EC36): the marker names its CAUSING message — and it renders
+    // on that message, so a marker under an unrelated request is structurally
+    // impossible.
+    expect(tag).toHaveAttribute('data-caused-by', 'dmsg-anchor');
     // The tag is the wireframe's literal words — legible, not attribute-only (EC9).
     expect(tag).toHaveTextContent('▤ v7 landed');
   });
@@ -288,7 +292,7 @@ describe('the ▤ v<N> landed tag — the thread half of the doc↔canvas↔thre
     landVersion(7);
     mount(DOC);
 
-    await userEvent.click(screen.getByTestId('thread-version-tag'));
+    await userEvent.click(screen.getByTestId('version-marker'));
     // The same `?v=N` route the strip selects by: the canvas swaps, the strip entry
     // highlights, and Back rewinds the move — a navigation, never local state.
     expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/${DOC}?v=7`);
@@ -299,6 +303,6 @@ describe('the ▤ v<N> landed tag — the thread half of the doc↔canvas↔thre
     mount(DOC);
 
     expect(screen.getByTestId('doc-message')).not.toHaveAttribute('data-version');
-    expect(screen.queryByTestId('thread-version-tag')).toBeNull();
+    expect(screen.queryByTestId('version-marker')).toBeNull();
   });
 });

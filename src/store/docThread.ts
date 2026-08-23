@@ -367,9 +367,10 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
             { projectId: key.slice(0, key.indexOf(':')), version, kind, at: Date.now() },
           ].slice(-LANDINGS_CAP),
           // Terminal only when nothing is queued behind the landing (§6.1): a
-          // queued send means the bridge is still working the thread's backlog.
-          genState: generated && queue.length <= 1
-            ? { ...s.genState, [key]: 'terminal' }
+          // queued send means the bridge is still working the thread's backlog,
+          // so the thread stays (or becomes) GENERATING until the queue drains.
+          genState: generated
+            ? { ...s.genState, [key]: queue.length <= 1 ? 'terminal' : 'generating' }
             : s.genState,
         };
       }

@@ -165,15 +165,27 @@ describe('version anchors (§7.6, client half)', () => {
     expect(messages()[0]).toMatchObject({ kind: 'user', id, version: 7 });
   });
 
-  it('tags the LAST user message before generation started, not an earlier one', () => {
+  // Re-scoped by DES-UX-001 slice T (§6.1 + §8.4.1 probe 1): the bridge QUEUES —
+  // sends land durably in send order — and `version.created` carries no
+  // source_message_id, so the anchor is an ORDER correlation: the oldest pending
+  // send is what the next generated version answers, never the newest.
+  it('correlates landings to sends FIFO: the OLDEST pending send is tagged first', () => {
     const first = nextMsgId();
     useDocThreadStore.getState().addUserMsg(KEY, first, 'first ask');
     const second = nextMsgId();
-    useDocThreadStore.getState().addUserMsg(KEY, second, 'actually, do this instead');
+    useDocThreadStore.getState().addUserMsg(KEY, second, 'and then this');
     ingest(frame('wicked.interactive.version.created', { version: 2, parent: 1, kind: 'generated' }));
-    const tagged = messages().filter((m) => m.kind === 'user' && m.version !== undefined);
+    let tagged = messages().filter((m) => m.kind === 'user' && m.version !== undefined);
     expect(tagged).toHaveLength(1);
-    expect(tagged[0]).toMatchObject({ id: second, version: 2 });
+    expect(tagged[0]).toMatchObject({ id: first, version: 2 });
+    // The queue is still working the second send, so the thread is not terminal…
+    expect(state()).toBe('generating');
+    // …and the NEXT landing answers it.
+    ingest(frame('wicked.interactive.version.created', { version: 3, parent: 2, kind: 'generated' }));
+    tagged = messages().filter((m) => m.kind === 'user' && m.version !== undefined);
+    expect(tagged).toHaveLength(2);
+    expect(tagged[1]).toMatchObject({ id: second, version: 3 });
+    expect(state()).toBe('terminal');
   });
 
   it('a fork version tags the message but leaves it anchored for the generation to come', () => {
@@ -188,5 +200,101 @@ describe('version anchors (§7.6, client half)', () => {
   it('a version with no message behind it tags nothing and throws nothing', () => {
     ingest(frame('wicked.interactive.version.created', { version: 2, parent: 1, kind: 'generated' }));
     expect(messages()).toEqual([]);
+  });
+});
+
+// ── DES-UX-001 slice T (§6.1): the send lifecycle — every send resolves visibly ──
+
+describe('send lifecycle (§6.1, EC36)', () => {
+  it('a refused send leaves the pending queue and wears the failed flag', () => {
+    const store = useDocThreadStore.getState();
+    const a = nextMsgId();
+    const b = nextMsgId();
+    store.addUserMsg(KEY, a, 'first');
+    store.addUserMsg(KEY, b, 'second');
+    store.markSendFailed(KEY, a);
+    expect(useDocThreadStore.getState().pending[KEY]).toEqual([b]);
+    expect(messages()[0]).toMatchObject({ id: a, failed: true });
+    // A later landing answers the SURVIVING send, never the failed one.
+    ingest(frame('wicked.interactive.version.created', { version: 2, parent: 1, kind: 'generated' }));
+    expect(messages()[0]).not.toHaveProperty('version');
+    expect(messages()[1]).toMatchObject({ id: b, version: 2 });
+  });
+
+  it('a retry re-enqueues at the TAIL — a new send in queue order', () => {
+    const store = useDocThreadStore.getState();
+    const a = nextMsgId();
+    const b = nextMsgId();
+    store.addUserMsg(KEY, a, 'first');
+    store.addUserMsg(KEY, b, 'second');
+    store.markSendFailed(KEY, a);
+    store.retrySend(KEY, a);
+    expect(useDocThreadStore.getState().pending[KEY]).toEqual([b, a]);
+    expect(messages()[0]).toMatchObject({ id: a, failed: false });
+  });
+
+  it('a run death fails its whole backlog visibly — no chip generates forever', () => {
+    const store = useDocThreadStore.getState();
+    const a = nextMsgId();
+    const b = nextMsgId();
+    store.addUserMsg(KEY, a, 'first');
+    store.addUserMsg(KEY, b, 'second');
+    ingest(frame('wicked.interactive.status.posted', { state: 'error', message: 'theme file not found' }));
+    expect(useDocThreadStore.getState().pending[KEY]).toEqual([]);
+    const users = messages().filter((m) => m.kind === 'user');
+    expect(users[0]).toMatchObject({ id: a, failed: true });
+    expect(users[1]).toMatchObject({ id: b, failed: true });
+    expect(state()).toBe('terminal');
+  });
+});
+
+// ── DES-UX-001 slice T (§6.3): rehydration from GET /d/:doc/api/conversation ──
+
+describe('rehydration (§6.3, BRIDGE-UX-1 probe 2)', () => {
+  it('restores user text and agent narration in wire order, anchors by ordinal', () => {
+    useDocThreadStore.getState().hydrate(KEY, [
+      { role: 'user', text: 'a deck for the Q3 review', ts: 1 },
+      { role: 'agent', text: 'Planning the deck — outline first.', ts: 2 },
+      { role: 'user', text: 'tighten the headline', ts: 3 },
+      { role: 'agent', text: 'Something broke', ts: 4, state: 'error' },
+    ], [{ ord: 1, version: 1 }]);
+    const restored = messages();
+    expect(restored.map((m) => m.kind)).toEqual(['user', 'narration', 'user', 'narration']);
+    // The 1st user message wears the session-observed anchor; the 2nd has the
+    // honest gap — the wire carries no version anchors (§8.4.1).
+    expect(restored[0]).toMatchObject({ text: 'a deck for the Q3 review', version: 1, restored: true });
+    expect(restored[2]).not.toHaveProperty('version');
+    expect(useDocThreadStore.getState().hydrated[KEY]).toBe(true);
+  });
+
+  it('never doubles a live projection, and runs once per thread', () => {
+    useDocThreadStore.getState().addUserMsg(KEY, nextMsgId(), 'live message');
+    useDocThreadStore.getState().hydrate(KEY, [{ role: 'user', text: 'from the wire' }], []);
+    expect(messages()).toHaveLength(1);
+    expect(useDocThreadStore.getState().hydrated[KEY]).toBe(true);
+    // A second hydrate is a no-op even against an empty-ish store slot.
+    useDocThreadStore.getState().hydrate(KEY, [{ role: 'user', text: 'again' }], []);
+    expect(messages()).toHaveLength(1);
+  });
+
+  it('drops filler narration at the same seam live frames cross (§3.2)', () => {
+    useDocThreadStore.getState().hydrate(KEY, [
+      { role: 'agent', text: 'Reticulating splines…' },
+      { role: 'agent', text: 'Rewriting slide 3' },
+    ], []);
+    expect(texts()).toEqual(['Rewriting slide 3']);
+  });
+});
+
+// ── DES-UX-001 slice T (§6.3): the session-storage anchor stopgap ──
+
+describe('anchor stopgap (threadStopgap)', () => {
+  it('a landed version records its user-message ordinal, readable back', async () => {
+    const { readAnchors } = await import('../src/interactive/threadStopgap.js');
+    window.sessionStorage.clear();
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, nextMsgId(), 'the ask');
+    ingest(frame('wicked.interactive.version.created', { version: 1, parent: null, kind: 'generated' }));
+    expect(readAnchors(KEY)).toEqual([{ ord: 1, version: 1 }]);
   });
 });

@@ -139,7 +139,7 @@ describe('DocumentThread — the §5.5 tokens', () => {
 
   it('the version tag is history: --status-done ink on a --radius-sm badge', () => {
     mountWithVersionTag();
-    const tag = screen.getByTestId('thread-version-tag');
+    const tag = screen.getByTestId('version-marker');
     expect(tag).toHaveTextContent('▤ v1 landed');
     expect(tag.style.color).toBe('var(--status-done)');
     expect(tag.style.borderRadius).toBe('var(--radius-sm)');
