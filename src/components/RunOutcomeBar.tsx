@@ -157,7 +157,7 @@ export function RunOutcomeBar({
           data-testid="outcome-unplaced-note"
           style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
         >
-          excludes {unplaced} undated run{unplaced === 1 ? '' : 's'}
+          excludes {unplaced} run{unplaced === 1 ? '' : 's'} with no clock in this window
         </p>
       )}
     </MetricTile>

@@ -121,7 +121,7 @@ describe('RunOutcomeBar (§2.1 — "Is the system healthy right now?")', () => {
       />,
     );
     expect(screen.getByTestId('outcome-unplaced-note').textContent)
-      .toBe('excludes 1 undated run');
+      .toBe('excludes 1 run with no clock in this window');
   });
 });
 
