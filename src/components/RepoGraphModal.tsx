@@ -779,6 +779,11 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                   >
                     {annotating ? 'Starting…' : 'Run annotation workflow →'}
                   </button>
+                  {/* §7.8 (slice AC, EC43): the named action's blast radius. */}
+                  <p data-testid="action-preview" className="text-[10px] font-mono" style={{ color: T.faint }}>
+                    launches the annotation workflow as a governed run — writes behavior
+                    annotations into this repo's domain model; typically minutes
+                  </p>
                   {annotateError && (
                     <p className="text-[11px] font-mono" style={{ color: T.deny }}>{annotateError}</p>
                   )}

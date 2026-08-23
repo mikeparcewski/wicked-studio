@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { EntityMode, LaunchRunBody, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
+import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { useGateStore } from '../store/gates.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill } from '../store/retryPrefill.js';
@@ -69,12 +70,16 @@ function detectWorkflow(text: string): string | null {
 function ActivePill({
   label,
   onClear,
+  attrs,
 }: {
   label: string;
   onClear: () => void;
+  /** Extra data-* attributes (the §7.8 repo chip's auto-attached marker). */
+  attrs?: Record<string, string>;
 }): React.ReactElement {
   return (
     <span
+      {...attrs}
       className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-mono"
       style={{
         background: 'var(--surface-raised)',
@@ -144,10 +149,38 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [repoRefs, setRepoRefs] = useState<string[]>(prefill?.repoRef ? [prefill.repoRef] : []);
   const [entityMode, setEntityMode] = useState<EntityMode>(prefill?.entityMode ?? 'shared');
+  // Gate posture (DES-UX-001 §7.8 + §13, slice AC): the shipped default is
+  // COMPOSER_DEFAULT_GATE_POSTURE (human_confirm before the first gate-bearing
+  // unit — no longer "none"); a retry prefill still reproduces the ORIGINAL
+  // run's posture, whatever it was (§4.3 — the prefill is the original).
   const prefillGate = confirmModeOf(prefill?.humanConfirm);
-  const [confirmMode, setConfirmMode] = useState<ConfirmMode>(prefillGate.mode);
-  const [beforeOrd, setBeforeOrd] = useState(prefillGate.beforeOrd);
+  const [confirmMode, setConfirmMode] = useState<ConfirmMode>(
+    prefill !== null ? prefillGate.mode : COMPOSER_DEFAULT_GATE_POSTURE.mode,
+  );
+  const [beforeOrd, setBeforeOrd] = useState(
+    prefill !== null ? prefillGate.beforeOrd : COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd,
+  );
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+
+  // ── Preflight (DES-UX-001 §7.8, EC43, slice AC) ────────────────────────────
+  // A code-shaped intent with no repo attached warns-and-blocks: zero POST
+  // /runs until the operator attaches one or explicitly overrides.
+  const [preflightBlocked, setPreflightBlocked] = useState(false);
+
+  // Auto-attach (§7.8): a project's bound repo (`crew.repo` membership) rides
+  // the launch by default — visibly, as a removable chip (auto is a default,
+  // not a lock). `reposTouched` = the operator has spoken; auto never wins.
+  const [autoAttached, setAutoAttached] = useState(false);
+  const reposTouched = useRef(prefill?.repoRef != null);
+  const repoRefsRef = useRef(repoRefs);
+  repoRefsRef.current = repoRefs;
+  const autoTriedFor = useRef<string | null>(null);
+
+  function touchRepoRefs(refs: string[]): void {
+    reposTouched.current = true;
+    setAutoAttached(false);
+    setRepoRefs(refs);
+  }
 
   // ── Project binding (DES-FEEDBACK-001 §5, slice B) ─────────────────────────
   // `null` = Unfiled (§5.1): no `projectId` key in the POST body, the backend
@@ -232,6 +265,34 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // (loadProjects is ref-guarded and single-shot, so listing only the lock is safe.)
   }, [lockedProjectId, prefill]);
 
+  // §7.8 auto-attach: entering the composer bound to a project reads that
+  // project's members once (the same wire ProjectDashboard already reads) and
+  // attaches its `crew.repo` refs — only while the operator hasn't touched the
+  // repo selection, and never over an existing selection or a retry prefill.
+  useEffect(() => {
+    if (runId) return; // launch form only — steer/inject composers never attach
+    const pid = lockedProjectId ?? selectedProjectId;
+    if (pid == null || pid === 'default') return;
+    if (reposTouched.current || autoTriedFor.current === pid) return;
+    autoTriedFor.current = pid;
+    let cancelled = false;
+    api
+      .listProjectMembers(pid)
+      .then(({ members }) => {
+        if (cancelled || reposTouched.current || repoRefsRef.current.length > 0) return;
+        const refs = members.filter((m) => m.member_kind === 'crew.repo').map((m) => m.member_ref);
+        if (refs.length === 0) return;
+        setRepoRefs(refs);
+        setAutoAttached(true);
+      })
+      .catch(() => {
+        autoTriedFor.current = null; // transient — retry on the next binding change
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, lockedProjectId, selectedProjectId]);
+
   // ── Elapsed-time ticker ────────────────────────────────────────────────────
   useEffect(() => {
     if (submitting) {
@@ -312,8 +373,18 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
-  async function submit(): Promise<void> {
+  async function submit(preflightOverride = false): Promise<void> {
     if (!problem.trim() || selectedClis.size === 0 || submitting) return;
+    // §7.8 preflight (EC43): a code-shaped intent — an explicit workflow, or
+    // the detector reading one from the text — launched with no repo attached
+    // cannot produce reviewable work. Warn-and-block: ZERO POST /runs until a
+    // repo attaches or the operator overrides ("Launch anyway").
+    const codeShaped = Boolean(workflowOverride?.trim() || workflow || detectWorkflow(problem));
+    if (!preflightOverride && codeShaped && repoRefs.length === 0) {
+      setPreflightBlocked(true);
+      return;
+    }
+    setPreflightBlocked(false);
     setSubmitting(true);
     setError(null);
 
@@ -589,7 +660,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     [...selectedClis].some((k) => !defaultCliSet.has(k));
 
   // Collect active non-default option pills
-  const activePills: Array<{ label: string; onClear: () => void }> = [];
+  const activePills: Array<{ label: string; onClear: () => void; attrs?: Record<string, string> }> = [];
 
   // The lineage claim leads the pills (§4.3): visible, and clearable — a retry
   // is a composer prefill the operator may edit down to a fresh launch.
@@ -629,8 +700,15 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   for (const rid of repoRefs) {
     const found = repos.find((r) => r.id === rid);
     activePills.push({
-      label: `Repo: ${found?.name ?? rid}`,
-      onClear: () => setRepoRefs((prev) => prev.filter((id) => id !== rid)),
+      label: `Repo: ${found?.name ?? rid}${autoAttached ? ' (from project)' : ''}`,
+      // Removing an auto-attached chip is the operator speaking (§7.8: auto is
+      // a default, not a lock) — auto never re-attaches afterwards.
+      onClear: () => touchRepoRefs(repoRefs.filter((id) => id !== rid)),
+      attrs: {
+        'data-testid': 'repo-chip',
+        'data-repo-ref': rid,
+        'data-auto-attached': autoAttached ? 'true' : 'false',
+      },
     });
   }
   if (clisDirty && roster.length > 0) {
@@ -671,6 +749,33 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           // Docked (non-embedded) forms sit at the pane's bottom edge — open up.
           dropUp={!embedded}
         />
+
+        {/* ── Gate posture at top level (§7.8, slice AC) — the + drawer keeps
+            the full matrix; this is the always-visible control whose shipped
+            default is COMPOSER_DEFAULT_GATE_POSTURE (never "none"). ── */}
+        <span
+          className="text-[11px] font-mono uppercase tracking-widest ml-auto"
+          style={{ color: 'var(--ink-dim)' }}
+        >
+          Gate
+        </span>
+        <select
+          data-testid="gate-posture"
+          aria-label="Gate posture"
+          title="When a human confirms this run's units — default: before the first gate-bearing unit"
+          className="rounded-lg px-2 py-1 text-[11px] font-mono"
+          style={{
+            background: 'var(--surface-card)',
+            border: '1px solid var(--surface-raised)',
+            color: 'var(--ink-high)',
+          }}
+          value={confirmMode}
+          onChange={(e) => setConfirmMode(e.target.value as ConfirmMode)}
+        >
+          <option value="before">{beforeOrd === 1 ? 'First gate' : `Before unit #${beforeOrd}`}</option>
+          <option value="all">Every unit</option>
+          <option value="none">No gates</option>
+        </select>
       </div>
 
       {showNewProject && (
@@ -742,6 +847,48 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         </div>
       )}
 
+      {/* ── Preflight warn-and-block (§7.8, EC43) — a code intent with no repo
+          fired zero POST /runs to get here; the override is the only way past
+          without attaching. ── */}
+      {preflightBlocked && repoRefs.length === 0 && (
+        <div
+          data-testid="preflight-block"
+          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
+          style={{
+            background: 'var(--status-gate-dim)',
+            border: '1px solid var(--status-gate-dim)',
+            color: 'var(--status-gate)',
+          }}
+        >
+          <span className="flex-1">
+            ⚠ No repository attached — the run cannot produce reviewable work.
+            Attach one, or launch anyway.
+          </span>
+          <button
+            type="button"
+            data-testid="preflight-attach"
+            onClick={() => setPopoverOpen(true)}
+            className="rounded-lg px-3 py-1 font-semibold text-xs shrink-0"
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+          >
+            Attach a repo
+          </button>
+          <button
+            type="button"
+            data-testid="preflight-override"
+            onClick={() => void submit(true)}
+            className="rounded-lg px-3 py-1 font-semibold text-xs shrink-0"
+            style={{
+              background: 'var(--surface-raised)',
+              color: 'var(--ink-muted)',
+              border: '1px solid var(--ink-dim)',
+            }}
+          >
+            Launch anyway
+          </button>
+        </div>
+      )}
+
       {/* ── Main input bubble ────────────────────────────────────────────── */}
       <div
         className="flex items-end gap-2 rounded-2xl px-4 py-3 transition-all"
@@ -777,7 +924,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
                 }}
                 repos={repos}
                 repoRefs={repoRefs}
-                onRepoRefsChange={setRepoRefs}
+                onRepoRefsChange={touchRepoRefs}
                 attachedFiles={attachedFiles}
                 onFilesChange={setAttachedFiles}
               />
@@ -850,7 +997,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {activePills.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-1">
           {activePills.map((pill, i) => (
-            <ActivePill key={i} label={pill.label} onClear={pill.onClear} />
+            <ActivePill key={i} label={pill.label} onClear={pill.onClear} {...(pill.attrs ? { attrs: pill.attrs } : {})} />
           ))}
         </div>
       )}
