@@ -93,9 +93,13 @@ describe('FeedbackOverlay — the instrumentation handshake (§5.5)', () => {
 
     const toggle = screen.getByTestId('feedback-toggle');
     expect(toggle).toBeDisabled();
-    // §3.3: a disabled control says WHY, and says the canvas is still fine.
-    expect(toggle.getAttribute('title')).toMatch(/did not answer the instrument bridge/i);
+    // §3.3 + EC45 (DES-UX-001 §7.3 re-scope): a disabled control says WHY in
+    // OPERATOR language with a next step — the wire phrase "instrument bridge"
+    // never reaches the DOM — and says the canvas is still fine.
+    expect(toggle.getAttribute('title')).toMatch(/preview to finish loading/i);
+    expect(toggle.getAttribute('title')).toMatch(/reopen the document or regenerate/i);
     expect(toggle.getAttribute('title')).toMatch(/still renders/i);
+    expect(document.body.innerHTML).not.toContain('instrument bridge');
     expect(screen.getByTestId('feedback-overlay')).toHaveAttribute('data-ready', 'false');
     // And nothing was rendered over the document that could swallow a click.
     expect(screen.queryByTestId('feedback-hitlayer')).toBeNull();

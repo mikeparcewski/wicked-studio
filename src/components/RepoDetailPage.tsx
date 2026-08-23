@@ -16,6 +16,36 @@ interface Props {
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
+/**
+ * §7.10 (slice X2): contributor identity de-duplicates. Git histories routinely
+ * carry one person under several author rows (work + noreply emails, case
+ * drift). Rows merge when they share an email OR a display name
+ * (case-insensitive); commits sum; the most-committed spelling of the name
+ * wins. Pure + exported for the unit spine.
+ */
+export function dedupeContributors(rows: readonly GitContributor[]): GitContributor[] {
+  const merged: GitContributor[] = [];
+  const byEmail = new Map<string, GitContributor>();
+  const byName = new Map<string, GitContributor>();
+  for (const row of rows) {
+    const email = row.email.trim().toLowerCase();
+    const name = row.name.trim().toLowerCase();
+    const hit = (email !== '' ? byEmail.get(email) : undefined) ?? byName.get(name);
+    if (hit === undefined) {
+      const copy = { ...row };
+      merged.push(copy);
+      if (email !== '') byEmail.set(email, copy);
+      if (name !== '') byName.set(name, copy);
+    } else {
+      if (row.commits > hit.commits) hit.name = row.name; // the busier spelling wins
+      hit.commits += row.commits;
+      if (email !== '') byEmail.set(email, hit);
+      if (name !== '') byName.set(name, hit);
+    }
+  }
+  return merged.sort((a, b) => b.commits - a.commits);
+}
+
 export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: Props): React.ReactElement {
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
@@ -54,7 +84,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
     }).finally(() => { if (!cancelled) setLoading(false); });
     // Git sections are decoupled — they don't block the page skeleton
     api.getRepoGitHistory(repoId).then(({ commits: c }) => { if (!cancelled) setCommits(c); }).catch(() => {});
-    api.getRepoContributors(repoId).then(({ contributors: c }) => { if (!cancelled) setContributors(c); }).catch(() => {});
+    api.getRepoContributors(repoId).then(({ contributors: c }) => { if (!cancelled) setContributors(dedupeContributors(c)); }).catch(() => {});
     return () => { cancelled = true; };
   }, [repoId]);
 

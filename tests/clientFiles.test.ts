@@ -1,7 +1,7 @@
 // Unit tests: the two slice-I client calls (DES-FEEDBACK-002 §3.3, crew#305) —
 // exact URLs and params, typed against wicked-crew-api-types 0.7.0.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../src/api/client.js';
+import { api, ApiError } from '../src/api/client.js';
 
 function setLocation(url: string): void {
   Object.defineProperty(window, 'location', {
@@ -59,15 +59,49 @@ describe('api.getRunDiff — GET /runs/:id/diff[?path=<absolute>]', () => {
     );
   });
 
-  it('surfaces the route error ladder verbatim (409 workdir-less example)', async () => {
+  it('surfaces the route error ladder through the EC33 translation (409 workdir-less example)', async () => {
+    // Slice X2 (DES-UX-001 §7.10): the thrown message is the TRANSLATED operator
+    // sentence carrying the daemon's own words whole; the raw status + verbatim
+    // sentence ride the typed ApiError fields for matchers (FileViewer's causes).
     fetchMock.mockResolvedValue({
       ok: false,
       status: 409,
       statusText: 'Conflict',
       text: () => Promise.resolve(JSON.stringify({ error: 'run r-1 has no workdir — nothing to diff' })),
     });
-    await expect(api.getRunDiff('r-1')).rejects.toThrow(
-      'API 409: run r-1 has no workdir — nothing to diff',
+    const err = await api.getRunDiff('r-1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).message).toBe(
+      'the daemon refused this — run r-1 has no workdir — nothing to diff',
     );
+    expect((err as ApiError).status).toBe(409);
+    expect((err as ApiError).wire).toBe('run r-1 has no workdir — nothing to diff');
+  });
+});
+
+describe('api.getElicitation — 404 means "nothing pending", matched on the typed status', () => {
+  it('answers null on the daemon 404 even though the translated message names no number', async () => {
+    // Regression pin (slice X2 verification): the old `/\b404\b/.test(e.message)`
+    // matcher went dead once the message became the translated sentence — the
+    // nothing-pending answer must ride ApiError.status, not the display string.
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      text: () => Promise.resolve(JSON.stringify({ error: 'Not Found' })),
+    });
+    await expect(api.getElicitation('r-1')).resolves.toBeNull();
+  });
+
+  it('a 500 still propagates — a broken daemon never renders as an empty panel', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: () => Promise.resolve(JSON.stringify({ error: 'boom' })),
+    });
+    const err = await api.getElicitation('r-1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(500);
   });
 });

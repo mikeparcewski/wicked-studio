@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '../api/client.js';
+import { api, apiStatus } from '../api/client.js';
 import { useElicitationStore, type OpenElicitation } from '../store/elicitations.js';
 
 /**
@@ -43,7 +43,7 @@ export function ElicitationPrompt({ e }: { e: OpenElicitation }): React.ReactEle
       clearElicitation(e.runId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (/\b409\b/.test(msg)) {
+      if (apiStatus(err) === 409) {
         // Stale tab: refetch and swap in whatever the server has now (null clears).
         // `.catch(() => null)` here would treat a 500 or a dropped connection as "nothing
         // pending" and CLEAR the prompt — hiding a broken daemon behind an empty panel, which is

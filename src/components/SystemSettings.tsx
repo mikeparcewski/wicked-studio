@@ -70,7 +70,8 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   useEffect(() => {
     api.getSettings()
       .then(({ settings: s }) => setSettings(s))
-      .catch((e: unknown) => setError(String(e)));
+      // EC33: the translated message, never `String(Error)`'s "Error: …" framing.
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
     api.getRoster()
       .then(({ roster: seats }) => {
         // Deposit for Chat's default chips (DES-FEEDBACK-001 §6.1).

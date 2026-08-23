@@ -1,3 +1,4 @@
+import { apiStatus } from '../api/errors.js';
 import { createDoc, docBinding, listDocs, type CreateDocResult, type DocSummary } from '../api/interactive.js';
 
 /**
@@ -46,7 +47,7 @@ export async function ensureScratchDoc(
     return created.name;
   } catch (e: unknown) {
     // Raced another creator: the bridge's 409 means the doc now exists — use it.
-    if (e instanceof Error && /^API 409: /.test(e.message)) return SCRATCH_DOC_NAME;
+    if (apiStatus(e) === 409) return SCRATCH_DOC_NAME;
     throw e;
   }
 }

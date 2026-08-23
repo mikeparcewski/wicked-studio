@@ -11,18 +11,32 @@ interface Props {
   onSelectRun?: (id: string) => void;
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }): React.ReactElement {
+function Row({ label, value, mono, title }: {
+  label: string; value: string; mono?: boolean; title?: string;
+}): React.ReactElement {
   return (
     <div className="flex gap-2 text-[11px]">
       <span className="w-20 shrink-0 font-mono" style={{ color: 'var(--ink-dim)' }}>{label}</span>
       <span
         className={mono ? 'font-mono break-all' : ''}
         style={{ color: 'var(--ink-muted)' }}
+        {...(title !== undefined ? { title } : {})}
       >
         {value}
       </span>
     </div>
   );
+}
+
+/**
+ * §7.10 (slice X2): long absolute worktree paths retire from the visible text —
+ * the 5-line /private/var wrap read as debug output. The visible value is the
+ * path's meaningful tail; the full path stays one hover away (title).
+ */
+export function compactPath(p: string): string {
+  const parts = p.replace(/\\/g, '/').split('/').filter((s) => s !== '');
+  if (parts.length <= 3) return p;
+  return `…/${parts.slice(-2).join('/')}`;
 }
 
 export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props): React.ReactElement {
@@ -43,15 +57,18 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
       />
       <Row label="intent" value={session.problem} />
       <Row label="repo" value={session.repo_ref ?? '—'} mono />
-      <Row label="worktree" value={session.workdir ?? '—'} mono />
+      {/* §7.10: the compact tail, full path on hover — never the 5-line wrap.
+          The DTO debug note that used to sit below ("work_output pending daemon
+          surface") is retired: internal notes are not user copy; the diff lives
+          behind Files → Full diff. */}
+      <Row
+        label="worktree"
+        value={session.workdir !== undefined && session.workdir !== null ? compactPath(session.workdir) : '—'}
+        mono
+        {...(session.workdir !== undefined && session.workdir !== null ? { title: session.workdir } : {})}
+      />
       <Row label="roster" value={session.clis.length > 0 ? session.clis.join(', ') : '—'} mono />
       <Row label="entity" value={session.entity_mode} />
-      <div
-        className="mt-1 rounded p-1.5 text-[10px] font-mono"
-        style={{ border: '1px dashed var(--surface-raised)', color: 'var(--ink-dim)' }}
-      >
-        diff: not exposed on the run DTO (<code>work_output</code> pending daemon surface)
-      </div>
     </div>
   );
 }

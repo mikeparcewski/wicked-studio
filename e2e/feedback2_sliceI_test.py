@@ -18,7 +18,8 @@ The slice DOM ACs, from §3.7 (studio side):
   3. the binary file renders the honest state ("binary file — N bytes"), never
      mojibake; the truncated file renders
      `[data-testid="viewer-truncation-banner"]` naming the cap + full size (EC23);
-  4. a 403 (outside every allowed root) surfaces the route's error VERBATIM;
+  4. a 403 (outside every allowed root) surfaces the route's sentence WHOLE —
+     in slice X2's EC33 translated frame, never the raw `API 403:` framing;
   5. no highlight/grammar library ships in the bundle (the §2.3 precedent's
      grep gate) — the adversarial `+++`-leading ADDED line in the untracked
      hunk still colors as an addition (the zero-dep classifier is stateful);
@@ -247,13 +248,18 @@ with sync_playwright() as p:
     }
     page.keyboard.press("Escape")
 
-    # ── Scene 7 (AC 4): the outside-root file — 403 surfaced VERBATIM ───────────
+    # ── Scene 7 (AC 4): the outside-root file — the daemon's sentence surfaces
+    # WHOLE, never swallowed. RE-SCOPED by slice X2 (DES-UX-001 §7.10, EC33):
+    # the `API 403:` framing retires — the refusal now arrives in the translated
+    # frame ("the daemon refused this — …") with the route's own words intact.
     page.locator(f'button[title="View {VIEWER_FILE_403}"]').click()
     page.locator('[data-testid="viewer-error"]').wait_for(timeout=10000)
     err_text = page.locator('[data-testid="viewer-error"]').text_content() or ""
     report["steps"]["forbidden_surfaced_verbatim"] = {
-        "ok": "API 403: path is outside every allowed root (the run's workdir/write roots "
-              "and the registered repos)" in err_text,
+        "ok": "path is outside every allowed root (the run's workdir/write roots "
+              "and the registered repos)" in err_text
+              and "the daemon refused this" in err_text
+              and "API 403" not in err_text,
         "text": err_text,
     }
     page.keyboard.press("Escape")

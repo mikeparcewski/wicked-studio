@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { api } from '../api/client.js';
 import { modePath } from '../hooks/useRoute.js';
+import { useProjectsStore } from '../store/projects.js';
 
 /**
  * The new-project flow (DES-FEEDBACK-001 §1.3, slice A): a minimal inline
@@ -64,6 +65,10 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
       const { project } = await api.createProject(
         description.trim() === '' ? { name } : { name, description: description.trim() },
       );
+      // Fresh-entity hydration (DES-UX-001 §7.10): the created project joins the
+      // store BEFORE navigation, so the rail row and the shell breadcrumb render
+      // its display name immediately — never the raw `proj_…` id until a reload.
+      useProjectsStore.getState().addProject(project);
       onClose();
       navigate(startPath(project.id, start));
     } catch (e) {

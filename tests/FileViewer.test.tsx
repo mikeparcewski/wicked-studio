@@ -6,6 +6,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FileViewer } from '../src/components/FileViewer.js';
 import * as client from '../src/api/client.js';
+import { ApiError } from '../src/api/errors.js';
 
 const PATH = '/work/src/foo.ts';
 
@@ -55,19 +56,23 @@ describe('FileViewer — File tab states', () => {
     expect(screen.getByText('first half…')).toBeInTheDocument(); // content still shown
   });
 
-  it('403: the route error surfaces VERBATIM, never swallowed', async () => {
-    vi.spyOn(client.api, 'getRunFile').mockRejectedValue(new Error(
-      "API 403: path is outside every allowed root (the run's workdir/write roots and the registered repos)",
+  it('403: the daemon sentence surfaces whole in the EC33 translated frame, never swallowed', async () => {
+    // Slice X2 re-scope (DES-UX-001 §7.10): the raw `API 403:` framing retires;
+    // the daemon's own sentence still surfaces verbatim inside the translation.
+    vi.spyOn(client.api, 'getRunFile').mockRejectedValue(new ApiError(
+      403, "path is outside every allowed root (the run's workdir/write roots and the registered repos)",
     ));
     render(<FileViewer runId="r-1" path={PATH} defaultTab="file" onClose={() => {}} onUnsupported={() => {}} />);
 
-    expect(await screen.findByTestId('viewer-error')).toHaveTextContent(
-      "API 403: path is outside every allowed root (the run's workdir/write roots and the registered repos)",
+    const el = await screen.findByTestId('viewer-error');
+    expect(el).toHaveTextContent(
+      "the daemon refused this — path is outside every allowed root (the run's workdir/write roots and the registered repos)",
     );
+    expect(document.body.textContent).not.toContain('API 403');
   });
 
   it('route-absent 404 ("Not Found", unnamed) calls onUnsupported instead of rendering a shell', async () => {
-    vi.spyOn(client.api, 'getRunFile').mockRejectedValue(new Error('API 404: Not Found'));
+    vi.spyOn(client.api, 'getRunFile').mockRejectedValue(new ApiError(404, 'Not Found'));
     const onUnsupported = vi.fn();
     render(<FileViewer runId="r-1" path={PATH} defaultTab="file" onClose={() => {}} onUnsupported={onUnsupported} />);
 
@@ -75,12 +80,13 @@ describe('FileViewer — File tab states', () => {
     expect(screen.queryByTestId('viewer-error')).not.toBeInTheDocument();
   });
 
-  it('a NAMED 404 (real answer from a daemon WITH the route) surfaces verbatim', async () => {
-    vi.spyOn(client.api, 'getRunFile').mockRejectedValue(new Error(`API 404: no such file: ${PATH}`));
+  it('a NAMED 404 (real answer from a daemon WITH the route) surfaces, translated', async () => {
+    vi.spyOn(client.api, 'getRunFile').mockRejectedValue(new ApiError(404, `no such file: ${PATH}`));
     const onUnsupported = vi.fn();
     render(<FileViewer runId="r-1" path={PATH} defaultTab="file" onClose={() => {}} onUnsupported={onUnsupported} />);
 
-    expect(await screen.findByTestId('viewer-error')).toHaveTextContent(`API 404: no such file: ${PATH}`);
+    expect(await screen.findByTestId('viewer-error')).toHaveTextContent(
+      `the daemon refused this — no such file: ${PATH}`);
     expect(onUnsupported).not.toHaveBeenCalled();
   });
 });
@@ -92,8 +98,8 @@ describe('FileViewer — Diff tab states', () => {
   // never reach the DOM (EC33). The verbatim contract still holds for every other
   // error (the named-404 test below is unchanged).
   it('409 (workdir reaped): the named-cause card, never the raw wire string', async () => {
-    vi.spyOn(client.api, 'getRunDiff').mockRejectedValue(new Error(
-      "API 409: run r-1's workdir no longer exists: /tmp/wt",
+    vi.spyOn(client.api, 'getRunDiff').mockRejectedValue(new ApiError(
+      409, "run r-1's workdir no longer exists: /tmp/wt",
     ));
     render(<FileViewer runId="r-1" defaultTab="diff" onClose={() => {}} onUnsupported={() => {}} />);
 
@@ -105,8 +111,8 @@ describe('FileViewer — Diff tab states', () => {
   });
 
   it('409 (no workdir attached): the no-repository named cause, raw strings absent', async () => {
-    vi.spyOn(client.api, 'getRunDiff').mockRejectedValue(new Error(
-      'API 409: run r-1 has no workdir — nothing to diff',
+    vi.spyOn(client.api, 'getRunDiff').mockRejectedValue(new ApiError(
+      409, 'run r-1 has no workdir — nothing to diff',
     ));
     const onClose = vi.fn();
     render(<FileViewer runId="r-1" defaultTab="diff" onClose={onClose} onUnsupported={() => {}} />);

@@ -12,6 +12,7 @@
 // the bus-emit bridge are top-level, while per-document state/commands live
 // under a `/d/<docId>` prefix.
 import { apiBase } from './client.js';
+import { ApiError } from './errors.js';
 
 // ── Wire shapes ─────────────────────────────────────────────────────────────
 // Narrow by intent: only the fields the UI consumes. The bridge is a Node
@@ -179,11 +180,13 @@ export class BridgeUnavailableError extends Error {
  * install command — never a crash, and never the install gate that blocks ordinary
  * documents. `hint` is carried verbatim so the UI renders an *actionable* message rather
  * than a bare failure (§3.3), exactly as `BridgeUnavailableError` does for the 503.
+ * An `ApiError` (slice X2) so the shared status/wire matchers and the EC33
+ * translated message apply to hinted refusals too.
  */
-export class ServiceHintError extends Error {
+export class ServiceHintError extends ApiError {
   readonly hint: string;
-  constructor(message: string, hint: string) {
-    super(message);
+  constructor(status: number, wire: string, hint: string) {
+    super(status, wire);
     this.name = 'ServiceHintError';
     this.hint = hint;
   }
@@ -245,13 +248,13 @@ async function iFetch<T>(url: string, init?: RequestInit): Promise<T> {
     }
     // The bridge reports failures as `{error}`; crew's own layers use `{message}`.
     const raw = body?.error ?? body?.message ?? text;
-    const msg = (typeof raw === 'string' ? raw : JSON.stringify(raw))
-      || res.statusText || String(res.status);
+    const msg = (typeof raw === 'string' ? raw : JSON.stringify(raw)) || res.statusText;
     // A refusal that NAMED its fix keeps that name typed all the way to the surface.
     if (typeof body?.hint === 'string' && body.hint.trim() !== '') {
-      throw new ServiceHintError(`API ${res.status}: ${msg}`, body.hint.trim());
+      throw new ServiceHintError(res.status, msg, body.hint.trim());
     }
-    throw new Error(`API ${res.status}: ${msg}`);
+    // EC33: the translated ApiError — never the raw `API NNN:` framing.
+    throw new ApiError(res.status, msg);
   }
   return res.json() as Promise<T>;
 }
@@ -436,7 +439,7 @@ export function getLearnedTheme(
 ): Promise<LearnedTheme | null> {
   return iFetch<LearnedTheme>(`${docBase(projectId, docId)}/api/theme/learned`)
     .catch((e: unknown) => {
-      if (e instanceof Error && e.message === 'API 404: no learned theme') return null;
+      if (e instanceof ApiError && e.status === 404 && e.wire === 'no learned theme') return null;
       throw e;
     });
 }

@@ -159,12 +159,15 @@ describe('DataUsed (FR-8)', () => {
 });
 
 describe('WhatWhere (FR-8)', () => {
-  it('renders intent + roster and labels the missing diff honestly', () => {
+  it('renders intent + roster; the DTO debug note is retired (DES-UX-001 §7.10)', () => {
     render(<WhatWhere model={modelWith()} />);
     const el = screen.getByTestId('what-where');
     expect(el).toHaveTextContent('do the thing');
     expect(el).toHaveTextContent('claude');
-    expect(el).toHaveTextContent('work_output');
+    // Slice X2 re-scope: "work_output pending daemon surface" was an internal
+    // note, not user copy — it must NOT render (the diff lives in Files).
+    expect(el.textContent).not.toContain('work_output');
+    expect(el.textContent).not.toContain('DTO');
   });
 });
 

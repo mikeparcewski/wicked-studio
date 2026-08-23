@@ -57,7 +57,25 @@ type FileOpKind = 'write' | 'delete';
 
 type FileFeedback = 'opened' | 'copied' | 'open-failed';
 
-function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; runId: string }): React.ReactElement {
+/**
+ * §7.10 (slice X2): Files rows render WORKTREE-RELATIVE paths — the 5-line
+ * absolute /private/var wrap retires from the visible text. Only the display
+ * changes: `path` stays absolute for the viewer fetch, external open, copy,
+ * and every `title`/aria attribute (the full path is one hover away).
+ */
+function relativeToRoot(path: string, root: string | undefined): string {
+  if (root === undefined || root === '') return path;
+  const norm = path.replace(/\\/g, '/');
+  const rootNorm = root.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (norm === rootNorm) return '.';
+  return norm.startsWith(`${rootNorm}/`) ? norm.slice(rootNorm.length + 1) : path;
+}
+
+function FilePath({ path, opKind, runId, root }: {
+  path: string; opKind?: FileOpKind; runId: string;
+  /** The run's worktree root (`session.workdir`) — the display-relativity base. */
+  root?: string | undefined;
+}): React.ReactElement {
   const [feedback, setFeedback] = useState<FileFeedback | null>(null);
   // Slice I (DES-FEEDBACK-002 §3.4): the row itself opens the INLINE viewer;
   // external-open (↗) and copy (⧉) move to hover-revealed row-end icons —
@@ -66,8 +84,9 @@ function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; 
   const rowRef = useRef<HTMLButtonElement | null>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current); }, []);
-  const parts = path.replace(/\\/g, '/').split('/');
-  const name = parts.pop() ?? path;
+  const display = relativeToRoot(path, root);
+  const parts = display.replace(/\\/g, '/').split('/');
+  const name = parts.pop() ?? display;
   const dir = parts.length > 0 ? `${parts.join('/')}/` : '';
 
   const glyph = opKind === 'delete' ? '−' : opKind === 'write' ? '±' : '~';
@@ -257,6 +276,8 @@ function RunTranscriptView({ runId, units, onOpenShell }: {
 
 function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
   const runId = model.session.id;
+  // §7.10: rows display worktree-relative paths (absolute stays on title/copy/open).
+  const root = model.session.workdir ?? undefined;
   // Slice I: the per-run [Full diff] button at the panel header (§3.4) — the
   // same viewer, whole-worktree diff (no path). Opens on the click, never
   // prefetches.
@@ -348,10 +369,10 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
           ) : (
             <ul className="flex flex-col gap-1">
               {sortedModified.map((f) => (
-                <FilePath key={f} path={f} opKind="write" runId={runId} />
+                <FilePath key={f} path={f} opKind="write" runId={runId} root={root} />
               ))}
               {sortedDeleted.map((f) => (
-                <FilePath key={f} path={f} opKind="delete" runId={runId} />
+                <FilePath key={f} path={f} opKind="delete" runId={runId} root={root} />
               ))}
             </ul>
           )}
@@ -366,7 +387,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
           </p>
           <ul className="flex flex-col gap-1">
             {sortedReferenced.map((f) => (
-              <FilePath key={f} path={f} runId={runId} />
+              <FilePath key={f} path={f} runId={runId} root={root} />
             ))}
           </ul>
         </div>
