@@ -5,6 +5,7 @@ import { ambientProjectId, launchPath, registerRepoPath } from '../hooks/ambient
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
+import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
@@ -537,6 +538,14 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
 
   // The Make/Chat partition invariant (§3.3): every run under exactly ONE path.
   const chatRuns = orderRuns(runs.filter(isChatRun)).slice(0, CHATS_MAX);
+  // Live pool sessions this client knows about (J4 round 2): deposited by
+  // GroupChat's open/rejoin and by chat frames on the app's /ws fold — never
+  // a fetch (the rail's zero-request budget holds). The Chat accordion must
+  // not claim "no chats" while one of these is live.
+  const liveChatSessions = useLiveChatsStore((s) => s.sessions);
+  const liveChats = Object.values(liveChatSessions)
+    .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
+    .slice(0, CHATS_MAX);
   const madeDocs = items
     .flatMap((item) => item.docs.map((doc) => ({ doc, projectId: item.project.id, projectName: item.project.name })))
     .sort((a, b) => (b.doc.updated_at ?? '').localeCompare(a.doc.updated_at ?? ''))
@@ -632,10 +641,39 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             onNew={() => navigate(launchPath(ambient, 'chat'))}
             navigate={navigate}
           >
-            {chatRuns.length === 0
+            {/* Live pool sessions first (J4 round 2): a warm conversation is
+                findable from the rail at its real URL — and the empty label
+                below may only render when there is truly NOTHING to show. */}
+            {liveChats.map((c) => (
+              <button
+                key={c.chatId}
+                type="button"
+                data-testid="rail-live-chat"
+                data-chat-id={c.chatId}
+                onClick={() => navigate(`/chat/${encodeURIComponent(c.chatId)}`)}
+                title={`Open live chat session ${c.chatId}`}
+                className="w-full text-left px-3 py-1.5 rounded-md transition-colors flex items-center gap-2"
+                style={{ background: 'transparent' }}
+                onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span
+                  aria-hidden
+                  className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ background: 'var(--status-run)' }}
+                />
+                <span className="truncate" style={{ fontSize: 'var(--text-xs)', color: S.ink, fontFamily: 'var(--font-mono)' }}>
+                  {c.seats.length > 0 ? c.seats.join(' · ') : c.chatId.slice(0, 8)}
+                </span>
+                <span className="shrink-0" style={{ fontSize: 'var(--text-2xs)', color: S.faint, fontFamily: 'var(--font-sans)' }}>
+                  live
+                </span>
+              </button>
+            ))}
+            {chatRuns.length === 0 && liveChats.length === 0
               // "Recorded" keeps this row's claim true beside a LIVE session
-              // (J4/C6 one-truth): the rail lists recorded chat runs only —
-              // live seats show on /chats, where this row points.
+              // (J4/C6 one-truth) — and with live rows above, the label never
+              // renders beside a live conversation at all (round 2, J4/3).
               ? <EmptyRow label="No recorded chats yet" href="/chats" navigate={navigate} />
               : chatRuns.map((view) => (
                   <RunRow key={view.session.id} view={view} onOpen={() => navigate(runPath(view.session.id))} />
