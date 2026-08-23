@@ -458,6 +458,26 @@ describe('send-state persistence (round-3 finding 4)', () => {
     expect(useDocThreadStore.getState().pending[KEY] ?? []).toHaveLength(0);
   });
 
+  it('the wire outranks a stale refusal: a "refused" send the wire ACCEPTED restores as ONE pending message', () => {
+    // The reload-teardown shape: the in-flight fetch was aborted by the unload,
+    // the catch persisted a refusal — but the bridge took the message (its line
+    // is on the wire). Hydrate must not render a duplicated, fabricated failure:
+    // the send restores from the wire line, PENDING, on its original clock.
+    const stale = [{ ord: 1, state: 'failed' as const, sentAt: 12345, text: 'add a roadmap slide' }];
+    useDocThreadStore.getState().hydrate(
+      KEY,
+      [{ role: 'user', text: 'the brief', ts: 't1' },
+       { role: 'user', text: 'add a roadmap slide', ts: 't2' }],
+      [{ ord: 1, version: 1 }], stale, []);
+    const users = messages().filter((m): m is Extract<DocMsg, { kind: 'user' }> => m.kind === 'user');
+    expect(users).toHaveLength(2); // no duplicate refused copy
+    expect(users[1]).toMatchObject({ text: 'add a roadmap slide', sentAt: 12345 });
+    expect(users[1]?.failed).not.toBe(true);
+    // Accepted and still unanswered ⇒ pending, and the thread is generating.
+    expect(useDocThreadStore.getState().pending[KEY] ?? []).toHaveLength(1);
+    expect(useDocThreadStore.getState().genState[KEY]).toBe('generating');
+  });
+
   it('an export entry persists and is restored at the transcript tail', () => {
     ingest(frame('wicked.interactive.export.generated', {
       format: 'pdf', file: 'deck_v1.pdf', download: '/d/launch-deck/api/export/file/deck_v1.pdf',

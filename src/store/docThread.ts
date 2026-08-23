@@ -554,6 +554,27 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         if (x.text === undefined) continue;
         refusedAfter.set(x.ord, [...(refusedAfter.get(x.ord) ?? []), x]);
       }
+      // The wire OUTRANKS a refusal mark: a "refused" send whose exact text IS
+      // the next accepted line was accepted after all — the failure was the lost
+      // RESPONSE (a reload tearing down the in-flight fetch, a network blip),
+      // never the send. Restoring the stale copy would duplicate the message
+      // wearing a fabricated failure; the truth is an accepted send still
+      // awaiting its answer, so it re-enters as PENDING on its original clock.
+      {
+        let o = 0;
+        for (const e of entries) {
+          const t = typeof e.text === 'string' ? e.text.trim() : '';
+          if (t === '' || e.role !== 'user') continue;
+          o += 1;
+          const queued = refusedAfter.get(o - 1) ?? [];
+          const match = queued.find((x) => (x.text as string).trim() === t);
+          if (match === undefined) continue;
+          if (!sendByOrd.has(o)) {
+            sendByOrd.set(o, { ord: o, state: 'pending', sentAt: match.sentAt });
+          }
+          queued.splice(queued.indexOf(match), 1);
+        }
+      }
       const restored: DocMsg[] = [];
       const pendingRestored: { ord: number; id: string }[] = [];
       const pushRefused = (afterOrd: number): void => {

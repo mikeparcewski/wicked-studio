@@ -508,6 +508,23 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
 
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }); }, [messages.length]);
 
+  // Page teardown flag: a reload/navigation ABORTS every in-flight send fetch,
+  // and that rejection is not a refusal — the bridge usually took the message
+  // (its line is on the wire). Marking it refused here would PERSIST a fabricated
+  // failure into the stopgap for the next load to restore. `pageshow` re-arms
+  // after a bfcache resurrection, where this document lives on.
+  const unloading = useRef(false);
+  useEffect(() => {
+    const hide = (): void => { unloading.current = true; };
+    const show = (): void => { unloading.current = false; };
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
+    return () => {
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+    };
+  }, []);
+
   const gate = state === 'gated'
     ? [...messages].reverse().find((m): m is Extract<DocMsg, { kind: 'gate' }> => m.kind === 'gate') ?? null
     : null;
@@ -628,6 +645,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
    *  persist its text for the failure to survive a reload (round-3 finding 4). */
   function failVisibly(msgId: string): void {
     if (key === null) return;
+    // A rejection during page teardown is the ABORT of the unload, not the
+    // bridge refusing: leave the send exactly as persisted (pending, its own
+    // clock) — the next load's hydrate restores its honest unresolved state.
+    if (unloading.current) return;
     const store = useDocThreadStore.getState();
     store.markSendFailed(key, msgId, true);
     if ((useDocThreadStore.getState().pending[key] ?? []).length === 0

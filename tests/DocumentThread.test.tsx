@@ -360,3 +360,37 @@ describe('the ▤ v<N> landed tag — the thread half of the doc↔canvas↔thre
     expect(screen.queryByTestId('version-marker')).toBeNull();
   });
 });
+
+describe('teardown honesty — an unload-aborted send is NOT a refusal', () => {
+  it('a rejection landing after pagehide leaves the send pending (no fabricated refusal persisted)', async () => {
+    mount(DOC, null);
+    let reject!: (e: Error) => void;
+    postEvent.mockImplementationOnce(() => new Promise((_, rej) => { reject = rej; }));
+
+    await send('add a roadmap slide');
+    await waitFor(() => expect(postEvent).toHaveBeenCalledTimes(1));
+    expect(useDocThreadStore.getState().pending[KEY]).toHaveLength(1);
+
+    // The reload begins: pagehide fires FIRST, then the browser aborts the fetch.
+    window.dispatchEvent(new Event('pagehide'));
+    await act(async () => { reject(new TypeError('Failed to fetch')); });
+
+    // The send keeps its honest unresolved state — pending, unfailed — so the
+    // stopgap the next load hydrates from still holds `pending` + the clock.
+    const msg = thread().find((m) => m.kind === 'user' && m.text === 'add a roadmap slide');
+    expect(msg).toMatchObject({ kind: 'user' });
+    expect((msg as Extract<DocMsg, { kind: 'user' }>).failed).not.toBe(true);
+    expect(useDocThreadStore.getState().pending[KEY]).toHaveLength(1);
+    expect(useDocThreadStore.getState().genState[KEY]).toBe('generating');
+
+    // pageshow re-arms the guard (a bfcache resurrection lives on): a LIVE
+    // rejection after it fails visibly again.
+    window.dispatchEvent(new Event('pageshow'));
+    postEvent.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await send('one more ask');
+    await waitFor(() => {
+      const failed = thread().find((m) => m.kind === 'user' && m.text === 'one more ask');
+      expect((failed as Extract<DocMsg, { kind: 'user' }>).failed).toBe(true);
+    });
+  });
+});
