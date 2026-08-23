@@ -154,6 +154,35 @@ describe('GroupChat — default agent chips (DES-FEEDBACK-001 §6)', () => {
     ]);
   });
 
+  it('the picker speaks the roster: display names and observed health ride each option (J4 round 2, minor)', async () => {
+    const user = userEvent.setup();
+    getRoster.mockResolvedValueOnce({
+      roster: [
+        { key: 'claude', display_name: 'Claude Code', enabled_for_council: true,
+          health: { status: 'active', since: '2026-08-01T00:00:00Z' } },
+        { key: 'codex', display_name: 'Codex', enabled_for_council: true,
+          health: { status: 'inactive', message: 'quota exceeded', since: '2026-08-01T00:00:00Z' } },
+        // A daemon predating crew#274: no health claim — never fabricated.
+        { key: 'pi', display_name: 'pi', enabled_for_council: true },
+      ] as unknown as RosterSeat[],
+    });
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    await user.click(screen.getByTestId('add-agent'));
+
+    const options = await screen.findAllByTestId('agent-picker-option');
+    const byKey = Object.fromEntries(options.map((o) => [o.dataset['agentKey'], o]));
+    expect(byKey['claude']).toHaveTextContent('Claude Code');
+    expect(byKey['claude']!.dataset['health']).toBe('active');
+    expect(byKey['codex']!.dataset['health']).toBe('inactive');
+    expect(byKey['codex']!.title).toBe('Codex — inactive');
+    // No health on the wire → no claim in the DOM.
+    expect(byKey['pi']!.dataset['health']).toBe('unknown');
+    expect(byKey['pi']!.querySelector('span[aria-hidden]')).toBeNull();
+    // The KEY stays the data identity the send uses.
+    await user.click(byKey['claude']!);
+    expect(chipKeys()).toContain('claude');
+  });
+
   it('a stale EDITED chip the daemon rejects surfaces a recoverable error naming it; remove + resend recovers into the same chat', async () => {
     // Round-2 re-scope (BRIEF-UX-001 J4 finding 1): this test previously drove
     // the recovery path through the PRISTINE fallback trio reaching the daemon
