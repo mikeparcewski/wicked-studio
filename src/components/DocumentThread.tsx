@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
+import { parseCreateAsk } from '../interactive/createAsk.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DemoWizard } from './DemoWizard.js';
 import { recordFromThread } from '../interactive/demoWire.js';
@@ -464,14 +465,20 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         return;
       }
 
-      // 1 — LAUNCH. The message IS the brief; the doc's generation run opens with it.
+      // 1 — LAUNCH. The message IS the brief; the doc's generation run opens with
+      // it. §7.3 (slice X2): a QUOTED name in the ask becomes the doc's name and
+      // the remainder stays the brief (the parse the composer previewed) — no
+      // more whole sentences slugified into names. Unquoted asks keep the
+      // first-six-words derivation unchanged.
       if (docId === null || key === null) {
         // §6.2 (slice U): the Unfiled mount creates UNBOUND (no `project`
         // field — `docBinding`); real projects bind as before. A refused
         // create lands in the catch below — the visible composer error,
         // never a silent close (the loud-502 contract, §8.4.1 probe 3).
+        const parsed = parseCreateAsk(body);
         const created = await createDoc(projectId, {
-          name: docName(body), kind: 'source', brief: body, ...docBinding(projectId),
+          name: parsed?.name ?? docName(body), kind: 'source',
+          brief: parsed?.brief ?? body, ...docBinding(projectId),
           source_message_id: msgId,
         });
         const opened = threadKey(projectId, created.name);
@@ -705,6 +712,23 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             steering the live {mode === 'video' ? 'demo' : 'document'} run
           </span>
         )}
+        {/* §7.3 (slice X2): the parse, SHOWN before submit — a quoted name in a
+            create ask becomes the doc's name, the rest stays the brief. Renders
+            only on the launch composer (no doc yet) when a quoted name parses. */}
+        {(docId === null || key === null) && mode !== 'video' && (() => {
+          const parsed = parseCreateAsk(text);
+          if (parsed === null) return null;
+          return (
+            <p
+              data-testid="create-parse"
+              className="text-[10px] font-mono"
+              style={{ color: 'var(--ink-dim)', margin: 0 }}
+            >
+              will create <span style={{ color: 'var(--ink-muted)' }}>“{parsed.name}”</span>
+              {' '}— brief: {parsed.brief}
+            </p>
+          );
+        })()}
         {/* §5.3's composer contract, worn by every mode: --surface-raised at
             --radius-xl, the wk-composer focus ring (--accent-dim via
             :focus-within — never the full accent), an accent-filled submit. */}
