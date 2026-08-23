@@ -353,12 +353,12 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
                 ))}
               </>
             )}
-            {searched.length === 0 && <EmptyState query={query} />}
+            {searched.length === 0 && <EmptyState query={query} hidden={hiddenByRange} />}
           </>
         ) : (
           <>
             {filtered.length === 0 ? (
-              <EmptyState query={query} tab={tab} />
+              <EmptyState query={query} tab={tab} hidden={hiddenByRange} />
             ) : (
               filtered.map(v => (
                 <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
@@ -414,9 +414,13 @@ function GroupLabel({ children, pulse }: { children: React.ReactNode; pulse?: bo
   );
 }
 
-function EmptyState({ query, tab }: { query: string; tab?: StatusTab }): React.ReactElement {
+function EmptyState({ query, tab, hidden = 0 }: { query: string; tab?: StatusTab; hidden?: number }): React.ReactElement {
+  // ONE truth per screen: "No <tab> runs yet." may not sit under a note saying
+  // N exist outside the range window — when rows are hidden, say WHERE they are.
   const msg = query
     ? `No runs match "${query}".`
+    : hidden > 0
+    ? `No${tab ? ` ${tab}` : ''} runs in this range view — ${hidden} exist${hidden === 1 ? 's' : ''} outside it.`
     : tab
     ? `No ${tab} runs yet.`
     : 'No work sessions yet.';

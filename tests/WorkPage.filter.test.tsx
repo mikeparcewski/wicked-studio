@@ -97,6 +97,9 @@ describe('WorkPage — range-hidden rows are stated, never silent (EC39)', () =>
     const note = screen.getByTestId('work-range-hidden-note');
     expect(note).toHaveAttribute('data-hidden', '1');
     expect(note.textContent).toMatch(/1 more cancelled run sits outside this 30d view/);
+    // The empty state tells the SAME truth — never "No cancelled runs yet."
+    // one line under a note saying they exist.
+    expect(screen.getByText(/No cancelled runs in this range view — 1 exists outside it\./)).toBeInTheDocument();
     // Widen → the row appears and the note goes away (90d covers all 32).
     await userEvent.click(screen.getByTestId('work-range-widen'));
     expect(screen.getByText(/called off/)).toBeInTheDocument();
