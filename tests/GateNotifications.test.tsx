@@ -38,6 +38,35 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// The pre-slice-AA scope contract (studio#10) — carried forward verbatim: the
+// runId prop still means "only this run's toast".
+describe('GateNotifications runId scope (studio#10)', () => {
+  it('shows all gates when no runId is provided', () => {
+    seed(gate('run-1'), gate('run-2'));
+    render(<GateNotifications onSelect={() => {}} />);
+    expect(screen.getAllByTestId('gate-toast')).toHaveLength(2);
+  });
+
+  it('shows only the matching gate when runId is provided', () => {
+    seed(gate('run-1'), gate('run-2'));
+    render(<GateNotifications onSelect={() => {}} runId="run-1" />);
+    const toasts = screen.getAllByTestId('gate-toast');
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]).toHaveAttribute('data-run-id', 'run-1');
+  });
+
+  it('shows nothing when runId matches no gate', () => {
+    seed(gate('run-1'), gate('run-2'));
+    render(<GateNotifications onSelect={() => {}} runId="run-99" />);
+    expect(screen.queryByTestId('gate-toast')).toBeNull();
+  });
+
+  it('shows nothing when store is empty', () => {
+    render(<GateNotifications onSelect={() => {}} runId="run-1" />);
+    expect(screen.queryByTestId('gate-notification')).toBeNull();
+  });
+});
+
 describe('GateNotifications — dismiss (§7.1)', () => {
   it('every card contains a toast-dismiss, and dismissing hides the card but never the gate', async () => {
     seed(gate('r-one'), gate('r-two'));
