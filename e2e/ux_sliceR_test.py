@@ -239,6 +239,12 @@ with sync_playwright() as p:
     term_btn.wait_for(timeout=10000)
     term_btn.click()
     page.locator('[data-testid="term-transcript"]').wait_for(timeout=10000)
+    # The transcript body is fetched per-unit after the container mounts — wait
+    # for the fixture's known transcript line, not just the container.
+    page.wait_for_function(
+        """() => (document.querySelector('[data-testid="term-transcript"]')
+          ?.innerText ?? '').includes('Mapped the middleware chain')""",
+        timeout=10000)
     term = page.evaluate(
         """() => ({
           transcriptShown: (document.querySelector('[data-testid="term-transcript"]')
