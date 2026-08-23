@@ -57,9 +57,17 @@ export interface ExportMenuProps {
    *  §4.2 addresses versions explicitly, and a download is a thing you keep. */
   version: number;
   compact?: boolean;
+  /**
+   * §7.2, the J3 closed-drawer pin: told `true` while this control owes (or is
+   * showing) an answer — an export in flight, a READY download not yet retired,
+   * a FAILED hint. The strip host pins itself visible on it: auto-hide fading the
+   * click site's answer out from under a closed drawer IS the "clicked, nothing
+   * visibly happened" failure. Optional — the board tile has no auto-hide to pin.
+   */
+  onHold?: ((held: boolean) => void) | undefined;
 }
 
-export function ExportMenu({ projectId, docId, version, compact = false }: ExportMenuProps): React.ReactElement {
+export function ExportMenu({ projectId, docId, version, compact = false, onHold }: ExportMenuProps): React.ReactElement {
   const [busy, setBusy] = useState<ExportFormat | null>(null);
   const [ready, setReady] = useState<ReadyArtifact | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -67,6 +75,15 @@ export function ExportMenu({ projectId, docId, version, compact = false }: Expor
   // §7.2: the click site answers for THIS version. A new selection retires the
   // previous answer — a v3 artifact link must not sit under an "Export v4" label.
   useEffect(() => { setReady(null); setHint(null); }, [docId, version]);
+
+  // The J3 hold: pending, ready and failed are all states the user has not acted
+  // on yet — each keeps the click site on screen until it is consumed or retired.
+  const answering = busy !== null || ready !== null || hint !== null;
+  useEffect(() => {
+    if (!answering || onHold === undefined) return;
+    onHold(true);
+    return () => { onHold(false); };
+  }, [answering, onHold]);
 
   function run(format: ExportFormat): void {
     setBusy(format);

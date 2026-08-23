@@ -41,7 +41,10 @@ function state(): string | undefined {
 }
 
 beforeEach(() => {
-  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {} });
+  useDocThreadStore.setState({
+    messages: {}, genState: {}, pending: {}, hydrated: {},
+    lastSignalAt: {}, expectedDividers: {},
+  });
 });
 
 describe('composer state mapping (§2.2)', () => {
@@ -296,5 +299,71 @@ describe('anchor stopgap (threadStopgap)', () => {
     store.addUserMsg(KEY, nextMsgId(), 'the ask');
     ingest(frame('wicked.interactive.version.created', { version: 1, parent: null, kind: 'generated' }));
     expect(readAnchors(KEY)).toEqual([{ ord: 1, version: 1 }]);
+  });
+});
+
+// ── The J3 bookkeeping pin: deferred continuation dividers + the signal clock ──
+
+describe('deferred dividers (§7.10, anchor-on-arrival)', () => {
+  it('expectDivider renders NOTHING until the wire shows the version exists', () => {
+    const store = useDocThreadStore.getState();
+    store.expectDivider(KEY, 'm-1', 4);
+    store.addUserMsg(KEY, 'm-1', 'make the closing slide stronger');
+    expect(messages().map((m) => m.kind)).toEqual(['user']);
+
+    // A lower version arriving is not that proof — the divider stays deferred.
+    ingest(frame('wicked.interactive.version.created', { version: 3, parent: 2, kind: 'generated' }));
+    expect(messages().some((m) => m.kind === 'divider')).toBe(false);
+
+    // The arrival at (or past) the fork's version materializes it, ABOVE its message.
+    ingest(frame('wicked.interactive.version.created', { version: 4, parent: 3, kind: 'generated' }));
+    const kinds = messages().map((m) => m.kind);
+    expect(kinds).toEqual(['divider', 'user']);
+    const divider = messages().find((m) => m.kind === 'divider');
+    expect(divider !== undefined && divider.kind === 'divider' && divider.version).toBe(4);
+  });
+
+  it('the divider lands immediately above its continuation message', () => {
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, 'm-1', 'the first ask');
+    ingest(frame('wicked.interactive.version.created', { version: 1, parent: null, kind: 'generated' }));
+    store.expectDivider(KEY, 'm-2', 2);
+    store.addUserMsg(KEY, 'm-2', 'continue from here');
+    expect(messages().some((m) => m.kind === 'divider')).toBe(false);
+    ingest(frame('wicked.interactive.version.created', { version: 2, parent: 1, kind: 'generated' }));
+    expect(messages().map((m) => m.kind)).toEqual(['user', 'divider', 'user']);
+  });
+
+  it('a continuation whose run never lands anything never grows a divider', () => {
+    const store = useDocThreadStore.getState();
+    store.expectDivider(KEY, 'm-1', 2);
+    store.addUserMsg(KEY, 'm-1', 'continue');
+    ingest(frame('wicked.interactive.status.posted', { state: 'working', message: 'Rewriting slide 2' }));
+    expect(messages().some((m) => m.kind === 'divider')).toBe(false);
+  });
+});
+
+describe('the signal clock (§6.1 honesty budget)', () => {
+  it('every parsed frame stamps lastSignalAt for its thread', () => {
+    expect(useDocThreadStore.getState().lastSignalAt[KEY]).toBeUndefined();
+    ingest(frame('wicked.interactive.status.posted', { state: 'working', message: 'Planning' }));
+    const first = useDocThreadStore.getState().lastSignalAt[KEY];
+    expect(typeof first).toBe('number');
+  });
+
+  it('a frame naming no document stamps nothing', () => {
+    ingest({ type: 'interactiveEvent', event: { event_type: 'wicked.interactive.status.posted',
+             payload: { state: 'working' } } } as unknown as CoreEvent);
+    expect(useDocThreadStore.getState().lastSignalAt[KEY]).toBeUndefined();
+  });
+
+  it('addUserMsg stamps sentAt; retrySend re-stamps it', () => {
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, 'm-1', 'the ask');
+    const msg = messages().find((m) => m.kind === 'user');
+    expect(msg !== undefined && msg.kind === 'user' && typeof msg.sentAt).toBe('number');
+    store.retrySend(KEY, 'm-1');
+    const retried = messages().find((m) => m.kind === 'user');
+    expect(retried !== undefined && retried.kind === 'user' && typeof retried.sentAt).toBe('number');
   });
 });

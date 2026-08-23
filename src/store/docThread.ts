@@ -28,6 +28,17 @@ export interface FeedbackItem { wid: string; text: string }
 /** What a failed export offers to run again — the same format, at the same version. */
 export interface ExportRetry { format: ExportFormat; version: number }
 
+/**
+ * DES-UX-001 §6.1 honesty budget (the J3 pin): how long a send may wear
+ * "generating — this message is being worked now" with NO
+ * `wicked.interactive.*` signal for its thread before the chip must become a
+ * visible timeout state (honest copy + a working retry). The reproduced
+ * failure was a create whose pill span 28 minutes with zero backend signal —
+ * no run anywhere, Health green. 90s is the budget: long enough for a slow
+ * worker pickup, far shorter than a user abandoning the page.
+ */
+export const GENERATING_SILENCE_BUDGET_MS = 90_000;
+
 export type DocMsg =
   // `items` is set only for a submitted feedback batch: ONE message, N targets (§4.3 —
   // sending each comment separately would produce N versions and N runs). `notRecorded`
@@ -38,8 +49,12 @@ export type DocMsg =
   // message rehydrated from `GET /d/:doc/api/conversation` (§6.3): the wire carries no
   // message ids, so a restored message's id is minted fresh and its version anchor (if
   // any) came from the session-storage stopgap, not the transcript.
+  // `sentAt` is the send's own clock (§6.1 honesty budget): stamped when the
+  // message is enqueued and re-stamped by a retry, it is half of what decides
+  // when the generating chip must stop claiming "being worked now".
   | { kind: 'user';      id: string; text: string; version?: number;
-      items?: FeedbackItem[]; notRecorded?: boolean; failed?: boolean; restored?: boolean }
+      items?: FeedbackItem[]; notRecorded?: boolean; failed?: boolean; restored?: boolean;
+      sentAt?: number }
   | { kind: 'narration'; id: string; text: string }
   // `href` + `file` make an agent message DOWNLOADABLE (§4.4): an export is an ordinary
   // message from the service, carrying its artifact — never a toast, never a second origin.
@@ -143,6 +158,16 @@ interface DocThreadStore {
   /** Threads whose rehydration read (§6.3) has run — once per thread per session. */
   hydrated: Record<string, boolean>;
   /**
+   * When the LAST `wicked.interactive.*` frame for each thread arrived (§6.1
+   * honesty budget). Any frame counts — status, chat, version, export: each one
+   * proves something is alive on the other end, so each one re-arms the budget.
+   * A thread that has never heard anything has no entry.
+   */
+  lastSignalAt: Record<string, number>;
+  /** Deferred continuation dividers (§7.10, the J3 bookkeeping pin), per thread:
+   *  each waits for the wire to show its version exists. See `expectDivider`. */
+  expectedDividers: Record<string, { msgId: string; version: number }[]>;
+  /**
    * The newest version the stream has landed, per thread. The transcript tags its anchor
    * message (§7.6) and does not otherwise care; a mode SURFACE does — a re-authored demo
    * spec is a new version of the same artifact (§7.10's continuation rhythm), so the
@@ -186,8 +211,15 @@ interface DocThreadStore {
                 artifact?: { href: string; file?: string }) => void;
   /** Append an §3.3 ACTIONABLE line — a failure that names its fix, and what to retry. */
   addActionable: (key: string, text: string, hint: string, retry?: ExportRetry) => void;
-  /** The version divider a fork+inject continuation renders behind (§7.10). */
-  addDivider: (key: string, version: number) => void;
+  /**
+   * Register the version divider a fork+inject continuation WILL render behind
+   * (§7.10) — deferred to the wire (the J3 bookkeeping pin): "continues as vN"
+   * is an anchor, and no anchor may render before the thread has OBSERVED that
+   * version exist. The divider is inserted immediately above the continuation
+   * message by the first `version.created` arrival at or past `version`; a
+   * continuation whose run never lands anything never grows a divider.
+   */
+  expectDivider: (key: string, msgId: string, version: number) => void;
   setGenState: (key: string, state: GenState) => void;
   clear: (key: string) => void;
 }
@@ -205,11 +237,16 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
   landed: {},
   landings: [],
   lastError: {},
+  lastSignalAt: {},
+  expectedDividers: {},
 
   ingest: (event) => {
     const frame = frameOf(event);
     if (frame === null) return;
     const { key, type, payload } = frame;
+    // §6.1 honesty budget: every parsed frame for this thread is a liveness
+    // signal — stamp it before the fold, whatever the fold does with the frame.
+    set((s) => ({ lastSignalAt: { ...s.lastSignalAt, [key]: Date.now() } }));
     // The anchor the VERSION branch tags, surfaced out of the reducer so the
     // session-storage stopgap (§6.3) records it OUTSIDE the state update.
     let taggedOrd: number | null = null;
@@ -335,9 +372,26 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         const queue = s.pending[key] ?? [];
         const anchorId = queue.length > 0 ? queue[0] : undefined;
         const generated = GENERATED.has(kind);
-        const thread = messages[key] ?? [];
+        // §7.10 deferred dividers (the J3 bookkeeping pin): this arrival is the
+        // proof-of-existence a registered continuation waited for. Each divider
+        // whose version the wire has now reached is inserted immediately above
+        // its continuation message — never earlier than this moment.
+        const expected = s.expectedDividers[key] ?? [];
+        const due = expected.filter((e) => version >= e.version);
+        let thread = messages[key] ?? [];
+        for (const e of due) {
+          const divider: DocMsg = { kind: 'divider', id: nextMsgId(), version: e.version };
+          const at = thread.findIndex((m) => m.kind === 'user' && m.id === e.msgId);
+          thread = at === -1
+            ? [...thread, divider]
+            : [...thread.slice(0, at), divider, ...thread.slice(at)];
+        }
+        const dividers = due.length === 0
+          ? {}
+          : { expectedDividers: { ...s.expectedDividers,
+                                  [key]: expected.filter((e) => version < e.version) } };
         const tagged = anchorId === undefined
-          ? messages
+          ? (due.length === 0 ? messages : { ...messages, [key]: thread })
           : {
               ...messages,
               [key]: thread.map((m) =>
@@ -356,6 +410,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         }
         return {
           messages: tagged,
+          ...dividers,
           pending: generated && anchorId !== undefined
             ? { ...s.pending, [key]: queue.slice(1) }
             : s.pending,
@@ -382,7 +437,8 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
 
   addUserMsg: (key, id, text, items) =>
     set((s) => ({
-      messages: append(s.messages, key, { kind: 'user', id, text, ...(items ? { items } : {}) }),
+      messages: append(s.messages, key,
+        { kind: 'user', id, text, sentAt: Date.now(), ...(items ? { items } : {}) }),
       pending: { ...s.pending, [key]: [...(s.pending[key] ?? []), id] },
     })),
 
@@ -401,7 +457,8 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       messages: {
         ...s.messages,
         [key]: (s.messages[key] ?? []).map((m) =>
-          m.kind === 'user' && m.id === id ? { ...m, failed: false } : m),
+          // A retry is a NEW send, so its §6.1 honesty-budget clock restarts too.
+          m.kind === 'user' && m.id === id ? { ...m, failed: false, sentAt: Date.now() } : m),
       },
       pending: { ...s.pending, [key]: [...(s.pending[key] ?? []).filter((p) => p !== id), id] },
     })),
@@ -467,8 +524,13 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       }),
     })),
 
-  addDivider: (key, version) =>
-    set((s) => ({ messages: append(s.messages, key, { kind: 'divider', id: nextMsgId(), version }) })),
+  expectDivider: (key, msgId, version) =>
+    set((s) => ({
+      expectedDividers: {
+        ...s.expectedDividers,
+        [key]: [...(s.expectedDividers[key] ?? []), { msgId, version }],
+      },
+    })),
 
   setGenState: (key, state) => set((s) => ({ genState: { ...s.genState, [key]: state } })),
 
@@ -480,6 +542,8 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       const hydrated = { ...s.hydrated }; delete hydrated[key];
       const landed = { ...s.landed }; delete landed[key];
       const lastError = { ...s.lastError }; delete lastError[key];
-      return { messages, genState, pending, hydrated, landed, lastError };
+      const lastSignalAt = { ...s.lastSignalAt }; delete lastSignalAt[key];
+      const expectedDividers = { ...s.expectedDividers }; delete expectedDividers[key];
+      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers };
     }),
 }));

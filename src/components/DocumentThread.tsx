@@ -9,7 +9,7 @@ import { retryBatchInject } from '../interactive/feedbackBatch.js';
 import { scrollToWid } from '../interactive/widScroller.js';
 import { scrollStripToVersion } from './threadAnchor.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
-import { nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState } from '../store/docThread.js';
+import { GENERATING_SILENCE_BUDGET_MS, nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState } from '../store/docThread.js';
 
 // Document mode's half of the ONE conversation (DES-MERGE-001 §2, §6.3 slice 10).
 //
@@ -61,8 +61,15 @@ const COMPOSER: Record<GenState, { placeholder: string; submit: string }> = {
 
 /** DES-UX-001 §6.1: where one user message sits in its send lifecycle. Derived from
  *  the store's pending FIFO — head = being worked, rest = queued behind the current
- *  run — plus the message's own `failed` flag. `undefined` = resolved (or historic). */
-export type SendState = 'generating' | 'queued' | 'failed';
+ *  run — plus the message's own `failed` flag. `undefined` = resolved (or historic).
+ *  `stalled` is the honesty-budget expiry (the J3 pin): the head send heard NO
+ *  `wicked.interactive.*` signal for `GENERATING_SILENCE_BUDGET_MS` — the chip must
+ *  say so and offer a retry, never keep claiming "being worked now". */
+export type SendState = 'generating' | 'queued' | 'failed' | 'stalled';
+
+/** The honest-timeout copy, pinned verbatim by the AC and the rig. */
+export const GENERATING_TIMEOUT_COPY =
+  'no worker has picked this up — the generation service may be down';
 
 function Bubble({
   msg, projectId, docId, onShowVersion, sendState, onRetrySend,
@@ -156,6 +163,30 @@ function Bubble({
           >
             <span className="w-1 h-1 rounded-full shrink-0" style={{ background: S.live }} />
             generating — this message is being worked now
+          </span>
+        )}
+        {/* §6.1 honesty budget (J3): the budget ran out with no signal from the
+            service — the chip stops claiming work and says what is known (nothing
+            picked this up), with the retry that re-arms the send AND the budget.
+            Gate-amber, not fail-red: nothing failed loudly, something is missing. */}
+        {sendState === 'stalled' && (
+          <span
+            data-testid="thread-generating-timeout"
+            className="flex items-center gap-2 rounded-full px-2.5 py-0.5 text-[10px] font-mono"
+            style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)',
+                     border: '1px solid var(--status-gate-dim)' }}
+          >
+            {GENERATING_TIMEOUT_COPY}
+            <button
+              type="button"
+              data-testid="thread-generating-retry"
+              onClick={() => onRetrySend?.(msg)}
+              className="underline font-mono text-[10px]"
+              style={{ background: 'transparent', border: 'none', color: 'var(--status-gate)',
+                       cursor: 'pointer', padding: 0 }}
+            >
+              retry
+            </button>
           </span>
         )}
         {sendState === 'queued' && (
@@ -428,6 +459,32 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const hydratedFromWire = useDocThreadStore((s) => (key === null ? false : s.hydrated[key] === true));
   // A document that exists with nothing in flight IS case 4: complete, and editable (§7.10).
   const state: GenState = docId === null ? 'idle' : streamed ?? 'terminal';
+  // §6.1 honesty budget (J3): the moment the thread last heard ANY interactive
+  // frame — status, version, chat, export. Silence past the budget while the
+  // head send claims "generating" flips the chip to the visible timeout state.
+  const lastSignal = useDocThreadStore((s) => (key === null ? 0 : s.lastSignalAt[key] ?? 0));
+  const headId: string | undefined = pendingIds[0];
+  const headSentAt = ((): number => {
+    if (headId === undefined) return 0;
+    const head = messages.find((m) => m.kind === 'user' && m.id === headId);
+    return head?.kind === 'user' ? head.sentAt ?? 0 : 0;
+  })();
+  const [stalled, setStalled] = useState(false);
+  // The budget re-arms on every signal and on every (re)send — whichever spoke last.
+  const budgetFrom = Math.max(headSentAt, lastSignal);
+  useEffect(() => {
+    // Nothing to time: no in-flight head send, no working claim, or no clock to
+    // measure from (a restored head with no sentAt cannot be honestly timed).
+    if (state !== 'generating' || headId === undefined || budgetFrom === 0) {
+      setStalled(false);
+      return;
+    }
+    const remaining = budgetFrom + GENERATING_SILENCE_BUDGET_MS - Date.now();
+    if (remaining <= 0) { setStalled(true); return; }
+    setStalled(false);
+    const timer = setTimeout(() => { setStalled(true); }, remaining);
+    return () => { clearTimeout(timer); };
+  }, [state, headId, budgetFrom]);
   // NOTE (issue #65): slice 16's picked theme no longer rides here. The `theme_id` it
   // put on the create body and the injected message was consumed by NOTHING — the theme
   // registry it named never existed on the bridge. A document's look is learned per-doc
@@ -496,7 +553,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
       if (state === 'terminal') {
         const from = selectedVersion ?? (await getVersions(projectId, docId)).head;
         const forked = await postFork(projectId, docId, from, msgId);
-        store.addDivider(key, forked.version);
+        // §7.10 + the J3 bookkeeping pin: the "continues as vN" divider is an
+        // ANCHOR, so it renders only when the wire shows vN exists — registered
+        // here, inserted above this message by the version.created arrival.
+        store.expectDivider(key, msgId, forked.version);
         store.addUserMsg(key, msgId, body);
         store.setGenState(key, 'generating');
         // §6.1 (EC36): once the message is ON the thread, a refused send fails
@@ -574,7 +634,9 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     if (msg.failed === true) return 'failed';
     const at = pendingIds.indexOf(msg.id);
     if (at === -1) return undefined;
-    return at === 0 ? 'generating' : 'queued';
+    if (at !== 0) return 'queued';
+    // The head send: "being worked now" only while the honesty budget holds (J3).
+    return stalled ? 'stalled' : 'generating';
   }
 
   // The tag's cross-link (§2.6 rule 2): selecting the version IS a navigation — the
@@ -701,7 +763,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             the folders the service reads in place — stated where the message is composed.
             Document mode only: a demo's look comes from the site it records (§4.5). */}
         {mode === 'document' && <ComposerContext projectId={projectId} docId={docId} />}
-        {state === 'generating' && (
+        {state === 'generating' && !stalled && (
           <span
             data-testid="steering-chip"
             className="self-start flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-mono"
@@ -710,6 +772,18 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
           >
             <span className="w-1 h-1 rounded-full shrink-0" style={{ background: S.live }} />
             steering the live {mode === 'video' ? 'demo' : 'document'} run
+          </span>
+        )}
+        {/* §6.1 (J3): past the honesty budget the composer must not claim a live
+            run either — one page, one truth. The retry lives on the message chip. */}
+        {state === 'generating' && stalled && (
+          <span
+            data-testid="steering-stalled"
+            className="self-start rounded-full px-2.5 py-0.5 text-[10px] font-mono"
+            style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)',
+                     border: '1px solid var(--status-gate-dim)' }}
+          >
+            no live signal from the generation service
           </span>
         )}
         {/* §7.3 (slice X2): the parse, SHOWN before submit — a quoted name in a

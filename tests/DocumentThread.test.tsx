@@ -5,7 +5,7 @@
 // one: editing a complete version is fork + inject as a SINGLE composer action, rendered
 // as a continuation — a version divider, no new thread header.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DocumentThread } from '../src/components/DocumentThread.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
@@ -187,18 +187,42 @@ describe('state 4 — terminal: fork + inject is ONE atomic action (§7.10)', ()
       }),
     }));
 
-    // Rendered as a CONTINUATION: a version divider, and no new thread header.
+    // The J3 bookkeeping pin: "continues as v4" is an ANCHOR — it must NOT
+    // render before the thread observed v4 on the wire. Right after the fork
+    // acks, the divider is only REGISTERED, never shown.
+    expect(screen.queryByTestId('version-divider')).toBeNull();
+    expect((useDocThreadStore.getState().messages[KEY] ?? []).map((m) => m.kind))
+      .toEqual(['user']);
+
+    // The version.created arrival is what materializes it — a CONTINUATION:
+    // a version divider above its message, and no new thread header.
+    act(() => {
+      useDocThreadStore.getState().ingest({
+        type: 'interactiveEvent',
+        event: {
+          event_type: 'wicked.interactive.version.created',
+          payload: { project_id: PROJECT, document_id: DOC, version: 4, parent: 3, kind: 'generated' },
+        },
+      } as never);
+    });
     const divider = screen.getByTestId('version-divider');
     expect(divider).toHaveAttribute('data-version', '4');
     expect(divider).toHaveTextContent('continues as v4');
     expect(screen.queryByTestId('thread-header')).toBeNull();
     expect(screen.getAllByTestId('thread')).toHaveLength(1);
 
-    // The divider precedes the message it continues into, and the composer is live again.
+    // The divider precedes the message it continues into, and the landing
+    // consumed both the anchor and the expectation.
     const order = (useDocThreadStore.getState().messages[KEY] ?? []).map((m) => m.kind);
     expect(order).toEqual(['divider', 'user']);
-    expect(useDocThreadStore.getState().genState[KEY]).toBe('generating');
     expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/${DOC}?v=4`);
+  });
+
+  it('the composer is live (generating) after the fork, before anything lands', async () => {
+    mount(DOC, 3);
+    await send('make the closing slide stronger');
+    await waitFor(() => expect(postEvent).toHaveBeenCalledTimes(1));
+    expect(useDocThreadStore.getState().genState[KEY]).toBe('generating');
   });
 
   it('with no routed version it forks from the manifest head, never from v1', async () => {
