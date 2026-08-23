@@ -944,29 +944,6 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
         {openError !== null && (
           <p className="text-[12px] font-mono" style={{ color: 'var(--status-fail)' }}>Could not open chat: {openError}</p>
         )}
-        {/* §7.9-2: a failed send is a visible, retryable fact — the draft is
-            still in the composer, nothing was fanned out, and Retry re-sends
-            exactly what failed. Never a cleared composer, never silence. */}
-        {sendFailed !== null && (
-          <div
-            data-testid="chat-send-failed"
-            className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[12px] font-mono flex items-center gap-3"
-            style={{ border: '1px solid var(--status-fail-dim)', color: 'var(--ink-body)' }}
-          >
-            <span style={{ color: 'var(--status-fail)' }}>
-              Send failed — {sendFailed.reason}. Your draft is still in the composer.
-            </span>
-            <button
-              type="button"
-              data-testid="chat-send-retry"
-              onClick={() => void send(sendFailed.text)}
-              className="shrink-0 px-2 py-0.5 rounded-lg"
-              style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)', border: '1px solid var(--surface-overlay)' }}
-            >
-              Retry
-            </button>
-          </div>
-        )}
         {firstRun && (
           // §2.4: the first-run state TEACHES — what Chat is, what typing does, and the
           // product's central trick (choose a mode by conversation). Never a warmed roster.
@@ -1052,6 +1029,29 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
                 </div>
               ),
             )}
+        {/* §7.9-2: a failed send is a visible, retryable fact — the draft is
+            still in the composer, nothing was fanned out, and Retry re-sends
+            exactly what failed. Never a cleared composer, never silence. */}
+        {sendFailed !== null && (
+          <div
+            data-testid="chat-send-failed"
+            className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[12px] font-mono flex items-center gap-3"
+            style={{ border: '1px solid var(--status-fail-dim)', color: 'var(--ink-body)' }}
+          >
+            <span style={{ color: 'var(--status-fail)' }}>
+              Send failed — {sendFailed.reason}. Your draft is still in the composer.
+            </span>
+            <button
+              type="button"
+              data-testid="chat-send-retry"
+              onClick={() => void send(sendFailed.text)}
+              className="shrink-0 px-2 py-0.5 rounded-lg"
+              style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)', border: '1px solid var(--surface-overlay)' }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
