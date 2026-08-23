@@ -42,8 +42,10 @@ cross-link; Video narration naming its subject). The §5.5 cross-link flash
 
 Captures (§6.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/vision/:
   vision-4-chat-firstrun.png   Chat mode, first-run state (§5.3)
-  vision-4-build-runs.png      Build mode: W2's running + gate runs, left-border
-                               status coloring, gate inbox, cost footer (§5.4)
+  vision-4-build-runs.png      Build mode: q3-review-deck's Build tab — the gate
+                               run's left-border coloring, gate inbox, purpose,
+                               primary action (§5.4; scene 2 visits the project
+                               tabs that own each status edge — see the scene)
   vision-5-document.png        Document mode, three-pane, v2 selected, version
                                tags in thread (§5.5)
   vision-5-video.png           Video mode: player + storyboard chapters (§5.6)
@@ -228,71 +230,151 @@ with sync_playwright() as p:
     }
 
     # ══ Scene 2 — Build (§5.4): left-border status, purpose, gate inbox, footer ═
-    # Re-scoped by DES-UX-001 slice S (§2.3 rule 2): a project's Build tab now
-    # shows exactly its runs, so the multi-status whole-fixture list (gate +
-    # working + failed edges, the $0.42 footer) lives on the FLAT `/runs` home.
+    # Re-scope history — this scene has followed the §5.4 anatomy twice:
+    #   · DES-UX-001 slice S (§2.3 rule 2) scoped a project's Build tab to
+    #     exactly its own runs, so the multi-status whole-fixture list (gate +
+    #     working + failed edges beside one $0.42 footer) moved to the FLAT
+    #     `/runs` home — this scene's §11.2 re-scope (slice W) pointed here.
+    #   · DES-UX-001 slice Y then retired bare `/runs` outright: it is a
+    #     replace-redirect to `/work`, whose rows are run-LINK anatomy, and the
+    #     unscoped CenterDashboard now sits behind the legacy-redirect fallback
+    #     — URL-unreachable. No `build-run-row` renders at ANY URL outside a
+    #     project shell.
+    # So this scene follows the anatomy to where it truly renders: the project
+    # Build tabs (`/p/:id/build`, slice S), visiting the tab that OWNS each
+    # status edge — q3-review-deck (gate, plus purpose/pill/action: the named
+    # capture), upload-endpoint (working, plus the ONLY real cost footer),
+    # auth-refactor (failed). Token contracts unchanged; the footer is asserted
+    # per-project because that is what each page truly folds (see below).
     set_fixture(ORIGIN, usage_ws=True)
-    page.goto(f"{ORIGIN}/runs", wait_until="domcontentloaded")
-    page.locator('[data-testid="build-run-row"][data-status="gate"]').first.wait_for(timeout=30000)
-    page.locator('[data-testid="build-stats-footer"]').wait_for(timeout=30000)
-    page.add_style_tag(content=HIDE_GATE_TOASTS)
 
-    build = page.evaluate(
-        f"""() => {{
-             const probes = ({PROBES})();
-             const purpose = document.querySelector('[data-testid="build-purpose"]');
-             const row = st => document.querySelector(
-               `[data-testid="build-run-row"][data-status="${{st}}"]`);
-             const edge = el => el ? {{
-               color: getComputedStyle(el).borderLeftColor,
-               width: getComputedStyle(el).borderLeftWidth }} : null;
-             const gateRow = row('gate');
-             const spans = gateRow ? gateRow.querySelectorAll('span') : [];
-             const pill = document.querySelector('[data-testid="gate-inbox-pill"]');
-             const footer = document.querySelector('[data-testid="build-stats-footer"]');
-             const action = document.querySelector('[data-testid="build-something"]');
-             return {{
-               probes,
-               purposeVisible: !!purpose && purpose.offsetParent !== null,
-               purposeColor: purpose ? getComputedStyle(purpose).color : null,
-               purposeFont: purpose ? getComputedStyle(purpose).fontFamily : null,
-               gateEdge: edge(row('gate')),
-               workingEdge: edge(row('working')),
-               failedEdge: edge(row('failed')),
-               intentFont: spans[1] ? getComputedStyle(spans[1]).fontFamily : null,
-               intentText: spans[1] ? spans[1].textContent : null,
-               statusFont: spans[2] ? getComputedStyle(spans[2]).fontFamily : null,
-               pillBg: pill ? getComputedStyle(pill).backgroundColor : null,
-               pillColor: pill ? getComputedStyle(pill).color : null,
-               footerFont: footer ? getComputedStyle(footer).fontFamily : null,
-               footerColor: footer ? getComputedStyle(footer).color : null,
-               footerText: footer ? footer.textContent : null,
-               actionBg: action ? getComputedStyle(action).backgroundColor : null,
-               campaignsAbsent: !document.body.innerText.toLowerCase().includes('campaign'),
-             }}; }}""")
-    pb = build["probes"]
-    build_ok = all([
-        build["purposeVisible"],
-        build["purposeColor"] == pb["inkBody"],                    # AC 1
-        "Inter" in (build["purposeFont"] or ""),
-        (build["gateEdge"] or {}).get("color") == pb["statusGate"],   # AC 2
-        (build["gateEdge"] or {}).get("width") == "2px",
-        (build["workingEdge"] or {}).get("color") == pb["statusRun"],
-        (build["failedEdge"] or {}).get("color") == pb["statusFail"],
-        "Inter" in (build["intentFont"] or ""),                    # EC13
-        "JetBrains Mono" in (build["statusFont"] or ""),
-        build["pillBg"] == pb["statusGateDim"],
-        build["pillColor"] == pb["statusGate"],
-        "JetBrains Mono" in (build["footerFont"] or ""),
-        build["footerColor"] == pb["inkDim"],
-        "$0.42" in (build["footerText"] or ""),
-        build["actionBg"] == pb["accent"],
-        build["campaignsAbsent"],
+    # The same §5.4 extraction, run on each project's Build tab.
+    BUILD_READ = f"""() => {{
+         const probes = ({PROBES})();
+         const purpose = document.querySelector('[data-testid="build-purpose"]');
+         const row = st => document.querySelector(
+           `[data-testid="build-run-row"][data-status="${{st}}"]`);
+         const edge = el => el ? {{
+           color: getComputedStyle(el).borderLeftColor,
+           width: getComputedStyle(el).borderLeftWidth }} : null;
+         const gateRow = row('gate');
+         const spans = gateRow ? gateRow.querySelectorAll('span') : [];
+         const pill = document.querySelector('[data-testid="gate-inbox-pill"]');
+         const footer = document.querySelector('[data-testid="build-stats-footer"]');
+         const action = document.querySelector('[data-testid="build-something"]');
+         return {{
+           probes,
+           purposeVisible: !!purpose && purpose.offsetParent !== null,
+           purposeColor: purpose ? getComputedStyle(purpose).color : null,
+           purposeFont: purpose ? getComputedStyle(purpose).fontFamily : null,
+           gateEdge: edge(row('gate')),
+           workingEdge: edge(row('working')),
+           failedEdge: edge(row('failed')),
+           intentFont: spans[1] ? getComputedStyle(spans[1]).fontFamily : null,
+           intentText: spans[1] ? spans[1].textContent : null,
+           statusFont: spans[2] ? getComputedStyle(spans[2]).fontFamily : null,
+           pillBg: pill ? getComputedStyle(pill).backgroundColor : null,
+           pillColor: pill ? getComputedStyle(pill).color : null,
+           footerPresent: !!footer,
+           footerWindow: footer ? footer.getAttribute('data-window') : null,
+           footerFont: footer ? getComputedStyle(footer).fontFamily : null,
+           footerColor: footer ? getComputedStyle(footer).color : null,
+           footerText: footer ? footer.textContent : null,
+           actionBg: action ? getComputedStyle(action).backgroundColor : null,
+           campaignsAbsent: !document.body.innerText.toLowerCase().includes('campaign'),
+         }}; }}"""
+
+    # ── 2a. The gate project (q3-review-deck → r-q3 at awaiting_human) ────────
+    page.goto(f"{ORIGIN}/p/q3-review-deck/build", wait_until="domcontentloaded")
+    page.locator('[data-testid="build-run-row"][data-status="gate"]').first.wait_for(timeout=30000)
+    page.add_style_tag(content=HIDE_GATE_TOASTS)
+    gate_page = page.evaluate(BUILD_READ)
+    pb = gate_page["probes"]
+    gate_ok = all([
+        gate_page["purposeVisible"],
+        gate_page["purposeColor"] == pb["inkBody"],                # AC 1
+        "Inter" in (gate_page["purposeFont"] or ""),
+        (gate_page["gateEdge"] or {}).get("color") == pb["statusGate"],  # AC 2
+        (gate_page["gateEdge"] or {}).get("width") == "2px",
+        "Inter" in (gate_page["intentFont"] or ""),                # EC13
+        "JetBrains Mono" in (gate_page["statusFont"] or ""),
+        gate_page["pillBg"] == pb["statusGateDim"],
+        gate_page["pillColor"] == pb["statusGate"],
+        gate_page["actionBg"] == pb["accent"],
+        # r-q3 is parked at its gate (`awaiting_human` — core: paused BEFORE a
+        # not-yet-done unit, so nothing is in flight) and no cliUsage frame has
+        # ever addressed it, so the data-gated footer (§2.7 rule 2) renders
+        # NOTHING on this page — never a $0.00 or an em-dash.
+        not gate_page["footerPresent"],
+        gate_page["campaignsAbsent"],
         # EC12: the accent is none of the status colors.
         pb["accent"] not in (pb["statusGate"], pb["statusRun"], pb["statusFail"]),
     ])
     page.screenshot(path=str(VSHOTS / "vision-4-build-runs.png"))
-    report["steps"]["build_runs"] = {"ok": build_ok, **build}
+
+    # ── 2b. The working project (upload-endpoint → r-upload executing) ────────
+    page.goto(f"{ORIGIN}/p/upload-endpoint/build", wait_until="domcontentloaded")
+    page.locator('[data-testid="build-run-row"][data-status="working"]').first.wait_for(timeout=30000)
+    page.add_style_tag(content=HIDE_GATE_TOASTS)
+    # This page's footer TRUTH, derived from the fixture's usage wires (the
+    # flat home's old "$0.42" was ALREADY this project's spend — the one
+    # `usage_ws` cliUsage frame is addressed to r-upload, and the REST events
+    # backfill carries no cliUsage for any run):
+    #   /ws pushes ONE frame on connect: {session: "r-upload",
+    #     inputTokens: 84000, outputTokens: 14000, costUsd: 0.42}
+    #   → usageTotals: tokens = 84000 + 14000 = 98000 → formatTokens "98.0k";
+    #                  cost = 0.42 → formatCost "$0.42";
+    #   → unitsInFlight: r-upload is `executing` with its cursor unit pending
+    #     → 1 → "1 step in flight";
+    #   → footerParts.join(' · ') = "1 step in flight · $0.42 · 98.0k tokens",
+    #     windowed "30d" (the useTimeRange default, EC39).
+    footer_folded = settled(
+        """() => { const f = document.querySelector('[data-testid="build-stats-footer"]');
+             return !!f && (f.textContent || '').includes('$0.42'); }""",
+        timeout=30000,
+    )
+    working_page = page.evaluate(BUILD_READ)
+    pw = working_page["probes"]
+    working_ok = all([
+        footer_folded,
+        (working_page["workingEdge"] or {}).get("color") == pw["statusRun"],  # AC 2
+        (working_page["workingEdge"] or {}).get("width") == "2px",
+        working_page["purposeVisible"],
+        working_page["footerPresent"],
+        "JetBrains Mono" in (working_page["footerFont"] or ""),
+        working_page["footerColor"] == pw["inkDim"],
+        "1 step in flight" in (working_page["footerText"] or ""),
+        "$0.42" in (working_page["footerText"] or ""),
+        "98.0k tokens" in (working_page["footerText"] or ""),
+        working_page["footerWindow"] == "30d",                     # EC39
+        working_page["campaignsAbsent"],
+    ])
+
+    # ── 2c. The failed project (auth-refactor → r-auth failed) ────────────────
+    page.goto(f"{ORIGIN}/p/auth-refactor/build", wait_until="domcontentloaded")
+    page.locator('[data-testid="build-run-row"][data-status="failed"]').first.wait_for(timeout=30000)
+    page.add_style_tag(content=HIDE_GATE_TOASTS)
+    failed_page = page.evaluate(BUILD_READ)
+    pf = failed_page["probes"]
+    failed_ok = all([
+        (failed_page["failedEdge"] or {}).get("color") == pf["statusFail"],  # AC 2
+        (failed_page["failedEdge"] or {}).get("width") == "2px",
+        failed_page["purposeVisible"],
+        # r-auth is terminal-failed (nothing in flight) and its events backfill
+        # holds no cliUsage — the data-gated footer renders nothing here too.
+        not failed_page["footerPresent"],
+        failed_page["campaignsAbsent"],
+    ])
+
+    build_ok = gate_ok and working_ok and failed_ok
+    report["steps"]["build_runs"] = {
+        "ok": build_ok,
+        "gate_ok": gate_ok, "working_ok": working_ok, "failed_ok": failed_ok,
+        "gate_project": {k: v for k, v in gate_page.items() if k != "probes"},
+        "working_project": {k: v for k, v in working_page.items() if k != "probes"},
+        "failed_project": {k: v for k, v in failed_page.items() if k != "probes"},
+        "footer_folded": footer_folded,
+    }
 
     # ══ Scene 3 — Document (§5.5): drive the W3 journey, then read the tokens ══
     page.goto(f"{ORIGIN}/p/scratch/document", wait_until="domcontentloaded")
