@@ -177,15 +177,27 @@ with sync_playwright() as p:
     # RESUMES the original clock (already stalled ⇒ visibly stalled), never re-arms.
     rewound = page.evaluate(
         """(key) => {
-             const k = `wk-thread-sends:${key}`;
-             const raw = sessionStorage.getItem(k);
-             if (!raw) return null;
-             const sends = JSON.parse(raw).map((s) => ({ ...s, sentAt: s.sentAt - 95000 }));
-             sessionStorage.setItem(k, JSON.stringify(sends));
-             return sends;
+             const raw = sessionStorage.getItem(`wk-thread-sends:${key}`);
+             return raw === null ? null : JSON.parse(raw);
            }""", KEY)
     check("C1_pending_send_persisted", bool(rewound) and rewound[0]["state"] == "pending",
           persisted=rewound)
+    # The rewind itself rides an init script so it executes on the NEXT document
+    # BEFORE any app code — a live-tab rewrite here can lose a race with the
+    # store's own persist (any late frame re-derives the snapshot and restores
+    # the fresh clock; the cold-run flake). One-shot: later reloads must see the
+    # app's own writes, so the marker retires the rewind after this reload.
+    page.add_init_script(f"""
+        (() => {{
+          if (sessionStorage.getItem('fixj33-rewound') !== null) return;
+          const k = 'wk-thread-sends:{KEY}';
+          const raw = sessionStorage.getItem(k);
+          if (raw === null) return;
+          sessionStorage.setItem('fixj33-rewound', '1');
+          sessionStorage.setItem(k, JSON.stringify(
+            JSON.parse(raw).map((s) => ({{ ...s, sentAt: s.sentAt - 95000 }}))));
+        }})();
+    """)
 
     page.reload(wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)
