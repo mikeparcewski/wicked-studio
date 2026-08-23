@@ -176,7 +176,9 @@ with sync_playwright() as p:
     plus_labels = page.evaluate(
         """() => Array.from(document.querySelectorAll('[data-testid="heading-new"]'))
               .map(b => b.getAttribute('aria-label'))""")
-    verbs_ok = plus_labels == ["New Projects", "New Make", "New Chat", "New Repositories"]
+    # RE-SCOPED by slice X2 (DES-UX-001 §7.10 grammar fix): the ＋ labels are
+    # the SINGULAR noun each affordance creates — never the heading's plural.
+    verbs_ok = plus_labels == ["New Project", "New Document", "New Chat", "New Repository"]
     settings_plus_absent = page.evaluate(
         """() => !document.querySelector(
              '[data-testid="rail-heading-settings"] [data-testid="heading-new"]')""")
