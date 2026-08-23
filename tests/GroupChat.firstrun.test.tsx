@@ -121,18 +121,38 @@ describe('GroupChat — first-run teaches, nothing warms (DES-UXFIX-001 §2.4 + 
     await waitFor(() => expect(screen.getByTestId('chat-close')).toBeInTheDocument());
   });
 
-  it('the fallback trio reaches the daemon ONLY when the roster is unreachable (§7.9-1)', async () => {
+  it('the fallback trio NEVER reaches the daemon: an unreachable roster fails the send inline, and Retry recovers (§7.9-1 round 2)', async () => {
+    // Round-2 re-scope (BRIEF-UX-001 J4 finding 1): this test previously
+    // pinned "the trio is the honest audience when the roster is unreachable"
+    // — the exact branch the cold-profile review caught rejecting every new
+    // user's first send. The trio is a PLACEHOLDER rendering now: a pristine
+    // selection either resolves to the roster or the send fails honestly
+    // (draft kept, inline retry) with NOTHING on the wire.
     const user = userEvent.setup();
-    getRoster.mockRejectedValue(new Error('daemon unreachable'));
+    getRoster.mockRejectedValueOnce(new Error('daemon unreachable'));
     render(<GroupChat repoId={null} onBack={() => undefined} />);
 
     await user.type(screen.getByRole('textbox'), 'make me a deck');
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    const failure = await screen.findByTestId('chat-send-failed');
+    expect(failure).toHaveTextContent(/could not load the agent roster/);
     expect(getRoster).toHaveBeenCalledTimes(1);
-    // Cold cache AND unreachable roster: the trio is the honest audience.
-    expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(FALLBACK);
+    // NOTHING reached the wire — no open, no fan-out, no phantom turn.
+    expect(openChat).not.toHaveBeenCalled();
+    expect(sendChatMessage).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox')).toHaveValue('make me a deck');
+    expect(screen.queryByTestId('user-bubble')).toBeNull();
+
+    // The roster recovers → Retry sends to the ROSTER's seats, exactly once.
+    await user.click(screen.getByTestId('chat-send-retry'));
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(ROSTER.map((s) => s.key));
+    const chatId = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(chatId, 'make me a deck'));
+    // No duplicate: the retried message renders exactly once.
+    await waitFor(() => expect(screen.getAllByTestId('user-bubble')).toHaveLength(1));
+    expect(screen.queryByTestId('chat-send-failed')).toBeNull();
   });
 
   it('[+ Add] opens the roster picker (fetch rides the user action) and the addition joins the send', async () => {
