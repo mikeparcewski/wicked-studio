@@ -32,6 +32,8 @@ vi.mock('../src/api/interactive.js', async (importOriginal) => {
   return {
     ServiceHintError: actual.ServiceHintError,
     BridgeUnavailableError: actual.BridgeUnavailableError,
+    docBinding: actual.docBinding, // slice U (§6.2): the real binding rule
+
     requestThemeLearn: (...a: unknown[]) => requestThemeLearn(...a),
     attachSource: (...a: unknown[]) => attachSource(...a),
     createDoc: (...a: unknown[]) => createDoc(...a),

@@ -21,6 +21,9 @@ vi.mock('../src/api/interactive.js', () => ({
   requestRecord: (...a: unknown[]) => requestRecord(...a),
   postEvent: (...a: unknown[]) => postEvent(...a),
   injectDocMessage: (...a: unknown[]) => injectDocMessage(...a),
+  // Slice U (§6.2): the REAL binding rule — the mock must not change it, or
+  // the "bound to its project" AC below would assert against a stub.
+  docBinding: (pid: string) => (pid === 'default' ? {} : { project: pid }),
 }));
 
 const PROJECT = 'proj-abc-123';

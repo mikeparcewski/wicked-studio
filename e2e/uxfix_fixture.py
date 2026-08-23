@@ -269,6 +269,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # 500 {error} — the visible-failure branch (a bridge that refuses the
          # send; the client must render thread-send-failed, never silence).
          "send_fail": False,
+         # Slice U (DES-UX-001 §6.2, §8.4.1 probe 3): when True, POST
+         # /api/docs answers the bridge's REAL refused-bind shape — a loud
+         # 502 {"error": "crew daemon unreachable at …"} with NOTHING created
+         # (server.js validates attachability BEFORE any disk write). The rig
+         # drives it against a real-project mount; the Unfiled (`default`)
+         # mount never binds — its create body carries no `project` field.
+         "create_fail": False,
          }
 state_lock = threading.Lock()
 
@@ -1803,6 +1810,16 @@ class W2Handler(SimpleHTTPRequestHandler):
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/api/docs$", path)
         if m:
             pid = urllib.parse.unquote(m.group(1))
+            # Slice U (§8.4.1 probe 3): the refused-bind branch — the REAL
+            # 502 shape server.js returns from assertProjectAttachable, BEFORE
+            # any state is written ("nothing created on a refused bind").
+            with state_lock:
+                refuse_create = bool(state["create_fail"])
+            if refuse_create:
+                self._json(502, {"error": "crew daemon unreachable at "
+                                          "http://127.0.0.1:9/api/v1 (ECONNREFUSED) — "
+                                          "start crew, or create the doc without a project"})
+                return True
             doc = slug(str(body.get("name") or "doc"))
             # Slice T (§8.4.1 probe 1): the REAL bridge DROPS source_message_id —
             # no `meta.sourceMessageId` ever reaches the manifest (the interactive.ts

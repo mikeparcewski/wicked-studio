@@ -21,6 +21,8 @@ const getVersions = vi.fn();
 
 vi.mock('../src/api/interactive.js', () => ({
   createDoc: (...a: unknown[]) => createDoc(...a),
+  // Slice U (§6.2): the REAL binding rule, mirrored — real projects bind.
+  docBinding: (pid: string) => (pid === 'default' ? {} : { project: pid }),
   postFork: (...a: unknown[]) => postFork(...a),
   postEvent: (...a: unknown[]) => postEvent(...a),
   // The real wrapper, mirrored: `injectDocMessage` IS one `postEvent` (slices 11+12
