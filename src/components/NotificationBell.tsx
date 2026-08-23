@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { unreadCount as unreadCountOf, WINDOW_LABEL_STYLE, windowWord } from '../board/metrics.js';
 import { useNotificationStore } from '../store/notifications.js';
 import type { NotifKind } from '../store/notifications.js';
 import { useProvenanceStore } from '../store/provenance.js';
@@ -73,7 +74,9 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // Slice W (§5.3): the badge's number is the metrics module's `unreadCount` —
+  // the same rows the dropdown lists, so badge and list cannot disagree.
+  const unreadCount = unreadCountOf(notifications);
 
   // Close on outside click
   useEffect(() => {
@@ -181,6 +184,10 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
               }}
             >
               Notifications
+            </span>
+            {/* EC39 (slice W): the badge's window — what this page observed. */}
+            <span data-testid="bell-window" data-window="session" style={WINDOW_LABEL_STYLE}>
+              {windowWord('session')}
             </span>
             {unreadCount > 0 && (
               <button

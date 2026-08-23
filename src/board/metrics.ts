@@ -222,6 +222,14 @@ export function usageTotals(
   return { totalTokens: totalInput + totalOutput, totalCost: hasCost ? costSum : null };
 }
 
+// ── unreadCount — the bell badge's number, window: "session" ──────────────────
+
+/** The bell badge counts exactly the unread rows its dropdown lists — one
+ *  selector, so badge and list cannot disagree (§5.3's bell↔summary rule). */
+export function unreadCount(notifications: ReadonlyArray<{ read: boolean }>): number {
+  return notifications.filter((n) => !n.read).length;
+}
+
 // ── ledeCounts — the landing lede's numbers, window: "24h" ────────────────────
 
 export interface LedeCounts {

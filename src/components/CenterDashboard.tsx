@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { unitsInFlight } from '../api/run-state.js';
+import { usageTotals, WINDOW_LABEL_STYLE } from '../board/metrics.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useRunEventStore } from '../store/events.js';
@@ -824,33 +825,10 @@ export function CenterDashboard({
     return [...active.slice(0, MAX_RUN_ROWS), ...terminal.slice(-room).reverse()];
   }, [workRuns]);
 
-  // ── Stats: aggregate cost/tokens from cliUsage events over the shown runs.
+  // ── Stats: cost/tokens over the shown runs — the metrics module's one
+  // `usageTotals` selector (slice W, §5.3: no inline cliUsage folds).
   // Rendered ONLY as a data-gated footer (§2.7 rule 2) — never an em-dash hero.
-  const stats = useMemo(() => {
-    let totalInput = 0;
-    let totalOutput = 0;
-    let costSum = 0;
-    let hasCost = false;
-
-    for (const v of workRuns) {
-      const events = byRun[v.session.id] ?? [];
-      for (const ev of events) {
-        if (ev.type === 'cliUsage') {
-          if (typeof ev.inputTokens === 'number') totalInput += ev.inputTokens;
-          if (typeof ev.outputTokens === 'number') totalOutput += ev.outputTokens;
-          if (typeof ev.costUsd === 'number') {
-            costSum += ev.costUsd;
-            hasCost = true;
-          }
-        }
-      }
-    }
-
-    return {
-      totalTokens: totalInput + totalOutput,
-      totalCost: hasCost ? costSum : null,
-    };
-  }, [byRun, workRuns]);
+  const stats = useMemo(() => usageTotals(byRun, workRuns), [byRun, workRuns]);
 
   // Counting `distributed` units counted the whole routed plan, not the running part of it
   // (FINDING-052); `unitsInFlight` counts only what is actually running.
@@ -1058,13 +1036,23 @@ export function CenterDashboard({
                 {projectId !== null && (
                   // EC34 (§2.5): the count beside a list equals the rows beneath
                   // it, SET-EQUAL on the same paint — one derivation (`runRows`)
-                  // feeds both, so they cannot disagree.
-                  <span
-                    data-testid="project-run-count"
-                    style={{ marginLeft: '6px', color: 'var(--ink-muted)', fontSize: 'var(--text-2xs)', ...mono }}
-                  >
-                    {runRows.length}
-                  </span>
+                  // feeds both, so they cannot disagree. EC39 (slice W): the
+                  // count names its window — the range the pills select.
+                  <>
+                    <span
+                      data-testid="project-run-count"
+                      data-window={range}
+                      style={{ marginLeft: '6px', color: 'var(--ink-muted)', fontSize: 'var(--text-2xs)', ...mono }}
+                    >
+                      {runRows.length}
+                    </span>
+                    <span
+                      data-testid="project-run-count-window"
+                      style={{ ...WINDOW_LABEL_STYLE, marginLeft: '4px' }}
+                    >
+                      {range}
+                    </span>
+                  </>
                 )}
               </p>
               <TimeRangeSelector value={range} onChange={setRange} />
@@ -1082,6 +1070,7 @@ export function CenterDashboard({
             {workRuns.length > runRows.length && (
               <button
                 type="button"
+                data-testid="build-runs-cap"
                 onClick={() => navigate('/work')}
                 style={{
                   fontSize: 'var(--text-xs)',
@@ -1094,7 +1083,9 @@ export function CenterDashboard({
                   display: 'block',
                 }}
               >
-                view all →
+                {/* §5.3 (slice W): the row cap is a silent filter no longer —
+                    the clipped list says what it holds back, in the same breath. */}
+                showing {runRows.length} of {workRuns.length} — view all →
               </button>
             )}
           </div>
@@ -1138,6 +1129,7 @@ export function CenterDashboard({
           {runRows.length > 0 && footerParts.length > 0 && (
             <p
               data-testid="build-stats-footer"
+              data-window={range}
               style={{
                 fontSize: 'var(--text-xs)',
                 color: 'var(--ink-dim)',
@@ -1146,6 +1138,11 @@ export function CenterDashboard({
               }}
             >
               {footerParts.join(' · ')}
+              {/* EC39 (slice W): the footer's numbers fold the range-filtered
+                  runs — the count names that window. */}
+              <span data-testid="build-stats-footer-window" style={{ ...WINDOW_LABEL_STYLE, marginLeft: '6px' }}>
+                {range}
+              </span>
             </p>
           )}
         </div>
