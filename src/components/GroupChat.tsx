@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { Project, RosterSeat } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
+import { useLiveChatsStore } from '../store/liveChats.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 import { Markdown } from './Markdown.js';
 import { NewProjectModal } from './NewProjectModal.js';
@@ -458,6 +459,8 @@ export function GroupChat({
         // J4/C6: that boundary is STATED in the thread (`rejoined`), never a
         // silent blank pretending the conversation never happened.
         setSeats(Object.fromEntries(probe.seats.map((k) => [k, 'ready' as SeatState])));
+        // A rejoined session is live — make it findable on the rail (J4).
+        useLiveChatsStore.getState().upsert(stored, probe.seats);
         setRejoined(true);
         setResolving(false);
         return;
@@ -584,10 +587,14 @@ export function GroupChat({
    * fetch here any more: the selection IS the answer (§6.1). Reuses the live
    * chat id when there is one: `chat_open` ensures per seat, so warming MORE
    * seats into an existing chat reuses the warm ones and adds only the missing.
-   * Returns the seat keys that came up ready.
+   * Returns the seat keys that came up ready, plus WHY nothing did when nothing
+   * did — the caller renders that as a retryable failed send (§7.9-2).
    */
-  async function armChat(agents: string[]): Promise<string[]> {
+  async function armChat(agents: string[]): Promise<{ ready: string[]; failure: string | null }> {
     setArming(true);
+    // Each arm attempt is a fresh claim: a stale open-failure banner from the
+    // previous attempt must not sit beside this one's outcome (J4 finding 3).
+    setOpenError(null);
     try {
       // The chat id is minted CLIENT-side and set before the open call: seats warm
       // serially (~2-3s each), and their chatSessionReady events arrive BEFORE the
@@ -622,35 +629,60 @@ export function GroupChat({
         const { seats: opened } = await api.openChat(body);
         // A repo switch mid-arm resets `chatIdRef` (the mount effect) — re-check
         // after the await so nothing is attributed to a repo we already left.
-        if (chatIdRef.current !== id) return [];
+        if (chatIdRef.current !== id) return { ready: [], failure: null };
         const st: Record<string, SeatState> = {};
         const errs: Record<string, string> = {};
         for (const s of opened) {
           st[s.cliKey] = s.ok ? 'ready' : 'failed';
           if (!s.ok && s.error) errs[s.cliKey] = s.error;
         }
-        setSeats((prev) => ({ ...prev, ...st }));
-        setSeatErrors((prev) => ({ ...prev, ...errs }));
         const ready = opened.filter((s) => s.ok).map((s) => s.cliKey);
-        // §6.2 recoverable error: a default chip may name an agent the daemon no
-        // longer has (stale cache or a fallback name with no seat behind it).
-        // When NOTHING came up, say WHICH names were rejected — the chips bar is
-        // back on screen (no seat is ready), so the user can remove the stale
-        // chip and send again; the retry re-arms into the same chat id.
+        // J4 finding 3: once an open SUCCEEDS, red chips left over from an
+        // earlier rejected attempt (seats this open did not name again) are
+        // stale evidence — prune them along with their reasons. Seats this
+        // open DID answer keep the daemon's fresh verdict, ok or not.
+        setSeats((prev) => {
+          const next = { ...prev };
+          if (ready.length > 0) {
+            for (const [k, state] of Object.entries(prev)) {
+              if (state === 'failed' && !opened.some((s) => s.cliKey === k)) delete next[k];
+            }
+          }
+          return { ...next, ...st };
+        });
+        setSeatErrors((prev) => {
+          const next = { ...prev };
+          if (ready.length > 0) {
+            for (const k of Object.keys(prev)) {
+              if (!opened.some((s) => s.cliKey === k)) delete next[k];
+            }
+          }
+          return { ...next, ...errs };
+        });
+        // §6.2 recoverable error: a chip may name an agent the daemon no
+        // longer has (a stale cache, or an operator-typed name with no seat
+        // behind it). When NOTHING came up, say WHICH names were rejected —
+        // the chips bar is back on screen (no seat is ready), so the user can
+        // remove the stale chip and send again; the retry re-arms into the
+        // same chat id.
         if (ready.length === 0 && opened.length > 0) {
           const rejected = opened.map((s) => `"${s.cliKey}"`).join(', ');
-          setOpenError(
+          const failure =
             `The daemon rejected agent${opened.length > 1 ? 's' : ''} ${rejected} — ` +
-              `remove the stale chip${opened.length > 1 ? 's' : ''} (✕) and send again.`,
-          );
+            `remove the stale chip${opened.length > 1 ? 's' : ''} (✕) and send again.`;
+          setOpenError(failure);
+          return { ready, failure };
         }
-        return ready;
+        // The session is live — make it findable (J4: the rail's live row).
+        if (ready.length > 0) useLiveChatsStore.getState().upsert(id, ready);
+        return { ready, failure: null };
       } catch (e: unknown) {
         // The id stays stored on purpose: an open that failed at the HTTP layer may still have
         // warmed seats server-side, and dropping the id here would orphan exactly what
         // FINDING-027 exists to stop orphaning. The next mount re-checks it and clears it if dead.
-        if (chatIdRef.current === id) setOpenError(e instanceof Error ? e.message : String(e));
-        return [];
+        const failure = e instanceof Error ? e.message : String(e);
+        if (chatIdRef.current === id) setOpenError(failure);
+        return { ready: [], failure };
       }
     } finally {
       setArming(false);
@@ -675,23 +707,38 @@ export function GroupChat({
     sendingRef.current = true;
     setSendFailed(null);
     try {
-      // §7.9-1 roster-first: a first send from a PRISTINE fallback selection with a
-      // still-cold cache fetches the roster ON THIS GESTURE (never on mount — §2.4
-      // holds) so the send names seats the daemon accepts. The fallback trio goes
-      // to the daemon only when the roster is genuinely unreachable.
-      if (warm.length === 0 && chatIdRef.current === null && !chipsTouchedRef.current
-        && getCachedRoster() === null) {
-        try {
-          const { roster } = await api.getRoster();
-          setCachedRoster(roster);
-          if (roster.length > 0) {
-            const keys = roster.map((s) => s.key);
-            setSelectedAgents(keys);
-            selectedAgentsRef.current = keys;
+      // §7.9-1 (round 2, J4 finding 1): a PRISTINE selection must NEVER reach
+      // the daemon with non-roster seats. While nothing is warm, no chat exists
+      // and the operator has not edited the chips, the audience can only be the
+      // ROSTER's — a cold OR empty cache fetches it ON THIS GESTURE (never on
+      // mount — §2.4 holds). The fallback trio is a placeholder rendering, not
+      // an audience: when the roster is unreachable or empty, the send FAILS
+      // HONESTLY here (draft survives, inline retry) and NOTHING goes on the
+      // wire. An operator-edited selection is their explicit call and ships
+      // as-is — the daemon's per-seat answer is the recovery path for that.
+      if (warm.length === 0 && chatIdRef.current === null && !chipsTouchedRef.current) {
+        let roster = getCachedRoster();
+        if (roster === null || roster.length === 0) {
+          try {
+            const fetched = await api.getRoster();
+            setCachedRoster(fetched.roster);
+            roster = fetched.roster;
+          } catch (e: unknown) {
+            const why = e instanceof Error ? e.message : String(e);
+            setSendFailed({
+              text,
+              reason: `could not load the agent roster (${why}); the default chips are placeholders and are never sent unresolved`,
+            });
+            return;
           }
-        } catch {
-          /* roster unreachable — the trio is the honest audience (§7.9-1) */
         }
+        if (roster.length === 0) {
+          setSendFailed({ text, reason: 'the daemon returned an empty agent roster — there is no seat to warm' });
+          return;
+        }
+        const keys = roster.map((s) => s.key);
+        setSelectedAgents(keys);
+        selectedAgentsRef.current = keys;
       }
       const turn = turnRef.current + 1;
       turnRef.current = turn;
@@ -707,13 +754,15 @@ export function GroupChat({
         // the §6.2 chips (defaults + additions − removals). Also the retry path
         // after a rejected open (stale chip): the re-arm reuses the same chat id
         // with the corrected selection, so recovery is just "send again".
-        warm = await armChat(selectedAgentsRef.current);
-        if (warm.length === 0) {
-          // armChat surfaced WHY (openError / failed chips); the user bubble
-          // retracts and the draft survives — nothing was fanned out.
-          setMessages((prev) => prev.filter((m) => m.turn !== turn));
+        const armed = await armChat(selectedAgentsRef.current);
+        if (armed.ready.length === 0) {
+          // Nothing was fanned out: the optimistic bubble retracts and the
+          // failure renders as a retryable inline row (§7.9-2 — the same
+          // dress a refused fan-out wears), beside armChat's chip guidance.
+          failSend(armed.failure ?? 'no agent seat came up');
           return;
         }
+        warm = armed.ready;
       }
       const id = chatIdRef.current;
       if (id === null) return; // repo switched under the send
@@ -731,6 +780,9 @@ export function GroupChat({
         // Accepted — the draft leaves the composer only now (§7.9-2). A mid-flight
         // edit is the operator's newer draft and is left alone.
         setInput((cur) => (cur.trim() === text ? '' : cur));
+        // A send the daemon accepted retires any lingering open-failure banner
+        // (J4 finding 3): the conversation is live; stale guidance would lie.
+        setOpenError(null);
       } catch (e: unknown) {
         failSend(e instanceof Error ? e.message : String(e));
         // The message never reached the daemon: this turn's audience is not
@@ -785,6 +837,7 @@ export function GroupChat({
     // leave a "live" id pointing at a chat the UI has already walked away from.
     clearStoredChatId(repoId);
     if (chatId !== null) {
+      useLiveChatsStore.getState().remove(chatId);
       try {
         await api.closeChat(chatId);
       } catch {
@@ -1269,6 +1322,16 @@ export function GroupChat({
                   ) : (
                     pickerRoster.map((seat) => {
                       const included = selectedAgents.includes(seat.key);
+                      // J4 round-2 minor: the picker speaks the roster's own
+                      // vocabulary — the seat's DISPLAY NAME (the key stays the
+                      // data identity), plus its observed health when the wire
+                      // carries one (crew#274 — additive; absent reads as no
+                      // claim, never a fabricated "active").
+                      const name =
+                        typeof seat.display_name === 'string' && seat.display_name !== ''
+                          ? seat.display_name
+                          : seat.key;
+                      const health = seat.health?.status;
                       return (
                         <button
                           key={seat.key}
@@ -1278,15 +1341,29 @@ export function GroupChat({
                           disabled={included}
                           data-testid="agent-picker-option"
                           data-agent-key={seat.key}
+                          data-health={health ?? 'unknown'}
+                          title={health ? `${name} — ${health}` : name}
                           onClick={() => {
                             chipsTouchedRef.current = true; // §7.9-1: an edit pins the selection
                             setSelectedAgents((prev) => (prev.includes(seat.key) ? prev : [...prev, seat.key]));
                             setPickerOpen(false);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs font-mono truncate transition-colors hover:bg-surface-card disabled:opacity-40"
+                          className="w-full text-left px-3 py-1.5 text-xs font-mono transition-colors hover:bg-surface-card disabled:opacity-40 flex items-center gap-1.5"
                           style={{ color: included ? 'var(--ink-dim)' : 'var(--ink-body)' }}
                         >
-                          {seat.key}
+                          {health !== undefined && (
+                            <span
+                              aria-hidden
+                              className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{
+                                background: health === 'active' ? 'var(--status-run)' : 'var(--status-fail)',
+                              }}
+                            />
+                          )}
+                          <span className="truncate">{name}</span>
+                          {name !== seat.key && (
+                            <span className="truncate" style={{ color: 'var(--ink-dim)' }}>{seat.key}</span>
+                          )}
                           {included ? ' ✓' : ''}
                         </button>
                       );
