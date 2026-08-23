@@ -14,13 +14,11 @@ same branch converts):
      that run is at `awaiting_human` (and, same mechanism: `--status-run`
      while executing, `--status-fail` when failed);
   3. the Chat mode first-run state shows the instruction text and NO openChat
-     request (`POST /api/v1/chats`) fires on mount. (RE-SCOPED to the
-     DES-FEEDBACK-001 §6 chips reality, which slice C shipped: the pre-slice-C
-     `add-agents` opt-in this AC originally pinned no longer exists — the
-     default agent chips render from `DEFAULT_CHAT_AGENTS` with a `✕` each,
-     and the `[+ Add]` affordance (`data-testid="add-agent"`, dashed border,
-     --ink-dim) opens the roster picker. Zero-requests-on-mount is UNCHANGED —
-     the chips render from the cached roster / fallback constant, §6.1.);
+     request (`POST /api/v1/chats`) fires on mount. (RE-SCOPED TWICE — slice C
+     chips, then BRIEF-UX-001 C6/EC44 round 3: the fallback constant is GONE;
+     the chips RESOLVE roster-true from the surface's one named mount GET
+     /roster and show the CHAT-CAPABLE seats with a `✕` each; `[+ Add]`
+     (dashed border, --ink-dim) opens the roster picker.);
   4. the version strip's active dot computed `background` resolves from
      `var(--accent)`; the Themes popover `data-testid="themes-explanation"`
      is non-empty. (The storyboard-chapter accent AC retired with the
@@ -162,6 +160,8 @@ with sync_playwright() as p:
     # ══ Scene 1 — Chat, first run (§5.3) ══════════════════════════════════════
     page.goto(f"{ORIGIN}/p/q3-review-deck/chat", wait_until="domcontentloaded")
     page.locator('[data-testid="chat-firstrun"]').wait_for(timeout=30000)
+    # EC44: the chips RESOLVE roster-true — census the resolved state.
+    page.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
 
     # §2.8 reconciled fonts: both faces load; the sans is Inter.
@@ -209,9 +209,9 @@ with sync_playwright() as p:
         (chat["instructionText"] or "").strip() != "",
         chat["instructionColor"] == pr["inkBody"],
         "Inter" in (chat["instructionFont"] or ""),
-        # §6.2: three default chips render immediately from the cache/fallback.
-        chat["chipsBarCount"] == "3",
-        chat["chipAgents"] == ["writer", "reviewer", "planner"],
+        # EC44: the default chips are the resolved CHAT-CAPABLE seats.
+        chat["chipsBarCount"] == "2",
+        chat["chipAgents"] == ["claude", "pi"],
         # EC13: chip text in the sans; §6.3 anatomy — [+ Add] dashed, --ink-dim.
         "Inter" in (chat["chipFont"] or ""),
         chat["chipColor"] == pr["inkBody"],
