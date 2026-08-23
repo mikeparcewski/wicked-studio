@@ -212,8 +212,13 @@ with sync_playwright() as p:
     page.locator('[data-testid="themes-input"]').fill("https://acme.example/brand")
     page.locator('[data-testid="themes-submit"]').click()
     page.locator('[data-testid="learn-inflight"]').wait_for(timeout=10000)
-    # Staged progress is the bridge's OWN status frame, no rotating filler.
-    page.locator('[data-testid="learn-stage"]').wait_for(timeout=15000)
+    # Staged progress is the bridge's OWN status frame, no rotating filler. The
+    # client's send subject ("Queued — …") renders first; the bridge's frame
+    # SUPERSEDES it — wait for that supersession, the thing this AC is about.
+    page.wait_for_function(
+        """() => /Grabbing the page/.test(
+                 document.querySelector('[data-testid="learn-stage"]')?.textContent ?? '')""",
+        timeout=15000)
     inflight = page.evaluate(
         """() => ({
              stage: document.querySelector('[data-testid="learn-stage"]')?.textContent ?? null,
