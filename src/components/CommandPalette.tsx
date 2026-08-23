@@ -883,7 +883,7 @@ export function CommandPalette({
 
       {/* `> Open Terminal` — the RightPanel pair (Modal + governed Terminal) */}
       {showTerminal && (
-        <Modal title="Operator shell" onClose={() => setShowTerminal(false)} disableEscapeKey>
+        <Modal title="Operator shell" onClose={() => setShowTerminal(false)}>
           <Terminal cwd={selectedRun?.session.workdir ?? '.'} governed />
         </Modal>
       )}

@@ -603,7 +603,6 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
           <Modal
             title={showTranscript ? "This run's transcript" : 'Operator shell'}
             onClose={() => { setTermOpen(false); setTermShell(false); }}
-            disableEscapeKey
           >
             {showTranscript ? (
               <RunTranscriptView

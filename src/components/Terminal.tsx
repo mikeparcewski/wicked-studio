@@ -95,6 +95,10 @@ export function Terminal({ cwd, cmd, governed = true, initialInput }: Props): Re
     const rafHandle = requestAnimationFrame(() => {
       if (disposed) return;
       term.open(host);
+      // DES-UX-001 §7.7 (slice AC): the shell takes focus on open — the first
+      // keystroke lands in the terminal, never swallowed by whatever the modal
+      // trigger left focused.
+      term.focus();
       try {
         fit.fit();
       } catch {

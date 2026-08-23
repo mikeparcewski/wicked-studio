@@ -1,23 +1,33 @@
 import { useId, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { useLayerStore } from '../store/layers.js';
 
 interface Props {
   title: string;
   onClose: () => void;
   children: ReactNode;
-  /** Opt out of the document-level Escape-to-close handler (e.g. modals that embed a terminal). */
-  disableEscapeKey?: boolean;
 }
 
-export function Modal({ title, onClose, children, disableEscapeKey }: Props): React.ReactElement {
+/**
+ * The modal family's document-level Escape listener (EC21-exempt: local, not
+ * registry-routed, so it fires even from typing contexts inside the modal).
+ * DES-UX-001 §7.7 (slice AC) made it universal — the former `disableEscapeKey`
+ * opt-out is gone: ONE Escape contract closes every layer, the Operator-shell
+ * and sign-in terminals included. The one yield is the '?' overlay, which sits
+ * above modals in the §7.7 chain and closes first.
+ */
+export function Modal({ title, onClose, children }: Props): React.ReactElement {
   const titleId = useId();
 
   useEffect(() => {
-    if (disableEscapeKey) return;
-    function handler(e: KeyboardEvent): void { if (e.key === 'Escape') onClose(); }
+    function handler(e: KeyboardEvent): void {
+      if (e.key !== 'Escape') return;
+      if (useLayerStore.getState().shortcutOverlayOpen) return; // overlay closes first
+      onClose();
+    }
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [onClose, disableEscapeKey]);
+  }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
       <div

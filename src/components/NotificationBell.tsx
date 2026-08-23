@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { unreadCount as unreadCountOf, WINDOW_LABEL_STYLE, windowWord } from '../board/metrics.js';
+import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
+import { useLayerStore } from '../store/layers.js';
 import { useNotificationStore } from '../store/notifications.js';
 import type { NotifKind } from '../store/notifications.js';
 import { useProvenanceStore } from '../store/provenance.js';
+import { useRunsPanelStore } from '../store/runsPanel.js';
 import { ProvenanceLine } from './ProvenanceLine.js';
 
 interface Props {
@@ -71,8 +74,28 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
   // was never opened simply carries no line yet.
   const provByRun = useProvenanceStore((s) => s.byRun);
 
-  const [open, setOpen] = useState(false);
+  // Open state lives in the layer ledger (DES-UX-001 §7.7, slice AC) so the
+  // Escape chain's other rungs (the triage selection) can yield while the
+  // popover is up — the bell is the chain's modal/popover rung.
+  const open = useLayerStore((s) => s.bellOpen);
+  const setOpen = useLayerStore((s) => s.setBellOpen);
   const ref = useRef<HTMLDivElement>(null);
+
+  // §7.7: Escape closes the bell popover — the brief's named gap. Registered
+  // through the ONE slice-G registry; yields while the '?' overlay or the runs
+  // sheet is up (their entries close them first, per the chain).
+  const escapeEntries = useMemo<ShortcutEntry[]>(() => [{
+    id: 'bell-close',
+    chord: { key: 'escape' },
+    group: 'panels',
+    description: 'Close the notifications popover',
+    guard: () =>
+      useLayerStore.getState().bellOpen &&
+      !useLayerStore.getState().shortcutOverlayOpen &&
+      !useRunsPanelStore.getState().expanded,
+    handler: () => useLayerStore.getState().setBellOpen(false),
+  }], []);
+  useGlobalShortcuts(escapeEntries);
 
   // Slice W (§5.3): the badge's number is the metrics module's `unreadCount` —
   // the same rows the dropdown lists, so badge and list cannot disagree.
@@ -88,7 +111,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
     }
     document.addEventListener('mousedown', onOutside);
     return () => document.removeEventListener('mousedown', onOutside);
-  }, [open]);
+  }, [open, setOpen]);
 
   function handleNotifClick(id: string, runId: string): void {
     markRead(id);
@@ -109,7 +132,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
         aria-expanded={open}
         aria-haspopup="true"
         title="Notifications"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(!open)}
         className="relative flex items-center rounded transition-opacity hover:opacity-70"
         style={{
           gap: collapsed ? 0 : '6px',
