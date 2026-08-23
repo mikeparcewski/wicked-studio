@@ -67,7 +67,7 @@ const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, navigate, search, pathname } = useRoute();
-  const { runs, refresh } = useRuns();
+  const { runs, refresh, loaded: runsLoaded } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestElicitation = useElicitationStore((s) => s.ingest);
   const ingestNotif = useNotificationStore((s) => s.ingest);
@@ -292,6 +292,11 @@ export function App(): React.ReactElement {
         onKill={onKill}
         navigate={navigate}
         launchProjectId={launchProjectId}
+        // Slice Z (§7.6): the route names a run the index has not resolved —
+        // a just-launched navigation or a mid-run reload racing GET /runs.
+        // ChatPanel holds the honest pending state, never the composer.
+        pendingRunId={selected === null ? runId : null}
+        runsLoaded={runsLoaded}
       />
     </div>
   );

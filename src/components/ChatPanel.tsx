@@ -38,6 +38,16 @@ interface Props {
    * field pre-fills with this project and LOCKS.
    */
   launchProjectId?: string | null;
+  /**
+   * DES-UX-001 §7.6 (slice Z): the run id the ROUTE names when `view` has not
+   * resolved from the run index yet — a just-launched run navigated to before
+   * the debounced `GET /runs` lands, or a bookmarked run reloaded mid-run.
+   * Non-null renders the honest opening/absent state, never the composer
+   * ("a refresh mid-run drops to a blank composer" is the C3 defect).
+   */
+  pendingRunId?: string | null;
+  /** Whether the run index has completed at least one fetch (useRuns.loaded). */
+  runsLoaded?: boolean;
 }
 
 // Agent identity under the token contract (DES-VISION-001 §2.11): one
@@ -201,8 +211,15 @@ const NARRATION_TAIL = 4096;
  * and windowed to the trailing ~{@link NARRATION_TAIL} bytes so a chatty
  * worker never grows the thread's DOM unbounded (the store keeps its own
  * larger cap for the full-output consumers).
+ *
+ * Exported for the Term tab (DES-UX-001 §7.6, slice Z): during a live run the
+ * terminal modal shows this SAME region — one live-output component, two
+ * mounts, never a fork. The streamed region carries `data-testid="live-output"`
+ * (EC41: between start and verdict, something true streams on the run's own
+ * page) and the honest label for what the deltas are — relayed live output,
+ * not the durable transcript (§13: richer streaming is a crew concern).
  */
-function LiveNarration({ runId, ord, phase }: { runId: string; ord: number; phase: string }): React.ReactElement {
+export function LiveNarration({ runId, ord, phase }: { runId: string; ord: number; phase: string }): React.ReactElement {
   const live = useRuntimeStore((s) => s.outputs[outputKey(runId, ord)]);
   const [visible, setVisible] = useState(true);
   const scrollRef = useRef<HTMLPreElement>(null);
@@ -236,15 +253,28 @@ function LiveNarration({ runId, ord, phase }: { runId: string; ord: number; phas
           </button>
         )}
       </div>
-      {hasText && visible && (
-        <pre
-          ref={scrollRef}
-          data-testid={`live-narration-text-${ord}`}
-          className="mt-2 max-h-64 overflow-auto rounded-lg p-2.5 text-[11px] leading-snug whitespace-pre-wrap break-words font-mono"
-          style={{ background: 'var(--surface-base)', color: 'var(--ink-body)', border: '1px solid var(--surface-raised)' }}
-        >
-          {tail}
-        </pre>
+      {hasText && (
+        <div data-testid="live-output" className="mt-2">
+          {/* The honest label (§7.6): what streams is the relayed delta feed,
+              not the durable record — say exactly that, house grammar. */}
+          <p
+            data-testid="live-output-label"
+            className="mb-1 text-[10px] font-mono"
+            style={{ color: 'var(--ink-dim)' }}
+          >
+            Live output — the full transcript lands when the unit completes.
+          </p>
+          {visible && (
+            <pre
+              ref={scrollRef}
+              data-testid={`live-narration-text-${ord}`}
+              className="max-h-64 overflow-auto rounded-lg p-2.5 text-[11px] leading-snug whitespace-pre-wrap break-words font-mono"
+              style={{ background: 'var(--surface-base)', color: 'var(--ink-body)', border: '1px solid var(--surface-raised)' }}
+            >
+              {tail}
+            </pre>
+          )}
+        </div>
       )}
     </div>
   );
@@ -737,13 +767,18 @@ function RunChat({
   // The conversational timeline holds ONLY phases that have run or are running (rejected counts:
   // it ran far enough to be judged). Future work is the stepper's job — a queued unit used to
   // render one tall, empty "Not started" block per phase, which is what the operator flagged.
+  //
+  // The CURSOR unit of an executing run enters regardless of its own status (DES-UX-001
+  // §7.6, slice Z / EC41): a run can be executing while its cursor unit still reads
+  // `pending` on the DTO (the status flip trails the deltas on the wire), and gating the
+  // live region on `distributed` alone left exactly that run's page silent while its
+  // output streamed. `executingOrd` already returns null for a finished cursor, so this
+  // never adds a done/rejected duplicate — and still only the ONE cursor unit, never the
+  // queue (FINDING-052 holds).
   const timeline = useMemo(
     () =>
       ordered.filter(
-        (u) =>
-          u.status === 'done' ||
-          u.status === 'rejected' ||
-          (u.status === 'distributed' && u.ord === executingUnitOrd),
+        (u) => u.status === 'done' || u.status === 'rejected' || u.ord === executingUnitOrd,
       ),
     [ordered, executingUnitOrd],
   );
@@ -1068,10 +1103,12 @@ function RunChat({
                   className="rounded-2xl px-5 py-4"
                   style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
                 >
-                  {/* A `distributed` unit is in the timeline ONLY as the cursor unit of an
+                  {/* A non-terminal unit is in the timeline ONLY as the cursor unit of an
                       executing run (FINDING-052: distributed = routed, not running — queued
-                      units live in the stepper now, never as thread blocks). */}
-                  {unit.status === 'distributed' && (
+                      units live in the stepper now, never as thread blocks). Slice Z widens
+                      the cursor's live region past `distributed`: a pending-status cursor of
+                      an executing run streams too (EC41). */}
+                  {unit.status !== 'done' && unit.status !== 'rejected' && (
                     <LiveNarration runId={session.id} ord={unit.ord} phase={phaseName(session.id, unit)} />
                   )}
                   {unit.status === 'done' && (
@@ -1219,6 +1256,55 @@ function RunChat({
   );
 }
 
+/**
+ * The route names a run the index has not resolved (DES-UX-001 §7.6, slice Z):
+ * a just-launched run whose debounced `GET /runs` reconcile is still in flight,
+ * or a bookmarked/reloaded mid-run URL racing the first fetch. Renders the
+ * honest holding state — never the composer (the C3 "refresh mid-run drops to
+ * a blank composer" defect). Zero requests of its own: the run index App
+ * already owns is the one wire, and the same live-update cycle that lists the
+ * run swaps this for the run view.
+ */
+function RunPendingView({ runId, runsLoaded, navigate }: {
+  runId: string;
+  runsLoaded: boolean;
+  navigate?: (path: string) => void;
+}): React.ReactElement {
+  return (
+    <div className="flex flex-col h-full items-center justify-center" data-testid="run-pending">
+      <div className="flex flex-col items-center gap-3 max-w-md px-8 text-center">
+        <span
+          className="inline-block w-2.5 h-2.5 rounded-full animate-pulse"
+          style={{ background: 'var(--status-run)' }}
+          aria-hidden="true"
+        />
+        <p className="text-sm font-mono" style={{ color: 'var(--ink-body)' }}>
+          Opening run <span className="font-semibold" style={{ color: 'var(--ink-high)' }}>{runId}</span>
+        </p>
+        <p className="text-xs font-mono leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
+          {runsLoaded
+            ? 'Not in the run index yet — a just-launched run appears within one live-update cycle; an id the daemon no longer serves will not.'
+            : 'Fetching the run index…'}
+        </p>
+        {runsLoaded && (
+          <a
+            href="/work"
+            className="text-xs font-mono underline transition-opacity hover:opacity-70"
+            style={{ color: 'var(--ink-muted)' }}
+            onClick={(e) => {
+              if (navigate === undefined) return;
+              e.preventDefault();
+              navigate('/work');
+            }}
+          >
+            All runs ›
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function NewRunView({
   chatMode,
   mode,
@@ -1268,7 +1354,7 @@ function NewRunView({
   );
 }
 
-export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefresh, onKill, navigate, launchProjectId = null }: Props): React.ReactElement {
+export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefresh, onKill, navigate, launchProjectId = null, pendingRunId = null, runsLoaded = false }: Props): React.ReactElement {
   const [mode, setMode] = useState<RunMode>('balanced');
 
   if (view) {
@@ -1297,6 +1383,17 @@ export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefres
         onNavigateBack={onNavigateBack}
         onRefresh={onRefresh}
         {...(onKill !== undefined ? { onKill } : {})}
+        {...(navigate !== undefined ? { navigate } : {})}
+      />
+    );
+  }
+  // The route names a run the index has not resolved (slice Z): hold with the
+  // honest pending state — never fall through to the composer under a run URL.
+  if (pendingRunId !== null) {
+    return (
+      <RunPendingView
+        runId={pendingRunId}
+        runsLoaded={runsLoaded}
         {...(navigate !== undefined ? { navigate } : {})}
       />
     );
