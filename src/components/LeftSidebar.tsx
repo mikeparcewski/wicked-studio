@@ -633,7 +633,10 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             navigate={navigate}
           >
             {chatRuns.length === 0
-              ? <EmptyRow label="No chat threads yet" href="/chats" navigate={navigate} />
+              // "Recorded" keeps this row's claim true beside a LIVE session
+              // (J4/C6 one-truth): the rail lists recorded chat runs only —
+              // live seats show on /chats, where this row points.
+              ? <EmptyRow label="No recorded chats yet" href="/chats" navigate={navigate} />
               : chatRuns.map((view) => (
                   <RunRow key={view.session.id} view={view} onOpen={() => navigate(runPath(view.session.id))} />
                 ))}

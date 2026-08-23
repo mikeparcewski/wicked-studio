@@ -150,6 +150,21 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
     : tab === 'failed' ? failedGroup
     : cancelledGroup;
 
+  // EC39, the J5/A5 follow-through: the positional range window can hide the
+  // very rows a landing count NAMES (live: the lede's "3 cancelled" linked to
+  // a 30d view holding zero cancelled rows — a count with no visible list).
+  // When the window excludes rows of the ACTIVE filter, the exclusion is
+  // STATED, never silent. Search is the user's own narrowing and says so in
+  // its empty state already, so the note counts against the unsearched window.
+  const inTabGroup = (v: SessionView): boolean =>
+    tab === 'all' ? true
+    : tab === 'active' ? isActiveStatus(v.session.status)
+    : tab === 'completed' ? isCompletedStatus(v.session.status)
+    : tab === 'failed' ? isFailedStatus(v.session.status)
+    : isCancelledStatus(v.session.status);
+  const windowedTabCount = windowedRuns.filter(inTabGroup).length;
+  const hiddenByRange = allWorkRuns.filter(inTabGroup).length - windowedTabCount;
+
   return (
     <div className="flex flex-col h-full" style={{ color: 'var(--ink-high)' }}>
       {/* Header */}
@@ -277,6 +292,33 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
         aria-labelledby={`work-tab-${tab}`}
         className="flex-1 overflow-y-auto px-5 pb-8 flex flex-col"
       >
+        {hiddenByRange > 0 && (
+          <p
+            data-testid="work-range-hidden-note"
+            data-hidden={hiddenByRange}
+            className="px-3 pb-2 text-[11px] font-mono"
+            style={{ color: 'var(--ink-muted)', margin: 0 }}
+          >
+            {hiddenByRange} more{tab === 'all' ? '' : ` ${tab}`} run{hiddenByRange === 1 ? '' : 's'} sit
+            {hiddenByRange === 1 ? 's' : ''} outside this {range} view
+            {range !== '90d' ? (
+              <>
+                {' — '}
+                <button
+                  type="button"
+                  data-testid="work-range-widen"
+                  onClick={() => setRange('90d')}
+                  className="underline"
+                  style={{ color: 'var(--ink-muted)', background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer' }}
+                >
+                  widen to 90d
+                </button>
+              </>
+            ) : (
+              ' (the view is positional — newest first)'
+            )}
+          </p>
+        )}
         {tab === 'all' ? (
           <>
             {activeGroup.length > 0 && (
