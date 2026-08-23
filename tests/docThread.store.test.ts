@@ -367,3 +367,35 @@ describe('the signal clock (§6.1 honesty budget)', () => {
     expect(retried !== undefined && retried.kind === 'user' && typeof retried.sentAt).toBe('number');
   });
 });
+
+// ── Round-3 J3: unbound-doc frames key to the Unfiled mount ───────────────────
+
+describe('unbound-doc frames (the round-2 first-generation fix)', () => {
+  it('a doc-naming frame with NO project keys to the Unfiled (default) mount, never dropped', () => {
+    const key = threadKey('default', DOC);
+    ingest({
+      type: 'interactiveEvent',
+      event: {
+        event_type: 'wicked.interactive.version.created',
+        // The real bridge stamps project_id ONLY on bound docs (serviceEmit);
+        // an Unfiled doc's payloads carry none — pre-fix these were dropped,
+        // leaving the open canvas on the v0 placeholder after v1 landed.
+        payload: { document_id: DOC, version: 1, parent: 0, kind: 'generated' },
+      },
+    } as unknown as CoreEvent);
+    expect(useDocThreadStore.getState().landed[key]).toBe(1);
+    expect(useDocThreadStore.getState().lastSignalAt[key]).toBeGreaterThan(0);
+  });
+
+  it('a frame naming no document is still dropped — the fallback never invents a doc', () => {
+    const before = Object.keys(useDocThreadStore.getState().landed).sort();
+    ingest({
+      type: 'interactiveEvent',
+      event: {
+        event_type: 'wicked.interactive.version.created',
+        payload: { version: 1, kind: 'generated' },
+      },
+    } as unknown as CoreEvent);
+    expect(Object.keys(useDocThreadStore.getState().landed).sort()).toEqual(before);
+  });
+});

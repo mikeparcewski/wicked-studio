@@ -199,7 +199,13 @@ function DocFrame({
   // guarantees a wid survives WITHIN a document's lineage, not that rects do).
   const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
   const [loadNonce, setLoadNonce] = useState(0);
-  useEffect(() => { setLoaded(false); }, [projectId, docId, version]);
+  // The RESOLVED version, computed before the hooks so the loading overlay is
+  // keyed to what the frame actually shows. Keying on the routed `version` prop
+  // missed every head-follow swap (routed null, head advanced on a landing): the
+  // remounted iframe painted blank with no named loading state — and the reverse
+  // race left a stale "Loading" overlay over an already-loaded frame.
+  const resolvedShown = manifest === null ? null : resolveVersion(manifest, version);
+  useEffect(() => { setLoaded(false); }, [projectId, docId, resolvedShown]);
   // §7.3's strip presence: visible now, gone after 3s of idleness, back on proximity.
   // `hold` (J3): a strip control holding an un-acted answer pins it visible.
   const { hidden, wake, hold } = useStripAutoHide();

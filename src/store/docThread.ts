@@ -13,6 +13,7 @@
 import { create } from 'zustand';
 import { isFiller } from './narration.js';
 import { recordAnchor, type StoredAnchor } from '../interactive/threadStopgap.js';
+import { UNFILED_MOUNT } from '../api/interactive.js';
 import type { ConversationEntry, ExportFormat } from '../api/interactive.js';
 import type { CoreEvent } from '../api/types.js';
 
@@ -98,7 +99,16 @@ function pick(bag: Record<string, unknown>, ...keys: string[]): string | null {
 
 interface Frame { key: string; type: string; payload: Record<string, unknown> }
 
-/** A relayed interactive frame, reduced to `(thread key, event type, payload)`. */
+/** A relayed interactive frame, reduced to `(thread key, event type, payload)`.
+ *
+ *  Project resolution (the round-2 first-generation fix): the bridge stamps
+ *  `project_id` on every payload of a doc BOUND to a crew project (serviceEmit
+ *  derives it from the binding breadcrumb), and stamps NOTHING for an unbound
+ *  doc — which the studio serves through the Unfiled (`default`) mount. So a
+ *  doc-naming frame with no project is not ambiguous, it is the Unfiled mount's:
+ *  dropping it (the pre-fix behavior) left every Unfiled doc's thread deaf —
+ *  the canvas kept the v0 "Building…" placeholder after v1 landed, the
+ *  generating chip never resolved, and the manifest never re-read. */
 function frameOf(event: CoreEvent): Frame | null {
   if (event.type !== 'interactiveEvent') return null;
   const ev = event.event as Record<string, unknown> | undefined;
@@ -106,8 +116,10 @@ function frameOf(event: CoreEvent): Frame | null {
   const type = pick(ev, 'event_type', 'type');
   const payload = (typeof ev.payload === 'object' && ev.payload !== null ? ev.payload : ev) as Record<string, unknown>;
   const docId = pick(payload, 'document_id', 'doc_id', 'document');
-  const projectId = pick(payload, 'project_id', 'project') ?? pick(ev, 'project_id', 'project');
-  if (type === null || docId === null || projectId === null) return null;
+  if (type === null || docId === null) return null;
+  const projectId = pick(payload, 'project_id', 'project')
+    ?? pick(ev, 'project_id', 'project')
+    ?? UNFILED_MOUNT;
   return { key: threadKey(projectId, docId), type, payload };
 }
 
