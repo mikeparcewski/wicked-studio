@@ -24,23 +24,41 @@ export const STRIP_SENSOR_PX = 80;
  * `STRIP_IDLE_MS` without interaction. `wake` is bound to mousemove on the strip
  * itself and on the bottom-proximity sensor; the sensor exists because the canvas
  * is an iframe, and an iframe swallows the mousemoves the parent would otherwise see.
+ *
+ * `hold` (DES-UX-001 §7.2, the J3 closed-drawer pin): a control ON the strip that
+ * owes the user an answer — an export that is pending, or whose READY/FAILED state
+ * has not been acted on — pins the strip visible. Auto-hide swallowing the click
+ * site's answer is exactly the "clicked, nothing visibly happened" failure the
+ * point-of-action states exist to prevent: with the thread drawer CLOSED the strip
+ * is the ONLY place the answer lives. Ref-counted so several holders compose;
+ * releasing the last hold re-arms the ordinary idle timer.
  */
-export function useStripAutoHide(idleMs: number = STRIP_IDLE_MS): { hidden: boolean; wake: () => void } {
+export function useStripAutoHide(idleMs: number = STRIP_IDLE_MS): {
+  hidden: boolean; wake: () => void; hold: (held: boolean) => void;
+} {
   const [hidden, setHidden] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holds = useRef(0);
 
   const wake = useCallback((): void => {
     setHidden(false);
     if (timer.current !== null) clearTimeout(timer.current);
-    timer.current = setTimeout(() => { setHidden(true); }, idleMs);
+    // The timer always re-arms, but firing while held must not hide the answer.
+    timer.current = setTimeout(() => { if (holds.current === 0) setHidden(true); }, idleMs);
   }, [idleMs]);
+
+  const hold = useCallback((held: boolean): void => {
+    holds.current = Math.max(0, holds.current + (held ? 1 : -1));
+    if (held) setHidden(false);
+    else if (holds.current === 0) wake(); // the answer was released: earn the exit again
+  }, [wake]);
 
   useEffect(() => {
     wake(); // the mount is an interaction: the strip shows, then earns its exit
     return () => { if (timer.current !== null) clearTimeout(timer.current); };
   }, [wake]);
 
-  return { hidden, wake };
+  return { hidden, wake, hold };
 }
 
 /**

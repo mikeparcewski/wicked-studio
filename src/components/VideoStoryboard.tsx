@@ -121,7 +121,7 @@ function DemoSurface({
   if (fresh !== null) lastManifest.current = fresh;
   const manifest = fresh ?? lastManifest.current;
   const [loaded, setLoaded] = useState(false);
-  const { hidden, wake } = useStripAutoHide();
+  const { hidden, wake, hold } = useStripAutoHide();
 
   const subject = `“${demoId}”`;
   if (manifest === null) {
@@ -200,6 +200,7 @@ function DemoSurface({
             mode="video"
             dimmed={hidden}
             onWake={wake}
+            onHold={hold}
             trailing={<ThreadToggle open={threadOpen} onToggle={onToggleThread} />}
           />
         </div>

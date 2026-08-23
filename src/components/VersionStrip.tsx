@@ -156,6 +156,9 @@ export interface VersionStripProps {
   dimmed?: boolean;
   /** Mouse presence on the strip is an interaction: it resets the owner's idle timer. */
   onWake?: (() => void) | undefined;
+  /** §7.2 (the J3 closed-drawer pin): a strip control holding an unanswered/
+   *  un-acted answer pins the strip visible — see `useStripAutoHide().hold`. */
+  onHold?: ((held: boolean) => void) | undefined;
   /** The canvas-first chrome's extra control — the thread-drawer toggle (§7.3). */
   trailing?: React.ReactNode;
   /** DES-FEEDBACK-002 §7 (slice K): the compare toggle/cluster. Absent = no
@@ -165,7 +168,7 @@ export interface VersionStripProps {
 
 export function VersionStrip({
   projectId, docId, manifest, selected, navigate, onForked,
-  mode = 'document', dimmed = false, onWake, trailing, compare,
+  mode = 'document', dimmed = false, onWake, onHold, trailing, compare,
 }: VersionStripProps): React.ReactElement {
   const [forking, setForking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -437,8 +440,10 @@ export function VersionStrip({
 
       {/* §4.4: export is PER-VERSION, so it belongs to the surface that owns which version
           is addressed. The selection is the subject — exporting "the document" would be
-          exporting whichever version happened to be head when the button was pressed. */}
-      <ExportMenu projectId={projectId} docId={docId} version={selected} />
+          exporting whichever version happened to be head when the button was pressed.
+          §7.2 (J3): its unresolved/un-acted answer HOLDS the strip visible — with the
+          drawer closed, this control is the only place the answer lives. */}
+      <ExportMenu projectId={projectId} docId={docId} version={selected} onHold={onHold} />
 
       {/* DES-FEEDBACK-001 §7.3: the thread-drawer toggle rides the strip's action end. */}
       {trailing}

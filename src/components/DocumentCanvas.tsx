@@ -201,7 +201,8 @@ function DocFrame({
   const [loadNonce, setLoadNonce] = useState(0);
   useEffect(() => { setLoaded(false); }, [projectId, docId, version]);
   // §7.3's strip presence: visible now, gone after 3s of idleness, back on proximity.
-  const { hidden, wake } = useStripAutoHide();
+  // `hold` (J3): a strip control holding an un-acted answer pins it visible.
+  const { hidden, wake, hold } = useStripAutoHide();
 
   // ── Compare state (DES-FEEDBACK-002 §7, slice K) — the lens, not an address ──
   // `cmp` is the comparand version; null = solo canvas. The overlay refinement
@@ -453,6 +454,7 @@ function DocFrame({
           onForked={onForked}
           dimmed={hidden}
           onWake={wake}
+          onHold={hold}
           trailing={<ThreadToggle open={threadOpen} onToggle={onToggleThread} />}
           // §7 (slice K): the strip WEARS the compare state this frame owns. The
           // strip's auto-hide/wake and the thread drawer are untouched by compare
