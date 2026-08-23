@@ -478,6 +478,11 @@ BATCH_RUNS = [
     session("r-batch2", "awaiting_human", "rotate the staging keys", "rotate the staging keys"),
 ]
 BATCH_MEMBERS = {"batch-one": ["r-batch1"], "batch-two": ["r-batch2"]}
+# Slice AA: the CREW-UX-2 DTO echo covers ALL membership records, the batch
+# corpus included — with `project_dto` + `batch_gates` both on, a batch run's
+# session claims its project (the daemon echoes every membership, not just
+# W2's). No standing rig combines the two switches; slice AA's B4 scene does.
+RUN_PROJECT.update({rid: pid for pid, rids in BATCH_MEMBERS.items() for rid in rids})
 BATCH_GATE_PROMPTS = {"r-batch1": ("Ship the version bump?", MIN),
                       "r-batch2": ("Rotate the keys now?", 3 * MIN)}
 ATTACHED_AT["r-batch1"] = NOW0 - MIN
