@@ -235,11 +235,13 @@ with sync_playwright() as p:
           ec36["markers"] == 3 and ec36["allAnchoredToOwnMessage"] and ec36["noStrayState"], **ec36)
 
     # The wire's ack shape, pinned in the client's own traffic (§8.4.1 probe 1):
-    # every accepted send answered 200 {ok, event_id, correlation_id}; the refused
-    # one answered 500 (the send_fail branch) — no other shape exists.
+    # every accepted chat.posted answered 200 {ok, event_id, correlation_id}; the
+    # refused one answered 500 (the send_fail branch) — no other shape exists.
+    # (A is a CREATE — POST /api/docs — so exactly two sends ride chat.posted:
+    # B's steer and C's retry; C's first attempt is the one refusal.)
     accepted = [a for a in send_acks if a["status"] == 200]
     refused = [a for a in send_acks if a["status"] == 500]
-    ack_ok = (len(accepted) >= 3 and len(refused) == 1
+    ack_ok = (len(accepted) == 2 and len(refused) == 1
               and all(sorted((a["ack"] or {}).keys()) == ["correlation_id", "event_id", "ok"]
                       for a in accepted))
     check("T8_real_ack_shapes_on_the_wire", ack_ok,
@@ -253,6 +255,7 @@ with sync_playwright() as p:
     # the session-storage stopgap, In-thread enabled, ONE conversation read.
     interactive_gets.clear()
     page.reload(wait_until="domcontentloaded")
+    page.add_style_tag(content=HIDE_GATE_TOASTS)  # re-add: styles die with the reload
     page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
     # Doc-open budget window (before the drawer opens): the standing manifest +
     # rendered-doc reads plus EXACTLY ONE sanctioned conversation read — nothing else.
@@ -262,11 +265,17 @@ with sync_playwright() as p:
     page.wait_for_timeout(800)  # settle one beat so late mount fetches register
     mount_gets = list(interactive_gets)
     conv_reads = [g for g in mount_gets if g.endswith("/api/conversation")]
-    sanctioned = {conv_path,
-                  f"/api/v1/projects/scratch/interactive/d/{doc_id}/api/versions"}
-    unsanctioned = [g for g in mount_gets
-                    if g not in sanctioned and not g.startswith(
-                        f"/api/v1/projects/scratch/interactive/d/{doc_id}/doc/")]
+    # The budget is scoped to THIS DOC'S MOUNT: the doc-open reads stay the standing
+    # manifest + rendered-doc pair plus EXACTLY ONE sanctioned conversation read —
+    # the one new fetch this slice adds. (App-boot reads outside the mount — the
+    # preflight gate, the board's docs-cache warms for other projects — are the
+    # standing pre-slice set and ride the reload, not the doc open.)
+    doc_mount = f"/api/v1/projects/scratch/interactive/d/{doc_id}/"
+    mount_scoped = [g for g in mount_gets if g.startswith(doc_mount)]
+    unsanctioned = [g for g in mount_scoped
+                    if g != conv_path
+                    and g != f"{doc_mount}api/versions"
+                    and not g.startswith(f"{doc_mount}doc/")]
     check("T9_one_sanctioned_conversation_read_on_doc_open",
           conv_reads == [conv_path] and unsanctioned == [],
           conversation_reads=conv_reads, unsanctioned=unsanctioned, mount_gets=mount_gets)
@@ -322,6 +331,7 @@ with sync_playwright() as p:
     set_fixture(ORIGIN, restart_bridge=True)
     interactive_gets.clear()
     page.reload(wait_until="domcontentloaded")
+    page.add_style_tag(content=HIDE_GATE_TOASTS)  # re-add: styles die with the reload
     page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
     wake_strip(page)
     page.locator('[data-testid="thread-toggle"]').click()
