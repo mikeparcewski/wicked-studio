@@ -161,6 +161,11 @@ NPM = "npm.cmd" if os.name == "nt" else "npm"
 
 # Same rule as the main harness: gate toasts are not these surfaces (and the
 # home route does not render them), but the suppression is cheap and display-only.
+# Slice AA re-scope note (DES-UX-001 §11.2, re-derived by grep 2026-08): no rig
+# asserts toast presence at fixed coordinates — the only coupling is this
+# selector. Since slice AA, `gate-notification` names each toast CARD (the
+# outer layer is `gate-notification-layer`, pointer-events: none), so this
+# hider keeps hiding every card; nothing about its mechanism changed.
 HIDE_GATE_TOASTS = '[data-testid="gate-notification"] { display: none !important; }'
 
 # ── The frozen clock (§4.0 determinism): every age derives from this one NOW0 ──

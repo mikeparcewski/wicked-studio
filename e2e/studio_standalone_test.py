@@ -192,6 +192,11 @@ report: dict = {"ok": False, "steps": {}}
 # the Document-mode composer. They are not this section's surface — same spirit as the
 # `fonts.g` console filter — so the doc sections suppress them rather than fight them.
 # Hiding is display-only: nothing about the asserted behaviour changes.
+# Slice AA re-scope note (DES-UX-001 §11.2): `gate-notification` now names each
+# toast CARD (the layer is `gate-notification-layer`, pointer-events: none), so
+# this selector still hides every card — the mechanism is unchanged. Toasts also
+# self-expire and cap at 3 since slice AA, so the overlap this guards against
+# is bounded; the hider stays because determinism is cheaper than a dwell race.
 HIDE_GATE_TOASTS = '[data-testid="gate-notification"] { display: none !important; }'
 
 def wake_strip(page) -> None:
