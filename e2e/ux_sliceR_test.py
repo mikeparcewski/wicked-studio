@@ -136,9 +136,18 @@ with sync_playwright() as p:
         page.goto(f"{ORIGIN}{thread}", wait_until="domcontentloaded")
         page.add_style_tag(content=HIDE_GATE_TOASTS)
 
+    def open_units_tab() -> None:
+        """Slice BB re-scope (DES-UX-002 §8.3): a terminal run's DEFAULT lens is
+        now the evidence timeline; the slice-R spine is the preserved Units tab
+        (`[data-testid="tab-unit-list"]` — its existence is itself an AC). Every
+        spine AC below re-verifies unchanged under that tab."""
+        page.locator('[data-testid="tab-unit-list"]').wait_for(timeout=15000)
+        page.locator('[data-testid="tab-unit-list"]').click()
+
     # ── Scene 1 (AC 1): units-as-spine — the failed run's post-mortem page ──────
     open_thread(AUTH_THREAD)
     page.locator('[data-testid="failure-banner"]').first.wait_for(timeout=30000)
+    open_units_tab()
     page.locator('[data-testid="work-unit"]').first.wait_for(timeout=15000)
     page.locator('[data-testid="unit-transcript"]').first.wait_for(timeout=15000)
     # Both terminal units' transcripts auto-open (the WorkUnitDetail:38 contract):
@@ -258,6 +267,7 @@ with sync_playwright() as p:
 
     # ── Scene 6 (AC 3): the retention empty state on the historical run ─────────
     open_thread(LEGACY_THREAD)
+    open_units_tab()
     page.locator('[data-testid="verdict-detail"][data-empty="true"]').wait_for(timeout=30000)
     empty = page.evaluate(
         """() => {
