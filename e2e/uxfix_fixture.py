@@ -210,7 +210,26 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # Slice R (DES-UX-001 §1): the failure-forensics corpus — see the
          # module docstring. Default False: no standing rig's failed runs
          # change shape.
-         "forensics": False}
+         "forensics": False,
+         # Slice V (DES-UX-001 §3/§4): the provenance + retry corpus.
+         #   provenance — GET /audit?runId= gains REAL AuditEntry rows for
+         #                r-auth and r-retry (actor{id,kind,trust} + the
+         #                run.launched detail; r-retry's detail carries
+         #                retryOf per CREW-UX-3) while r-legacy answers an
+         #                EMPTY page — the degraded no-audit run. The run
+         #                index gains r-retry (completed) whose session
+         #                echoes retry_of:"r-auth" (api-types 0.8.0), the
+         #                lineage pair both cross-links render from. POST
+         #                /runs validates retryOf against the known ids
+         #                (400 with the daemon's named error otherwise) and
+         #                answers 201 {runId:"r-new"}. Default False: no
+         #                standing rig's board grows a run.
+         "provenance": False,
+         # Slice V: one-shot RAW CoreEvent frames drained ONCE by the /ws
+         # loop, verbatim (e.g. a sessionFailed that mints a run_failed
+         # notification row). Distinct from extra_narration (which wraps
+         # its lines in unitOutputDelta) and extra_gates (awaitingHuman).
+         "extra_frames": []}
 state_lock = threading.Lock()
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
@@ -314,6 +333,33 @@ RUNS = [
 ]
 ORPHAN = session("r-orphan", "executing", "stranded work from another client",
                  "stranded work from another client")
+
+# ── Slice V (DES-UX-001 §3/§4): the provenance + retry corpus, behind `provenance` ──
+#
+# The lineage pair: r-auth (failed, above) was retried as r-retry, which
+# COMPLETED — so the back-link ("retry of r-auth") and the forward link
+# ("retried as r-retry") both have a true record to render, and the completed
+# retry also pins §4.5's "terminal-but-completed runs do not render Retry".
+# `retry_of` is the api-types 0.8.0 DTO echo: ABSENT (never null) on non-retries.
+RETRY_RUN = session("r-retry", "completed", "refactor the auth middleware",
+                    "refactor the auth middleware")
+RETRY_RUN["session"]["retry_of"] = "r-auth"
+RETRY_RUN["units"][0]["status"] = "done"
+
+# GET /audit?runId= — REAL AuditEntry shapes (wicked-crew-api-types: ts, action,
+# actor{id,kind,trust}, runId, detail), newest first. r-legacy deliberately has
+# NO entry: the degraded "launched via API (actor unknown)" run. r-retry's
+# detail carries retryOf — the CREW-UX-3 system-of-record lineage record
+# (crew routes.ts:601 writes exactly this shape).
+AUDIT_ACTOR = {"id": "mika", "kind": "human", "trust": "operator"}
+AUDIT_ENTRIES = {
+    "r-auth": [{"ts": NOW0 - 13 * MIN, "action": "run.launched", "actor": AUDIT_ACTOR,
+                "runId": "r-auth",
+                "detail": {"workflow": "wf-w2", "projectId": "auth-refactor"}}],
+    "r-retry": [{"ts": NOW0 - 5 * MIN, "action": "run.launched", "actor": AUDIT_ACTOR,
+                 "runId": "r-retry",
+                 "detail": {"workflow": "wf-w2", "retryOf": "r-auth"}}],
+}
 
 # ── Slice P (DES-FEEDBACK-003 §10.2): the two chat runs, behind `chat_runs` ───
 #
@@ -919,6 +965,45 @@ learned_lock = threading.Lock()
 learned_themes: dict = {}
 
 
+def assemble_runs() -> list:
+    """The run corpus under the CURRENT switches — shared by GET /runs and the
+    slice-V single-run GET /runs/<id> so both wires decorate identically."""
+    with state_lock:
+        if state["no_runs"]:
+            runs = []
+        else:
+            runs = RUNS + ([ORPHAN] if state["orphan"] else []) \
+                + ([LONG_RUN] if state["long_prompt"] else []) \
+                + ([CHAT_LIVE, CHAT_GATED] if state["chat_runs"] else []) \
+                + (BATCH_RUNS if state["batch_gates"] else []) \
+                + ([RETRY_RUN] if state["provenance"] else [])
+        viewer_on = state["viewer"]
+        repo_refs_on = state["repo_refs"]
+        forensics_on = state["forensics"]
+        provenance_on = state["provenance"]
+    if viewer_on or repo_refs_on or forensics_on or provenance_on:
+        runs = json.loads(json.dumps(runs))
+        for r in runs:
+            # Slice V: the CREW-UX-2 DTO echo for the lineage pair — the retry
+            # prefill's project binding reads it (`project_id`, api-types 0.8.0).
+            if provenance_on and r["session"]["id"] in ("r-auth", "r-retry"):
+                r["session"]["project_id"] = "auth-refactor"
+            # Slice I: the live run gains a workdir (the diff route's
+            # 409 gate reads it; AgentSession carries it on the wire).
+            if viewer_on and r["session"]["id"] == "r-upload":
+                r["session"]["workdir"] = VIEWER_WORKDIR
+            # Slice P: repo-linked runs for the /repos tiles (§4.4).
+            if repo_refs_on and r["session"]["id"] in REPO_REF_RUNS:
+                r["session"]["repo_ref"] = REPO_ID
+            # Slice R: r-auth's real-shape units + the evidence root
+            # its survey transcript cites (workdir stays None — its
+            # /diff answers the REAL 409 named-cause case).
+            if forensics_on and r["session"]["id"] == "r-auth":
+                r["units"] = json.loads(json.dumps(FORENSICS_AUTH_UNITS))
+                r["session"]["extra_write_roots"] = [FORENSICS_EVIDENCE_ROOT]
+    return runs
+
+
 def ssrf_reject_reason(url: str) -> str | None:
     """The bridge-side guard (DES-MERGE-001 §4.6): why this URL is refused, or None."""
     try:
@@ -1126,10 +1211,16 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # slice 2: prove a NEW delta reaches the live feed within 2s).
                 extra: list = []
                 gates_extra: list = []
+                frames_extra: list = []
                 if newest:
                     with state_lock:
                         extra, state["extra_narration"] = list(state["extra_narration"]), []
                         gates_extra, state["extra_gates"] = list(state["extra_gates"]), []
+                        frames_extra, state["extra_frames"] = list(state["extra_frames"]), []
+                # Slice V: raw one-shot CoreEvent frames, verbatim (e.g. a
+                # sessionFailed that mints a run_failed notification row).
+                for frame in frames_extra:
+                    self.wfile.write(ws_frame(frame))
                 for line in extra:
                     self.wfile.write(ws_frame({
                         "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
@@ -1181,34 +1272,32 @@ class W2Handler(SimpleHTTPRequestHandler):
             self.wfile.write(LOGO_TEST_SVG)
             return True
         if path == "/api/v1/runs":
+            self._json(200, {"runs": assemble_runs()})
+            return True
+        # Slice V: GET /runs/<id> — one run's detail (`{run: SessionView}`), the
+        # real daemon contract useRunModel re-hydrates on. Same corpus assembly
+        # as the list, so the switches decorate both wires identically; an
+        # unknown id answers the daemon's 404.
+        m = re.match(r"^/api/v1/runs/([^/]+)$", path)
+        if m:
+            rid = urllib.parse.unquote(m.group(1))
+            found = next((r for r in assemble_runs() if r["session"]["id"] == rid), None)
+            if found is None:
+                self._json(404, {"error": f"Run {rid} not found"})
+            else:
+                self._json(200, {"run": found})
+            return True
+        # Slice V (DES-UX-001 §3.2): the audit trail — always present (the real
+        # daemon serves it unconditionally, crew routes.ts:286); the corpus
+        # switch only decides which runs have entries. `?runId=` filters;
+        # newest first; an unmatched run answers an EMPTY page, never a 404.
+        if path == "/api/v1/audit":
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            run_id = (q.get("runId") or [""])[0]
             with state_lock:
-                if state["no_runs"]:
-                    runs = []
-                else:
-                    runs = RUNS + ([ORPHAN] if state["orphan"] else []) \
-                        + ([LONG_RUN] if state["long_prompt"] else []) \
-                        + ([CHAT_LIVE, CHAT_GATED] if state["chat_runs"] else []) \
-                        + (BATCH_RUNS if state["batch_gates"] else [])
-                viewer_on = state["viewer"]
-                repo_refs_on = state["repo_refs"]
-                forensics_on = state["forensics"]
-            if viewer_on or repo_refs_on or forensics_on:
-                runs = json.loads(json.dumps(runs))
-                for r in runs:
-                    # Slice I: the live run gains a workdir (the diff route's
-                    # 409 gate reads it; AgentSession carries it on the wire).
-                    if viewer_on and r["session"]["id"] == "r-upload":
-                        r["session"]["workdir"] = VIEWER_WORKDIR
-                    # Slice P: repo-linked runs for the /repos tiles (§4.4).
-                    if repo_refs_on and r["session"]["id"] in REPO_REF_RUNS:
-                        r["session"]["repo_ref"] = REPO_ID
-                    # Slice R: r-auth's real-shape units + the evidence root
-                    # its survey transcript cites (workdir stays None — its
-                    # /diff answers the REAL 409 named-cause case).
-                    if forensics_on and r["session"]["id"] == "r-auth":
-                        r["units"] = json.loads(json.dumps(FORENSICS_AUTH_UNITS))
-                        r["session"]["extra_write_roots"] = [FORENSICS_EVIDENCE_ROOT]
-            self._json(200, {"runs": runs})
+                provenance_on = state["provenance"]
+            entries = AUDIT_ENTRIES.get(run_id, []) if provenance_on else []
+            self._json(200, {"entries": entries})
             return True
         # Slice I: the crew#305 file/diff routes (real contract, switch-gated).
         m = re.match(r"^/api/v1/runs/([^/]+)/(files|diff)$", path)
@@ -1704,6 +1793,21 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # awaiting between the selection and the fan-out.
                 return self._json(409, {"error": "not awaiting a human gate"})
             return self._json(200, {"status": "resumed"})
+        # Slice V (DES-UX-001 §4 / CREW-UX-3): POST /runs — the launch. retryOf
+        # must name an EXISTING run id (the daemon's 400 with a named error,
+        # crew routes.ts:588) — never a silently unrecorded lineage.
+        if path == "/api/v1/runs":
+            retry_of = body.get("retryOf")
+            if retry_of is not None:
+                with state_lock:
+                    provenance_on = state["provenance"]
+                known = {r["session"]["id"] for r in RUNS} \
+                    | ({RETRY_RUN["session"]["id"]} if provenance_on else set())
+                if retry_of not in known:
+                    return self._json(400, {
+                        "error": f"retryOf names an unknown run: {retry_of} — "
+                                 "lineage must point at an existing run id"})
+            return self._json(201, {"runId": "r-new"})
         # POST /api/v1/chats — open a chat: warm the asked-for seats (or the whole
         # roster when `clis` is omitted, matching the daemon), every seat ok, instantly.
         if path == "/api/v1/chats":
