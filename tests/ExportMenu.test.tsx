@@ -28,6 +28,8 @@ const { ServiceHintError } = vi.hoisted(() => ({
 vi.mock('../src/api/interactive.js', () => ({
   postExport: (...a: unknown[]) => postExport(...a),
   postFork: (...a: unknown[]) => postFork(...a),
+  // The real resolver's shape (interactive.ts): proxy mount + bridge-root-relative path.
+  interactiveUrl: (pid: string, p: string) => `/api/v1/projects/${pid}/interactive${p}`,
   ServiceHintError,
 }));
 
@@ -114,13 +116,56 @@ describe('the version strip exports the SELECTED version (§4.4, §4.2)', () => 
     await waitFor(() => expect(postExport).toHaveBeenCalledWith(PROJECT, DOC, 1, 'pdf'));
   });
 
-  it('the artifact lands in the thread as a download — the strip itself reports nothing', async () => {
+  it('the artifact lands in the thread as a download — and no failure hint renders', async () => {
     strip();
     await press('html');
     postExport.mockResolvedValue(reply('roadmap_v3.html', 'html'));
 
     await waitFor(() => expect(messages().some((m) => m.kind === 'agent')).toBe(true));
     expect(screen.queryByTestId('export-hint')).toBeNull();
+  });
+
+  // DES-UX-001 §7.2 (B5, EC37): the control the finger pressed answers WHERE it
+  // was pressed — pending on the clicked control, then the click site itself
+  // becoming the download affordance. The thread message still lands (above).
+  it('AC §7.2: the clicked control renders export-pending, then BECOMES the download (export-ready)', async () => {
+    let release: (v: unknown) => void = () => {};
+    postExport.mockImplementation(() => new Promise((res) => { release = res; }));
+    strip();
+    await press('pdf');
+
+    // PENDING, on that control: the spinner is inside the pdf button itself.
+    const pending = screen.getByTestId('export-pending');
+    expect(pending.closest('[data-format="pdf"]')).not.toBeNull();
+
+    release(reply('roadmap_v3.pdf'));
+    // READY, at the click site: a REAL anchor — href through the one-origin proxy,
+    // download attribute naming the artifact — where the pdf button was.
+    const ready = await screen.findByTestId('export-ready');
+    expect(ready.tagName).toBe('A');
+    expect(ready).toHaveAttribute('data-format', 'pdf');
+    expect(ready).toHaveAttribute(
+      'href', `/api/v1/projects/${PROJECT}/interactive/d/${DOC}/download/roadmap_v3.pdf`);
+    expect(ready).toHaveAttribute('download', 'roadmap_v3.pdf');
+    // The other formats are still offered beside it.
+    expect(screen.getAllByTestId('export-format')).toHaveLength(2);
+  });
+
+  it('§7.2: a new version selection retires the previous READY answer', async () => {
+    const { rerender } = render(
+      <VersionStrip projectId={PROJECT} docId={DOC} manifest={MANIFEST}
+                    selected={3} navigate={() => {}} onForked={() => {}} />,
+    );
+    await press('pdf');
+    await screen.findByTestId('export-ready');
+
+    rerender(
+      <VersionStrip projectId={PROJECT} docId={DOC} manifest={MANIFEST}
+                    selected={2} navigate={() => {}} onForked={() => {}} />,
+    );
+    // A v3 artifact link must not sit under an "Export v2" label.
+    expect(screen.queryByTestId('export-ready')).toBeNull();
+    expect(screen.getAllByTestId('export-format')).toHaveLength(3);
   });
 });
 
