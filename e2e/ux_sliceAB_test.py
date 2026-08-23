@@ -9,11 +9,14 @@ open-time failed-with-reason seat, §7.9-4).
 The §7.9 DOM ACs, verbatim mapping:
 
   1. roster-true chips (§7.9-1, re-scoped per §11.2 to roster-first with the
-     cold-cache fallback): a fresh /chat/new mounts with the FALLBACK trio and
-     ZERO chat-surface requests (`data-source="fallback"` — the §2.4 budget
-     holds); the FIRST SEND fetches the roster ON THE GESTURE (exactly one
-     GET /roster) and opens with the ROSTER's seats — the daemon accepts them,
-     no rejected-chip error renders, and ≥1 reply frame lands after flush;
+     cold-cache fallback; round-2 J4 finding 1 tightened it further — the
+     fallback trio is a PLACEHOLDER that never ships, and the roster-down
+     branch is pinned by ux_fixJ42): a fresh /chat/new mounts with the
+     FALLBACK trio and ZERO chat-surface requests (`data-source="fallback"` —
+     the §2.4 budget holds); the FIRST SEND fetches the roster ON THE GESTURE
+     (exactly one GET /roster) and opens with the ROSTER's seats — the daemon
+     accepts them, no rejected-chip error renders, and ≥1 reply frame lands
+     after flush;
   2. a fixture-failed send (chat_send_fail) leaves the composer text INTACT,
      retracts the optimistic bubbles, and renders inline retry (§7.9-2);
      retry after the failure clears resends exactly the failed text;
