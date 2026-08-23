@@ -228,8 +228,11 @@ with sync_playwright() as p:
     }
 
     # ══ Scene 2 — Build (§5.4): left-border status, purpose, gate inbox, footer ═
+    # Re-scoped by DES-UX-001 slice S (§2.3 rule 2): a project's Build tab now
+    # shows exactly its runs, so the multi-status whole-fixture list (gate +
+    # working + failed edges, the $0.42 footer) lives on the FLAT `/runs` home.
     set_fixture(ORIGIN, usage_ws=True)
-    page.goto(f"{ORIGIN}/p/q3-review-deck/build", wait_until="domcontentloaded")
+    page.goto(f"{ORIGIN}/runs", wait_until="domcontentloaded")
     page.locator('[data-testid="build-run-row"][data-status="gate"]').first.wait_for(timeout=30000)
     page.locator('[data-testid="build-stats-footer"]').wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)

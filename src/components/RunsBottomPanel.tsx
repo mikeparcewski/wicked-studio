@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { SessionStatus, SessionView } from '../api/types.js';
 import { GATE_HASH } from '../board/gateActions.js';
+import { sessionProjectId } from '../hooks/ambientProject.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
+import { useProjectsStore } from '../store/projects.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
 import { useRuntimeStore, type LoggedEvent } from '../store/runtime.js';
 import { prefersReducedMotion } from './LiveEdge.js';
@@ -128,18 +130,52 @@ interface Props {
   navigate: (path: string) => void;
   /** True inside Document/Video — entering auto-collapses the sheet (EC27). */
   immersive: boolean;
+  /**
+   * Slice S (DES-UX-001 §2.3 rule 2): inside a project route the counters
+   * scope to THAT project's runs — `data-scope="project"` — derived from the
+   * run DTO's `project_id` (CREW-UX-2 daemon truth; the membership mirror
+   * answers only for pre-0.8.0 daemons). `null` = the global counters
+   * (`data-scope="global"`), everywhere outside a project.
+   */
+  scopeProjectId: string | null;
 }
 
-export function RunsBottomPanel({ runs, runPath, navigate, immersive }: Props): React.ReactElement {
+export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProjectId }: Props): React.ReactElement {
   const expanded = useRunsPanelStore((s) => s.expanded);
   const gates = useGateStore((s) => s.gates);
   const logs = useRuntimeStore((s) => s.logs);
   const projectNameByRun = useMembershipStore((s) => s.projectNameByRun);
+  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
+  const projects = useProjectsStore((s) => s.projects);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const stats = useMemo(() => runStats(runs), [runs]);
+  // Zero-new-requests scoping (§5.1 still holds): a pure filter over the runs
+  // prop — DTO truth first, mirror fallback — never a fetch of its own.
+  const scopedRuns = useMemo(() => {
+    if (scopeProjectId === null) return runs;
+    return runs.filter((v) => {
+      const claimed = sessionProjectId(v.session);
+      return claimed !== undefined
+        ? claimed === scopeProjectId
+        : projectIdByRun[v.session.id] === scopeProjectId;
+    });
+  }, [runs, scopeProjectId, projectIdByRun]);
+
+  /** A sheet row's project label: the DTO's own claim resolved against the
+   *  already-loaded projects store (zero membership fetches — §2.5's AC),
+   *  falling back to the board model's mirror for pre-0.8.0 daemons. */
+  const projectLabelOf = (view: SessionView): string => {
+    const claimed = sessionProjectId(view.session);
+    if (claimed === null) return '';
+    if (claimed !== undefined) {
+      return projects.find((p) => p.id === claimed)?.name ?? claimed;
+    }
+    return projectNameByRun[view.session.id] ?? '';
+  };
+
+  const stats = useMemo(() => runStats(scopedRuns), [scopedRuns]);
   const spend = useMemo(() => observedSpend(logs), [logs]);
-  const rows = useMemo(() => recentRuns(runs, SHEET_MAX), [runs]);
+  const rows = useMemo(() => recentRuns(scopedRuns, SHEET_MAX), [scopedRuns]);
   const quiet = stats.working === 0 && stats.gates === 0 && stats.failed === 0;
 
   // EC27: entering an immersive mode collapses an open sheet — the canvas-first
@@ -217,6 +253,7 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive }: Props): 
       <div
         data-testid="runs-bottom-bar"
         data-expanded={String(expanded)}
+        data-scope={scopeProjectId === null ? 'global' : 'project'}
         data-working={stats.working}
         data-gates={stats.gates}
         data-failed={stats.failed}
@@ -334,7 +371,7 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive }: Props): 
                     className="truncate shrink-0"
                     style={{ maxWidth: '20ch', fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-sans)' }}
                   >
-                    {projectNameByRun[id] ?? ''}
+                    {projectLabelOf(view)}
                   </span>
                   <span className="flex-1" />
                   <span

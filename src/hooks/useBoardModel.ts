@@ -9,6 +9,7 @@ import {
   type Band,
   type Signal,
 } from '../board/boardAttention.js';
+import { sessionProjectId } from './ambientProject.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { useGateStore, type OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -25,11 +26,16 @@ import { useRuntimeStore } from '../store/runtime.js';
  * and doc status come from the shared runtime store, which the cards subscribe to
  * directly (§3.5: one socket, one store, no polling).
  *
- * Runs are joined to projects through MEMBERSHIP (`crew.run` / `crew.chat` refs) —
- * `AgentSession` carries no project id, so this is the only binding that exists.
- * Memberships are re-read when a run the board has never placed shows up in the
- * run list (slice 6): a run launched from a card's quick action, or by any other
- * client, must land on its project's card without a reload.
+ * Runs are placed on projects by the DTO's own `project_id` (CREW-UX-2,
+ * api-types 0.8.0: the daemon echoes the membership record at DTO assembly —
+ * DES-UX-001 §2.3 rule 3, "one truth, one source"). Against a pre-0.8.0 daemon
+ * the field is ABSENT and the client-side MEMBERSHIP join (`crew.run` /
+ * `crew.chat` refs) stands as the fallback. The members wire is still read
+ * either way — it is the only source of the repo binding and the `attached_at`
+ * clocks — and is re-read when a run the board cannot place shows up in the
+ * run list (slice 6): a run launched by another client must land on its
+ * project's card without a reload. A run CARRYING `project_id` never needs
+ * that placement re-read: the daemon already answered.
  *
  * Ordering is by DECAYED attention score (`boardAttention.ts`), not by a fixed
  * bucket — the F3 fix: a failure from last week no longer outranks a run that is
@@ -153,6 +159,16 @@ interface Bindings {
 }
 
 const EMPTY: Bindings = { runIds: new Set(), repo: null, docs: [], attachedAt: {} };
+
+/**
+ * DTO-truth placement (DES-UX-001 §2.3 rule 3): the run's own `project_id`
+ * claim wins wherever the daemon echoes one; the client-side membership join
+ * answers only for pre-0.8.0 daemons whose DTOs never carry the field.
+ */
+function belongsTo(v: SessionView, projectId: string, joined: ReadonlySet<string>): boolean {
+  const claimed = sessionProjectId(v.session);
+  return claimed !== undefined ? claimed === projectId : joined.has(v.session.id);
+}
 
 /**
  * Mirror the run→project join into the shared membership store (DES-FEEDBACK-003
@@ -299,13 +315,17 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
   // A run the board cannot place yet (launched from a quick action, or by another
   // client) means the membership snapshot is stale — re-read it. Guarded per run id,
   // so the unfiled runs that legitimately belong to no project cost exactly one pass
-  // each rather than one per `GET /runs` reconcile.
+  // each rather than one per `GET /runs` reconcile. A run whose DTO CARRIES
+  // `project_id` (string OR null — CREW-UX-2) is never "unplaced": the daemon
+  // already answered, so it costs zero membership fetches (§2.5's request-tap AC).
   useEffect(() => {
     // Nothing is "unplaced" until the first membership read has landed — without this
     // the initial run list would fan out a second, identical read behind the first.
     if (projects.length === 0 || Object.keys(bindings).length === 0) return;
     const known = new Set(Object.values(bindings).flatMap((b) => [...b.runIds]));
-    const unplaced = runs.filter((v) => !known.has(v.session.id) && !placed.current.has(v.session.id));
+    const unplaced = runs.filter((v) =>
+      sessionProjectId(v.session) === undefined
+      && !known.has(v.session.id) && !placed.current.has(v.session.id));
     if (unplaced.length === 0) return;
     for (const v of unplaced) placed.current.add(v.session.id);
     let cancelled = false;
@@ -358,7 +378,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
       return projects
         .map((project): BoardProject => {
           const b = bindings[project.id] ?? EMPTY;
-          const mine = runs.filter((v) => b.runIds.has(v.session.id));
+          const mine = runs.filter((v) => belongsTo(v, project.id, b.runIds));
           const { score, signal } = topSignal(
             signalsOf(project, mine, b.docs, gates, logTail, failedAt, docActivity[project.id]?.at),
             now,
@@ -379,13 +399,20 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     [projects, bindings, runs, gates, docActivity, failedAt, now],
   );
 
-  // The unfiled set (F5): what the run list holds that no membership claims. Held
-  // back until the first membership read lands — before that, EVERY run would look
-  // unfiled and the shelf would flash into existence on each load.
+  // The unfiled set (F5, re-pointed by DES-UX-001 §2.3 rule 3): a run whose DTO
+  // carries `project_id: null` is what the DAEMON considers unfiled — daemon
+  // truth needs no hold-back. Only the pre-0.8.0 fallback (field absent, the
+  // client-side join) stays held back until the first membership read lands —
+  // before that, EVERY such run would look unfiled and the shelf would flash
+  // into existence on each load.
   const unfiled = useMemo(() => {
-    if (loading || (projects.length > 0 && Object.keys(bindings).length === 0)) return [];
+    const joinReady = !loading && !(projects.length > 0 && Object.keys(bindings).length === 0);
     const known = new Set(Object.values(bindings).flatMap((b) => [...b.runIds]));
-    return runs.filter((v) => !known.has(v.session.id));
+    return runs.filter((v) => {
+      const claimed = sessionProjectId(v.session);
+      if (claimed !== undefined) return claimed === null;
+      return joinReady && !known.has(v.session.id);
+    });
   }, [runs, projects, bindings, loading]);
 
   return { items, unfiled, failedAt, loading, error };

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import type { DocSummary } from '../api/interactive.js';
+import { ambientProjectId, launchPath, registerRepoPath } from '../hooks/ambientProject.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
@@ -361,7 +362,13 @@ function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }:
 
 const MAKE_MODES: Mode[] = ['build', 'document', 'video'];
 
-function MakePicker({ navigate, onClose }: { navigate: (p: string) => void; onClose: () => void }): React.ReactElement {
+function MakePicker({ navigate, onClose, ambient }: {
+  navigate: (p: string) => void;
+  onClose: () => void;
+  /** The ambient project (shared derivation, DES-UX-001 §2.3 rule 1) — Build
+   *  from inside a project context opens the PRE-BOUND form, never Unfiled. */
+  ambient: string | null;
+}): React.ReactElement {
   /** null = the three rows; a mode = the project-picker stage (Document/Video). */
   const [stage, setStage] = useState<Mode | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -377,9 +384,11 @@ function MakePicker({ navigate, onClose }: { navigate: (p: string) => void; onCl
 
   const pick = (m: Mode): void => {
     if (m === 'build') {
-      // The unbound launch form, Unfiled default — slice B semantics (§3.4).
+      // Slice S (DES-UX-001 §2.3 rule 1): inside a project context the launch
+      // form opens PRE-BOUND (`/p/:id/build/new`, the slice-B lock); outside
+      // one, the flat Unfiled-default form — the old slice-B semantics (§3.4).
       onClose();
-      navigate('/runs/new');
+      navigate(launchPath(ambient, 'build'));
       return;
     }
     // A doc lives in a project — the bridge mounts per project (§3.4): pick one
@@ -480,6 +489,11 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
   // ── The one-open accordion (§3.2, EC26): zero or one heading expanded. ──────
   // Default derives from the route; the map re-fires ONLY when the mapped
   // heading changes, so a manual collapse survives moves within one territory.
+  // The ambient project (slice S, DES-UX-001 §2.3 rule 1): every "+" verb on
+  // this rail derives "which project am I standing in" from the ONE shared
+  // helper — inside `/p/:id/*` the new-run / new-chat / register-repo gestures
+  // carry the binding instead of resetting to Unfiled (the review's J5 resets).
+  const ambient = ambientProjectId(pathname);
   const mapped = headingForPath(pathname);
   const [openHeading, setOpenHeading] = useState<PathKey | null>(mapped);
   const lastMapped = useRef(mapped);
@@ -587,7 +601,7 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             onNew={() => setMakePickerOpen(v => !v)}
             navigate={navigate}
             extra={makePickerOpen
-              ? <MakePicker navigate={navigate} onClose={() => setMakePickerOpen(false)} />
+              ? <MakePicker navigate={navigate} onClose={() => setMakePickerOpen(false)} ambient={ambient} />
               : undefined}
           >
             {madeRuns.length === 0 && madeDocs.length === 0
@@ -610,7 +624,7 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             path={P_CHAT}
             open={openHeading === 'chat'}
             onToggle={() => toggle('chat')}
-            onNew={() => navigate('/chat/new')}
+            onNew={() => navigate(launchPath(ambient, 'chat'))}
             navigate={navigate}
           >
             {chatRuns.length === 0
@@ -626,7 +640,7 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             path={P_REPOS}
             open={openHeading === 'repos'}
             onToggle={() => toggle('repos')}
-            onNew={() => navigate('/repos/new')}
+            onNew={() => navigate(registerRepoPath(ambient))}
             navigate={navigate}
           >
             <div className="px-3 pb-1">

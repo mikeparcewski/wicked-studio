@@ -38,7 +38,7 @@ const usage = (costUsd: number, ts = Date.now()): LoggedEvent => ({
 
 const runPath = (id: string): string => `/runs/${id}`;
 
-function mount(over: { runs?: typeof W2; immersive?: boolean } = {}): {
+function mount(over: { runs?: typeof W2; immersive?: boolean; scope?: string | null } = {}): {
   navigate: ReturnType<typeof vi.fn>;
   rerender: (ui: React.ReactElement) => void;
 } {
@@ -49,6 +49,7 @@ function mount(over: { runs?: typeof W2; immersive?: boolean } = {}): {
       runPath={runPath}
       navigate={navigate}
       immersive={over.immersive ?? false}
+      scopeProjectId={over.scope ?? null}
     />,
   );
   return { navigate, rerender };
@@ -208,7 +209,7 @@ describe('EC27 — immersive routes auto-collapse the sheet', () => {
   it('entering Document/Video collapses an open sheet; a manual re-expand stands', () => {
     const navigate = vi.fn();
     const ui = (immersive: boolean): React.ReactElement => (
-      <RunsBottomPanel runs={W2} runPath={runPath} navigate={navigate} immersive={immersive} />
+      <RunsBottomPanel runs={W2} runPath={runPath} navigate={navigate} immersive={immersive} scopeProjectId={null} />
     );
     const { rerender } = render(ui(false));
     fireEvent.click(screen.getByTestId('runs-bar-toggle'));
@@ -256,7 +257,7 @@ describe('§5.7 Escape precedence — palette → sheet → triage, one registry
     render(
       <>
         <Triage items={items} />
-        <RunsBottomPanel runs={W2} runPath={runPath} navigate={vi.fn()} immersive={false} />
+        <RunsBottomPanel runs={W2} runPath={runPath} navigate={vi.fn()} immersive={false} scopeProjectId={null} />
       </>,
     );
     press('j'); // select the first triage row

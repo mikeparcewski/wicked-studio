@@ -4,6 +4,7 @@ import { listDocs, type DocSummary } from '../api/interactive.js';
 import { useDocsCache } from '../store/docsCache.js';
 import type { SessionView } from '../api/types.js';
 import { compareScored, scoreOf, type Signal, type SignalKind } from '../board/boardAttention.js';
+import { sessionProjectId } from '../hooks/ambientProject.js';
 import { interactiveRootOf } from '../hooks/useBoardModel.js';
 import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import { useTriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
@@ -175,7 +176,15 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   const myRuns = useMemo(() => {
     const now = Date.now();
     return runs
-      .filter((v) => v.session.id in memberKinds && v.session.archived_at == null)
+      // Slice S (DES-UX-001 §2.3 rule 3): the run DTO's own `project_id` claim
+      // (CREW-UX-2) places a run here the instant `GET /runs` reconciles — no
+      // waiting on the mount-time members snapshot. The membership join stays
+      // as the pre-0.8.0 fallback (field absent) and as the kind/clock source.
+      .filter((v) => {
+        if (v.session.archived_at != null) return false;
+        const claimed = sessionProjectId(v.session);
+        return claimed !== undefined ? claimed === projectId : v.session.id in memberKinds;
+      })
       .map((v) => {
         const signal = runSignal(v, gates[v.session.id]?.receivedAt, attachedAt[v.session.id] ?? fallbackAt);
         return {
@@ -189,7 +198,7 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         { score: a.score, at: a.at, name: a.view.session.problem },
         { score: b.score, at: b.at, name: b.view.session.problem },
       ));
-  }, [runs, memberKinds, attachedAt, gates, fallbackAt]);
+  }, [runs, memberKinds, attachedAt, gates, fallbackAt, projectId]);
 
   const openRuns = myRuns.filter(({ view }) => !['completed', 'cancelled', 'failed'].includes(view.session.status));
   const waiting = myRuns.filter(({ view }) => view.session.status === 'awaiting_human');

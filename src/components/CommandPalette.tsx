@@ -4,6 +4,7 @@ import type { GovernanceClaim, InteractionRequest, RepoEntry, SessionView } from
 import { api } from '../api/client.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { fuzzyMatch, type FuzzyResult } from '../palette/fuzzy.js';
+import { launchPath } from '../hooks/ambientProject.js';
 import { modePath, projectPath, type Navigate } from '../hooks/useRoute.js';
 import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -454,13 +455,15 @@ export function CommandPalette({
 
     // Verbs (§1.3's table — each names its existing mechanism, none invents one).
     const verbs: Array<{ name: string; action: () => void; when?: boolean }> = [
+      // Slice S: the pre-bound-vs-flat fork is the shared `launchPath` spelling
+      // (DES-UX-001 §2.3 rule 1) — the palette may not hand-roll it.
       {
         name: 'New Build',
-        action: () => navigate(projectId !== null ? `${modePath(projectId, 'build')}/new` : '/runs/new'),
+        action: () => navigate(launchPath(projectId, 'build')),
       },
       {
         name: 'New Chat',
-        action: () => navigate(projectId !== null ? `${modePath(projectId, 'chat')}/new` : '/chat/new'),
+        action: () => navigate(launchPath(projectId, 'chat')),
       },
       // The §3.4 fork's other two tines (DES-FEEDBACK-003 §8.4, slice N): the
       // palette and Make's ＋ agree on what can be made. Inside a project shell

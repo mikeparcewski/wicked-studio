@@ -113,6 +113,16 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     ≥1 fetch and reach its own timeout branch). Both failed
                     runs gain one `dataUsed` file so the Files panel offers
                     [Full diff]. Default False.
+  project_dto     — the slice-S CREW-UX-2 corpus (DES-UX-001 §2.3): every run
+                    DTO carries `project_id` (api-types 0.8.0 — a string echoed
+                    from the membership record, or null = GENUINELY unfiled),
+                    the list gains `r-unfiled` (a null-claim run no membership
+                    names), and `POST /api/v1/runs` becomes a REAL launch: the
+                    daemon's `{runId}` answer, the run atomically filed into
+                    `body.projectId` (never a silent unfiled run) and served on
+                    both the runs wire (with its `project_id` echo) and its
+                    project's members wire. Default False: pre-0.8.0 rigs keep
+                    DTOs without the field and a POST that 404s.
 
 A rig that never flips them gets the default W2 board.
 """
@@ -229,7 +239,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # loop, verbatim (e.g. a sessionFailed that mints a run_failed
          # notification row). Distinct from extra_narration (which wraps
          # its lines in unitOutputDelta) and extra_gates (awaitingHuman).
-         "extra_frames": []}
+         "extra_frames": [],
+         # Slice S (DES-UX-001 §2.3, CREW-UX-2): run DTOs carry `project_id`,
+         # r-unfiled joins the list, POST /runs launches for real. Default
+         # False: no standing rig's DTO shape changes.
+         "project_dto": False}
 state_lock = threading.Lock()
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
@@ -360,6 +374,28 @@ AUDIT_ENTRIES = {
                  "runId": "r-retry",
                  "detail": {"workflow": "wf-w2", "retryOf": "r-auth"}}],
 }
+
+# ── Slice S (DES-UX-001 §2.3): the CREW-UX-2 project_id corpus, behind
+#    `project_dto` ──────────────────────────────────────────────────────────────
+#
+# The run→project truth the DTO echoes (api-types 0.8.0): a string for every
+# membership above, `None` (JSON null) for a run the daemon GENUINELY considers
+# unfiled — never the absent field, which spells a pre-0.8.0 server.
+RUN_PROJECT = {ref: pid for pid, refs in MEMBERS.items() for ref in refs}
+
+# The null-claim run: on the list, filed nowhere, no membership names it. The
+# board's "not in a project" shelf must show it off DTO truth alone — no
+# membership hold-back, no join.
+UNFILED_RUN = session("r-unfiled", "executing", "poke at the flaky CI job",
+                      "poke at the flaky CI job")
+
+# Runs launched over POST /api/v1/runs this server lifetime (project_dto on):
+# each entry rides GET /runs (its session carrying the `project_id` echo) and —
+# when filed — its project's members wire, the atomic attach (routes.ts:148,
+# "never a silent unfiled run"). Guarded by state_lock.
+launched_runs: list = []          # SessionView dicts, project_id already stamped
+launched_members: dict = {}       # pid -> [run ids]
+launched_seq = [0]
 
 # ── Slice P (DES-FEEDBACK-003 §10.2): the two chat runs, behind `chat_runs` ───
 #
@@ -981,7 +1017,12 @@ def assemble_runs() -> list:
         repo_refs_on = state["repo_refs"]
         forensics_on = state["forensics"]
         provenance_on = state["provenance"]
-    if viewer_on or repo_refs_on or forensics_on or provenance_on:
+        project_dto_on = state["project_dto"]
+        # Slice S (DES-UX-001 §2.3): the null-claim run + this-lifetime launches
+        # join BOTH wires (list + detail) so the DTO echo decorates identically.
+        if project_dto_on and not state["no_runs"]:
+            runs = runs + [UNFILED_RUN] + launched_runs
+    if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on:
         runs = json.loads(json.dumps(runs))
         for r in runs:
             # Slice V: the CREW-UX-2 DTO echo for the lineage pair — the retry
@@ -1001,6 +1042,13 @@ def assemble_runs() -> list:
             if forensics_on and r["session"]["id"] == "r-auth":
                 r["units"] = json.loads(json.dumps(FORENSICS_AUTH_UNITS))
                 r["session"]["extra_write_roots"] = [FORENSICS_EVIDENCE_ROOT]
+            # Slice S (CREW-UX-2): the DTO echoes the membership record —
+            # ALWAYS present with the corpus on (string | null), the
+            # api-types 0.8.0 contract. Launched runs arrive pre-stamped;
+            # slice V's explicit lineage-pair stamp above wins when both
+            # corpora are on (this is the membership-derived fallback).
+            if project_dto_on and "project_id" not in r["session"]:
+                r["session"]["project_id"] = RUN_PROJECT.get(r["session"]["id"])
     return runs
 
 
@@ -1359,6 +1407,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             # Slice L: the batch corpus projects' runs.
             if batch_on:
                 refs.extend(BATCH_MEMBERS.get(pid, []))
+            # Slice S: runs launched this lifetime — the atomic attach means the
+            # membership record and the DTO echo agree from the first read.
+            with state_lock:
+                refs.extend(launched_members.get(pid, []))
             # Slice P: the live chat thread is a `crew.chat` member of notes.
             kinds = {}
             if chat_runs_on and pid == "notes":
@@ -1779,6 +1831,43 @@ class W2Handler(SimpleHTTPRequestHandler):
         # The slice-6 document journey's writes (create / fork / bus emit).
         if self._interactive_post(path, body if isinstance(body, dict) else {}):
             return None
+        # POST /api/v1/runs — the REAL launch (slice S, project_dto only): the
+        # daemon's `{runId}` answer; `body.projectId` files the run atomically
+        # (LaunchSchema, routes.ts:148 — "never a silent unfiled run"), and the
+        # DTO the next GET /runs serves carries the CREW-UX-2 `project_id` echo.
+        # POST /api/v1/runs — the launch, shared by the slice-V (provenance/
+        # retry) and slice-S (project_dto) corpora. retryOf validation first
+        # (CREW-UX-3: 400 on an unknown id, crew routes.ts:588); then a REAL
+        # launch when project_dto is on (the run rides GET /runs with its
+        # project_id echo — atomic filing), else slice V's plain 201.
+        if path == "/api/v1/runs":
+            retry_of = body.get("retryOf")
+            if retry_of is not None:
+                with state_lock:
+                    provenance_on = state["provenance"]
+                known = {r["session"]["id"] for r in RUNS} \
+                    | ({RETRY_RUN["session"]["id"]} if provenance_on else set()) \
+                    | {r["session"]["id"] for r in launched_runs}
+                if retry_of not in known:
+                    return self._json(400, {
+                        "error": f"retryOf names an unknown run: {retry_of} — "
+                                 "lineage must point at an existing run id"})
+            with state_lock:
+                project_dto_on = state["project_dto"]
+                if project_dto_on:
+                    launched_seq[0] += 1
+                    rid = f"r-launched-{launched_seq[0]}"
+                    pid = body.get("projectId")
+                    run = session(rid, "executing", body.get("problem", ""),
+                                  body.get("problem", ""))
+                    run["session"]["project_id"] = pid if pid else None
+                    launched_runs.append(run)
+                    if pid:
+                        launched_members.setdefault(pid, []).append(rid)
+                        ATTACHED_AT[rid] = NOW0
+            if project_dto_on:
+                return self._json(200, {"runId": rid})
+            return self._json(201, {"runId": "r-new"})
         # POST /api/v1/runs/<id>/gate — the steering-gate decision (slice H,
         # DES-FEEDBACK-002 §2.3). The fixture accepts it so the answered state
         # ("approved · advancing…") renders truthfully after a triage key or a
@@ -1793,21 +1882,6 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # awaiting between the selection and the fan-out.
                 return self._json(409, {"error": "not awaiting a human gate"})
             return self._json(200, {"status": "resumed"})
-        # Slice V (DES-UX-001 §4 / CREW-UX-3): POST /runs — the launch. retryOf
-        # must name an EXISTING run id (the daemon's 400 with a named error,
-        # crew routes.ts:588) — never a silently unrecorded lineage.
-        if path == "/api/v1/runs":
-            retry_of = body.get("retryOf")
-            if retry_of is not None:
-                with state_lock:
-                    provenance_on = state["provenance"]
-                known = {r["session"]["id"] for r in RUNS} \
-                    | ({RETRY_RUN["session"]["id"]} if provenance_on else set())
-                if retry_of not in known:
-                    return self._json(400, {
-                        "error": f"retryOf names an unknown run: {retry_of} — "
-                                 "lineage must point at an existing run id"})
-            return self._json(201, {"runId": "r-new"})
         # POST /api/v1/chats — open a chat: warm the asked-for seats (or the whole
         # roster when `clis` is omitted, matching the daemon), every seat ok, instantly.
         if path == "/api/v1/chats":
