@@ -50,8 +50,8 @@ const S = {
  *  §8.4.1), so anchors survive only for what this session observed. */
 const NO_ANCHOR_TITLE =
   'The message that produced this version is not known to this session, so there is '
-  + 'nothing to scroll to. The transcript carries no version anchors (BRIDGE-UX-1) — '
-  + 'they survive for what this session observed; documents created before the merge '
+  + 'nothing to scroll to. The document service does not yet record version anchors '
+  + 'in the transcript — they survive for what this session observed; older documents '
   + 'have no anchor.';
 
 /** Compact, locale-formatted; an unparseable stamp falls back to what the manifest said. */

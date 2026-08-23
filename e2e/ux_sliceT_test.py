@@ -68,11 +68,12 @@ STEER = "Tighten the headline on slide one"
 FAILING = "Add a closing slide with the roadmap"
 
 # §6.3's stopgap copy — the promise with a pointer, scoped to the anchor gap.
+# Round-3 copy pass: operator language — the spec ref (BRIDGE-UX-1 §8.4.1) no
+# longer leaks into product copy; the promise names the service capability.
 STOPGAP_MUST_SAY = [
     "restored from the document’s transcript",
     "what this session observed",
-    "return when the transcript carries version anchors",
-    "BRIDGE-UX-1",
+    "return once the document service records which message produced each version",
 ]
 
 report: dict = {"ok": False, "steps": {}}

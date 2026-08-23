@@ -726,8 +726,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
                        margin: 0, fontFamily: 'var(--font-sans)' }}
             >
               Thread restored from the document’s transcript. Version markers show what
-              this session observed — markers from before this session return when the
-              transcript carries version anchors (BRIDGE-UX-1 §8.4.1).
+              this session observed — markers from before this session return once the
+              document service records which message produced each version.
             </p>
           )}
         {messages.length === 0 && (
