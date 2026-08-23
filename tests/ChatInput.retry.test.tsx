@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { StrictMode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput } from '../src/components/ChatInput.js';
@@ -87,6 +88,22 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
     const body: LaunchRunBody = vi.mocked(client.api.launchRun).mock.calls[0]![0];
     expect('retryOf' in body, 'cleared pill = no lineage key at all').toBe(false);
+  });
+
+  it('the prefill survives StrictMode dev double-invoked initializers', () => {
+    // StrictMode double-invokes lazy useState initializers in dev and commits
+    // the SECOND pass — an initializer-side take() would consume on the
+    // discarded first pass and open an empty composer. Peek-then-clear holds.
+    depositPrefill();
+    render(
+      <StrictMode>
+        <ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />
+      </StrictMode>,
+    );
+    expect(screen.getByTestId('launch-problem')).toHaveValue('refactor the auth middleware');
+    expect(screen.getByText('Retry of r-origin')).toBeInTheDocument();
+    // …and the deposit is still consumed once the mount commits.
+    expect(takeRetryPrefill()).toBeNull();
   });
 
   it('the prefill is consume-once — a second mount opens clean', () => {

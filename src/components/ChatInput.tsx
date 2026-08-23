@@ -3,7 +3,7 @@ import { api } from '../api/client.js';
 import type { EntityMode, LaunchRunBody, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
 import { useProvenanceStore } from '../store/provenance.js';
-import { confirmModeOf, takeRetryPrefill, type RetryPrefill } from '../store/retryPrefill.js';
+import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill } from '../store/retryPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { ContextPopover } from './ContextPopover.js';
 import type { ConfirmMode } from './ContextPopover.js';
@@ -104,9 +104,15 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const clearGate = useGateStore((s) => s.clearGate);
 
   // Retry-as-prefill (DES-UX-001 §4.3): the LAUNCH-FORM composer consumes a
-  // pending retry prefill ONCE at mount (lazy state init — never re-taken on a
-  // re-render). Run-selected composers (steer/inject) never consume it.
-  const [prefill] = useState<RetryPrefill | null>(() => (runId ? null : takeRetryPrefill()));
+  // pending retry prefill ONCE at mount. PEEK in the lazy initializer (which
+  // StrictMode double-invokes in dev — an initializer-side take() would
+  // consume on the discarded first pass and commit an EMPTY composer), then
+  // clear in the commit effect below. Run-selected composers (steer/inject)
+  // never consume it.
+  const [prefill] = useState<RetryPrefill | null>(() => (runId ? null : peekRetryPrefill()));
+  useEffect(() => {
+    if (prefill !== null) clearRetryPrefill();
+  }, [prefill]);
   /** Lineage claim carried to the launch (`retryOf`, CREW-UX-3) — clearable. */
   const [retryOf, setRetryOf] = useState<string | null>(prefill?.retryOf ?? null);
 

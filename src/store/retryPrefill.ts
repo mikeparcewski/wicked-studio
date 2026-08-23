@@ -36,6 +36,21 @@ export function takeRetryPrefill(): RetryPrefill | null {
 }
 
 /**
+ * Read WITHOUT consuming — for lazy `useState` initializers, which React's
+ * StrictMode double-invokes in dev: an initializer-side take() would consume
+ * on the discarded first pass and commit null (an empty composer, dev only).
+ * The taking mount pairs peek with {@link clearRetryPrefill} in an effect.
+ */
+export function peekRetryPrefill(): RetryPrefill | null {
+  return pending;
+}
+
+/** The second half of peek-then-clear: drop the deposit once a mount took it. */
+export function clearRetryPrefill(): void {
+  pending = null;
+}
+
+/**
  * Map the wire's `HumanConfirm` onto the composer's gate-posture controls
  * (`ConfirmMode` + the before-ordinal). Pure — unit-tested.
  */
