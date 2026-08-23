@@ -17,6 +17,7 @@ import { FailureBanner } from './FailureBanner.js';
 import { FileViewer } from './FileViewer.js';
 import { Markdown } from './Markdown.js';
 import { RunTimes } from './runIdentity.js';
+import { RunTimeline } from './RunTimeline.js';
 import { UnitList } from './UnitList.js';
 import { VerdictDetail } from './VerdictDetail.js';
 import type { RunMode } from './runMode.js';
@@ -805,6 +806,13 @@ function RunChat({
   // FailureBanner as the HEADLINE above the list — not the whole story.
   const isPostMortem = session.status === 'failed' || session.status === 'cancelled';
 
+  // DES-UX-002 §2 (slice BB / EC48): a TERMINAL run's default layout is the
+  // evidence timeline — rail + detail panel over the recorded event trail. The
+  // pre-BB body (the post-mortem spine / the conversational thread) is not
+  // evicted: it remains the Units tab, rendered unchanged. Live runs keep the
+  // conversational layout — the timeline reads a finished run's story.
+  const [runTab, setRunTab] = useState<'timeline' | 'units'>('timeline');
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [timeline.length, log.length]);
@@ -951,9 +959,51 @@ function RunChat({
           The timeline below renders only the phases that have entered the conversation. */}
       <ProcessStepper runId={session.id} units={ordered} executingUnitOrd={executingUnitOrd} />
 
+      {/* Slice BB (DES-UX-002 §2.3): terminal runs carry two lenses on the same record —
+          the evidence timeline (default) and the pre-BB Units view, preserved unchanged. */}
+      {isTerminal && (
+        <div className="flex items-center gap-1 px-6 pt-2 shrink-0" role="tablist" aria-label="Run detail view">
+          {([['timeline', 'Timeline', 'tab-timeline'], ['units', 'Units', 'tab-unit-list']] as const).map(([id, label, testId]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              data-testid={testId}
+              aria-selected={runTab === id}
+              onClick={() => setRunTab(id)}
+              className="rounded-t px-3 py-1 text-xs font-semibold font-mono transition-colors"
+              style={{
+                background: runTab === id ? 'var(--surface-raised)' : 'transparent',
+                color: runTab === id ? 'var(--ink-high)' : 'var(--ink-muted)',
+                borderBottom: `2px solid ${runTab === id ? 'var(--accent)' : 'transparent'}`,
+                cursor: 'pointer',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* The evidence timeline (§2, EC48) — FailureBanner stays the HEADLINE on a
+          post-mortem run in BOTH lenses (DES-UX-001 §1.3-1 is not undone by BB). */}
+      {isTerminal && runTab === 'timeline' && (
+        <div className="flex-1 min-h-0 flex flex-col gap-3 px-4 py-3">
+          {isPostMortem && (
+            <FailureBanner view={view} log={log} {...(navigate === undefined ? {} : { navigate })} />
+          )}
+          <RunTimeline
+            view={view}
+            {...(navigate === undefined ? {} : { navigate })}
+            onOpenFile={setEvidenceFile}
+          />
+        </div>
+      )}
+
       {/* Message thread. `data-testid="thread"` + `data-message-id` are the contract the
           version → message cross-link resolves against (DES-MERGE-001 §7.6); the strip
           addresses the thread through the DOM because they are sibling surfaces. */}
+      {!(isTerminal && runTab === 'timeline') && (
       <div
         data-testid="thread"
         className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-6 max-w-3xl w-full mx-auto"
@@ -1213,6 +1263,7 @@ function RunChat({
 
         <div ref={bottomRef} />
       </div>
+      )}
 
       {/* The evidence viewer: slice I's FileViewer, reused verbatim — populated
           from GET /runs/:id/files (readRunFile). Opened only by a clicked
