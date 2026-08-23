@@ -123,13 +123,17 @@ describe('GroupChat — default agent chips (DES-FEEDBACK-001 §6)', () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
 
+    // Slice AB (§7.9-1): an edit pins the selection first — otherwise the
+    // picker's own roster deposit would re-seed the pristine fallback trio
+    // to the full roster (the warm-roster-wins rule) before the click lands.
+    await user.click(screen.getByRole('button', { name: 'Remove writer' }));
     await user.click(screen.getByTestId('add-agent'));
     await waitFor(() => expect(getRoster).toHaveBeenCalledTimes(1));
     const options = await screen.findAllByTestId('agent-picker-option');
     expect(options.map((o) => o.dataset['agentKey'])).toEqual(['claude', 'codex', 'agy', 'pi']);
 
     await user.click(options[1]!); // codex
-    expect(chipKeys()).toEqual([...DEFAULT_CHAT_AGENTS, 'codex']);
+    expect(chipKeys()).toEqual(['reviewer', 'planner', 'codex']);
 
     // Re-opening reads the now-warm cache — no second fetch.
     await user.click(screen.getByTestId('add-agent'));
@@ -144,13 +148,17 @@ describe('GroupChat — default agent chips (DES-FEEDBACK-001 §6)', () => {
     await user.keyboard('{Enter}');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual([
-      ...DEFAULT_CHAT_AGENTS,
+      'reviewer',
+      'planner',
       'codex',
     ]);
   });
 
   it('a stale default the daemon rejects surfaces a recoverable error naming it; remove + resend recovers into the same chat', async () => {
     const user = userEvent.setup();
+    // Slice AB (§7.9-1): the stale-trio-reaches-the-daemon case now REQUIRES
+    // an unreachable roster — a reachable one would have re-seeded the send.
+    getRoster.mockRejectedValue(new Error('daemon unreachable'));
     // First open: every requested seat is rejected (stale fallback names).
     openChat.mockImplementationOnce((body: { chatId: string; clis?: string[] }) =>
       Promise.resolve({
@@ -176,7 +184,10 @@ describe('GroupChat — default agent chips (DES-FEEDBACK-001 §6)', () => {
     await user.click(screen.getByRole('button', { name: 'Remove writer' }));
     await user.click(screen.getByRole('button', { name: 'Remove reviewer' }));
 
-    // The retry re-arms the SAME chat id with the corrected selection, then sends.
+    // §7.9-2: the failed send's DRAFT survived in the composer — clear it for
+    // the corrected resend (the retry re-arms the SAME chat id, then sends).
+    expect(screen.getByRole('textbox')).toHaveValue('hello?');
+    await user.clear(screen.getByRole('textbox'));
     await user.type(screen.getByRole('textbox'), 'try again');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(2));

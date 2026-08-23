@@ -115,11 +115,19 @@ describe('the register below (§4.3: "the list below is the existing ChatsPage l
     expect(onSelect).toHaveBeenCalledWith('c-gated');
   });
 
-  it('fires zero requests on mount — props and loaded stores only (fetch untouched)', () => {
-    const spy = vi.fn();
+  it('fires exactly ONE declared request on mount — GET /chats, the §7.9-5 live-session listing (re-scoped by DES-UX-001 slice AB)', async () => {
+    // Pre-slice-AB this page read props + loaded stores only. Slice AB adds the
+    // ONE named exception (the §3.3-style declared fetch): the live-session
+    // listing rides the /chats navigation so warm seats are findable (the
+    // zombie-cleanup wire, FINDING-027's GET /chats). Nothing else may fire.
+    const spy = vi.fn().mockRejectedValue(new Error('offline'));
     vi.stubGlobal('fetch', spy);
     page();
-    expect(spy).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    const url = String(spy.mock.calls[0]?.[0] ?? '');
+    expect(url.endsWith('/api/v1/chats')).toBe(true);
+    // An unreachable daemon keeps the band absent — the page still renders.
+    expect(screen.queryByTestId('live-chats')).toBeNull();
     vi.unstubAllGlobals();
   });
 });
