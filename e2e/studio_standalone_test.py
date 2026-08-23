@@ -1148,6 +1148,10 @@ try:
     VERSIONS_RE = re.compile(r"^/d/([^/]+)/api/versions$")
     RENDER_RE = re.compile(r"^/d/([^/]+)/doc/(\d+)$")
     FORK_RE = re.compile(r"^/d/([^/]+)/api/fork$")
+    # Slice T (DES-UX-001 §6.3, BRIDGE-UX-1 probe 2): GET /d/:doc/api/conversation
+    # is a REAL bridge read — studio now fetches it once on every doc open, so the
+    # fake bridge answers it (empty history: these fixture docs never had a thread).
+    CONVERSATION_RE = re.compile(r"^/d/([^/]+)/api/conversation$")
     # Slice 15 (§4.4): all three exports are the SERVICE's, and PPTX's python-pptx is a
     # LAZY dependency — absent on this box, as on most — so it answers a clean 400 naming
     # the command that fixes it. HTML and PDF depend on nothing optional and still render.
@@ -1246,6 +1250,10 @@ try:
                 # Video mode is what narrows them to `kind: "demo"`.
                 self._json(200, FIXTURE_DOCS + FIXTURE_DEMOS
                            if project == demo_project else FIXTURE_DOCS)
+                return True
+            if CONVERSATION_RE.match(rest):
+                # Slice T (§6.3): the announce-history read, empty for fixture docs.
+                self._json(200, [])
                 return True
             if INVENTED_THEME_RE.match(rest):
                 # Issue #65: the invented theme routes are 404 — the same answer the
