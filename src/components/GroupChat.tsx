@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { Project, RosterSeat } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
-import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
+import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
+import { setRetryPrefill } from '../store/retryPrefill.js';
 import { Markdown } from './Markdown.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
@@ -58,11 +59,26 @@ function defaultSelection(): string[] {
  */
 const SEAT_CHIP = { bg: 'var(--surface-raised)', fg: 'var(--ink-body)' } as const;
 
-type SeatState = 'warming' | 'ready' | 'failed';
+/**
+ * The explicit seat lifecycle (DES-UX-001 §7.9-4, EC44): connecting (an open
+ * in flight) → ready (the seat answered ok) → working (a reply is pending) →
+ * replied (its turn finished) — and failed-with-reason, whose reason is the
+ * daemon's own open-time answer (`POST /chats` per-seat `error`) or a
+ * `chatSessionFailed` frame's reason. The wire carries NO per-seat mid-stream
+ * lifecycle (BRIDGE-UX-1 probe 4: seat identity is absent from the interactive
+ * vocabulary), so mid-stream failure reasons beyond those two wires are not
+ * invented here — the state machine ships, the reasons stay honest.
+ */
+type SeatState = 'connecting' | 'ready' | 'working' | 'replied' | 'failed';
+
+/** States in which the seat can receive a message (warm on the daemon). */
+const WARM_STATES: ReadonlySet<SeatState> = new Set(['ready', 'working', 'replied']);
 
 const SEAT_DOT: Record<SeatState, string> = {
-  warming: 'var(--status-gate)',
+  connecting: 'var(--status-gate)',
   ready: 'var(--status-run)',
+  working: 'var(--status-gate)',
+  replied: 'var(--status-run)',
   failed: 'var(--status-fail)',
 };
 
@@ -105,6 +121,8 @@ function clearStoredChatId(repoId?: string | null): void {
 export interface UserMsg {
   kind: 'user';
   text: string;
+  /** The send ordinal this message opened (1-based) — §7.9-3 turn identity. */
+  turn?: number;
 }
 export interface SeatMsg {
   kind: 'seat';
@@ -112,6 +130,8 @@ export interface SeatMsg {
   text: string;
   pending: boolean;
   ok: boolean;
+  /** The send ordinal this reply answers — chunk routing keys on seat+turn. */
+  turn?: number;
 }
 export type Msg = UserMsg | SeatMsg;
 
@@ -241,6 +261,15 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
   const [selectedAgents, setSelectedAgents] = useState<string[]>(defaultSelection);
   const selectedAgentsRef = useRef<string[]>(selectedAgents);
   selectedAgentsRef.current = selectedAgents;
+  // §7.9-1: whether the operator has EDITED the selection (✕ / picker add).
+  // While untouched, a warm roster arriving later re-seeds the chips — the
+  // fallback trio only ever reaches the daemon when the cache stayed cold AND
+  // the roster proved unreachable at send time. An edit pins the selection.
+  const chipsTouchedRef = useRef(false);
+  // §7.9-2: a failed send keeps its draft; the failure renders inline with retry.
+  const [sendFailed, setSendFailed] = useState<{ text: string; reason: string } | null>(null);
+  // §7.9-3: the send ordinal — every bubble is stamped with the turn it belongs to.
+  const turnRef = useRef(0);
   // [+ Add] opens the roster picker; ITS roster read is allowed to fetch —
   // opening the picker is a user action, not a mount (§2.4).
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -333,6 +362,9 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     // So does the chip selection (§6.2: per-run, never persisted): the new
     // repo's create flow starts from the defaults again.
     setSelectedAgents(defaultSelection());
+    chipsTouchedRef.current = false;
+    setSendFailed(null);
+    turnRef.current = 0;
     setPickerOpen(false);
     // The id goes too, and it is the one reset that is not cosmetic. Resolving the new repo's chat
     // is ASYNC — a stored id costs a probe round-trip — and until it lands, a `chatId` still holding
@@ -400,12 +432,29 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     // nothing but `repoId` and module-scope helpers, so the dep list is genuinely complete.)
   }, [repoId]);
 
+  // §7.9-1 (the seeding-order fix): a roster deposited AFTER this surface
+  // seeded its chips from the cold-cache fallback re-seeds them — warm roster
+  // beats the fallback trio — but only while the selection is still pristine
+  // (untouched, nothing warmed, no thread). Never a fetch: this only HEARS
+  // deposits other surfaces already paid for (§2.4's budget holds unchanged).
+  useEffect(() => {
+    return subscribeRoster((roster) => {
+      if (chipsTouchedRef.current || chatIdRef.current !== null) return;
+      if (roster.length === 0) return;
+      setSelectedAgents(roster.map((s) => s.key));
+    });
+  }, []);
+
   useEventStream((ev) => {
     const frame = ev as { type: string; chat?: string; cliKey?: string; text?: string; ok?: boolean; reason?: string };
     if (frame.chat !== chatIdRef.current) return;
     switch (frame.type) {
       case 'chatSessionReady':
-        if (frame.cliKey) setSeats((s) => ({ ...s, [frame.cliKey!]: 'ready' }));
+        // Never demote a working seat: its warm-up ready can arrive after the
+        // first fan-out already put a reply in flight.
+        if (frame.cliKey) {
+          setSeats((s) => (s[frame.cliKey!] === 'working' ? s : { ...s, [frame.cliKey!]: 'ready' }));
+        }
         break;
       case 'chatSessionFailed':
         if (frame.cliKey) {
@@ -417,40 +466,55 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
         if (frame.cliKey && frame.text) appendToPending(frame.cliKey, frame.text);
         break;
       case 'chatReply':
-        if (frame.cliKey) finalizePending(frame.cliKey, frame.text ?? '', frame.ok ?? false);
+        if (frame.cliKey) {
+          finalizePending(frame.cliKey, frame.text ?? '', frame.ok ?? false);
+          setSeats((s) => (s[frame.cliKey!] === 'failed' ? s : { ...s, [frame.cliKey!]: 'replied' }));
+        }
         break;
       default:
         break;
     }
   });
 
-  /** Deltas attach to the seat's LATEST pending bubble (one in-flight turn per seat). */
+  /**
+   * §7.9-3 chunk routing: a seat's frames belong to its OLDEST unfinished
+   * turn — the wire carries no turn field (chatDelta is {chat, cliKey, text}),
+   * and a warm seat answers its queue in send order, so per-seat FIFO IS the
+   * turn correlation. The pre-slice-AB code walked backward (newest pending),
+   * which spliced a still-streaming turn's chunks into the NEXT turn's bubble
+   * the moment a second send appended its pending row — the mid-word splice
+   * the review observed. A chunk with no pending bubble opens its own (text
+   * is never silently dropped).
+   */
   function appendToPending(cliKey: string, text: string): void {
     setMessages((prev) => {
       const next = [...prev];
-      for (let i = next.length - 1; i >= 0; i--) {
+      for (let i = 0; i < next.length; i++) {
         const m = next[i];
         if (m && m.kind === 'seat' && m.cliKey === cliKey && m.pending) {
           next[i] = { ...m, text: m.text + text };
           return next;
         }
       }
-      return prev;
+      next.push({ kind: 'seat', cliKey, text, pending: true, ok: false, turn: turnRef.current });
+      return next;
     });
   }
 
-  /** The terminal reply text is authoritative — it replaces accumulated deltas. */
+  /** The terminal reply text is authoritative — it replaces the accumulated
+   *  deltas of the seat's OLDEST pending turn (the same FIFO as the chunks). */
   function finalizePending(cliKey: string, text: string, ok: boolean): void {
     setMessages((prev) => {
       const next = [...prev];
-      for (let i = next.length - 1; i >= 0; i--) {
+      for (let i = 0; i < next.length; i++) {
         const m = next[i];
         if (m && m.kind === 'seat' && m.cliKey === cliKey && m.pending) {
-          next[i] = { kind: 'seat', cliKey, text, pending: false, ok };
+          next[i] = { ...m, text, pending: false, ok };
           return next;
         }
       }
-      return prev;
+      next.push({ kind: 'seat', cliKey, text, pending: false, ok, turn: turnRef.current });
+      return next;
     });
   }
 
@@ -477,12 +541,14 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
         chatIdRef.current = id;
         writeStoredChatId(repoId, id);
       }
-      // Optimistic chips: each seat being warmed shows as warming while the open is in
-      // flight; ready/failed events (and the open response) correct them as truth arrives.
+      // Optimistic chips: each seat being warmed shows as connecting while the open is
+      // in flight; ready/failed events (and the open response) correct them as truth arrives.
       setSeats((prev) => ({
         ...prev,
         ...Object.fromEntries(
-          agents.filter((k) => prev[k] !== 'ready').map((k) => [k, 'warming' as SeatState]),
+          agents
+            .filter((k) => !WARM_STATES.has(prev[k] ?? 'failed'))
+            .map((k) => [k, 'connecting' as SeatState]),
         ),
       }));
       try {
@@ -533,41 +599,126 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     }
   }
 
-  async function send(): Promise<void> {
-    const text = input.trim();
+  /** One send in flight at a time — Enter held down must not double-post the draft
+   *  (the draft now stays in the composer until the daemon ACCEPTS it, §7.9-2). */
+  const sendingRef = useRef(false);
+
+  async function send(retryText?: string): Promise<void> {
+    const text = (retryText ?? input).trim();
     // `resolving` waits out the rejoin probe: until it answers, "no chat id" does NOT
     // mean first-run, and treating it as one would mint over the stored id (FINDING-027).
-    if (text === '' || ended || arming || resolving) return;
+    if (text === '' || ended || arming || resolving || sendingRef.current) return;
     let warm = Object.entries(seats)
-      .filter(([, st]) => st === 'ready')
+      .filter(([, st]) => WARM_STATES.has(st))
       .map(([k]) => k);
-    // Nothing ready with nothing selected: nobody would receive this (§6.2's
+    // Nothing warm with nothing selected: nobody would receive this (§6.2's
     // selection is the send's audience) — the disabled Send already says so.
     if (warm.length === 0 && chatIdRef.current === null && selectedAgentsRef.current.length === 0) return;
-    setInput('');
-    setMessages((prev) => [...prev, { kind: 'user', text }]);
-    if (warm.length === 0) {
-      // Typing IS the opt-in (§2.4): the first send warms the SELECTED agents —
-      // the §6.2 chips (defaults + additions − removals). Also the retry path
-      // after a rejected open (stale default chip): the re-arm reuses the same
-      // chat id with the corrected selection, so recovery is just "send again".
-      warm = await armChat(selectedAgentsRef.current);
-      if (warm.length === 0) return; // armChat surfaced why (openError / failed chip)
-    }
-    const id = chatIdRef.current;
-    if (id === null) return; // repo switched under the send
-    setMessages((prev) => [
-      ...prev,
-      ...warm.map((cliKey): SeatMsg => ({ kind: 'seat', cliKey, text: '', pending: true, ok: false })),
-    ]);
+    sendingRef.current = true;
+    setSendFailed(null);
     try {
-      await api.sendChatMessage(id, text);
-    } catch (e: unknown) {
-      const err = e instanceof Error ? e.message : String(e);
-      setMessages((prev) =>
-        prev.map((m) => (m.kind === 'seat' && m.pending ? { ...m, pending: false, ok: false, text: `(send failed: ${err})` } : m)),
-      );
+      // §7.9-1 roster-first: a first send from a PRISTINE fallback selection with a
+      // still-cold cache fetches the roster ON THIS GESTURE (never on mount — §2.4
+      // holds) so the send names seats the daemon accepts. The fallback trio goes
+      // to the daemon only when the roster is genuinely unreachable.
+      if (warm.length === 0 && chatIdRef.current === null && !chipsTouchedRef.current
+        && getCachedRoster() === null) {
+        try {
+          const { roster } = await api.getRoster();
+          setCachedRoster(roster);
+          if (roster.length > 0) {
+            const keys = roster.map((s) => s.key);
+            setSelectedAgents(keys);
+            selectedAgentsRef.current = keys;
+          }
+        } catch {
+          /* roster unreachable — the trio is the honest audience (§7.9-1) */
+        }
+      }
+      const turn = turnRef.current + 1;
+      turnRef.current = turn;
+      setMessages((prev) => [...prev, { kind: 'user', text, turn }]);
+      // §7.9-2: a failed send retracts its optimistic bubbles (nothing went out),
+      // keeps the draft in the composer, and renders the failure inline with retry.
+      const failSend = (reason: string): void => {
+        setMessages((prev) => prev.filter((m) => m.turn !== turn));
+        setSendFailed({ text, reason });
+      };
+      if (warm.length === 0) {
+        // Typing IS the opt-in (§2.4): the first send warms the SELECTED agents —
+        // the §6.2 chips (defaults + additions − removals). Also the retry path
+        // after a rejected open (stale chip): the re-arm reuses the same chat id
+        // with the corrected selection, so recovery is just "send again".
+        warm = await armChat(selectedAgentsRef.current);
+        if (warm.length === 0) {
+          // armChat surfaced WHY (openError / failed chips); the user bubble
+          // retracts and the draft survives — nothing was fanned out.
+          setMessages((prev) => prev.filter((m) => m.turn !== turn));
+          return;
+        }
+      }
+      const id = chatIdRef.current;
+      if (id === null) return; // repo switched under the send
+      setMessages((prev) => [
+        ...prev,
+        ...warm.map((cliKey): SeatMsg => ({ kind: 'seat', cliKey, text: '', pending: true, ok: false, turn })),
+      ]);
+      // §7.9-4: the fan-out audience is WORKING until its reply lands.
+      setSeats((prev) => ({
+        ...prev,
+        ...Object.fromEntries(warm.filter((k) => prev[k] !== 'failed').map((k) => [k, 'working' as SeatState])),
+      }));
+      try {
+        await api.sendChatMessage(id, text);
+        // Accepted — the draft leaves the composer only now (§7.9-2). A mid-flight
+        // edit is the operator's newer draft and is left alone.
+        setInput((cur) => (cur.trim() === text ? '' : cur));
+      } catch (e: unknown) {
+        failSend(e instanceof Error ? e.message : String(e));
+        // The message never reached the daemon: this turn's audience is not
+        // working on it. (A seat still streaming an OLDER turn re-corrects on
+        // its next frame — replied/failed arrive from the wire.)
+        setSeats((prev) => ({
+          ...prev,
+          ...Object.fromEntries(
+            warm.filter((k) => prev[k] === 'working').map((k) => [k, 'ready' as SeatState]),
+          ),
+        }));
+      }
+    } finally {
+      sendingRef.current = false;
     }
+  }
+
+  /**
+   * The conversation→action bridge (§7.9): promote this chat into a BUILD with
+   * the transcript as context. Rides the composer's existing prefill machinery
+   * (the §4.3 retry store, consumed once at the launch form's mount) — a
+   * prefill, never a hidden launch: the operator edits before send. No lineage
+   * claim is invented (`retryOf: null` — chats are not runs).
+   */
+  function promoteToBuild(): void {
+    if (navigate === undefined) return;
+    const transcript = messages
+      .filter((m) => m.kind === 'user' || !m.pending)
+      .map((m) => (m.kind === 'user' ? `operator: ${m.text}` : `${m.cliKey}: ${m.text}`))
+      .join('\n');
+    const MAX = 6000; // keep the prefill a context, not a payload
+    const clipped = transcript.length > MAX ? `…${transcript.slice(-MAX)}` : transcript;
+    setRetryPrefill({
+      retryOf: null,
+      problem: `Continue from this chat — the transcript is context, the last ask is the intent:\n\n${clipped}`,
+      clis: (() => {
+        const warm = Object.entries(seats).filter(([, st]) => WARM_STATES.has(st)).map(([k]) => k);
+        return warm.length > 0 ? warm : selectedAgentsRef.current;
+      })(),
+      workflowId: null,
+      repoRef: repoId ?? null,
+      entityMode: 'shared',
+      humanConfirm: 'none',
+      projectId: projectId ?? selectedProjectRef.current,
+    });
+    navigate('/runs/new');
   }
 
   async function endChat(): Promise<void> {
@@ -586,21 +737,34 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     onBack();
   }
 
+  // §7.9-4 / EC44: every seat chip SAYS its state — connecting / ready /
+  // working / replied / failed — and a failed seat carries its reason inline
+  // (the daemon's open-time answer or the chatSessionFailed frame), truncated
+  // in CSS with the full text on the title. No unlabeled "working" anywhere.
   const seatChip = (cliKey: string, st: SeatState): React.ReactElement => (
     // wk-disclose: the roster disclosure animates in at --dur-base ease-out
     // (§5.3 motion) — once per chip mount, never a loop (§1.6).
     <span
       key={cliKey}
+      data-testid="seat-chip"
+      data-agent={cliKey}
+      data-state={st}
       title={st === 'failed' ? seatErrors[cliKey] : st}
       className="wk-disclose inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-mono"
       style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg, opacity: st === 'failed' ? 0.5 : 1 }}
     >
       <span
-        className={`inline-block w-1.5 h-1.5 rounded-full ${st === 'warming' ? 'animate-pulse' : ''}`}
+        className={`inline-block w-1.5 h-1.5 rounded-full ${st === 'connecting' || st === 'working' ? 'animate-pulse' : ''}`}
         style={{ background: SEAT_DOT[st] }}
       />
       {cliKey}
-      {st === 'failed' ? ' ✕' : ''}
+      <span
+        data-testid="seat-state"
+        className="truncate"
+        style={{ color: st === 'failed' ? 'var(--status-fail)' : 'var(--ink-dim)', maxWidth: '180px' }}
+      >
+        {st === 'failed' && seatErrors[cliKey] ? `failed — ${seatErrors[cliKey]}` : st}
+      </span>
     </span>
   );
 
@@ -649,6 +813,8 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     // keeps the bubble shape without claiming a surface of its own.
     <div
       key={key}
+      data-testid="user-bubble"
+      data-turn={m.turn}
       className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[13px]"
       style={{ background: 'transparent', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
     >
@@ -660,6 +826,12 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     <div
       // §5.3 token usage: agent bubbles sit on --surface-card; the
       // border speaks status while a reply is pending or failed.
+      // §7.9-3: the bubble WEARS its seat+turn identity, so chunk routing
+      // is assertable in the DOM (data-turn matches the causing send).
+      data-testid="seat-bubble"
+      data-agent={m.cliKey}
+      data-turn={m.turn}
+      data-pending={m.pending}
       className="rounded-xl px-4 py-2 text-[13px] min-w-[60px]"
       style={{
         background: 'var(--surface-card)',
@@ -688,7 +860,7 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     </span>
   );
 
-  const anyReady = Object.values(seats).some((st) => st === 'ready');
+  const anyReady = Object.values(seats).some((st) => WARM_STATES.has(st));
   // V8: a teardown control exists only once there is something armed to tear down —
   // warm agents, or a kept-on-error chat id the operator may want to disconnect.
   const closable = chatId !== null && (anyReady || openError !== null);
@@ -701,7 +873,8 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
   // Not first-run while the rejoin probe is unresolved — teaching "nothing here yet"
   // over a chat that may be about to pop back in would be a lie held for milliseconds.
   const firstRun =
-    messages.length === 0 && Object.keys(seats).length === 0 && openError === null && !resolving;
+    messages.length === 0 && Object.keys(seats).length === 0 && openError === null &&
+    sendFailed === null && !resolving;
   // The create-flow project field (§5.2) shows only while the chat is still being
   // CREATED (binding happens at open time) and only outside the project shell —
   // in the shell the context IS the project (§4.3) and rides `projectId` silently.
@@ -739,6 +912,19 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
           </div>
         )}
         <div className="flex-1" />
+        {/* §7.9 conversation→action: visible once there is a transcript to carry. */}
+        {messages.length > 0 && navigate !== undefined && !ended && (
+          <button
+            type="button"
+            data-testid="chat-promote"
+            title="Open the Build composer prefilled with this conversation as context — editable before launch"
+            onClick={promoteToBuild}
+            className="text-[11px] px-2.5 py-1 rounded-lg"
+            style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)', border: '1px solid var(--surface-overlay)' }}
+          >
+            Continue in Build →
+          </button>
+        )}
         {closable && (
           <button
             type="button"
@@ -757,6 +943,29 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
       <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-3">
         {openError !== null && (
           <p className="text-[12px] font-mono" style={{ color: 'var(--status-fail)' }}>Could not open chat: {openError}</p>
+        )}
+        {/* §7.9-2: a failed send is a visible, retryable fact — the draft is
+            still in the composer, nothing was fanned out, and Retry re-sends
+            exactly what failed. Never a cleared composer, never silence. */}
+        {sendFailed !== null && (
+          <div
+            data-testid="chat-send-failed"
+            className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[12px] font-mono flex items-center gap-3"
+            style={{ border: '1px solid var(--status-fail-dim)', color: 'var(--ink-body)' }}
+          >
+            <span style={{ color: 'var(--status-fail)' }}>
+              Send failed — {sendFailed.reason}. Your draft is still in the composer.
+            </span>
+            <button
+              type="button"
+              data-testid="chat-send-retry"
+              onClick={() => void send(sendFailed.text)}
+              className="shrink-0 px-2 py-0.5 rounded-lg"
+              style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)', border: '1px solid var(--surface-overlay)' }}
+            >
+              Retry
+            </button>
+          </div>
         )}
         {firstRun && (
           // §2.4: the first-run state TEACHES — what Chat is, what typing does, and the
@@ -886,6 +1095,10 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
           <div
             data-testid="agent-chips-bar"
             data-count={selectedAgents.length}
+            // §7.9-1 honesty: where this seeding came from — the live roster
+            // cache, or the cold-cache fallback trio (roster-first, fallback
+            // only while nothing has fetched a roster this session).
+            data-source={(getCachedRoster()?.length ?? 0) > 0 ? 'roster' : 'fallback'}
             className="flex items-center gap-1.5 flex-wrap pb-2"
           >
             {selectedAgents.map((key) => (
@@ -913,7 +1126,10 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
                   type="button"
                   aria-label={`Remove ${key}`}
                   title={`Remove ${key} from this chat`}
-                  onClick={() => setSelectedAgents((prev) => prev.filter((a) => a !== key))}
+                  onClick={() => {
+                    chipsTouchedRef.current = true; // §7.9-1: an edit pins the selection
+                    setSelectedAgents((prev) => prev.filter((a) => a !== key));
+                  }}
                   // §6.3: 12×12, transparent, --ink-dim → --ink-high on hover
                   // (the wk-chip-x pair in global.css — hover needs CSS).
                   className="wk-chip-x inline-flex items-center justify-center leading-none"
@@ -974,6 +1190,7 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
                           data-testid="agent-picker-option"
                           data-agent-key={seat.key}
                           onClick={() => {
+                            chipsTouchedRef.current = true; // §7.9-1: an edit pins the selection
                             setSelectedAgents((prev) => (prev.includes(seat.key) ? prev : [...prev, seat.key]));
                             setPickerOpen(false);
                           }}
