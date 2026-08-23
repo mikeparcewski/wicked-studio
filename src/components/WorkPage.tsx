@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
+import { outcomeOf } from '../board/metrics.js';
 import { RunLink } from './RunLink.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 
-type StatusTab = 'all' | 'active' | 'completed' | 'failed';
+type StatusTab = 'all' | 'active' | 'completed' | 'failed' | 'cancelled';
 
 interface Props {
   runs: SessionView[];
@@ -24,16 +25,23 @@ function routedFilter(search: string): StatusTab | null {
   return raw !== null && TABS.some((t) => t.id === raw) ? (raw as StatusTab) : null;
 }
 
+// The J5/A5 partition is THE shared one (src/board/metrics.ts `outcomeOf`):
+// cancelled ≠ failed, so the Failed filter lists exactly the set every failed
+// COUNT names — the landing's number is reproducible from these rows.
 const isTerminal = (s: string) => ['completed', 'failed', 'cancelled'].includes(s);
 const isActiveStatus = (s: string) => !isTerminal(s);
-const isCompletedStatus = (s: string) => s === 'completed';
-const isFailedStatus = (s: string) => s === 'failed' || s === 'cancelled';
+const isCompletedStatus = (s: string) => outcomeOf(s) === 'done';
+const isFailedStatus = (s: string) => outcomeOf(s) === 'fail';
+const isCancelledStatus = (s: string) => outcomeOf(s) === 'cancelled';
 
 const TABS: { id: StatusTab; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'active', label: 'Active' },
   { id: 'completed', label: 'Completed' },
   { id: 'failed', label: 'Failed' },
+  // Cancelled runs get their OWN filter — they left the Failed set (J5/A5)
+  // and every terminal row must still be reachable through some filter.
+  { id: 'cancelled', label: 'Cancelled' },
 ];
 
 export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' }: Props): React.ReactElement {
@@ -122,22 +130,25 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
     return { total, active, successRate, topWorkflow };
   }, [windowedRuns]);
 
-  const counts: Record<StatusTab, number> = {
-    all: searched.length,
-    active: searched.filter(v => isActiveStatus(v.session.status)).length,
-    completed: searched.filter(v => isCompletedStatus(v.session.status)).length,
-    failed: searched.filter(v => isFailedStatus(v.session.status)).length,
-  };
-
   const activeGroup = searched.filter(v => isActiveStatus(v.session.status));
   const completedGroup = searched.filter(v => isCompletedStatus(v.session.status));
   const failedGroup = searched.filter(v => isFailedStatus(v.session.status));
+  const cancelledGroup = searched.filter(v => isCancelledStatus(v.session.status));
+
+  const counts: Record<StatusTab, number> = {
+    all: searched.length,
+    active: activeGroup.length,
+    completed: completedGroup.length,
+    failed: failedGroup.length,
+    cancelled: cancelledGroup.length,
+  };
 
   const filtered =
     tab === 'all' ? searched
     : tab === 'active' ? activeGroup
     : tab === 'completed' ? completedGroup
-    : failedGroup;
+    : tab === 'failed' ? failedGroup
+    : cancelledGroup;
 
   return (
     <div className="flex flex-col h-full" style={{ color: 'var(--ink-high)' }}>
@@ -288,6 +299,14 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
               <>
                 <GroupLabel>Failed</GroupLabel>
                 {failedGroup.map(v => (
+                  <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                ))}
+              </>
+            )}
+            {cancelledGroup.length > 0 && (
+              <>
+                <GroupLabel>Cancelled</GroupLabel>
+                {cancelledGroup.map(v => (
                   <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
                 ))}
               </>

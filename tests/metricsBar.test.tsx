@@ -80,12 +80,48 @@ describe('RunOutcomeBar (§2.1 — "Is the system healthy right now?")', () => {
     expect(tile.textContent).toContain('No runs attached in the last 24h');
   });
 
-  it('maps statuses to outcome classes (cancelled counts as failed)', () => {
+  it('maps statuses to outcome classes (cancelled is its OWN class — J5/A5)', () => {
     expect(outcomeOf('executing')).toBe('run');
     expect(outcomeOf('awaiting_human')).toBe('gate');
     expect(outcomeOf('failed')).toBe('fail');
-    expect(outcomeOf('cancelled')).toBe('fail');
+    expect(outcomeOf('cancelled')).toBe('cancelled');
     expect(outcomeOf('completed')).toBe('done');
+  });
+
+  it('a cancelled run wears its own neutral segment, never the fail token', () => {
+    const withCancelled = [
+      makeView({ id: 'r-x', status: 'failed' }),
+      makeView({ id: 'r-y', status: 'cancelled' }),
+    ];
+    render(
+      <RunOutcomeBar
+        runs={withCancelled}
+        attachedAt={{ 'r-x': NOW - HOUR, 'r-y': NOW - 2 * HOUR }}
+        now={NOW}
+      />,
+    );
+    const tile = screen.getByTestId('run-outcome-bar');
+    expect(tile.getAttribute('data-total')).toBe('2');
+    const fills = [...tile.querySelectorAll('rect')].map((r) => r.getAttribute('fill'));
+    expect(fills).toContain('var(--status-fail)');
+    expect(fills).toContain('var(--ink-dim)');
+    expect(tile.textContent).toContain('1 failed');
+    expect(tile.textContent).toContain('1 cancelled');
+  });
+
+  it('states its exclusions: undated runs are named beside the number (EC39)', () => {
+    render(
+      <RunOutcomeBar
+        runs={[
+          makeView({ id: 'r-in', status: 'failed' }),
+          makeView({ id: 'r-noclock', status: 'failed' }),
+        ]}
+        attachedAt={{ 'r-in': NOW - HOUR }}
+        now={NOW}
+      />,
+    );
+    expect(screen.getByTestId('outcome-unplaced-note').textContent)
+      .toBe('excludes 1 undated run');
   });
 });
 

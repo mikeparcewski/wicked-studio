@@ -274,7 +274,10 @@ export function ActivityRiver({ items, runs, gates, logs, failedAt, landings, na
                   const x1 = Math.max(x(span.end), x0 + 2); // a point of activity stays visible
                   const body = span.live
                     ? 'var(--status-run-dim)'
-                    : span.outcome === 'fail' ? 'var(--status-fail-dim)' : 'var(--status-done)';
+                    : span.outcome === 'fail' ? 'var(--status-fail-dim)'
+                    // Cancelled ≠ failed (J5/A5): neutral ink, no fail dress.
+                    : span.outcome === 'cancelled' ? 'var(--ink-dim)'
+                    : 'var(--status-done)';
                   return (
                     <a key={span.runId} {...link(modePath(span.projectId, 'build', span.runId))}
                        data-testid="river-span" data-run-id={span.runId}

@@ -19,8 +19,10 @@ const NOW = 1_700_000_000_000;
 const HOUR = 3_600_000;
 
 const text = (c: Partial<LedeCounts>): string =>
-  composeLede({ finished: 0, passed: 0, failed: 0, gates: 0, live: 0, projects: 5, ...c })
-    .segments.map((s) => s.text).join('');
+  composeLede({
+    finished: 0, passed: 0, failed: 0, cancelled: 0, gates: 0, live: 0,
+    projects: 5, undatable: 0, ...c,
+  }).segments.map((s) => s.text).join('');
 
 describe('composeLede — §7.3 grammar, every drop-out case', () => {
   it('the full sentence: finished with both outcomes, and gates', () => {
@@ -66,8 +68,20 @@ describe('composeLede — §7.3 grammar, every drop-out case', () => {
     expect(text({ live: 1 })).toBe('While you were away: nothing finished — 1 run still moving.');
   });
 
+  it('cancelled is its own clause — never folded into failed (J5/A5)', () => {
+    expect(text({ finished: 3, passed: 1, failed: 1, cancelled: 1, gates: 0 })).toBe(
+      'While you were away: 3 runs finished — 1 passed, 1 failed, 1 cancelled.',
+    );
+    expect(text({ finished: 2, cancelled: 2 })).toBe(
+      'While you were away: 2 runs finished — 2 cancelled.',
+    );
+  });
+
   it('the all-quiet system reads the quiet phrase — no zero-count segment renders', () => {
-    const quiet = composeLede({ finished: 0, passed: 0, failed: 0, gates: 0, live: 0, projects: 28 });
+    const quiet = composeLede({
+      finished: 0, passed: 0, failed: 0, cancelled: 0, gates: 0, live: 0,
+      projects: 28, undatable: 0,
+    });
     expect(quiet.quiet).toBe(true);
     expect(quiet.segments.map((s) => s.text).join('')).toBe(
       'All quiet. 28 projects, nothing running, nothing waiting.',
@@ -75,10 +89,19 @@ describe('composeLede — §7.3 grammar, every drop-out case', () => {
     expect(text({})).not.toContain('0 ');
   });
 
-  it('each numeric segment names a real destination (§7.3 links)', () => {
-    const full = composeLede({ finished: 4, passed: 3, failed: 1, gates: 2, live: 0, projects: 5 });
+  it('each numeric segment names a real destination (§7.3 links) — every outcome number opens ITS filter (J5)', () => {
+    const full = composeLede({
+      finished: 4, passed: 2, failed: 1, cancelled: 1, gates: 2, live: 0,
+      projects: 5, undatable: 0,
+    });
     const hrefs = full.segments.filter((s) => s.href !== null).map((s) => s.href);
-    expect(hrefs).toEqual(['/work', '#needs-you']);
+    expect(hrefs).toEqual([
+      '/work',
+      '/work?filter=completed',
+      '/work?filter=failed',
+      '/work?filter=cancelled',
+      '#needs-you',
+    ]);
   });
 });
 
@@ -99,7 +122,10 @@ describe('ledeCounts — honest clocks only (EC29: no invented clock)', () => {
       { 'r-in': NOW - 5 * HOUR, 'r-out': NOW - 30 * HOUR, 'r-archived': NOW - HOUR },
       {}, {}, 7, NOW,
     );
-    expect(c).toEqual({ finished: 1, passed: 1, failed: 0, gates: 1, live: 1, projects: 7 });
+    expect(c).toEqual({
+      finished: 1, passed: 1, failed: 0, cancelled: 0, gates: 1, live: 1,
+      projects: 7, undatable: 1, // r-clockless: excluded AND counted (EC39)
+    });
   });
 
   it('the failure tail and arrival-stamped frames extend a run into the window', () => {
@@ -153,7 +179,8 @@ describe('<NarrativeBand> — composition on screen', () => {
       'While you were away: 1 run finished — 1 passed — and 1 gate is waiting on you.',
     );
     const links = [...lede.querySelectorAll('a[data-testid="lede-segment"]')];
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/work', '#needs-you']);
+    expect(links.map((a) => a.getAttribute('href')))
+      .toEqual(['/work', '/work?filter=completed', '#needs-you']);
     // §8.5: the two surviving slice-E tiles live on as margin notes.
     const margin = screen.getByTestId('river-margin');
     expect(margin.querySelector('[data-testid="run-outcome-bar"]')).not.toBeNull();
