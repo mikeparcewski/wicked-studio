@@ -20,7 +20,8 @@ DES-FEEDBACK-003 §8.6 — the canvas REGION, panes included, ends above the bar
       the toggle appears; columns mode renders [data-testid="chat-round"] with
       a [data-testid="chat-round-grid"] of data-columns="4" — since DES-UX-001
       slice AB (§7.9-1, the §11.2 re-scope) the first pristine cold-cache send
-      is ROSTER-FIRST: it warms the fixture's four roster seats, not the
+      is ROSTER-TRUE (EC44 round-3 re-scope): it warms the CHAT-CAPABLE
+      seats the chips display (claude + pi), not the
       fallback trio.
    2. The same seat's cells share a column index across rounds; a seat that
       died between rounds (real chatSessionFailed) renders
@@ -117,6 +118,9 @@ with sync_playwright() as p:
     # ══ Scene 1 — chat columns (§6.5) ═══════════════════════════════════════════
     page.goto(CHAT_URL, wait_until="domcontentloaded")
     page.locator('[data-testid="chat-firstrun"]').wait_for(timeout=30000)
+    # EC44: wait for the chips to RESOLVE (Send is disabled while the roster
+    # is unknown — typing earlier would no-op).
+    page.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
 
     # AC: no toggle before anything replied (a single/zero-seat chat has nothing
@@ -124,22 +128,23 @@ with sync_playwright() as p:
     step("K1_toggle_absent_firstrun",
          page.locator('[data-testid="chat-layout-toggle"]').count() == 0)
 
-    # Round 1: the first send is roster-first (slice AB §7.9-1) — it warms the
-    # fixture's four roster seats; the fixture fans out one REAL chatReply per
-    # seat, then kills the last-warmed seat (chatSessionFailed → 'pi').
+    # Round 1: the first send is roster-TRUE (EC44) — it warms exactly the
+    # chat-capable chips (claude + pi); the fixture fans out one REAL
+    # chatReply per seat, then kills the last-warmed seat
+    # (chatSessionFailed → 'pi').
     composer = page.locator("textarea.wk-composer")
     composer.fill("How should we refactor the fetch layer?")
     page.keyboard.press("Enter")
     page.wait_for_function(
         """() => [...document.querySelectorAll('[data-testid="doc-canvas"], p, div')]
                  .filter(el => el.childElementCount === 0 && (el.textContent || '').includes('(round 1)'))
-                 .length >= 3""",
+                 .length >= 2""",
         timeout=30000)
     # The dying seat's chip goes failed BEFORE round 2 (its title carries the reason).
     page.locator('[title="session exited unexpectedly (fixture)"]').wait_for(timeout=30000)
     step("K1_round1_replies", True)
 
-    # The toggle appeared (3 distinct replying seats). Type a draft, then switch
+    # The toggle appeared (2 distinct replying seats). Type a draft, then switch
     # layouts — the composer must keep focus AND the draft (§6.5), and the
     # toggle must fire ZERO requests (C1).
     page.locator('[data-testid="chat-layout-toggle"]').wait_for(timeout=30000)
@@ -165,7 +170,7 @@ with sync_playwright() as p:
              };
            }""")
     step("K1_columns_grid",
-         grid1["columns"] == "4" and grid1["rounds"] == 1 and len(grid1["agents"]) == 4,
+         grid1["columns"] == "2" and grid1["rounds"] == 1 and len(grid1["agents"]) == 2,
          **grid1)
     step("K1_toggle_zero_requests_keeps_draft",
          api_requests == before_toggle
@@ -173,14 +178,14 @@ with sync_playwright() as p:
          new_requests=[r for r in api_requests if r not in before_toggle])
 
     # Round 2, sent FROM columns mode (Enter still sends — the toggle never
-    # intercepts composer keys): two live seats reply; the dead seat's column
-    # renders the dimmed EMPTY cell, and column indexes hold across rounds.
+    # intercepts composer keys): the surviving seat replies; the dead seat's
+    # column renders the dimmed EMPTY cell, and column indexes hold.
     composer.fill("Which part ships first?")
     page.keyboard.press("Enter")
     page.wait_for_function(
         """() => [...document.querySelectorAll('div,p')]
                  .filter(el => el.childElementCount === 0 && (el.textContent || '').includes('(round 2)'))
-                 .length >= 2""",
+                 .length >= 1""",
         timeout=30000)
     rounds = page.evaluate(
         """() => {
@@ -197,7 +202,7 @@ with sync_playwright() as p:
              };
            }""")
     step("K2_empty_cell_stable_columns",
-         rounds["count"] == 2 and rounds["columns"] == ["4", "4"]
+         rounds["count"] == 2 and rounds["columns"] == ["2", "2"]
          and rounds["agents"][0] == rounds["agents"][1]
          and rounds["emptyAgents"] == ["pi"] and rounds["emptyInSecond"]
          and rounds["noHorizPageScroll"],

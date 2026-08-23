@@ -93,9 +93,11 @@ ACCENT_PROBE_JS = """() => {
   return v;
 }"""
 ROSTER_KEYS = ["claude", "codex", "agy", "pi"]
-# §6.2's hardcoded fallback trio — what the default chips render on this route
-# (nothing fetches the roster before Chat mounts, so the cache is cold).
-FALLBACK = ["writer", "reviewer", "planner"]
+# EC44 (round 3): the fallback trio is GONE — the cold route resolves the
+# roster with the surface's ONE named mount request, and the default chips
+# are the CHAT-CAPABLE seats (acp object, or the absent-key arm — pi).
+CAPABLE = ["claude", "pi"]
+ADDED = "codex"  # acp=null — joins only by the operator's explicit labeled pick
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -159,6 +161,9 @@ with sync_playwright() as p:
     page.goto(CHAT_URL, wait_until="domcontentloaded")
     page.locator('[data-testid="mode-switcher"]').wait_for(timeout=30000)
     page.locator('[data-testid="chat-firstrun"]').wait_for(timeout=30000)
+    # EC44: the chips RESOLVE roster-true (never a fabricated trio) — wait for
+    # the resolved state before the census.
+    page.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
 
     # AC 1 — the switcher is the spine (F8): filled active segment, glyph+label
@@ -215,9 +220,12 @@ with sync_playwright() as p:
         path=str(SHOTS / "uxfix-4-switcher.png"))
     page.screenshot(path=str(SHOTS / "uxfix-4-chat-firstrun.png"))
 
-    # AC 3 — [+ Add] is the roster opt-in now (§6.2): the picker's fetch rides
-    # the click (ONE GET /roster), the addition joins the selection, and the
-    # first send warms the whole selection into the four-seat strip.
+    # AC 3 (re-scoped by EC44) — [+ Add] opens the picker from the now-warm
+    # cache (the mount resolve already paid the one named fetch — the click
+    # adds NONE); every roster seat is offered, the incapable ones LABELED;
+    # an explicit pick of the acp-null seat joins the selection, and the send
+    # connects EXACTLY the displayed chips — the capable seats warm, the
+    # explicit incapable pick fails with the core's own reason.
     page.locator('[data-testid="add-agent"]').click()
     page.locator('[data-testid="agent-picker"]').wait_for(timeout=10000)
     page.wait_for_function(
@@ -225,11 +233,10 @@ with sync_playwright() as p:
         arg=len(ROSTER_KEYS), timeout=10000,
     )
     picker_roster_gets = len([1 for (m, q, _b) in net if q == "/api/v1/roster"])
-    # Slice AB (§7.9-1): the picker's deposit re-seeds the pristine selection to
-    # the ROSTER — claude is already included (offered disabled, ✓-marked).
+    page.locator(f'[data-testid="agent-picker-option"][data-agent-key="{ADDED}"]').click()
     page.wait_for_function(
         """n => document.querySelector('[data-testid="agent-chips-bar"]')?.dataset.count === String(n)""",
-        arg=len(ROSTER_KEYS), timeout=10000,
+        arg=len(CAPABLE) + 1, timeout=10000,
     )
     added_count = page.evaluate(
         """() => document.querySelector('[data-testid="agent-chips-bar"]')?.dataset.count ?? null""")
@@ -237,26 +244,28 @@ with sync_playwright() as p:
     page.locator("textarea").fill("warm the whole selection")
     page.keyboard.press("Enter")
     page.locator('[data-testid="chat-close"]').wait_for(timeout=30000)
-    # Slice AB (§7.9-4/EC44): the fanned-out seats SAY working — no reply ever
-    # lands in this scene, and a chip claiming "ready" here would be the lie
-    # the old rig pinned by accident.
+    # Slice AB (§7.9-4/EC44): the fanned-out CAPABLE seats SAY working — no
+    # reply ever lands in this scene — and the explicit incapable pick wears
+    # failed-with-reason (the daemon's own open-time answer).
     page.wait_for_function(
         """n => document.querySelectorAll('[data-testid="seat-chip"][data-state="working"]').length === n""",
-        arg=len(ROSTER_KEYS), timeout=30000,
+        arg=len(CAPABLE), timeout=30000,
     )
     disclosed = page.evaluate(
         """keys => {
-             const chips = Array.from(document.querySelectorAll('[data-testid="seat-chip"]'))
-               .map(c => c.dataset.agent);
+             const els = Array.from(document.querySelectorAll('[data-testid="seat-chip"]'));
+             const chips = els.map(c => c.dataset.agent);
+             const states = Object.fromEntries(els.map(c => [c.dataset.agent, c.dataset.state]));
              return {
                chips,
+               states,
                allSeats: keys.every(k => chips.includes(k)),
                chipsBarRetired: !document.querySelector('[data-testid="agent-chips-bar"]'),
                closePresent: !!document.querySelector('[data-testid="chat-close"]'),
                firstrunGone: !document.querySelector('[data-testid="chat-firstrun"]'),
              };
            }""",
-        ROSTER_KEYS,
+        CAPABLE + [ADDED],
     )
     disclosed_opens = opens(net)
     page.screenshot(path=str(SHOTS / "uxfix-4-chat-multiagent.png"))
@@ -268,6 +277,7 @@ with sync_playwright() as p:
     net2 = tap(page2)
     page2.goto(CHAT_URL, wait_until="domcontentloaded")
     page2.locator('[data-testid="chat-firstrun"]').wait_for(timeout=30000)
+    page2.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page2.add_style_tag(content=HIDE_GATE_TOASTS)
 
     page2.locator("textarea").fill("make me a deck")
@@ -303,13 +313,14 @@ report["steps"]["slice4_chat_firstrun"] = {
         firstrun["teachText"] is not None,
         "Chat with an agent about this project." in (firstrun["teachText"] or ""),
         "just talk" in (firstrun["teachText"] or ""),
-        # §6.2: the default chips render immediately — the fallback trio, no fetch.
-        firstrun["chipsBarCount"] == str(len(FALLBACK)),
-        firstrun["chipKeys"] == FALLBACK,
+        # EC44: the chips resolve roster-true — the capable seats, seeded by
+        # the surface's ONE named mount request (never a fabricated trio).
+        firstrun["chipsBarCount"] == str(len(CAPABLE)),
+        firstrun["chipKeys"] == CAPABLE,
         firstrun["addAgent"],
         firstrun["closeAbsent"], firstrun["noWarmChips"],
         firstrun["noGroupChatCopy"], firstrun["composerFocused"],
-        mount_opens == 0, mount_roster == 0,
+        mount_opens == 0, mount_roster == 1,
     ]),
     **firstrun,
     "openChat_requests_on_mount": mount_opens,
@@ -317,13 +328,17 @@ report["steps"]["slice4_chat_firstrun"] = {
 }
 report["steps"]["slice4_add_agent_picker"] = {
     "ok": all([
-        # The picker's roster fetch rode the CLICK — exactly one, none on mount.
+        # The mount resolve was the one fetch; the picker click added NONE.
         picker_roster_gets == 1,
-        added_count == str(len(ROSTER_KEYS)),
+        added_count == str(len(CAPABLE) + 1),
         disclosed["allSeats"], disclosed["chipsBarRetired"], disclosed["closePresent"],
         disclosed["firstrunGone"],
         len(disclosed_opens) == 1,
-        (disclosed_opens[0] or {}).get("clis") == ROSTER_KEYS,
+        # EC44: the open names EXACTLY the displayed chips…
+        (disclosed_opens[0] or {}).get("clis") == CAPABLE + [ADDED],
+        # …the capable seats work; the explicit incapable pick failed honestly.
+        all(disclosed["states"].get(k) == "working" for k in CAPABLE),
+        disclosed["states"].get(ADDED) == "failed",
     ]),
     **disclosed,
     "roster_gets_after_picker_open": picker_roster_gets,
@@ -334,10 +349,10 @@ report["steps"]["slice4_add_agent_picker"] = {
 report["steps"]["slice4_first_send"] = {
     "ok": all([
         typed["userBubble"],
-        typed["workingChips"] == ROSTER_KEYS,
+        typed["workingChips"] == CAPABLE,
         typed["chipsBarRetired"],
         len(typed_opens) == 1,
-        (typed_opens[0] or {}).get("clis") == ROSTER_KEYS,
+        (typed_opens[0] or {}).get("clis") == CAPABLE,
         len(sent) == 1,
         (sent[0][2] or {}).get("text") == "make me a deck",
     ]),
