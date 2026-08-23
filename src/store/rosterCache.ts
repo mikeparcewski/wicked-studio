@@ -18,6 +18,7 @@ import type { RosterSeat } from '../api/types.js';
  */
 
 let cached: RosterSeat[] | null = null;
+const listeners = new Set<(roster: RosterSeat[]) => void>();
 
 /** The last roster any surface fetched, or `null` when none has yet. */
 export function getCachedRoster(): RosterSeat[] | null {
@@ -27,9 +28,23 @@ export function getCachedRoster(): RosterSeat[] | null {
 /** Deposit a freshly fetched roster for later synchronous reads. */
 export function setCachedRoster(roster: RosterSeat[]): void {
   cached = roster;
+  for (const fn of listeners) fn(roster);
+}
+
+/**
+ * Warm-roster notification (DES-UX-001 §7.9-1): a surface whose defaults were
+ * seeded while the cache was cold (the fallback trio) hears the deposit that
+ * arrives later — e.g. the launch form's startup fetch landing after Chat
+ * mounted — so a warm roster beats the fallback without any new fetch. The
+ * subscription itself can never fire a request (§2.4 holds unchanged).
+ */
+export function subscribeRoster(fn: (roster: RosterSeat[]) => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }
 
 /** Test hook: return to the cold-start state. */
 export function clearCachedRoster(): void {
   cached = null;
+  listeners.clear();
 }

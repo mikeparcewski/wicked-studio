@@ -9,8 +9,13 @@ import type { EntityMode, HumanConfirm } from '../api/types.js';
  * recorded in the system of record, not inferred from prompt equality.
  */
 export interface RetryPrefill {
-  /** The run being retried — rides the launch body as `retryOf`. */
-  retryOf: string;
+  /**
+   * The run being retried — rides the launch body as `retryOf`. `null` when
+   * the prefill is not a retry at all: the chat→build promotion (DES-UX-001
+   * §7.9's conversation→action bridge) rides the same machinery with the
+   * transcript as context and NO lineage claim (chats are not runs).
+   */
+  retryOf: string | null;
   problem: string;
   clis: readonly string[];
   /** The original `workflow_id`; `null` = free-text (nothing to prefill). */

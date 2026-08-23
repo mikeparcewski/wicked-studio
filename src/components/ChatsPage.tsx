@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
+import { useEventStream } from '../hooks/useEventStream.js';
 import { useTimeRange, type TimeRange } from '../hooks/useTimeRange.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -82,9 +84,88 @@ function ChatsOverTimeTile({ chats, range, now }: {
   );
 }
 
+/** One warm chat session on the daemon (`GET /chats` — the FINDING-027 wire). */
+interface LiveChatRow {
+  chatId: string;
+  seats: string[];
+  idleSecs: number | null;
+  /** When this page last SAW a stream frame for the chat (0 = never). */
+  lastFrameAt: number;
+}
+
+/** A frame this recent reads as "streaming now" — observed, never asserted. */
+const STREAMING_WINDOW_MS = 30_000;
+
 export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const { range, setRange, filter: filterByRange } = useTimeRange('30d');
+
+  // ── Live sessions (DES-UX-001 §7.9-5): the warm seat pool, findable ────────
+  // The review's zombie class — "abandoned tabs leak working agents nothing
+  // points at" — dies here: every live chat the daemon holds is LISTED on
+  // /chats (one GET /chats riding this navigation — a page-load read, not a
+  // mount ambush on another surface), each with its seats, idle age, and an
+  // End control (`DELETE /chats/:id`, the same teardown Chat's Close uses).
+  // Streams announce themselves: a chatDelta/chatReply frame flags its session
+  // "streaming now" from the FIRST frame — a session is visible here while it
+  // streams, even one this list fetch predates.
+  const [liveChats, setLiveChats] = useState<LiveChatRow[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listChats()
+      .then(({ chats }) => {
+        if (cancelled) return;
+        setLiveChats(chats.map((c) => ({ ...c, lastFrameAt: 0 })));
+      })
+      .catch(() => {
+        if (!cancelled) setLiveChats([]); // unreachable — the band stays absent
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEventStream((ev) => {
+    const frame = ev as { type: string; chat?: string; cliKey?: string; reason?: string };
+    if (typeof frame.chat !== 'string' || frame.chat === '') return;
+    if (frame.type === 'chatClosed') {
+      setLiveChats((prev) => (prev === null ? prev : prev.filter((c) => c.chatId !== frame.chat)));
+      return;
+    }
+    if (!['chatDelta', 'chatReply', 'chatSessionReady'].includes(frame.type)) return;
+    setLiveChats((prev) => {
+      const now = Date.now();
+      const list = prev ?? [];
+      const found = list.find((c) => c.chatId === frame.chat);
+      if (found === undefined) {
+        // §7.9-5: listed from its FIRST frame — a session the fetch predates.
+        return [
+          ...list,
+          { chatId: frame.chat!, seats: frame.cliKey ? [frame.cliKey] : [], idleSecs: null, lastFrameAt: now },
+        ];
+      }
+      return list.map((c) =>
+        c.chatId === frame.chat
+          ? {
+              ...c,
+              lastFrameAt: now,
+              seats: frame.cliKey && !c.seats.includes(frame.cliKey) ? [...c.seats, frame.cliKey] : c.seats,
+            }
+          : c,
+      );
+    });
+  });
+
+  /** End a warm session from the list — the zombie-cleanup affordance. */
+  function endLiveChat(chatId: string): void {
+    void api
+      .closeChat(chatId)
+      .then(() => setLiveChats((prev) => (prev === null ? prev : prev.filter((c) => c.chatId !== chatId))))
+      .catch(() => {
+        /* teardown is best-effort — the daemon's idle reaper collects either way */
+      });
+  }
 
   // Strict filter: include 'chat' runs and legacy runs with no workflow stamp as a transitional fallback.
   const allChats = useMemo(() => runs.filter(isChatRun), [runs]);
@@ -170,6 +251,65 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
           />
         </TileBand>
       </div>
+
+      {/* ── Live sessions (DES-UX-001 §7.9-5): warm seats, findable + endable.
+             Absent entirely when the daemon holds none — the run list below is
+             history; this band is the NOW. ── */}
+      {liveChats !== null && liveChats.length > 0 && (
+        <div className="px-8 flex flex-col gap-2" data-testid="live-chats" data-count={liveChats.length}>
+          <p
+            className="text-[10px] font-mono uppercase tracking-widest m-0"
+            style={{ color: 'var(--ink-dim)' }}
+          >
+            Live sessions — warm agent seats on the daemon
+          </p>
+          {liveChats.map((c) => {
+            const streaming = c.lastFrameAt !== 0 && Date.now() - c.lastFrameAt < STREAMING_WINDOW_MS;
+            return (
+              <div
+                key={c.chatId}
+                data-testid="live-chat-row"
+                data-chat-id={c.chatId}
+                data-streaming={streaming}
+                className="w-full flex items-center gap-3 rounded-2xl px-5 py-3"
+                style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+              >
+                <span className="text-sm font-mono truncate" style={{ color: 'var(--ink-high)' }}>
+                  {c.chatId.slice(0, 8)}
+                </span>
+                <span className="text-xs font-mono truncate" style={{ color: 'var(--ink-muted)' }}>
+                  {c.seats.length > 0 ? c.seats.join(' · ') : 'seats unknown'}
+                </span>
+                {streaming ? (
+                  <span
+                    data-testid="live-chat-streaming"
+                    title="A reply frame from this session was observed in the last 30s"
+                    className="text-[10px] font-mono px-2 py-0.5 rounded-full shrink-0"
+                    style={{ color: 'var(--status-run)', border: '1px solid var(--status-run-dim)' }}
+                  >
+                    streaming now
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono shrink-0" style={{ color: 'var(--ink-dim)' }}>
+                    {c.idleSecs === null ? 'idle (age unknown)' : `idle ${Math.round(c.idleSecs)}s`}
+                  </span>
+                )}
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  data-testid="live-chat-end"
+                  title="Disconnect this session's agents and end it"
+                  onClick={() => endLiveChat(c.chatId)}
+                  className="text-[11px] px-2.5 py-1 rounded-lg shrink-0"
+                  style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', border: '1px solid var(--surface-overlay)' }}
+                >
+                  End
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── List / Empty state (untouched below the band, §4.3) ── */}
       <div className="px-8 pb-8 flex flex-col gap-2" data-testid="chats-list">

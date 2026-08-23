@@ -16,9 +16,12 @@ What it asserts (§6.5 + §7.5 DOM ACs, EC18 as amended by §12.1 and
 DES-FEEDBACK-003 §8.6 — the canvas REGION, panes included, ends above the bar):
 
   Chat columns (§6.5):
-   1. First-run: no layout toggle (no replying seats yet). After a 3-seat round
+   1. First-run: no layout toggle (no replying seats yet). After a full round
       the toggle appears; columns mode renders [data-testid="chat-round"] with
-      a [data-testid="chat-round-grid"] of data-columns="3".
+      a [data-testid="chat-round-grid"] of data-columns="4" — since DES-UX-001
+      slice AB (§7.9-1, the §11.2 re-scope) the first pristine cold-cache send
+      is ROSTER-FIRST: it warms the fixture's four roster seats, not the
+      fallback trio.
    2. The same seat's cells share a column index across rounds; a seat that
       died between rounds (real chatSessionFailed) renders
       [data-testid="chat-cell-empty"] in the next round — never a collapsed
@@ -42,7 +45,7 @@ DES-FEEDBACK-003 §8.6 — the canvas REGION, panes included, ends above the bar
    8. On a fresh v1-only document the toggle is DISABLED with the stated reason.
 
 Captures (§12.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/vision/:
-  feedback2-K-chat-columns.png    3-seat rounds side by side, one empty cell
+  feedback2-K-chat-columns.png    4-seat rounds side by side, one empty cell
   feedback2-K-compare-split.png   v3 ↔ v2 split with the strip toolbar cluster
   feedback2-K-compare-overlay.png overlay mode, slider at 50
 
@@ -121,8 +124,9 @@ with sync_playwright() as p:
     step("K1_toggle_absent_firstrun",
          page.locator('[data-testid="chat-layout-toggle"]').count() == 0)
 
-    # Round 1: the first send warms the default trio; the fixture fans out one
-    # REAL chatReply per seat, then kills the last-warmed seat (chatSessionFailed).
+    # Round 1: the first send is roster-first (slice AB §7.9-1) — it warms the
+    # fixture's four roster seats; the fixture fans out one REAL chatReply per
+    # seat, then kills the last-warmed seat (chatSessionFailed → 'pi').
     composer = page.locator("textarea.wk-composer")
     composer.fill("How should we refactor the fetch layer?")
     page.keyboard.press("Enter")
@@ -161,7 +165,7 @@ with sync_playwright() as p:
              };
            }""")
     step("K1_columns_grid",
-         grid1["columns"] == "3" and grid1["rounds"] == 1 and len(grid1["agents"]) == 3,
+         grid1["columns"] == "4" and grid1["rounds"] == 1 and len(grid1["agents"]) == 4,
          **grid1)
     step("K1_toggle_zero_requests_keeps_draft",
          api_requests == before_toggle
@@ -193,9 +197,9 @@ with sync_playwright() as p:
              };
            }""")
     step("K2_empty_cell_stable_columns",
-         rounds["count"] == 2 and rounds["columns"] == ["3", "3"]
+         rounds["count"] == 2 and rounds["columns"] == ["4", "4"]
          and rounds["agents"][0] == rounds["agents"][1]
-         and rounds["emptyAgents"] == ["planner"] and rounds["emptyInSecond"]
+         and rounds["emptyAgents"] == ["pi"] and rounds["emptyInSecond"]
          and rounds["noHorizPageScroll"],
          **rounds)
     page.screenshot(path=str(VSHOTS / "feedback2-K-chat-columns.png"))

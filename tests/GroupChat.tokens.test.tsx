@@ -129,7 +129,8 @@ describe('GroupChat — the §5.3 visual language', () => {
     const pending = screen.getAllByText('thinking…')[0]!.closest('div') as HTMLElement;
     expect(pending.style.background).toBe('var(--surface-card)');
     // The seat chips animate in via wk-disclose (§5.3 motion, one run, no loop).
-    const chip = screen.getAllByTitle('ready')[0]!;
+    // Slice AB (§7.9-4): a fanned-out seat SAYS "working" until its reply lands.
+    const chip = screen.getAllByTitle('working')[0]!;
     expect(chip.className).toContain('wk-disclose');
   });
 });

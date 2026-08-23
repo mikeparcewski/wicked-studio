@@ -140,6 +140,19 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     conversation announce history — the disk — survive,
                     exactly the split BRIDGE-UX-1 probe 2 verified.
 
+  chat_reject_seats — slice AB (DES-UX-001 §7.9-4): cliKeys POST /chats
+                    answers ok:false + a per-seat error (open-time
+                    failed-with-reason). Default [].
+  chat_send_fail  — slice AB (§7.9-2): POST /chats/<id>/messages answers a
+                    500 {error} — the draft-surviving failure. Default False.
+  chat_deltas     — slice AB (§7.9-3): sends BUFFER interleaved chatDelta
+                    chunks + a chatReply per live seat; POST /__fixture
+                    {"chat_flush": true} broadcasts the buffered rounds in
+                    send order (so turn 2 can open before turn 1's chunks
+                    arrive — the splice corpus). GET /api/v1/chats lists the
+                    live pool unconditionally (the FINDING-027 wire).
+                    Default False.
+
 A rig that never flips them gets the default W2 board.
 """
 
@@ -302,6 +315,19 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # no readback ripening. The brief's real failure mode (a learn that
          # hangs silently), for the client's bounded-timeout branch.
          "learn_silent": False,
+         # Slice AB (DES-UX-001 §7.9): the chat-repair corpus, all default-off.
+         #   chat_reject_seats — cliKeys POST /chats answers ok:false with the
+         #                       daemon's per-seat error (open-time
+         #                       failed-with-reason, §7.9-4).
+         #   chat_send_fail    — POST /chats/<id>/messages answers 500 {error}
+         #                       (the draft-surviving failure, §7.9-2).
+         #   chat_deltas       — sends BUFFER interleaved chatDelta chunks +
+         #                       chatReply per live seat instead of replying;
+         #                       POST /__fixture {"chat_flush": true} broadcasts
+         #                       the buffered rounds in order — so a rig can
+         #                       open turn 2 BEFORE turn 1's chunks arrive (the
+         #                       §7.9-3 splice corpus).
+         "chat_reject_seats": [], "chat_send_fail": False, "chat_deltas": False,
          }
 state_lock = threading.Lock()
 
@@ -1157,6 +1183,10 @@ chat_state_lock = threading.Lock()
 chat_warm_seats: dict = {}   # chat_id -> [cliKey, warm order]
 chat_dead_seats: dict = {}   # chat_id -> set of cliKeys that chatSessionFailed
 chat_send_count: dict = {}   # chat_id -> number of message fan-outs so far
+# Slice AB (§7.9-3): rounds buffered while `chat_deltas` is on — each entry is
+# the ordered frame list one send produced (interleaved chunks, then replies).
+# POST /__fixture {"chat_flush": true} broadcasts them in send order.
+chat_round_buffer: list = []
 
 # The reply prose per seat — short and distinct, so the columns screenshot reads
 # as three agents disagreeing about the same prompt, not lorem ipsum.
@@ -1567,6 +1597,16 @@ class W2Handler(SimpleHTTPRequestHandler):
         # Slice J (§5.2): the decisions corpus — read on the search GESTURE only.
         if path == "/api/v1/governance/claims":
             self._json(200, {"claims": GOVERNANCE_CLAIMS})
+            return True
+        # /api/v1/chats — every live chat (the FINDING-027 wire: chatId, seats,
+        # idleSecs number|null). Slice AB's /chats live-session band reads it.
+        if path == "/api/v1/chats":
+            with chat_state_lock:
+                rows = [{"chatId": cid,
+                         "seats": [k for k in seats if k not in chat_dead_seats.get(cid, set())],
+                         "idleSecs": 5}
+                        for cid, seats in chat_warm_seats.items()]
+            self._json(200, {"chats": rows})
             return True
         # /api/v1/chats/<id> — seats of a chat. Empty for a chat we never opened
         # (the daemon does not 404 an unknown id; empty means reclaimed/none).
@@ -2122,6 +2162,14 @@ class W2Handler(SimpleHTTPRequestHandler):
                     ws_queue.clear()
                 with doc_sched_lock:
                     doc_next_free.clear()
+            # Slice AB (§7.9-3): broadcast the buffered chat rounds in send
+            # order — the rig decides WHEN turn 1's chunks arrive.
+            if body.get("chat_flush"):
+                with chat_state_lock:
+                    rounds, chat_round_buffer[:] = list(chat_round_buffer), []
+                for frames in rounds:
+                    for frame in frames:
+                        broadcast_chat(frame)
             with state_lock:
                 # `appearance` rides the same control channel but lands in the
                 # settings store: a dict replaces studio.appearance wholesale,
@@ -2224,13 +2272,22 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/chats":
             clis = body.get("clis") or [s["key"] for s in ROSTER]
             chat_id = body.get("chatId") or "fixture-chat"
+            # Slice AB (§7.9-4): seats named by `chat_reject_seats` answer the
+            # daemon's real per-seat shape — ok:false with an error the chip
+            # must wear as failed-with-reason. Only accepted seats warm.
+            with state_lock:
+                reject = set(state["chat_reject_seats"])
             with chat_state_lock:
-                chat_warm_seats[chat_id] = list(clis)
+                chat_warm_seats[chat_id] = [k for k in clis if k not in reject]
                 chat_dead_seats.setdefault(chat_id, set())
                 chat_send_count.setdefault(chat_id, 0)
             return self._json(201, {
                 "chatId": chat_id,
-                "seats": [{"cliKey": k, "ok": True} for k in clis],
+                "seats": [
+                    {"cliKey": k, "ok": True} if k not in reject
+                    else {"cliKey": k, "ok": False, "error": f"unknown agent '{k}'"}
+                    for k in clis
+                ],
             })
         # POST /api/v1/chats/<id>/messages — accept the fan-out; replies would
         # stream over /ws, which this fixture leaves to the narration loop —
@@ -2242,6 +2299,39 @@ class W2Handler(SimpleHTTPRequestHandler):
         if len(parts) == 6 and parts[3] == "chats" and parts[5] == "messages":
             with state_lock:
                 replies_on = state["chat_replies"]
+                send_fail = state["chat_send_fail"]
+                deltas_on = state["chat_deltas"]
+            # Slice AB (§7.9-2): the daemon refuses the fan-out — the client's
+            # draft must survive and the failure must render inline with retry.
+            if send_fail:
+                return self._json(500, {"error": "chat send refused (fixture)"})
+            # Slice AB (§7.9-3): buffer this round's interleaved chunk frames +
+            # replies; nothing is broadcast until the rig flushes — so a second
+            # send can open its turn BEFORE the first turn's chunks arrive.
+            if deltas_on:
+                chat_id = urllib.parse.unquote(parts[4])
+                with chat_state_lock:
+                    warm = chat_warm_seats.get(chat_id, [])
+                    dead = chat_dead_seats.setdefault(chat_id, set())
+                    live = [k for k in warm if k not in dead]
+                    chat_send_count[chat_id] = chat_send_count.get(chat_id, 0) + 1
+                    round_n = chat_send_count[chat_id]
+                    per_seat = []
+                    for k in live:
+                        line = CHAT_REPLY_LINES.get(k, "Agreed — start small.") + f" (round {round_n})"
+                        third = max(1, len(line) // 3)
+                        per_seat.append((k, [line[:third], line[third:2 * third], line[2 * third:]], line))
+                    frames = []
+                    for i in range(3):
+                        for (k, chunks, _line) in per_seat:
+                            if chunks[i]:
+                                frames.append({"type": "chatDelta", "chat": chat_id,
+                                               "cliKey": k, "text": chunks[i]})
+                    for (k, _chunks, line) in per_seat:
+                        frames.append({"type": "chatReply", "chat": chat_id,
+                                       "cliKey": k, "ok": True, "text": line})
+                    chat_round_buffer.append(frames)
+                return self._json(200, {"seats": live})
             if replies_on:
                 chat_id = urllib.parse.unquote(parts[4])
                 with chat_state_lock:
@@ -2281,6 +2371,14 @@ class W2Handler(SimpleHTTPRequestHandler):
     def do_DELETE(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path
         if path.startswith("/api/v1/chats/"):
+            # Slice AB (§7.9-5): the teardown is real — the chat leaves the
+            # live listing, exactly as the daemon reaps a closed pool entry.
+            chat_id = urllib.parse.unquote(path.split("/")[4]) if len(path.split("/")) == 5 else None
+            if chat_id is not None:
+                with chat_state_lock:
+                    chat_warm_seats.pop(chat_id, None)
+                    chat_dead_seats.pop(chat_id, None)
+                    chat_send_count.pop(chat_id, None)
             return self._json(200, {"ok": True})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
 
