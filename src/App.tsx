@@ -37,6 +37,7 @@ import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.j
 import { useRuns } from './hooks/useRuns.js';
 import { useGateStore } from './store/gates.js';
 import { useElicitationStore } from './store/elicitations.js';
+import { useLiveChatsStore } from './store/liveChats.js';
 import { useNotificationStore } from './store/notifications.js';
 import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
@@ -75,6 +76,7 @@ export function App(): React.ReactElement {
   const ingestRuntime = useRuntimeStore((s) => s.ingest);
   const ingestRunEvent = useRunEventStore((s) => s.ingest);
   const ingestDocThread = useDocThreadStore((s) => s.ingest);
+  const ingestLiveChat = useLiveChatsStore((s) => s.ingest);
 
   // Dashboard gate callbacks — the CenterDashboard handles the API call + store
   // clearing itself; these callbacks exist for any post-confirmation side-effects
@@ -97,12 +99,15 @@ export function App(): React.ReactElement {
       // Relayed interactive frames feed BOTH altitudes off the one subscription (§3.4):
       // the runtime store's board headline above, the doc transcript here.
       ingestDocThread(event);
+      // J4 round 2: chat frames announce/retire live sessions for the rail's
+      // Chat accordion — evidence this subscription already carries, no fetch.
+      ingestLiveChat(event);
       // Slice L (DES-FEEDBACK-002 §8.2): the desktop layer folds off the SAME
       // subscription — hidden-tab-only, opt-in, permission-gated, never prompts.
       notifyGateIfUnfocused(event);
       if (LIFECYCLE_EVENTS.has(event.type)) refresh();
     },
-    [ingestGate, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, refresh],
+    [ingestGate, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, ingestLiveChat, refresh],
   );
 
   useEventStream(handleEvent);

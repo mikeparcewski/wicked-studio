@@ -174,6 +174,10 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
 
   const active = useMemo(() => chats.filter(v => !terminal(v.session.status)), [chats]);
 
+  /** Live pool sessions visible on this screen — the Active-now headline
+   *  counts them too (round 2, J4 minor / EC39: the number matches the page). */
+  const liveCount = liveChats?.length ?? 0;
+
   // Gates from chats (§4.3 row 3): the gate store filtered to THIS partition —
   // "Did a conversation stall on me?" is asked of every chat, not just the
   // range-filtered slice, so the filter is the partition predicate alone.
@@ -233,14 +237,25 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
             testId="chats-active-tile"
             question="How many threads are warm?"
             title="Active now"
-            value={`${active.length} of ${chats.length}`}
-            data={{ 'data-count': active.length }}
+            // Round 2, J4 minor / EC39: the headline counts what THIS SCREEN
+            // shows — live pool sessions (the band below) plus non-terminal
+            // chat runs in the selected range — and labels each part, so
+            // "0 of 0" can never sit beside a visible live row.
+            value={
+              liveCount > 0
+                ? `${liveCount} live session${liveCount === 1 ? '' : 's'} · ${active.length} chat run${active.length === 1 ? '' : 's'} in ${range}`
+                : `${active.length} of ${chats.length} chat runs in ${range}`
+            }
+            data={{ 'data-count': active.length + liveCount, 'data-live': liveCount }}
           >
             <p
               className="text-lg font-semibold leading-none"
-              style={{ margin: 0, color: active.length > 0 ? 'var(--status-run)' : 'var(--ink-dim)' }}
+              style={{
+                margin: 0,
+                color: active.length + liveCount > 0 ? 'var(--status-run)' : 'var(--ink-dim)',
+              }}
             >
-              {active.length}
+              {active.length + liveCount}
             </p>
           </MetricTile>
           <GatesWaitingTile

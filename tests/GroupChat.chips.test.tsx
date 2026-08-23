@@ -154,12 +154,46 @@ describe('GroupChat — default agent chips (DES-FEEDBACK-001 §6)', () => {
     ]);
   });
 
-  it('a stale default the daemon rejects surfaces a recoverable error naming it; remove + resend recovers into the same chat', async () => {
+  it('the picker speaks the roster: display names and observed health ride each option (J4 round 2, minor)', async () => {
     const user = userEvent.setup();
-    // Slice AB (§7.9-1): the stale-trio-reaches-the-daemon case now REQUIRES
-    // an unreachable roster — a reachable one would have re-seeded the send.
-    getRoster.mockRejectedValue(new Error('daemon unreachable'));
-    // First open: every requested seat is rejected (stale fallback names).
+    getRoster.mockResolvedValueOnce({
+      roster: [
+        { key: 'claude', display_name: 'Claude Code', enabled_for_council: true,
+          health: { status: 'active', since: '2026-08-01T00:00:00Z' } },
+        { key: 'codex', display_name: 'Codex', enabled_for_council: true,
+          health: { status: 'inactive', message: 'quota exceeded', since: '2026-08-01T00:00:00Z' } },
+        // A daemon predating crew#274: no health claim — never fabricated.
+        { key: 'pi', display_name: 'pi', enabled_for_council: true },
+      ] as unknown as RosterSeat[],
+    });
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    await user.click(screen.getByTestId('add-agent'));
+
+    const options = await screen.findAllByTestId('agent-picker-option');
+    const byKey = Object.fromEntries(options.map((o) => [o.dataset['agentKey'], o]));
+    expect(byKey['claude']).toHaveTextContent('Claude Code');
+    expect(byKey['claude']!.dataset['health']).toBe('active');
+    expect(byKey['codex']!.dataset['health']).toBe('inactive');
+    expect(byKey['codex']!.title).toBe('Codex — inactive');
+    // No health on the wire → no claim in the DOM.
+    expect(byKey['pi']!.dataset['health']).toBe('unknown');
+    expect(byKey['pi']!.querySelector('span[aria-hidden]')).toBeNull();
+    // The KEY stays the data identity the send uses.
+    await user.click(byKey['claude']!);
+    expect(chipKeys()).toContain('claude');
+  });
+
+  it('a stale EDITED chip the daemon rejects surfaces a recoverable error naming it; remove + resend recovers into the same chat', async () => {
+    // Round-2 re-scope (BRIEF-UX-001 J4 finding 1): this test previously drove
+    // the recovery path through the PRISTINE fallback trio reaching the daemon
+    // (roster unreachable) — a wire call the round-2 mandate forbids outright.
+    // The §6.2 recovery contract it pinned is unchanged and still pinned here,
+    // now driven through what can still legitimately carry a stale name to the
+    // daemon: an OPERATOR-EDITED selection (an edit pins the selection — the
+    // operator's explicit call ships as-is; the daemon's per-seat answer is
+    // the recovery path).
+    const user = userEvent.setup();
+    // First open: every requested seat is rejected (stale names).
     openChat.mockImplementationOnce((body: { chatId: string; clis?: string[] }) =>
       Promise.resolve({
         chatId: body.chatId,
@@ -168,20 +202,25 @@ describe('GroupChat — default agent chips (DES-FEEDBACK-001 §6)', () => {
     );
     render(<GroupChat repoId={null} onBack={() => undefined} />);
 
+    // The edit PINS the selection (§7.9-1) — no roster re-seed rides the send.
+    await user.click(screen.getByRole('button', { name: 'Remove writer' }));
     await user.type(screen.getByRole('textbox'), 'hello?');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect(getRoster).not.toHaveBeenCalled(); // touched selection: the operator's call
+    expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(['reviewer', 'planner']);
 
-    // The error NAMES the rejected agents (§6.2) …
+    // The error NAMES the rejected agents (§6.2) — on the banner AND the
+    // retryable failed-send row (§7.9-2 carries the same reason).
     await waitFor(() =>
-      expect(screen.getByText(/rejected agents "writer", "reviewer", "planner"/)).toBeInTheDocument(),
+      expect(screen.getAllByText(/rejected agents "reviewer", "planner"/).length).toBeGreaterThan(0),
     );
-    // … and the message did NOT go out.
+    // … the message did NOT go out, and the failure is a retryable row (§7.9-2).
     expect(sendChatMessage).not.toHaveBeenCalled();
+    expect(screen.getByTestId('chat-send-failed')).toBeInTheDocument();
     // Recoverable: the chips bar is back (nothing warmed), removals still work.
     const bar = await screen.findByTestId('agent-chips-bar');
-    expect(bar).toHaveAttribute('data-count', '3');
-    await user.click(screen.getByRole('button', { name: 'Remove writer' }));
+    expect(bar).toHaveAttribute('data-count', '2');
     await user.click(screen.getByRole('button', { name: 'Remove reviewer' }));
 
     // §7.9-2: the failed send's DRAFT survived in the composer — clear it for
@@ -196,5 +235,9 @@ describe('GroupChat — default agent chips (DES-FEEDBACK-001 §6)', () => {
     expect(second.chatId, 'recovery must not mint a second chat (FINDING-027)').toBe(first.chatId);
     expect(second.clis).toEqual(['planner']);
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(second.chatId, 'try again'));
+    // J4 finding 3: the successful send retires the stale open-failure banner
+    // and the previously-rejected seats' red chips (they are not in this open).
+    await waitFor(() => expect(screen.queryByText(/rejected agents/)).toBeNull());
+    expect(document.querySelector('[data-testid="seat-chip"][data-agent="reviewer"]')).toBeNull();
   });
 });
