@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { EntityMode, LaunchRunBody, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
+import { useProvenanceStore } from '../store/provenance.js';
+import { confirmModeOf, takeRetryPrefill, type RetryPrefill } from '../store/retryPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { ContextPopover } from './ContextPopover.js';
 import type { ConfirmMode } from './ContextPopover.js';
@@ -101,6 +103,13 @@ const SYSTEM_WORKFLOW_IDS = new Set(['chat', 'onboarding', 'survey-repo', 'domai
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
 
+  // Retry-as-prefill (DES-UX-001 §4.3): the LAUNCH-FORM composer consumes a
+  // pending retry prefill ONCE at mount (lazy state init — never re-taken on a
+  // re-render). Run-selected composers (steer/inject) never consume it.
+  const [prefill] = useState<RetryPrefill | null>(() => (runId ? null : takeRetryPrefill()));
+  /** Lineage claim carried to the launch (`retryOf`, CREW-UX-3) — clearable. */
+  const [retryOf, setRetryOf] = useState<string | null>(prefill?.retryOf ?? null);
+
   // ── Steer mode state ───────────────────────────────────────────────────────
   const [steerText, setSteerText] = useState('');
   const [steering, setSteering] = useState(false);
@@ -115,9 +124,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // setInjecting(true) call re-renders the disabled state.
   const injectInflightRef = useRef(false);
 
-  // ── Launch form state ──────────────────────────────────────────────────────
-  const [problem, setProblem] = useState('');
-  const [workflow, setWorkflow] = useState('');
+  // ── Launch form state — a retry prefill seeds the initial values (§4.3);
+  //    everything stays fully editable before send. ──────────────────────────
+  const [problem, setProblem] = useState(prefill?.problem ?? '');
+  const [workflow, setWorkflow] = useState(prefill?.workflowId ?? '');
   const [roster, setRoster] = useState<RosterSeat[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
   const selectableWorkflows = useMemo(
@@ -126,10 +136,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   );
   const [selectedClis, setSelectedClis] = useState<Set<string>>(new Set());
   const [repos, setRepos] = useState<RepoEntry[]>([]);
-  const [repoRefs, setRepoRefs] = useState<string[]>([]);
-  const [entityMode, setEntityMode] = useState<EntityMode>('shared');
-  const [confirmMode, setConfirmMode] = useState<ConfirmMode>('none');
-  const [beforeOrd, setBeforeOrd] = useState(1);
+  const [repoRefs, setRepoRefs] = useState<string[]>(prefill?.repoRef ? [prefill.repoRef] : []);
+  const [entityMode, setEntityMode] = useState<EntityMode>(prefill?.entityMode ?? 'shared');
+  const prefillGate = confirmModeOf(prefill?.humanConfirm);
+  const [confirmMode, setConfirmMode] = useState<ConfirmMode>(prefillGate.mode);
+  const [beforeOrd, setBeforeOrd] = useState(prefillGate.beforeOrd);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
   // ── Project binding (DES-FEEDBACK-001 §5, slice B) ─────────────────────────
@@ -137,7 +148,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // default — byte-identical to the pre-slice request. The list loads lazily on
   // the dropdown's first open (or on mount when pre-bound, to resolve the name).
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(prefill?.projectId ?? null);
   const [showNewProject, setShowNewProject] = useState(false);
   const projectsRequested = useRef(false);
 
@@ -177,6 +188,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         // Deposit for Chat's default chips (§6.1: cached, never fetched on mount).
         setCachedRoster(seats);
         setRoster(seats);
+        // A retry prefill's roster wins over the stored/default selection —
+        // §4.3: the composer opens matching the ORIGINAL run, editable after.
+        if (prefill !== null) {
+          setSelectedClis(new Set(prefill.clis));
+          return;
+        }
         try {
           const stored = localStorage.getItem('wicked_default_clis');
           if (stored) {
@@ -197,14 +214,17 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       .listWorkflows()
       .then(({ workflows: wfs }) => setWorkflows(wfs))
       .catch(() => {});
-  }, []);
+    // `prefill` is lazy-initialized state: stable for the component's lifetime,
+    // so this still runs exactly once per mount.
+  }, [prefill]);
 
   // §4.3 pre-bound: resolve the locked project's NAME up front — the field must
   // show the name, not the id. Unbound forms load nothing until the first open.
+  // A retry prefill's project binding needs the same name resolution (§4.3).
   useEffect(() => {
-    if (lockedProjectId != null) loadProjects();
+    if (lockedProjectId != null || prefill?.projectId != null) loadProjects();
     // (loadProjects is ref-guarded and single-shot, so listing only the lock is safe.)
-  }, [lockedProjectId]);
+  }, [lockedProjectId, prefill]);
 
   // ── Elapsed-time ticker ────────────────────────────────────────────────────
   useEffect(() => {
@@ -313,9 +333,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
     if (boundProject) body.projectId = boundProject;
+    // Lineage (§4.3, CREW-UX-3): recorded in the system of record at launch —
+    // never inferred from prompt equality. The pill above is the operator's
+    // way to drop the claim before sending.
+    if (retryOf) body.retryOf = retryOf;
 
     try {
       const { runId: newRunId } = await api.launchRun(body);
+      // The studio witnessed this launch — the provenance line's honest
+      // 'via studio' channel derives from exactly this record (§3.3).
+      useProvenanceStore.getState().markLaunchedHere(newRunId);
       setProblem('');
       onLaunched(newRunId);
     } catch (err) {
@@ -558,6 +585,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // Collect active non-default option pills
   const activePills: Array<{ label: string; onClear: () => void }> = [];
 
+  // The lineage claim leads the pills (§4.3): visible, and clearable — a retry
+  // is a composer prefill the operator may edit down to a fresh launch.
+  if (retryOf) {
+    activePills.push({
+      label: `Retry of ${retryOf.slice(0, 8)}`,
+      onClear: () => setRetryOf(null),
+    });
+  }
   if (attachedFiles.length > 0) {
     activePills.push({
       label: `${attachedFiles.length} file${attachedFiles.length !== 1 ? 's' : ''} attached`,
