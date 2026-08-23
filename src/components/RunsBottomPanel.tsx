@@ -164,6 +164,7 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
       {
         id: 'runs-sheet-close',
         chord: { key: 'escape' },
+        group: 'panels',
         description: 'Collapse the runs sheet',
         guard: () => useRunsPanelStore.getState().expanded,
         handler: () => useRunsPanelStore.getState().collapse(),

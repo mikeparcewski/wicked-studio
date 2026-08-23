@@ -123,6 +123,7 @@ export function paletteShortcutEntries(opts: {
   return [
     {
       id: 'palette-toggle-k',
+      group: 'palette',
       chord: { key: 'k', ctrlOrMeta: true },
       description: 'Open the command palette',
       handler: toggle,
@@ -130,6 +131,7 @@ export function paletteShortcutEntries(opts: {
     },
     {
       id: 'palette-toggle-p',
+      group: 'palette',
       chord: { key: 'p', ctrlOrMeta: true },
       description: 'Open the command palette',
       handler: toggle,
@@ -139,6 +141,7 @@ export function paletteShortcutEntries(opts: {
       // §5.2: global search is the palette's DEEP MODE — Cmd+Shift+F opens the
       // palette with the `?` prefix pre-typed (registered in the §1.2 table).
       id: 'palette-search',
+      group: 'palette',
       chord: { key: 'f', ctrlOrMeta: true, shift: true },
       description: 'Global search',
       handler: (e) => {
@@ -148,6 +151,7 @@ export function paletteShortcutEntries(opts: {
     },
     {
       id: 'kill-run',
+      group: 'palette',
       chord: { key: 'k', ctrlOrMeta: true, shift: true },
       description: 'Cancel the selected run',
       guard: opts.killEligible,

@@ -223,6 +223,7 @@ function DocFrame({
   const compareShortcuts = useMemo<ShortcutEntry[]>(() => [{
     id: 'doc-compare-exit',
     chord: { key: 'escape' },
+    group: 'panels',
     description: 'Exit the version compare lens',
     guard: () => cmpRef.current !== null,
     handler: () => {
