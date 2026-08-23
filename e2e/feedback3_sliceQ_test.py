@@ -369,7 +369,11 @@ report["steps"]["lede"] = {
         home["ledeQuestion"] == "What happened and what needs me?",
         # Slice Y (DES-UX-001 §7.4): the all-runs number re-points to /work —
         # the ONE canonical runs surface; the bare /runs listing is retired.
-        home["ledeLinkHrefs"] == ["/work", "#needs-you"],
+        # Fix slice J4/J5 (BRIEF-UX-001 re-review): each OUTCOME number now
+        # links to ITS /work filter, so a count is reproducible from the rows
+        # it names. This fixture finishes 3 passed + 1 failed, no cancelled.
+        home["ledeLinkHrefs"] == [
+            "/work", "/work?filter=completed", "/work?filter=failed", "#needs-you"],
         home["spendHref"] == "/make",
     ]),
     "web_fonts": fonts_ok, "lede_settled": lede_ok, "spend_settled": spend_ok,
