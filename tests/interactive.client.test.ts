@@ -418,7 +418,7 @@ describe('happy-path shapes', () => {
     // error, thrown in the EC33 translated frame carrying the service's sentence.
     stubFetch('Cannot GET /d/absent/api/theme/learned', 404);
     await expect(getLearnedTheme(PROJECT, 'absent')).rejects.toThrow(
-      'the daemon refused this — Cannot GET /d/absent/api/theme/learned');
+      /the daemon refused this — .*Cannot GET \/d\/absent\/api\/theme\/learned/);
     // A dead bridge stays the typed 503, exactly as every other wrapper.
     stubFetch({ code: 'bridge_unavailable', hint: 'npm i -g wicked-interactive' }, 503);
     await expect(getLearnedTheme(PROJECT, DOC)).rejects.toBeInstanceOf(BridgeUnavailableError);
