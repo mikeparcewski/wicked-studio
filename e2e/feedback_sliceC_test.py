@@ -58,8 +58,9 @@ CHAT_URL = f"{ORIGIN}/p/q3-review-deck/chat"
 VSHOTS = REPO / "e2e" / "shots" / "vision"
 
 # EC44: the cold route resolves the roster on mount; the default chips are
-# the CHAT-CAPABLE subset (acp object or absent key — pi's arm; explicit
-# null = incapable, offered only in the labeled picker).
+# the CHAT-CAPABLE subset (acp objects on claude/pi; round 4: an absent
+# key beside a speaking roster = "no config" — incapable seats are offered
+# only in the labeled picker).
 ROSTER_KEYS = ["claude", "codex", "agy", "pi"]
 CAPABLE = ["claude", "pi"]
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { GroupChat, chatCapable, defaultSelection } from '../src/components/GroupChat.js';
+import { GroupChat, chatCapable, defaultSelection, rosterSpeaksAcp } from '../src/components/GroupChat.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
 import type { RosterSeat } from '../src/api/types.js';
 
@@ -17,9 +17,12 @@ import type { RosterSeat } from '../src/api/types.js';
  *     named mount request (GET /api/v1/roster) to resolve it — warm cache
  *     renders chips synchronously with zero requests;
  *   - the DEFAULT selection is the CHAT-CAPABLE seats only: the roster seat's
- *     `acp` field is the capability marker (object when configured, explicit
- *     null when not — wicked-core's chat_ensure answers "no ACP config" for
- *     null-acp seats). An ABSENT key (older daemon) reads as capable;
+ *     `acp` field is the capability marker — an object when configured, and
+ *     ABSENT when not (skip_serializing_if: the engine never writes null;
+ *     wicked-core's chat_ensure answers "no ACP config" for configless
+ *     seats). Round-4 polarity: an absent key is "no config" whenever ANY
+ *     seat in the roster speaks the field; only a roster with no acp key
+ *     anywhere (a daemon predating the field) reads all-capable;
  *   - [+ Add] offers incapable seats LABELED ("no chat config"), never as
  *     silent equals — picking one is the operator's explicit call;
  *   - the send body = exactly the selected chips. No hidden fan-out;
@@ -51,10 +54,12 @@ vi.mock('../src/hooks/useEventStream.js', () => ({
 }));
 
 /** The live daemon's wire shape in miniature: `acp` is an object on the
- *  chat-capable seats and EXPLICIT null on the rest (GET /api/v1/roster). */
+ *  chat-capable seats and ABSENT on the rest (GET /api/v1/roster — the
+ *  engine's skip_serializing_if never writes a null; codex here is the real
+ *  absent-key spelling, agy the defensive explicit-null belt arm). */
 const ROSTER = [
   { key: 'claude', enabled_for_council: true, acp: { binary: 'claude-agent-acp', transport: 'stdio' } },
-  { key: 'codex', enabled_for_council: true, acp: null },
+  { key: 'codex', enabled_for_council: true },
   { key: 'agy', enabled_for_council: false, acp: null },
   { key: 'pi', enabled_for_council: false, acp: { binary: 'pi-acp', transport: 'stdio' } },
 ] as unknown as RosterSeat[];
@@ -80,17 +85,38 @@ function chipKeys(): (string | undefined)[] {
   return screen.getAllByTestId('agent-chip').map((c) => c.dataset['agent']);
 }
 
-describe('chatCapable / defaultSelection — the EC44 capability rule', () => {
-  it('acp object = capable; explicit null = not; ABSENT key = capable (no fabricated incapability)', () => {
-    expect(chatCapable({ acp: { binary: 'x' } } as unknown as RosterSeat)).toBe(true);
-    expect(chatCapable({ acp: null } as unknown as RosterSeat)).toBe(false);
-    expect(chatCapable({ key: 'old-daemon' } as unknown as RosterSeat)).toBe(true);
+describe('chatCapable / defaultSelection — the EC44 capability rule (round-4 polarity)', () => {
+  it('acp object = capable; null = not; ABSENT = not-capable when the roster speaks acp, capable when none does', () => {
+    expect(chatCapable({ acp: { binary: 'x' } } as unknown as RosterSeat, true)).toBe(true);
+    expect(chatCapable({ acp: null } as unknown as RosterSeat, true)).toBe(false);
+    // The round-4 correction: skip_serializing_if means the engine spells
+    // "no config" by OMITTING the key — beside a speaking roster, absence is
+    // the incapability, and reading it as capable repaints the 4-red-seats
+    // cold send this whole fix exists to kill.
+    expect(chatCapable({ key: 'no-config' } as unknown as RosterSeat, true)).toBe(false);
+    expect(chatCapable({ key: 'old-daemon' } as unknown as RosterSeat, false)).toBe(true);
+    expect(rosterSpeaksAcp(ROSTER)).toBe(true);
+    expect(rosterSpeaksAcp([{ key: 'a' }, { key: 'b' }] as unknown as RosterSeat[])).toBe(false);
+    // Explicit null counts as speaking (a claim is a claim).
+    expect(rosterSpeaksAcp([{ key: 'a', acp: null }] as unknown as RosterSeat[])).toBe(true);
   });
 
   it('defaultSelection is the chat-capable subset — a marker-less roster keeps every seat', () => {
     expect(defaultSelection(ROSTER)).toEqual(CAPABLE);
     const unmarked = [{ key: 'a' }, { key: 'b' }] as unknown as RosterSeat[];
     expect(defaultSelection(unmarked)).toEqual(['a', 'b']);
+  });
+
+  it('the LIVE daemon wire verbatim (round 4): objects on claude/pi, key absent on the other four', () => {
+    const live = [
+      { key: 'claude', acp: { binary: 'claude-agent-acp', start_args: [], transport: 'stdio' } },
+      { key: 'agy' },
+      { key: 'codex' },
+      { key: 'pi', acp: { binary: 'pi-acp', start_args: [], transport: 'stdio' } },
+      { key: 'copilot' },
+      { key: 'opencode' },
+    ] as unknown as RosterSeat[];
+    expect(defaultSelection(live)).toEqual(['claude', 'pi']);
   });
 });
 
@@ -247,7 +273,8 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
           health: { status: 'active', since: '2026-08-01T00:00:00Z' } },
         { key: 'codex', display_name: 'Codex', enabled_for_council: true, acp: null,
           health: { status: 'inactive', message: 'quota exceeded', since: '2026-08-01T00:00:00Z' } },
-        // A daemon predating crew#274/acp: no health claim, no capability claim.
+        // A seat with no health claim whose acp key is ABSENT — beside a
+        // roster that speaks acp, absence IS "no config" (round 4).
         { key: 'pi', display_name: 'pi', enabled_for_council: true },
       ] as unknown as RosterSeat[],
     });
@@ -261,9 +288,12 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
     expect(byKey['claude']!.dataset['health']).toBe('active');
     expect(byKey['codex']!.dataset['health']).toBe('inactive');
     expect(byKey['codex']!.title).toBe('Codex — inactive — no chat (ACP) config — can’t join a chat');
-    // No health on the wire → no claim in the DOM; absent acp → capable.
+    // No health on the wire → no claim in the DOM. The acp key is absent on
+    // a roster that SPEAKS acp (claude carries the object), so absence is
+    // "no config" — labeled, never a silent default (round-4 polarity).
     expect(byKey['pi']!.dataset['health']).toBe('unknown');
-    expect(byKey['pi']!.dataset['chatCapable']).toBe('true');
+    expect(byKey['pi']!.dataset['chatCapable']).toBe('false');
+    expect(byKey['pi']!).toHaveTextContent('no chat config');
     expect(byKey['pi']!.querySelector('span[aria-hidden]')).toBeNull();
   });
 

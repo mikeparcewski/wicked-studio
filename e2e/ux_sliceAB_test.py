@@ -4,10 +4,11 @@ ux_sliceAB_test.py — the DES-UX-001 slice-AB gate: chat repair (§7.9, EC44, C
 Runs against the shared frozen-NOW0 W2 fixture (uxfix_fixture.py) with the
 slice-AB corpus: `chat_deltas` (buffered interleaved chunk rounds + a flush
 control — the §7.9-3 splice corpus). The open-time failed-with-reason seat
-(§7.9-4) is now the fixture's OWN capability rejection: codex carries
-acp=null on the roster wire, so explicitly adding it fails the open with the
-core's genuine "no ACP config for 'codex'" (round-3 re-scope — no
-chat_reject_seats switch needed for this scene).
+(§7.9-4) is now the fixture's OWN capability rejection: codex's roster
+entry OMITS the acp key (the engine's real "no config" spelling —
+skip_serializing_if never writes null), so explicitly adding it fails the
+open with the core's genuine "no ACP config for 'codex'" (round-3 re-scope,
+round-4 wire correction — no chat_reject_seats switch needed).
 
 The §7.9 DOM ACs, verbatim mapping:
 
@@ -70,11 +71,12 @@ ORIGIN = f"http://127.0.0.1:{FEEDBACK_PORT}"
 VSHOTS = REPO / "e2e" / "shots" / "vision"
 
 # The fixture's roster (uxfix_fixture.ROSTER keys); the chat-capable subset
-# is the EC44 default chip set. codex (acp=null) is the open-time
-# failed-with-reason seat once explicitly added.
+# is the EC44 default chip set. codex (acp key ABSENT — the real wire
+# spelling of "no config") is the open-time failed-with-reason seat once
+# explicitly added.
 ROSTER_KEYS = ["claude", "codex", "agy", "pi"]
 CAPABLE = ["claude", "pi"]
-REJECTED = "codex"  # acp=null on the wire — the open answers "no ACP config"
+REJECTED = "codex"  # no acp on the wire — the open answers "no ACP config"
 WARM = CAPABLE
 
 MSG1 = "compare the auth options"

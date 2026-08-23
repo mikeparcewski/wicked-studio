@@ -95,9 +95,11 @@ ACCENT_PROBE_JS = """() => {
 ROSTER_KEYS = ["claude", "codex", "agy", "pi"]
 # EC44 (round 3): the fallback trio is GONE — the cold route resolves the
 # roster with the surface's ONE named mount request, and the default chips
-# are the CHAT-CAPABLE seats (acp object, or the absent-key arm — pi).
+# are the CHAT-CAPABLE seats (acp objects on claude/pi — round 4: an
+# absent key beside a speaking roster is "no config", the engine never
+# writes null).
 CAPABLE = ["claude", "pi"]
-ADDED = "codex"  # acp=null — joins only by the operator's explicit labeled pick
+ADDED = "codex"  # no acp config — joins only by the operator's explicit labeled pick
 
 report: dict = {"ok": False, "steps": {}}
 

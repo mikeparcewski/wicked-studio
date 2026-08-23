@@ -12,11 +12,14 @@ with 4 red "no ACP config" seats. The EC44 contract this rig gates:
   what the chips SHOW at send time == what the send CONNECTS.
 
 Runs against the shared fixture (uxfix_fixture.py), whose roster now mirrors
-the REAL daemon's capability wire: each seat carries the `acp` marker (object
-= chat-capable, EXPLICIT null = not, ABSENT = additive/no-claim = capable),
-and POST /chats rejects acp-null seats per-seat with the core's own
-"no ACP config for '<key>'" (wicked-core acp_runner chat_ensure) — a UI that
-silently fans out to incapable seats cannot pass by fixture leniency.
+the REAL daemon's capability wire (round-4 corrected): `acp` is an object on
+chat-capable seats and ABSENT on the rest — the engine's skip_serializing_if
+never writes a null, so beside a roster that speaks the field, absence IS
+"no config" (only a roster with no acp key anywhere reads all-capable — a
+daemon predating the field). The fixture keeps one explicit-null belt seat
+(agy), and POST /chats rejects BOTH incapable spellings per-seat with the
+core's own "no ACP config for '<key>'" (wicked-core acp_runner chat_ensure)
+— a UI that silently fans out to incapable seats cannot pass by leniency.
 
 Scenes (each on a FRESH browser context — zero storage, the cold profile):
 
@@ -24,8 +27,9 @@ Scenes (each on a FRESH browser context — zero storage, the cold profile):
      (installed pre-navigation) proves the resolving row rendered and that
      writer/reviewer/planner (and the incapable codex/agy) were NEVER painted
      as chips; the surface makes its ONE named mount request (GET /roster);
-     the chips resolve to the CHAT-CAPABLE seats (claude + pi — pi via the
-     ABSENT-key arm); [+ Add] labels the incapable seats ("no chat config",
+     the chips resolve to the CHAT-CAPABLE seats (claude + pi, the two
+     acp-object seats, as on the live wire); [+ Add] labels the incapable
+     seats ("no chat config",
      data-chat-capable="false"); the SEND's POST /chats body names EXACTLY
      the displayed chips (request-tapped), the send succeeds, replies land,
      and NO seat chip is red — the no-4-red-seats-by-default acceptance.

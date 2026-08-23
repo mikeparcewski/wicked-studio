@@ -40,17 +40,39 @@ import { ProjectSwitcher } from './ProjectSwitcher.js';
 /**
  * EC44 chat-capability: a seat can hold a chat session only when its roster
  * entry carries an ACP config — wicked-core's `chat_ensure` answers
- * "no ACP config for '<key>'" for any seat without one (acp_runner.rs), so
- * default-selecting such a seat guarantees a red failed chip on every cold
- * chat. The marker is the seat's `acp` field on the roster wire: an object
- * ({binary, start_args, transport}) when configured, EXPLICIT `null` when
- * not (the engine serializes the None). The field predates the shared
- * `RosterSeat` type and rides its index signature, so it is read
- * defensively: an ABSENT key (a daemon predating the field) is no claim and
- * reads as capable — never a fabricated incapability.
+ * "no ACP config for '<key>'" for any seat without one (acp_runner.rs:3095
+ * via `acp_config_for`), so default-selecting such a seat guarantees a red
+ * failed chip on every cold chat. The marker is the seat's `acp` field on
+ * the roster wire: an object ({binary, start_args, transport}) when
+ * configured, and ABSENT when not — the engine's `AgenticCli.acp` is
+ * `#[serde(skip_serializing_if = "Option::is_none")]` (wicked-council
+ * types.rs, since the field's introduction), so a `None` NEVER serializes;
+ * absence is the wire's only spelling of "no config" (verified against the
+ * live daemon round 4: acp objects on claude/pi, no key at all on the other
+ * four). The field predates the shared `RosterSeat` type and rides its
+ * index signature, so it is read defensively, ROSTER-aware:
+ *
+ *   - `acp` object            → capable (the engine will ensure a session);
+ *   - `acp: null`             → not capable (belt: no current engine emits
+ *                               it, but a null claim is still "no config");
+ *   - key ABSENT, and ANY seat in this roster carries the key
+ *                             → not capable — this daemon SPEAKS the field,
+ *                               so absence is its own "no config" (reading
+ *                               it as capable repaints the round-3 defect:
+ *                               4 red "no ACP config" seats on every cold
+ *                               send — caught live in round 4);
+ *   - key ABSENT everywhere   → capable — a daemon predating the field
+ *                               makes no claim, and fabricating
+ *                               incapability would empty every chat.
  */
-export function chatCapable(seat: RosterSeat): boolean {
-  return seat['acp'] !== null;
+export function rosterSpeaksAcp(roster: RosterSeat[]): boolean {
+  return roster.some((s) => s['acp'] !== undefined);
+}
+
+export function chatCapable(seat: RosterSeat, speaksAcp: boolean): boolean {
+  if (seat['acp'] === null) return false;
+  if (seat['acp'] !== undefined) return true;
+  return !speaksAcp;
 }
 
 /**
@@ -61,7 +83,8 @@ export function chatCapable(seat: RosterSeat): boolean {
  * request.
  */
 export function defaultSelection(roster: RosterSeat[]): string[] {
-  return roster.filter(chatCapable).map((s) => s.key);
+  const speaks = rosterSpeaksAcp(roster);
+  return roster.filter((s) => chatCapable(s, speaks)).map((s) => s.key);
 }
 
 /**
@@ -765,15 +788,18 @@ export function GroupChat({
       .filter(([, st]) => WARM_STATES.has(st))
       .map(([k]) => k);
     // EC44 — the chips are truth: the send's audience IS the selection on
-    // screen, nothing else. While no chat exists, an unresolved roster or an
+    // screen, nothing else. While nothing is warm, an unresolved roster or an
     // empty selection means nobody would receive this — the disabled Send
-    // already says so; this is the belt to that suspender (Enter races the
-    // resolve). The round-2 hidden fan-out that swapped a pristine selection
-    // for the full roster AT SEND TIME is gone: it repaired the send outcome
-    // by bypassing the display, which is the exact lie C6 names.
+    // already says so; this is the belt to that suspender (Enter bypasses the
+    // disabled button and races the resolve). It holds with OR without a chat
+    // id: a fully-failed open leaves a chat id behind, and letting an emptied
+    // selection through would arm with `clis` OMITTED — the daemon then warms
+    // its OWN default set, an audience no chip ever showed (round-4 catch).
+    // The round-2 hidden fan-out that swapped a pristine selection for the
+    // full roster AT SEND TIME is gone: it repaired the send outcome by
+    // bypassing the display, which is the exact lie C6 names.
     if (
       warm.length === 0 &&
-      chatIdRef.current === null &&
       (knownRoster === null || selectedAgentsRef.current.length === 0)
     ) return;
     sendingRef.current = true;
@@ -1341,7 +1367,7 @@ export function GroupChat({
                 className="inline-flex items-center"
                 style={{ color: 'var(--ink-dim)', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)' }}
               >
-                {knownRoster.some(chatCapable)
+                {defaultSelection(knownRoster).length > 0
                   ? 'no agents selected — add one to send'
                   : 'no agent has a chat (ACP) config — add one anyway, or configure ACP'}
               </span>
@@ -1440,7 +1466,7 @@ export function GroupChat({
                       // config"), never as a silent equal; picking it is the
                       // operator's explicit call and the daemon's per-seat
                       // answer is the recovery path.
-                      const capable = chatCapable(seat);
+                      const capable = chatCapable(seat, rosterSpeaksAcp(pickerRoster));
                       const titleBits = [name];
                       if (health) titleBits.push(health);
                       if (!capable) titleBits.push('no chat (ACP) config — can’t join a chat');

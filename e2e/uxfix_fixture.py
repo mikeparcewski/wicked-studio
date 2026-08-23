@@ -1101,13 +1101,19 @@ REPO_CONTRIBUTORS = [
 # NEITHER — the additive-wire case (a daemon predating crew#274) the slice-O
 # health registry must render as unknown, never as a fabricated "active".
 #
-# Fix J4 round 3 (EC44): each seat also mirrors the real roster's CHAT-
+# Fix J4 round 3+4 (EC44): each seat also mirrors the real roster's CHAT-
 # capability marker — `acp` is the engine's ACP config object on seats that
-# can hold a chat session and EXPLICIT null on seats that cannot (the live
-# daemon serves acp=null on 4 of its 6 seats; wicked-core's chat_ensure
-# answers "no ACP config for '<key>'" for those). `pi` carries NO acp key at
-# all — the additive-wire case again (a daemon predating the field), which
-# the client must read as capable, never as a fabricated incapability.
+# can hold a chat session and ABSENT on seats that cannot: `AgenticCli.acp`
+# is `#[serde(skip_serializing_if = "Option::is_none")]` (wicked-council
+# types.rs, since the field's introduction), so the engine NEVER serializes
+# a null — absence is the wire's only spelling of "no config" (verified
+# against the live daemon round 4: acp objects on claude/pi, no key at all
+# on agy/codex/copilot/opencode; wicked-core's chat_ensure answers
+# "no ACP config for '<key>'" for those). Here `claude` and `pi` carry the
+# object (the live capable pair), `codex` carries NO key — the REAL
+# incapable spelling — and `agy` carries an explicit null: no current
+# engine emits it, but the client treats a null claim as "no config" too
+# (belt), and the fixture keeps that arm honest end-to-end.
 CODEX_HEALTH_MESSAGE = ("quota exceeded: the monthly usage limit for this "
                         "seat has been reached upstream")
 ROSTER = [
@@ -1116,18 +1122,26 @@ ROSTER = [
      "acp": {"binary": "claude-agent-acp", "start_args": [], "transport": "stdio"},
      "health": {"status": "active", "since": iso(NOW0 - 2 * DAY)}},
     {"key": "codex", "display_name": "codex", "binary": "codex",
-     "enabled_for_council": True, "signed_in": False, "acp": None,
+     "enabled_for_council": True, "signed_in": False,
      "health": {"status": "inactive", "message": CODEX_HEALTH_MESSAGE,
                 "since": iso(NOW0 - 2 * HOUR), "lastErrorAt": iso(NOW0 - 2 * HOUR)}},
     {"key": "agy", "display_name": "agy", "binary": "agy",
      "enabled_for_council": True, "signed_in": True, "acp": None,
      "health": {"status": "active", "since": iso(NOW0 - 2 * DAY)}},
-    {"key": "pi", "display_name": "pi", "binary": "pi", "enabled_for_council": True},
+    {"key": "pi", "display_name": "pi", "binary": "pi", "enabled_for_council": True,
+     "acp": {"binary": "pi-acp", "start_args": [], "transport": "stdio"}},
 ]
 
-# The chat-capable subset (EC44): explicit acp object OR an absent key (no
-# claim = capable); only EXPLICIT null is an incapability on the wire.
-CHAT_CAPABLE_KEYS = [s["key"] for s in ROSTER if s.get("acp", "absent") is not None]
+# The chat-capable subset (EC44, round-4 corrected polarity): an acp OBJECT
+# is capable; explicit null is not; an ABSENT key is "no config" whenever ANY
+# seat in the roster speaks the field (skip_serializing_if — the engine never
+# writes null), and "no claim = capable" only on a roster with no acp key
+# anywhere (a daemon predating the field).
+_SPEAKS_ACP = any("acp" in s for s in ROSTER)
+CHAT_CAPABLE_KEYS = [
+    s["key"] for s in ROSTER
+    if isinstance(s.get("acp"), dict) or ("acp" not in s and not _SPEAKS_ACP)
+]
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 NARRATION = "Writing the token-bucket middleware for /upload"
@@ -2453,10 +2467,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             def seat(k: str) -> dict:
                 if k not in known:
                     return {"cliKey": k, "ok": False, "error": f"no ACP config for '{k}'"}
-                # Fix J4 round 3 (EC44): the real chat_ensure also rejects a
-                # KNOWN seat whose roster entry carries acp=null — chat needs
-                # an ACP session config, and 4 of the live daemon's 6 seats
-                # have none. Absent key = no claim = accepted (older engine).
+                # Fix J4 round 3+4 (EC44): the real chat_ensure also rejects
+                # a KNOWN seat with no ACP session config — 4 of the live
+                # daemon's 6 seats have none (their roster entries OMIT the
+                # acp key; skip_serializing_if). Both incapable spellings —
+                # codex's absent key and agy's explicit null — reject here,
+                # exactly as acp_config_for answers None for each.
                 if k not in CHAT_CAPABLE_KEYS:
                     return {"cliKey": k, "ok": False, "error": f"no ACP config for '{k}'"}
                 if k in reject:
