@@ -4,29 +4,24 @@ feedback_sliceC_test.py — the DES-FEEDBACK-001 slice-C gate: Chat default
 agent chips (§6, §8.3 slice C), against the shared frozen-NOW0 W2 fixture
 (uxfix_fixture.py).
 
-The slice DOM ACs, verbatim from §8.3:
+The slice DOM ACs (§8.3), as RE-SCOPED TWICE — by DES-UX-001 slice AB
+(§11.2, roster-first) and by BRIEF-UX-001 C6/EC44 (round 3: chips are truth —
+the fallback trio is GONE; no chip is painted until the roster is known):
 
-  1. `[data-testid="agent-chip"]` elements are present on first render without
-     any network request having fired;
-  2. the `data-count` attribute on `[data-testid="agent-chips-bar"]` equals 3;
+  1. `[data-testid="agent-chip"]` elements resolve on this cold route from the
+     surface's ONE named mount request (GET /roster) — roster-true, never a
+     fabricated trio (`data-source="roster"`);
+  2. the `data-count` attribute equals the CHAT-CAPABLE seat count;
   3. clicking a chip's ✕ removes it (count decrements);
-  4. `[data-testid="add-agent"]` button opens the roster picker;
+  4. `[data-testid="add-agent"]` button opens the roster picker (from the
+     now-warm cache — no second fetch);
   5. zero `openChat` requests fire on mount (verified by `page.on('request')`).
 
-RE-SCOPED by DES-UX-001 slice AB (§11.2): chip seeding is ROSTER-FIRST with
-the cold-cache fallback — this route fetches no roster before Chat mounts, so
-what this rig pins IS the cold-cache fallback arm (the trio, zero requests,
-`data-source="fallback"` on the chips bar). The roster-first arm — a warm
-cache seeding the chips, the first send fetching the roster on its own
-gesture — is pinned by ux_sliceAB_test.py and the GroupChat unit suites.
-
-"Without any network request" is measured as the slice-B rig measured it: the
-app-shell rail fires its own requests identically on main (projects, runs —
-they are not this slice's), so the tap records EVERY /api/v1/* request and the
-assertion is on the DELTA the chat surface could add — the chat-surface set
-(`/api/v1/chats*`, `/api/v1/roster`) must be EMPTY on mount (§6.1: chips render
-from the cache/fallback, the binding UXFIX §2.4 constraint). The rail's own
-requests are reported informationally, never asserted against.
+The mount-network assertion is the same DELTA discipline as before: the tap
+records EVERY /api/v1/* request; the chat-surface set on mount must be
+EXACTLY the one named GET /roster (EC44's carve-out from the §2.4 budget) and
+zero /chats requests. The rail's own requests are reported informationally,
+never asserted against.
 
 Plus the §8.3 preservation list this rig can see: the chat first-run teaching
 state (EC7 — the surface teaches itself; pinned in depth by uxfix_slice4) and
@@ -34,7 +29,7 @@ EC13 (chip text reads in the SANS — asserted via computed style, with the
 token anatomy: --radius-full resolves to 9999px, --text-xs to 11px).
 
 Captures (§8.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/vision/:
-  feedback-C-chat-chips.png          Chat first-run, 3 default chips, no thread
+  feedback-C-chat-chips.png          Chat first-run, capable default chips, no thread
   feedback-C-chat-chips-removed.png  one chip removed, 2 remaining
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
@@ -62,10 +57,11 @@ ORIGIN = f"http://127.0.0.1:{FEEDBACK_PORT}"
 CHAT_URL = f"{ORIGIN}/p/q3-review-deck/chat"
 VSHOTS = REPO / "e2e" / "shots" / "vision"
 
-# §6.2's hardcoded fallback trio — what renders here: nothing on this route
-# fetches a roster before Chat mounts, so the cache is cold by construction.
-FALLBACK = ["writer", "reviewer", "planner"]
+# EC44: the cold route resolves the roster on mount; the default chips are
+# the CHAT-CAPABLE subset (acp object or absent key — pi's arm; explicit
+# null = incapable, offered only in the labeled picker).
 ROSTER_KEYS = ["claude", "codex", "agy", "pi"]
+CAPABLE = ["claude", "pi"]
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -125,6 +121,9 @@ with sync_playwright() as p:
     page.goto(CHAT_URL, wait_until="domcontentloaded")
     page.locator('[data-testid="chat-firstrun"]').wait_for(timeout=30000)
     page.locator('[data-testid="agent-chips-bar"]').wait_for(timeout=30000)
+    # EC44: the chips RESOLVE (the honest resolving row first, then roster-true
+    # chips) — wait for the resolved state before the census.
+    page.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
 
     fonts_ok = page.evaluate("() => document.fonts.status") is not None  # settle probe below
@@ -175,7 +174,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(VSHOTS / "feedback-C-chat-chips.png"))
 
     # ── AC 3: ✕ removes — count decrements, chip gone ──────────────────────────
-    page.locator('[data-testid="agent-chip"][data-agent="writer"] button').click()
+    page.locator('[data-testid="agent-chip"][data-agent="claude"] button').click()
     removed = page.evaluate(
         """() => ({
              barCount: document.querySelector('[data-testid="agent-chips-bar"]')?.dataset.count ?? null,
@@ -212,9 +211,9 @@ with sync_playwright() as p:
 report["steps"]["chips_first_render"] = {
     "ok": all([
         fonts_ok,
-        first_render["barCount"] == "3",
-        first_render["barSource"] == "fallback",  # slice AB §7.9-1's honesty attr
-        first_render["chipKeys"] == FALLBACK,
+        first_render["barCount"] == str(len(CAPABLE)),
+        first_render["barSource"] == "roster",  # EC44's honesty attr: chips are seats
+        first_render["chipKeys"] == CAPABLE,
         # §6.3 anatomy in tokens: --radius-full → 9999px, --text-xs → 11px,
         # EC13: the chip label reads in the SANS (Inter stack), 3px 8px 3px 6px.
         first_render["chipRadius"] == "9999px",
@@ -231,13 +230,14 @@ report["steps"]["chips_first_render"] = {
     "screenshot": str(VSHOTS / "feedback-C-chat-chips.png"),
 }
 report["steps"]["mount_network_delta"] = {
-    "ok": len(mount_chat_surface) == 0 and len(open_posts_on_mount) == 0,
+    # EC44: exactly the ONE named roster resolve — and nothing chat-shaped.
+    "ok": mount_chat_surface == [("GET", "/api/v1/roster")] and len(open_posts_on_mount) == 0,
     "chat_surface_requests_on_mount": mount_chat_surface,
     "openChat_posts_on_mount": len(open_posts_on_mount),
     "rail_owned_requests_ignored": mount_rail,
 }
 report["steps"]["chip_remove"] = {
-    "ok": removed["barCount"] == "2" and removed["chipKeys"] == ["reviewer", "planner"],
+    "ok": removed["barCount"] == "1" and removed["chipKeys"] == ["pi"],
     **removed,
     "screenshot": str(VSHOTS / "feedback-C-chat-chips-removed.png"),
 }
@@ -245,8 +245,9 @@ report["steps"]["add_agent_picker"] = {
     "ok": all([
         picker_options_ok,
         picker == ROSTER_KEYS,
-        # The roster fetch rode the CLICK: zero before, exactly one after.
-        roster_gets_before == 0,
+        # The mount already resolved the roster (EC44's one named request);
+        # the picker reads the warm cache — the click adds NO fetch.
+        roster_gets_before == 1,
         roster_gets_after == 1,
     ]),
     "picker_options": picker,
