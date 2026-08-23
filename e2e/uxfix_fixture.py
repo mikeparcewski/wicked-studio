@@ -147,8 +147,20 @@ Mutable switches (flipped over POST /__fixture between page loads):
   chat_reject_seats — slice AB (DES-UX-001 §7.9-4): cliKeys POST /chats
                     answers ok:false + a per-seat error (open-time
                     failed-with-reason). Default [].
+                    NOTE (fix J4 round 2): independent of this switch, POST
+                    /chats now mirrors the REAL daemon's roster contract —
+                    any cli NOT in ROSTER is rejected per-seat with the
+                    core's own sentence ("no ACP config for '<key>'",
+                    wicked-core acp_runner chat_ensure). The accept-anything
+                    fixture is what let the fallback-trio-on-the-wire class
+                    pass the rigs while the real daemon rejected every cold
+                    profile's first send.
   chat_send_fail  — slice AB (§7.9-2): POST /chats/<id>/messages answers a
                     500 {error} — the draft-surviving failure. Default False.
+  roster_fail     — fix J4 round 2 (§7.9-1): GET /api/v1/roster answers a
+                    500 {error} — the roster-unreachable branch, where a
+                    pristine first send must FAIL INLINE with nothing on the
+                    wire (the trio never ships). Default False.
   chat_deltas     — slice AB (§7.9-3): sends BUFFER interleaved chatDelta
                     chunks + a chatReply per live seat; POST /__fixture
                     {"chat_flush": true} broadcasts the buffered rounds in
@@ -347,6 +359,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #                       open turn 2 BEFORE turn 1's chunks arrive (the
          #                       §7.9-3 splice corpus).
          "chat_reject_seats": [], "chat_send_fail": False, "chat_deltas": False,
+         # Fix J4 round 2 (§7.9-1): GET /roster answers 500 — the
+         # roster-unreachable branch. A pristine first send must fail INLINE
+         # (draft kept, retry) with ZERO wire calls; the trio never ships.
+         "roster_fail": False,
          }
 state_lock = threading.Lock()
 
@@ -1636,7 +1652,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"contributors": REPO_CONTRIBUTORS})
             return True
         if path == "/api/v1/roster":
-            self._json(200, {"roster": ROSTER})
+            # Fix J4 round 2: the roster-unreachable branch, switch-gated.
+            with state_lock:
+                roster_down = state["roster_fail"]
+            if roster_down:
+                self._json(500, {"error": "roster unavailable (fixture)"})
+            else:
+                self._json(200, {"roster": ROSTER})
             return True
         # Slice J (§5.2): the decisions corpus — read on the search GESTURE only.
         if path == "/api/v1/governance/claims":
@@ -2336,27 +2358,41 @@ class W2Handler(SimpleHTTPRequestHandler):
                 return self._json(409, {"error": "not awaiting a human gate"})
             return self._json(200, {"status": "resumed"})
         # POST /api/v1/chats — open a chat: warm the asked-for seats (or the whole
-        # roster when `clis` is omitted, matching the daemon), every seat ok, instantly.
+        # roster when `clis` is omitted, matching the daemon), instantly.
+        # Fix J4 round 2 — the STRICT roster contract, always on: the real
+        # daemon warms a seat via wicked-core's chat_ensure, which answers
+        # "no ACP config for '<key>'" for any cli its roster does not carry
+        # (acp_runner.rs). The old accept-anything behavior is exactly what
+        # let a fallback-trio open pass the rigs while every REAL cold
+        # profile's first send failed — that class can never pass here again.
         if path == "/api/v1/chats":
             clis = body.get("clis") or [s["key"] for s in ROSTER]
             chat_id = body.get("chatId") or "fixture-chat"
+            known = {s["key"] for s in ROSTER}
             # Slice AB (§7.9-4): seats named by `chat_reject_seats` answer the
             # daemon's real per-seat shape — ok:false with an error the chip
             # must wear as failed-with-reason. Only accepted seats warm.
             with state_lock:
                 reject = set(state["chat_reject_seats"])
+
+            def seat(k: str) -> dict:
+                if k not in known:
+                    return {"cliKey": k, "ok": False, "error": f"no ACP config for '{k}'"}
+                if k in reject:
+                    return {"cliKey": k, "ok": False, "error": f"unknown agent '{k}'"}
+                return {"cliKey": k, "ok": True}
+
+            seats = [seat(k) for k in clis]
             with chat_state_lock:
-                chat_warm_seats[chat_id] = [k for k in clis if k not in reject]
-                chat_dead_seats.setdefault(chat_id, set())
-                chat_send_count.setdefault(chat_id, 0)
-            return self._json(201, {
-                "chatId": chat_id,
-                "seats": [
-                    {"cliKey": k, "ok": True} if k not in reject
-                    else {"cliKey": k, "ok": False, "error": f"unknown agent '{k}'"}
-                    for k in clis
-                ],
-            })
+                warmed = [s["cliKey"] for s in seats if s["ok"]]
+                if warmed or chat_id in chat_warm_seats:
+                    chat_warm_seats.setdefault(chat_id, [])
+                    for k in warmed:
+                        if k not in chat_warm_seats[chat_id]:
+                            chat_warm_seats[chat_id].append(k)
+                    chat_dead_seats.setdefault(chat_id, set())
+                    chat_send_count.setdefault(chat_id, 0)
+            return self._json(201, {"chatId": chat_id, "seats": seats})
         # POST /api/v1/chats/<id>/messages — accept the fan-out; replies would
         # stream over /ws, which this fixture leaves to the narration loop —
         # UNLESS the slice-K `chat_replies` switch is on: then each send queues
