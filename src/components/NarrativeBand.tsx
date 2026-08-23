@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
 import type { SessionView } from '../api/types.js';
+import { ledeCounts, observedSpend, WINDOW_LABEL_STYLE, windowWord, type LedeCounts } from '../board/metrics.js';
 import type { BoardProject } from '../hooks/useBoardModel.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { useDocThreadStore } from '../store/docThread.js';
 import { useGateStore } from '../store/gates.js';
-import { useRuntimeStore, type LoggedEvent } from '../store/runtime.js';
+import { useRuntimeStore } from '../store/runtime.js';
 import { ActivityRiver } from './ActivityRiver.js';
-import { RIVER_WINDOW_MS } from './ActivityRiver.js';
-import { outcomeOf, RunOutcomeBar } from './RunOutcomeBar.js';
+import { RunOutcomeBar } from './RunOutcomeBar.js';
 import { TokenBurnSparkline } from './TokenBurnSparkline.js';
 
 /**
@@ -24,56 +24,10 @@ import { TokenBurnSparkline } from './TokenBurnSparkline.js';
  * (§7.3; the wire has no such thing).
  */
 
-const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);
-const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
-
-export interface LedeCounts {
-  /** Terminal runs whose last OBSERVED clock is inside the 24h window. */
-  finished: number;
-  passed: number;
-  failed: number;
-  /** Runs waiting on a human right now. */
-  gates: number;
-  /** Runs moving under their own power right now. */
-  live: number;
-  /** Board projects (the quiet phrase's subject). */
-  projects: number;
-}
-
-/** Fold the honest per-run clocks into the lede's counts — exported for tests. */
-export function ledeCounts(
-  runs: SessionView[],
-  attachedAt: Record<string, number>,
-  logs: Record<string, LoggedEvent[]>,
-  failedAt: Record<string, number>,
-  projects: number,
-  now: number,
-): LedeCounts {
-  const start = now - RIVER_WINDOW_MS;
-  let finished = 0, passed = 0, failedN = 0, gates = 0, live = 0;
-  for (const v of runs) {
-    if (v.session.archived_at != null) continue;
-    const id = v.session.id;
-    const status = v.session.status;
-    if (status === 'awaiting_human') gates += 1;
-    if (ACTIVE.has(status)) live += 1;
-    if (!TERMINAL.has(status)) continue;
-    // A run "finished while you were away" iff its LAST observed clock —
-    // attach, arrival-stamped frames, or the failure tail — is in-window.
-    const points = [
-      attachedAt[id],
-      failedAt[id],
-      ...(logs[id] ?? []).map((e) => e.ts),
-    ].filter((t): t is number => typeof t === 'number');
-    if (points.length === 0) continue; // clockless: the river counts it unplaced
-    const last = Math.max(...points);
-    if (last < start || last > now) continue;
-    finished += 1;
-    if (outcomeOf(status) === 'fail') failedN += 1;
-    else passed += 1;
-  }
-  return { finished, passed, failed: failedN, gates, live, projects };
-}
+// Slice W (DES-UX-001 §5.3): the lede's fold moved to THE one metrics module —
+// its gates/live numbers are now `runStats`' own, so the lede and the bottom
+// bar cannot diverge. Re-exported so standing importers keep one source.
+export { ledeCounts, type LedeCounts } from '../board/metrics.js';
 
 export interface LedeSegment {
   text: string;
@@ -142,18 +96,11 @@ export function NarrativeBand({ items, runs, attachedAt, failedAt, navigate, now
     [runs, attachedAt, logs, failedAt, items.length, at],
   );
 
-  // Observed spend — the SAME fold as the margin sparkline (real costUsd only).
+  // Observed spend — literally the same selector as the bottom bar and the
+  // margin sparkline's endpoint (slice W: one selector per metric, §5.3).
   const spend = useMemo(() => {
-    let total = 0, seen = false;
-    for (const log of Object.values(logs)) {
-      for (const entry of log) {
-        if (entry.type === 'cliUsage' && typeof entry.costUsd === 'number') {
-          total += entry.costUsd;
-          seen = true;
-        }
-      }
-    }
-    return seen ? total : null;
+    const s = observedSpend(logs);
+    return s.frames > 0 ? s.total : null;
   }, [logs]);
 
   const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
@@ -199,14 +146,26 @@ export function NarrativeBand({ items, runs, attachedAt, failedAt, navigate, now
             ),
           )}
         </p>
+        {/* EC39 (slice W): the lede's numbers name their window — the river's
+            own stated 24h, worn as the §5.4 dim-mono suffix. */}
+        <span data-testid="lede-window" data-window="24h" style={{ ...WINDOW_LABEL_STYLE, flexShrink: 0 }}>
+          {windowWord('24h')}
+        </span>
         {spend !== null && (
-          <a {...link('/make')} data-testid="lede-spend"
-             style={{
-               marginLeft: 'auto', flexShrink: 0, textDecoration: 'none',
-               fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
-             }}>
-            ${spend.toFixed(2)} observed
-          </a>
+          <>
+            <a {...link('/make')} data-testid="lede-spend"
+               data-window="session"
+               style={{
+                 marginLeft: 'auto', flexShrink: 0, textDecoration: 'none',
+                 fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
+               }}>
+              ${spend.toFixed(2)} observed
+            </a>
+            {/* EC39: the spend's window — what this page observed this session. */}
+            <span data-testid="lede-spend-window" data-window="session" style={{ ...WINDOW_LABEL_STYLE, flexShrink: 0 }}>
+              {windowWord('session')}
+            </span>
+          </>
         )}
       </div>
 

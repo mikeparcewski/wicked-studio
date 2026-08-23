@@ -7,7 +7,7 @@ import { gateOpenPath } from '../board/gateActions.js';
 import type { OpenGate } from '../store/gates.js';
 import type { LoggedEvent } from '../store/runtime.js';
 import type { VersionLanding } from '../store/docThread.js';
-import { outcomeOf } from './RunOutcomeBar.js';
+import { outcomeOf, WINDOW_24H_MS } from '../board/metrics.js';
 
 /**
  * The activity river (DES-FEEDBACK-003 §7.3, slice Q): the landing page's
@@ -25,7 +25,9 @@ import { outcomeOf } from './RunOutcomeBar.js';
  * (`.wk-river-gate-waiting`, reduced-motion honored in global.css).
  */
 
-export const RIVER_WINDOW_MS = 24 * 3_600_000;
+// Slice W (§5.3): the river's window IS the shared 24h window — one constant,
+// so the lede's counts and the river's picture can never disagree on span.
+export const RIVER_WINDOW_MS: number = WINDOW_24H_MS;
 /** §7.3: at most this many lanes; the rest collapse into `({n} quiet)`. */
 export const MAX_LANES = 6;
 
