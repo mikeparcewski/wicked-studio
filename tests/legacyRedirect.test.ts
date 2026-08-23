@@ -131,3 +131,23 @@ describe('useLegacyRedirect (DES-MERGE-001 §1.5 — no bookmark breaks)', () =>
     expect(listProjects).not.toHaveBeenCalled();
   });
 });
+
+describe('slice Y (DES-UX-001 §7.4): the bare /runs listing retires into /work', () => {
+  const bare = { panel: 'runs', runId: null, projectId: null, mode: null, showLaunch: false };
+
+  it('/runs → /work, replacing the history entry, with no membership lookup', () => {
+    window.history.replaceState(null, '', '/runs');
+    const navigate = vi.fn();
+    renderHook(() => useLegacyRedirect(bare, navigate));
+    expect(navigate).toHaveBeenCalledWith('/work', { replace: true });
+    expect(listProjects).not.toHaveBeenCalled();
+  });
+
+  it('carries the search string — /runs?filter=failed keeps its failure context', () => {
+    window.history.replaceState(null, '', '/runs?filter=failed');
+    const navigate = vi.fn();
+    renderHook(() => useLegacyRedirect(bare, navigate));
+    expect(navigate).toHaveBeenCalledWith('/work?filter=failed', { replace: true });
+    window.history.replaceState(null, '', '/');
+  });
+});

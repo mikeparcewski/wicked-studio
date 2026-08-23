@@ -78,7 +78,7 @@ describe('composeLede — §7.3 grammar, every drop-out case', () => {
   it('each numeric segment names a real destination (§7.3 links)', () => {
     const full = composeLede({ finished: 4, passed: 3, failed: 1, gates: 2, live: 0, projects: 5 });
     const hrefs = full.segments.filter((s) => s.href !== null).map((s) => s.href);
-    expect(hrefs).toEqual(['/runs', '#needs-you']);
+    expect(hrefs).toEqual(['/work', '#needs-you']);
   });
 });
 
@@ -153,7 +153,7 @@ describe('<NarrativeBand> — composition on screen', () => {
       'While you were away: 1 run finished — 1 passed — and 1 gate is waiting on you.',
     );
     const links = [...lede.querySelectorAll('a[data-testid="lede-segment"]')];
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/runs', '#needs-you']);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/work', '#needs-you']);
     // §8.5: the two surviving slice-E tiles live on as margin notes.
     const margin = screen.getByTestId('river-margin');
     expect(margin.querySelector('[data-testid="run-outcome-bar"]')).not.toBeNull();

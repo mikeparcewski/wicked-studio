@@ -948,7 +948,7 @@ function RunChat({
           <div className="flex flex-col gap-3">
             {/* slice Y (§7.4): the banner's "All runs ›" is a FAILURE-CONTEXT
                 entry — it lands on /work with the Failed filter active. */}
-            <FailureBanner view={view} log={log} navigate={navigate} />
+            <FailureBanner view={view} log={log} {...(navigate === undefined ? {} : { navigate })} />
             <VerdictDetail runId={session.id} units={ordered} />
             <UnitList runId={session.id} units={ordered} onOpenFile={setEvidenceFile} />
           </div>

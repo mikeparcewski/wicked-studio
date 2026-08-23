@@ -118,12 +118,13 @@ describe('RunsSection (§1.4 DOM)', () => {
     expect(navigate).toHaveBeenCalledWith('/p/proj/build/r-42');
   });
 
-  it('keeps "All runs ›" at the bottom of the section as a real /runs link', () => {
+  // Slice Y (DES-UX-001 §7.4): the target re-pointed to /work, the canonical surface.
+  it('keeps "All runs ›" at the bottom of the section as a real /work link', () => {
     const navigate = vi.fn();
     render(<RunsSection runs={[]} runPath={flat} navigate={navigate} />);
     const hatch = screen.getByTestId('rail-all-runs');
-    expect(hatch).toHaveAttribute('href', '/runs');
+    expect(hatch).toHaveAttribute('href', '/work');
     fireEvent.click(hatch);
-    expect(navigate).toHaveBeenCalledWith('/runs');
+    expect(navigate).toHaveBeenCalledWith('/work');
   });
 });
