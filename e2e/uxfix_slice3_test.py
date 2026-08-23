@@ -17,10 +17,11 @@ What it asserts (slice-3 DOM ACs, as amended by §8.7):
      rail-section-projects / rail-section-repos); the retired section labels
      and their empty strings ("Chats", "Work", "No chats yet", "No work yet")
      appear nowhere in the rail's text, and the old near-synonym verb labels
-     ("Do Work", "New Repository") appear nowhere on the page — the headings'
-     ＋ icons carry aria-labels in the §3.1 "New <path>" grammar instead
-     ("New Chat" is that grammar's honest spelling for Chat's ＋ now, so it
-     leaves the banned list).
+     ("Do Work") appear nowhere on the page — the headings' ＋ icons carry
+     aria-labels in the "New <noun>" grammar instead ("New Chat" left the
+     banned list when it became Chat's honest ＋ spelling; "New Repository"
+     left it with slice X2's §7.10 singular-grammar fix, where it became the
+     Repositories ＋'s own corrected label).
   2. The Projects ACCORDION lists ATTENTION-ORDERED rows: expanded, its rows
      settle to the same decayed-score order as the board's NEEDS YOU band —
      q3-review-deck → api-migration → auth-refactor → upload-endpoint —
@@ -89,7 +90,11 @@ EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor", "upload-en
 # "Work" are checked against the RAIL's text only — the board legitimately
 # renders run problems containing the word "work" in prose.
 RAIL_BANNED = ["Chats", "Work", "No chats yet", "No work yet"]
-PAGE_BANNED = ["Do Work", "New Repository"]
+# RE-SCOPED by slice X2 (DES-UX-001 §7.10): "New Repository" leaves the banned
+# list — it is now the CORRECTED singular grammar of the Repositories ＋ itself
+# (the old standalone verb affordance it used to catch is long retired; the
+# heading-count assert below still pins that anatomy). "Do Work" stays banned.
+PAGE_BANNED = ["Do Work"]
 
 console_errors: list[str] = []
 
