@@ -250,6 +250,39 @@ with sync_playwright() as p:
         "() => document.querySelector('[data-testid=\"terminal\"]') === null", timeout=5000)
     check("shell_focused_and_escape_closes", bool(focused))
 
+    # 3d. Stacked layers — ONE press, ONE layer (§7.7's "one contract"): bell
+    # popover + Operator-shell modal + palette stacked; each Escape closes
+    # exactly the top rung — palette first, then the modal, then the popover.
+    STACK = """() => ({
+      palette: !!document.querySelector('[data-testid="palette-input"]'),
+      modal: !!document.querySelector('[data-testid="terminal"]'),
+      bell: !!document.querySelector('[data-testid="bell-popover"]'),
+    })"""
+    page.get_by_title("Notifications").click()
+    page.locator('[data-testid="bell-popover"]').wait_for(timeout=5000)
+    page.keyboard.press("Control+k")           # palette over the popover (no mousedown)
+    page.locator('[data-testid="palette-input"]').wait_for(timeout=5000)
+    page.keyboard.type("> open terminal")
+    page.keyboard.press("Enter")               # modal opens; palette closes itself
+    page.locator('[data-testid="terminal"]').wait_for(timeout=10000)
+    page.wait_for_timeout(300)
+    page.evaluate("() => (document.activeElement)?.blur?.()")
+    page.keyboard.press("Control+k")           # palette re-opens over the modal
+    page.locator('[data-testid="palette-input"]').wait_for(timeout=5000)
+    stack0 = page.evaluate(STACK)
+    presses = []
+    for _ in range(3):
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(250)
+        presses.append(page.evaluate(STACK))
+    check(
+        "escape_one_press_one_layer",
+        stack0 == {"palette": True, "modal": True, "bell": True}
+        and presses[0] == {"palette": False, "modal": True, "bell": True}
+        and presses[1] == {"palette": False, "modal": False, "bell": True}
+        and presses[2] == {"palette": False, "modal": False, "bell": False},
+        stack=stack0, presses=presses)
+
     # ════ Scene 4 (§7.8): preflight, auto-attach, gate posture, previews ══════
     set_fixture(ORIGIN, repo=True, repo_member=True, project_dto=True)
     run_posts: list = []

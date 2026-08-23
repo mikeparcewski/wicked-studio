@@ -82,6 +82,12 @@ export function setShortcutsPaletteOpen(open: boolean): void {
   paletteOpen = open;
 }
 
+/** §7.7 chain: the modal family's local listeners yield while the palette is
+ *  open (palette closes before modal/popover) — this is their read. */
+export function isShortcutsPaletteOpen(): boolean {
+  return paletteOpen;
+}
+
 function dispatch(e: KeyboardEvent): void {
   if (isTypingContext(e)) return;
   for (const entry of table) {

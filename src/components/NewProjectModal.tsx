@@ -1,7 +1,8 @@
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { api } from '../api/client.js';
 import { modePath } from '../hooks/useRoute.js';
 import { useProjectsStore } from '../store/projects.js';
+import { useModalEscape } from './Modal.js';
 
 /**
  * The new-project flow (DES-FEEDBACK-001 §1.3, slice A): a minimal inline
@@ -49,11 +50,8 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    function handler(e: KeyboardEvent): void { if (e.key === 'Escape') onClose(); }
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+  // §7.7 (slice AC): the shared modal-family Escape — one press, one layer.
+  useModalEscape(onClose);
 
   const nameValid = PROJECT_NAME_RE.test(name);
 

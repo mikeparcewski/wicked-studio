@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { unreadCount as unreadCountOf, WINDOW_LABEL_STYLE, windowWord } from '../board/metrics.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
-import { useLayerStore } from '../store/layers.js';
+import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useNotificationStore } from '../store/notifications.js';
 import type { NotifKind } from '../store/notifications.js';
 import { useProvenanceStore } from '../store/provenance.js';
@@ -92,6 +92,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
     guard: () =>
       useLayerStore.getState().bellOpen &&
       !useLayerStore.getState().shortcutOverlayOpen &&
+      !anyModalOpen() && // a stacked modal closes first (one press, one layer)
       !useRunsPanelStore.getState().expanded,
     handler: () => useLayerStore.getState().setBellOpen(false),
   }], []);

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { EntityMode, LaunchRunBody, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
+import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
 import { useGateStore } from '../store/gates.js';
+import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill } from '../store/retryPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
@@ -347,10 +349,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }, [popoverOpen]);
 
   // ── Close popover on Escape ────────────────────────────────────────────────
+  // §7.7 (slice AC): a popover rung — yields to the '?' overlay, the palette,
+  // and any open modal above it (one press, one layer).
   useEffect(() => {
     if (!popoverOpen) return;
     function handleKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') setPopoverOpen(false);
+      if (e.key !== 'Escape') return;
+      if (useLayerStore.getState().shortcutOverlayOpen) return;
+      if (isShortcutsPaletteOpen()) return;
+      if (anyModalOpen()) return;
+      setPopoverOpen(false);
     }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);

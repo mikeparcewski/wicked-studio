@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { clearBatchSelection, toggleBatchSelect, useBatchGateStore } from '../board/batchGates.js';
 import { decideGate, gateOpenPath } from '../board/gateActions.js';
 import { isSimpleGate, type OpenGate } from '../store/gates.js';
-import { useLayerStore } from '../store/layers.js';
+import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
 import type { Navigate } from './useRoute.js';
 import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
@@ -219,7 +219,8 @@ export function useTriageCursor(
           (selRef.current !== null || useBatchGateStore.getState().selected.length > 0) &&
           !useRunsPanelStore.getState().expanded &&
           !useLayerStore.getState().shortcutOverlayOpen &&
-          !useLayerStore.getState().bellOpen,
+          !useLayerStore.getState().bellOpen &&
+          !anyModalOpen(),
         handler: () => {
           setNoteFor(null);
           setSelectedKey(null);

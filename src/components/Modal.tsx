@@ -1,6 +1,7 @@
-import { useId, useEffect } from 'react';
+import { useId, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { useLayerStore } from '../store/layers.js';
+import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
+import { isTopModal, useLayerStore } from '../store/layers.js';
 
 interface Props {
   title: string;
@@ -16,13 +17,37 @@ interface Props {
  * and sign-in terminals included. The one yield is the '?' overlay, which sits
  * above modals in the §7.7 chain and closes first.
  */
-export function Modal({ title, onClose, children }: Props): React.ReactElement {
-  const titleId = useId();
+/**
+ * The modal family's shared Escape wiring (§7.7, one press = one layer):
+ * registers the mounted modal in the layer ledger (so the bell, the runs
+ * sheet, and the triage selection yield beneath it) and closes it on Escape —
+ * yielding to the '?' overlay and the palette above it in the chain, and to
+ * any LATER-opened modal (only the topmost answers). Used by every
+ * modal-family component: Modal, RepoGraphModal, NewProjectModal.
+ */
+export function useModalEscape(onClose: () => void): void {
+  const modalId = useRef<number | null>(null);
+  useEffect(() => {
+    const { pushModal, popModal } = useLayerStore.getState();
+    const id = pushModal();
+    modalId.current = id;
+    return () => {
+      modalId.current = null;
+      popModal(id);
+    };
+  }, []);
 
   useEffect(() => {
     function handler(e: KeyboardEvent): void {
       if (e.key !== 'Escape') return;
       if (useLayerStore.getState().shortcutOverlayOpen) return; // overlay closes first
+      if (isShortcutsPaletteOpen()) return; // palette closes before modal (§7.7 chain)
+      if (!isTopModal(modalId.current)) return; // a later-opened modal closes first
+      // One press, one layer: this modal CLAIMS the press — the registry's
+      // window-bubble dispatch (bell, sheet, triage) never sees it. (React
+      // may flush this modal's unmount between the capture and bubble phases,
+      // so a ledger check downstream is not enough.)
+      e.stopPropagation();
       onClose();
     }
     // CAPTURE phase: an embedded widget (xterm cancels the keydown it handles)
@@ -30,6 +55,11 @@ export function Modal({ title, onClose, children }: Props): React.ReactElement {
     document.addEventListener('keydown', handler, true);
     return () => document.removeEventListener('keydown', handler, true);
   }, [onClose]);
+}
+
+export function Modal({ title, onClose, children }: Props): React.ReactElement {
+  const titleId = useId();
+  useModalEscape(onClose);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
       <div

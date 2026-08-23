@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { RepoEntry, CodeGraphNode, CodeGraphEdge, CodeGraphData, DomainGraph, DomainCoverage } from '../api/types.js';
 import { CytoGraph } from './CytoGraph.js';
 import { HotspotsView } from './HotspotsView.js';
+import { useModalEscape } from './Modal.js';
 
 interface Props {
   repo: RepoEntry;
@@ -466,11 +467,8 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
     }
   }
 
-  useEffect(() => {
-    function handler(e: KeyboardEvent): void { if (e.key === 'Escape') onClose(); }
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+  // §7.7 (slice AC): the shared modal-family Escape — one press, one layer.
+  useModalEscape(onClose);
 
   useEffect(() => {
     setLoading(true);

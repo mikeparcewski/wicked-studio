@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getConversation, getVersions, interactiveDocUrl, listDocs } from '../api/interactive.js';
 import { readAnchors } from '../interactive/threadStopgap.js';
 import { useDocsCache } from '../store/docsCache.js';
-import { useLayerStore } from '../store/layers.js';
+import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
@@ -226,8 +226,11 @@ function DocFrame({
     chord: { key: 'escape' },
     group: 'panels',
     description: 'Exit the version compare lens',
-    // §7.7 chain: the '?' overlay closes before the compare lens (slice AC).
-    guard: () => cmpRef.current !== null && !useLayerStore.getState().shortcutOverlayOpen,
+    // §7.7 chain: the '?' overlay and any modal close before the compare lens.
+    guard: () =>
+      cmpRef.current !== null &&
+      !useLayerStore.getState().shortcutOverlayOpen &&
+      !anyModalOpen(),
     handler: () => {
       setCmp(null);
       setOverlayOn(false);

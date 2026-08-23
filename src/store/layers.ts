@@ -19,13 +19,40 @@ interface LayerStore {
   shortcutOverlayOpen: boolean;
   /** The bell's notifications popover — the modal/popover rung of the chain. */
   bellOpen: boolean;
+  /** The open modal family, in mount (= open) order — last is topmost. The
+   *  rungs beneath modal/popover (bell, sheet, triage, compare lens) yield
+   *  while ANY modal is open, and only the TOP modal answers Escape, so one
+   *  press closes exactly one layer even when layers stack. */
+  modalIds: number[];
   setShortcutOverlayOpen: (open: boolean) => void;
   setBellOpen: (open: boolean) => void;
+  pushModal: () => number;
+  popModal: (id: number) => void;
 }
+
+let nextModalId = 1;
 
 export const useLayerStore = create<LayerStore>((set) => ({
   shortcutOverlayOpen: false,
   bellOpen: false,
+  modalIds: [],
   setShortcutOverlayOpen: (open) => set({ shortcutOverlayOpen: open }),
   setBellOpen: (open) => set({ bellOpen: open }),
+  pushModal: () => {
+    const id = nextModalId++;
+    set((s) => ({ modalIds: [...s.modalIds, id] }));
+    return id;
+  },
+  popModal: (id) => set((s) => ({ modalIds: s.modalIds.filter((m) => m !== id) })),
 }));
+
+/** True while any modal-family layer is open (the registry guards' read). */
+export function anyModalOpen(): boolean {
+  return useLayerStore.getState().modalIds.length > 0;
+}
+
+/** True when `id` is the topmost open modal — the one Escape may close. */
+export function isTopModal(id: number | null): boolean {
+  const ids = useLayerStore.getState().modalIds;
+  return id !== null && ids[ids.length - 1] === id;
+}
