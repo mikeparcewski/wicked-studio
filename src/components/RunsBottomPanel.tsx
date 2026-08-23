@@ -218,14 +218,16 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
 
   const allRuns = (testId: string): React.ReactElement => (
     <a
-      href="/runs"
+      href="/work"
       data-testid={testId}
       onClick={(e) => {
         // A real link (§5.3) — the ONE escape hatch to the flat list, not an
         // expand gesture, so the click must not bubble into the toggle.
+        // Target: /work, the ONE canonical runs surface (DES-UX-001 §7.4,
+        // slice Y — only the href moved; the sheet itself is untouched, §9).
         e.preventDefault();
         e.stopPropagation();
-        navigate('/runs');
+        navigate('/work');
       }}
       className="shrink-0 transition-opacity hover:opacity-80"
       style={{ color: 'var(--accent)', textDecoration: 'none' }}

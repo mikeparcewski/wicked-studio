@@ -107,13 +107,14 @@ export function RunsSection({ runs, runPath, navigate }: Props): React.ReactElem
           </div>
         </button>
       ))}
-      {/* The ONE escape hatch to the flat cross-project run lists (§2.3) — it
-          stays at the bottom of the section (§1.4). */}
+      {/* The ONE escape hatch to the flat cross-project run list (§2.3) — it
+          stays at the bottom of the section (§1.4). Target: /work, the ONE
+          canonical runs surface (DES-UX-001 §7.4, slice Y). */}
       <div className="px-3 pt-1 pb-1">
         <a
-          href="/runs"
+          href="/work"
           data-testid="rail-all-runs"
-          onClick={(e) => { e.preventDefault(); navigate('/runs'); }}
+          onClick={(e) => { e.preventDefault(); navigate('/work'); }}
           className="text-[11px] font-mono transition-opacity hover:opacity-80"
           style={{ color: 'var(--accent)', textDecoration: 'none' }}
         >

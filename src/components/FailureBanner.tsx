@@ -4,9 +4,28 @@ import type { LoggedEvent } from '../store/runtime.js';
 interface Props {
   view: SessionView;
   log: LoggedEvent[];
+  /** When provided, the banner carries the §7.4 failure-context "All runs ›"
+   *  link (DES-UX-001 slice Y): it lands on /work with the Failed filter
+   *  active — arriving FROM a failure keeps the failure lens. */
+  navigate?: (path: string) => void;
 }
 
-export function FailureBanner({ view, log }: Props): React.ReactElement | null {
+/** The failure-context all-runs entry (§7.4): /work, Failed filter active. */
+function AllRunsLink({ navigate }: { navigate: (path: string) => void }): React.ReactElement {
+  return (
+    <a
+      href="/work?filter=failed"
+      data-testid="failure-all-runs"
+      onClick={(e) => { e.preventDefault(); navigate('/work?filter=failed'); }}
+      className="mt-2 inline-block transition-opacity hover:opacity-80"
+      style={{ color: 'var(--accent)', textDecoration: 'none' }}
+    >
+      All runs ›
+    </a>
+  );
+}
+
+export function FailureBanner({ view, log, navigate }: Props): React.ReactElement | null {
   const { status } = view.session;
   if (status !== 'failed' && status !== 'cancelled') return null;
 
@@ -26,6 +45,7 @@ export function FailureBanner({ view, log }: Props): React.ReactElement | null {
         }}
       >
         Run cancelled.
+        {navigate !== undefined && <div><AllRunsLink navigate={navigate} /></div>}
       </div>
     );
   }
@@ -52,6 +72,7 @@ export function FailureBanner({ view, log }: Props): React.ReactElement | null {
           ))}
         </ul>
       )}
+      {navigate !== undefined && <AllRunsLink navigate={navigate} />}
     </div>
   );
 }

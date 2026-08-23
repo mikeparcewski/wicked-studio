@@ -175,9 +175,11 @@ export function App(): React.ReactElement {
   );
 
   // Outside the project shell, "back" belongs to the list the run was opened from —
-  // `/runs`, not the board (§1.5): `/` is now a different surface, not this one's parent.
+  // `/work`, the ONE canonical runs surface (DES-UX-001 §7.4, slice Y — the bare
+  // `/runs` listing retired into a redirect): `/` is a different surface, not this
+  // one's parent.
   const onNavigateBack = useCallback(
-    () => navigate(projectId && mode ? modePath(projectId, mode) : '/runs'),
+    () => navigate(projectId && mode ? modePath(projectId, mode) : '/work'),
     [navigate, projectId, mode],
   );
 
@@ -455,7 +457,9 @@ export function App(): React.ReactElement {
     if (panel === 'work') {
       return (
         <div className="flex-1 overflow-y-auto">
-          <WorkPage runs={runs} selectedRunId={runId} onSelect={selectRun} navigate={navigate} />
+          {/* `search` carries §7.4's context-sensitive entry (slice Y): arriving
+              from a failure context (`?filter=failed`) lands with that tab active. */}
+          <WorkPage runs={runs} selectedRunId={runId} onSelect={selectRun} navigate={navigate} search={search} />
         </div>
       );
     }

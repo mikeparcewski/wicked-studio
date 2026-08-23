@@ -12,6 +12,16 @@ interface Props {
   selectedRunId: string | null;
   onSelect: (id: string) => void;
   navigate: (path: string) => void;
+  /** The current URL search string — §7.4's context-sensitive entry (slice Y):
+   *  `?filter=failed` (an all-runs affordance in a failure context) lands with
+   *  the Failed tab active. Anything not a tab id is ignored. */
+  search?: string;
+}
+
+/** The routed status filter, or null when the search carries none/garbage. */
+function routedFilter(search: string): StatusTab | null {
+  const raw = new URLSearchParams(search).get('filter');
+  return raw !== null && TABS.some((t) => t.id === raw) ? (raw as StatusTab) : null;
 }
 
 const isTerminal = (s: string) => ['completed', 'failed', 'cancelled'].includes(s);
@@ -26,9 +36,16 @@ const TABS: { id: StatusTab; label: string }[] = [
   { id: 'failed', label: 'Failed' },
 ];
 
-export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): React.ReactElement {
+export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState<StatusTab>('all');
+  const entryFilter = routedFilter(search);
+  const [tab, setTab] = useState<StatusTab>(entryFilter ?? 'all');
+  // The page stays mounted across /work navigations, so a LATER entry that
+  // carries `?filter=` (a failure-context affordance clicked while already
+  // here) re-points the tab too; tab clicks afterwards win as local state.
+  useEffect(() => {
+    if (entryFilter !== null) setTab(entryFilter);
+  }, [entryFilter]);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const { range, setRange, filter: filterByRange } = useTimeRange('30d');
   // Archived runs (crew#265) are WRITTEN OFF: excluded from the default list server-side, so the
@@ -185,6 +202,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate }: Props): Re
       <div
         role="tablist"
         aria-label="Filter by status"
+        data-filter={tab}
         className="px-8 pb-3 flex items-center gap-2"
         onKeyDown={e => {
           const ids = TABS.map(t => t.id);
