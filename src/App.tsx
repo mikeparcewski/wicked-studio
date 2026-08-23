@@ -119,7 +119,7 @@ export function App(): React.ReactElement {
   }, []);
 
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
-  useLegacyRedirect({ panel, runId, projectId, mode, showLaunch }, navigate);
+  useLegacyRedirect({ panel, runId, projectId, mode, showLaunch, chatMode }, navigate);
 
   // FINDING-013: /ws has no late-join replay, so a page reloaded against a run shows an empty Burn
   // panel even though usage was durably recorded. When the selected run has no frames yet (a reload
@@ -272,9 +272,25 @@ export function App(): React.ReactElement {
   // In the project shell the new chat is FILED into the project at open time
   // (DES-FEEDBACK-001 §5.1 — `projectId` on the POST body, never a silent unfiled
   // thread); outside it, GroupChat renders its own ProjectSwitcher (§5.2).
-  const groupChatSurface = (repo: string | null, pid: string | null = null): React.ReactElement => (
+  // `routedChatId`/`reflectUrl` (J4/C6): on the FLAT chat routes the session's
+  // id lives in the URL — `/chat/:id` the moment the session exists — so an
+  // opened chat is findable again after navigating away. The project shell's
+  // chat keeps its own `/p/:pid/chat` address and does not reflect.
+  const groupChatSurface = (
+    repo: string | null,
+    pid: string | null = null,
+    routedChatId: string | null = null,
+    reflectUrl = false,
+  ): React.ReactElement => (
     <div className="flex-1 overflow-hidden">
-      <GroupChat repoId={repo} onBack={onNavigateBack} projectId={pid} navigate={navigate} />
+      <GroupChat
+        repoId={repo}
+        onBack={onNavigateBack}
+        projectId={pid}
+        navigate={navigate}
+        routedChatId={routedChatId}
+        reflectUrl={reflectUrl}
+      />
     </div>
   );
 
@@ -508,13 +524,16 @@ export function App(): React.ReactElement {
         </div>
       );
     }
+    // CHAT: the group-chat surface (warm seats + fan-out), not a run (crew#165).
+    // Checked BEFORE the home-dashboard fallback: `/chat/:id` (J4/C6) carries no
+    // runId/showLaunch and must land here, not on the dashboard. `artifactId`
+    // is the routed session id; the flat routes reflect the live id in the URL.
+    if (chatMode && selected === null) {
+      return groupChatSurface(repoId, null, artifactId, true);
+    }
     // Home dashboard: no run selected and not launching — three-panel home view + manager controls
     if (panel === 'runs' && !runId && !selected && !showLaunch) {
       return dashboardSurface();
-    }
-    // NEW CHAT: the group-chat surface (warm seats + fan-out), not a run (crew#165).
-    if (chatMode && selected === null) {
-      return groupChatSurface(repoId);
     }
     // Run selected or launch form
     return runSurface();

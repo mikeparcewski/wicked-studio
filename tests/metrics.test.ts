@@ -81,8 +81,20 @@ describe('outcomeTotals24h / failedCount24h — window "24h" on the attach clock
 
   it('buckets on the honest clock; clockless/outside runs are unplaced', () => {
     expect(outcomeTotals24h(W2, attached, NOW)).toEqual({
-      run: 1, gate: 1, fail: 1, done: 1, unplaced: 2,
+      run: 1, gate: 1, fail: 1, cancelled: 0, done: 1, unplaced: 2,
     });
+  });
+
+  it('cancelled is its own bucket — never folded into fail (J5/A5)', () => {
+    const runs = [
+      makeView({ id: 'r-cx', status: 'cancelled' }),
+      makeView({ id: 'r-fx', status: 'failed' }),
+    ];
+    const clocks = { 'r-cx': NOW - HOUR, 'r-fx': NOW - 2 * HOUR };
+    expect(outcomeTotals24h(runs, clocks, NOW)).toEqual({
+      run: 0, gate: 0, fail: 1, cancelled: 1, done: 0, unplaced: 0,
+    });
+    expect(failedCount24h(runs, clocks, NOW)).toBe(1);
   });
 
   it('failedCount24h vs failedCountAll: two labeled truths, not a contradiction', () => {
@@ -90,11 +102,11 @@ describe('outcomeTotals24h / failedCount24h — window "24h" on the attach clock
     expect(failedCountAll(W2)).toBe(2);
   });
 
-  it('outcomeOf maps every status', () => {
+  it('outcomeOf maps every status — ONE partition, cancelled ≠ failed', () => {
     expect(outcomeOf('executing')).toBe('run');
     expect(outcomeOf('awaiting_human')).toBe('gate');
     expect(outcomeOf('failed')).toBe('fail');
-    expect(outcomeOf('cancelled')).toBe('fail');
+    expect(outcomeOf('cancelled')).toBe('cancelled');
     expect(outcomeOf('completed')).toBe('done');
   });
 });
@@ -162,7 +174,25 @@ describe('ledeCounts — gates/live are runStats\' own numbers (§5.1 offender p
     expect(c.finished).toBe(1);
     expect(c.failed).toBe(1);
     expect(c.passed).toBe(0);
+    expect(c.cancelled).toBe(0);
     expect(c.projects).toBe(3);
+    // Clockless terminal runs (r-fail-old, r-done) are excluded AND counted,
+    // so the label can state the exclusion (EC39 — never a silent drop).
+    expect(c.undatable).toBe(2);
+  });
+
+  it('a cancelled run finishes as cancelled — never as failed, never as passed', () => {
+    const runs = [
+      makeView({ id: 'r-cx', status: 'cancelled' }),
+      makeView({ id: 'r-fx', status: 'failed' }),
+      makeView({ id: 'r-dx', status: 'completed' }),
+    ];
+    const clocks = { 'r-cx': NOW - HOUR, 'r-fx': NOW - HOUR, 'r-dx': NOW - HOUR };
+    const c = ledeCounts(runs, clocks, {}, {}, 1, NOW);
+    expect(c.finished).toBe(3);
+    expect(c.passed).toBe(1);
+    expect(c.failed).toBe(1);
+    expect(c.cancelled).toBe(1);
   });
 
   it('the shared 24h span is the one constant', () => {

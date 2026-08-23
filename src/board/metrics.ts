@@ -49,12 +49,20 @@ export const WINDOW_24H_MS = 24 * 3_600_000;
 
 const TERMINAL: ReadonlySet<SessionStatus> = new Set(['completed', 'cancelled', 'failed']);
 
-export type Outcome = 'run' | 'gate' | 'fail' | 'done';
+export type Outcome = 'run' | 'gate' | 'fail' | 'cancelled' | 'done';
 
-/** One status → outcome mapping (was RunOutcomeBar's; now every fold's). */
+/**
+ * THE one status → outcome partition (J5/A5: "failed" had two definitions —
+ * the landing's 24h fold counted cancelled runs as failed while every list
+ * surface counted `status === 'failed'` alone, so the fold said 10 where the
+ * lists said 2). Cancelled is its OWN outcome now — an operator's decision,
+ * not a failure — and every consumer (outcome bar, lede, river, /work tabs)
+ * reads this mapping, so a "failed" count is the same set everywhere.
+ */
 export function outcomeOf(status: string): Outcome {
   if (status === 'awaiting_human') return 'gate';
-  if (status === 'failed' || status === 'cancelled') return 'fail';
+  if (status === 'failed') return 'fail';
+  if (status === 'cancelled') return 'cancelled';
   if (status === 'completed') return 'done';
   return 'run';
 }
@@ -97,6 +105,8 @@ export interface OutcomeTotals {
   run: number;
   gate: number;
   fail: number;
+  /** Cancelled ≠ failed (the J5/A5 partition) — its own bucket everywhere. */
+  cancelled: number;
   done: number;
   /** Runs with no attach clock inside the window — reported, never painted. */
   unplaced: number;
@@ -112,7 +122,7 @@ export function outcomeTotals24h(
   attachedAt: Record<string, number>,
   now: number,
 ): OutcomeTotals {
-  const totals: OutcomeTotals = { run: 0, gate: 0, fail: 0, done: 0, unplaced: 0 };
+  const totals: OutcomeTotals = { run: 0, gate: 0, fail: 0, cancelled: 0, done: 0, unplaced: 0 };
   const start = now - WINDOW_24H_MS;
   for (const v of runs) {
     if (v.session.archived_at != null) continue;
@@ -236,13 +246,20 @@ export interface LedeCounts {
   /** Terminal runs whose last OBSERVED clock is inside the 24h window. */
   finished: number;
   passed: number;
+  /** `status === 'failed'` only — the same set /work's Failed filter lists. */
   failed: number;
+  /** Cancelled ≠ failed (J5/A5) — its own count, its own /work filter. */
+  cancelled: number;
   /** Runs waiting on a human right now — `gateCount`, verbatim. */
   gates: number;
   /** Runs moving under their own power right now — `workingCount`, verbatim. */
   live: number;
   /** Board projects (the quiet phrase's subject). */
   projects: number;
+  /** Terminal runs with NO observed clock at all — excluded from the windowed
+   *  counts, and the label must SAY so (EC39: a count a user cannot reproduce
+   *  from a visible list is a defect; the exclusion is stated, never silent). */
+  undatable: number;
 }
 
 /**
@@ -260,7 +277,7 @@ export function ledeCounts(
 ): LedeCounts {
   const { working, gates } = runStats(runs);
   const start = now - WINDOW_24H_MS;
-  let finished = 0, passed = 0, failedN = 0;
+  let finished = 0, passed = 0, failedN = 0, cancelledN = 0, undatable = 0;
   for (const v of runs) {
     if (v.session.archived_at != null) continue;
     const id = v.session.id;
@@ -272,12 +289,22 @@ export function ledeCounts(
       failedAt[id],
       ...(logs[id] ?? []).map((e) => e.ts),
     ].filter((t): t is number => typeof t === 'number');
-    if (points.length === 0) continue; // clockless: the river counts it unplaced
+    if (points.length === 0) {
+      // Clockless: excluded from the windowed fold — COUNTED so the label can
+      // state the exclusion (EC39), never silently dropped.
+      undatable += 1;
+      continue;
+    }
     const last = Math.max(...points);
     if (last < start || last > now) continue;
     finished += 1;
-    if (outcomeOf(v.session.status) === 'fail') failedN += 1;
+    const outcome = outcomeOf(v.session.status);
+    if (outcome === 'fail') failedN += 1;
+    else if (outcome === 'cancelled') cancelledN += 1;
     else passed += 1;
   }
-  return { finished, passed, failed: failedN, gates, live: working, projects };
+  return {
+    finished, passed, failed: failedN, cancelled: cancelledN,
+    gates, live: working, projects, undatable,
+  };
 }

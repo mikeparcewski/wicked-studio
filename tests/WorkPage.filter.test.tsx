@@ -75,3 +75,41 @@ describe('WorkPage — §7.4 context-sensitive entry (slice Y)', () => {
     expect(screen.getByRole('tablist')).toHaveAttribute('data-filter', 'active');
   });
 });
+
+// EC39 follow-through (fix slice J4/J5 verification finding): the positional
+// range window (useTimeRange, 30d → first 30 rows) can hide the very rows a
+// landing count links to — live, the lede's "3 cancelled" landed on a 30d
+// /work view holding ZERO cancelled rows. The exclusion must be STATED.
+describe('WorkPage — range-hidden rows are stated, never silent (EC39)', () => {
+  // 31 completed rows first (fills the 30d positional window), then the
+  // cancelled row — outside the window on the cancelled tab.
+  const MANY = [
+    ...Array.from({ length: 31 }, (_, i) =>
+      makeView({ id: `r-c${i}`, workflow_id: 'feature', problem: `done ${i}`, status: 'completed' })),
+    makeView({ id: 'r-cxl', workflow_id: 'feature', problem: 'called off', status: 'cancelled' }),
+  ];
+
+  it('states the hidden count on a filter whose rows the window excludes, and widens on demand', async () => {
+    render(
+      <WorkPage runs={MANY} selectedRunId={null} onSelect={() => {}} navigate={() => {}} search="?filter=cancelled" />,
+    );
+    // The 30d window (first 30 rows) holds no cancelled run — the note says so.
+    const note = screen.getByTestId('work-range-hidden-note');
+    expect(note).toHaveAttribute('data-hidden', '1');
+    expect(note.textContent).toMatch(/1 more cancelled run sits outside this 30d view/);
+    // The empty state tells the SAME truth — never "No cancelled runs yet."
+    // one line under a note saying they exist.
+    expect(screen.getByText(/No cancelled runs in this range view — 1 exists outside it\./)).toBeInTheDocument();
+    // Widen → the row appears and the note goes away (90d covers all 32).
+    await userEvent.click(screen.getByTestId('work-range-widen'));
+    expect(screen.getByText(/called off/)).toBeInTheDocument();
+    expect(screen.queryByTestId('work-range-hidden-note')).toBeNull();
+  });
+
+  it('renders no note when the window hides nothing', () => {
+    render(
+      <WorkPage runs={RUNS} selectedRunId={null} onSelect={() => {}} navigate={() => {}} search="?filter=failed" />,
+    );
+    expect(screen.queryByTestId('work-range-hidden-note')).toBeNull();
+  });
+});

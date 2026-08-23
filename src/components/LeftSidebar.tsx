@@ -90,7 +90,8 @@ export function headingForPath(pathname: string): PathKey | null {
   const [, first = '', second = ''] = pathname.split('/');
   if (first === 'projects' || first === 'p') return 'projects';
   if (first === 'make') return 'make';
-  if (first === 'chats' || (first === 'chat' && second === 'new')) return 'chat';
+  // `/chat/new` AND `/chat/:id` (J4/C6: a live session's real URL) are Chat's.
+  if (first === 'chats' || (first === 'chat' && second !== '')) return 'chat';
   if (first === 'repos' || first === 'repo-detail') return 'repos';
   if (SETTINGS_ROUTES.has(first)) return 'settings';
   return null;
@@ -632,7 +633,10 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             navigate={navigate}
           >
             {chatRuns.length === 0
-              ? <EmptyRow label="No chat threads yet" href="/chats" navigate={navigate} />
+              // "Recorded" keeps this row's claim true beside a LIVE session
+              // (J4/C6 one-truth): the rail lists recorded chat runs only —
+              // live seats show on /chats, where this row points.
+              ? <EmptyRow label="No recorded chats yet" href="/chats" navigate={navigate} />
               : chatRuns.map((view) => (
                   <RunRow key={view.session.id} view={view} onOpen={() => navigate(runPath(view.session.id))} />
                 ))}

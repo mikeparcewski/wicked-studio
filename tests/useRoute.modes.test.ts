@@ -65,6 +65,11 @@ describe('useRoute — the existing panel routes keep working', () => {
     expect(routeAt('/runs/run-1').current).toMatchObject({ panel: 'runs', runId: 'run-1' });
     expect(routeAt('/runs/new').current).toMatchObject({ panel: 'runs', showLaunch: true });
     expect(routeAt('/chat/new').current).toMatchObject({ showLaunch: true, chatMode: true });
+    // J4/C6: /chat/:id is a live SESSION's address — chat surface, never the
+    // launch form, and never a runId (a chat is not a run).
+    expect(routeAt('/chat/abc-123').current).toMatchObject({
+      panel: 'runs', chatMode: true, artifactId: 'abc-123', runId: null, showLaunch: false,
+    });
     expect(routeAt('/work').current.panel).toBe('work');
     expect(routeAt('/repos/new').current).toMatchObject({ panel: 'repos', showRegisterRepo: true });
     expect(routeAt('/repo-detail/repo-1').current).toMatchObject({ panel: 'repo-detail', repoId: 'repo-1' });

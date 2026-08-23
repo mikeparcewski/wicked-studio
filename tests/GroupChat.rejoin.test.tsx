@@ -318,3 +318,81 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     expect(sessionStorage.getItem('wicked.chat.r1')).toBeNull();
   });
 });
+
+describe('GroupChat — the routed session URL (J4/C6)', () => {
+  it('a routed id the daemon still holds is rejoined — with the honest boundary note, never a silent empty', async () => {
+    getChat.mockResolvedValue({ chatId: 'routed-1', seats: ['claude'] });
+    render(<GroupChat repoId={null} onBack={() => undefined} routedChatId="routed-1" reflectUrl />);
+    await waitFor(() => expect(getChat).toHaveBeenCalledWith('routed-1'));
+    await waitFor(() => expect(screen.getByTitle('ready')).toHaveTextContent('claude'));
+    // The wire keeps seats, not history — the boundary is STATED in the thread.
+    expect(screen.getByTestId('chat-rejoined-note').textContent).toContain('can’t be replayed');
+    // The routed session becomes this tab's session for the repo scope.
+    expect(sessionStorage.getItem('wicked.chat._')).toBe('routed-1');
+    expect(openChat).not.toHaveBeenCalled();
+  });
+
+  it('the routed id wins over the tab-stored id — the URL is the operator\'s ask', async () => {
+    sessionStorage.setItem('wicked.chat._', 'stored-other');
+    getChat.mockResolvedValue({ chatId: 'routed-1', seats: ['claude'] });
+    render(<GroupChat repoId={null} onBack={() => undefined} routedChatId="routed-1" />);
+    await waitFor(() => expect(getChat).toHaveBeenCalledWith('routed-1'));
+    expect(getChat).not.toHaveBeenCalledWith('stored-other');
+  });
+
+  it('a routed id the daemon no longer holds says so — the ended boundary, not first-run teaching', async () => {
+    getChat.mockResolvedValue({ chatId: 'gone-1', seats: [] });
+    render(<GroupChat repoId={null} onBack={() => undefined} routedChatId="gone-1" />);
+    const ended = await screen.findByTestId('chat-session-ended');
+    expect(ended.textContent).toContain('aren’t stored beyond the live session');
+    expect(screen.queryByTestId('chat-firstrun')).toBeNull();
+    expect(openChat, 'a dead routed id must not auto-mint').not.toHaveBeenCalled();
+  });
+
+  it('a send from the ended boundary starts a NEW session and the URL follows it (replace)', async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    getChat.mockResolvedValue({ chatId: 'gone-1', seats: [] });
+    render(
+      <GroupChat repoId={null} onBack={() => undefined} routedChatId="gone-1" reflectUrl navigate={navigate} />,
+    );
+    await screen.findByTestId('chat-session-ended');
+    await user.type(screen.getByRole('textbox'), 'start over');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    const mintedId = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
+    expect(mintedId).not.toBe('gone-1');
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith(`/chat/${mintedId}`, { replace: true }));
+    // The ended boundary leaves the screen once a live session exists.
+    expect(screen.queryByTestId('chat-session-ended')).toBeNull();
+  });
+
+  it('minting on /chat/new reflects the id into /chat/:id the moment the session exists', async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<GroupChat repoId={null} onBack={() => undefined} reflectUrl navigate={navigate} />);
+    await armViaFirstSend(user);
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    const mintedId = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith(`/chat/${mintedId}`, { replace: true }));
+  });
+
+  it('the reflection navigation does not reset the live transcript (routedChatId → own id)', async () => {
+    const user = userEvent.setup();
+    const view = render(<GroupChat repoId={null} onBack={() => undefined} reflectUrl />);
+    await armViaFirstSend(user);
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    const mintedId = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
+    // The App re-renders the SAME mount with the reflected URL: routedChatId = own id.
+    view.rerender(
+      <GroupChat repoId={null} onBack={() => undefined} routedChatId={mintedId} reflectUrl />,
+    );
+    // No re-probe, no second open, and the sent bubble survives — the guard
+    // skips the self-reflection instead of wiping the live transcript.
+    expect(getChat).not.toHaveBeenCalled();
+    expect(openChat).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('user-bubble')).toHaveTextContent('warm us up');
+  });
+});

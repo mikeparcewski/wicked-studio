@@ -266,12 +266,26 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
           {liveChats.map((c) => {
             const streaming = c.lastFrameAt !== 0 && Date.now() - c.lastFrameAt < STREAMING_WINDOW_MS;
             return (
+              // J4/C6: a live row is a DOOR, not a plaque — clicking it (or
+              // Enter/Space with focus) opens the session at its real URL,
+              // `/chat/:id`, where the surface rejoins the warm seats. The End
+              // control stays its own gesture (stopPropagation).
               <div
                 key={c.chatId}
                 data-testid="live-chat-row"
                 data-chat-id={c.chatId}
                 data-streaming={streaming}
-                className="w-full flex items-center gap-3 rounded-2xl px-5 py-3"
+                role="button"
+                tabIndex={0}
+                title="Open this live session"
+                onClick={() => navigate(`/chat/${encodeURIComponent(c.chatId)}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/chat/${encodeURIComponent(c.chatId)}`);
+                  }
+                }}
+                className="w-full flex items-center gap-3 rounded-2xl px-5 py-3 cursor-pointer"
                 style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
               >
                 <span className="text-sm font-mono truncate" style={{ color: 'var(--ink-high)' }}>
@@ -299,7 +313,10 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
                   type="button"
                   data-testid="live-chat-end"
                   title="Disconnect this session's agents and end it"
-                  onClick={() => endLiveChat(c.chatId)}
+                  onClick={(e) => {
+                    e.stopPropagation(); // End is not Open
+                    endLiveChat(c.chatId);
+                  }}
                   className="text-[11px] px-2.5 py-1 rounded-lg shrink-0"
                   style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', border: '1px solid var(--surface-overlay)' }}
                 >
@@ -311,10 +328,31 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
         </div>
       )}
 
-      {/* ── List / Empty state (untouched below the band, §4.3) ── */}
+      {/* ── List / Empty state (below the band, §4.3) ── */}
       <div className="px-8 pb-8 flex flex-col gap-2" data-testid="chats-list">
         {filtered.length === 0 ? (
+          // ONE truth per screen (J4/C6): "No chat sessions yet" may never sit
+          // beside a non-empty live band. With live sessions above, this rail
+          // says what it actually holds — recorded chat RUNS — and states the
+          // persistence boundary honestly (chat transcripts are not stored
+          // beyond the live session; there is no history wire to list here).
+          (liveChats?.length ?? 0) > 0 ? (
+            <div
+              data-testid="chats-empty-live"
+              className="rounded-2xl p-10 text-center"
+              style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+            >
+              <p className="text-base font-mono font-semibold mb-3">
+                No recorded chat runs — your live sessions are above
+              </p>
+              <p className="text-sm font-mono" style={{ color: 'var(--ink-muted)' }}>
+                Open a live session to continue it. Chat transcripts aren’t stored
+                beyond the live session, so ended chats don’t appear here.
+              </p>
+            </div>
+          ) : (
           <div
+            data-testid="chats-empty"
             className="rounded-2xl p-10 text-center"
             style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
           >
@@ -337,6 +375,7 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
               </button>
             </p>
           </div>
+          )
         ) : (
           filtered.map(v => (
             <button

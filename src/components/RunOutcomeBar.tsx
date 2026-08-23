@@ -13,7 +13,8 @@ export { outcomeOf } from '../board/metrics.js';
  *
  * SVG-first, no chart library (§2.3): 12 stacked bars, one per 2-hour window
  * over the last 24h, segments filled with the status tokens (`--status-run`
- * working / `--status-gate` waiting / `--status-fail` failed-or-cancelled /
+ * working / `--status-gate` waiting / `--status-fail` failed / `--ink-dim`
+ * cancelled — its own segment, never folded into failed (J5/A5) /
  * `--status-done` completed).
  *
  * WIRE HONESTY — the clock. §2.4 assumed a `created_at` on the session;
@@ -33,11 +34,14 @@ const W = 168;
 const H = 26;
 const COL_GAP = 2;
 
-/** Stack order bottom→top, with the fill token each segment means. */
+/** Stack order bottom→top, with the fill token each segment means. Cancelled
+ *  is its own segment in NEUTRAL ink (J5/A5: cancelled ≠ failed — it must not
+ *  wear the fail token, and it must not vanish into done). */
 const SEGMENTS: ReadonlyArray<{ key: Outcome; fill: string }> = [
   { key: 'run', fill: 'var(--status-run)' },
   { key: 'gate', fill: 'var(--status-gate)' },
   { key: 'fail', fill: 'var(--status-fail)' },
+  { key: 'cancelled', fill: 'var(--ink-dim)' },
   { key: 'done', fill: 'var(--status-done)' },
 ];
 
@@ -64,7 +68,10 @@ export function RunOutcomeBar({
   // bucket PLACEMENT (chart geometry) is derived here, on the same clock rule.
   const counts = useMemo(() => outcomeTotals24h(runs, attachedAt, at), [runs, attachedAt, at]);
   const { windows } = useMemo(() => {
-    const buckets = Array.from({ length: WINDOWS }, () => ({ run: 0, gate: 0, fail: 0, done: 0 }));
+    const buckets = Array.from(
+      { length: WINDOWS },
+      () => ({ run: 0, gate: 0, fail: 0, cancelled: 0, done: 0 }),
+    );
     const start = at - WINDOWS * WINDOW_MS;
     for (const v of runs) {
       if (v.session.archived_at != null) continue;
@@ -78,8 +85,11 @@ export function RunOutcomeBar({
   }, [runs, attachedAt, at]);
   const unplaced = counts.unplaced;
 
-  const inWindow = counts.run + counts.gate + counts.fail + counts.done;
-  const colMax = windows.reduce((m, w) => Math.max(m, w.run + w.gate + w.fail + w.done), 0);
+  const inWindow = counts.run + counts.gate + counts.fail + counts.cancelled + counts.done;
+  const colMax = windows.reduce(
+    (m, w) => Math.max(m, w.run + w.gate + w.fail + w.cancelled + w.done),
+    0,
+  );
   const colW = (W - COL_GAP * (WINDOWS - 1)) / WINDOWS;
 
   const value =
@@ -89,6 +99,7 @@ export function RunOutcomeBar({
           counts.run > 0 ? `${counts.run} working` : null,
           counts.gate > 0 ? `${counts.gate} gate` : null,
           counts.fail > 0 ? `${counts.fail} failed` : null,
+          counts.cancelled > 0 ? `${counts.cancelled} cancelled` : null,
           counts.done > 0 ? `${counts.done} done` : null,
         ].filter((s) => s !== null).join(' · ');
 
@@ -117,7 +128,7 @@ export function RunOutcomeBar({
           style={{ display: 'block' }}
         >
           {windows.map((w, i) => {
-            const total = w.run + w.gate + w.fail + w.done;
+            const total = w.run + w.gate + w.fail + w.cancelled + w.done;
             if (total === 0) return null;
             let y = H;
             return SEGMENTS.map(({ key, fill }) => {
@@ -137,6 +148,17 @@ export function RunOutcomeBar({
             });
           })}
         </svg>
+      )}
+      {unplaced > 0 && (
+        // EC39: the windowed count states its exclusions VISIBLY — runs with
+        // no clock in this window are not painted, and the label says so, so
+        // the number stays reproducible from the rows a user can see.
+        <p
+          data-testid="outcome-unplaced-note"
+          style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
+        >
+          excludes {unplaced} run{unplaced === 1 ? '' : 's'} with no clock in this window
+        </p>
       )}
     </MetricTile>
   );

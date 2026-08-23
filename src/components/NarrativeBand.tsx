@@ -54,13 +54,22 @@ export function composeLede(c: LedeCounts): { quiet: boolean; segments: LedeSegm
   }
   const segments: LedeSegment[] = [{ text: 'While you were away: ', href: null }];
   if (c.finished > 0) {
-    const split = [
-      c.passed > 0 ? `${c.passed} passed` : null,
-      c.failed > 0 ? `${c.failed} failed` : null,
-    ].filter((s) => s !== null).join(', ');
     // Every all-runs number lands on /work — the ONE canonical runs surface
-    // (DES-UX-001 §7.4, slice Y; the bare /runs listing retired into a redirect).
-    segments.push({ text: `${plural(c.finished, 'run')} finished — ${split}`, href: '/work' });
+    // (DES-UX-001 §7.4, slice Y). Each OUTCOME number links to ITS filter
+    // (J5/A5: a count must be reproducible from a visible list — "1 failed"
+    // opens exactly the rows the Failed filter shows, cancelled ITS rows).
+    segments.push({ text: `${plural(c.finished, 'run')} finished`, href: '/work' });
+    segments.push({ text: ' — ', href: null });
+    const split: LedeSegment[] = [];
+    if (c.passed > 0) split.push({ text: `${c.passed} passed`, href: '/work?filter=completed' });
+    if (c.failed > 0) split.push({ text: `${c.failed} failed`, href: '/work?filter=failed' });
+    if (c.cancelled > 0) {
+      split.push({ text: `${c.cancelled} cancelled`, href: '/work?filter=cancelled' });
+    }
+    split.forEach((seg, i) => {
+      if (i > 0) segments.push({ text: ', ', href: null });
+      segments.push(seg);
+    });
   } else if (c.gates === 0) {
     // Nothing finished, nothing waiting — but something is moving: say that,
     // with the number still derived (EC29), never an empty "away:" stub.
@@ -93,10 +102,11 @@ export function NarrativeBand({ items, runs, attachedAt, failedAt, navigate, now
   const landings = useDocThreadStore((s) => s.landings);
   const at = now ?? Date.now();
 
-  const lede = useMemo(
-    () => composeLede(ledeCounts(runs, attachedAt, logs, failedAt, items.length, at)),
+  const counts = useMemo(
+    () => ledeCounts(runs, attachedAt, logs, failedAt, items.length, at),
     [runs, attachedAt, logs, failedAt, items.length, at],
   );
+  const lede = useMemo(() => composeLede(counts), [counts]);
 
   // Observed spend — literally the same selector as the bottom bar and the
   // margin sparkline's endpoint (slice W: one selector per metric, §5.3).
@@ -153,6 +163,18 @@ export function NarrativeBand({ items, runs, attachedAt, failedAt, navigate, now
         <span data-testid="lede-window" data-window="24h" style={{ ...WINDOW_LABEL_STYLE, flexShrink: 0 }}>
           {windowWord('24h')}
         </span>
+        {counts.undatable > 0 && (
+          // EC39 (J5): the windowed fold EXCLUDES runs that carry no observed
+          // clock, and says so in the same breath — never a number a user
+          // cannot rebuild from the rows a list can show them.
+          <span
+            data-testid="lede-undatable"
+            data-undatable={counts.undatable}
+            style={{ ...WINDOW_LABEL_STYLE, flexShrink: 0 }}
+          >
+            · excludes {counts.undatable} undated run{counts.undatable === 1 ? '' : 's'}
+          </span>
+        )}
         {spend !== null && (
           <>
             <a {...link('/make')} data-testid="lede-spend"

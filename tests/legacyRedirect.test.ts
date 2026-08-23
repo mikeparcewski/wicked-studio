@@ -26,8 +26,8 @@ function member(projectId: string, kind: string, ref: string): ProjectMember {
 
 /** Route shape for a legacy path; `mode: null` is what makes it legacy. */
 const legacy = {
-  runs: (runId: string) => ({ panel: 'runs', runId, projectId: null, mode: null, showLaunch: false }),
-  projects: (projectId: string) => ({ panel: 'project-detail', runId: null, projectId, mode: null, showLaunch: false }),
+  runs: (runId: string) => ({ panel: 'runs', runId, projectId: null, mode: null, showLaunch: false, chatMode: false }),
+  projects: (projectId: string) => ({ panel: 'project-detail', runId: null, projectId, mode: null, showLaunch: false, chatMode: false }),
 };
 
 beforeEach(() => {
@@ -113,7 +113,7 @@ describe('useLegacyRedirect (DES-MERGE-001 §1.5 — no bookmark breaks)', () =>
   it('a bare /p/:projectId is NOT redirected — it IS the dashboard (DES-FEEDBACK-001 §4.1)', () => {
     const navigate = vi.fn();
     renderHook(() => useLegacyRedirect(
-      { panel: 'runs', runId: null, projectId: 'proj-1', mode: null, showLaunch: false }, navigate));
+      { panel: 'runs', runId: null, projectId: 'proj-1', mode: null, showLaunch: false, chatMode: false }, navigate));
     expect(navigate).not.toHaveBeenCalled();
     expect(listProjects).not.toHaveBeenCalled();
   });
@@ -121,11 +121,11 @@ describe('useLegacyRedirect (DES-MERGE-001 §1.5 — no bookmark breaks)', () =>
   it('never redirects a route that is already in the shell, or the launch form', () => {
     const navigate = vi.fn();
     renderHook(() => useLegacyRedirect(
-      { panel: 'runs', runId: 'run-9', projectId: 'proj-1', mode: 'build', showLaunch: false }, navigate));
+      { panel: 'runs', runId: 'run-9', projectId: 'proj-1', mode: 'build', showLaunch: false, chatMode: false }, navigate));
     renderHook(() => useLegacyRedirect(
-      { panel: 'runs', runId: null, projectId: null, mode: null, showLaunch: true }, navigate));
+      { panel: 'runs', runId: null, projectId: null, mode: null, showLaunch: true, chatMode: false }, navigate));
     renderHook(() => useLegacyRedirect(
-      { panel: 'work', runId: null, projectId: null, mode: null, showLaunch: false }, navigate));
+      { panel: 'work', runId: null, projectId: null, mode: null, showLaunch: false, chatMode: false }, navigate));
 
     expect(navigate).not.toHaveBeenCalled();
     expect(listProjects).not.toHaveBeenCalled();
@@ -133,7 +133,7 @@ describe('useLegacyRedirect (DES-MERGE-001 §1.5 — no bookmark breaks)', () =>
 });
 
 describe('slice Y (DES-UX-001 §7.4): the bare /runs listing retires into /work', () => {
-  const bare = { panel: 'runs', runId: null, projectId: null, mode: null, showLaunch: false };
+  const bare = { panel: 'runs', runId: null, projectId: null, mode: null, showLaunch: false, chatMode: false };
 
   it('/runs → /work, replacing the history entry, with no membership lookup', () => {
     window.history.replaceState(null, '', '/runs');

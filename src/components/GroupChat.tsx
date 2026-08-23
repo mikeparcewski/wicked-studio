@@ -216,11 +216,27 @@ interface Props {
    * OPEN — a user action — never on mount.
    */
   projectId?: string | null;
-  /** App-level route navigation — needed only by the "+ New project" hand-off. */
-  navigate?: (path: string) => void;
+  /** App-level route navigation — the "+ New project" hand-off and the J4
+   *  URL reflection (which replaces, so Back never walks through /chat/new). */
+  navigate?: (path: string, opts?: { replace?: boolean }) => void;
+  /**
+   * The chat session id the URL names (`/chat/:id`, J4/C6) — the surface
+   * REJOINS it if the daemon still holds it, and says honestly that it is
+   * gone if not. `null` on `/chat/new` and in the project shell.
+   */
+  routedChatId?: string | null;
+  /**
+   * When true (the flat `/chat/*` routes) the live session's id is reflected
+   * into the URL the moment it exists — mint, rejoin, or routed — so the
+   * session is findable again after navigating away (J4/C6). The project
+   * shell passes false: its chat lives at `/p/:pid/chat`.
+   */
+  reflectUrl?: boolean;
 }
 
-export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props): React.ReactElement {
+export function GroupChat({
+  repoId, onBack, projectId = null, navigate, routedChatId = null, reflectUrl = false,
+}: Props): React.ReactElement {
   const [chatId, setChatId] = useState<string | null>(null);
   const [seats, setSeats] = useState<Record<string, SeatState>>({});
   const [seatErrors, setSeatErrors] = useState<Record<string, string>>({});
@@ -240,6 +256,20 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
    * requests and gates nothing.
    */
   const [resolving, setResolving] = useState(false);
+  /**
+   * The client REJOINED a live session it did not open on this mount (J4/C6).
+   * The wire keeps no transcript (`GET /chats/:id` answers seats only), so a
+   * rejoined thread starts empty CLIENT-side — the boundary is stated in the
+   * thread, never a silent blank pretending nothing was said.
+   */
+  const [rejoined, setRejoined] = useState(false);
+  /**
+   * The URL named a session (`/chat/:id`) the daemon no longer holds (J4/C6):
+   * the pool reaped it or it was ended. Rendered as an honest boundary — the
+   * transcript is not persisted beyond the live session, so there is nothing
+   * to replay; a send starts a NEW session (and the URL follows it).
+   */
+  const [routedGone, setRoutedGone] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatIdRef = useRef<string | null>(null);
   chatIdRef.current = chatId;
@@ -346,6 +376,11 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
   // daemon still holds it. This is deliberately agnostic to WHAT remounts us: any cause, including
   // a full page reload, lands on the same stored id.
   useEffect(() => {
+    // J4: `routedChatId` is a dep too, and its one same-mount transition is the
+    // URL reflection THIS component issued after minting or rejoining — the
+    // state already IS that chat's, and a reset here would wipe the live
+    // transcript mid-conversation. Skip exactly that case.
+    if (routedChatId !== null && routedChatId === chatIdRef.current) return;
     let cancelled = false;
 
     // `repoId` is a dep, so this effect also fires on a repo SWITCH with the component still
@@ -376,12 +411,16 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     // already treat it as not-ready and wait.
     setChatId(null);
     chatIdRef.current = null;
+    setRejoined(false);
+    setRoutedGone(false);
 
     // A stored id is a claim, not a fact — the daemon reaps idle chats and enforces a pool cap,
     // so it may have reclaimed this one underneath us. Ask before trusting it. With nothing
     // stored, this is first-run: NO probe, NO roster fetch, NO warming — zero requests (§2.4).
     // Read SYNCHRONOUSLY, and park the opt-ins while the probe runs (see `resolving`).
-    const stored = readStoredChatId(repoId);
+    // J4: a URL-routed id WINS over the per-repo stored id — the operator asked
+    // for THAT session by address; the stored id is only the tab's memory.
+    const stored = routedChatId ?? readStoredChatId(repoId);
     setResolving(stored !== null);
 
     void (async () => {
@@ -410,16 +449,25 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
       if (probe.seats.length > 0) {
         setChatId(stored);
         chatIdRef.current = stored;
+        // A routed rejoin becomes THIS tab's session for the repo too — /chats
+        // → row → send → navigate away → back must land on the same session.
+        writeStoredChatId(repoId, stored);
         // Warm seats only — the transcript is not persisted server-side, so a rejoined chat
         // starts with an empty log. The SESSIONS carry the conversation memory, which is the
         // expensive part; re-minting would have thrown that away as well as leaking it.
+        // J4/C6: that boundary is STATED in the thread (`rejoined`), never a
+        // silent blank pretending the conversation never happened.
         setSeats(Object.fromEntries(probe.seats.map((k) => [k, 'ready' as SeatState])));
+        setRejoined(true);
         setResolving(false);
         return;
       }
-      // Reclaimed → back to the calm first-run state, not a re-mint: warming is the
-      // user's call now, and the next opt-in mints fresh.
-      clearStoredChatId(repoId);
+      // Reclaimed → the id is dead. On `/chat/new` this lands on the calm
+      // first-run state; on a routed `/chat/:id` (J4) the page SAYS the session
+      // ended (`routedGone`) — the honest boundary, never a wordless empty.
+      // Either way warming stays the user's call and the next opt-in mints fresh.
+      if (routedChatId !== null) setRoutedGone(true);
+      if (readStoredChatId(repoId) === stored) clearStoredChatId(repoId);
       setResolving(false);
       // (On the cancelled path `resolving` is deliberately left alone: the next effect
       // run has already set its own value for the new repo.)
@@ -428,9 +476,19 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
     return () => {
       cancelled = true;
     };
-    // (The exhaustive-deps suppression that used to sit here is gone: the effect now closes over
-    // nothing but `repoId` and module-scope helpers, so the dep list is genuinely complete.)
-  }, [repoId]);
+    // (The exhaustive-deps suppression that used to sit here is gone: the effect closes over
+    // nothing but `repoId`/`routedChatId` and module-scope helpers — the list is complete.)
+  }, [repoId, routedChatId]);
+
+  // J4/C6 — the URL names the session the moment it exists. Mint, rejoin, or
+  // routed: on the flat chat routes the live id is REFLECTED into `/chat/:id`
+  // (replace, so Back never re-enters the transient /chat/new), making the
+  // session revisitable for its lifetime — from /chats, a bookmark, or Back.
+  useEffect(() => {
+    if (!reflectUrl || navigate === undefined || chatId === null) return;
+    if (routedChatId === chatId) return; // the URL already says so
+    navigate(`/chat/${encodeURIComponent(chatId)}`, { replace: true });
+  }, [reflectUrl, navigate, chatId, routedChatId]);
 
   // §7.9-1 (the seeding-order fix): a roster deposited AFTER this surface
   // seeded its chips from the cold-cache fallback re-seeds them — warm roster
@@ -874,7 +932,7 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
   // over a chat that may be about to pop back in would be a lie held for milliseconds.
   const firstRun =
     messages.length === 0 && Object.keys(seats).length === 0 && openError === null &&
-    sendFailed === null && !resolving;
+    sendFailed === null && !resolving && !routedGone;
   // The create-flow project field (§5.2) shows only while the chat is still being
   // CREATED (binding happens at open time) and only outside the project shell —
   // in the shell the context IS the project (§4.3) and rides `projectId` silently.
@@ -943,6 +1001,37 @@ export function GroupChat({ repoId, onBack, projectId = null, navigate }: Props)
       <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-3">
         {openError !== null && (
           <p className="text-[12px] font-mono" style={{ color: 'var(--status-fail)' }}>Could not open chat: {openError}</p>
+        )}
+        {/* J4/C6 — the honest boundary for a routed session that is gone: the
+            daemon holds sessions only while they live, and transcripts are not
+            persisted beyond that (the wire carries seats, never history). Say
+            it; never render a wordless empty that reads as "nothing was said". */}
+        {routedGone && chatId === null && (
+          <div
+            data-testid="chat-session-ended"
+            className="rounded-xl px-4 py-3 text-[12px] font-mono"
+            style={{ border: '1px dashed var(--surface-overlay)', color: 'var(--ink-muted)' }}
+          >
+            This chat session is no longer live on the daemon — it was ended or
+            reclaimed. Transcripts aren’t stored beyond the live session, so
+            there is nothing to replay here. Sending a message starts a new
+            session (this page’s address will follow it).
+          </div>
+        )}
+        {/* J4/C6 — the rejoin boundary: the warm session is back, but the wire
+            keeps no transcript, so what was said before this page opened is
+            not replayed. The agents still hold the conversation memory — the
+            thread continues; only the client-side log starts here. */}
+        {rejoined && (
+          <div
+            data-testid="chat-rejoined-note"
+            className="rounded-xl px-4 py-3 text-[12px] font-mono"
+            style={{ border: '1px dashed var(--surface-overlay)', color: 'var(--ink-muted)' }}
+          >
+            Rejoined the live session — its agents keep the conversation memory,
+            but earlier messages aren’t stored on the wire, so they can’t be
+            replayed here. New replies stream below.
+          </div>
         )}
         {firstRun && (
           // §2.4: the first-run state TEACHES — what Chat is, what typing does, and the

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
+import { outcomeOf } from '../board/metrics.js';
 import { RunLink } from './RunLink.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 
-type StatusTab = 'all' | 'active' | 'completed' | 'failed';
+type StatusTab = 'all' | 'active' | 'completed' | 'failed' | 'cancelled';
 
 interface Props {
   runs: SessionView[];
@@ -24,16 +25,23 @@ function routedFilter(search: string): StatusTab | null {
   return raw !== null && TABS.some((t) => t.id === raw) ? (raw as StatusTab) : null;
 }
 
+// The J5/A5 partition is THE shared one (src/board/metrics.ts `outcomeOf`):
+// cancelled ≠ failed, so the Failed filter lists exactly the set every failed
+// COUNT names — the landing's number is reproducible from these rows.
 const isTerminal = (s: string) => ['completed', 'failed', 'cancelled'].includes(s);
 const isActiveStatus = (s: string) => !isTerminal(s);
-const isCompletedStatus = (s: string) => s === 'completed';
-const isFailedStatus = (s: string) => s === 'failed' || s === 'cancelled';
+const isCompletedStatus = (s: string) => outcomeOf(s) === 'done';
+const isFailedStatus = (s: string) => outcomeOf(s) === 'fail';
+const isCancelledStatus = (s: string) => outcomeOf(s) === 'cancelled';
 
 const TABS: { id: StatusTab; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'active', label: 'Active' },
   { id: 'completed', label: 'Completed' },
   { id: 'failed', label: 'Failed' },
+  // Cancelled runs get their OWN filter — they left the Failed set (J5/A5)
+  // and every terminal row must still be reachable through some filter.
+  { id: 'cancelled', label: 'Cancelled' },
 ];
 
 export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' }: Props): React.ReactElement {
@@ -122,22 +130,40 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
     return { total, active, successRate, topWorkflow };
   }, [windowedRuns]);
 
-  const counts: Record<StatusTab, number> = {
-    all: searched.length,
-    active: searched.filter(v => isActiveStatus(v.session.status)).length,
-    completed: searched.filter(v => isCompletedStatus(v.session.status)).length,
-    failed: searched.filter(v => isFailedStatus(v.session.status)).length,
-  };
-
   const activeGroup = searched.filter(v => isActiveStatus(v.session.status));
   const completedGroup = searched.filter(v => isCompletedStatus(v.session.status));
   const failedGroup = searched.filter(v => isFailedStatus(v.session.status));
+  const cancelledGroup = searched.filter(v => isCancelledStatus(v.session.status));
+
+  const counts: Record<StatusTab, number> = {
+    all: searched.length,
+    active: activeGroup.length,
+    completed: completedGroup.length,
+    failed: failedGroup.length,
+    cancelled: cancelledGroup.length,
+  };
 
   const filtered =
     tab === 'all' ? searched
     : tab === 'active' ? activeGroup
     : tab === 'completed' ? completedGroup
-    : failedGroup;
+    : tab === 'failed' ? failedGroup
+    : cancelledGroup;
+
+  // EC39, the J5/A5 follow-through: the positional range window can hide the
+  // very rows a landing count NAMES (live: the lede's "3 cancelled" linked to
+  // a 30d view holding zero cancelled rows — a count with no visible list).
+  // When the window excludes rows of the ACTIVE filter, the exclusion is
+  // STATED, never silent. Search is the user's own narrowing and says so in
+  // its empty state already, so the note counts against the unsearched window.
+  const inTabGroup = (v: SessionView): boolean =>
+    tab === 'all' ? true
+    : tab === 'active' ? isActiveStatus(v.session.status)
+    : tab === 'completed' ? isCompletedStatus(v.session.status)
+    : tab === 'failed' ? isFailedStatus(v.session.status)
+    : isCancelledStatus(v.session.status);
+  const windowedTabCount = windowedRuns.filter(inTabGroup).length;
+  const hiddenByRange = allWorkRuns.filter(inTabGroup).length - windowedTabCount;
 
   return (
     <div className="flex flex-col h-full" style={{ color: 'var(--ink-high)' }}>
@@ -266,6 +292,33 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
         aria-labelledby={`work-tab-${tab}`}
         className="flex-1 overflow-y-auto px-5 pb-8 flex flex-col"
       >
+        {hiddenByRange > 0 && (
+          <p
+            data-testid="work-range-hidden-note"
+            data-hidden={hiddenByRange}
+            className="px-3 pb-2 text-[11px] font-mono"
+            style={{ color: 'var(--ink-muted)', margin: 0 }}
+          >
+            {hiddenByRange} more{tab === 'all' ? '' : ` ${tab}`} run{hiddenByRange === 1 ? '' : 's'} sit
+            {hiddenByRange === 1 ? 's' : ''} outside this {range} view
+            {range !== '90d' ? (
+              <>
+                {' — '}
+                <button
+                  type="button"
+                  data-testid="work-range-widen"
+                  onClick={() => setRange('90d')}
+                  className="underline"
+                  style={{ color: 'var(--ink-muted)', background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer' }}
+                >
+                  widen to 90d
+                </button>
+              </>
+            ) : (
+              ' (the view is positional — newest first)'
+            )}
+          </p>
+        )}
         {tab === 'all' ? (
           <>
             {activeGroup.length > 0 && (
@@ -292,12 +345,20 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
                 ))}
               </>
             )}
-            {searched.length === 0 && <EmptyState query={query} />}
+            {cancelledGroup.length > 0 && (
+              <>
+                <GroupLabel>Cancelled</GroupLabel>
+                {cancelledGroup.map(v => (
+                  <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                ))}
+              </>
+            )}
+            {searched.length === 0 && <EmptyState query={query} hidden={hiddenByRange} />}
           </>
         ) : (
           <>
             {filtered.length === 0 ? (
-              <EmptyState query={query} tab={tab} />
+              <EmptyState query={query} tab={tab} hidden={hiddenByRange} />
             ) : (
               filtered.map(v => (
                 <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
@@ -353,9 +414,13 @@ function GroupLabel({ children, pulse }: { children: React.ReactNode; pulse?: bo
   );
 }
 
-function EmptyState({ query, tab }: { query: string; tab?: StatusTab }): React.ReactElement {
+function EmptyState({ query, tab, hidden = 0 }: { query: string; tab?: StatusTab; hidden?: number }): React.ReactElement {
+  // ONE truth per screen: "No <tab> runs yet." may not sit under a note saying
+  // N exist outside the range window — when rows are hidden, say WHERE they are.
   const msg = query
     ? `No runs match "${query}".`
+    : hidden > 0
+    ? `No${tab ? ` ${tab}` : ''} runs in this range view — ${hidden} exist${hidden === 1 ? 's' : ''} outside it.`
     : tab
     ? `No ${tab} runs yet.`
     : 'No work sessions yet.';

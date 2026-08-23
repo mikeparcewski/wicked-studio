@@ -213,6 +213,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #               resolves), giving §4.4's runs-per-repo / failing-
          #               repos tiles something true to group. Default False.
          "chat_runs": False, "repo_refs": False,
+         # Fix slice J4/J5 (BRIEF-UX-001 re-review): the outcome-partition
+         # corpus — cancelled runs in AND out of the 24h window plus undatable
+         # terminal runs (no attach clock anywhere), so a rig can prove
+         # cancelled ≠ failed on every surface and that windowed counts state
+         # their exclusions. Switch-gated: no standing rig's board grows rows.
+         "j5_runs": False,
          # Slice J (DES-FEEDBACK-002 §10.2): upload-endpoint gains ONE
          # crew.repo member (studio-api) on the members wire — the dashboard's
          # bound-repos row corpus. Switch-gated so no standing rig's member
@@ -445,6 +451,30 @@ RUNS = [
 ]
 ORPHAN = session("r-orphan", "executing", "stranded work from another client",
                  "stranded work from another client")
+
+# ── Fix slice J4/J5: the outcome-partition corpus, behind `j5_runs` ───────────
+#
+# Cancelled ≠ failed (the J5/A5 blocker): one cancelled run INSIDE the 24h
+# attach window and one outside it, plus two undatable terminal runs (failed /
+# cancelled with NO membership and no clock anywhere) — so a rig can derive,
+# independently: the landing's 24h failed count (1: r-auth alone), the
+# all-window failed count (3: r-auth, r-legacy, r-fail-undated), the cancelled
+# counts (24h: 1, all: 2), and the stated exclusions for the undatable pair.
+J5_RUNS = [
+    session("r-cxl-new", "cancelled", "prototype the CSV importer",
+            "prototype the CSV importer"),
+    session("r-cxl-old", "cancelled", "trial the queue migration",
+            "trial the queue migration"),
+    session("r-fail-undated", "failed", "probe the flaky webhook",
+            "probe the flaky webhook"),
+    session("r-cxl-undated", "cancelled", "sketch the export format",
+            "sketch the export format"),
+]
+# The dated pair is filed under smoke-tests; the undated pair is filed NOWHERE
+# (no membership → no attach clock → honest "unplaced"/"undatable").
+J5_MEMBER_REFS = ["r-cxl-new", "r-cxl-old"]
+ATTACHED_AT["r-cxl-new"] = NOW0 - 2 * HOUR
+ATTACHED_AT["r-cxl-old"] = NOW0 - 3 * DAY
 
 # ── Slice V (DES-UX-001 §3/§4): the provenance + retry corpus, behind `provenance` ──
 #
@@ -1125,7 +1155,8 @@ def assemble_runs() -> list:
                 + ([LONG_RUN] if state["long_prompt"] else []) \
                 + ([CHAT_LIVE, CHAT_GATED] if state["chat_runs"] else []) \
                 + (BATCH_RUNS if state["batch_gates"] else []) \
-                + ([RETRY_RUN] if state["provenance"] else [])
+                + ([RETRY_RUN] if state["provenance"] else []) \
+                + (J5_RUNS if state["j5_runs"] else [])
         viewer_on = state["viewer"]
         repo_refs_on = state["repo_refs"]
         forensics_on = state["forensics"]
@@ -1621,10 +1652,16 @@ class W2Handler(SimpleHTTPRequestHandler):
                         for cid, seats in chat_warm_seats.items()]
             self._json(200, {"chats": rows})
             return True
-        # /api/v1/chats/<id> — seats of a chat. Empty for a chat we never opened
-        # (the daemon does not 404 an unknown id; empty means reclaimed/none).
+        # /api/v1/chats/<id> — seats of a chat, the POOL truth (crew's
+        # `chatSeats`): the live seats of a chat this server opened, EMPTY for
+        # one it never did (the daemon does not 404 an unknown id; empty means
+        # reclaimed/none). Fix slice J4 reads this as the rejoin probe.
         if path.startswith("/api/v1/chats/") and len(path.split("/")) == 5:
-            self._json(200, {"chatId": urllib.parse.unquote(path.split("/")[4]), "seats": []})
+            cid = urllib.parse.unquote(path.split("/")[4])
+            with chat_state_lock:
+                seats = [k for k in chat_warm_seats.get(cid, [])
+                         if k not in chat_dead_seats.get(cid, set())]
+            self._json(200, {"chatId": cid, "seats": seats})
             return True
         parts = path.split("/")
         # /api/v1/projects/<id>/members
@@ -1636,6 +1673,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 river_on = state["river"]
                 repo_member_on = state["repo_member"]
                 batch_on = state["batch_gates"]
+                j5_on = state["j5_runs"]
+            # Fix slice J4/J5: the dated cancelled pair is filed under
+            # smoke-tests (real attach clocks); the undated pair stays unfiled.
+            if j5_on and pid == "smoke-tests":
+                refs.extend(J5_MEMBER_REFS)
             # Slice L: the batch corpus projects' runs.
             if batch_on:
                 refs.extend(BATCH_MEMBERS.get(pid, []))
