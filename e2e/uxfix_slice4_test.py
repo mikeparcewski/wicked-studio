@@ -44,8 +44,9 @@ What it asserts (design §4.3 as amended by DES-FEEDBACK-001 §6/§8.3):
   4. Typing is the warm opt-in: in a FRESH tab (own sessionStorage), typing a
      message and pressing Enter is ROSTER-FIRST (slice AB §7.9-1): one GET
      /roster rides the send gesture, then exactly ONE POST /api/v1/chats whose
-     `clis` is the ROSTER (the fallback trio ships only when the roster is
-     unreachable) — then POSTs the message to /chats/<id>/messages; the user
+     `clis` is the ROSTER (round-2 re-scope, J4 finding 1: the fallback trio
+     NEVER ships — an unreachable roster fails the send inline instead, pinned
+     by ux_fixJ42) — then POSTs the message to /chats/<id>/messages; the user
      bubble renders and the chips bar retires (the header's warm seat chips
      are the truth now).
 
