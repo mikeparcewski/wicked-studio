@@ -134,7 +134,18 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
   const stats = useMemo(() => runStats(scopedRuns), [scopedRuns]);
   const spend = useMemo(() => observedSpend(logs), [logs]);
   const rows = useMemo(() => recentRuns(scopedRuns, SHEET_MAX), [scopedRuns]);
-  const quiet = stats.working === 0 && stats.gates === 0 && stats.failed === 0;
+  // Slice AA (DES-UX-001 §7.1, B4): inside a project shell, a gate waiting on a
+  // run OUTSIDE the scope announces HERE — this count plus the bell — never as
+  // an overlay card over the mode surface. Scoped stats stay untouched (EC34:
+  // the sheet's rows still equal `stats.gates`); this is a separate, labeled
+  // count over the same gate store the toasts read.
+  const gatesElsewhere = useMemo(() => {
+    if (scopeProjectId === null) return 0;
+    const scoped = new Set(scopedRuns.map((v) => v.session.id));
+    return Object.keys(gates).filter((id) => !scoped.has(id)).length;
+  }, [gates, scopeProjectId, scopedRuns]);
+  const quiet =
+    stats.working === 0 && stats.gates === 0 && stats.failed === 0 && gatesElsewhere === 0;
 
   // EC27: entering an immersive mode collapses an open sheet — the canvas-first
   // principle, same transition the rail collapses on. Fires on the transition
@@ -198,6 +209,17 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
     <>
       <Segment glyph="●" color="var(--status-run)" text={`${stats.working} working`} />
       <Segment glyph="⏸" color="var(--status-gate)" text={`${stats.gates} gates`} pulse={stats.gates > 0} />
+      {/* §7.1 (slice AA): the cross-project announcement — labeled, beside the
+          scoped count, so "0 gates +2 elsewhere" reads as two truths, not one lie. */}
+      {gatesElsewhere > 0 && (
+        <span
+          data-testid="runs-bar-gates-elsewhere"
+          data-count={gatesElsewhere}
+          style={{ ...WINDOW_LABEL_STYLE, color: 'var(--status-gate)' }}
+        >
+          +{gatesElsewhere} elsewhere
+        </span>
+      )}
       <Segment glyph="✗" color="var(--status-fail)" text={`${stats.failed} failed`} />
       {/* EC39 (slice W): the three counts share one window and SAY it — the
           unwindowed listing, "all" — so "2 failed" here beside a "1 failed
@@ -229,6 +251,7 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
         data-window="all"
         data-working={stats.working}
         data-gates={stats.gates}
+        data-gates-elsewhere={gatesElsewhere}
         data-failed={stats.failed}
         className="fixed bottom-0 left-0 right-0 flex items-center font-mono"
         style={{
