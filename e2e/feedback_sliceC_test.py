@@ -13,6 +13,13 @@ The slice DOM ACs, verbatim from §8.3:
   4. `[data-testid="add-agent"]` button opens the roster picker;
   5. zero `openChat` requests fire on mount (verified by `page.on('request')`).
 
+RE-SCOPED by DES-UX-001 slice AB (§11.2): chip seeding is ROSTER-FIRST with
+the cold-cache fallback — this route fetches no roster before Chat mounts, so
+what this rig pins IS the cold-cache fallback arm (the trio, zero requests,
+`data-source="fallback"` on the chips bar). The roster-first arm — a warm
+cache seeding the chips, the first send fetching the roster on its own
+gesture — is pinned by ux_sliceAB_test.py and the GroupChat unit suites.
+
 "Without any network request" is measured as the slice-B rig measured it: the
 app-shell rail fires its own requests identically on main (projects, runs —
 they are not this slice's), so the tap records EVERY /api/v1/* request and the
@@ -142,6 +149,7 @@ with sync_playwright() as p:
              const add = document.querySelector('[data-testid="add-agent"]');
              return {
                barCount: bar ? bar.dataset.count : null,
+               barSource: bar ? bar.dataset.source : null,
                chipKeys: chips.map(c => c.dataset.agent),
                chipRadius: c0 ? c0.borderRadius : null,
                chipFontSize: c0 ? c0.fontSize : null,
@@ -151,7 +159,7 @@ with sync_playwright() as p:
                xBackground: xs ? xs.backgroundColor : null,
                addPresent: !!add,
                addDashed: add ? getComputedStyle(add).borderTopStyle === 'dashed' : false,
-               noThread: !document.querySelector('[title="ready"], [title="warming"]'),
+               noThread: !document.querySelector('[data-testid="seat-chip"]'),
                teachPresent: !!document.querySelector('[data-testid="chat-firstrun"]'),
                pickerClosed: !document.querySelector('[data-testid="agent-picker"]'),
              };
@@ -205,6 +213,7 @@ report["steps"]["chips_first_render"] = {
     "ok": all([
         fonts_ok,
         first_render["barCount"] == "3",
+        first_render["barSource"] == "fallback",  # slice AB §7.9-1's honesty attr
         first_render["chipKeys"] == FALLBACK,
         # §6.3 anatomy in tokens: --radius-full → 9999px, --text-xs → 11px,
         # EC13: the chip label reads in the SANS (Inter stack), 3px 8px 3px 6px.
