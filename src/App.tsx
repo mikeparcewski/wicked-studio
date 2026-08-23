@@ -28,6 +28,7 @@ import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { WorkPage } from './components/WorkPage.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
+import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useLegacyRedirect } from './hooks/useLegacyRedirect.js';
@@ -298,9 +299,10 @@ export function App(): React.ReactElement {
    * interactive canvas (§6.3, slice 8); Video still states what is coming and the action
    * that enables it; Chat and Build reuse the existing surfaces above.
    *
-   * Build with nothing open is the existing run home, UNSCOPED: scoping a project's runs
-   * is the board's data plumbing (slices 5-6) and needs launch to file the run it creates,
-   * so filtering here first would hide a run the user had just launched.
+   * Build with nothing open is the run home SCOPED to the project (DES-UX-001 §2.3
+   * rule 2, slice S — superseding the old "unscoped until launch files" caveat: launch
+   * DOES file the run now, and the DTO echoes `project_id` back, so a just-launched run
+   * appears in its project's list within one live-update cycle instead of vanishing).
    */
   function renderModeSurface(m: Mode, pid: string): React.ReactElement {
     // The document's VERSION rides in the query (`?v=N`, slice 9) — the artifact is the
@@ -419,7 +421,15 @@ export function App(): React.ReactElement {
     if (panel === 'repos') {
       return (
         <div className="flex-1 overflow-hidden">
-          <RepositoriesPanel onSelectRun={selectRun} autoShowRegister={showRegisterRepo} navigate={navigate} />
+          <RepositoriesPanel
+            onSelectRun={selectRun}
+            autoShowRegister={showRegisterRepo}
+            navigate={navigate}
+            // Slice S (DES-UX-001 §2.3 rule 1): `/repos/new?project=<id>` — the
+            // ambient-project carry from an entry point inside a project context.
+            // The ONE shared derivation; the panel itself never re-parses the URL.
+            ambientProject={ambientProjectId(pathname, search)}
+          />
         </div>
       );
     }
@@ -544,8 +554,16 @@ export function App(): React.ReactElement {
 
       {/* The runs bottom panel (DES-FEEDBACK-003 §5, slice N): a fourth reader
           of the SAME `useRuns()` array plus the client-held stores — zero new
-          requests, zero new sockets. Fixed at the viewport bottom, everywhere. */}
-      <RunsBottomPanel runs={runs} runPath={runPath} navigate={navigate} immersive={immersive} />
+          requests, zero new sockets. Fixed at the viewport bottom, everywhere.
+          Inside a project route its counters scope to THAT project's runs
+          (DES-UX-001 §2.3 rule 2, slice S — `data-scope="project"`). */}
+      <RunsBottomPanel
+        runs={runs}
+        runPath={runPath}
+        navigate={navigate}
+        immersive={immersive}
+        scopeProjectId={projectId}
+      />
 
       {/* Gate toasts — renders above everything; scoped to the current run. NOT on the
           orchestrator board: there every waiting gate is already an answerable chip on

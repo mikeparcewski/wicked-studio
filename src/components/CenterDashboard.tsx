@@ -17,10 +17,11 @@ import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { unitsInFlight } from '../api/run-state.js';
 import { useGateStore } from '../store/gates.js';
+import { useMembershipStore } from '../store/membership.js';
 import { useRunEventStore } from '../store/events.js';
 import { useSteeringStore } from '../store/steering.js';
+import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
-import { modePath } from '../hooks/useRoute.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -782,7 +783,24 @@ export function CenterDashboard({
 
   const { range, setRange, filter: filterByRange } = useTimeRange('30d');
 
-  const filteredRuns = useMemo(() => filterByRange(runs), [runs, filterByRange]);
+  // ── Project scoping (DES-UX-001 §2.3 rule 2, slice S) ─────────────────────
+  // Inside a project shell (`/p/:id/build`) this surface shows EXACTLY the
+  // project's runs — the run DTO's own `project_id` (CREW-UX-2 daemon truth),
+  // with the board model's membership mirror answering only for pre-0.8.0
+  // daemons whose DTOs never carry the field. Never the global list filtered
+  // by nothing. Outside a project (`/runs`) it stays the flat cross-project home.
+  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
+  const scopedRuns = useMemo(() => {
+    if (projectId === null) return runs;
+    return runs.filter((v) => {
+      const claimed = sessionProjectId(v.session);
+      return claimed !== undefined
+        ? claimed === projectId
+        : projectIdByRun[v.session.id] === projectId;
+    });
+  }, [runs, projectId, projectIdByRun]);
+
+  const filteredRuns = useMemo(() => filterByRange(scopedRuns), [scopedRuns, filterByRange]);
 
   // ── Derived: active sessions only (feed + send panel scope) ──────────────
   const activeRuns = useMemo(
@@ -929,11 +947,15 @@ export function CenterDashboard({
     return entries;
   }, [byRun, activeRuns]);
 
-  // ── Open gates (sorted newest-first by receivedAt) ────────────────────────
-  const openGates = useMemo(
-    () => Object.values(gates).sort((a, b) => b.receivedAt - a.receivedAt),
-    [gates],
-  );
+  // ── Open gates (sorted newest-first by receivedAt) — inside a project,
+  // scoped to ITS runs (§2.3 rule 2: a project page shows exactly its runs;
+  // a foreign gate belongs to the bar/toasts, not this inbox). ──────────────
+  const openGates = useMemo(() => {
+    const all = Object.values(gates).sort((a, b) => b.receivedAt - a.receivedAt);
+    if (projectId === null) return all;
+    const mine = new Set(scopedRuns.map((v) => v.session.id));
+    return all.filter((g) => mine.has(g.runId));
+  }, [gates, projectId, scopedRuns]);
 
   /** The last recorded `sessionFailed` message for a run, if the store holds one. */
   const failReasonOf = useCallback(
@@ -1031,7 +1053,20 @@ export function CenterDashboard({
                 marginBottom: '10px',
               }}
             >
-              <p style={sectionLabel}>Runs</p>
+              <p style={sectionLabel}>
+                Runs
+                {projectId !== null && (
+                  // EC34 (§2.5): the count beside a list equals the rows beneath
+                  // it, SET-EQUAL on the same paint — one derivation (`runRows`)
+                  // feeds both, so they cannot disagree.
+                  <span
+                    data-testid="project-run-count"
+                    style={{ marginLeft: '6px', color: 'var(--ink-muted)', fontSize: 'var(--text-2xs)', ...mono }}
+                  >
+                    {runRows.length}
+                  </span>
+                )}
+              </p>
               <TimeRangeSelector value={range} onChange={setRange} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1083,8 +1118,9 @@ export function CenterDashboard({
           <button
             type="button"
             data-testid="build-something"
-            // §4.3: from project context the launch form opens pre-bound and locked.
-            onClick={() => navigate(projectId ? modePath(projectId, 'build', 'new') : '/runs/new')}
+            // §4.3: from project context the launch form opens pre-bound and
+            // locked — the shared `launchPath` spelling (slice S, §2.3 rule 1).
+            onClick={() => navigate(launchPath(projectId, 'build'))}
             style={{
               background: 'var(--accent)',
               color: 'var(--accent-fg)',

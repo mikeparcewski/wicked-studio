@@ -13,6 +13,14 @@ interface Props {
   onSelectRun?: (runId: string) => void;
   autoShowRegister?: boolean;
   navigate: (path: string) => void;
+  /**
+   * Slice S (DES-UX-001 §2.3 rule 1): the ambient project carried into
+   * `/repos/new?project=<id>` by an entry point inside a project context —
+   * derived by the ONE shared helper (`ambientProjectId`), passed down, never
+   * re-parsed here. When set, the register form's project field pre-binds to
+   * it and LOCKS (the slice-B contract) — never a silent reset to Unfiled.
+   */
+  ambientProject?: string | null;
 }
 
 const TERMINAL = new Set(['completed', 'cancelled', 'failed']);
@@ -179,7 +187,7 @@ function FailingReposTile({ runs, repos, attachedAt, now }: {
   );
 }
 
-export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: Props): React.ReactElement {
+export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -206,9 +214,21 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
   // binds via POST /projects/:id/members (`crew.repo`) right after registration.
   // `null` = Unfiled: register exactly as before, attach nothing.
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(ambientProject);
   const [showNewProject, setShowNewProject] = useState(false);
   const projectsRequested = useRef(false);
+
+  // The ambient carry pre-binds and LOCKS the field (§2.5's AC: entered from a
+  // project context, the form renders `data-locked` — never Unfiled). Resolve
+  // the project's NAME up front, exactly like the composer's §4.3 pre-bind.
+  const locked = ambientProject !== null;
+  useEffect(() => {
+    if (ambientProject !== null) {
+      setSelectedProjectId(ambientProject);
+      loadProjects();
+    }
+    // loadProjects is ref-guarded and single-shot, so listing only the carry is safe.
+  }, [ambientProject]);
 
   function loadProjects(): void {
     if (projectsRequested.current) return;
@@ -287,7 +307,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
       setNewGitUrl('');
       setCheckoutPath('');
       setSourceMode('local');
-      setSelectedProjectId(null);
+      setSelectedProjectId(ambientProject);
       nameEditedRef.current = false;
 
       navigate('/repo-detail/' + encodeURIComponent(repo.id));
@@ -369,11 +389,19 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate }: P
                 Project
               </span>
               <ProjectSwitcher
-                current={projects.find((p) => p.id === selectedProjectId) ?? null}
+                current={
+                  projects.find((p) => p.id === selectedProjectId)
+                  // Locked-but-still-resolving: show the id rather than a false
+                  // "Unfiled" while the one name-resolving read is in flight.
+                  ?? (locked && selectedProjectId !== null
+                    ? { id: selectedProjectId, name: selectedProjectId, description: null, status: 'active', scope: '', created_at: 0, updated_at: 0 }
+                    : null)
+                }
                 projects={projects}
                 onSelect={setSelectedProjectId}
                 onNewProject={() => setShowNewProject(true)}
                 onOpen={loadProjects}
+                locked={locked}
               />
             </div>
 
