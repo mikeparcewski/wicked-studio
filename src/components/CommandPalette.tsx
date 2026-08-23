@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { GovernanceClaim, InteractionRequest, RepoEntry, SessionView } from '../api/types.js';
 import { api } from '../api/client.js';
+import { UNFILED_MOUNT } from '../api/interactive.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { fuzzyMatch, type FuzzyResult } from '../palette/fuzzy.js';
 import { launchPath } from '../hooks/ambientProject.js';
@@ -858,16 +859,18 @@ export function CommandPalette({
         >
           <div className="flex flex-col gap-2" data-testid="palette-project-stage">
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-sans)', margin: 0 }}>
-              {`A ${pickProjectFor} lives in a project — pick one:`}
+              Pick a project — or keep it Unfiled:
             </p>
             <ProjectSwitcher
               current={null}
               projects={projects}
               onSelect={(pid) => {
-                if (pid === null) return; // a document cannot be Unfiled (§3.4)
+                // DES-UX-001 §6.2 (slice U): Unfiled routes to the `default`
+                // project's mount — the daemon's unfiled home — never a silent
+                // close (the same repair as the Make ＋ picker's stage).
                 const m = pickProjectFor;
                 setPickProjectFor(null);
-                navigate(modePath(pid, m));
+                navigate(modePath(pid ?? UNFILED_MOUNT, m));
               }}
             />
           </div>

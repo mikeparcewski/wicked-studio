@@ -1,4 +1,4 @@
-import { createDoc, listDocs, type CreateDocResult, type DocSummary } from '../api/interactive.js';
+import { createDoc, docBinding, listDocs, type CreateDocResult, type DocSummary } from '../api/interactive.js';
 
 /**
  * The studio-owned scratch document a brand learn rides (one per project).
@@ -27,7 +27,7 @@ export interface ScratchDocDeps {
   listDocs: (projectId: string) => Promise<DocSummary[]>;
   createDoc: (
     projectId: string,
-    body: { name: string; kind: 'source'; brief: string; project: string },
+    body: { name: string; kind: 'source'; brief: string; project?: string },
   ) => Promise<CreateDocResult>;
 }
 
@@ -40,7 +40,8 @@ export async function ensureScratchDoc(
   if (docs.some((d) => d.name === SCRATCH_DOC_NAME)) return SCRATCH_DOC_NAME;
   try {
     const created = await deps.createDoc(projectId, {
-      name: SCRATCH_DOC_NAME, kind: 'source', brief: SCRATCH_DOC_BRIEF, project: projectId,
+      // §6.2 (slice U): the Unfiled mount creates unbound; real projects bind.
+      name: SCRATCH_DOC_NAME, kind: 'source', brief: SCRATCH_DOC_BRIEF, ...docBinding(projectId),
     });
     return created.name;
   } catch (e: unknown) {

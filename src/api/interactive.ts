@@ -113,6 +113,25 @@ export interface CreateDocBody {
   // `requestThemeLearn` and sticks server-side.
 }
 
+/**
+ * The synthesized Unfiled mount (DES-UX-001 §6.2, slice U): crew's proxy
+ * synthesizes `/projects/default/interactive` by design — `proxy-routes.ts`
+ * `rootFor()` skips the existence check for `default` — so the picker's
+ * Unfiled routes THERE, the daemon's own unfiled home.
+ */
+export const UNFILED_MOUNT = 'default';
+
+/**
+ * The create body's binding half (§8.4.1 probe 3): a real project binds
+ * (`project` present — registration is the authority, a refused bind is the
+ * loud 502 with nothing created); the Unfiled mount OMITS the field, because
+ * a project-unbound doc is the bridge's native shape there — `default` is
+ * synthesized, and asking crew to register against it would be refused.
+ */
+export function docBinding(projectId: string): Pick<CreateDocBody, 'project'> {
+  return projectId === UNFILED_MOUNT ? {} : { project: projectId };
+}
+
 export interface CreateDocResult {
   name: string;
   head: number;
