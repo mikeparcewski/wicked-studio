@@ -316,7 +316,9 @@ with sync_playwright() as p:
     # now STAYS OPEN and answers — in-flight, then done when the readback ripens. The
     # submission is still a MESSAGE (§2.3): the ask lands in the thread verbatim.
     page.locator('[data-testid="learn-inflight"]').wait_for(timeout=30000)
-    page.locator('[data-testid="doc-message"]').last.wait_for(timeout=30000)
+    page.locator('[data-testid="doc-message"]',
+                 has_text="Learn a theme from https://acme.example/brand") \
+        .first.wait_for(timeout=30000)
     learned = page.evaluate(
         """() => ({
              askInThread: Array.from(document.querySelectorAll('[data-testid="doc-message"]'))
