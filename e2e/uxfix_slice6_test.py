@@ -26,7 +26,7 @@ by DES-FEEDBACK-001 §7.3, which made Document mode canvas-first):
      whose empty state points at it, and the drawer state survives the
      navigation the composer makes.)
   2. Thread tags: each message that produced a version carries
-     data-testid="thread-version-tag" with its data-version, reading
+     data-testid="version-marker" with its data-version, reading
      "▤ v<N> landed"; a tag click navigates to that version (?v=N) and the
      strip entry highlights — the thread→strip direction.
   3. The slice-9 regression guard (§7.6): selecting a strip entry swaps the
@@ -147,7 +147,7 @@ with sync_playwright() as p:
     # ── Scene A: W3 — create from the brief, watch v1 land ────────────────────────
     page.locator('[data-testid="doc-composer"]').fill("Make me a deck for the Q3 review")
     page.keyboard.press("Enter")
-    page.locator('[data-testid="thread-version-tag"][data-version="1"]').wait_for(timeout=30000)
+    page.locator('[data-testid="version-marker"][data-version="1"]').wait_for(timeout=30000)
     page.locator('[data-testid="version-entry"][data-version="1"]').wait_for(timeout=30000)
     page.locator('[data-testid="thread"][data-composer-state="terminal"]').wait_for(timeout=30000)
 
@@ -155,7 +155,7 @@ with sync_playwright() as p:
     page.locator('[data-testid="doc-composer"]').fill("Tighten this headline")
     page.keyboard.press("Enter")
     page.locator('[data-testid="version-divider"][data-version="2"]').wait_for(timeout=30000)
-    page.locator('[data-testid="thread-version-tag"][data-version="2"]').wait_for(timeout=30000)
+    page.locator('[data-testid="version-marker"][data-version="2"]').wait_for(timeout=30000)
     page.locator('[data-testid="version-entry"][data-version="2"][data-selected="true"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas"][data-version="2"]').wait_for(timeout=30000)
     # The canvas is LOADED (its named loading state has retired) before any capture.
@@ -204,7 +204,7 @@ with sync_playwright() as p:
     # AC 2 — the tags: both landed versions are tagged, legibly, on their messages.
     tags = page.evaluate(
         """() => {
-             const tags = Array.from(document.querySelectorAll('[data-testid="thread-version-tag"]'));
+             const tags = Array.from(document.querySelectorAll('[data-testid="version-marker"]'));
              const msgs = Array.from(document.querySelectorAll('[data-testid="doc-message"]'));
              return {
                tagTexts: tags.map(t => t.textContent.trim()),
@@ -272,7 +272,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "uxfix-6-version-crosslink.png"))
 
     # thread → strip: clicking a tag navigates to ITS version; the strip follows.
-    page.locator('[data-testid="thread-version-tag"][data-version="2"]').click()
+    page.locator('[data-testid="version-marker"][data-version="2"]').click()
     page.locator('[data-testid="version-entry"][data-version="2"][data-selected="true"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas"][data-version="2"]').wait_for(timeout=30000)
     thread_to_strip = page.evaluate("() => location.pathname + location.search")

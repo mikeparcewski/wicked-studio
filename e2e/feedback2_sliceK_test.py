@@ -208,7 +208,7 @@ with sync_playwright() as p:
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-composer"]').fill("Make me a deck for the Q3 review")
     page.keyboard.press("Enter")
-    page.locator('[data-testid="thread-version-tag"][data-version="1"]').wait_for(timeout=30000)
+    page.locator('[data-testid="version-marker"][data-version="1"]').wait_for(timeout=30000)
     page.locator('[data-testid="thread"][data-composer-state="terminal"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-composer"]').fill("Tighten this headline")
     page.keyboard.press("Enter")
@@ -372,7 +372,7 @@ with sync_playwright() as p:
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-composer"]').fill("Write a one-pager on the rollout")
     page.keyboard.press("Enter")
-    page.locator('[data-testid="thread-version-tag"][data-version="1"]').wait_for(timeout=30000)
+    page.locator('[data-testid="version-marker"][data-version="1"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas"][data-version="1"]').wait_for(timeout=30000)
     wake_strip(page)
     v1only = page.evaluate(

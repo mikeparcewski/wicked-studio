@@ -300,11 +300,11 @@ with sync_playwright() as p:
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-composer"]').fill("Make me a deck for the Q3 review")
     page.keyboard.press("Enter")
-    page.locator('[data-testid="thread-version-tag"][data-version="1"]').wait_for(timeout=30000)
+    page.locator('[data-testid="version-marker"][data-version="1"]').wait_for(timeout=30000)
     page.locator('[data-testid="thread"][data-composer-state="terminal"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-composer"]').fill("Tighten this headline")
     page.keyboard.press("Enter")
-    page.locator('[data-testid="thread-version-tag"][data-version="2"]').wait_for(timeout=30000)
+    page.locator('[data-testid="version-marker"][data-version="2"]').wait_for(timeout=30000)
     page.locator('[data-testid="version-entry"][data-version="2"][data-selected="true"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas"][data-version="2"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas-loading"]').wait_for(state="detached", timeout=30000)
@@ -315,7 +315,7 @@ with sync_playwright() as p:
              const strip = document.querySelector('[data-testid="version-strip"]');
              const dot = document.querySelector('[data-testid="version-active-dot"]');
              const selected = document.querySelector('[data-testid="version-entry"][data-selected="true"]');
-             const tag = document.querySelector('[data-testid="thread-version-tag"][data-version="2"]');
+             const tag = document.querySelector('[data-testid="version-marker"][data-version="2"]');
              const thread = document.querySelector('[data-testid="thread"]');
              const stamp = document.querySelector('[data-testid="version-stamp"]');
              return {{
@@ -371,7 +371,7 @@ with sync_playwright() as p:
     page.locator('[data-testid="themes-open"]').click()  # toggle shut for the capture
 
     # Back to v2 for the named capture (the slice entry: v2 selected, tags visible).
-    page.locator('[data-testid="thread-version-tag"][data-version="2"]').click()
+    page.locator('[data-testid="version-marker"][data-version="2"]').click()
     page.locator('[data-testid="version-entry"][data-version="2"][data-selected="true"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas"][data-version="2"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas-loading"]').wait_for(state="detached", timeout=30000)
