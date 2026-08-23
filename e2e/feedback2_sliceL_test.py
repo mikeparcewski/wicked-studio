@@ -360,12 +360,22 @@ with sync_playwright() as p:
         """() => ({ pushed: window.__pushed, focused: window.__focused,
                     closed: window.__notifObjs[0].closed })"""
     )
+    # DES-UX-001 slice AC re-scope (§11.2): gate-posture is a LAUNCH-time
+    # control with a non-"none" shipped default (§7.8/§13) — the STEER composer
+    # this click lands on must not render one (a live run's gate is answered,
+    # never re-postured). Re-derived at slice time: the batch-entry assertions
+    # below pin POST /runs/:id/gate bodies, which carry no launch posture, so
+    # none of them move; this negative pin is the one the flip adds here.
+    posture_leak = pageB.evaluate(
+        "() => !!document.querySelector('[data-testid=\"gate-posture\"]')")
     report["steps"]["notification_click_lands_on_gate"] = {
         "ok": all([
             clicked["focused"] >= 1,
             f"/p/{SIMPLE_PROJECT}/build/{SIMPLE_RUN}#gate" in clicked["pushed"],
             clicked["closed"] is True,
+            not posture_leak,
         ]),
+        "gate_posture_absent_on_steer_composer": not posture_leak,
         **clicked,
     }
     pageB.close()
