@@ -23,7 +23,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat } from '../src/components/GroupChat.js';
-import { clearCachedRoster } from '../src/store/rosterCache.js';
+import { setCachedRoster } from '../src/store/rosterCache.js';
+import type { RosterSeat } from '../src/api/types.js';
 
 const openChat = vi.fn();
 const getChat = vi.fn();
@@ -64,7 +65,9 @@ beforeEach(() => {
   );
   sendChatMessage.mockResolvedValue({ seats: [] });
   sessionStorage.clear();
-  clearCachedRoster(); // chips render the §6.2 fallback trio
+  // EC44 re-scope: a WARM cache renders the chips synchronously — this suite
+  // pins their VISUAL anatomy, not the seeding (see GroupChat.chips/firstrun).
+  setCachedRoster(ROSTER as unknown as RosterSeat[]);
 });
 
 describe('GroupChat — the §5.3 visual language', () => {

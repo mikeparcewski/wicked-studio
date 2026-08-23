@@ -382,7 +382,8 @@ export function GroupChat({
   // session (a warm cache already seeded the chips synchronously above).
   useEffect(() => {
     if (getCachedRoster() === null) resolveRoster();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design (EC44's one named request)
+    // (mount-only by design — EC44's one named request; the helper closes
+    // over nothing reactive, so the empty dep list is complete.)
   }, []);
 
   /** Toggle the roster picker; on first open with a cold cache, fetch (a user action — §2.4-safe). */

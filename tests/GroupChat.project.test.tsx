@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat } from '../src/components/GroupChat.js';
+import { setCachedRoster } from '../src/store/rosterCache.js';
+import type { RosterSeat } from '../src/api/types.js';
 
 /**
  * DES-FEEDBACK-001 slice B (§5.1/§5.2/§4.3) — the Chat create flow's project
@@ -66,6 +68,11 @@ beforeEach(() => {
   );
   sendChatMessage.mockResolvedValue({ seats: [] });
   sessionStorage.clear();
+  // EC44 re-scope: this suite's subject is the project binding, not chip
+  // seeding — a WARM roster cache keeps the mount request-free (the cold-cache
+  // arm, where the surface makes its one named roster resolve, is pinned in
+  // GroupChat.chips/firstrun).
+  setCachedRoster(ROSTER as unknown as RosterSeat[]);
 });
 
 describe('GroupChat — create-flow project binding (slice B)', () => {
