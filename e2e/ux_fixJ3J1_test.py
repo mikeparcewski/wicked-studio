@@ -169,10 +169,15 @@ with sync_playwright() as p:
           revived["causedBy"] == msg_id and not revived["timedOut"] and not revived["generating"],
           expected_cause=msg_id, **revived)
 
-    # ── Scene 2 (AC 2): no premature anchors on the continue path ──────────────
+    # ── Scene 2 (AC 2): no premature anchors — re-scoped to the round-3 contract:
+    # a PLAIN continue-send never forks (no divider, ever); the deferred divider
+    # is the explicit BRANCH gesture's anchor (sending from an older ?v=N). ─────
     created = api_create_doc("anchor-truth", "the anchor-truth brief")
     DOC2 = created["name"]
     set_fixture(ORIGIN, doc_run_ms=2500)
+    fork_posts: list[str] = []
+    page.on("request", lambda r: fork_posts.append(r.url)
+            if r.method == "POST" and r.url.endswith("/api/fork") else None)
     page.goto(f"{ORIGIN}/p/{PID}/document/{DOC2}", wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
@@ -187,8 +192,8 @@ with sync_playwright() as p:
     cont_id = page.evaluate(
         """() => { const m = document.querySelectorAll('[data-testid="doc-message"]');
                    return m[m.length - 1]?.getAttribute('data-message-id'); }""")
-    # The fork has acked (the send chip is up) but nothing has LANDED: no divider,
-    # no version chip on the continuation message — anchors wait for the wire.
+    # The send has acked but nothing has LANDED: no version chip yet — and no fork
+    # was fired, so no divider will EVER render for this plain send.
     page.wait_for_timeout(900)  # inside the 2.5s scheduled landing
     premature = page.evaluate(
         """(contId) => ({
@@ -197,26 +202,68 @@ with sync_playwright() as p:
                `[data-testid="version-marker"][data-caused-by="${contId}"]`),
            })""", cont_id)
     check("no_anchor_before_the_version_arrives",
-          not premature["divider"] and not premature["chipOnSend"], **premature)
+          not premature["divider"] and not premature["chipOnSend"],
+          forks_fired=len(fork_posts), **premature)
 
-    # The version.created arrival materializes the divider ABOVE its message.
+    # The ANSWERER's version.created is what tags the plain send — v2, from the
+    # service, with NO fork fired and NO continuation divider.
+    page.locator(f'[data-testid="version-marker"][data-caused-by="{cont_id}"]').wait_for(timeout=15000)
+    plain = page.evaluate(
+        """(contId) => ({
+             markerVersion: document.querySelector(
+               `[data-testid="version-marker"][data-caused-by="${contId}"]`)?.getAttribute('data-version'),
+             divider: !!document.querySelector('[data-testid="version-divider"]'),
+           })""", cont_id)
+    check("plain_send_answered_by_the_wire_no_fork_no_divider",
+          plain["markerVersion"] == "2" and not plain["divider"] and fork_posts == [],
+          forks_fired=len(fork_posts), **plain)
+
+    # The BRANCH gesture: send from the explicitly selected OLDER v1 — the one
+    # case fork survives, and the divider stays the deferred wire-proof anchor.
+    page.goto(f"{ORIGIN}/p/{PID}/document/{DOC2}?v=1", wait_until="domcontentloaded")
+    page.add_style_tag(content=HIDE_GATE_TOASTS)
+    page.locator('[data-testid="doc-canvas"][data-version="1"]').wait_for(timeout=30000)
+    wake_strip(page)
+    page.locator('[data-testid="thread-toggle"]').click()
+    page.locator('[data-testid="thread"][data-composer-state="terminal"]').wait_for(timeout=15000)
+    page.locator('[data-testid="doc-composer"]').fill("branch: keep the original intro")
+    page.keyboard.press("Enter")
+    page.locator('[data-testid="thread-generating"]').wait_for(timeout=15000)
+    branch_id = page.evaluate(
+        """() => { const m = document.querySelectorAll('[data-testid="doc-message"]');
+                   return m[m.length - 1]?.getAttribute('data-message-id'); }""")
+    # The fork has acked (v3 committed) but nothing has LANDED: the divider is
+    # only REGISTERED — no anchor renders before the wire's proof.
+    page.wait_for_timeout(900)
+    branch_premature = page.evaluate(
+        """(bid) => ({
+             divider: !!document.querySelector('[data-testid="version-divider"]'),
+             chipOnSend: !!document.querySelector(
+               `[data-testid="version-marker"][data-caused-by="${bid}"]`),
+           })""", branch_id)
+    check("branch_divider_deferred_until_the_wire_proves_it",
+          len(fork_posts) == 1
+          and not branch_premature["divider"] and not branch_premature["chipOnSend"],
+          forks_fired=len(fork_posts), **branch_premature)
+
+    # The landing materializes the divider ABOVE its message.
     page.locator('[data-testid="version-divider"]').wait_for(timeout=15000)
     anchored = page.evaluate(
-        """(contId) => {
+        """(bid) => {
              const divider = document.querySelector('[data-testid="version-divider"]');
              const next = divider?.nextElementSibling;
              return {
                dividerVersion: divider?.getAttribute('data-version'),
                dividerText: divider?.textContent ?? '',
                aboveItsMessage: !!next?.querySelector(
-                 `[data-testid="doc-message"][data-message-id="${contId}"]`),
+                 `[data-testid="doc-message"][data-message-id="${bid}"]`),
                chipOnSend: !!document.querySelector(
-                 `[data-testid="version-marker"][data-caused-by="${contId}"]`),
+                 `[data-testid="version-marker"][data-caused-by="${bid}"]`),
              };
-           }""", cont_id)
+           }""", branch_id)
     check("divider_anchors_on_arrival_above_its_message",
-          anchored["dividerVersion"] == "2"
-          and "continues as v2" in anchored["dividerText"]
+          anchored["dividerVersion"] == "3"
+          and "continues as v3" in anchored["dividerText"]
           and anchored["aboveItsMessage"] and anchored["chipOnSend"],
           **anchored)
     set_fixture(ORIGIN, doc_run_ms=0)
