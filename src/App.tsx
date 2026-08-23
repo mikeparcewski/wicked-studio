@@ -572,8 +572,12 @@ export function App(): React.ReactElement {
       {/* Gate toasts — renders above everything; scoped to the current run. NOT on the
           orchestrator board: there every waiting gate is already an answerable chip on
           its project's card, sorted to the front (§1.4, slice 7), and the unscoped stack
-          would both duplicate those chips and physically cover the cards holding them. */}
-      {panel !== 'home' && <GateNotifications onSelect={selectRun} runId={runId} />}
+          would both duplicate those chips and physically cover the cards holding them.
+          Slice AA (§7.1): inside a project shell only THAT project's gates paint cards —
+          a foreign gate announces in the runs bar + bell instead (B4). */}
+      {panel !== 'home' && (
+        <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={runs} />
+      )}
 
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (
