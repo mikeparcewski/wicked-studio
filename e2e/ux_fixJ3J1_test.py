@@ -153,20 +153,22 @@ with sync_playwright() as p:
 
     # The retry is LIVE: with the bridge speaking again, the same send lands its
     # version — the pill retires into the real anchor (§3.3: a failure state
-    # always carries its own fix).
+    # always carries its own fix). (Round-3 fixture honesty: the retry's answer is
+    # the ANSWERER minting a NEW version — head+1 — never a version re-announced
+    # for the send itself, so the anchor is whatever version the wire lands.)
     set_fixture(ORIGIN, doc_silent=False)
     page.locator('[data-testid="thread-generating-retry"]').click()
     page.locator('[data-testid="thread-generating"]').wait_for(timeout=15000)
-    page.locator('[data-testid="version-marker"][data-version="1"]').wait_for(timeout=30000)
+    page.locator(f'[data-testid="version-marker"][data-caused-by="{msg_id}"]').wait_for(timeout=30000)
     revived = page.evaluate(
-        """() => ({
-             causedBy: document.querySelector('[data-testid="version-marker"][data-version="1"]')
-               ?.getAttribute('data-caused-by'),
+        """(msgId) => ({
+             markerVersion: document.querySelector(
+               `[data-testid="version-marker"][data-caused-by="${msgId}"]`)?.getAttribute('data-version'),
              timedOut: !!document.querySelector('[data-testid="thread-generating-timeout"]'),
              generating: !!document.querySelector('[data-testid="thread-generating"]'),
-           })""")
+           })""", msg_id)
     check("timeout_retry_is_live_and_anchors",
-          revived["causedBy"] == msg_id and not revived["timedOut"] and not revived["generating"],
+          bool(revived["markerVersion"]) and not revived["timedOut"] and not revived["generating"],
           expected_cause=msg_id, **revived)
 
     # ── Scene 2 (AC 2): no premature anchors — re-scoped to the round-3 contract:
