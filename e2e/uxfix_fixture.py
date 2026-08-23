@@ -93,6 +93,26 @@ Mutable switches (flipped over POST /__fixture between page loads):
   notif_prefs     — replaces the settings store's `studio.notifications`
                     (a dict; None REMOVES the key — the never-persisted
                     default case), same channel as `appearance`.
+  forensics       — the slice-R failure-forensics corpus (DES-UX-001 §1):
+                    r-auth (failed 13m ago) gains TWO real-shape units — a
+                    `done` survey with a captured transcript served on the
+                    REAL `GET /runs/:id/units/:unitKey/output` wire (its
+                    markdown cites /w2/auth-evidence/NOTES.md, served on the
+                    files route via the run's `extra_write_roots`) and a
+                    `rejected` review whose output route answers the daemon's
+                    honest `outputUnavailable` — plus a `gateEvaluated` deny
+                    (agentVerdict/agentReasoning/denialReason, and
+                    `evaluatorPass: true` beside EMPTY `evaluatorPolicies` —
+                    the FINDING-025 vacuous default-allow) in its durable
+                    event tail. r-auth stays workdir-less, so its /diff
+                    answers the REAL 409 "has no workdir" (the named-cause
+                    case). r-legacy (failed 8 DAYS ago) keeps a tail with NO
+                    `gateEvaluated` (the retention empty state) and its
+                    /diff HANGS without answering (the zero-request-hang
+                    regression trap — the client must still have dispatched
+                    ≥1 fetch and reach its own timeout branch). Both failed
+                    runs gain one `dataUsed` file so the Files panel offers
+                    [Full diff]. Default False.
 
 A rig that never flips them gets the default W2 board.
 """
@@ -186,7 +206,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # /ws loop (the extra_narration mechanism) — how a rig injects a gate
          # ARRIVAL (the desktop-notification trigger), distinct from the
          # cached-gate GET a page load reconciles.
-         "extra_gates": []}
+         "extra_gates": [],
+         # Slice R (DES-UX-001 §1): the failure-forensics corpus — see the
+         # module docstring. Default False: no standing rig's failed runs
+         # change shape.
+         "forensics": False}
 state_lock = threading.Lock()
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
@@ -512,6 +536,124 @@ NOTES_DOCS = [
     {"name": "ideas", "kind": "doc", "head": 1, "versions": 1, "updated_at": iso(NOW0 - 2 * DAY)},
     {"name": "todo", "kind": "doc", "head": 1, "versions": 1, "updated_at": iso(NOW0 - 3 * DAY)},
 ]
+
+# ── Slice R (DES-UX-001 §1): the failure-forensics corpus, behind `forensics` ──
+#
+# Everything below speaks the REAL crew wire: the unit-output route's exact
+# contract (routes.ts — 200 `{"output": …}` when a transcript survives, 200
+# `{"output": null, "outputUnavailable": <the FINDING-006 sentence>}` for the
+# rejected unit, 404 naming the run's keys for an unknown one), `gateEvaluated`
+# with the api-types field set (incl. the FINDING-025 vacuous shape: EMPTY
+# `evaluatorPolicies` beside `evaluatorPass: true`), and the crew#305 file
+# route serving the cited evidence under r-auth's `extra_write_roots`.
+
+FORENSICS_EVIDENCE_ROOT = "/w2/auth-evidence"
+FORENSICS_NOTES_PATH = f"{FORENSICS_EVIDENCE_ROOT}/NOTES.md"
+FORENSICS_NOTES_CONTENT = """\
+# Auth middleware survey notes
+
+## Token refresh
+The refresh path lives in `src/auth/refresh.ts` and is exercised by
+`auth.refresh.spec` — any refactor that drops the expired-access +
+valid-refresh branch fails it.
+
+## Rollout order
+Middleware order matters: rateLimit -> session -> refresh.
+"""
+
+# The survey transcript CITES the notes file as a markdown link — the evidence
+# reference the run page must make a live click (§1.5 AC 6), exactly as agents
+# write them into transcripts.
+FORENSICS_SURVEY_OUTPUT = """\
+## Survey: the auth middleware surface
+
+Mapped the middleware chain and the token-refresh path.
+
+- `src/auth/middleware.ts` wires session + refresh, in that order
+- the expired-access + valid-refresh branch is covered by `auth.refresh.spec`
+
+Full notes, including the rollout-order constraint, are in
+[NOTES.md](/w2/auth-evidence/NOTES.md).
+"""
+
+# Core's denial prefix shape ("Governance DENIED unit N (key): …") — the one
+# field that distinguishes a gate deny from a worker failure (FINDING-050).
+FORENSICS_REVIEW_DENIAL = (
+    "Governance DENIED unit 1 (review): the refactored middleware drops the "
+    "token-refresh path — auth.refresh.spec fails on the expired-token branch"
+)
+
+# The rejected unit's honest no-transcript answer — routes.ts's
+# outputUnavailableReason wording, verbatim shape (FINDING-006).
+FORENSICS_REVIEW_UNAVAILABLE = (
+    "Unit 1 was REJECTED, so wicked-core stored no transcript for it: a work_output "
+    "record is written only for a unit whose phase resolved approved, and this one's did not. "
+    "That is the deny-dominates rule holding, not a lost or unreadable record — and the text "
+    "the unit streamed is not retained anywhere else, so this is the whole of what survives. "
+    f"Why it was rejected: {FORENSICS_REVIEW_DENIAL}. "
+    "The gate decision and the run's event trail are in GET /api/v1/runs/r-auth/evidence."
+)
+
+
+def _forensics_unit(key: str, ord_: int, desc: str, stage: str, status: str,
+                    denial: str | None = None) -> dict:
+    return {"id": f"r-auth:{key}", "session_id": "r-auth", "ord": ord_,
+            "description": desc, "stage": stage, "assigned_cli": "claude",
+            "assigned_invocation": None, "council_task_ref": None, "routing": None,
+            "denial_reason": denial, "phase_ref": None, "conformance_ref": None,
+            "phase_status": None, "collection_scope": None, "status": status}
+
+
+FORENSICS_AUTH_UNITS = [
+    _forensics_unit("survey", 0, "survey the auth middleware surface", "recon", "done"),
+    _forensics_unit("review", 1, "review the middleware refactor", "review", "rejected",
+                    denial=FORENSICS_REVIEW_DENIAL),
+]
+
+# What each unit's REAL output route answers (GET /runs/r-auth/units/<key>/output).
+FORENSICS_UNIT_OUTPUTS = {
+    "survey": {"output": FORENSICS_SURVEY_OUTPUT},
+    "review": {"output": None, "outputUnavailable": FORENSICS_REVIEW_UNAVAILABLE},
+}
+
+# The gateEvaluated deny in r-auth's durable tail: the deciding phase (ord 1,
+# the review), its criterion, the agent judge's verdict + reasoning, the
+# winning denialReason — and the FINDING-025 vacuous default-allow shape.
+FORENSICS_GATE_DENY = {
+    "type": "gateEvaluated", "session": "r-auth", "ord": 1,
+    "ts": NOW0 - 12 * MIN - 10 * SEC,
+    "criterion": "the middleware refactor keeps every existing auth test green",
+    "hasDeterministicFloor": True, "deterministicPass": True,
+    "agentVerdict": "fail",
+    "agentReasoning": (
+        "The refactored middleware drops the token-refresh path: requests carrying "
+        "an expired access token with a valid refresh token now 401 instead of "
+        "refreshing — auth.refresh.spec fails on that branch."
+    ),
+    "evaluatorPass": True, "evaluatorPolicies": [],  # FINDING-025: vacuous default-allow
+    "denialReason": FORENSICS_REVIEW_DENIAL,
+    "combined": False,
+}
+
+# Appended to the durable tails while `forensics` is on. Both failed runs gain
+# one dataUsed file so their Files panels offer [Full diff] (the escape-hatch
+# entry points); r-legacy's tail stays gateEvaluated-FREE — the retention
+# empty state ("no evaluator record survives for this run").
+FORENSICS_AUTH_EVENTS = [
+    {"type": "dataUsed", "session": "r-auth", "ord": 0,
+     "files": [FORENSICS_NOTES_PATH], "ts": NOW0 - 12 * MIN - 30 * SEC},
+    FORENSICS_GATE_DENY,
+]
+FORENSICS_LEGACY_EVENTS = [
+    {"type": "dataUsed", "session": "r-legacy", "ord": 0,
+     "files": ["/w2/legacy/importer.py"], "ts": NOW0 - 8 * DAY - 30 * SEC},
+]
+
+# How long r-legacy's /diff HANGS before releasing its (daemon) thread with a
+# late answer — well past the client's own timeout budget, so the rig proves
+# the client reached its error branch on its OWN clock, having dispatched ≥1
+# real fetch (the zero-request-hang regression trap, §1.3-4b).
+FORENSICS_DIFF_HANG_SECONDS = 30
 
 # ── The vision-slice-4 Video surface (DES-VISION-001 §5.6): one recorded demo ──
 #
@@ -1049,7 +1191,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                         + (BATCH_RUNS if state["batch_gates"] else [])
                 viewer_on = state["viewer"]
                 repo_refs_on = state["repo_refs"]
-            if viewer_on or repo_refs_on:
+                forensics_on = state["forensics"]
+            if viewer_on or repo_refs_on or forensics_on:
                 runs = json.loads(json.dumps(runs))
                 for r in runs:
                     # Slice I: the live run gains a workdir (the diff route's
@@ -1059,6 +1202,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                     # Slice P: repo-linked runs for the /repos tiles (§4.4).
                     if repo_refs_on and r["session"]["id"] in REPO_REF_RUNS:
                         r["session"]["repo_ref"] = REPO_ID
+                    # Slice R: r-auth's real-shape units + the evidence root
+                    # its survey transcript cites (workdir stays None — its
+                    # /diff answers the REAL 409 named-cause case).
+                    if forensics_on and r["session"]["id"] == "r-auth":
+                        r["units"] = json.loads(json.dumps(FORENSICS_AUTH_UNITS))
+                        r["session"]["extra_write_roots"] = [FORENSICS_EVIDENCE_ROOT]
             self._json(200, {"runs": runs})
             return True
         # Slice I: the crew#305 file/diff routes (real contract, switch-gated).
@@ -1198,12 +1347,39 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 viewer_on = state["viewer"]
                 river_on = state["river"]
+                forensics_on = state["forensics"]
             if viewer_on and rid == "r-upload":
                 events = events + VIEWER_EVENTS
             # Slice Q: r-auth's durable tail matches its spread attach clock.
             if river_on and rid == "r-auth":
                 events = list(RIVER_AUTH_EVENTS)
+            # Slice R: the forensics tails — r-auth gains its dataUsed file +
+            # the gateEvaluated deny; r-legacy gains ONLY a dataUsed file (its
+            # tail stays gateEvaluated-free: the retention empty state).
+            if forensics_on and rid == "r-auth":
+                events = events + FORENSICS_AUTH_EVENTS
+            if forensics_on and rid == "r-legacy":
+                events = events + FORENSICS_LEGACY_EVENTS
             self._json(200, {"events": events})
+            return True
+        # Slice R: the REAL unit-transcript wire (routes.ts crew — the studio's
+        # WorkUnitDetail + Term-tab transcript read). Served only while the
+        # forensics corpus is on; otherwise the daemon's unknown-run 404.
+        m = re.match(r"^/api/v1/runs/([^/]+)/units/([^/]+)/output$", path)
+        if m:
+            rid = urllib.parse.unquote(m.group(1))
+            key = urllib.parse.unquote(m.group(2))
+            with state_lock:
+                forensics_on = state["forensics"]
+            if not forensics_on or rid != "r-auth":
+                self._json(404, {"error": "Run not found"})
+                return True
+            served = FORENSICS_UNIT_OUTPUTS.get(key)
+            if served is None:
+                self._json(404, {"error": f"Unit '{key}' not found in run {rid}",
+                                 "units": sorted(FORENSICS_UNIT_OUTPUTS)})
+                return True
+            self._json(200, served)
             return True
         if path.startswith("/api/v1/"):
             self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
@@ -1219,7 +1395,12 @@ class W2Handler(SimpleHTTPRequestHandler):
         with state_lock:
             viewer_on = state["viewer"] and state["file_routes"]
             orphan_on = state["orphan"]
-        if not viewer_on:
+            forensics_on = state["forensics"]
+        # Slice R: the forensics corpus lights these routes for the two failed
+        # runs on its own — r-auth's evidence file + REAL workdir-less 409, and
+        # r-legacy's hanging diff — without dragging the whole viewer corpus in.
+        forensic_rid = forensics_on and rid in ("r-auth", "r-legacy")
+        if not viewer_on and not forensic_rid:
             self._json(404, {"message": f"Route GET:{self.path} not found",
                              "error": "Not Found", "statusCode": 404})
             return
@@ -1244,6 +1425,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(400, {"error": "`path` must be an absolute path"})
                 return
             roots = [workdir] if workdir else []
+            # Slice R: r-auth's extra_write_roots — the evidence root its
+            # survey transcript cites (resolveRunPath honors write roots).
+            if forensics_on and rid == "r-auth":
+                roots.append(FORENSICS_EVIDENCE_ROOT)
             if not any(qpath == r or qpath.startswith(r + "/") for r in roots):
                 self._json(403, {"error": "path is outside every allowed root (the "
                                           "run's workdir/write roots and the registered repos)"})
@@ -1253,12 +1438,24 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(400, {"error": "`path` query parameter is required"})
                 return
             served = VIEWER_FILES.get(qpath)
+            if served is None and forensics_on and qpath == FORENSICS_NOTES_PATH:
+                served = {"path": FORENSICS_NOTES_PATH, "content": FORENSICS_NOTES_CONTENT,
+                          "size": len(FORENSICS_NOTES_CONTENT.encode()),
+                          "truncated": False, "binary": False}
             if served is None:
                 self._json(404, {"error": f"no such file: {qpath}"})
                 return
             self._json(200, served)
             return
         # leaf == "diff"
+        if forensics_on and rid == "r-legacy":
+            # Slice R (§1.3-4b): the historical run's diff HANGS — no answer
+            # until well past the client's timeout budget. The client must have
+            # dispatched ≥1 real fetch and reach its OWN error branch; the late
+            # 409 merely releases this daemon thread afterwards.
+            time.sleep(FORENSICS_DIFF_HANG_SECONDS)
+            self._json(409, {"error": f"run {rid}'s workdir no longer exists: /w2/legacy"})
+            return
         if workdir is None:
             self._json(409, {"error": f"run {rid} has no workdir — nothing to diff"})
             return
