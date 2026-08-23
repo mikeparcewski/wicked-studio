@@ -41,9 +41,11 @@ const CARD_W = 260;
 /** The anchoring budget the AC pins: the box sits within this of the element's rect. */
 const GAP = 4;
 
+/** EC45 (DES-UX-001 §7.3): the disabled state says why in OPERATOR language
+ *  with a next step — wire jargon ("instrument bridge") never reaches the DOM. */
 const DEGRADED_TITLE =
-  'Point-and-comment is unavailable: this document did not answer the instrument bridge. '
-  + 'The document still renders, versions and exports normally.';
+  'Comments need the document’s preview to finish loading — reopen the document '
+  + 'or regenerate this version. It still renders, versions and exports normally.';
 
 interface Inventory { widMap: Record<string, WidRect>; measured: ScrollState }
 

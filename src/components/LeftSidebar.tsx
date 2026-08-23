@@ -68,13 +68,15 @@ const S = {
 export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'settings';
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
- *  links `/system` in the collapsed column — it has no dashboard). */
-interface PathSpec { key: PathKey; title: string; glyph: string; dash: string | null; collapsedHref: string }
-const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     glyph: '◇', dash: '/projects', collapsedHref: '/projects' };
-const P_MAKE: PathSpec     = { key: 'make',     title: 'Make',         glyph: '⚒', dash: '/make',     collapsedHref: '/make' };
-const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         glyph: '💬', dash: '/chats',    collapsedHref: '/chats' };
-const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', glyph: '⬡', dash: '/repos',    collapsedHref: '/repos' };
-const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     glyph: '⚙', dash: null,        collapsedHref: '/system' };
+ *  links `/system` in the collapsed column — it has no dashboard). `noun` is
+ *  the SINGULAR the ＋ affordance creates (DES-UX-001 §7.10's grammar fix:
+ *  "New Project", never "New Projects"). */
+interface PathSpec { key: PathKey; title: string; noun: string; glyph: string; dash: string | null; collapsedHref: string }
+const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     noun: 'Project',    glyph: '◇', dash: '/projects', collapsedHref: '/projects' };
+const P_MAKE: PathSpec     = { key: 'make',     title: 'Make',         noun: 'Document',   glyph: '⚒', dash: '/make',     collapsedHref: '/make' };
+const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         noun: 'Chat',       glyph: '💬', dash: '/chats',    collapsedHref: '/chats' };
+const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Repository', glyph: '⬡', dash: '/repos',    collapsedHref: '/repos' };
+const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
 const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_SETTINGS];
 
 const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows', 'policies', 'rules']);
@@ -332,8 +334,8 @@ function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }:
           <button
             type="button"
             data-testid="heading-new"
-            aria-label={`New ${path.title}`}
-            title={`New ${path.title}`}
+            aria-label={`New ${path.noun}`}
+            title={`New ${path.noun}`}
             // Keep the mousedown out of the make-picker's outside-close
             // listener, so ＋ is a true toggle (open picker + click ＋ again
             // = closed, not close-then-reopen).

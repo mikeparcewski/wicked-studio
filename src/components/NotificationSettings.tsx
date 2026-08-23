@@ -73,7 +73,17 @@ export function NotificationSettings(): React.ReactElement {
       };
     }
     if (permission === 'granted') return { text: 'permission granted ✓', color: 'var(--status-run)' };
-    return null; // 'default': nothing to report until the operator opts in
+    if (prefs.desktop) {
+      // §7.10 (slice X2): the on-load truth. The crew-persisted pref says
+      // desktop-on, but THIS browser has never granted (state 'default') —
+      // notifications will not fire here until re-enabled, so say so with the
+      // next step instead of silently rendering an On radio that does nothing.
+      return {
+        text: 'permission not granted in this browser — click the desktop option to grant it',
+        color: 'var(--status-gate)',
+      };
+    }
+    return null; // 'default' + off: nothing to report until the operator opts in
   })();
 
   return (

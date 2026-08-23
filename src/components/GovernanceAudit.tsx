@@ -149,7 +149,8 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
           No governance claims recorded for this run.
         </p>
         <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-          Claims appear when wicked-core runs governance decisions (core#24/#26).
+          {/* §7.10: issue numbers are internal notes, not user copy. */}
+          Claims appear once wicked-core runs governance decisions for a run.
         </p>
         {refreshBtn}
       </div>
