@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { StageKind, UnitStatus, WorkUnit } from '../api/types.js';
 import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore, outputKey } from '../store/runtime.js';
+import { Markdown } from './Markdown.js';
 import { RoutingProvenance } from './RoutingProvenance.js';
 
 const STAGE_STYLE: Record<StageKind, { bg: string; color: string }> = {
@@ -24,9 +25,11 @@ interface Props {
   unit: WorkUnit;
   isGated: boolean;
   onResolved?: () => void;
+  /** Evidence-reference wiring (slice R): file links in the transcript open the FileViewer. */
+  onOpenFile?: (path: string) => void;
 }
 
-export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): React.ReactElement {
+export function WorkUnitDetail({ runId, unit, isGated, onResolved, onOpenFile }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const liveOutput = useRuntimeStore((s) => s.outputs[outputKey(runId, unit.ord)]);
   const [transcript, setTranscript] = useState<string | null>(null);
@@ -166,13 +169,25 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved }: Props): Rea
         </div>
 
         {showTranscript && (
-          <pre
+          <div
             data-testid="unit-transcript"
-            className="mt-1 max-h-96 overflow-auto rounded-lg p-2 text-[10px] leading-tight whitespace-pre-wrap font-mono"
+            className="mt-1 max-h-96 overflow-auto rounded-lg p-2 text-[10px] leading-tight"
             style={{ background: 'var(--surface-base)', color: 'var(--ink-high)' }}
           >
-            {loadingTranscript ? 'Loading…' : transcript}
-          </pre>
+            {/* Markdown, matching the run thread's done-unit treatment — so an evidence
+                reference in the transcript is a live link into the FileViewer, not a
+                dead underline (DES-UX-001 §1.3-4c). */}
+            {loadingTranscript
+              ? <span className="font-mono">Loading…</span>
+              : (
+                <Markdown
+                  className="whitespace-pre-wrap"
+                  {...(onOpenFile !== undefined ? { onOpenFile } : {})}
+                >
+                  {transcript ?? ''}
+                </Markdown>
+              )}
+          </div>
         )}
       </div>
     </li>

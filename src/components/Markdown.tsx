@@ -1,6 +1,18 @@
+import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+
+/**
+ * A file reference, as agents write them into transcripts: any href that is not
+ * an external URL (`https://…`), an anchor, or a mail link. Covers absolute
+ * paths (`/w2/auth/NOTES.md`) and bare relative names (`NOTES.md`) — both used
+ * to render as underlined `target="_blank"` anchors that dead-clicked
+ * (DES-UX-001 §1.1-5: "evidence links do nothing on click").
+ */
+function isFileRef(href: string): boolean {
+  return !/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('//') && !href.startsWith('#');
+}
 
 const components: Components = {
   h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2" style={{ color: 'var(--ink-high)' }}>{children}</h1>,
@@ -77,15 +89,53 @@ const components: Components = {
 interface Props {
   children: string;
   className?: string;
+  /**
+   * Evidence-reference wiring (DES-UX-001 §1.3-4c): when provided, a link whose
+   * href is a FILE reference (not an external URL) resolves through this
+   * callback — the run view opens it in the slice-I FileViewer via
+   * `GET /runs/:id/files` — instead of a dead `target="_blank"` click.
+   * External http(s) links keep today's exact behavior.
+   */
+  onOpenFile?: (path: string) => void;
 }
 
-export function Markdown({ children, className }: Props): React.ReactElement {
+export function Markdown({ children, className, onOpenFile }: Props): React.ReactElement {
+  const resolved = useMemo<Components>(() => {
+    if (onOpenFile === undefined) return components;
+    return {
+      ...components,
+      a: ({ href, children: linkChildren }) => {
+        if (typeof href === 'string' && isFileRef(href)) {
+          return (
+            <a
+              href={href}
+              data-testid="evidence-ref"
+              className="underline"
+              style={{ color: 'var(--accent)' }}
+              onClick={(e) => {
+                e.preventDefault();
+                onOpenFile(href);
+              }}
+            >
+              {linkChildren}
+            </a>
+          );
+        }
+        return (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
+            {linkChildren}
+          </a>
+        );
+      },
+    };
+  }, [onOpenFile]);
+
   return (
     <div
       className={`text-sm leading-relaxed ${className ?? ''}`}
       style={{ color: 'var(--ink-high)' }}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={resolved}>
         {children}
       </ReactMarkdown>
     </div>

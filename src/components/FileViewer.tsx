@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { api } from '../api/client.js';
 import type { RunDiff, RunFileContent } from '../api/types.js';
@@ -48,6 +48,35 @@ type Fetched<T> =
   | { state: 'loading' }
   | { state: 'error'; message: string }
   | { state: 'ok'; data: T };
+
+/**
+ * The diff's own fetch state (slice R, DES-UX-001 §1.3-4). Distinct from
+ * {@link Fetched} because the diff path owes the operator two more honest
+ * answers: a NAMED CAUSE for the daemon's 409s (never the raw wire string),
+ * and a TIMEOUT branch so a never-resolving request shows "Couldn't load the
+ * diff — retry" instead of an eternal "Loading…".
+ */
+type DiffFetched =
+  | { state: 'loading' }
+  | { state: 'timeout' }
+  | { state: 'cause'; cause: 'no-repo' | 'workdir-gone' }
+  | { state: 'error'; message: string }
+  | { state: 'ok'; data: RunDiff };
+
+/** Budget for a diff request to resolve before the honest error branch shows. */
+export const DIFF_TIMEOUT_MS = 8000;
+
+/**
+ * Map the daemon's diff refusals to their named causes (routes.ts crew#305):
+ * `run <id> has no workdir — nothing to diff` (409, repo-less run) and
+ * `run <id>'s workdir no longer exists: <path>` (409, reaped worktree). The
+ * raw `API 409` / `has no workdir` strings NEVER reach the DOM (EC33).
+ */
+function diffCauseOf(message: string): 'no-repo' | 'workdir-gone' | null {
+  if (/has no workdir/.test(message)) return 'no-repo';
+  if (/workdir no longer exists/.test(message)) return 'workdir-gone';
+  return null;
+}
 
 /** Fastify's default unknown-route 404 carries no named error — the daemon
  *  predates crew#305. Named 404s ("unknown run: …", "no such file: …") are
@@ -113,7 +142,9 @@ function LoadingPane(): React.ReactElement {
 export function FileViewer({ runId, path, defaultTab, onClose, onUnsupported }: Props): React.ReactElement {
   const [tab, setTab] = useState<ViewerTab>(path === undefined ? 'diff' : defaultTab);
   const [file, setFile] = useState<Fetched<RunFileContent> | null>(null);
-  const [diff, setDiff] = useState<Fetched<RunDiff> | null>(null);
+  const [diff, setDiff] = useState<DiffFetched | null>(null);
+  /** Bumped by the retry affordance: resets `diff` so the fetch effect re-fires. */
+  const [diffAttempt, setDiffAttempt] = useState(0);
 
   // Escape closes (the Modal pattern); the caller restores focus to the row.
   useEffect(() => {
@@ -136,16 +167,56 @@ export function FileViewer({ runId, path, defaultTab, onClose, onUnsupported }: 
       });
   }, [tab, path, runId, file, onUnsupported]);
 
+  // The diff fetch (slice R rewrite — DES-UX-001 §1.3-4b). The old shape could
+  // strand the pane on "Loading…" with NO request ever dispatched (the
+  // zero-request hang, brief A1 dead-end 3). This one:
+  //  - dispatches the request SYNCHRONOUSLY inside the effect, on every
+  //    activation while unfetched (`diff === null`), so a mounted diff tab
+  //    always has ≥1 attempted fetch behind it;
+  //  - races it against DIFF_TIMEOUT_MS so a never-resolving request lands in
+  //    an honest, retryable error state instead of an eternal spinner;
+  //  - names the daemon's 409 causes instead of surfacing the raw wire string.
+  // One fetch per (run, path, attempt): keyed through a ref, NOT through the
+  // `diff` state — the old state-guarded shape could cancel its own in-flight
+  // request when the effect re-ran on its own setState. No cleanup either: a
+  // late resolution lands harmlessly (React no-ops setState after unmount),
+  // and the timer stays live so a hung request ALWAYS reaches the error state.
+  const diffFetchKey = useRef<string | null>(null);
   useEffect(() => {
-    if (tab !== 'diff' || diff !== null) return;
+    if (tab !== 'diff') return;
+    const key = `${runId} ${path ?? ''} ${diffAttempt}`;
+    if (diffFetchKey.current === key) return;
+    diffFetchKey.current = key;
+    let settled = false;
     setDiff({ state: 'loading' });
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      setDiff({ state: 'timeout' });
+    }, DIFF_TIMEOUT_MS);
     api.getRunDiff(runId, path)
-      .then((data) => setDiff({ state: 'ok', data }))
+      .then((data) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        setDiff({ state: 'ok', data });
+      })
       .catch((e: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         if (isRouteAbsent(e)) { onUnsupported(); return; }
-        setDiff({ state: 'error', message: e instanceof Error ? e.message : String(e) });
+        const message = e instanceof Error ? e.message : String(e);
+        const cause = diffCauseOf(message);
+        setDiff(cause !== null ? { state: 'cause', cause } : { state: 'error', message });
       });
-  }, [tab, path, runId, diff, onUnsupported]);
+  }, [tab, path, runId, diffAttempt, onUnsupported]);
+
+  /** The retry affordance: clear the state so the effect re-dispatches. */
+  function retryDiff(): void {
+    setDiff(null);
+    setDiffAttempt((n) => n + 1);
+  }
 
   function handleOpenExternally(): void {
     if (path === undefined) return;
@@ -262,7 +333,7 @@ export function FileViewer({ runId, path, defaultTab, onClose, onUnsupported }: 
         {tab === 'file' ? (
           <FileBody file={file} onOpenExternally={handleOpenExternally} />
         ) : (
-          <DiffBody diff={diff} narrowed={path !== undefined} />
+          <DiffBody diff={diff} narrowed={path !== undefined} onRetry={retryDiff} onClose={onClose} />
         )}
       </div>
     </div>
@@ -327,26 +398,116 @@ function FileBody({ file, onOpenExternally }: {
   );
 }
 
-function DiffBody({ diff, narrowed }: {
-  diff: Fetched<RunDiff> | null;
+/**
+ * The named-cause card (DES-UX-001 §1.3-4a): the daemon's 409 refusals become
+ * operator answers with a remediation, on `--surface-raised` with `--ink-muted`
+ * body and an `--accent` remediation link (§1.4). The raw wire strings never
+ * render — the cause card IS the translation (EC33).
+ */
+function DiffCauseCard({ cause, onClose }: {
+  cause: 'no-repo' | 'workdir-gone';
+  onClose: () => void;
+}): React.ReactElement {
+  const headline =
+    cause === 'no-repo'
+      ? 'This run had no repository attached — nothing was produced to review.'
+      : 'This run’s workdir no longer exists.';
+  const body =
+    cause === 'no-repo'
+      ? 'The run executed without a workdir, so there is no worktree to diff. Its captured unit transcripts are the record of what it did.'
+      : 'The worktree was cleaned up after the run ended. The captured unit transcripts and evidence remain the durable record.';
+  const remediation =
+    cause === 'no-repo'
+      ? 'Attach a repository at launch to make future runs reviewable — for this one, review the captured transcripts on the run page.'
+      : 'Review the captured transcripts on the run page.';
+  return (
+    <div
+      data-testid="diff-named-cause"
+      data-cause={cause}
+      className="m-4 rounded-lg p-4 flex flex-col gap-2 self-start"
+      style={{ background: 'var(--surface-raised)', border: '1px solid var(--surface-raised)' }}
+    >
+      <p className="text-xs font-semibold font-mono" style={{ color: 'var(--ink-muted)' }}>{headline}</p>
+      <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>{body}</p>
+      <button
+        type="button"
+        data-testid="diff-cause-remediation"
+        onClick={onClose}
+        className="self-start text-xs font-mono underline transition-opacity hover:opacity-70"
+        style={{ color: 'var(--accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+      >
+        {remediation}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The honest interim baseline label (DES-UX-001 §8.1): until CREW-UX-1 lands a
+ * branch-vs-base diff, the daemon diffs the working tree against HEAD — so a
+ * run's COMMITTED work is invisible here by construction. Say so, always,
+ * rather than letting "no changes" read as "did nothing".
+ */
+function BaselineNote(): React.ReactElement {
+  return (
+    <p
+      data-testid="diff-baseline-note"
+      className="px-3 py-1.5 text-[10px] font-mono shrink-0"
+      style={{ color: 'var(--ink-dim)', borderBottom: '1px solid var(--surface-raised)' }}
+    >
+      showing uncommitted changes vs HEAD; committed work is not shown here
+    </p>
+  );
+}
+
+function DiffBody({ diff, narrowed, onRetry, onClose }: {
+  diff: DiffFetched | null;
   narrowed: boolean;
+  onRetry: () => void;
+  onClose: () => void;
 }): React.ReactElement {
   if (diff === null || diff.state === 'loading') return <LoadingPane />;
+  if (diff.state === 'timeout') {
+    // §1.3-4b: a never-resolving diff lands HERE within the timeout budget —
+    // never an indefinite "Loading…". The request WAS dispatched; retry re-fires it.
+    return (
+      <div data-testid="diff-error" className="p-4 flex flex-col items-start gap-2">
+        <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>
+          Couldn&apos;t load the diff — the daemon did not answer in time.
+        </p>
+        <button
+          type="button"
+          data-testid="diff-retry"
+          onClick={onRetry}
+          className="text-xs font-mono underline transition-opacity hover:opacity-70"
+          style={{ color: 'var(--accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (diff.state === 'cause') return <DiffCauseCard cause={diff.cause} onClose={onClose} />;
   if (diff.state === 'error') return <ErrorPane message={diff.message} />;
   const { diff: text, truncated } = diff.data;
 
   if (text === '') {
-    // `diff: ""` is a real answer (clean tree), not an error (§3.3).
+    // `diff: ""` is a real answer (clean tree), not an error (§3.3) — but under
+    // the HEAD baseline it only means "no UNCOMMITTED changes" (§8.1).
     return (
-      <p data-testid="viewer-clean-tree" className="p-4 text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
-        {narrowed ? 'no changes to this file.' : 'clean tree — no changes.'}
-      </p>
+      <div className="flex-1 min-h-0 flex flex-col">
+        <BaselineNote />
+        <p data-testid="viewer-clean-tree" className="p-4 text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
+          {narrowed ? 'no changes to this file.' : 'clean tree — no changes.'}
+        </p>
+      </div>
     );
   }
 
   const lines = classifyDiff(text);
   return (
     <div className="flex-1 min-h-0 flex flex-col">
+      <BaselineNote />
       {truncated && (
         <TruncationBanner text="diff truncated at 1 MB — narrow to a single file for the rest" />
       )}
