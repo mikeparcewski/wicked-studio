@@ -31,8 +31,8 @@ vi.mock('../src/hooks/useEventStream.js', () => ({
 
 const { ChatsPage } = await import('../src/components/ChatsPage.js');
 
-function page(): ReturnType<typeof render> {
-  return render(<ChatsPage runs={[]} onSelect={() => {}} navigate={() => {}} />);
+function page(navigate: (path: string) => void = () => {}): ReturnType<typeof render> {
+  return render(<ChatsPage runs={[]} onSelect={() => {}} navigate={navigate} />);
 }
 
 beforeEach(() => {
@@ -89,5 +89,40 @@ describe('the live-session band (§7.9-5)', () => {
       emit!({ type: 'chatClosed', chat: 'warm-chat-1', reason: 'closed elsewhere' });
     });
     await waitFor(() => expect(screen.queryByTestId('live-chat-row')).toBeNull());
+  });
+
+  it('a live row is a door (J4/C6): clicking it opens the session at /chat/:id', async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    page(navigate);
+    await user.click(await screen.findByTestId('live-chat-row'));
+    expect(navigate).toHaveBeenCalledWith('/chat/warm-chat-1');
+  });
+
+  it('End is its own gesture — it never also opens the session', async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    page(navigate);
+    await screen.findByTestId('live-chat-row');
+    await user.click(screen.getByTestId('live-chat-end'));
+    expect(closeChat).toHaveBeenCalledWith('warm-chat-1');
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('one truth per screen (J4/C6): "No chat sessions yet" never renders beside a live band', async () => {
+    page(); // runs=[] → the run list below is empty; one live session is warm
+    await screen.findByTestId('live-chat-row');
+    expect(screen.queryByText('No chat sessions yet')).toBeNull();
+    const empty = screen.getByTestId('chats-empty-live');
+    // The honest boundary: transcripts are not stored beyond the live session.
+    expect(empty.textContent).toContain('aren’t stored beyond the live session');
+  });
+
+  it('with no live band, the plain empty state stands alone', async () => {
+    listChats.mockResolvedValue({ chats: [] });
+    page();
+    await waitFor(() => expect(listChats).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('chats-empty')).toHaveTextContent('No chat sessions yet');
+    expect(screen.queryByTestId('chats-empty-live')).toBeNull();
   });
 });
