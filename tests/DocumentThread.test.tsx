@@ -2,8 +2,9 @@
 //
 // What Enter does is a pure function of the generation's state, so each test drives the
 // composer in one state and asserts the WIRE it chose. The §7.10 case is the load-bearing
-// one: editing a complete version is fork + inject as a SINGLE composer action, rendered
-// as a continuation — a version divider, no new thread header.
+// one (round-3 contract): a PLAIN continue-send is the ask alone — the client never mints
+// a version for it; fork survives only for the genuine branch gesture (sending from an
+// explicitly selected OLDER version), rendered as a continuation with a deferred divider.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -169,33 +170,32 @@ describe('state 3 — gated: the gate is answerable in the thread', () => {
   });
 });
 
-describe('state 4 — terminal: fork + inject is ONE atomic action (§7.10)', () => {
-  it('forks from the shown version, injects with the same message, renders a continuation', async () => {
-    mount(DOC, 3);
+describe('state 4 — terminal: a PLAIN send never forks (§7.10, round-3 contract)', () => {
+  it('with no routed version: inject only — no fork, no minted version, no divider', async () => {
+    mount(DOC, null);
     expect(screen.getByTestId('thread')).toHaveAttribute('data-composer-state', 'terminal');
 
     await send('make the closing slide stronger');
 
     await waitFor(() => expect(postEvent).toHaveBeenCalledTimes(1));
-    // ONE composer action → one fork, one inject, both carrying the same anchor id.
     const anchorId = screen.getByTestId('doc-message').getAttribute('data-message-id');
-    expect(postFork).toHaveBeenCalledTimes(1);
-    expect(postFork).toHaveBeenCalledWith(PROJECT, DOC, 3, anchorId);
+    // The round-2 J3 pin: NO fork on a plain send — the pre-fix path minted a
+    // byte-identical version before any work existed.
+    expect(postFork).not.toHaveBeenCalled();
     expect(postEvent).toHaveBeenCalledWith(PROJECT, expect.objectContaining({
+      event_type: 'wicked.interactive.chat.posted',
       payload: expect.objectContaining({
         text: 'make the closing slide stronger', document_id: DOC, source_message_id: anchorId,
       }),
     }));
-
-    // The J3 bookkeeping pin: "continues as v4" is an ANCHOR — it must NOT
-    // render before the thread observed v4 on the wire. Right after the fork
-    // acks, the divider is only REGISTERED, never shown.
+    // No divider, ever, for a plain send — a continuation divider is a branch anchor.
     expect(screen.queryByTestId('version-divider')).toBeNull();
-    expect((useDocThreadStore.getState().messages[KEY] ?? []).map((m) => m.kind))
-      .toEqual(['user']);
+    // Nothing landed yet, so the route stays put: the bare route already follows the head.
+    expect(navigate).not.toHaveBeenCalled();
+    expect(useDocThreadStore.getState().genState[KEY]).toBe('generating');
 
-    // The version.created arrival is what materializes it — a CONTINUATION:
-    // a version divider above its message, and no new thread header.
+    // The REAL revised version arriving is what tags the send — the wire's proof,
+    // never the client's own mint.
     act(() => {
       useDocThreadStore.getState().ingest({
         type: 'interactiveEvent',
@@ -205,32 +205,60 @@ describe('state 4 — terminal: fork + inject is ONE atomic action (§7.10)', ()
         },
       } as never);
     });
+    expect(screen.getByTestId('version-marker')).toHaveAttribute('data-caused-by', anchorId);
+    expect(screen.queryByTestId('version-divider')).toBeNull();
+  });
+
+  it('with the HEAD selected: still a plain send — no fork; the route un-pins to follow the head', async () => {
+    mount(DOC, 3); // head is 3 (getVersions mock)
+    await send('tighten the intro');
+    await waitFor(() => expect(postEvent).toHaveBeenCalledTimes(1));
+    expect(getVersions).toHaveBeenCalledWith(PROJECT, DOC);
+    expect(postFork).not.toHaveBeenCalled();
+    // ?v=3 pinned the head; the send un-pins so the canvas follows the landing.
+    expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/${DOC}`);
+  });
+
+  it('from an explicitly selected OLDER version: the genuine branch gesture forks, with the deferred divider', async () => {
+    mount(DOC, 2); // older than the head (3) — the one case fork survives
+    await send('branch: keep the old chart');
+
+    await waitFor(() => expect(postEvent).toHaveBeenCalledTimes(1));
+    const anchorId = screen.getByTestId('doc-message').getAttribute('data-message-id');
+    expect(postFork).toHaveBeenCalledTimes(1);
+    expect(postFork).toHaveBeenCalledWith(PROJECT, DOC, 2, anchorId);
+
+    // The J3 bookkeeping pin holds on the branch too: "continues as v4" is an
+    // ANCHOR — registered on the fork ack, rendered only on the wire's proof.
+    expect(screen.queryByTestId('version-divider')).toBeNull();
+    expect((useDocThreadStore.getState().messages[KEY] ?? []).map((m) => m.kind))
+      .toEqual(['user']);
+
+    act(() => {
+      useDocThreadStore.getState().ingest({
+        type: 'interactiveEvent',
+        event: {
+          event_type: 'wicked.interactive.version.created',
+          payload: { project_id: PROJECT, document_id: DOC, version: 4, parent: 2, kind: 'generated' },
+        },
+      } as never);
+    });
     const divider = screen.getByTestId('version-divider');
     expect(divider).toHaveAttribute('data-version', '4');
     expect(divider).toHaveTextContent('continues as v4');
     expect(screen.queryByTestId('thread-header')).toBeNull();
-    expect(screen.getAllByTestId('thread')).toHaveLength(1);
 
-    // The divider precedes the message it continues into, and the landing
-    // consumed both the anchor and the expectation.
+    // The divider precedes the message it continues into.
     const order = (useDocThreadStore.getState().messages[KEY] ?? []).map((m) => m.kind);
     expect(order).toEqual(['divider', 'user']);
     expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/${DOC}?v=4`);
   });
 
-  it('the composer is live (generating) after the fork, before anything lands', async () => {
-    mount(DOC, 3);
+  it('the composer is live (generating) after a plain send, before anything lands', async () => {
+    mount(DOC, null);
     await send('make the closing slide stronger');
     await waitFor(() => expect(postEvent).toHaveBeenCalledTimes(1));
     expect(useDocThreadStore.getState().genState[KEY]).toBe('generating');
-  });
-
-  it('with no routed version it forks from the manifest head, never from v1', async () => {
-    mount(DOC, null);
-    await send('tighten the intro');
-    await waitFor(() => expect(postFork).toHaveBeenCalledTimes(1));
-    expect(getVersions).toHaveBeenCalledWith(PROJECT, DOC);
-    expect(postFork).toHaveBeenCalledWith(PROJECT, DOC, 3, expect.any(String));
   });
 });
 
