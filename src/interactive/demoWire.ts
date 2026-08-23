@@ -11,7 +11,7 @@
 // too (§2.3): a recording the user asked for that leaves no trace in the transcript makes
 // the transcript stop being the record of why v4 became v5.
 
-import { createDoc, requestRecord, type CreateDocBody, type DemoStepDraft } from '../api/interactive.js';
+import { createDoc, docBinding, requestRecord, type CreateDocBody, type DemoStepDraft } from '../api/interactive.js';
 import { nextMsgId, threadKey, useDocThreadStore } from '../store/docThread.js';
 import { submitFeedbackBatch, type SubmitBatchResult } from './feedbackBatch.js';
 
@@ -84,7 +84,8 @@ export function demoDraftBody(
     url: draft.targetUrl.trim(),
     brief: demoBrief(draft),
     demo_steps: steps,
-    project: projectId,
+    // §6.2 (slice U): the Unfiled mount creates unbound; real projects bind.
+    ...docBinding(projectId),
     source_message_id: sourceMessageId,
   };
 }

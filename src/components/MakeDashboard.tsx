@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { SessionView } from '../api/types.js';
-import type { DocSummary } from '../api/interactive.js';
+import { UNFILED_MOUNT, type DocSummary } from '../api/interactive.js';
 import { versionPath, type Mode } from '../hooks/useRoute.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -165,7 +165,12 @@ export function MakeDashboard({ runs, navigate, runPath }: Props): React.ReactEl
   // The known corpus: doc rows off the session cache, newest first.
   const docRows = useMemo(
     () => Object.entries(byProject)
-      .flatMap(([pid, docs]) => docs.map((doc) => ({ doc, projectId: pid, projectName: projectNameById[pid] ?? pid })))
+      // Slice U (§6.2): the default bucket never rides the board's store mirror
+      // (F5), so its docs label "Unfiled" — the run rows' exact grammar above.
+      .flatMap(([pid, docs]) => docs.map((doc) => ({
+        doc, projectId: pid,
+        projectName: projectNameById[pid] ?? (pid === UNFILED_MOUNT ? 'Unfiled' : pid),
+      })))
       .sort((a, b) => (b.doc.updated_at ?? '').localeCompare(a.doc.updated_at ?? '')),
     [byProject, projectNameById],
   );

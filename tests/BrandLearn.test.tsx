@@ -30,6 +30,8 @@ const getLearnedTheme = vi.fn();
 vi.mock('../src/api/interactive.js', () => ({
   listDocs: (...a: unknown[]) => listDocs(...a) as unknown,
   createDoc: (...a: unknown[]) => createDoc(...a) as unknown,
+  // Slice U (§6.2): the REAL binding rule, mirrored — real projects bind.
+  docBinding: (pid: string) => (pid === 'default' ? {} : { project: pid }),
   requestThemeLearn: (...a: unknown[]) => requestThemeLearn(...a) as unknown,
   getLearnedTheme: (...a: unknown[]) => getLearnedTheme(...a) as unknown,
   attachSource: vi.fn(),

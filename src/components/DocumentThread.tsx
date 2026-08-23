@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createDoc, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
+import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DemoWizard } from './DemoWizard.js';
 import { recordFromThread } from '../interactive/demoWire.js';
@@ -466,8 +466,12 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
 
       // 1 — LAUNCH. The message IS the brief; the doc's generation run opens with it.
       if (docId === null || key === null) {
+        // §6.2 (slice U): the Unfiled mount creates UNBOUND (no `project`
+        // field — `docBinding`); real projects bind as before. A refused
+        // create lands in the catch below — the visible composer error,
+        // never a silent close (the loud-502 contract, §8.4.1 probe 3).
         const created = await createDoc(projectId, {
-          name: docName(body), kind: 'source', brief: body, project: projectId,
+          name: docName(body), kind: 'source', brief: body, ...docBinding(projectId),
           source_message_id: msgId,
         });
         const opened = threadKey(projectId, created.name);

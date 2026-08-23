@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RepoEntry, SessionView } from '../api/types.js';
-import type { DocSummary } from '../api/interactive.js';
+import { UNFILED_MOUNT, type DocSummary } from '../api/interactive.js';
 import { ambientProjectId, launchPath, registerRepoPath } from '../hooks/ambientProject.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute.js';
@@ -438,16 +438,18 @@ function MakePicker({ navigate, onClose, ambient }: {
         <div className="px-3 py-1.5 flex flex-col gap-1.5" data-testid="make-picker-project-stage">
           <p style={{ fontSize: 'var(--text-2xs)', color: S.faint, fontFamily: 'var(--font-sans)', margin: 0 }}>
             {real.length === 0
-              ? `A ${MODE_SPECS[stage].label.toLowerCase()} lives in a project — create a project first.`
-              : `A ${MODE_SPECS[stage].label.toLowerCase()} lives in a project — pick one:`}
+              ? `No projects yet — a ${MODE_SPECS[stage].label.toLowerCase()} can start Unfiled, or create one:`
+              : 'Pick a project — or keep it Unfiled:'}
           </p>
           <ProjectSwitcher
             current={null}
             projects={projects}
             onSelect={(pid) => {
-              if (pid === null) return; // a document cannot be Unfiled (§3.4)
+              // DES-UX-001 §6.2 (slice U): Unfiled is NO dead end — it routes to
+              // the `default` project's mount, the daemon's own unfiled home
+              // (crew synthesizes that mount; the doc is created UNBOUND there).
               onClose();
-              navigate(modePath(pid, stage));
+              navigate(modePath(pid ?? UNFILED_MOUNT, stage));
             }}
           />
         </div>
