@@ -14,8 +14,9 @@ import { act, cleanup, render, screen, fireEvent } from '@testing-library/react'
  *     sessions + non-terminal chat runs) and labels each part (EC39).
  */
 
+interface ChatRow { chatId: string; seats: string[]; idleSecs: number | null }
 const listRepos = vi.fn(() => Promise.resolve({ repos: [] }));
-const listChats = vi.fn(() => Promise.resolve({ chats: [] }));
+const listChats = vi.fn((): Promise<{ chats: ChatRow[] }> => Promise.resolve({ chats: [] }));
 
 vi.mock('../src/hooks/useBoardModel.js', () => ({
   useBoardModel: () => ({ items: [], unfiled: [], loading: false, error: null }),
