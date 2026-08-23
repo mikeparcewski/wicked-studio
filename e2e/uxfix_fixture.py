@@ -132,6 +132,10 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     OWN new version FIFO doc_run_ms after the previous landing
                     (BRIDGE-UX-1 probe 1: the bridge queues, never drops), so
                     a rig can witness generating/queued/marker in sequence.
+  doc_silent      — the J3 no-answerer shape (§6.1 honesty budget): create and
+                    chat.posted ACK exactly as the real bridge does, then the
+                    bus says NOTHING (no status.posted, no version.created,
+                    ever) — the reproduced 28-min "generating" silence.
   send_fail       — slice T (§6.1): POST /api/events chat.posted answers a
                     500 {error} — the visible-failure branch (default False).
   restart_bridge  — slice T (§6.3): POST {"restart_bridge": true} simulates a
@@ -289,6 +293,15 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # 500 {error} — the visible-failure branch (a bridge that refuses the
          # send; the client must render thread-send-failed, never silence).
          "send_fail": False,
+         # J3 fix (§6.1 honesty budget): when True, the doc wires ACK exactly as
+         # the real bridge does when its worker never picks the job up — create
+         # answers 201 (v1 committed, brief logged), chat.posted answers 200
+         # {ok} and lands durably — but the bus then says NOTHING: no
+         # status.posted, no version.created, ever. The reproduced no-answerer
+         # shape (28 min of "generating" with zero backend signal); the client's
+         # GENERATING_SILENCE_BUDGET_MS timeout is what stands between the user
+         # and an eternal "being worked now".
+         "doc_silent": False,
          # Slice U (DES-UX-001 §6.2, §8.4.1 probe 3): when True, POST
          # /api/docs answers the bridge's REAL refused-bind shape — a loud
          # 502 {"error": "crew daemon unreachable at …"} with NOTHING created
@@ -1981,6 +1994,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # The brief IS the doc's first user line in the announce history
                 # (the create message the reload scene must get back, §6.3).
                 log_conversation(pid, doc, "user", brief)
+            with state_lock:
+                silent_doc = bool(state["doc_silent"])
+            if silent_doc:
+                # J3 no-answerer shape: the ack is real, the bus never speaks.
+                self._json(201, {"name": doc, "head": 1, "generating": True, "project_id": pid})
+                return True
             queue_interactive("wicked.interactive.status.posted", {
                 "project_id": pid, "document_id": doc, "state": "working",
                 "message": "Planning the deck — outline first, then the slides."})
@@ -2106,6 +2125,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 with state_lock:
                     refuse = bool(state["send_fail"])
                     run_ms = int(state["doc_run_ms"])
+                    silent_doc = bool(state["doc_silent"])
                 if refuse:
                     self._json(500, {"error": "bridge refused the send (fixture send_fail)"})
                     return True
@@ -2113,6 +2133,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # order (BRIDGE-UX-1 probe 1: the bus is the queue) …
                 if payload.get("role") == "user" and payload.get("text"):
                     log_conversation(pid, doc, "user", str(payload.get("text")))
+                if silent_doc:
+                    # J3 no-answerer shape: 200 {ok}, landed durably — and then
+                    # NOTHING answers it (no status frame, no landing, ever).
+                    self._json(200, {"ok": True, "event_id": "evt-fixture",
+                                     "correlation_id": "c-fixture"})
+                    return True
                 if run_ms > 0:
                     # … and each send's run lands its OWN new version, FIFO,
                     # doc_run_ms after the previous landing (§8.4.1 queue truth).
