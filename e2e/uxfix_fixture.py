@@ -1100,21 +1100,34 @@ REPO_CONTRIBUTORS = [
 # since/lastErrorAt) and the `signed_in` heuristic. `pi` deliberately carries
 # NEITHER — the additive-wire case (a daemon predating crew#274) the slice-O
 # health registry must render as unknown, never as a fabricated "active".
+#
+# Fix J4 round 3 (EC44): each seat also mirrors the real roster's CHAT-
+# capability marker — `acp` is the engine's ACP config object on seats that
+# can hold a chat session and EXPLICIT null on seats that cannot (the live
+# daemon serves acp=null on 4 of its 6 seats; wicked-core's chat_ensure
+# answers "no ACP config for '<key>'" for those). `pi` carries NO acp key at
+# all — the additive-wire case again (a daemon predating the field), which
+# the client must read as capable, never as a fabricated incapability.
 CODEX_HEALTH_MESSAGE = ("quota exceeded: the monthly usage limit for this "
                         "seat has been reached upstream")
 ROSTER = [
     {"key": "claude", "display_name": "claude", "binary": "claude",
      "enabled_for_council": True, "signed_in": True,
+     "acp": {"binary": "claude-agent-acp", "start_args": [], "transport": "stdio"},
      "health": {"status": "active", "since": iso(NOW0 - 2 * DAY)}},
     {"key": "codex", "display_name": "codex", "binary": "codex",
-     "enabled_for_council": True, "signed_in": False,
+     "enabled_for_council": True, "signed_in": False, "acp": None,
      "health": {"status": "inactive", "message": CODEX_HEALTH_MESSAGE,
                 "since": iso(NOW0 - 2 * HOUR), "lastErrorAt": iso(NOW0 - 2 * HOUR)}},
     {"key": "agy", "display_name": "agy", "binary": "agy",
-     "enabled_for_council": True, "signed_in": True,
+     "enabled_for_council": True, "signed_in": True, "acp": None,
      "health": {"status": "active", "since": iso(NOW0 - 2 * DAY)}},
     {"key": "pi", "display_name": "pi", "binary": "pi", "enabled_for_council": True},
 ]
+
+# The chat-capable subset (EC44): explicit acp object OR an absent key (no
+# claim = capable); only EXPLICIT null is an incapability on the wire.
+CHAT_CAPABLE_KEYS = [s["key"] for s in ROSTER if s.get("acp", "absent") is not None]
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 NARRATION = "Writing the token-bucket middleware for /upload"
@@ -2439,6 +2452,12 @@ class W2Handler(SimpleHTTPRequestHandler):
 
             def seat(k: str) -> dict:
                 if k not in known:
+                    return {"cliKey": k, "ok": False, "error": f"no ACP config for '{k}'"}
+                # Fix J4 round 3 (EC44): the real chat_ensure also rejects a
+                # KNOWN seat whose roster entry carries acp=null — chat needs
+                # an ACP session config, and 4 of the live daemon's 6 seats
+                # have none. Absent key = no claim = accepted (older engine).
+                if k not in CHAT_CAPABLE_KEYS:
                     return {"cliKey": k, "ok": False, "error": f"no ACP config for '{k}'"}
                 if k in reject:
                     return {"cliKey": k, "ok": False, "error": f"unknown agent '{k}'"}
