@@ -127,6 +127,12 @@ with sync_playwright() as p:
     set_fixture(ORIGIN, export_delay_ms=1500)
     goto_doc()
     wake_strip(page)
+    # §7.3: the thread is a DRAWER, closed by default when a doc is open — WHY the
+    # click site must answer (EC37). Open it so AC 1's "the thread message remains"
+    # is checked against a visible transcript (and the shot shows both truths).
+    page.locator('[data-testid="thread-toggle"]').click()
+    page.locator('[data-testid="thread"]').wait_for(timeout=15000)
+    wake_strip(page)
     html_btn = page.locator('[data-testid="export-format"][data-format="html"]')
     html_btn.wait_for(timeout=15000)
     html_btn.click()
