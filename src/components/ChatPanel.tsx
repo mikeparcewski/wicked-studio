@@ -7,6 +7,7 @@ import { useGateStore } from '../store/gates.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { ElicitationPrompt } from './ElicitationPrompt.js';
 import { useRuntimeStore, outputKey, type CouncilStatus } from '../store/runtime.js';
+import { setRetryPrefill } from '../store/retryPrefill.js';
 import { LiveEdge } from './LiveEdge.js';
 import { STATUS_STYLE } from './RunCard.js';
 import { SteeringGate } from './SteeringGate.js';
@@ -826,6 +827,27 @@ function RunChat({
     void onKill?.(session.id);
   }
 
+  /**
+   * Retry (DES-UX-001 §4.3): reopen the standard composer PREFILLED with this
+   * run's intent + configuration — fully editable before send, nothing
+   * auto-launches. The launch will carry `retryOf` (CREW-UX-3) so both runs'
+   * provenance lines cross-link from the system of record.
+   */
+  function startRetry(): void {
+    setRetryPrefill({
+      retryOf: session.id,
+      problem: session.problem,
+      clis: session.clis,
+      // 'chat' is a system workflow, not a launchable choice — leave it unset.
+      workflowId: session.workflow_id && session.workflow_id !== 'chat' ? session.workflow_id : null,
+      repoRef: session.repo_ref,
+      entityMode: session.entity_mode,
+      humanConfirm: session.human_confirm,
+      projectId: typeof session.project_id === 'string' ? session.project_id : null,
+    });
+    navigate?.('/runs/new');
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Run header */}
@@ -852,6 +874,20 @@ function RunChat({
           {session.problem}
         </p>
         <span className="text-xs font-medium shrink-0 font-mono" style={{ color: style.color }}>{style.label}</span>
+        {/* Retry — failed/cancelled only (§4.5: the loop closes failures, not
+            successes). A standard secondary button (§4.4 tokens). */}
+        {isPostMortem && navigate !== undefined && (
+          <button
+            type="button"
+            data-testid="run-retry"
+            onClick={startRetry}
+            title="Reopen the composer prefilled with this run's intent and configuration — editable before send"
+            className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
+            style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)' }}
+          >
+            Retry
+          </button>
+        )}
         <ModePill mode={mode} onChange={onModeChange} readOnly={isTerminal} />
         <ExportEvidenceButton runId={session.id} disabled={!isTerminal} />
         {!isTerminal && onKill && (

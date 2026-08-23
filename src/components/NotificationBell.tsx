@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNotificationStore } from '../store/notifications.js';
 import type { NotifKind } from '../store/notifications.js';
+import { useProvenanceStore } from '../store/provenance.js';
+import { ProvenanceLine } from './ProvenanceLine.js';
 
 interface Props {
   navigate: (path: string) => void;
@@ -63,6 +65,10 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
   const notifications = useNotificationStore((s) => s.notifications);
   const markRead      = useNotificationStore((s) => s.markRead);
   const markAllRead   = useNotificationStore((s) => s.markAllRead);
+  // Run provenance for the rows (DES-UX-001 §3.3): read the ALREADY-CACHED
+  // audit answers only — a list never fans out audit fetches. A row whose run
+  // was never opened simply carries no line yet.
+  const provByRun = useProvenanceStore((s) => s.byRun);
 
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -296,6 +302,14 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
                     >
                       {n.message}
                     </p>
+                    {/* Provenance — the same contract as the run detail's line
+                        (§3.3/§3.5): named actor when the cached audit entry
+                        matches, the honest degraded copy when it does not. */}
+                    {provByRun[n.runId] !== undefined && (
+                      <div style={{ marginBottom: '3px' }}>
+                        <ProvenanceLine provenance={provByRun[n.runId]} testId="notif-provenance" />
+                      </div>
+                    )}
                     {/* Run id + link */}
                     <span
                       style={{
