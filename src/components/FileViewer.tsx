@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { api } from '../api/client.js';
+import { api, apiWire, isRouteAbsent } from '../api/client.js';
 import type { RunDiff, RunFileContent } from '../api/types.js';
 import { classifyDiff, isDimLine } from '../viewer/colorize.js';
 import type { DiffLineKind } from '../viewer/colorize.js';
@@ -24,8 +24,10 @@ import type { DiffLineKind } from '../viewer/colorize.js';
  * Requests fire ONLY on a user gesture: the viewer mounts on a row click and
  * each tab fetches on its first activation — nothing is prefetched.
  *
- * Route errors (400/403/404/409/507) surface VERBATIM — never swallowed. The
- * one exception is the forward-compat contract every studio wire follows: a
+ * Route errors (400/403/404/409/507) surface — never swallowed — carrying the
+ * daemon's own sentence inside the EC33 translated frame (slice X2: "the
+ * daemon refused this — …", never the raw `API NNN:` framing). The one
+ * exception is the forward-compat contract every studio wire follows: a
  * daemon WITHOUT the routes answers Fastify's generic 404 (`Not Found`, no
  * named error), and that calls `onUnsupported` so the caller can fall back to
  * today's exact behavior (external open + copy feedback) instead of the
@@ -71,18 +73,13 @@ export const DIFF_TIMEOUT_MS = 8000;
  * `run <id> has no workdir — nothing to diff` (409, repo-less run) and
  * `run <id>'s workdir no longer exists: <path>` (409, reaped worktree). The
  * raw `API 409` / `has no workdir` strings NEVER reach the DOM (EC33).
+ * Classified on the shared layer's VERBATIM `wire` sentence (slice X2 —
+ * `ApiError.message` is already translated; matchers never parse it).
  */
-function diffCauseOf(message: string): 'no-repo' | 'workdir-gone' | null {
-  if (/has no workdir/.test(message)) return 'no-repo';
-  if (/workdir no longer exists/.test(message)) return 'workdir-gone';
+function diffCauseOf(wire: string): 'no-repo' | 'workdir-gone' | null {
+  if (/has no workdir/.test(wire)) return 'no-repo';
+  if (/workdir no longer exists/.test(wire)) return 'workdir-gone';
   return null;
-}
-
-/** Fastify's default unknown-route 404 carries no named error — the daemon
- *  predates crew#305. Named 404s ("unknown run: …", "no such file: …") are
- *  real answers from a daemon WITH the routes and must surface verbatim. */
-function isRouteAbsent(e: unknown): boolean {
-  return e instanceof Error && e.message === 'API 404: Not Found';
 }
 
 function formatBytes(n: number): string {
@@ -207,7 +204,7 @@ export function FileViewer({ runId, path, defaultTab, onClose, onUnsupported }: 
         clearTimeout(timer);
         if (isRouteAbsent(e)) { onUnsupported(); return; }
         const message = e instanceof Error ? e.message : String(e);
-        const cause = diffCauseOf(message);
+        const cause = diffCauseOf(apiWire(e) ?? '');
         setDiff(cause !== null ? { state: 'cause', cause } : { state: 'error', message });
       });
   }, [tab, path, runId, diffAttempt, onUnsupported]);

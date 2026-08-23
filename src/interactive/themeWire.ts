@@ -30,6 +30,7 @@
 //   - the learn is DOC-SCOPED: the learned tokens stick to THIS document and every later
 //     version of it wears them (theme-source.js reads <doc>/theme/learned.theme.json).
 
+import { apiWire } from '../api/errors.js';
 import {
   attachSource, requestThemeLearn, ServiceHintError,
   type LearnKind, type LearnThemeBody, type SourceEntry,
@@ -89,9 +90,13 @@ export function learnSubject(kind: LearnKind, value: string): string {
       + 'The file is not uploaded.';
 }
 
-/** The service's own sentence, unwrapped from the client's `API <status>: ` framing so
- *  the refusal a human reads is the refusal the guard wrote (§4.6). */
+/** The service's own sentence, so the refusal a human reads is the refusal the
+ *  guard wrote (§4.6). The shared layer carries it verbatim as `ApiError.wire`
+ *  (slice X2); the legacy `API <status>: ` strip stays as the fallback for
+ *  errors minted outside the wire layer. */
 export function serviceReason(e: unknown): string {
+  const wire = apiWire(e);
+  if (wire !== null) return wire;
   const message = e instanceof Error ? e.message : String(e);
   return message.replace(/^API \d{3}: /, '');
 }

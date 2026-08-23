@@ -20,7 +20,10 @@ import type {
   UpdateProjectBody,
 } from './types.js';
 
+import { ApiError } from './errors.js';
+
 export type * from './types.js';
+export { ApiError, apiStatus, apiWire, isRouteAbsent, translateWireError } from './errors.js';
 
 /**
  * Origin-aware API base resolution (DES-STUDIO-SERVING-001 §4.2).
@@ -76,8 +79,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       const raw = body.error ?? body.message ?? text;
       msg = typeof raw === 'string' ? raw : JSON.stringify(raw);
     } catch { msg = text; }
-    if (!msg) msg = res.statusText || String(res.status);
-    throw new Error(`API ${res.status}: ${msg}`);
+    if (!msg) msg = res.statusText;
+    // EC33 (DES-UX-001 §7.10): the raw `API NNN:` framing never reaches the
+    // DOM — ApiError's message is the translated operator sentence; matchers
+    // read the typed `status`/`wire` fields instead of parsing a prefix.
+    throw new ApiError(res.status, msg);
   }
   return res.json() as Promise<T>;
 }
@@ -100,7 +106,7 @@ export async function downloadRunEvidence(runId: string): Promise<void> {
       const body = JSON.parse(text) as { error?: unknown };
       if (typeof body.error === 'string') msg = body.error;
     } catch { /* not JSON — keep the raw text */ }
-    throw new Error(`API ${res.status}: ${msg || res.statusText || String(res.status)}`);
+    throw new ApiError(res.status, msg || res.statusText);
   }
   const filename =
     /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1]

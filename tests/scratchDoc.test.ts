@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ensureScratchDoc, SCRATCH_DOC_NAME } from '../src/theming/scratchDoc.js';
 import type { DocSummary } from '../src/api/interactive.js';
+import { ApiError } from '../src/api/errors.js';
 
 /**
  * The per-project scratch doc a brand learn rides: created once through the
@@ -50,7 +51,7 @@ describe('ensureScratchDoc', () => {
 
   it('a concurrent 409 ("doc already exists") resolves to the doc, not an error', async () => {
     const listDocs = vi.fn().mockResolvedValue([]);
-    const createDoc = vi.fn().mockRejectedValue(new Error('API 409: doc already exists'));
+    const createDoc = vi.fn().mockRejectedValue(new ApiError(409, 'doc already exists'));
     await expect(ensureScratchDoc('proj-1', { listDocs, createDoc }))
       .resolves.toBe(SCRATCH_DOC_NAME);
   });

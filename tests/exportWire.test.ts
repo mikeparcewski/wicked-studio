@@ -16,11 +16,17 @@ const postExport = vi.fn();
 /** The real class, mirrored ONCE and shared with the mocked module: `exportHint` narrows
  *  on it, so a test that constructed a different class would pass for the wrong reason. */
 const { ServiceHintError } = vi.hoisted(() => ({
+  // Mirrors the real (status, wire, hint) ApiError shape (slice X2): the message
+  // is the EC33 translated sentence, exactly what the layer would mint.
   ServiceHintError: class ServiceHintError extends Error {
     readonly hint: string;
-    constructor(message: string, hint: string) {
-      super(message);
+    readonly status: number;
+    readonly wire: string;
+    constructor(status: number, wire: string, hint: string) {
+      super(`the daemon refused this — ${wire}`);
       this.name = 'ServiceHintError';
+      this.status = status;
+      this.wire = wire;
       this.hint = hint;
     }
   },
@@ -162,7 +168,7 @@ describe('a completed export is an ordinary downloadable message (§2.5, §4.4)'
 
 describe('a PPTX export with python-pptx absent is ACTIONABLE, not a crash (§4.4, §3.3)', () => {
   beforeEach(() => {
-    postExport.mockRejectedValue(new ServiceHintError('API 400: pptx export unavailable', PPTX_HINT));
+    postExport.mockRejectedValue(new ServiceHintError(400, 'pptx export unavailable', PPTX_HINT));
   });
 
   it('AC: the service’s 400 becomes a message naming the install command VERBATIM', async () => {
@@ -195,6 +201,6 @@ describe('a PPTX export with python-pptx absent is ACTIONABLE, not a crash (§4.
     await runExport({ projectId: PROJECT, docId: DOC, version: 2, format: 'pdf' });
 
     expect(messages()[1]).toMatchObject({ kind: 'actionable', hint: 'API 500: renderer crashed' });
-    expect(exportHint(new ServiceHintError('API 400: nope', PPTX_HINT))).toBe(PPTX_HINT);
+    expect(exportHint(new ServiceHintError(400, 'nope', PPTX_HINT))).toBe(PPTX_HINT);
   });
 });

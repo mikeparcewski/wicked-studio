@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { RightPanel } from '../src/components/RightPanel.js';
 import * as client from '../src/api/client.js';
+import { ApiError } from '../src/api/errors.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { makeView, makeUnit } from './factories.js';
 import type { SessionView } from '../src/api/types.js';
@@ -67,7 +68,7 @@ describe('RightPanel Files tab — slice I inline viewer + preserved openPath/co
   });
 
   it('↗ falls back to copying the path when the daemon has no /open route', async () => {
-    vi.spyOn(client.api, 'openPath').mockRejectedValue(new Error('API 404: Not Found'));
+    vi.spyOn(client.api, 'openPath').mockRejectedValue(new ApiError(404, 'Not Found'));
     await renderFilesTab();
 
     fireEvent.click(screen.getByRole('button', { name: `Open externally: ${FILE}` }));
@@ -87,7 +88,7 @@ describe('RightPanel Files tab — slice I inline viewer + preserved openPath/co
 
   it('a daemon WITHOUT the file routes (generic 404): the row click falls back to the external open', async () => {
     // Fastify's route-absent 404 carries no named error — exactly "Not Found".
-    vi.spyOn(client.api, 'getRunFile').mockRejectedValue(new Error('API 404: Not Found'));
+    vi.spyOn(client.api, 'getRunFile').mockRejectedValue(new ApiError(404, 'Not Found'));
     const openPath = vi.spyOn(client.api, 'openPath').mockResolvedValue({ status: 'opened' });
     const row = await renderFilesTab();
 

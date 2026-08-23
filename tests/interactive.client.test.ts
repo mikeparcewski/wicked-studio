@@ -177,12 +177,12 @@ describe('BridgeUnavailableError', () => {
     const err = await listDocs(PROJECT).catch((e: unknown) => e);
     expect(err).not.toBeInstanceOf(BridgeUnavailableError);
     expect(err).toBeInstanceOf(Error);
-    expect((err as Error).message).toBe('API 503: service overloaded');
+    expect((err as Error).message).toBe('the daemon refused this — service overloaded');
   });
 
   it("surfaces the bridge's {error} message on ordinary failures", async () => {
     stubFetch({ error: 'doc already exists' }, 409);
-    await expect(createDoc(PROJECT, { name: DOC })).rejects.toThrow('API 409: doc already exists');
+    await expect(createDoc(PROJECT, { name: DOC })).rejects.toThrow('the daemon refused this — doc already exists');
   });
 });
 
@@ -208,9 +208,11 @@ describe('ServiceHintError', () => {
     const err = await postExport(PROJECT, DOC, 3, 'pptx').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ServiceHintError);
     expect((err as ServiceHintError).hint).toBe(hint);
-    // The message keeps the status and the service's own reason for a bare render.
+    // The message keeps the service's own reason, in the EC33 translated frame,
+    // for a bare render; the status rides the typed field (slice X2).
     expect((err as ServiceHintError).message).toBe(
-      'API 400: pptx export unavailable: python-pptx is not importable');
+      'the daemon refused this — pptx export unavailable: python-pptx is not importable');
+    expect((err as ServiceHintError).status).toBe(400);
   });
 
   it('trims the hint, and a whitespace-only hint is no hint — stays a generic Error', async () => {
@@ -222,7 +224,7 @@ describe('ServiceHintError', () => {
     const blank = await postExport(PROJECT, DOC, 3, 'pptx').catch((e: unknown) => e);
     expect(blank).not.toBeInstanceOf(ServiceHintError);
     expect(blank).toBeInstanceOf(Error);
-    expect((blank as Error).message).toBe('API 400: nope');
+    expect((blank as Error).message).toBe('the daemon refused this — nope');
   });
 
   it('the 503 bridge_unavailable branch wins even when a hint is present', async () => {
@@ -412,9 +414,11 @@ describe('happy-path shapes', () => {
   });
 
   it('getLearnedTheme still throws on any OTHER failure — unknown doc, dead bridge', async () => {
-    // An unknown doc is an express-default 404 (no JSON error to match) — a real error.
+    // An unknown doc is an express-default 404 (no JSON error to match) — a real
+    // error, thrown in the EC33 translated frame carrying the service's sentence.
     stubFetch('Cannot GET /d/absent/api/theme/learned', 404);
-    await expect(getLearnedTheme(PROJECT, 'absent')).rejects.toThrow(/404/);
+    await expect(getLearnedTheme(PROJECT, 'absent')).rejects.toThrow(
+      'the daemon refused this — Cannot GET /d/absent/api/theme/learned');
     // A dead bridge stays the typed 503, exactly as every other wrapper.
     stubFetch({ code: 'bridge_unavailable', hint: 'npm i -g wicked-interactive' }, 503);
     await expect(getLearnedTheme(PROJECT, DOC)).rejects.toBeInstanceOf(BridgeUnavailableError);
