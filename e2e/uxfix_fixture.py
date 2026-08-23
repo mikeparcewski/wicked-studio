@@ -281,6 +281,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # drives it against a real-project mount; the Unfiled (`default`)
          # mount never binds — its create body carries no `project` field.
          "create_fail": False,
+         # Slice X2 (DES-UX-001 §7.10): POST /api/v1/projects creates for real —
+         # a proj_-minted id + the engine's real 409 collision sentence; created
+         # rows join GET /projects. Default False: no standing rig's project
+         # list grows a row it never asserted.
+         "project_create": False,
          }
 state_lock = threading.Lock()
 
@@ -434,6 +439,16 @@ UNFILED_RUN = session("r-unfiled", "executing", "poke at the flaky CI job",
 launched_runs: list = []          # SessionView dicts, project_id already stamped
 launched_members: dict = {}       # pid -> [run ids]
 launched_seq = [0]
+
+# ── Slice X2 (DES-UX-001 §7.10): projects created over POST /api/v1/projects ──
+# Behind the `project_create` switch (default False — no standing rig's project
+# list grows a row). The route mirrors the REAL daemon contract verbatim:
+# 201 {project} with a wicked-core-shaped `proj_<millis:013><seq:05>` id
+# (project.rs:189 — never derived from the name) and the engine's real 409
+# sentence on an active-name collision (project.rs:236). Created rows join
+# GET /projects for this server lifetime. Guarded by state_lock.
+created_projects: list = []       # Project dicts, proj_-minted ids
+created_seq = [100000]            # the engine's seq starts fresh per process
 
 # ── Slice P (DES-FEEDBACK-003 §10.2): the two chat runs, behind `chat_runs` ───
 #
@@ -1463,7 +1478,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/projects":
             with state_lock:
                 batch_on = state["batch_gates"]
-            self._json(200, {"projects": PROJECTS + (BATCH_PROJECTS if batch_on else [])})
+                # Slice X2: this-lifetime created projects ride the list too.
+                created = json.loads(json.dumps(created_projects))
+            self._json(200, {"projects": PROJECTS
+                             + (BATCH_PROJECTS if batch_on else []) + created})
             return True
         if path == "/api/v1/repos":
             with state_lock:
@@ -2004,6 +2022,30 @@ class W2Handler(SimpleHTTPRequestHandler):
         # The slice-6 document journey's writes (create / fork / bus emit).
         if self._interactive_post(path, body if isinstance(body, dict) else {}):
             return None
+        # POST /api/v1/projects — create (slice X2, project_create only): the
+        # daemon's real contract — 201 {project} with a proj_-minted id
+        # (project.rs:189) and the engine's verbatim 409 sentence on an
+        # active-name collision (project.rs:236). See created_projects above.
+        if path == "/api/v1/projects":
+            with state_lock:
+                create_on = state["project_create"]
+            if not create_on:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            name = str(body.get("name") or "").strip()
+            if not name:
+                return self._json(400, {"error": "name must be a non-empty string"})
+            with state_lock:
+                taken = {p["name"] for p in PROJECTS} | {p["name"] for p in created_projects}
+                if name in taken:
+                    return self._json(409, {
+                        "error": f"project name '{name}' is already in use by an active project"})
+                created_seq[0] += 1
+                pid = f"proj_{NOW0:013d}{created_seq[0]:05d}"
+                row = project(pid, name, NOW0,
+                              **({"description": str(body["description"])}
+                                 if body.get("description") else {}))
+                created_projects.append(row)
+            return self._json(201, {"project": row})
         # POST /api/v1/runs — the REAL launch (slice S, project_dto only): the
         # daemon's `{runId}` answer; `body.projectId` files the run atomically
         # (LaunchSchema, routes.ts:148 — "never a silent unfiled run"), and the
