@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
+import { executingOrd } from '../api/run-state.js';
 import type { SessionView } from '../api/types.js';
 import { useRunModel } from '../hooks/useRunModel.js';
 import type { RunModel } from '../hooks/useRunModel.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
+import { LiveNarration } from './ChatPanel.js';
 import { Burn } from './Burn.js';
 import { FileViewer } from './FileViewer.js';
 import { CoverageView } from './CoverageView.js';
@@ -213,10 +215,17 @@ function FilePath({ path, opKind, runId, root }: {
  * Fetches ride the same sanctioned wire the run view uses
  * (`GET /runs/:id/units/:unitKey/output`), gesture-gated on opening the modal.
  */
-function RunTranscriptView({ runId, units, onOpenShell }: {
+function RunTranscriptView({ runId, units, onOpenShell, live = null }: {
   runId: string;
   units: SessionView['units'];
   onOpenShell: () => void;
+  /**
+   * Slice Z (DES-UX-001 §7.6): the executing cursor unit, when the run is live —
+   * the modal leads with the SAME `unitOutputDelta` live region the run thread
+   * renders (LiveNarration, one component, never a fork), so the Term tab is
+   * never an empty shell mid-run. Null for terminal runs: captured-only.
+   */
+  live?: { ord: number; phase: string } | null;
 }): React.ReactElement {
   const captured = [...units]
     .filter((u) => u.status === 'done' || u.status === 'rejected')
@@ -246,6 +255,9 @@ function RunTranscriptView({ runId, units, onOpenShell }: {
 
   return (
     <div data-testid="term-transcript" className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
+      {live !== null && (
+        <LiveNarration runId={runId} ord={live.ord} phase={live.phase} />
+      )}
       {captured.map((unit) => (
         <div key={unit.id}>
           <p className="text-[10px] font-mono mb-1 uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>
@@ -514,12 +526,16 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
         <button
           type="button"
           onClick={() => setTermOpen(true)}
-          title={view.units.some((u) => u.status === 'done' || u.status === 'rejected')
-            ? "View this run's transcript"
-            : 'Terminal'}
-          aria-label={view.units.some((u) => u.status === 'done' || u.status === 'rejected')
-            ? "View this run's transcript"
-            : 'Open terminal'}
+          title={executingOrd(session, view.units) !== null
+            ? "View this run's live output"
+            : view.units.some((u) => u.status === 'done' || u.status === 'rejected')
+              ? "View this run's transcript"
+              : 'Terminal'}
+          aria-label={executingOrd(session, view.units) !== null
+            ? "View this run's live output"
+            : view.units.some((u) => u.status === 'done' || u.status === 'rejected')
+              ? "View this run's transcript"
+              : 'Open terminal'}
           className="rounded px-2 py-0.5 text-[11px] font-mono"
           style={{ color: 'var(--ink-muted)' }}
         >
@@ -593,15 +609,23 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
         ))}
       </div>
 
-      {/* Terminal modal — transcript-first when captured output exists (§1.3-4):
-          a diagnosing operator lands on the run's own record, never on an empty
-          shell by default. */}
+      {/* Terminal modal — transcript-first when captured output exists (§1.3-4),
+          and LIVE-first while the run executes (DES-UX-001 §7.6, slice Z): a
+          diagnosing operator lands on the run's own record — streamed or
+          captured — never on an empty ungoverned shell by default. The shell
+          stays the labeled secondary inside RunTranscriptView. */}
       {termOpen && (() => {
         const hasCaptured = view.units.some((u) => u.status === 'done' || u.status === 'rejected');
-        const showTranscript = hasCaptured && !termShell;
+        // The executing cursor unit (null unless the run is executing — the
+        // same derivation the run thread's live region keys on).
+        const liveUnitOrd = executingOrd(session, view.units);
+        const liveUnit = view.units.find((u) => u.ord === liveUnitOrd);
+        const showTranscript = (hasCaptured || liveUnitOrd !== null) && !termShell;
         return (
           <Modal
-            title={showTranscript ? "This run's transcript" : 'Operator shell'}
+            title={showTranscript
+              ? (liveUnitOrd !== null ? "This run's live output" : "This run's transcript")
+              : 'Operator shell'}
             onClose={() => { setTermOpen(false); setTermShell(false); }}
             disableEscapeKey
           >
@@ -610,6 +634,9 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
                 runId={session.id}
                 units={view.units}
                 onOpenShell={() => setTermShell(true)}
+                live={liveUnitOrd !== null
+                  ? { ord: liveUnitOrd, phase: liveUnit?.stage ?? `unit #${liveUnitOrd}` }
+                  : null}
               />
             ) : (
               <Terminal

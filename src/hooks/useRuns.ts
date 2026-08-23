@@ -20,12 +20,16 @@ import { useElicitationStore } from '../store/elicitations.js';
  * pool from being saturated by stacked actor-bound requests, which would starve
  * concurrent read-only operations (getCoverageReport, listConformanceRules, etc.).
  */
-export function useRuns(): { runs: SessionView[]; refresh: () => void } {
+export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: boolean } {
   const status = useConnectionStore((s) => s.status);
   const setGate = useGateStore((s) => s.setGate);
   const reconcileGates = useGateStore((s) => s.reconcile);
   const reconcileElicitations = useElicitationStore((s) => s.reconcile);
   const [runs, setRuns] = useState<SessionView[]>([]);
+  // Slice Z (DES-UX-001 §7.6): whether at least one GET /runs has RESOLVED —
+  // lets a route naming an unlisted run distinguish "index still in flight"
+  // from "the daemon does not serve this id" (the honest pending copy).
+  const [loaded, setLoaded] = useState(false);
   const [tick, setTick] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -58,6 +62,7 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void } {
       }
       if (cancelled) return;
       setRuns(fetched);
+      setLoaded(true);
 
       const awaiting = fetched
         .filter((v) => v.session.status === 'awaiting_human')
@@ -95,5 +100,5 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void } {
     };
   }, [status, tick, setGate, reconcileGates, reconcileElicitations]);
 
-  return { runs, refresh };
+  return { runs, refresh, loaded };
 }
