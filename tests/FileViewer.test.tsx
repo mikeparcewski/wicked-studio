@@ -86,15 +86,39 @@ describe('FileViewer — File tab states', () => {
 });
 
 describe('FileViewer — Diff tab states', () => {
-  it('409 (workdir reaped): honest, verbatim', async () => {
+  // RE-SCOPED by slice R (DES-UX-001 §1.3-4a / §11.2): this assertion used to pin
+  // the 409 surfacing VERBATIM. The design supersedes that — the daemon's two diff
+  // 409s become NAMED-CAUSE cards, and the raw `API 409` / `has no workdir` strings
+  // never reach the DOM (EC33). The verbatim contract still holds for every other
+  // error (the named-404 test below is unchanged).
+  it('409 (workdir reaped): the named-cause card, never the raw wire string', async () => {
     vi.spyOn(client.api, 'getRunDiff').mockRejectedValue(new Error(
       "API 409: run r-1's workdir no longer exists: /tmp/wt",
     ));
     render(<FileViewer runId="r-1" defaultTab="diff" onClose={() => {}} onUnsupported={() => {}} />);
 
-    expect(await screen.findByTestId('viewer-error')).toHaveTextContent(
-      "API 409: run r-1's workdir no longer exists: /tmp/wt",
-    );
+    const card = await screen.findByTestId('diff-named-cause');
+    expect(card).toHaveAttribute('data-cause', 'workdir-gone');
+    expect(card).toHaveTextContent('This run’s workdir no longer exists.');
+    expect(document.body.textContent).not.toContain('API 409');
+    expect(screen.queryByTestId('viewer-error')).not.toBeInTheDocument();
+  });
+
+  it('409 (no workdir attached): the no-repository named cause, raw strings absent', async () => {
+    vi.spyOn(client.api, 'getRunDiff').mockRejectedValue(new Error(
+      'API 409: run r-1 has no workdir — nothing to diff',
+    ));
+    const onClose = vi.fn();
+    render(<FileViewer runId="r-1" defaultTab="diff" onClose={onClose} onUnsupported={() => {}} />);
+
+    const card = await screen.findByTestId('diff-named-cause');
+    expect(card).toHaveAttribute('data-cause', 'no-repo');
+    expect(card).toHaveTextContent('This run had no repository attached — nothing was produced to review.');
+    expect(document.body.textContent).not.toContain('API 409');
+    expect(document.body.textContent).not.toContain('has no workdir');
+    // The remediation link resolves (closes back to the run page's transcripts).
+    screen.getByTestId('diff-cause-remediation').click();
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('colors added/removed/hunk lines from the classifier and banners diff truncation', async () => {

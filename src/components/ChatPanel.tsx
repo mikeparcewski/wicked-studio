@@ -12,7 +12,11 @@ import { STATUS_STYLE } from './RunCard.js';
 import { SteeringGate } from './SteeringGate.js';
 import { ChatInput } from './ChatInput.js';
 import { AgentTerminal } from './AgentTerminal.js';
+import { FailureBanner } from './FailureBanner.js';
+import { FileViewer } from './FileViewer.js';
 import { Markdown } from './Markdown.js';
+import { UnitList } from './UnitList.js';
+import { VerdictDetail } from './VerdictDetail.js';
 import type { RunMode } from './runMode.js';
 import { MODE_LABELS } from './runMode.js';
 export type { RunMode } from './runMode.js';
@@ -752,14 +756,26 @@ function RunChat({
   const [transcripts, setTranscripts] = useState<
     Record<number, { text: string | null; loading: boolean; visible: boolean }>
   >({});
+  // Evidence-reference wiring (DES-UX-001 §1.3-4c): a file link clicked in any
+  // transcript opens the slice-I FileViewer on that path — never a dead click.
+  const [evidenceFile, setEvidenceFile] = useState<string | null>(null);
   const autoLoadedOrds = useRef<Set<number>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Units-as-spine for EVERY terminal failure (DES-UX-001 §1.3-1): a failed or
+  // cancelled run renders the ordered UnitList → WorkUnitDetail post-mortem
+  // (each unit's captured transcript auto-opens, WorkUnitDetail.tsx:38), with
+  // FailureBanner as the HEADLINE above the list — not the whole story.
+  const isPostMortem = session.status === 'failed' || session.status === 'cancelled';
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [timeline.length, log.length]);
 
   useEffect(() => {
+    // Post-mortem runs render the unit spine, whose WorkUnitDetail owns the
+    // per-unit transcript fetch — skipping here avoids a duplicate request.
+    if (isPostMortem) return;
     for (const unit of units) {
       if (unit.status === 'done' && !autoLoadedOrds.current.has(unit.ord)) {
         autoLoadedOrds.current.add(unit.ord);
@@ -789,7 +805,7 @@ function RunChat({
           });
       }
     }
-  }, [units, session.id]);
+  }, [units, session.id, isPostMortem]);
 
   function toggleTranscript(ord: number): void {
     setTranscripts((prev) => {
@@ -886,9 +902,23 @@ function RunChat({
           </div>
         </div>
 
+        {/* The post-mortem spine (DES-UX-001 §1.3, slice R): a failed/cancelled run
+            renders FailureBanner as the headline, the evaluator's VerdictDetail card,
+            and the ordered unit spine — each captured transcript auto-opened — in
+            place of the conversational timeline. The transcripts were on the wire
+            all along (GET /runs/:id/units/:unitKey/output); this is the render path
+            that finally takes them for the statuses that need them most. */}
+        {isPostMortem && (
+          <div className="flex flex-col gap-3">
+            <FailureBanner view={view} log={log} />
+            <VerdictDetail runId={session.id} units={ordered} />
+            <UnitList runId={session.id} units={ordered} onOpenFile={setEvidenceFile} />
+          </div>
+        )}
+
         {/* Phase entries — only phases that have run or are running; gate panel injected
             inline before the unit it blocks when that unit has already entered the thread */}
-        {timeline.flatMap((unit) => {
+        {!isPostMortem && timeline.flatMap((unit) => {
           const tc = transcripts[unit.ord];
           const stageBadge = STAGE_BADGE[unit.stage] ?? { bg: 'var(--surface-raised)', color: 'var(--ink-muted)' };
           const gateBeforeThis = session.status === 'awaiting_human' && gate?.ord === unit.ord;
@@ -1024,7 +1054,7 @@ function RunChat({
                         <div className="mt-2.5 max-h-[28rem] overflow-y-auto">
                           {tc.loading
                             ? <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>Loading output…</span>
-                            : <Markdown className="whitespace-pre-wrap">{tc.text ?? ''}</Markdown>
+                            : <Markdown className="whitespace-pre-wrap" onOpenFile={setEvidenceFile}>{tc.text ?? ''}</Markdown>
                           }
                         </div>
                       )}
@@ -1102,6 +1132,26 @@ function RunChat({
 
         <div ref={bottomRef} />
       </div>
+
+      {/* The evidence viewer: slice I's FileViewer, reused verbatim — populated
+          from GET /runs/:id/files (readRunFile). Opened only by a clicked
+          evidence reference; a daemon without the route falls back to the
+          external open (which itself copy-falls-back), same as the Files panel. */}
+      {evidenceFile !== null && (
+        <FileViewer
+          runId={session.id}
+          path={evidenceFile}
+          defaultTab="file"
+          onClose={() => setEvidenceFile(null)}
+          onUnsupported={() => {
+            const p = evidenceFile;
+            setEvidenceFile(null);
+            void api.openPath(p, session.id).catch(() => {
+              void navigator.clipboard.writeText(p).catch(() => { /* clipboard unavailable */ });
+            });
+          }}
+        />
+      )}
 
       {agentTerminal && (
         <div className="px-4 pb-3 shrink-0">

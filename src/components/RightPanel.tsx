@@ -181,6 +181,76 @@ function FilePath({ path, opKind, runId }: { path: string; opKind?: FileOpKind; 
   );
 }
 
+/**
+ * The Term tab's transcript-first landing (DES-UX-001 §1.3-4, slice R): when a
+ * run has captured unit output, a diagnosing operator lands on THAT — the
+ * run's own transcript — not on an empty ungoverned shell. The operator shell
+ * stays available as a labeled, secondary action.
+ *
+ * Fetches ride the same sanctioned wire the run view uses
+ * (`GET /runs/:id/units/:unitKey/output`), gesture-gated on opening the modal.
+ */
+function RunTranscriptView({ runId, units, onOpenShell }: {
+  runId: string;
+  units: SessionView['units'];
+  onOpenShell: () => void;
+}): React.ReactElement {
+  const captured = [...units]
+    .filter((u) => u.status === 'done' || u.status === 'rejected')
+    .sort((a, b) => a.ord - b.ord);
+  const [texts, setTexts] = useState<Record<number, string | null>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    for (const unit of captured) {
+      const unitKey = unit.id.startsWith(`${runId}:`) ? unit.id.slice(runId.length + 1) : `u${unit.ord}`;
+      void api
+        .getUnitOutput(runId, unitKey)
+        .then(({ output, outputUnavailable }) => {
+          if (cancelled) return;
+          setTexts((prev) => ({ ...prev, [unit.ord]: output ?? outputUnavailable ?? '(no transcript captured)' }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setTexts((prev) => ({ ...prev, [unit.ord]: '(transcript unavailable)' }));
+        });
+    }
+    return () => { cancelled = true; };
+    // The captured set is derived from `units`; keying on runId + length keeps the
+    // effect from re-firing per render while still refetching on a run switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId, captured.length]);
+
+  return (
+    <div data-testid="term-transcript" className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
+      {captured.map((unit) => (
+        <div key={unit.id}>
+          <p className="text-[10px] font-mono mb-1 uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>
+            unit #{unit.ord} · {unit.stage} · {unit.status}
+          </p>
+          <pre
+            className="rounded-lg p-2 text-[10px] leading-tight whitespace-pre-wrap font-mono overflow-x-auto"
+            style={{ background: 'var(--surface-base)', color: 'var(--ink-body)' }}
+          >
+            {texts[unit.ord] ?? 'Loading…'}
+          </pre>
+        </div>
+      ))}
+      <div className="flex items-center gap-2 pt-1" style={{ borderTop: '1px solid var(--surface-raised)' }}>
+        <button
+          type="button"
+          data-testid="term-open-shell"
+          onClick={onOpenShell}
+          className="text-[11px] font-mono underline transition-opacity hover:opacity-70"
+          style={{ color: 'var(--ink-muted)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          Open operator shell (ungoverned) instead
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
   const runId = model.session.id;
   // Slice I: the per-run [Full diff] button at the panel header (§3.4) — the
@@ -323,6 +393,9 @@ export function RightPanel({ view }: Props): React.ReactElement {
   const [openAccordion, setOpenAccordion] = useState<AccordionId | null>('whatwhere');
 
   const [termOpen, setTermOpen] = useState(false);
+  // Slice R (§1.3-4): the Term tab lands on the run's captured transcript when
+  // one exists; the ungoverned operator shell is the labeled SECONDARY action.
+  const [termShell, setTermShell] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
 
   // Steering INPUT lives in the run thread's composer (ChatInput routes by run
@@ -402,8 +475,12 @@ export function RightPanel({ view }: Props): React.ReactElement {
         <button
           type="button"
           onClick={() => setTermOpen(true)}
-          title="Terminal"
-          aria-label="Open terminal"
+          title={view.units.some((u) => u.status === 'done' || u.status === 'rejected')
+            ? "View this run's transcript"
+            : 'Terminal'}
+          aria-label={view.units.some((u) => u.status === 'done' || u.status === 'rejected')
+            ? "View this run's transcript"
+            : 'Open terminal'}
           className="rounded px-2 py-0.5 text-[11px] font-mono"
           style={{ color: 'var(--ink-muted)' }}
         >
@@ -470,15 +547,33 @@ export function RightPanel({ view }: Props): React.ReactElement {
         ))}
       </div>
 
-      {/* Terminal modal */}
-      {termOpen && (
-        <Modal title="Operator shell" onClose={() => setTermOpen(false)} disableEscapeKey>
-          <Terminal
-            cwd={session.workdir ?? '.'}
-            governed
-          />
-        </Modal>
-      )}
+      {/* Terminal modal — transcript-first when captured output exists (§1.3-4):
+          a diagnosing operator lands on the run's own record, never on an empty
+          shell by default. */}
+      {termOpen && (() => {
+        const hasCaptured = view.units.some((u) => u.status === 'done' || u.status === 'rejected');
+        const showTranscript = hasCaptured && !termShell;
+        return (
+          <Modal
+            title={showTranscript ? "This run's transcript" : 'Operator shell'}
+            onClose={() => { setTermOpen(false); setTermShell(false); }}
+            disableEscapeKey
+          >
+            {showTranscript ? (
+              <RunTranscriptView
+                runId={session.id}
+                units={view.units}
+                onOpenShell={() => setTermShell(true)}
+              />
+            ) : (
+              <Terminal
+                cwd={session.workdir ?? '.'}
+                governed
+              />
+            )}
+          </Modal>
+        );
+      })()}
 
       {/* Coverage modal */}
       {coverageOpen && (
