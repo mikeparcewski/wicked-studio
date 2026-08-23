@@ -623,11 +623,13 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   }
 
   /** §6.1's visible failure: the message stays on the thread wearing the failed
-   *  chip; the working state retires when nothing else is pending behind it. */
+   *  chip; the working state retires when nothing else is pending behind it.
+   *  `refused: true` — the bridge never accepted the send, so the stopgap must
+   *  persist its text for the failure to survive a reload (round-3 finding 4). */
   function failVisibly(msgId: string): void {
     if (key === null) return;
     const store = useDocThreadStore.getState();
-    store.markSendFailed(key, msgId);
+    store.markSendFailed(key, msgId, true);
     if ((useDocThreadStore.getState().pending[key] ?? []).length === 0
         && useDocThreadStore.getState().genState[key] === 'generating') {
       store.setGenState(key, 'terminal');

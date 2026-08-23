@@ -12,7 +12,10 @@
 
 import { create } from 'zustand';
 import { isFiller } from './narration.js';
-import { recordAnchor, type StoredAnchor } from '../interactive/threadStopgap.js';
+import {
+  recordAnchor, recordExport, writeSendStates,
+  type StoredAnchor, type StoredExport, type StoredSendState,
+} from '../interactive/threadStopgap.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
 import type { ConversationEntry, ExportFormat } from '../api/interactive.js';
 import type { CoreEvent } from '../api/types.js';
@@ -53,9 +56,12 @@ export type DocMsg =
   // `sentAt` is the send's own clock (§6.1 honesty budget): stamped when the
   // message is enqueued and re-stamped by a retry, it is half of what decides
   // when the generating chip must stop claiming "being worked now".
+  // `refused` narrows `failed` (round-3 J3): the bridge never ACCEPTED this send,
+  // so the wire's announce history holds no line for it — the send-state stopgap
+  // must persist its text itself for the failure to survive a reload.
   | { kind: 'user';      id: string; text: string; version?: number;
-      items?: FeedbackItem[]; notRecorded?: boolean; failed?: boolean; restored?: boolean;
-      sentAt?: number }
+      items?: FeedbackItem[]; notRecorded?: boolean; failed?: boolean; refused?: boolean;
+      restored?: boolean; sentAt?: number }
   | { kind: 'narration'; id: string; text: string }
   // `href` + `file` make an agent message DOWNLOADABLE (§4.4): an export is an ordinary
   // message from the service, carrying its artifact — never a toast, never a second origin.
@@ -195,8 +201,10 @@ interface DocThreadStore {
   /** Flag/clear §7.7's "not recorded in the run" chip on one already-rendered message. */
   markNotRecorded: (key: string, id: string, notRecorded: boolean) => void;
   /** §6.1's visible failure: the send was refused — drop it from the pending queue
-   *  and mark the message failed, so it renders `thread-send-failed` with a retry. */
-  markSendFailed: (key: string, id: string) => void;
+   *  and mark the message failed, so it renders `thread-send-failed` with a retry.
+   *  `refused` says the bridge never ACCEPTED it (an HTTP refusal): the wire holds
+   *  no line for it, so the send-state stopgap persists its text itself. */
+  markSendFailed: (key: string, id: string, refused?: boolean) => void;
   /** Re-arm a failed send: clear the flag and re-enqueue at the TAIL — a retry is a
    *  new send in queue order, never a jump back to its original position. */
   retrySend: (key: string, id: string) => void;
@@ -208,8 +216,16 @@ interface DocThreadStore {
    * ordinal (the only correlation the wire supports). Applies only while the
    * projection is empty; a thread with live messages keeps them and just marks
    * itself hydrated, so the read never doubles what this session already saw.
+   *
+   * Round-3 J3 (finding 4): `sends` re-attaches the unresolved-send states the
+   * wire cannot carry — pending sends re-enter the FIFO with their ORIGINAL
+   * sentAt (the honesty budget resumes, it never re-arms), failed accepted sends
+   * re-wear their failure + retry, and REFUSED sends (no wire line) are
+   * re-rendered from their persisted text. `exports` restores the transcript's
+   * downloadable export entries the announce history has no record of.
    */
-  hydrate: (key: string, entries: ConversationEntry[], anchors: StoredAnchor[]) => void;
+  hydrate: (key: string, entries: ConversationEntry[], anchors: StoredAnchor[],
+            sends?: StoredSendState[], exports?: StoredExport[]) => void;
   /** Append a client-authored informative line (§3.3) — an action the user took. */
   addNarration: (key: string, text: string) => void;
   /**
@@ -241,6 +257,32 @@ function append(messages: Record<string, DocMsg[]>, key: string, msg: DocMsg): R
   return { ...messages, [key]: [...(messages[key] ?? []), msg] };
 }
 
+/**
+ * Round-3 J3 (finding 4): derive one thread's unresolved-send snapshot from the
+ * live projection and persist it (session storage) — called after every mutation
+ * that can change it, so the write cannot drift from the truth on screen.
+ * Ordinals count ACCEPTED user lines only (the wire's own addressing); a REFUSED
+ * send carries its text, because the announce history has no line for it.
+ */
+function persistSendStates(key: string): void {
+  const s = useDocThreadStore.getState();
+  const msgs = s.messages[key] ?? [];
+  const pending = new Set(s.pending[key] ?? []);
+  const out: StoredSendState[] = [];
+  let ord = 0; // accepted-user-line ordinal, the wire's addressing
+  for (const m of msgs) {
+    if (m.kind !== 'user') continue;
+    if (m.refused === true) {
+      out.push({ ord, state: 'failed', sentAt: m.sentAt ?? 0, text: m.text });
+      continue;
+    }
+    ord += 1;
+    if (m.failed === true) out.push({ ord, state: 'failed', sentAt: m.sentAt ?? 0 });
+    else if (pending.has(m.id)) out.push({ ord, state: 'pending', sentAt: m.sentAt ?? 0 });
+  }
+  writeSendStates(key, out);
+}
+
 export const useDocThreadStore = create<DocThreadStore>((set) => ({
   messages: {},
   genState: {},
@@ -263,6 +305,8 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
     // session-storage stopgap (§6.3) records it OUTSIDE the state update.
     let taggedOrd: number | null = null;
     let taggedVersion = 0;
+    // The EXPORTED branch's stopgap record, surfaced the same way.
+    let exportEntry: StoredExport | null = null;
 
     set((s) => {
       const messages = s.messages;
@@ -356,10 +400,13 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
         if (href !== null && (messages[key] ?? []).some(
           (m) => m.kind === 'agent' && m.href === href,
         )) return s;
+        const text = `${format.toUpperCase()} export ready — ${file}`;
+        // Round-3 minor: the announce history carries no exports, so the entry is
+        // ALSO recorded in the session stopgap — the reload restores the download.
+        if (href !== null) exportEntry = { text, href, file };
         return {
           messages: append(messages, key, {
-            kind: 'agent', id: nextMsgId(), author: 'export',
-            text: `${format.toUpperCase()} export ready — ${file}`,
+            kind: 'agent', id: nextMsgId(), author: 'export', text,
             ...(href === null ? {} : { href, file }),
           }),
         };
@@ -445,65 +492,122 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       return s;
     });
     if (taggedOrd !== null) recordAnchor(key, taggedOrd, taggedVersion);
+    if (exportEntry !== null) recordExport(key, exportEntry);
+    // Any frame can resolve or fail sends (a landing consumes the head anchor, a
+    // status error kills the backlog) — re-derive the persisted snapshot either way.
+    persistSendStates(key);
   },
 
-  addUserMsg: (key, id, text, items) =>
+  addUserMsg: (key, id, text, items) => {
     set((s) => ({
       messages: append(s.messages, key,
         { kind: 'user', id, text, sentAt: Date.now(), ...(items ? { items } : {}) }),
       pending: { ...s.pending, [key]: [...(s.pending[key] ?? []), id] },
-    })),
+    }));
+    persistSendStates(key);
+  },
 
-  markSendFailed: (key, id) =>
+  markSendFailed: (key, id, refused = false) => {
     set((s) => ({
       messages: {
         ...s.messages,
         [key]: (s.messages[key] ?? []).map((m) =>
-          m.kind === 'user' && m.id === id ? { ...m, failed: true } : m),
+          m.kind === 'user' && m.id === id
+            ? { ...m, failed: true, ...(refused ? { refused: true } : {}) }
+            : m),
       },
       pending: { ...s.pending, [key]: (s.pending[key] ?? []).filter((p) => p !== id) },
-    })),
+    }));
+    persistSendStates(key);
+  },
 
-  retrySend: (key, id) =>
+  retrySend: (key, id) => {
     set((s) => ({
       messages: {
         ...s.messages,
         [key]: (s.messages[key] ?? []).map((m) =>
           // A retry is a NEW send, so its §6.1 honesty-budget clock restarts too.
-          m.kind === 'user' && m.id === id ? { ...m, failed: false, sentAt: Date.now() } : m),
+          // A refused send being re-armed sheds the refused mark: if THIS attempt
+          // is accepted, the wire will hold its line like any other send's.
+          m.kind === 'user' && m.id === id
+            ? { ...m, failed: false, refused: false, sentAt: Date.now() }
+            : m),
       },
       pending: { ...s.pending, [key]: [...(s.pending[key] ?? []).filter((p) => p !== id), id] },
-    })),
+    }));
+    persistSendStates(key);
+  },
 
-  hydrate: (key, entries, anchors) =>
+  hydrate: (key, entries, anchors, sends = [], exports = []) =>
     set((s) => {
       // Once per thread per session, and never over a live projection: the read
       // restores what the wire holds, it must not double what this tab saw.
       if (s.hydrated[key] === true) return s;
       if ((s.messages[key] ?? []).length > 0) return { hydrated: { ...s.hydrated, [key]: true } };
       const byOrd = new Map(anchors.map((a) => [a.ord, a.version]));
+      // Round-3 J3: the persisted unresolved sends, by accepted-user ordinal.
+      const sendByOrd = new Map(sends.filter((x) => x.text === undefined).map((x) => [x.ord, x]));
+      const refusedAfter = new Map<number, StoredSendState[]>();
+      for (const x of sends) {
+        if (x.text === undefined) continue;
+        refusedAfter.set(x.ord, [...(refusedAfter.get(x.ord) ?? []), x]);
+      }
       const restored: DocMsg[] = [];
+      const pendingRestored: { ord: number; id: string }[] = [];
+      const pushRefused = (afterOrd: number): void => {
+        for (const x of refusedAfter.get(afterOrd) ?? []) {
+          // A REFUSED send has no wire line — its persisted text re-renders it,
+          // wearing the failure and its retry (never a plain accepted message).
+          restored.push({
+            kind: 'user', id: nextMsgId(), text: x.text as string, restored: true,
+            failed: true, refused: true, sentAt: x.sentAt,
+          });
+        }
+      };
       let ord = 0;
+      pushRefused(0);
       for (const e of entries) {
         const text = typeof e.text === 'string' ? e.text.trim() : '';
         if (text === '') continue;
         if (e.role === 'user') {
           ord += 1;
           const version = byOrd.get(ord);
+          const sendState = sendByOrd.get(ord);
+          const id = nextMsgId();
           restored.push({
-            kind: 'user', id: nextMsgId(), text, restored: true,
+            kind: 'user', id, text, restored: true,
             ...(version === undefined ? {} : { version }),
+            // A still-unresolved send keeps its ORIGINAL clock: the honesty
+            // budget resumes across the reload instead of re-arming (a send
+            // that was already stalled comes back visibly stalled).
+            ...(sendState === undefined ? {} : { sentAt: sendState.sentAt }),
+            ...(sendState?.state === 'failed' ? { failed: true } : {}),
           });
+          if (sendState?.state === 'pending') pendingRestored.push({ ord, id });
+          pushRefused(ord);
         } else if (!isFiller(text)) {
           // Agent narration (including error states) at the same seam live frames
           // cross: filler is dropped here too — one rule, both sources (§3.2).
           restored.push({ kind: 'narration', id: nextMsgId(), text });
         }
       }
+      // Round-3 minor: the transcript's export downloads, restored at the tail —
+      // the announce history holds no exports, so the stopgap is their record.
+      for (const x of exports) {
+        restored.push({ kind: 'agent', id: nextMsgId(), author: 'export',
+                        text: x.text, href: x.href, ...(x.file === undefined ? {} : { file: x.file }) });
+      }
       if (restored.length === 0) return { hydrated: { ...s.hydrated, [key]: true } };
+      const pendingIds = pendingRestored.sort((a, b) => a.ord - b.ord).map((x) => x.id);
       return {
         messages: { ...s.messages, [key]: restored },
         hydrated: { ...s.hydrated, [key]: true },
+        ...(pendingIds.length === 0 ? {} : {
+          pending: { ...s.pending, [key]: pendingIds },
+          // Sends are still in flight, so the thread IS generating — restored
+          // exactly as unresolved, never quietly demoted to terminal.
+          genState: { ...s.genState, [key]: 'generating' as GenState },
+        }),
       };
     }),
 
