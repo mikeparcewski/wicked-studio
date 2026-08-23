@@ -320,6 +320,20 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # GENERATING_SILENCE_BUDGET_MS timeout is what stands between the user
          # and an eternal "being worked now".
          "doc_silent": False,
+         # Round-3 J3: mirror the REAL bridge's create shape (generation.js) —
+         # a kind:"source" create seeds a PLACEHOLDER v0 ("Building {name}…",
+         # head 0) and answers 200 {name, head: 0, generating: true}; the first
+         # draft lands LATER as v1 (kind "generated") when the answerer emits
+         # draft.completed — doc_run_ms is how long that answerer takes.
+         # Switch-gated (default False) so standing rigs keep the historical
+         # v1-at-create shape; the round-3 rig runs the real v0→v1 journey.
+         "doc_v0": False,
+         # Round-3 J3: mirror the UNBOUND-doc reality (serviceEmit stamps
+         # project_id only on docs bound to a crew project): when True, doc
+         # frames ride the relay WITHOUT project_id — exactly what an Unfiled
+         # doc's frames look like on the real stack. Default False: standing
+         # rigs keep the stamped frames their projects legitimately have.
+         "doc_unbound": False,
          # Slice U (DES-UX-001 §6.2, §8.4.1 probe 3): when True, POST
          # /api/docs answers the bridge's REAL refused-bind shape — a loud
          # 502 {"error": "crew daemon unreachable at …"} with NOTHING created
@@ -1309,11 +1323,19 @@ def queue_interactive(event_type: str, payload: dict) -> None:
     # Slice T: doc-scoped narration is ALSO appended to the durable announce
     # history — the same dual-write the real bridge does (SSE relay + JSONL),
     # so GET /d/:doc/api/conversation reads back what the stream said.
+    # (Logged BEFORE the unbound strip below: the disk knows the doc's home
+    # even when the frame does not carry it — same as the real bridge.)
     if event_type == "wicked.interactive.status.posted":
         pid, doc = payload.get("project_id"), payload.get("document_id")
         text = payload.get("message")
         if pid and doc and text:
             log_conversation(pid, doc, "agent", str(text), payload.get("state"))
+    # Round-3 J3 (`doc_unbound`): an UNBOUND doc's frames carry no project_id on
+    # the real relay (serviceEmit stamps only bound docs) — mirror that shape.
+    with state_lock:
+        unbound = state["doc_unbound"]
+    if unbound and payload.get("document_id"):
+        payload = {k: v for k, v in payload.items() if k != "project_id"}
     with ws_lock:
         ws_queue.append({"type": "interactiveEvent",
                          "event": {"event_type": event_type, "payload": payload}})
@@ -1393,7 +1415,18 @@ def doc_versions(pid: str, doc: str) -> list:
 
 def doc_html(doc: str, version: int) -> str:
     """The rendered document at one version — a light deck slide, so the canvas reads
-    as a document against the app chrome and the v1→v2 headline change is visible."""
+    as a document against the app chrome and the v1→v2 headline change is visible.
+    v0 is the REAL bridge's generation placeholder (generation.js), verbatim in
+    spirit: 'Building {name}…' + the updates-automatically promise — what the
+    canvas shows between create and the answerer's first draft (doc_v0)."""
+    if version == 0:
+        title = doc.replace("-", " ")
+        return (f"<!doctype html><html><head><meta charset=\"utf-8\"><title>{doc} v0</title>"
+                "</head><body><section>"
+                f"<h1>Building {title}…</h1>"
+                "<p class=\"lead\">Reading your brief and drafting your document. "
+                "This view updates automatically the moment the first draft is ready.</p>"
+                "</section></body></html>")
     headline = HEADLINES.get(version, TIGHT_HEADLINE)
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>{doc} v{version}</title>
 <style>body{{margin:0;font-family:Georgia,serif;background:#f4f1ea;color:#1b1b1b;
@@ -2049,27 +2082,42 @@ class W2Handler(SimpleHTTPRequestHandler):
             # no `meta.sourceMessageId` ever reaches the manifest (the interactive.ts
             # claim was aspirational). The client's anchor is client-side; the
             # fixture must not serve a correlation the wire does not carry.
-            with docs_lock:
-                docs_created.setdefault(pid, {})[doc] = [
-                    {"version": 1, "parent": None, "feedback_file": None,
-                     "html_file": "v1.html", "created_at": iso(NOW0)}]
+            with state_lock:
+                silent_doc = bool(state["doc_silent"])
+                run_ms = int(state["doc_run_ms"])
+                v0_mirror = bool(state["doc_v0"])
+            if v0_mirror:
+                # Round-3 J3: the REAL create shape (generation.js) — a v0
+                # "Building…" placeholder is what exists at ack time; the first
+                # draft lands LATER as v1 when the answerer's draft.completed
+                # materializes (schedule_doc_run below, doc_run_ms later).
+                with docs_lock:
+                    docs_created.setdefault(pid, {})[doc] = [
+                        {"version": 0, "parent": None, "feedback_file": None,
+                         "html_file": "_v0.html", "created_at": iso(NOW0)}]
+            else:
+                with docs_lock:
+                    docs_created.setdefault(pid, {})[doc] = [
+                        {"version": 1, "parent": None, "feedback_file": None,
+                         "html_file": "v1.html", "created_at": iso(NOW0)}]
             brief = str(body.get("brief") or "")
             if brief:
                 # The brief IS the doc's first user line in the announce history
                 # (the create message the reload scene must get back, §6.3).
                 log_conversation(pid, doc, "user", brief)
-            with state_lock:
-                silent_doc = bool(state["doc_silent"])
+            head0 = 0 if v0_mirror else 1
             if silent_doc:
                 # J3 no-answerer shape: the ack is real, the bus never speaks.
-                self._json(201, {"name": doc, "head": 1, "generating": True, "project_id": pid})
+                self._json(201, {"name": doc, "head": head0, "generating": True, "project_id": pid})
                 return True
             queue_interactive("wicked.interactive.status.posted", {
                 "project_id": pid, "document_id": doc, "state": "working",
                 "message": "Planning the deck — outline first, then the slides."})
-            with state_lock:
-                run_ms = int(state["doc_run_ms"])
-            if run_ms > 0:
+            if v0_mirror:
+                # The answerer lands the FIRST DRAFT as v1 (head 0 → 1), exactly
+                # the real materializeDraft → version.created "generated" path.
+                schedule_doc_run(pid, doc, run_ms / 1000.0)
+            elif run_ms > 0:
                 # Slice T: v1 is committed now but LANDS (the frame) after the
                 # run — long enough for the rig to witness thread-generating.
                 schedule_doc_run(pid, doc, run_ms / 1000.0, fixed_version=1)
@@ -2077,7 +2125,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 queue_interactive("wicked.interactive.version.created", {
                     "project_id": pid, "document_id": doc,
                     "version": 1, "parent": None, "kind": "generated"})
-            self._json(201, {"name": doc, "head": 1, "generating": True, "project_id": pid})
+            self._json(201, {"name": doc, "head": head0, "generating": True, "project_id": pid})
             return True
         # POST /api/v1/projects/<pid>/interactive/d/<doc>/api/fork — branch (§7.10).
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/fork$", path)
@@ -2208,17 +2256,31 @@ class W2Handler(SimpleHTTPRequestHandler):
                     # doc_run_ms after the previous landing (§8.4.1 queue truth).
                     schedule_doc_run(pid, doc, run_ms / 1000.0)
                 else:
-                    # Historical instant path, unchanged for every standing rig:
-                    # re-announce the head as the regenerated version.
-                    versions = doc_versions(pid, doc)
-                    head = max((e["version"] for e in versions), default=1)
+                    # Round-3 J3 honesty: NO version is minted for the send by
+                    # the client — the ANSWERER lands one. The instant path is
+                    # the answerer taking ~0s: it appends head+1 to a created
+                    # doc's manifest and announces THAT (mirroring the real
+                    # regenerate → version.created "generated"). Static registry
+                    # docs (the notes seeds) cannot grow, so they keep the
+                    # historical head re-announce.
+                    with docs_lock:
+                        created_versions = docs_created.get(pid, {}).get(doc)
+                        if created_versions is not None:
+                            v = max(e["version"] for e in created_versions) + 1
+                            created_versions.append(
+                                {"version": v, "parent": v - 1, "feedback_file": None,
+                                 "html_file": f"v{v}.html", "created_at": iso(NOW0 + v * SEC)})
+                            parent = v - 1
+                        else:
+                            versions = doc_versions(pid, doc)
+                            v = max((e["version"] for e in versions), default=1)
+                            parent = v - 1 if v > 1 else None
                     queue_interactive("wicked.interactive.status.posted", {
                         "project_id": pid, "document_id": doc, "state": "working",
                         "message": "Tightening the headline and rebalancing the slide."})
                     queue_interactive("wicked.interactive.version.created", {
                         "project_id": pid, "document_id": doc,
-                        "version": head, "parent": head - 1 if head > 1 else None,
-                        "kind": "generated"})
+                        "version": v, "parent": parent, "kind": "generated"})
             self._json(200, {"ok": True, "event_id": "evt-fixture", "correlation_id": "c-fixture"})
             return True
         return False
