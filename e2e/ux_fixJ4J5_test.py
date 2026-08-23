@@ -264,6 +264,9 @@ with sync_playwright() as p:
     net2 = tap(page2)
     page2.goto(f"{ORIGIN}/chat/new", wait_until="domcontentloaded")
     page2.locator('[data-testid="chat-firstrun"]').wait_for(timeout=30000)
+    # EC44 (round 3): the chips RESOLVE before the send — Send is disabled
+    # while the roster is unknown, so wait for the resolved chips first.
+    page2.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page2.add_style_tag(content=HIDE_GATE_TOASTS)
 
     page2.locator("textarea").fill(MSG1)

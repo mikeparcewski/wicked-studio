@@ -9,22 +9,31 @@ any cli not in ROSTER answers the core's own per-seat rejection
 round-2 review caught — the fallback trio riding the wire and every cold
 profile's first send failing — can never pass this rig by fixture leniency.
 
+ROUND-3 RE-SCOPE (BRIEF-UX-001 C6/EC44 — chips are truth): the fallback-
+trio-as-placeholder arm this rig used to pin is GONE (that placeholder was
+the round-3 defect: chips painted that the send did not connect). The scenes
+below now pin the same J4 outcomes through the EC44 contract: cold mount
+resolves the roster with its ONE named request, the chips are the CHAT-
+CAPABLE seats, and every send connects exactly the displayed chips. The
+dedicated EC44 gate (paint witness, capability labels) is ux_fixJ43_test.py.
+
 Scenes (each on a FRESH browser context — zero storage, the cold profile):
 
-  1. COLD PROFILE (finding 1 + 3): /chat/new mounts with the fallback chips
-     as PLACEHOLDERS (data-source="fallback", zero chat-surface requests);
-     the FIRST SEND fetches the roster on the gesture (exactly one GET
-     /roster), opens with the ROSTER's seats — the strict fixture accepts
-     them, the send succeeds, a reply lands — the URL flips to /chat/:id
+  1. COLD PROFILE (finding 1 + 3): /chat/new mounts with NO chat request but
+     the ONE named GET /roster (EC44); the chips resolve roster-true
+     (data-source="roster", the chat-capable seats); the FIRST SEND opens
+     with EXACTLY the displayed chips — the strict fixture accepts them,
+     the send succeeds, a reply lands — the URL flips to /chat/:id
      (J4: the session is findable), the rail lists the live session and
      never says "no chats", and /chats' Active-now headline counts the
      live row (finding 4a: no "0 of 0" beside a live session).
-  2. ROSTER UNREACHABLE (finding 1): with GET /roster answering 500, a
-     pristine first send FAILS INLINE — zero POST /chats (the trio never
-     ships), the draft survives in the composer, the failure renders with
-     a working Retry; after the roster recovers, Retry sends the ROSTER's
-     seats and exactly one user bubble renders (no duplicate).
-  3. OPEN-FAILURE RECOVERY (finding 2 + 3): every seat rejected at open →
+  2. ROSTER UNREACHABLE (finding 1, re-dressed by EC44): with GET /roster
+     answering 500, the MOUNT resolve fails — the bar says so with a
+     working Retry, NO chip is painted, Send stays disabled, and nothing
+     ships (zero POST /chats); after the roster recovers, Retry resolves
+     the chips and the send connects the capable seats, exactly one user
+     bubble (no duplicate).
+  3. OPEN-FAILURE RECOVERY (finding 2 + 3): every (capable) seat rejected at open →
      the failure renders as a retryable row beside the banner, the draft
      survives; remove one chip, un-reject, Retry → the send succeeds into
      the SAME chat id, the stale banner clears, and the removed seat's
@@ -50,6 +59,7 @@ import sys
 from urllib.parse import urlparse
 
 from uxfix_fixture import (
+    CHAT_CAPABLE_KEYS,
     HIDE_GATE_TOASTS,
     REPO,
     ROSTER,
@@ -63,7 +73,7 @@ ORIGIN = f"http://127.0.0.1:{FEEDBACK_PORT}"
 VSHOTS = REPO / "e2e" / "shots" / "vision"
 
 ROSTER_KEYS = [s["key"] for s in ROSTER]
-FALLBACK = ["writer", "reviewer", "planner"]
+CAPABLE = CHAT_CAPABLE_KEYS  # the EC44 default chip set — what a cold send connects
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -150,17 +160,20 @@ with sync_playwright() as p:
     page.goto(f"{ORIGIN}/chat/new", wait_until="domcontentloaded")
     page.locator('[data-testid="chat-firstrun"]').wait_for(timeout=30000)
     page.locator('[data-testid="agent-chips-bar"]').wait_for(timeout=30000)
+    page.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
 
     storage = page.evaluate("() => sessionStorage.length + localStorage.length")
     mount = page.evaluate(CENSUS)
     mount_chat = [(m, q) for (m, q, _b) in net if is_chat_surface(q)]
-    check("cold_mount_placeholders_zero_requests",
+    # EC44: the ONE named mount request (GET /roster) resolves the chips
+    # roster-true; nothing chat-shaped fires and nothing warms.
+    check("cold_mount_resolves_roster_true_chips",
           storage == 0
           and mount["chipsBar"] is not None
-          and mount["chipsBar"]["source"] == "fallback"
-          and mount["chipsBar"]["count"] == str(len(FALLBACK))
-          and len(mount_chat) == 0,
+          and mount["chipsBar"]["source"] == "roster"
+          and mount["chipsBar"]["count"] == str(len(CAPABLE))
+          and mount_chat == [("GET", "/api/v1/roster")],
           storage_entries=storage, chips_bar=mount["chipsBar"], mount_chat_requests=mount_chat)
 
     page.locator("textarea").fill(MSG_COLD)
@@ -177,7 +190,7 @@ with sync_playwright() as p:
     check("cold_first_send_roster_first_and_accepted",
           len(roster_gets) == 1
           and len(opens) == 1
-          and (opens[0][2] or {}).get("clis") == ROSTER_KEYS
+          and (opens[0][2] or {}).get("clis") == CAPABLE
           and not sent["openError"]
           and sent["sendFailed"] is None
           and sent["userBubbles"] == [MSG_COLD]
@@ -221,26 +234,34 @@ with sync_playwright() as p:
     page2.locator('[data-testid="chat-firstrun"]').wait_for(timeout=30000)
     page2.add_style_tag(content=HIDE_GATE_TOASTS)
 
+    # EC44: the failed MOUNT resolve renders as the bar's unresolved row —
+    # no chip is painted, Send stays disabled, and Enter ships NOTHING.
+    page2.locator('[data-testid="agent-chips-unresolved"]').wait_for(timeout=30000)
     page2.locator("textarea").fill(MSG_DOWN)
     page2.keyboard.press("Enter")
-    page2.locator('[data-testid="chat-send-failed"]').wait_for(timeout=30000)
     down = page2.evaluate(CENSUS)
     down_opens = [(m, q) for (m, q, _b) in net2 if m == "POST" and q == "/api/v1/chats"]
     down_sends = [(m, q) for (m, q, _b) in net2 if m == "POST" and "/messages" in q]
+    down_chips = page2.evaluate(
+        """() => [...document.querySelectorAll('[data-testid=\"agent-chip\"]')].length""")
     check("roster_down_nothing_ships_draft_survives",
           len(down_opens) == 0 and len(down_sends) == 0
-          and "roster" in (down["sendFailed"] or "")
+          and down_chips == 0
           and down["composer"] == MSG_DOWN
           and down["userBubbles"] == []
-          and down["sendDisabled"] is False
+          and down["sendDisabled"] is True
           and down["pathname"] == "/chat/new",
-          opens=down_opens, sends=down_sends, census=down)
+          opens=down_opens, sends=down_sends, chips=down_chips, census=down)
 
     page2.screenshot(path=str(VSHOTS / "ux-J42-roster-down.png"))
 
-    # The roster recovers → Retry sends the ROSTER's seats, exactly once.
+    # The roster recovers → the bar's Retry resolves the chips, and the send
+    # connects EXACTLY the displayed (capable) seats, exactly once.
     set_fixture(ORIGIN, roster_fail=False)
-    page2.locator('[data-testid="chat-send-retry"]').click()
+    page2.locator('[data-testid="agent-chips-retry"]').click()
+    page2.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
+    page2.locator("textarea").click()
+    page2.keyboard.press("Enter")
     page2.wait_for_function(
         f"""() => [...document.querySelectorAll('[data-testid="user-bubble"]')]
                   .filter((u) => u.textContent === {json.dumps(MSG_DOWN)}).length === 1
@@ -248,8 +269,8 @@ with sync_playwright() as p:
                && document.querySelector('textarea')?.value === ''""",
         timeout=30000)
     retry_opens = [(m, q, b) for (m, q, b) in net2 if m == "POST" and q == "/api/v1/chats"]
-    check("roster_recovers_retry_sends_roster_once",
-          len(retry_opens) == 1 and (retry_opens[0][2] or {}).get("clis") == ROSTER_KEYS,
+    check("roster_recovers_retry_sends_capable_once",
+          len(retry_opens) == 1 and (retry_opens[0][2] or {}).get("clis") == CAPABLE,
           open_body=retry_opens[0][2] if retry_opens else None)
     ctx2.close()
 
@@ -261,6 +282,7 @@ with sync_playwright() as p:
     net3 = tap(page3)
     page3.goto(f"{ORIGIN}/chat/new", wait_until="domcontentloaded")
     page3.locator('[data-testid="chat-firstrun"]').wait_for(timeout=30000)
+    page3.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page3.add_style_tag(content=HIDE_GATE_TOASTS)
 
     page3.locator("textarea").fill(MSG_REJ)
@@ -275,12 +297,12 @@ with sync_playwright() as p:
           and rej["userBubbles"] == []
           and len(rej_sends) == 0
           and all(st == "failed" for st in rej["seatChips"].values())
-          and set(rej["seatChips"]) == set(ROSTER_KEYS),
+          and set(rej["seatChips"]) == set(CAPABLE),
           census=rej, sends=rej_sends)
 
     # Remove one chip; the retried open must not name it — and its stale red
     # seat chip must be PRUNED once the send succeeds (finding 3).
-    removed = ROSTER_KEYS[-1]
+    removed = CAPABLE[-1]
     page3.locator(f'[data-testid="agent-chip"][data-agent="{removed}"] button').click()
     set_fixture(ORIGIN, chat_reject_seats=[])
     page3.locator('[data-testid="chat-send-retry"]').click()
@@ -297,7 +319,7 @@ with sync_playwright() as p:
         timeout=30000)
     recovered = page3.evaluate(CENSUS)
     opens3 = [(m, q, b) for (m, q, b) in net3 if m == "POST" and q == "/api/v1/chats"]
-    kept = [k for k in ROSTER_KEYS if k != removed]
+    kept = [k for k in CAPABLE if k != removed]
     check("recovery_same_chat_banner_and_stale_chips_clear",
           len(opens3) == 2
           and (opens3[0][2] or {}).get("chatId") == (opens3[1][2] or {}).get("chatId")
@@ -335,7 +357,7 @@ with sync_playwright() as p:
           and by_key["claude"]["health"] == "active"
           and by_key["codex"]["health"] == "inactive"
           and by_key["pi"]["health"] == "unknown"
-          and by_key["codex"]["title"] == "codex — inactive"
+          and by_key["codex"]["title"] == "codex — inactive — no chat (ACP) config — can’t join a chat"
           and all((o["text"] or "").strip() != "" for o in picker),
           picker=picker)
     ctx3.close()

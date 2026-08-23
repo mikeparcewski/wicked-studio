@@ -19,36 +19,72 @@ import { ProjectSwitcher } from './ProjectSwitcher.js';
  *
  * NOTHING warms on mount (DES-UXFIX-001 §2.4, F6). First-run is a calm teaching
  * state: one line on what Chat is, a focused composer, and the DEFAULT agent
- * chips (DES-FEEDBACK-001 §6.2): the agents that WILL join, rendered
- * synchronously from the cached roster (never fetched on mount — §6.1's
- * reconciliation of "agents by default" with zero-requests-on-mount), each
- * removable for this run via its ✕, extendable via [+ Add] (the roster
- * picker — its fetch rides that user action). The first send warms exactly
- * the selected set. The warm-and-rejoin machinery (FINDING-027) is preserved
- * verbatim — it still runs on opt-in, not on mount: a stored chat the daemon
- * still holds is rejoined exactly as before, because warm seats someone paid
- * for must not be orphaned.
+ * chips (DES-FEEDBACK-001 §6.2 as re-scoped by BRIEF-UX-001 C6/EC44): the
+ * agents that WILL join. EC44 — the chips are TRUTH: what the bar shows at
+ * send time is exactly what the send connects, so a chip is never painted
+ * until the roster is KNOWN. A warm cache renders chips synchronously with
+ * zero requests; a cold cache renders an honest "resolving agents…" row and
+ * this surface makes its ONE named mount request — GET /api/v1/roster — to
+ * resolve it (the truthfulness requirement outranks the §2.4 zero-mount
+ * budget here, by explicit round-3 mandate; the request is named in the AC).
+ * There is NO hardcoded fallback set any more: the writer/reviewer/planner
+ * trio round 3 caught being painted as seats is gone. Each chip is removable
+ * for this run via its ✕, extendable via [+ Add] (the roster picker). The
+ * first send warms exactly the selected set — no hidden fan-out. The
+ * warm-and-rejoin machinery (FINDING-027) is preserved verbatim — it still
+ * runs on opt-in, not on mount: a stored chat the daemon still holds is
+ * rejoined exactly as before, because warm seats someone paid for must not
+ * be orphaned.
  */
 
 /**
- * The hardcoded fallback default set (§6.2) — used ONLY when the roster cache
- * is empty (nothing has fetched the roster yet this session). These are the
- * ONLY hardcoded agent names in the agent layer; everything else comes from
- * the roster cache or user action.
+ * EC44 chat-capability: a seat can hold a chat session only when its roster
+ * entry carries an ACP config — wicked-core's `chat_ensure` answers
+ * "no ACP config for '<key>'" for any seat without one (acp_runner.rs:3095
+ * via `acp_config_for`), so default-selecting such a seat guarantees a red
+ * failed chip on every cold chat. The marker is the seat's `acp` field on
+ * the roster wire: an object ({binary, start_args, transport}) when
+ * configured, and ABSENT when not — the engine's `AgenticCli.acp` is
+ * `#[serde(skip_serializing_if = "Option::is_none")]` (wicked-council
+ * types.rs, since the field's introduction), so a `None` NEVER serializes;
+ * absence is the wire's only spelling of "no config" (verified against the
+ * live daemon round 4: acp objects on claude/pi, no key at all on the other
+ * four). The field predates the shared `RosterSeat` type and rides its
+ * index signature, so it is read defensively, ROSTER-aware:
+ *
+ *   - `acp` object            → capable (the engine will ensure a session);
+ *   - `acp: null`             → not capable (belt: no current engine emits
+ *                               it, but a null claim is still "no config");
+ *   - key ABSENT, and ANY seat in this roster carries the key
+ *                             → not capable — this daemon SPEAKS the field,
+ *                               so absence is its own "no config" (reading
+ *                               it as capable repaints the round-3 defect:
+ *                               4 red "no ACP config" seats on every cold
+ *                               send — caught live in round 4);
+ *   - key ABSENT everywhere   → capable — a daemon predating the field
+ *                               makes no claim, and fabricating
+ *                               incapability would empty every chat.
  */
-export const DEFAULT_CHAT_AGENTS = ['writer', 'reviewer', 'planner'];
+export function rosterSpeaksAcp(roster: RosterSeat[]): boolean {
+  return roster.some((s) => s['acp'] !== undefined);
+}
+
+export function chatCapable(seat: RosterSeat, speaksAcp: boolean): boolean {
+  if (seat['acp'] === null) return false;
+  if (seat['acp'] !== undefined) return true;
+  return !speaksAcp;
+}
 
 /**
- * The default chip selection for a chat being created (§6.2): the cached
- * roster when the app has one (fetched at startup by the launch form, or by
- * any other roster consumer), else the hardcoded fallback trio. Synchronous
- * by construction — reading it can never fire a request.
+ * The default chip selection for a chat being created: the CHAT-CAPABLE
+ * subset of the roster (EC44 — the seats that can actually join; the
+ * incapable ones are offered in [+ Add], labeled honestly, never silently
+ * default-selected into guaranteed failures). Pure derivation — never a
+ * request.
  */
-function defaultSelection(): string[] {
-  const cached = getCachedRoster();
-  return cached !== null && cached.length > 0
-    ? cached.map((s) => s.key)
-    : [...DEFAULT_CHAT_AGENTS];
+export function defaultSelection(roster: RosterSeat[]): string[] {
+  const speaks = rosterSpeaksAcp(roster);
+  return roster.filter((s) => chatCapable(s, speaks)).map((s) => s.key);
 }
 
 /**
@@ -285,17 +321,25 @@ export function GroupChat({
     writeStoredLayout(next);
   }
 
-  // ── Default agent chips (DES-FEEDBACK-001 §6, slice C) ─────────────────────
-  // The agents that will join on the first send: defaults (cached roster or
-  // the fallback trio) + picker additions − ✕ removals. Per-run only, never
-  // persisted (§6.2). Initialized synchronously — zero requests (§6.1).
-  const [selectedAgents, setSelectedAgents] = useState<string[]>(defaultSelection);
+  // ── Default agent chips (DES-FEEDBACK-001 §6 / EC44 — chips are truth) ─────
+  // The agents that will join on the first send: the chat-capable roster
+  // defaults + picker additions − ✕ removals. Per-run only, never persisted
+  // (§6.2). `roster` is this surface's copy of the known roster: a warm cache
+  // seeds it (and the chips) synchronously; while it is null the bar renders
+  // the resolving state and NO chip is painted (EC44 — never a placeholder
+  // dressed as a seat).
+  const [knownRoster, setKnownRoster] = useState<RosterSeat[] | null>(getCachedRoster);
+  const [rosterError, setRosterError] = useState<string | null>(null);
+  const [selectedAgents, setSelectedAgents] = useState<string[]>(() => {
+    const cached = getCachedRoster();
+    return cached !== null ? defaultSelection(cached) : [];
+  });
   const selectedAgentsRef = useRef<string[]>(selectedAgents);
   selectedAgentsRef.current = selectedAgents;
   // §7.9-1: whether the operator has EDITED the selection (✕ / picker add).
-  // While untouched, a warm roster arriving later re-seeds the chips — the
-  // fallback trio only ever reaches the daemon when the cache stayed cold AND
-  // the roster proved unreachable at send time. An edit pins the selection.
+  // While untouched, a roster arriving later (this surface's own resolve, or
+  // another surface's deposit) re-seeds the chips to the chat-capable
+  // defaults. An edit pins the selection.
   const chipsTouchedRef = useRef(false);
   // §7.9-2: a failed send keeps its draft; the failure renders inline with retry.
   const [sendFailed, setSendFailed] = useState<{ text: string; reason: string } | null>(null);
@@ -328,6 +372,42 @@ export function GroupChat({
         projectsRequested.current = false; // transient — retry on the next open
       });
   }
+
+  /**
+   * Resolve the roster (EC44) — the ONE request this surface may make on
+   * mount, and only with a cold cache: GET /api/v1/roster (named in the AC;
+   * the truthfulness requirement outranks the §2.4 zero-mount budget for
+   * this surface, by round-3 mandate). The answer is DEPOSITED into the
+   * shared cache — the subscribe effect below hears it and seeds the chips —
+   * so every other §2.4 surface still pays nothing. Failure renders as the
+   * bar's honest failed-to-resolve state with a Retry (never a fabricated
+   * chip row).
+   */
+  const rosterResolveInFlight = useRef(false);
+  function resolveRoster(): void {
+    if (rosterResolveInFlight.current) return;
+    rosterResolveInFlight.current = true;
+    setRosterError(null);
+    api
+      .getRoster()
+      .then(({ roster }) => {
+        setCachedRoster(roster); // the subscribe effect seeds chips + knownRoster
+      })
+      .catch((e: unknown) => {
+        setRosterError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        rosterResolveInFlight.current = false;
+      });
+  }
+
+  // The mount-time resolve: fires ONLY while nothing has fetched a roster this
+  // session (a warm cache already seeded the chips synchronously above).
+  useEffect(() => {
+    if (getCachedRoster() === null) resolveRoster();
+    // (mount-only by design — EC44's one named request; the helper closes
+    // over nothing reactive, so the empty dep list is complete.)
+  }, []);
 
   /** Toggle the roster picker; on first open with a cold cache, fetch (a user action — §2.4-safe). */
   function togglePicker(): void {
@@ -396,8 +476,12 @@ export function GroupChat({
     // starts a new create flow, so the binding resets to Unfiled (§5.1).
     setSelectedProjectId(null);
     // So does the chip selection (§6.2: per-run, never persisted): the new
-    // repo's create flow starts from the defaults again.
-    setSelectedAgents(defaultSelection());
+    // repo's create flow starts from the chat-capable defaults again (EC44 —
+    // empty while the roster is still unresolved, never a fabricated chip).
+    {
+      const cached = getCachedRoster();
+      setSelectedAgents(cached !== null ? defaultSelection(cached) : []);
+    }
     chipsTouchedRef.current = false;
     setSendFailed(null);
     turnRef.current = 0;
@@ -493,16 +577,18 @@ export function GroupChat({
     navigate(`/chat/${encodeURIComponent(chatId)}`, { replace: true });
   }, [reflectUrl, navigate, chatId, routedChatId]);
 
-  // §7.9-1 (the seeding-order fix): a roster deposited AFTER this surface
-  // seeded its chips from the cold-cache fallback re-seeds them — warm roster
-  // beats the fallback trio — but only while the selection is still pristine
-  // (untouched, nothing warmed, no thread). Never a fetch: this only HEARS
-  // deposits other surfaces already paid for (§2.4's budget holds unchanged).
+  // §7.9-1 / EC44: any roster deposit — this surface's own resolve, or another
+  // surface's fetch landing first — becomes the known roster, and re-seeds a
+  // PRISTINE selection (untouched, nothing warmed) to the chat-capable
+  // defaults. An edit pins the selection; a live chat's audience is the warm
+  // seats, not the chips.
   useEffect(() => {
     return subscribeRoster((roster) => {
+      setKnownRoster(roster);
+      setPickerRoster(roster);
+      setRosterError(null);
       if (chipsTouchedRef.current || chatIdRef.current !== null) return;
-      if (roster.length === 0) return;
-      setSelectedAgents(roster.map((s) => s.key));
+      setSelectedAgents(defaultSelection(roster));
     });
   }, []);
 
@@ -701,45 +787,24 @@ export function GroupChat({
     let warm = Object.entries(seats)
       .filter(([, st]) => WARM_STATES.has(st))
       .map(([k]) => k);
-    // Nothing warm with nothing selected: nobody would receive this (§6.2's
-    // selection is the send's audience) — the disabled Send already says so.
-    if (warm.length === 0 && chatIdRef.current === null && selectedAgentsRef.current.length === 0) return;
+    // EC44 — the chips are truth: the send's audience IS the selection on
+    // screen, nothing else. While nothing is warm, an unresolved roster or an
+    // empty selection means nobody would receive this — the disabled Send
+    // already says so; this is the belt to that suspender (Enter bypasses the
+    // disabled button and races the resolve). It holds with OR without a chat
+    // id: a fully-failed open leaves a chat id behind, and letting an emptied
+    // selection through would arm with `clis` OMITTED — the daemon then warms
+    // its OWN default set, an audience no chip ever showed (round-4 catch).
+    // The round-2 hidden fan-out that swapped a pristine selection for the
+    // full roster AT SEND TIME is gone: it repaired the send outcome by
+    // bypassing the display, which is the exact lie C6 names.
+    if (
+      warm.length === 0 &&
+      (knownRoster === null || selectedAgentsRef.current.length === 0)
+    ) return;
     sendingRef.current = true;
     setSendFailed(null);
     try {
-      // §7.9-1 (round 2, J4 finding 1): a PRISTINE selection must NEVER reach
-      // the daemon with non-roster seats. While nothing is warm, no chat exists
-      // and the operator has not edited the chips, the audience can only be the
-      // ROSTER's — a cold OR empty cache fetches it ON THIS GESTURE (never on
-      // mount — §2.4 holds). The fallback trio is a placeholder rendering, not
-      // an audience: when the roster is unreachable or empty, the send FAILS
-      // HONESTLY here (draft survives, inline retry) and NOTHING goes on the
-      // wire. An operator-edited selection is their explicit call and ships
-      // as-is — the daemon's per-seat answer is the recovery path for that.
-      if (warm.length === 0 && chatIdRef.current === null && !chipsTouchedRef.current) {
-        let roster = getCachedRoster();
-        if (roster === null || roster.length === 0) {
-          try {
-            const fetched = await api.getRoster();
-            setCachedRoster(fetched.roster);
-            roster = fetched.roster;
-          } catch (e: unknown) {
-            const why = e instanceof Error ? e.message : String(e);
-            setSendFailed({
-              text,
-              reason: `could not load the agent roster (${why}); the default chips are placeholders and are never sent unresolved`,
-            });
-            return;
-          }
-        }
-        if (roster.length === 0) {
-          setSendFailed({ text, reason: 'the daemon returned an empty agent roster — there is no seat to warm' });
-          return;
-        }
-        const keys = roster.map((s) => s.key);
-        setSelectedAgents(keys);
-        selectedAgentsRef.current = keys;
-      }
       const turn = turnRef.current + 1;
       turnRef.current = turn;
       setMessages((prev) => [...prev, { kind: 'user', text, turn }]);
@@ -1226,23 +1291,87 @@ export function GroupChat({
             onClose={() => setShowNewProject(false)}
           />
         )}
-        {/* §6.2/§6.3: the default agent chips — the agents that WILL join the
-            first send. Rendered from the cached roster / fallback constant,
-            never a fetch (§6.1). Each chip is an agent that IS included; the
-            ✕ removes it for THIS run only. [+ Add] is the separate affordance
-            (dashed vs solid, --ink-dim vs --ink-body) opening the roster
-            picker. Chip text reads in the SANS (EC13: labels in sans — these
-            are selection labels, not narration data). */}
+        {/* §6.2/§6.3 as re-scoped by EC44: the default agent chips — the
+            agents that WILL join the first send, and NOTHING before that is
+            known. While the roster is unresolved the bar renders an honest
+            resolving row (or the failed-to-resolve row with Retry) — never a
+            chip dressed as a seat. Once known, each chip is an agent that IS
+            included; the ✕ removes it for THIS run only. [+ Add] is the
+            separate affordance (dashed vs solid) opening the roster picker.
+            Chip text reads in the SANS (EC13: labels in sans — these are
+            selection labels, not narration data). */}
         {showChipsBar && (
           <div
             data-testid="agent-chips-bar"
-            data-count={selectedAgents.length}
-            // §7.9-1 honesty: where this seeding came from — the live roster
-            // cache, or the cold-cache fallback trio (roster-first, fallback
-            // only while nothing has fetched a roster this session).
-            data-source={(getCachedRoster()?.length ?? 0) > 0 ? 'roster' : 'fallback'}
+            data-count={knownRoster === null ? undefined : selectedAgents.length}
+            // EC44 honesty: 'roster' once the seats are known; 'resolving'
+            // while they are not (and no chip is painted in that state).
+            data-source={knownRoster !== null ? 'roster' : 'resolving'}
             className="flex items-center gap-1.5 flex-wrap pb-2"
           >
+            {knownRoster === null && rosterError === null && (
+              <span
+                data-testid="agent-chips-resolving"
+                className="inline-flex items-center gap-1.5 animate-pulse"
+                style={{
+                  border: '1px dashed var(--surface-overlay)',
+                  borderRadius: 'var(--radius-full)',
+                  color: 'var(--ink-dim)',
+                  fontSize: 'var(--text-xs)',
+                  fontFamily: 'var(--font-sans)',
+                  padding: '3px 10px',
+                }}
+              >
+                resolving agents…
+              </span>
+            )}
+            {knownRoster === null && rosterError !== null && (
+              <span
+                data-testid="agent-chips-unresolved"
+                className="inline-flex items-center gap-2"
+                style={{
+                  border: '1px dashed var(--status-fail-dim)',
+                  borderRadius: 'var(--radius-full)',
+                  color: 'var(--ink-dim)',
+                  fontSize: 'var(--text-xs)',
+                  fontFamily: 'var(--font-sans)',
+                  padding: '3px 10px',
+                }}
+                title={rosterError}
+              >
+                couldn’t load the agent roster
+                <button
+                  type="button"
+                  data-testid="agent-chips-retry"
+                  onClick={resolveRoster}
+                  style={{
+                    background: 'var(--surface-raised)',
+                    border: '1px solid var(--surface-overlay)',
+                    borderRadius: 'var(--radius-full)',
+                    color: 'var(--ink-body)',
+                    cursor: 'pointer',
+                    fontSize: 'var(--text-2xs)',
+                    padding: '1px 8px',
+                  }}
+                >
+                  Retry
+                </button>
+              </span>
+            )}
+            {knownRoster !== null && knownRoster.length > 0 && selectedAgents.length === 0 && (
+              // The honest empty-selection note: everything was removed, or no
+              // configured seat carries a chat (ACP) config — either way the
+              // send has no audience until [+ Add] gives it one.
+              <span
+                data-testid="agent-chips-empty-note"
+                className="inline-flex items-center"
+                style={{ color: 'var(--ink-dim)', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)' }}
+              >
+                {defaultSelection(knownRoster).length > 0
+                  ? 'no agents selected — add one to send'
+                  : 'no agent has a chat (ACP) config — add one anyway, or configure ACP'}
+              </span>
+            )}
             {selectedAgents.map((key) => (
               <span
                 key={key}
@@ -1332,6 +1461,15 @@ export function GroupChat({
                           ? seat.display_name
                           : seat.key;
                       const health = seat.health?.status;
+                      // EC44: capability is DISCLOSED, not enforced — a seat
+                      // with no ACP config is offered labeled ("no chat
+                      // config"), never as a silent equal; picking it is the
+                      // operator's explicit call and the daemon's per-seat
+                      // answer is the recovery path.
+                      const capable = chatCapable(seat, rosterSpeaksAcp(pickerRoster));
+                      const titleBits = [name];
+                      if (health) titleBits.push(health);
+                      if (!capable) titleBits.push('no chat (ACP) config — can’t join a chat');
                       return (
                         <button
                           key={seat.key}
@@ -1342,7 +1480,8 @@ export function GroupChat({
                           data-testid="agent-picker-option"
                           data-agent-key={seat.key}
                           data-health={health ?? 'unknown'}
-                          title={health ? `${name} — ${health}` : name}
+                          data-chat-capable={capable}
+                          title={titleBits.join(' — ')}
                           onClick={() => {
                             chipsTouchedRef.current = true; // §7.9-1: an edit pins the selection
                             setSelectedAgents((prev) => (prev.includes(seat.key) ? prev : [...prev, seat.key]));
@@ -1363,6 +1502,15 @@ export function GroupChat({
                           <span className="truncate">{name}</span>
                           {name !== seat.key && (
                             <span className="truncate" style={{ color: 'var(--ink-dim)' }}>{seat.key}</span>
+                          )}
+                          {!capable && (
+                            <span
+                              data-testid="agent-picker-nochat"
+                              className="shrink-0"
+                              style={{ color: 'var(--ink-dim)', fontStyle: 'italic' }}
+                            >
+                              no chat config
+                            </span>
                           )}
                           {included ? ' ✓' : ''}
                         </button>
@@ -1402,9 +1550,14 @@ export function GroupChat({
             // Typing is how the selected agents warm — so text alone enables Send,
             // including the §6.2 retry after a rejected open (send re-arms). The
             // holds: `resolving` (the stored chat is still being probed — not
-            // first-run yet), `arming` (an open is in flight), and an EMPTY chip
-            // selection with nothing warm (nobody would receive the message).
-            disabled={input.trim() === '' || arming || resolving || (showChipsBar && selectedAgents.length === 0)}
+            // first-run yet), `arming` (an open is in flight), an UNRESOLVED
+            // roster (EC44: the chips are the audience, and there are no chips
+            // until the roster is known), and an EMPTY chip selection with
+            // nothing warm (nobody would receive the message).
+            disabled={
+              input.trim() === '' || arming || resolving ||
+              (showChipsBar && (knownRoster === null || selectedAgents.length === 0))
+            }
             className="px-4 text-sm font-semibold disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)', borderRadius: 'var(--radius-xl)' }}
           >

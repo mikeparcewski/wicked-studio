@@ -3,20 +3,23 @@
 ux_sliceAB_test.py — the DES-UX-001 slice-AB gate: chat repair (§7.9, EC44, C6).
 Runs against the shared frozen-NOW0 W2 fixture (uxfix_fixture.py) with the
 slice-AB corpus: `chat_deltas` (buffered interleaved chunk rounds + a flush
-control — the §7.9-3 splice corpus) and `chat_reject_seats=["codex"]` (the
-open-time failed-with-reason seat, §7.9-4).
+control — the §7.9-3 splice corpus). The open-time failed-with-reason seat
+(§7.9-4) is now the fixture's OWN capability rejection: codex's roster
+entry OMITS the acp key (the engine's real "no config" spelling —
+skip_serializing_if never writes null), so explicitly adding it fails the
+open with the core's genuine "no ACP config for 'codex'" (round-3 re-scope,
+round-4 wire correction — no chat_reject_seats switch needed).
 
 The §7.9 DOM ACs, verbatim mapping:
 
-  1. roster-true chips (§7.9-1, re-scoped per §11.2 to roster-first with the
-     cold-cache fallback; round-2 J4 finding 1 tightened it further — the
-     fallback trio is a PLACEHOLDER that never ships, and the roster-down
-     branch is pinned by ux_fixJ42): a fresh /chat/new mounts with the
-     FALLBACK trio and ZERO chat-surface requests (`data-source="fallback"` —
-     the §2.4 budget holds); the FIRST SEND fetches the roster ON THE GESTURE
-     (exactly one GET /roster) and opens with the ROSTER's seats — the daemon
-     accepts them, no rejected-chip error renders, and ≥1 reply frame lands
-     after flush;
+  1. roster-true chips (§7.9-1, re-scoped AGAIN by round 3 — BRIEF-UX-001
+     C6/EC44, chips are truth; the fallback trio is GONE): a fresh /chat/new
+     resolves the roster with its ONE named mount request (GET /roster) and
+     paints the CHAT-CAPABLE chips (`data-source="roster"`); the operator
+     explicitly ADDS the incapable codex from the labeled picker; the FIRST
+     SEND opens with EXACTLY the displayed chips — the capable seats warm,
+     codex fails with the core's own "no ACP config" reason, and ≥1 reply
+     frame lands after flush;
   2. a fixture-failed send (chat_send_fail) leaves the composer text INTACT,
      retracts the optimistic bubbles, and renders inline retry (§7.9-2);
      retry after the failure clears resends exactly the failed text;
@@ -67,11 +70,14 @@ FEEDBACK_PORT = int(os.environ.get("FEEDBACK_PORT", "4398"))
 ORIGIN = f"http://127.0.0.1:{FEEDBACK_PORT}"
 VSHOTS = REPO / "e2e" / "shots" / "vision"
 
-# The fixture's roster (uxfix_fixture.ROSTER keys) and the §6.2 fallback trio.
+# The fixture's roster (uxfix_fixture.ROSTER keys); the chat-capable subset
+# is the EC44 default chip set. codex (acp key ABSENT — the real wire
+# spelling of "no config") is the open-time failed-with-reason seat once
+# explicitly added.
 ROSTER_KEYS = ["claude", "codex", "agy", "pi"]
-FALLBACK = ["writer", "reviewer", "planner"]
-REJECTED = "codex"  # chat_reject_seats — the open-time failed-with-reason seat
-WARM = [k for k in ROSTER_KEYS if k != REJECTED]
+CAPABLE = ["claude", "pi"]
+REJECTED = "codex"  # no acp on the wire — the open answers "no ACP config"
+WARM = CAPABLE
 
 MSG1 = "compare the auth options"
 MSG2 = "now sketch the migration plan"
@@ -109,7 +115,7 @@ def api_post(path: str, body: dict) -> dict:
 # ── 1. Build + the shared fixture with the slice-AB corpus ────────────────────
 dist = ensure_build(fail)
 start_server(FEEDBACK_PORT, dist)
-set_fixture(ORIGIN, chat_deltas=True, chat_reject_seats=[REJECTED])
+set_fixture(ORIGIN, chat_deltas=True)
 report["steps"]["fixture_server"] = {"ok": True, "origin": ORIGIN}
 
 from playwright.sync_api import sync_playwright  # noqa: E402 (import after server, harness style)
@@ -176,17 +182,31 @@ with sync_playwright() as p:
 
     baseline_working = page.locator('[data-testid="runs-bottom-bar"]').get_attribute("data-working")
 
+    page.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     mount = page.evaluate(CHAT_CENSUS)
     mount_chat_requests = [(m, q) for (m, q, _b) in net if is_chat_surface(q)]
-    check("mount_fallback_zero_requests",
+    # EC44: the ONE named mount request resolves the chips roster-true
+    # (capable seats only); nothing chat-shaped fires, nothing warms.
+    check("mount_resolves_roster_true_chips",
           mount["chipsBar"] is not None
-          and mount["chipsBar"]["source"] == "fallback"
-          and mount["chipsBar"]["count"] == str(len(FALLBACK))
-          and len(mount_chat_requests) == 0,
+          and mount["chipsBar"]["source"] == "roster"
+          and mount["chipsBar"]["count"] == str(len(CAPABLE))
+          and mount_chat_requests == [("GET", "/api/v1/roster")],
           chips_bar=mount["chipsBar"], mount_chat_requests=mount_chat_requests)
 
-    # AC 1 — the first send is roster-first: ONE /roster GET rides the gesture,
-    # the open names the roster's seats, and no rejected-chip error renders.
+    # The incapable seat joins by the operator's EXPLICIT pick from the
+    # labeled picker (EC44: disclosed, never a silent equal).
+    page.locator('[data-testid="add-agent"]').click()
+    codex_opt = page.locator(f'[data-testid="agent-picker-option"][data-agent-key="{REJECTED}"]')
+    codex_opt.wait_for(timeout=30000)
+    check("picker_disclosed_incapable_pick",
+          codex_opt.get_attribute("data-chat-capable") == "false"
+          and codex_opt.locator('[data-testid="agent-picker-nochat"]').count() == 1,
+          capable_attr=codex_opt.get_attribute("data-chat-capable"))
+    codex_opt.click()
+
+    # AC 1 — the send connects EXACTLY the displayed chips: the open names the
+    # capable defaults + the explicit addition; no gesture-time roster fetch.
     page.locator("textarea").fill(MSG1)
     page.keyboard.press("Enter")
     page.wait_for_function(
@@ -197,14 +217,14 @@ with sync_playwright() as p:
     opens = [(m, q, b) for (m, q, b) in net if m == "POST" and q == "/api/v1/chats"]
     sent1 = page.evaluate(CHAT_CENSUS)
     chat_id = (opens[0][2] or {}).get("chatId") if opens else None
-    check("roster_first_send",
-          len(roster_gets) == 1
+    check("send_connects_displayed_chips",
+          len(roster_gets) == 1  # the mount resolve; the gesture added none
           and len(opens) == 1
-          and (opens[0][2] or {}).get("clis") == ROSTER_KEYS
+          and (opens[0][2] or {}).get("clis") == CAPABLE + [REJECTED]
           and not sent1["openError"]
           and sent1["chips"].get(REJECTED) == "failed"
           and all(sent1["chips"].get(k) == "working" for k in WARM)
-          and f"unknown agent '{REJECTED}'" in (sent1["failedChipText"] or "")
+          and f"no ACP config for '{REJECTED}'" in (sent1["failedChipText"] or "")
           and sent1["composer"] == ""  # the ACCEPTED draft left the composer
           and chat_id is not None,
           roster_gets=len(roster_gets), open_body=opens[0][2] if opens else None,
