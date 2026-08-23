@@ -148,6 +148,14 @@ function parse(pathname: string): Route {
   if (first === 'chat' && second === 'new') {
     return route({ panel: 'runs', showLaunch: true, chatMode: true });
   }
+  // `/chat/:id` — a live chat SESSION's real URL (J4/C6: an opened chat is
+  // findable again). The id is the pool session's chatId, carried in
+  // `artifactId` (it is NOT a run — `runId` stays null so no run-selected
+  // machinery fires against it). GroupChat rejoins the warm session, or says
+  // honestly that it is gone.
+  if (first === 'chat' && second) {
+    return route({ panel: 'runs', chatMode: true, artifactId: safeDecode(second) });
+  }
   if (first === 'projects' && second) {
     return route({ panel: 'project-detail', projectId: safeDecode(second) });
   }

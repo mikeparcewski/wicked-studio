@@ -40,6 +40,9 @@ interface LegacyRoute {
   projectId: string | null;
   mode: Mode | null;
   showLaunch: boolean;
+  /** True on the chat-surface routes (`/chat/new`, `/chat/:id`) — these are
+   *  NOT the legacy bare-`/runs` listing and must never redirect to /work. */
+  chatMode: boolean;
 }
 
 /**
@@ -62,10 +65,11 @@ interface LegacyRoute {
  * guessed project binding.
  */
 export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void {
-  const { panel, runId, projectId, mode, showLaunch } = route;
+  const { panel, runId, projectId, mode, showLaunch, chatMode } = route;
 
   useEffect(() => {
     if (mode !== null) return; // already in the shell
+    if (chatMode) return; // `/chat/*` is the chat surface, not a legacy run route
 
     if (projectId !== null) {
       // Only the LEGACY `/projects/:id` panel redirects — onto the dashboard
@@ -92,5 +96,5 @@ export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void 
         /* projects surface unreachable — the legacy run view stays, which is the honest fallback */
       });
     return () => { cancelled = true; };
-  }, [panel, runId, projectId, mode, showLaunch, navigate]);
+  }, [panel, runId, projectId, mode, showLaunch, chatMode, navigate]);
 }
