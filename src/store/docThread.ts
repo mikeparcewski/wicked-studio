@@ -458,11 +458,13 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
             };
         if (anchorId !== undefined && generated) {
           // The session-storage stopgap's address (§6.3): the tagged message's
-          // 1-based ordinal among USER messages — the only spelling that survives
-          // a reload, because message ids are minted per session.
+          // 1-based ordinal among ACCEPTED user messages — the only spelling that
+          // survives a reload, because message ids are minted per session. A
+          // REFUSED send has no wire line, so it does not count (round-3 J3:
+          // the wire's ordinals are the address space, not the projection's).
           let ord = 0;
           for (const m of thread) {
-            if (m.kind === 'user') ord += 1;
+            if (m.kind === 'user' && m.refused !== true) ord += 1;
             if (m.kind === 'user' && m.id === anchorId) { taggedOrd = ord; break; }
           }
           taggedVersion = version;
