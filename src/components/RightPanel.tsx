@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useRunModel } from '../hooks/useRunModel.js';
 import type { RunModel } from '../hooks/useRunModel.js';
+import { useProvenanceStore } from '../store/provenance.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
 import { Burn } from './Burn.js';
 import { FileViewer } from './FileViewer.js';
@@ -17,6 +18,9 @@ import { WhatWhere } from './WhatWhere.js';
 
 interface Props {
   view: SessionView;
+  /** The loaded run index (App's one `useRuns()` array) — forward lineage only, no new fetch. */
+  runs?: SessionView[];
+  onSelectRun?: (id: string) => void;
 }
 
 type AccordionId =
@@ -388,9 +392,23 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
   );
 }
 
-export function RightPanel({ view }: Props): React.ReactElement {
+export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<AccordionId | null>('whatwhere');
+
+  // Provenance rides the run-detail load: ONE `GET /audit?runId=` per detail
+  // view, cached per run id (DES-UX-001 §3.3 — the sanctioned exception,
+  // named in its AC). Notification rows read the same cache — no fan-out.
+  const provenance = useProvenanceStore((s) => s.byRun[view.session.id] ?? null);
+  useEffect(() => {
+    useProvenanceStore.getState().load(view.session.id);
+  }, [view.session.id]);
+
+  // Forward lineage (§4.3): retries of THIS run, from the already-loaded index.
+  const retriedAs = useMemo(
+    () => (runs ?? []).filter((r) => r.session.retry_of === view.session.id).map((r) => r.session.id),
+    [runs, view.session.id],
+  );
 
   const [termOpen, setTermOpen] = useState(false);
   // Slice R (§1.3-4): the Term tab lands on the run's captured transcript when
@@ -533,7 +551,14 @@ export function RightPanel({ view }: Props): React.ReactElement {
                 {id === 'burn' && <Burn model={model} />}
                 {id === 'data' && <DataUsed model={model} />}
                 {id === 'steering' && <SteeringTimeline runId={model.session.id} />}
-                {id === 'whatwhere' && <WhatWhere model={model} />}
+                {id === 'whatwhere' && (
+                  <WhatWhere
+                    model={model}
+                    provenance={provenance}
+                    retriedAs={retriedAs}
+                    {...(onSelectRun !== undefined ? { onSelectRun } : {})}
+                  />
+                )}
                 {id === 'assumptions' && <AssumptionsPanel model={model} />}
                 {id === 'files' && <FilesPanel model={model} />}
               </div>

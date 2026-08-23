@@ -1,7 +1,14 @@
 import type { RunModel } from '../hooks/useRunModel.js';
+import type { Provenance } from '../store/provenance.js';
+import { ProvenanceLine } from './ProvenanceLine.js';
 
 interface Props {
   model: RunModel;
+  /** Derived audit provenance (DES-UX-001 §3.3) — `null`/absent degrades honestly. */
+  provenance?: Provenance | null;
+  /** Forward lineage: run ids the loaded index shows as retries of this run (§4.3). */
+  retriedAs?: readonly string[];
+  onSelectRun?: (id: string) => void;
 }
 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }): React.ReactElement {
@@ -18,11 +25,22 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
   );
 }
 
-export function WhatWhere({ model }: Props): React.ReactElement {
+export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props): React.ReactElement {
   const { session } = model;
 
   return (
     <div data-testid="what-where" className="flex flex-col gap-1.5">
+      {/* The provenance line — FIRST row of the card (DES-UX-001 §3.3): who or
+          what launched this run, degrading to "launched via API (actor
+          unknown)" rather than omitting the line. Lineage cross-links (§4.3)
+          ride inside it. */}
+      <ProvenanceLine
+        provenance={provenance ?? null}
+        retryOf={session.retry_of}
+        retriedAs={retriedAs}
+        onSelectRun={onSelectRun}
+        testId="run-provenance"
+      />
       <Row label="intent" value={session.problem} />
       <Row label="repo" value={session.repo_ref ?? '—'} mono />
       <Row label="worktree" value={session.workdir ?? '—'} mono />

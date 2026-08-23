@@ -525,7 +525,7 @@ export function App(): React.ReactElement {
 
       {/* Right panel only when a run is selected */}
       {selected !== null && (
-        <RightPanel view={selected} />
+        <RightPanel view={selected} runs={runs} onSelectRun={selectRun} />
       )}
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus

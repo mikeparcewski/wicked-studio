@@ -1,6 +1,7 @@
 import type {
   ActivityPage,
   AttachMemberBody,
+  AuditPage,
   CoreEvent,
   CreateProjectBody,
   GateDecision,
@@ -137,6 +138,15 @@ export const api = {
 
   /** One run's detail (`SessionView`). */
   getRun: (id: string) => apiFetch<{ run: SessionView }>(`/runs/${encodeURIComponent(id)}`),
+
+  /**
+   * The daemon's audit trail filtered to one run (`GET /audit?runId=`, newest
+   * first) — the system of record for "who launched that run" (DES-UX-001 §3.2;
+   * crew routes.ts:266/570). One fetch per detail view, cached per run id in
+   * the provenance store — the §3.3-sanctioned exception, named in its AC.
+   */
+  getAudit: (runId: string) =>
+    apiFetch<AuditPage>(`/audit?runId=${encodeURIComponent(runId)}`),
 
   /** A run's durably-persisted event trail (`GET /runs/:id/events`). Used to backfill the event
    * store on a reload with no live `/ws` replay so Burn/insight panels are not empty (FINDING-013).
