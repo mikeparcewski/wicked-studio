@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { UNFILED_MOUNT } from '../api/interactive.js';
 import { usePreflight } from '../hooks/usePreflight.js';
 import { MODES, modePath, projectPath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import { useConnectionStore } from '../store/connection.js';
@@ -77,7 +78,11 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
   );
 
   const project = projects.find((p) => p.id === projectId) ?? null;
-  const name = project?.name ?? projectId;
+  // Slice U (DES-UX-001 §6.2): the synthesized `default` bucket never rides the
+  // board's store mirror (F5 — it is not a project card), so at /p/default the
+  // shell labels it the way run surfaces label Unfiled runs — the daemon's own
+  // name for the bucket, "Unfiled" — instead of leaking the raw id.
+  const name = project?.name ?? (projectId === UNFILED_MOUNT ? 'Unfiled' : projectId);
 
   // ── The merged readiness model (§5.6, slice 17) ───────────────────────────
   usePreflight(projectId);
