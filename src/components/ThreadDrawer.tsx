@@ -72,6 +72,12 @@ export function StripSensor({ hidden, wake }: { hidden: boolean; wake: () => voi
     <div
       data-testid="strip-sensor"
       onMouseMove={wake}
+      // Round-3 J3 (the pointer-interception minor): the sensor sits over the
+      // iframe, so a CLICK that lands on it would otherwise die silently — the
+      // exact "clicked, nothing visibly happened" failure. A pointerdown is an
+      // interaction like any other: it wakes the strip, so the click visibly
+      // summons the control the user was reaching for.
+      onPointerDown={wake}
       style={{
         bottom: 0, height: `${STRIP_SENSOR_PX}px`, left: 0, position: 'absolute',
         right: 0, zIndex: 1,

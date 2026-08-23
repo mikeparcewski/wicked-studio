@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { interactiveUrl } from '../api/interactive.js';
 import type { ExportFormat } from '../api/interactive.js';
 import { EXPORT_FORMATS, runExport } from '../interactive/exportWire.js';
+import { exportKey, NO_ANSWERS, useExportAnswers } from '../store/exportAnswers.js';
+import type { ExportAnswer } from '../store/exportAnswers.js';
 
 // The export control (DES-MERGE-001 §4.4, §6.4 slice 15) — ONE component in both places
 // the design puts it: per-version on the document's version strip, and as a quick action
@@ -16,6 +18,11 @@ import { EXPORT_FORMATS, runExport } from '../interactive/exportWire.js';
 // the control), READY (the control itself becomes the download affordance), or FAILED
 // (the reason, adjacent, with the retriable row above it) — where the click happened,
 // never only in a thread that may be off screen.
+//
+// Round-3 J3: the answers live in the exportAnswers STORE, not component state — a
+// landing that advances the addressed version (the route follows the head), a strip
+// re-render, or a selection move must never wipe an un-acted answer. An answer for
+// another version of the same doc stays visible here, labeled with ITS version.
 
 // DES-VISION-001 §2.11: semantic tokens only. The RUNNING format speaks the
 // brand accent (an affordance state); the hint below is an actionable install
@@ -47,9 +54,6 @@ const READY: React.CSSProperties = {
   textDecoration: 'none',
 };
 
-/** What the click site holds once its export finished: the artifact itself. */
-interface ReadyArtifact { format: ExportFormat; href: string; file: string }
-
 export interface ExportMenuProps {
   projectId: string;
   docId: string;
@@ -59,7 +63,7 @@ export interface ExportMenuProps {
   compact?: boolean;
   /**
    * §7.2, the J3 closed-drawer pin: told `true` while this control owes (or is
-   * showing) an answer — an export in flight, a READY download not yet retired,
+   * showing) an answer — an export in flight, a READY download not yet acted on,
    * a FAILED hint. The strip host pins itself visible on it: auto-hide fading the
    * click site's answer out from under a closed drawer IS the "clicked, nothing
    * visibly happened" failure. Optional — the board tile has no auto-hide to pin.
@@ -68,17 +72,21 @@ export interface ExportMenuProps {
 }
 
 export function ExportMenu({ projectId, docId, version, compact = false, onHold }: ExportMenuProps): React.ReactElement {
-  const [busy, setBusy] = useState<ExportFormat | null>(null);
-  const [ready, setReady] = useState<ReadyArtifact | null>(null);
-  const [hint, setHint] = useState<string | null>(null);
+  const key = exportKey(projectId, docId);
+  const answers = useExportAnswers((s) => s.answers[key] ?? NO_ANSWERS);
 
-  // §7.2: the click site answers for THIS version. A new selection retires the
-  // previous answer — a v3 artifact link must not sit under an "Export v4" label.
-  useEffect(() => { setReady(null); setHint(null); }, [docId, version]);
+  const pending = answers.find((a) => a.state === 'pending');
+  const readyHere = answers.find((a) => a.state === 'ready' && a.version === version);
+  const failedHere = answers.filter((a) => a.state === 'failed' && a.version === version);
+  // Round-3 J3: un-acted answers for OTHER versions of this doc stay at the click
+  // site, labeled with their own version — never wiped by a selection move or a
+  // head-follow landing, and never mislabeled as the addressed version.
+  const readyElsewhere = answers.filter((a) => a.state === 'ready' && a.version !== version);
+  const failedElsewhere = answers.filter((a) => a.state === 'failed' && a.version !== version);
 
   // The J3 hold: pending, ready and failed are all states the user has not acted
-  // on yet — each keeps the click site on screen until it is consumed or retired.
-  const answering = busy !== null || ready !== null || hint !== null;
+  // on yet — each keeps the click site on screen until it is consumed or replaced.
+  const answering = answers.length > 0;
   useEffect(() => {
     if (!answering || onHold === undefined) return;
     onHold(true);
@@ -86,21 +94,42 @@ export function ExportMenu({ projectId, docId, version, compact = false, onHold 
   }, [answering, onHold]);
 
   function run(format: ExportFormat): void {
-    setBusy(format);
-    setReady(null);
-    setHint(null);
+    const store = useExportAnswers.getState();
+    store.begin(key, version, format);
+    // The continuation writes to the module-level store, so the answer lands even
+    // if this click site unmounted meanwhile (round-3 J3: churn-proof answers).
     void runExport({ projectId, docId, version, format })
       .then((outcome) => {
-        if (outcome.ok) {
-          // READY at the click site: the service's `download` is bridge-root-relative;
-          // resolved through the proxy it stays on the one origin (§5.3).
-          setReady({ format, href: interactiveUrl(projectId, outcome.result.download),
-                     file: outcome.file });
-        } else {
-          setHint(outcome.hint);
-        }
-      })
-      .finally(() => setBusy(null));
+        useExportAnswers.getState().settle(key, outcome.ok
+          ? { state: 'ready', version, format,
+              // READY at the click site: the service's `download` is bridge-root-relative;
+              // resolved through the proxy it stays on the one origin (§5.3).
+              href: interactiveUrl(projectId, outcome.result.download), file: outcome.file }
+          : { state: 'failed', version, format, hint: outcome.hint });
+      });
+  }
+
+  /** The READY anchor — the artifact IS the affordance now (§7.2). Acting on it
+   *  (the download click) consumes the answer, which releases the strip hold. */
+  function readyAnchor(a: Extract<ExportAnswer, { state: 'ready' }>, labelVersion: boolean): React.ReactElement {
+    const label = labelVersion
+      ? (compact ? `${a.format} v${a.version} ↓` : `${a.format.toUpperCase()} v${a.version} ↓`)
+      : (compact ? `${a.format} ↓` : `${a.format.toUpperCase()} ↓`);
+    return (
+      <a
+        key={`${a.format}-${a.version}`}
+        data-testid="export-ready"
+        data-format={a.format}
+        data-version={String(a.version)}
+        href={a.href}
+        download={a.file}
+        onClick={() => useExportAnswers.getState().consume(key, a.version, a.format)}
+        title={`${a.format.toUpperCase()} of v${a.version} ready — download ${a.file}`}
+        style={{ ...(compact ? COMPACT : BUTTON), ...READY }}
+      >
+        {label}
+      </a>
+    );
   }
 
   return (
@@ -113,7 +142,7 @@ export function ExportMenu({ projectId, docId, version, compact = false, onHold 
       style={{ alignSelf: 'center', display: 'flex', flexDirection: 'column',
                flexShrink: 0, gap: '2px', maxWidth: '220px', minWidth: 0 }}
     >
-      <div style={{ alignItems: 'center', display: 'flex', gap: compact ? '7px' : '5px' }}>
+      <div style={{ alignItems: 'center', display: 'flex', flexWrap: 'wrap', gap: compact ? '7px' : '5px' }}>
         {!compact && (
           <span style={{ color: S.faint, fontSize: 'var(--text-2xs)', letterSpacing: '0.06em',
                          fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
@@ -124,51 +153,58 @@ export function ExportMenu({ projectId, docId, version, compact = false, onHold 
           // §7.2 READY: the control that was clicked IS the download now — a real
           // anchor with the artifact's name, at the click site. The thread message
           // remains; this is the click site answering (EC37).
-          ready !== null && ready.format === format ? (
-            <a
-              key={format}
-              data-testid="export-ready"
-              data-format={format}
-              href={ready.href}
-              download={ready.file}
-              title={`${format.toUpperCase()} ready — download ${ready.file}`}
-              style={{ ...(compact ? COMPACT : BUTTON), ...READY }}
-            >
-              {compact ? `${format} ↓` : `${format.toUpperCase()} ↓`}
-            </a>
+          readyHere !== undefined && readyHere.format === format ? (
+            readyAnchor(readyHere as Extract<ExportAnswer, { state: 'ready' }>, false)
           ) : (
             <button
               key={format}
               type="button"
               data-testid="export-format"
               data-format={format}
-              disabled={busy !== null}
+              disabled={pending !== undefined}
               onClick={() => run(format)}
               title={`Export “${docId}” v${version} as ${format.toUpperCase()} — it lands in the thread as a download`}
               style={{ ...(compact ? COMPACT : BUTTON),
-                       color: busy === format ? S.accent : S.muted,
-                       opacity: busy !== null && busy !== format ? 0.4 : 1 }}
+                       color: pending !== undefined && pending.format === format
+                              && pending.version === version ? S.accent : S.muted,
+                       opacity: pending !== undefined
+                         && (pending.format !== format || pending.version !== version) ? 0.4 : 1 }}
             >
               {/* §7.2 PENDING: the spinner lives ON the clicked control. */}
-              {busy === format
+              {pending !== undefined && pending.format === format && pending.version === version
                 ? <span data-testid="export-pending" className="animate-pulse">{format}…</span>
                 : compact ? format : format.toUpperCase()}
             </button>
           )
         ))}
+        {/* Round-3 J3: answers the user has not acted on, for other versions of THIS
+            doc — visible at the click site, wearing their own version. */}
+        {readyElsewhere.map((a) => readyAnchor(a as Extract<ExportAnswer, { state: 'ready' }>, true))}
+        {pending !== undefined && pending.version !== version && (
+          <span data-testid="export-pending" data-version={String(pending.version)}
+                className="animate-pulse"
+                style={{ color: S.accent, fontSize: compact ? '9px' : 'var(--text-2xs)',
+                         fontFamily: compact ? 'var(--font-mono)' : 'var(--font-sans)' }}>
+            {pending.format} v{pending.version}…
+          </span>
+        )}
       </div>
       {/* §7.2 FAILED, §3.3: the reason is stated and the control that retries it is the
           row above — adjacent, not a toast that takes the fix away with it when it fades. */}
-      {hint !== null && (
+      {[...failedHere, ...failedElsewhere].map((a) => (
         <span
+          key={`hint-${a.format}-${a.version}`}
           data-testid="export-hint"
-          title={hint}
+          data-version={String(a.version)}
+          title={a.state === 'failed' ? a.hint : undefined}
           style={{ color: S.hint, fontSize: '9px', fontFamily: 'var(--font-mono)',
                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         >
-          {hint}
+          {a.state === 'failed'
+            ? (a.version === version ? a.hint : `v${a.version}: ${a.hint}`)
+            : null}
         </span>
-      )}
+      ))}
     </div>
   );
 }
