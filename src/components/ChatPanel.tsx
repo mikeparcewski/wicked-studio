@@ -16,6 +16,7 @@ import { AgentTerminal } from './AgentTerminal.js';
 import { FailureBanner } from './FailureBanner.js';
 import { FileViewer } from './FileViewer.js';
 import { Markdown } from './Markdown.js';
+import { RunTimes } from './runIdentity.js';
 import { UnitList } from './UnitList.js';
 import { VerdictDetail } from './VerdictDetail.js';
 import type { RunMode } from './runMode.js';
@@ -905,6 +906,11 @@ function RunChat({
           </button>
         )}
       </div>
+
+      {/* Run times (DES-UX-001 §7.5, slice Y2): started/ended/duration derived
+          from the event log App already backfills — the DTO carries no
+          timestamps; where the log lacks the events the line says so. */}
+      <RunTimes runId={session.id} status={session.status} />
 
       {/* Process stepper — the run's map: every phase, in order, with its state at a glance.
           The timeline below renders only the phases that have entered the conversation. */}
