@@ -268,6 +268,12 @@ with sync_playwright() as p:
     timeout_el = page.locator('[data-testid="learn-timeout"]')
     timeout_el.wait_for(timeout=100000)
     wake_strip(page)  # the long wait dimmed the strip — wake it for the capture
+    # …and let the strip's opacity transition FINISH: data-hidden flips at the
+    # start of the fade-in, and a capture mid-fade ghosts the popover.
+    page.wait_for_function(
+        """() => getComputedStyle(
+                 document.querySelector('[data-testid="version-strip"]')).opacity === '1'""",
+        timeout=10000)
     silence = page.evaluate(
         """() => ({
              copy: document.querySelector('[data-testid="learn-timeout"]')?.textContent ?? '',
