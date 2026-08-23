@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { api, type GateDecision } from '../api/client.js';
 import type { CoverageReport } from '../api/types.js';
+import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useGateStore } from '../store/gates.js';
 import { useSteeringStore, type SteeringAction } from '../store/steering.js';
 import { GATE_HASH } from './GateChip.js';
@@ -39,6 +40,10 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
   const [error, setError] = useState<string | null>(null);
   const [coverage, setCoverage] = useState<CoverageReport | null>(null);
   const message = useRef<HTMLParagraphElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  /** Synchronous double-fire guard for the keyboard path — `loading` is a
+   *  render-cycle behind a fast second keydown. */
+  const inflight = useRef(false);
 
   // Arrived from a board gate chip (§1.4 complex gate): put the MESSAGE in view and
   // give it focus, so a keyboard lands on the question rather than wherever the
@@ -66,6 +71,8 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
     action: () => Promise<unknown>,
     intervention: { kind: SteeringAction; amend?: string },
   ): Promise<void> {
+    if (inflight.current) return;
+    inflight.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -81,6 +88,7 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      inflight.current = false;
       setLoading(false);
     }
   }
@@ -101,6 +109,45 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
   const cancel = (): Promise<void> =>
     run(() => api.cancelRun(runId), { kind: 'cancel' });
 
+  // DES-UX-001 §7.7 (slice AC): the gate panel honors a / r — the same
+  // POST /runs/:id/gate its buttons fire, through the ONE slice-G registry
+  // (the shared typing guard keeps the steer textarea's letters as letters).
+  // Guarded on the panel HOLDING focus: a is approve exactly where approve
+  // matters most, and nowhere else on the page.
+  const actions = useRef({ approve, reject });
+  actions.current = { approve, reject };
+  const keyEntries = useMemo<ShortcutEntry[]>(() => {
+    const focused = (): boolean =>
+      !inflight.current &&
+      root.current !== null &&
+      root.current.contains(document.activeElement);
+    return [
+      {
+        id: 'gate-panel-approve',
+        chord: { key: 'a' },
+        group: 'gates',
+        description: 'Approve the focused gate',
+        guard: focused,
+        handler: (e) => {
+          e.preventDefault();
+          void actions.current.approve();
+        },
+      },
+      {
+        id: 'gate-panel-reject',
+        chord: { key: 'r' },
+        group: 'gates',
+        description: 'Reject the focused gate',
+        guard: focused,
+        handler: (e) => {
+          e.preventDefault();
+          void actions.current.reject();
+        },
+      },
+    ];
+  }, []);
+  useGlobalShortcuts(keyEntries);
+
   const { headline, footnote } = cleanPrompt(
     prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.',
   );
@@ -109,11 +156,16 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
 
   return (
     <div
+      ref={root}
+      // Programmatically/click focusable, not a tab stop: clicking anywhere on
+      // the card arms the a/r keys (§7.7) without adding a tab-order entry.
+      tabIndex={-1}
       className="rounded-xl p-4"
       style={{
         background: 'var(--surface-rail)',
         border: '1px solid var(--status-gate-dim)',
         boxShadow: '0 0 0 1px var(--status-gate-dim)',
+        outline: 'none',
       }}
       data-testid="steering-gate"
       data-run-id={runId}
@@ -233,6 +285,7 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
       {/* Mode-selector note: workflow gates are always HITL regardless of run-level human_confirm */}
       <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
         Workflow-declared gate — run-level human_confirm setting does not apply here.
+        {' '}· a approve · r reject while this card holds focus
       </p>
     </div>
   );
