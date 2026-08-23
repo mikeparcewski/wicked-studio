@@ -67,7 +67,7 @@ function chips(): HTMLElement[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
   useDocContextStore.setState({ sources: {} });
   requestThemeLearn.mockResolvedValue({ ok: true, event_id: 'e1', correlation_id: 'c1' });
   attachSource.mockResolvedValue({

@@ -64,7 +64,7 @@ describe('a status with no subject is filler (§3.3)', () => {
 describe('the filter is applied at the seam, so no surface can render it', () => {
   it('AC: a bare status never reaches the transcript — but its state transition does', () => {
     const { ingest } = useDocThreadStore.getState();
-    useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+    useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
 
     for (const line of BARE) ingest(frame({ state: 'working', message: line }));
     expect(useDocThreadStore.getState().messages[KEY] ?? []).toEqual([]);

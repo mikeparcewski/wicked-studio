@@ -58,12 +58,21 @@ const COMPOSER: Record<GenState, { placeholder: string; submit: string }> = {
 
 // ── Message renderers ────────────────────────────────────────────────────────
 
+/** DES-UX-001 §6.1: where one user message sits in its send lifecycle. Derived from
+ *  the store's pending FIFO — head = being worked, rest = queued behind the current
+ *  run — plus the message's own `failed` flag. `undefined` = resolved (or historic). */
+export type SendState = 'generating' | 'queued' | 'failed';
+
 function Bubble({
-  msg, projectId, docId, onShowVersion,
+  msg, projectId, docId, onShowVersion, sendState, onRetrySend,
 }: {
   msg: DocMsg; projectId: string; docId: string | null;
   /** The tag's cross-link (DES-UXFIX-001 §2.6 rule 2): show this version on the strip. */
   onShowVersion?: (version: number) => void;
+  /** §6.1 lifecycle chip for a user message still in flight (or refused). */
+  sendState?: SendState | undefined;
+  /** Re-arm a refused send — §6.1's "visible failure with a retry". */
+  onRetrySend?: (msg: Extract<DocMsg, { kind: 'user' }>) => void;
 }): React.ReactElement | null {
   if (msg.kind === 'user') {
     return (
@@ -110,13 +119,17 @@ function Bubble({
             is TAGGED with it, and the tag cross-links to the strip — the same seam the
             strip's "In thread" crosses the other way. The eye can trace canvas ↔ strip ↔
             thread in both directions. */}
-        {/* §5.5: the version tag is HISTORY — --status-done ink on a
-            --radius-sm badge (Video's "recording complete" tag mirrors it). */}
+        {/* §5.5: the version marker is HISTORY — --status-done ink on a
+            --radius-sm badge (Video's "recording complete" tag mirrors it).
+            DES-UX-001 §6.1: `data-caused-by` names the message that produced the
+            version — the marker renders ON its causing message, so the anchor is
+            structural: no marker can render under an unrelated request (EC36). */}
         {msg.version !== undefined && (
           <button
             type="button"
-            data-testid="thread-version-tag"
+            data-testid="version-marker"
             data-version={String(msg.version)}
+            data-caused-by={msg.id}
             onClick={() => { if (msg.version !== undefined) onShowVersion?.(msg.version); }}
             title={`This message made v${msg.version} — show it on the canvas and the strip`}
             className="px-2 py-0.5 text-[10px] font-mono"
@@ -126,6 +139,53 @@ function Bubble({
           >
             ▤ v{msg.version} landed
           </button>
+        )}
+        {/* DES-UX-001 §6.1 (EC36): every send resolves VISIBLY. The chip beneath a
+            user message says where the send is — being worked now (run-emerald, the
+            live pair), queued behind the current run (the honest client-side rendering
+            of the bridge's FIFO — §8.4.1 probe 1: the wire acks 200 and queues, but
+            carries no queue-position, so the position is the client's own order), or
+            refused with a retry (fail-red). It clears when the marker above lands. */}
+        {sendState === 'generating' && (
+          <span
+            data-testid="thread-generating"
+            className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-mono"
+            style={{ background: 'var(--status-run-dim)', color: S.live,
+                     border: '1px solid var(--status-run-dim)' }}
+          >
+            <span className="w-1 h-1 rounded-full shrink-0" style={{ background: S.live }} />
+            generating — this message is being worked now
+          </span>
+        )}
+        {sendState === 'queued' && (
+          <span
+            data-testid="thread-queued"
+            className="rounded-full px-2.5 py-0.5 text-[10px] font-mono"
+            style={{ background: 'transparent', color: S.muted,
+                     border: `1px solid ${S.border}` }}
+          >
+            queued behind the current run
+          </span>
+        )}
+        {sendState === 'failed' && (
+          <span
+            data-testid="thread-send-failed"
+            className="flex items-center gap-2 rounded-full px-2.5 py-0.5 text-[10px] font-mono"
+            style={{ background: 'var(--status-fail-dim)', color: S.danger,
+                     border: '1px solid var(--status-fail-dim)' }}
+          >
+            send failed — nothing landed for this message
+            <button
+              type="button"
+              data-testid="thread-send-retry"
+              onClick={() => onRetrySend?.(msg)}
+              className="underline font-mono text-[10px]"
+              style={{ background: 'transparent', border: 'none', color: S.danger,
+                       cursor: 'pointer', padding: 0 }}
+            >
+              retry
+            </button>
+          </span>
         )}
       </div>
     );
@@ -361,6 +421,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const key = docId === null ? null : threadKey(projectId, docId);
   const messages = useDocThreadStore((s) => (key === null ? EMPTY : s.messages[key] ?? EMPTY));
   const streamed = useDocThreadStore((s) => (key === null ? undefined : s.genState[key]));
+  // §6.1: the send FIFO — head is being worked, the rest are queued behind it.
+  const pendingIds = useDocThreadStore((s) => (key === null ? EMPTY_IDS : s.pending[key] ?? EMPTY_IDS));
+  // §6.3: whether this thread's text was rehydrated from the conversation read.
+  const hydratedFromWire = useDocThreadStore((s) => (key === null ? false : s.hydrated[key] === true));
   // A document that exists with nothing in flight IS case 4: complete, and editable (§7.10).
   const state: GenState = docId === null ? 'idle' : streamed ?? 'terminal';
   // NOTE (issue #65): slice 16's picked theme no longer rides here. The `theme_id` it
@@ -424,7 +488,13 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         store.addDivider(key, forked.version);
         store.addUserMsg(key, msgId, body);
         store.setGenState(key, 'generating');
-        await injectDocMessage(projectId, docId, body, msgId);
+        // §6.1 (EC36): once the message is ON the thread, a refused send fails
+        // THERE — the failed chip with its retry, never a silent transcript row.
+        try {
+          await injectDocMessage(projectId, docId, body, msgId);
+        } catch {
+          failVisibly(msgId);
+        }
         setText('');
         navigate(versionPath(projectId, docId, forked.version));
         return;
@@ -432,14 +502,18 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
 
       // 2 / 3 — STEER, and answer a gate WITH a steer in the same submit.
       store.addUserMsg(key, msgId, body);
-      if (state === 'gated' && gate !== null) {
-        await postEvent(projectId, {
-          event_type: 'wicked.interactive.question.answered',
-          payload: { request_id: gate.requestId, answer: body, document_id: docId },
-        });
-        store.setGenState(key, 'generating');
-      } else {
-        await injectDocMessage(projectId, docId, body, msgId);
+      try {
+        if (state === 'gated' && gate !== null) {
+          await postEvent(projectId, {
+            event_type: 'wicked.interactive.question.answered',
+            payload: { request_id: gate.requestId, answer: body, document_id: docId },
+          });
+          store.setGenState(key, 'generating');
+        } else {
+          await injectDocMessage(projectId, docId, body, msgId);
+        }
+      } catch {
+        failVisibly(msgId);
       }
       setText('');
     } catch (e: unknown) {
@@ -447,6 +521,49 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     } finally {
       setBusy(false);
     }
+  }
+
+  /** §6.1's visible failure: the message stays on the thread wearing the failed
+   *  chip; the working state retires when nothing else is pending behind it. */
+  function failVisibly(msgId: string): void {
+    if (key === null) return;
+    const store = useDocThreadStore.getState();
+    store.markSendFailed(key, msgId);
+    if ((useDocThreadStore.getState().pending[key] ?? []).length === 0
+        && useDocThreadStore.getState().genState[key] === 'generating') {
+      store.setGenState(key, 'terminal');
+    }
+  }
+
+  /** §6.1's retry: a re-send is a NEW send — re-enqueued at the tail, re-emitted on
+   *  the same wire the message originally rode (the gate's answer wire while the
+   *  gate is still open, the inject wire otherwise). */
+  async function retrySend(msg: Extract<DocMsg, { kind: 'user' }>): Promise<void> {
+    if (docId === null || key === null) return;
+    const store = useDocThreadStore.getState();
+    store.retrySend(key, msg.id);
+    try {
+      if (state === 'gated' && gate !== null) {
+        await postEvent(projectId, {
+          event_type: 'wicked.interactive.question.answered',
+          payload: { request_id: gate.requestId, answer: msg.text, document_id: docId },
+        });
+      } else {
+        await injectDocMessage(projectId, docId, msg.text, msg.id);
+      }
+      useDocThreadStore.getState().setGenState(key, 'generating');
+    } catch {
+      failVisibly(msg.id);
+    }
+  }
+
+  /** Where a user message sits in its §6.1 lifecycle (see `SendState`). */
+  function sendStateOf(msg: DocMsg): SendState | undefined {
+    if (msg.kind !== 'user') return undefined;
+    if (msg.failed === true) return 'failed';
+    const at = pendingIds.indexOf(msg.id);
+    if (at === -1) return undefined;
+    return at === 0 ? 'generating' : 'queued';
   }
 
   // The tag's cross-link (§2.6 rule 2): selecting the version IS a navigation — the
@@ -491,6 +608,25 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         />
       )}
       <div className="flex-1 overflow-y-auto px-3.5 py-4 flex flex-col gap-3">
+        {/* §6.3's stopgap note, scoped to the ONE gap the wire still has: the thread's
+            TEXT is back from `GET /d/:doc/api/conversation` (BRIDGE-UX-1 probe 2 — a
+            real read), but the transcript carries no version anchors, so markers are
+            session-observed only. A promise with a pointer, never a shrug — and it
+            renders only while a restored message actually lacks its marker. */}
+        {hydratedFromWire
+          && messages.some((m) => m.kind === 'user' && m.restored === true && m.version === undefined)
+          && (
+            <p
+              data-testid="thread-stopgap"
+              className="text-[11px] leading-relaxed rounded-lg px-3 py-2"
+              style={{ color: S.muted, background: S.card, border: `1px solid ${S.border}`,
+                       margin: 0, fontFamily: 'var(--font-sans)' }}
+            >
+              Thread restored from the document’s transcript. Version markers show what
+              this session observed — markers from before this session return when the
+              transcript carries version anchors (BRIDGE-UX-1 §8.4.1).
+            </p>
+          )}
         {messages.length === 0 && (
           <p className="leading-relaxed" style={{ color: S.body, fontSize: 'var(--text-sm)' }}>
             {docId === null
@@ -511,7 +647,17 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
                   onAnswered={() => useDocThreadStore.getState().setGenState(key, 'generating')}
                 />
               )) || null
-            : <Bubble key={m.id} msg={m} projectId={projectId} docId={docId} onShowVersion={showVersion} />,
+            : (
+                <Bubble
+                  key={m.id}
+                  msg={m}
+                  projectId={projectId}
+                  docId={docId}
+                  onShowVersion={showVersion}
+                  sendState={sendStateOf(m)}
+                  onRetrySend={(msg) => void retrySend(msg)}
+                />
+              ),
         )}
         <div ref={bottom} />
       </div>
@@ -599,6 +745,9 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
 
 /** Stable identity for "no messages" so the selector never returns a fresh array. */
 const EMPTY: DocMsg[] = [];
+
+/** Stable identity for "nothing pending" — same rule as EMPTY. */
+const EMPTY_IDS: string[] = [];
 
 /** The doc's name is DERIVED from the ask (§4.1) — the bridge slugifies what it gets. */
 function docName(brief: string): string {

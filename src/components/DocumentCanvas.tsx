@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getVersions, interactiveDocUrl, listDocs } from '../api/interactive.js';
+import { getConversation, getVersions, interactiveDocUrl, listDocs } from '../api/interactive.js';
+import { readAnchors } from '../interactive/threadStopgap.js';
 import { useDocsCache } from '../store/docsCache.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
@@ -491,6 +492,30 @@ export interface DocumentCanvasProps {
 export function DocumentCanvas({
   projectId, docId, version = null, navigate, children,
 }: DocumentCanvasProps): React.ReactElement {
+  // §6.3 rehydration (DES-UX-001 slice T, BRIDGE-UX-1 probe 2): opening a doc reads
+  // its announce history from `GET /d/:doc/api/conversation` — the ONE sanctioned
+  // doc-open fetch this slice adds — so the thread's TEXT survives a reload from the
+  // wire, not from tab memory. It fires on DOC OPEN (here, not in the thread pane):
+  // the drawer mounts/unmounts on toggle, and toggling must stay a zero-request
+  // gesture. Guarded once per thread per session; a projection that already holds
+  // live messages is kept verbatim (`hydrate` only fills an empty thread). A bridge
+  // without the route — or a dead one — degrades to the live-only projection.
+  useEffect(() => {
+    if (docId === null) return;
+    const key = threadKey(projectId, docId);
+    const store = useDocThreadStore.getState();
+    if (store.hydrated[key] === true) return;
+    let cancelled = false;
+    getConversation(projectId, docId)
+      .then((entries) => {
+        if (!cancelled) useDocThreadStore.getState().hydrate(key, entries, readAnchors(key));
+      })
+      .catch(() => {
+        if (!cancelled) useDocThreadStore.getState().hydrate(key, [], []);
+      });
+    return () => { cancelled = true; };
+  }, [projectId, docId]);
+
   // §7.3: the drawer's state lives on the Document surface. Default CLOSED when a doc
   // is open (the canvas is full-width on first visit); default OPEN on the picker,
   // whose empty state points at the thread — a pointer at a hidden pane would be a

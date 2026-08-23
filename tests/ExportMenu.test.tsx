@@ -94,7 +94,7 @@ async function press(format: string, scope?: HTMLElement): Promise<void> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
   postExport.mockResolvedValue(reply('roadmap_v3.pdf'));
 });
 afterEach(cleanup);

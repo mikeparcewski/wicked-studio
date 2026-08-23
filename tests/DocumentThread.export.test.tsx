@@ -49,7 +49,7 @@ function mount(): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
 });
 afterEach(cleanup);
 

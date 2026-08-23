@@ -124,6 +124,20 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     project's members wire. Default False: pre-0.8.0 rigs keep
                     DTOs without the field and a POST that 404s.
 
+  doc_run_ms      — slice T (DES-UX-001 §6.1): how long one doc "run" takes.
+                    0 (default) keeps the instant landings every standing rig
+                    assumes; >0 makes each accepted chat.posted send land its
+                    OWN new version FIFO doc_run_ms after the previous landing
+                    (BRIDGE-UX-1 probe 1: the bridge queues, never drops), so
+                    a rig can witness generating/queued/marker in sequence.
+  send_fail       — slice T (§6.1): POST /api/events chat.posted answers a
+                    500 {error} — the visible-failure branch (default False).
+  restart_bridge  — slice T (§6.3): POST {"restart_bridge": true} simulates a
+                    FULL bridge restart: process-scoped state (relay queue,
+                    run schedule) clears; the docs registry and the
+                    conversation announce history — the disk — survive,
+                    exactly the split BRIDGE-UX-1 probe 2 verified.
+
 A rig that never flips them gets the default W2 board.
 """
 
@@ -243,7 +257,19 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # Slice S (DES-UX-001 §2.3, CREW-UX-2): run DTOs carry `project_id`,
          # r-unfiled joins the list, POST /runs launches for real. Default
          # False: no standing rig's DTO shape changes.
-         "project_dto": False}
+         "project_dto": False,
+         # Slice T (DES-UX-001 §6.1, BRIDGE-UX-1 probe 1): how long one doc
+         # "run" takes. 0 (default) keeps the historical instant landing every
+         # standing rig assumes. >0 makes each accepted chat.posted send land
+         # its OWN new version doc_run_ms after the previous landing — the
+         # bridge's real queue semantics (sends ack 200 and land FIFO), slowed
+         # down enough for a rig to witness generating/queued states.
+         "doc_run_ms": 0,
+         # Slice T (§6.1): when True, POST /api/events chat.posted answers a
+         # 500 {error} — the visible-failure branch (a bridge that refuses the
+         # send; the client must render thread-send-failed, never silence).
+         "send_fail": False,
+         }
 state_lock = threading.Lock()
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
@@ -1122,11 +1148,76 @@ def broadcast_chat(frame: dict) -> None:
             q.append(frame)
 
 
+# ── Slice T (DES-UX-001 §6.3): the doc's announce history, as the REAL bridge
+# keeps it (BRIDGE-UX-1 probe 2 pinned the shape): user chat + agent narration
+# (error states included) as {role, text, ts[, state]} — no message ids, no
+# version markers. It lives OUTSIDE process-restart scope by design: the real
+# store is conversation.jsonl on disk and survives a full bridge restart, which
+# is what the `restart_bridge` control simulates (ws state clears, this stays).
+conversations_lock = threading.Lock()
+conversations: dict = {}  # (pid, doc) -> [{role, text, ts[, state]}]
+
+
+def log_conversation(pid: str, doc: str, role: str, text: str, state_val: str | None = None) -> None:
+    entry = {"role": role, "text": text, "ts": iso(int(time.time() * 1000))}
+    if state_val == "error":
+        entry["state"] = state_val
+    with conversations_lock:
+        conversations.setdefault((pid, doc), []).append(entry)
+
+
 def queue_interactive(event_type: str, payload: dict) -> None:
     """Queue one relayed interactive frame for the /ws loop's next tick."""
+    # Slice T: doc-scoped narration is ALSO appended to the durable announce
+    # history — the same dual-write the real bridge does (SSE relay + JSONL),
+    # so GET /d/:doc/api/conversation reads back what the stream said.
+    if event_type == "wicked.interactive.status.posted":
+        pid, doc = payload.get("project_id"), payload.get("document_id")
+        text = payload.get("message")
+        if pid and doc and text:
+            log_conversation(pid, doc, "agent", str(text), payload.get("state"))
     with ws_lock:
         ws_queue.append({"type": "interactiveEvent",
                          "event": {"event_type": event_type, "payload": payload}})
+
+
+# Slice T (§6.1): the per-doc "agent" is BUSY between a send and its landing —
+# a second send queues behind it, exactly the FIFO the probe pinned. Each
+# scheduled landing appends a NEW version and emits the same two frames the
+# instant path emits, doc_run_ms after the previous landing completes.
+doc_sched_lock = threading.Lock()
+doc_next_free: dict = {}  # (pid, doc) -> unix seconds when the agent frees up
+
+
+def schedule_doc_run(pid: str, doc: str, delay_s: float, fixed_version: int | None = None) -> None:
+    """Land one version after `delay_s` of FIFO-queued work. `fixed_version`
+    re-announces an existing manifest version (the create path, whose v1 is
+    committed at POST time); None appends head+1 (a steer send's own landing)."""
+    with doc_sched_lock:
+        start = max(time.time(), doc_next_free.get((pid, doc), 0.0))
+        fire_at = start + delay_s
+        doc_next_free[(pid, doc)] = fire_at
+
+    def land() -> None:
+        if fixed_version is None:
+            with docs_lock:
+                versions = docs_created.get(pid, {}).get(doc)
+                if versions is None:
+                    return
+                v = max(e["version"] for e in versions) + 1
+                versions.append({"version": v, "parent": v - 1, "feedback_file": None,
+                                 "html_file": f"v{v}.html", "created_at": iso(NOW0 + v * SEC)})
+            parent = v - 1
+        else:
+            v, parent = fixed_version, None
+        queue_interactive("wicked.interactive.status.posted", {
+            "project_id": pid, "document_id": doc, "state": "working",
+            "message": f"Applying the change — landing v{v}."})
+        queue_interactive("wicked.interactive.version.created", {
+            "project_id": pid, "document_id": doc,
+            "version": v, "parent": parent, "kind": "generated"})
+
+    threading.Timer(max(fire_at - time.time(), 0.0), land).start()
 
 
 def slug(name: str) -> str:
@@ -1635,6 +1726,18 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"document_id": doc, "learned_at": iso(ready_at),
                                  "tokens": LEARNED_TOKENS})
             return True
+        # Slice T (DES-UX-001 §6.3, BRIDGE-UX-1 probe 2): the REAL thread-history
+        # read — GET /d/:doc/api/conversation returns the announce history (user
+        # chat + agent narration, error states included) as {role, text, ts[,
+        # state]} ONLY: no message ids, no version markers — the fidelity the
+        # probe pinned. The store survives `restart_bridge` (it is the disk).
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/conversation$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            with conversations_lock:
+                entries = [dict(e) for e in conversations.get((pid, doc), [])]
+            self._json(200, entries)
+            return True
         # /api/v1/projects/<pid>/interactive/d/<doc>/api/versions — the manifest.
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/versions$", path)
         if m:
@@ -1701,18 +1804,32 @@ class W2Handler(SimpleHTTPRequestHandler):
         if m:
             pid = urllib.parse.unquote(m.group(1))
             doc = slug(str(body.get("name") or "doc"))
-            anchor = body.get("source_message_id")
+            # Slice T (§8.4.1 probe 1): the REAL bridge DROPS source_message_id —
+            # no `meta.sourceMessageId` ever reaches the manifest (the interactive.ts
+            # claim was aspirational). The client's anchor is client-side; the
+            # fixture must not serve a correlation the wire does not carry.
             with docs_lock:
                 docs_created.setdefault(pid, {})[doc] = [
                     {"version": 1, "parent": None, "feedback_file": None,
-                     "html_file": "v1.html", "created_at": iso(NOW0),
-                     "meta": {"sourceMessageId": anchor}}]
+                     "html_file": "v1.html", "created_at": iso(NOW0)}]
+            brief = str(body.get("brief") or "")
+            if brief:
+                # The brief IS the doc's first user line in the announce history
+                # (the create message the reload scene must get back, §6.3).
+                log_conversation(pid, doc, "user", brief)
             queue_interactive("wicked.interactive.status.posted", {
                 "project_id": pid, "document_id": doc, "state": "working",
                 "message": "Planning the deck — outline first, then the slides."})
-            queue_interactive("wicked.interactive.version.created", {
-                "project_id": pid, "document_id": doc,
-                "version": 1, "parent": None, "kind": "generated"})
+            with state_lock:
+                run_ms = int(state["doc_run_ms"])
+            if run_ms > 0:
+                # Slice T: v1 is committed now but LANDS (the frame) after the
+                # run — long enough for the rig to witness thread-generating.
+                schedule_doc_run(pid, doc, run_ms / 1000.0, fixed_version=1)
+            else:
+                queue_interactive("wicked.interactive.version.created", {
+                    "project_id": pid, "document_id": doc,
+                    "version": 1, "parent": None, "kind": "generated"})
             self._json(201, {"name": doc, "head": 1, "generating": True, "project_id": pid})
             return True
         # POST /api/v1/projects/<pid>/interactive/d/<doc>/api/fork — branch (§7.10).
@@ -1726,10 +1843,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                     self._json(404, {"error": f"no such doc {doc}"})
                     return True
                 v = max(e["version"] for e in versions) + 1
+                # Slice T (§8.4.1): no meta.sourceMessageId — the bridge drops it.
                 versions.append(
                     {"version": v, "parent": frm, "feedback_file": None,
-                     "html_file": f"v{v}.html", "created_at": iso(NOW0 + v * SEC),
-                     "meta": {"sourceMessageId": body.get("source_message_id")}})
+                     "html_file": f"v{v}.html", "created_at": iso(NOW0 + v * SEC)})
             self._json(200, {"version": v, "parent": frm})
             return True
         # Issue #65: the invented POST /api/theme/learn 404s, exactly as the real
@@ -1777,15 +1894,34 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"ok": True, "event_id": "evt-fixture", "correlation_id": "c-fixture"})
                 return True
             if body.get("event_type") == "wicked.interactive.chat.posted" and doc:
-                versions = doc_versions(pid, doc)
-                head = max((e["version"] for e in versions), default=1)
-                queue_interactive("wicked.interactive.status.posted", {
-                    "project_id": pid, "document_id": doc, "state": "working",
-                    "message": "Tightening the headline and rebalancing the slide."})
-                queue_interactive("wicked.interactive.version.created", {
-                    "project_id": pid, "document_id": doc,
-                    "version": head, "parent": head - 1 if head > 1 else None,
-                    "kind": "generated"})
+                # Slice T (§6.1): a refused send is a LOUD 500 — the client's
+                # visible-failure branch. Real shape: the bridge reports {error}.
+                with state_lock:
+                    refuse = bool(state["send_fail"])
+                    run_ms = int(state["doc_run_ms"])
+                if refuse:
+                    self._json(500, {"error": "bridge refused the send (fixture send_fail)"})
+                    return True
+                # The accepted send lands durably in the announce history in send
+                # order (BRIDGE-UX-1 probe 1: the bus is the queue) …
+                if payload.get("role") == "user" and payload.get("text"):
+                    log_conversation(pid, doc, "user", str(payload.get("text")))
+                if run_ms > 0:
+                    # … and each send's run lands its OWN new version, FIFO,
+                    # doc_run_ms after the previous landing (§8.4.1 queue truth).
+                    schedule_doc_run(pid, doc, run_ms / 1000.0)
+                else:
+                    # Historical instant path, unchanged for every standing rig:
+                    # re-announce the head as the regenerated version.
+                    versions = doc_versions(pid, doc)
+                    head = max((e["version"] for e in versions), default=1)
+                    queue_interactive("wicked.interactive.status.posted", {
+                        "project_id": pid, "document_id": doc, "state": "working",
+                        "message": "Tightening the headline and rebalancing the slide."})
+                    queue_interactive("wicked.interactive.version.created", {
+                        "project_id": pid, "document_id": doc,
+                        "version": head, "parent": head - 1 if head > 1 else None,
+                        "kind": "generated"})
             self._json(200, {"ok": True, "event_id": "evt-fixture", "correlation_id": "c-fixture"})
             return True
         return False
@@ -1809,6 +1945,16 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("reset_learn"):
                 with learned_lock:
                     learned_themes.clear()
+            # Slice T (§6.3): `restart_bridge` simulates a FULL bridge restart —
+            # everything process-scoped clears (the relay queue, the agent's
+            # in-flight schedule), while the disk survives: the docs registry
+            # and the conversation.jsonl-backed announce history stay, exactly
+            # the split BRIDGE-UX-1 probe 2 verified on the real bridge.
+            if body.get("restart_bridge"):
+                with ws_lock:
+                    ws_queue.clear()
+                with doc_sched_lock:
+                    doc_next_free.clear()
             with state_lock:
                 # `appearance` rides the same control channel but lands in the
                 # settings store: a dict replaces studio.appearance wholesale,

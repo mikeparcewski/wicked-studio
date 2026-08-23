@@ -1148,6 +1148,10 @@ try:
     VERSIONS_RE = re.compile(r"^/d/([^/]+)/api/versions$")
     RENDER_RE = re.compile(r"^/d/([^/]+)/doc/(\d+)$")
     FORK_RE = re.compile(r"^/d/([^/]+)/api/fork$")
+    # Slice T (DES-UX-001 §6.3, BRIDGE-UX-1 probe 2): GET /d/:doc/api/conversation
+    # is a REAL bridge read — studio now fetches it once on every doc open, so the
+    # fake bridge answers it (empty history: these fixture docs never had a thread).
+    CONVERSATION_RE = re.compile(r"^/d/([^/]+)/api/conversation$")
     # Slice 15 (§4.4): all three exports are the SERVICE's, and PPTX's python-pptx is a
     # LAZY dependency — absent on this box, as on most — so it answers a clean 400 naming
     # the command that fixes it. HTML and PDF depend on nothing optional and still render.
@@ -1246,6 +1250,10 @@ try:
                 # Video mode is what narrows them to `kind: "demo"`.
                 self._json(200, FIXTURE_DOCS + FIXTURE_DEMOS
                            if project == demo_project else FIXTURE_DOCS)
+                return True
+            if CONVERSATION_RE.match(rest):
+                # Slice T (§6.3): the announce-history read, empty for fixture docs.
+                self._json(200, [])
                 return True
             if INVENTED_THEME_RE.match(rest):
                 # Issue #65: the invented theme routes are 404 — the same answer the
@@ -1772,18 +1780,25 @@ try:
         docs_created_by_steer = len(created_docs)
         page.screenshot(path=str(SHOTS / "slice10-thread-steering.png"), full_page=True)
 
-        # ── AC (§7.6, client half): the landed version tags the message that caused it ──
+        # ── AC (§7.6 client half, re-scoped by DES-UX-001 slice T / §8.4.1 probe 1):
+        # the bridge QUEUES — the create's generation is the run in flight and the
+        # steer is queued behind it, so landings answer sends FIFO: the first
+        # generated version tags the CREATE message, the next tags the steer. The
+        # fake bridge lands both, exactly as the real one processes its queue.
         page.evaluate(
-            """args => window.__pushFrame({ type: 'interactiveEvent', event: {
-                 event_type: 'wicked.interactive.version.created',
-                 payload: { project_id: args.project, document_id: args.doc,
-                            version: 2, parent: 1, kind: 'generated' } } })""",
+            """args => { for (const version of [1, 2]) {
+                 window.__pushFrame({ type: 'interactiveEvent', event: {
+                   event_type: 'wicked.interactive.version.created',
+                   payload: { project_id: args.project, document_id: args.doc,
+                              version, parent: version - 1, kind: 'generated' } } });
+               } }""",
             {"project": doc_project, "doc": CREATED_DOC},
         )
         tagged_ok, tag_ms = within(
             page,
             """() => { const m = document.querySelectorAll('[data-testid="doc-message"]');
-                       return m.length > 0 && m[m.length - 1].getAttribute('data-version') === '2'; }""",
+                       return m.length > 1 && m[0].getAttribute('data-version') === '1'
+                         && m[m.length - 1].getAttribute('data-version') === '2'; }""",
         )
         terminal_state = thread.get_attribute("data-composer-state")
         chip_when_terminal = page.locator('[data-testid="steering-chip"]').count()

@@ -42,7 +42,7 @@ function messages(key = KEY): DocMsg[] {
 }
 
 beforeEach(() => {
-  useDocThreadStore.setState({ messages: {}, genState: {}, anchor: {}, landed: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
   createDoc.mockResolvedValue({ name: DEMO, head: 1, kind: 'demo' });
   requestRecord.mockResolvedValue({ queued: true });
   postEvent.mockResolvedValue({ ok: true, event_id: 'e1', correlation_id: 'c1' });
@@ -119,7 +119,7 @@ describe('the ordered demo wizard — order is the thing it exists to carry', ()
       .toBe(`Authored “${DEMO}” — 3 steps against https://shop.example/. `
         + 'Recording runs them in a real browser.');
     // §7.6: the version this generation lands tags the message that triggered it.
-    expect(useDocThreadStore.getState().anchor[KEY]).toBe('dmsg-7');
+    expect(useDocThreadStore.getState().pending[KEY]).toContain('dmsg-7');
   });
 });
 
