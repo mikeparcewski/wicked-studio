@@ -53,9 +53,11 @@ describe('WorkPage — §7.4 context-sensitive entry (slice Y)', () => {
     mount('?filter=failed');
     expect(screen.getByRole('tablist')).toHaveAttribute('data-filter', 'failed');
     expect(screen.getByRole('tab', { name: /^Failed/ })).toHaveAttribute('aria-selected', 'true');
-    // Only the failed run renders in the panel.
-    expect(screen.getByText('broken work')).toBeInTheDocument();
-    expect(screen.queryByText('live work')).toBeNull();
+    // Only the failed run renders in the panel. Rows carry the slice-Y2
+    // synthesized title (`intent · short-id · #ordinal`, EC40), so the raw
+    // problem text is a prefix, not the whole text node.
+    expect(screen.getByText(/broken work/)).toBeInTheDocument();
+    expect(screen.queryByText(/live work/)).toBeNull();
   });
 
   it('ignores a filter that is not a tab id', () => {
