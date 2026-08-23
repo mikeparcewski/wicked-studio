@@ -1835,21 +1835,39 @@ class W2Handler(SimpleHTTPRequestHandler):
         # daemon's `{runId}` answer; `body.projectId` files the run atomically
         # (LaunchSchema, routes.ts:148 — "never a silent unfiled run"), and the
         # DTO the next GET /runs serves carries the CREW-UX-2 `project_id` echo.
+        # POST /api/v1/runs — the launch, shared by the slice-V (provenance/
+        # retry) and slice-S (project_dto) corpora. retryOf validation first
+        # (CREW-UX-3: 400 on an unknown id, crew routes.ts:588); then a REAL
+        # launch when project_dto is on (the run rides GET /runs with its
+        # project_id echo — atomic filing), else slice V's plain 201.
         if path == "/api/v1/runs":
+            retry_of = body.get("retryOf")
+            if retry_of is not None:
+                with state_lock:
+                    provenance_on = state["provenance"]
+                known = {r["session"]["id"] for r in RUNS} \
+                    | ({RETRY_RUN["session"]["id"]} if provenance_on else set()) \
+                    | {r["session"]["id"] for r in launched_runs}
+                if retry_of not in known:
+                    return self._json(400, {
+                        "error": f"retryOf names an unknown run: {retry_of} — "
+                                 "lineage must point at an existing run id"})
             with state_lock:
-                if not state["project_dto"]:
-                    return self._json(404, {"error": "w2 fixture: POST /runs needs project_dto"})
-                launched_seq[0] += 1
-                rid = f"r-launched-{launched_seq[0]}"
-                pid = body.get("projectId")
-                run = session(rid, "executing", body.get("problem", ""),
-                              body.get("problem", ""))
-                run["session"]["project_id"] = pid if pid else None
-                launched_runs.append(run)
-                if pid:
-                    launched_members.setdefault(pid, []).append(rid)
-                    ATTACHED_AT[rid] = NOW0
-            return self._json(200, {"runId": rid})
+                project_dto_on = state["project_dto"]
+                if project_dto_on:
+                    launched_seq[0] += 1
+                    rid = f"r-launched-{launched_seq[0]}"
+                    pid = body.get("projectId")
+                    run = session(rid, "executing", body.get("problem", ""),
+                                  body.get("problem", ""))
+                    run["session"]["project_id"] = pid if pid else None
+                    launched_runs.append(run)
+                    if pid:
+                        launched_members.setdefault(pid, []).append(rid)
+                        ATTACHED_AT[rid] = NOW0
+            if project_dto_on:
+                return self._json(200, {"runId": rid})
+            return self._json(201, {"runId": "r-new"})
         # POST /api/v1/runs/<id>/gate — the steering-gate decision (slice H,
         # DES-FEEDBACK-002 §2.3). The fixture accepts it so the answered state
         # ("approved · advancing…") renders truthfully after a triage key or a
@@ -1864,21 +1882,6 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # awaiting between the selection and the fan-out.
                 return self._json(409, {"error": "not awaiting a human gate"})
             return self._json(200, {"status": "resumed"})
-        # Slice V (DES-UX-001 §4 / CREW-UX-3): POST /runs — the launch. retryOf
-        # must name an EXISTING run id (the daemon's 400 with a named error,
-        # crew routes.ts:588) — never a silently unrecorded lineage.
-        if path == "/api/v1/runs":
-            retry_of = body.get("retryOf")
-            if retry_of is not None:
-                with state_lock:
-                    provenance_on = state["provenance"]
-                known = {r["session"]["id"] for r in RUNS} \
-                    | ({RETRY_RUN["session"]["id"]} if provenance_on else set())
-                if retry_of not in known:
-                    return self._json(400, {
-                        "error": f"retryOf names an unknown run: {retry_of} — "
-                                 "lineage must point at an existing run id"})
-            return self._json(201, {"runId": "r-new"})
         # POST /api/v1/chats — open a chat: warm the asked-for seats (or the whole
         # roster when `clis` is omitted, matching the daemon), every seat ok, instantly.
         if path == "/api/v1/chats":
