@@ -36,6 +36,15 @@ file — the wire studio's restored brand-learn flow polls. The remaining
 known-invented wire OUTSIDE scope (sources attach: slice 19) is still probed as
 ADVISORY — reported, not fatal.
 
+BRIDGE-UX-1 (DES-UX-001 §8.4): section 7 grows the FATAL probes for the four
+bridge-contract questions DES-UX-001 is gated on — mid-run sends (queue or
+drop, B1), the thread-history read (B3), unfiled-doc hosting (B2), and per-seat
+mid-stream lifecycle (C6). Each probe PINS observed bridge behavior as the
+contract; a pin that starts failing means the bridge grew (or changed) the
+surface — adopt it in the client/design first, then move the pin. Outcomes are
+recorded prose-side in DES-UX-001 §8.4.1; crew lookups are pinned to a dead
+port so the probes can never touch a real crew daemon on this machine.
+
 Env knobs:
   WICKED_INTERACTIVE_DIR  the bridge checkout (default: ../wicked-interactive
                           next to this repo — the monorepo layout).
@@ -133,32 +142,44 @@ if not cli.is_file():
 tmp = Path(tempfile.mkdtemp(prefix="wi-contract-"))
 port = free_port(int(os.environ.get("WI_CONTRACT_PORT", "4460")))
 base = f"http://127.0.0.1:{port}"
-env = dict(os.environ, WICKED_BUS_DATA_DIR=str(tmp / "bus"))
+# BRIDGE-UX-1 hermeticity: pin the bridge's crew lookups (project.js resolveCrewApi,
+# server.js crewApiBase) to a port nothing listens on, so the refused-bind probe can
+# never reach — let alone write into — a REAL crew daemon running on this machine.
+dead_crew_port = free_port(port + 7)
+env = dict(os.environ, WICKED_BUS_DATA_DIR=str(tmp / "bus"),
+           WICKED_CREW_API=f"http://127.0.0.1:{dead_crew_port}")
 log = (tmp / "serve.log").open("w")
-proc = subprocess.Popen(
-    ["node", str(cli), "serve", "--root", str(tmp / "docs"), "--port", str(port)],
-    cwd=str(WI_DIR), env=env, stdout=log, stderr=log,
-)
 
-try:
-    # Wait for the bridge's own health signal — never a sleep-and-hope.
+
+def spawn_bridge() -> subprocess.Popen:
+    return subprocess.Popen(
+        ["node", str(cli), "serve", "--root", str(tmp / "docs"), "--port", str(port)],
+        cwd=str(WI_DIR), env=env, stdout=log, stderr=log,
+    )
+
+
+def wait_healthy(p: subprocess.Popen, step: str = "bridge_start") -> None:
+    """Wait for the bridge's own health signal — never a sleep-and-hope."""
     deadline = time.time() + 30
-    healthy = False
     while time.time() < deadline:
-        if proc.poll() is not None:
-            fail("bridge_start",
-                 f"bridge exited early (rc={proc.returncode}) — see {tmp}/serve.log:\n"
+        if p.poll() is not None:
+            fail(step,
+                 f"bridge exited early (rc={p.returncode}) — see {tmp}/serve.log:\n"
                  + (tmp / "serve.log").read_text()[-2000:])
         try:
             status, text, _ = http("GET", f"{base}/api/health")
             if status == 200 and json.loads(text).get("ok") is True:
-                healthy = True
-                break
+                return
         except OSError:
             pass
         time.sleep(0.2)
-    if not healthy:
-        fail("bridge_start", f"GET /api/health never answered ok:true on {base}")
+    fail(step, f"GET /api/health never answered ok:true on {base}")
+
+
+proc = spawn_bridge()
+
+try:
+    wait_healthy(proc)
     report["bridge"] = {"dir": str(WI_DIR), "root": str(tmp / "docs"), "port": port,
                         "pid": proc.pid}
     report["steps"]["bridge_start"] = {"ok": True}
@@ -331,6 +352,237 @@ try:
         "corrupt_file_404": {"ok": corrupt_ok, "status": corrupt_status,
                              "body": corrupt_text[:200]},
         "unknown_doc_404_status_only": {"ok": unknown_ok, "status": unknown_status},
+    }
+
+    # ═══ 7. BRIDGE-UX-1 (DES-UX-001 §8.4) — the four gating probes ══════════════
+    # Every probe pins OBSERVED bridge behavior as the contract for its dependent
+    # studio slice (T / U / AB). Pins are FATAL both ways: a surface a pin says is
+    # absent that starts answering means the bridge grew it — adopt it in the
+    # client/design, then move the pin (the invented-routes protocol, §4 above).
+    import threading  # noqa: E402 (grouped with its one consumer, harness style)
+
+    class SSEReader:
+        """Collect GET /api/events frames on a thread — the studio's live wire."""
+
+        def __init__(self, url: str):
+            self.frames: list[dict] = []
+            self.lock = threading.Lock()
+            self.thread = threading.Thread(target=self._run, args=(url,), daemon=True)
+            self.thread.start()
+
+        def _run(self, url: str) -> None:
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url), timeout=60) as res:
+                    etype, data = None, []
+                    for raw in res:
+                        line = raw.decode("utf-8", "replace").rstrip("\n")
+                        if line.startswith("event: "):
+                            etype = line[7:]
+                        elif line.startswith("data: "):
+                            data.append(line[6:])
+                        elif line == "":
+                            if etype and data:
+                                try:
+                                    envelope = json.loads("".join(data))
+                                except ValueError:
+                                    envelope = {}
+                                with self.lock:
+                                    self.frames.append({"event_type": etype, "envelope": envelope})
+                            etype, data = None, []
+            except OSError:
+                pass  # bridge stopped (probe 2 restarts it); collected frames stay readable
+
+        def wait_for(self, pred, timeout: float = 25.0):
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                with self.lock:
+                    for f in self.frames:
+                        if pred(f):
+                            return f
+                time.sleep(0.1)
+            return None
+
+    def sse_payload(frame) -> dict:
+        p = (frame or {}).get("envelope", {}).get("payload")
+        return p if isinstance(p, dict) else {}
+
+    sse = SSEReader(f"{base}/api/events")
+    PROBE_DOC = "bridge-ux-1-probe"
+
+    def conversation() -> list[dict]:
+        s, t, _ = http("GET", f"{base}/d/{PROBE_DOC}/api/conversation")
+        return json.loads(t) if s == 200 else []
+
+    def wait_conversation(pred, timeout: float = 25.0) -> list[dict]:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            entries = conversation()
+            if pred(entries):
+                return entries
+            time.sleep(0.25)
+        return conversation()
+
+    # ── Probe 3 (§6.2, slice U): can the bridge host an UNFILED doc? ────────────
+    # (a) POST /api/docs with NO `project` field is exactly what Make→Unfiled would
+    # send through the default project's mount (crew synthesizes that mount by
+    # design — proxy-routes.ts rootFor() skips the existence check for `default`).
+    status, text, _ = http("POST", f"{base}/api/docs", {
+        "name": PROBE_DOC,
+        "html": "<!DOCTYPE html><html><body><h1>probe</h1><p>unfiled</p></body></html>",
+    })
+    unfiled_created = status == 200 and json.loads(text).get("name") == PROBE_DOC
+    s_doc, _, ct_doc = http("GET", f"{base}/d/{PROBE_DOC}/doc")
+    s_list, t_list, _ = http("GET", f"{base}/api/docs")
+    listed = s_list == 200 and any(d.get("name") == PROBE_DOC for d in json.loads(t_list))
+    hosts_unfiled = unfiled_created and s_doc == 200 and ct_doc.startswith("text/html") and listed
+    # (b) a REFUSED bind (crew pinned unreachable above) is loud and creates NOTHING.
+    s_bind, t_bind, _ = http("POST", f"{base}/api/docs", {
+        "name": "bridge-ux-1-filed", "html": "<html><body>x</body></html>", "project": "default",
+    })
+    s_ghost, _, _ = http("GET", f"{base}/d/bridge-ux-1-filed/doc")
+    bind_refused_loudly = s_bind == 502 and "unreachable" in t_bind and s_ghost == 404
+    report["steps"]["bridge_ux1_probe3_unfiled_docs"] = {
+        "ok": hosts_unfiled and bind_refused_loudly,
+        "verdict": "B2 = make-Unfiled-work is viable: the bridge hosts a project-unbound doc "
+                   "natively (created, mounted, served, listed); binding needs a reachable crew "
+                   "and a refused bind creates nothing",
+        "unfiled_create": {"ok": hosts_unfiled, "status": status,
+                           "doc_served": s_doc, "listed": listed},
+        "refused_bind": {"ok": bind_refused_loudly, "status": s_bind,
+                         "ghost_doc_status": s_ghost, "body": t_bind[:200]},
+    }
+
+    # ── Probe 1 (§6.1, slice T): mid-run sends — QUEUE or DROP? ─────────────────
+    # A real command (feedback.submitted, materialized on the doc FIFO) and a burst
+    # of thread sends fired in the same instant. The accept gate must be run-state-
+    # independent: every send answers 200 + event_id (no busy-reject surface) and
+    # lands durably in the transcript IN SEND ORDER — queue semantics, never drop.
+    s_fb, _, _ = http("POST", f"{base}/api/events", {
+        "event_type": "wicked.interactive.feedback.submitted",
+        "payload": {"document_id": PROBE_DOC, "version_target": 0,
+                    "source_message_id": "probe-msg-0",
+                    "items": [{"selector": "probe", "type": "structural-change",
+                               "instruction": "probe — retitle the heading"}]},
+    })
+    send_rows = []
+    for i in (1, 2, 3):
+        s, t, _ = http("POST", f"{base}/api/events", {
+            "event_type": "wicked.interactive.chat.posted",
+            "payload": {"role": "user", "text": f"probe-send-{i}", "document_id": PROBE_DOC,
+                        "source_message_id": f"probe-msg-{i}"},
+        })
+        body = json.loads(t) if s == 200 else {}
+        send_rows.append({"status": s, "ack_keys": sorted(body.keys())})
+    sends_accepted = all(r["status"] == 200 for r in send_rows)
+    # Pin: the ack is {ok, event_id, correlation_id} — no queue position, no run id.
+    ack_shape_pinned = all(r["ack_keys"] == ["correlation_id", "event_id", "ok"] for r in send_rows)
+    entries = wait_conversation(
+        lambda es: sum(1 for e in es if str(e.get("text", "")).startswith("probe-send-")) >= 3)
+    landed = [e["text"] for e in entries if str(e.get("text", "")).startswith("probe-send-")]
+    landed_in_order = landed == ["probe-send-1", "probe-send-2", "probe-send-3"]
+    # The command executed AROUND the sends (the in-flight run was real):
+    fb_done = sse.wait_for(lambda f: f["event_type"] == "wicked.interactive.feedback.processed"
+                           and sse_payload(f).get("document_id") == PROBE_DOC)
+    vc = sse.wait_for(lambda f: f["event_type"] == "wicked.interactive.version.created"
+                      and sse_payload(f).get("document_id") == PROBE_DOC)
+    # Pin the B1 anchor gap: version.created carries NO causing-message correlation
+    # (the client supplies source_message_id; the bridge drops it — anchor is client-side).
+    vc_payload = sse_payload(vc)
+    anchor_gap_pinned = vc is not None and "source_message_id" not in vc_payload
+    report["steps"]["bridge_ux1_probe1_mid_run_sends"] = {
+        "ok": s_fb == 200 and sends_accepted and ack_shape_pinned and landed_in_order
+              and fb_done is not None and anchor_gap_pinned,
+        "verdict": "B1 = QUEUE: a send arriving while a command materializes is accepted "
+                   "(200 + event_id — no busy-reject exists on this wire) and lands durably "
+                   "in send order; version.created carries no source_message_id, so the "
+                   "version anchor stays client-side",
+        "command_accepted": s_fb == 200, "sends": send_rows,
+        "transcript_order": landed, "feedback_processed": fb_done is not None,
+        "version_created_payload_keys": sorted(vc_payload.keys()),
+    }
+
+    # ── Probe 4 (§7.9, slice AB): per-seat MID-STREAM lifecycle ─────────────────
+    # (a) the lifecycle types that exist are agent/service-owned — never UI-forgeable:
+    s_status, t_status, _ = http("POST", f"{base}/api/events", {
+        "event_type": "wicked.interactive.status.posted",
+        "payload": {"document_id": PROBE_DOC, "state": "error", "message": "forged"}})
+    s_err, t_err, _ = http("POST", f"{base}/api/events", {
+        "event_type": "wicked.interactive.error.raised",
+        "payload": {"document_id": PROBE_DOC, "source": "probe", "error": "forged"}})
+    lifecycle_locked = (s_status == 403 and "not a UI-emittable" in t_status
+                        and s_err == 403 and "not a UI-emittable" in t_err)
+    # (b) NO per-seat vocabulary exists on this wire:
+    s_seat, t_seat, _ = http("POST", f"{base}/api/events", {
+        "event_type": "wicked.interactive.seat.failed",
+        "payload": {"document_id": PROBE_DOC, "seat": "claude"}})
+    seat_absent = s_seat == 400 and "unknown event type" in t_seat
+    # (c) a REAL mid-stream death, observed on the wire: theme.requested against an
+    # absent file makes the materializer die mid-work; the bridge's whole failure
+    # surface is one DOC-scoped status.posted {state:"error"} — no seat, no turn.
+    http("POST", f"{base}/api/events", {
+        "event_type": "wicked.interactive.theme.requested",
+        "payload": {"document_id": PROBE_DOC, "path": str(tmp / "absent-brand.pdf")}})
+    err_frame = sse.wait_for(lambda f: f["event_type"] == "wicked.interactive.status.posted"
+                             and sse_payload(f).get("document_id") == PROBE_DOC
+                             and sse_payload(f).get("state") == "error")
+    err_payload = sse_payload(err_frame)
+    doc_scoped_error = (err_frame is not None
+                        and "file not found" in str(err_payload.get("message", ""))
+                        and not any(k in err_payload for k in ("seat", "seat_id", "turn", "reply_id")))
+    # …and the death reaches the durable transcript as agent narration:
+    entries = wait_conversation(
+        lambda es: any(e.get("role") == "agent" and e.get("state") == "error" for e in es))
+    error_narrated = any(e.get("role") == "agent" and e.get("state") == "error" for e in entries)
+    report["steps"]["bridge_ux1_probe4_seat_lifecycle"] = {
+        "ok": lifecycle_locked and seat_absent and doc_scoped_error and error_narrated,
+        "verdict": "C6 = NO per-seat lifecycle on this wire: a mid-stream death emits one "
+                   "doc-scoped status.posted {state:error, message} (SSE-relayed + narrated "
+                   "into the transcript); seat identity does not exist in the vocabulary and "
+                   "lifecycle types are not UI-forgeable",
+        "lifecycle_types_locked_to_agent": {"ok": lifecycle_locked,
+                                            "status_posted": s_status, "error_raised": s_err},
+        "seat_vocabulary_absent": {"ok": seat_absent, "status": s_seat},
+        "mid_stream_death_frame": {"ok": doc_scoped_error,
+                                   "payload_keys": sorted(err_payload.keys()),
+                                   "message": str(err_payload.get("message", ""))[:160]},
+        "death_narrated_in_transcript": error_narrated,
+    }
+
+    # ── Probe 2 (§6.3, slice T): thread-history read after RECONNECT ────────────
+    # Fidelity pins first: GET /api/conversation is a REAL history read but carries
+    # role/text/ts(/state) only — the send's source_message_id is dropped at append
+    # and version.created never enters the transcript, so version anchors cannot be
+    # rehydrated from this surface today (T's session-storage stopgap stands).
+    entries = conversation()
+    sent = [e for e in entries if str(e.get("text", "")).startswith("probe-send-")]
+    fidelity_pinned = (len(sent) == 3
+                       and all(set(e.keys()) <= {"role", "text", "ts", "state"} for e in entries)
+                       and not any("source_message_id" in e for e in entries))
+    # The reconnect that matters is a full bridge restart: disk (conversation.jsonl)
+    # must be the store, not process memory. Same root, same port, fresh process.
+    proc.send_signal(signal.SIGTERM)
+    try:
+        proc.wait(timeout=8)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=8)
+    proc = spawn_bridge()
+    wait_healthy(proc, step="bridge_ux1_probe2_restart")
+    entries_after = conversation()
+    landed_after = [e["text"] for e in entries_after if str(e.get("text", "")).startswith("probe-send-")]
+    survives_restart = landed_after == ["probe-send-1", "probe-send-2", "probe-send-3"]
+    s_list2, t_list2, _ = http("GET", f"{base}/api/docs")
+    remounted = s_list2 == 200 and any(d.get("name") == PROBE_DOC for d in json.loads(t_list2))
+    report["steps"]["bridge_ux1_probe2_thread_history"] = {
+        "ok": fidelity_pinned and survives_restart and remounted,
+        "verdict": "B3 = a REAL history read EXISTS: GET /d/:doc/api/conversation returns the "
+                   "announce history (chat + agent narration) from disk and survives a full "
+                   "bridge restart; fidelity is role/text/ts(/state) only — no message ids, no "
+                   "version markers — so text rehydrates now, anchors stay client-side",
+        "fidelity": {"ok": fidelity_pinned,
+                     "entry_keys": sorted({k for e in entries for k in e})},
+        "survives_restart": {"ok": survives_restart, "texts": landed_after},
+        "doc_remounted_after_restart": remounted,
     }
 
     # ── Advisory: invented wires OUTSIDE this scope (on the record, not fatal) ──
