@@ -51,7 +51,7 @@ function thread(key = KEY): DocMsg[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastSignalAt: {} });
   createDoc.mockResolvedValue({ name: DEMO, head: 1, kind: 'demo' });
   requestRecord.mockResolvedValue({ queued: true });
   postEvent.mockResolvedValue({ ok: true, event_id: 'e1', correlation_id: 'c1' });
@@ -164,10 +164,27 @@ describe('the composer can ask for a recording, and the ask is a message', () =>
 
   it('retires the offer while the recorder is running, and says so with the demo named', async () => {
     mount(DEMO);
-    act(() => useDocThreadStore.getState().setGenState(KEY, 'generating'));
+    act(() => {
+      useDocThreadStore.getState().setGenState(KEY, 'generating');
+      // VIDEO-FB honesty: claiming a LIVE run requires having heard one — the
+      // chip says "steering the live demo run" only after a signal arrived.
+      useDocThreadStore.setState((s) => ({ lastSignalAt: { ...s.lastSignalAt, [KEY]: Date.now() } }));
+    });
 
     await waitFor(() => expect(screen.queryByTestId('thread-record')).toBeNull());
     expect(screen.getByTestId('steering-chip')).toHaveTextContent('steering the live demo run');
+  });
+
+  it('never claims a live run it has not heard — pre-signal the chip says WAITING', async () => {
+    mount(DEMO);
+    act(() => useDocThreadStore.getState().setGenState(KEY, 'generating'));
+
+    await waitFor(() => expect(screen.queryByTestId('thread-record')).toBeNull());
+    // No wicked.interactive.* frame has arrived for this thread (lastSignalAt
+    // empty): the cold-operator finding was this chip reading "steering the
+    // live demo run" with nothing running anywhere.
+    expect(screen.getByTestId('steering-chip')).toHaveTextContent(
+      'sent — waiting for the demo service to pick this up');
   });
 
   it('a refused request states the failure — the composer never swallows it (§3.3)', async () => {

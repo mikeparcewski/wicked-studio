@@ -362,9 +362,19 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
               [key]: (messages[key] ?? []).map((m) =>
                 m.kind === 'user' && backlog.has(m.id) ? { ...m, failed: true } : m),
             };
+        // VIDEO-FB (the stuck-badge fix — the docfb2 GENERATED-set pattern, applied
+        // at the RUN seam): a run that COMPLETES has answered the send it was
+        // working, and the answer may have been chat alone — no version ever
+        // arrives to consume the head anchor, so without this the message wears
+        // "generating — being worked now" forever (then lies "no worker picked
+        // this up" at the budget). The head send resolves here, UN-TAGGED: there
+        // is no landing to tag, and nothing else will answer it.
+        const queue = s.pending[key] ?? [];
         const pending = backlog !== null && backlog.size > 0
           ? { pending: { ...s.pending, [key]: [] } }
-          : {};
+          : state === 'complete' && queue.length > 0
+            ? { pending: { ...s.pending, [key]: queue.slice(1) } }
+            : {};
         // §3.2/§3.3: filler never reaches the transcript — rotating flavour text and a
         // subject-less `Working…` are both dropped AT THE SEAM, so an upstream bridge that
         // still speaks either cannot put it on screen. A filtered frame still carries the

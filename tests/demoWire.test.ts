@@ -33,6 +33,7 @@ const KEY = threadKey(PROJECT, DEMO);
 const DRAFT: DemoDraft = {
   name: 'a demo of the checkout flow',
   targetUrl: 'https://shop.example/ ',
+  description: 'a demo of the checkout flow',
   steps: [
     { subject: 'the storefront', action: 'open it' },
     { subject: 'the cart', action: 'add a hoodie to it' },
@@ -92,13 +93,25 @@ describe('the ordered demo wizard — order is the thing it exists to carry', ()
     expect(stepTitle({ subject: ' the cart ', action: ' add a hoodie ' })).toBe('the cart — add a hoodie');
   });
 
-  it('is submittable only with a real target and at least one complete step', () => {
+  it('is submittable with a real target and something to author from (VIDEO-FB / CREW-UX-9)', () => {
     expect(draftReady(DRAFT)).toBe(true);
-    expect(draftReady({ ...DRAFT, steps: [] })).toBe(false);
+    // Describe-first is the PRIMARY path: a description alone is submittable —
+    // the governed run authors the steps from it.
+    expect(draftReady({ ...DRAFT, steps: [] })).toBe(true);
+    // …but an empty draft is not: no steps AND no description = nothing to author.
+    expect(draftReady({ ...DRAFT, steps: [], description: '  ' })).toBe(false);
     expect(draftReady({ ...DRAFT, targetUrl: 'shop.example' })).toBe(false);   // no scheme to open
     expect(draftReady({ ...DRAFT, targetUrl: '' })).toBe(false);
     expect(draftReady({ ...DRAFT, name: '  ' })).toBe(false);
     expect(draftReady({ ...DRAFT, steps: [...DRAFT.steps, { subject: 'x', action: '' }] })).toBe(false);
+  });
+
+  it('a describe-first draft (no steps) OMITS demo_steps and briefs the description', () => {
+    const draft = { ...DRAFT, steps: [] };
+    const body = demoDraftBody(PROJECT, draft, 'dmsg-9');
+    expect(body.demo_steps).toBeUndefined();
+    expect(body.brief).toBe(
+      'Record a demo of https://shop.example/:\na demo of the checkout flow');
   });
 
   it('AC: completion opens the demo conversation with the authored spec as its first line', async () => {

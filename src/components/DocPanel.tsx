@@ -92,6 +92,10 @@ export interface DocPanelDoc {
   /** The service's fork result; the owner re-reads the manifest and routes to it. */
   onForked: (result: ForkResult) => void;
   compare: CompareControl;
+  /** VIDEO-FB: the shown version's recorded video, when one EXISTS on the wire
+   *  (the owner probes `/d/:id/api/demo/recording/_v<N>.webm` before offering).
+   *  Rendered beside the export formats as a same-origin download. */
+  recording?: { href: string; file: string } | null;
 }
 
 export interface DocPanelProps {
@@ -102,11 +106,16 @@ export interface DocPanelProps {
   onCollapse: () => void;
   onTab: (tab: DocPanelTab) => void;
   doc: DocPanelDoc | null;
+  /** The surface's own noun (VIDEO-FB copy: a demo surface never says
+   *  "document"). Defaults to the Document surface's. */
+  subject?: 'document' | 'demo';
   /** The thread pane (DocumentThread) — the Chat tab's body. */
   children?: React.ReactNode;
 }
 
-const NO_DOC_REASON = 'Open a document first — this tab acts on one document.';
+function noDocReason(subject: 'document' | 'demo'): string {
+  return `Open a ${subject} first — this tab acts on one ${subject}.`;
+}
 
 /** Oldest → newest for pickers; the detail list flips it (newest first). */
 function byVersion(a: VersionEntry, b: VersionEntry): number {
@@ -145,7 +154,7 @@ const SEGMENT: React.CSSProperties = {
 
 // ── The Compare tab (slice K's controls, re-homed) ───────────────────────────
 
-function CompareTab({ doc }: { doc: DocPanelDoc }): React.ReactElement {
+function CompareTab({ doc, subject }: { doc: DocPanelDoc; subject: 'document' | 'demo' }): React.ReactElement {
   const c = doc.compare;
   return (
     <div className="flex flex-col gap-2" style={{ padding: '10px 12px' }}>
@@ -154,7 +163,7 @@ function CompareTab({ doc }: { doc: DocPanelDoc }): React.ReactElement {
         style={{ color: S.body, fontSize: 'var(--text-sm)', fontFamily: 'var(--font-sans)',
                  lineHeight: 1.4, margin: 0 }}
       >
-        Put two versions of this document side by side on the canvas — or stack
+        Put two versions of this {subject} side by side on the canvas — or stack
         them with adjustable opacity to spot layout shifts.
       </p>
       {!c.active && (
@@ -245,12 +254,16 @@ function CompareTab({ doc }: { doc: DocPanelDoc }): React.ReactElement {
 // ── The Versions tab — per-version detail off the manifest, plus the moved
 //    fork / in-thread gestures ────────────────────────────────────────────────
 
-/** The tab's honesty line, pinned by the rig: the operator asked for git
- *  history; the workspace has none on any wire, and the manifest IS the record. */
-export const VERSIONS_HISTORY_NOTE =
-  'From the document’s own version manifest — the document workspace keeps no '
-  + 'git log, so this manifest is the history: number, lineage, timestamp, and '
-  + 'the files each revision was built from.';
+/** The tab's honesty line, per surface noun (VIDEO-FB): the operator asked for
+ *  git history; the workspace has none on any wire, and the manifest IS the record. */
+export function versionsHistoryNote(subject: 'document' | 'demo'): string {
+  return `From the ${subject}’s own version manifest — the ${subject} workspace keeps no `
+    + 'git log, so this manifest is the history: number, lineage, timestamp, and '
+    + 'the files each revision was built from.';
+}
+
+/** The Document surface's spelling, pinned verbatim by the docfb rig. */
+export const VERSIONS_HISTORY_NOTE = versionsHistoryNote('document');
 
 function lineageOf(entry: VersionEntry): string {
   if (entry.parent === null) return 'root — the first version';
@@ -259,8 +272,9 @@ function lineageOf(entry: VersionEntry): string {
     : `continues v${entry.parent}`;
 }
 
-function VersionsTab({ doc, onShowChat }: {
+function VersionsTab({ doc, subject, onShowChat }: {
   doc: DocPanelDoc;
+  subject: 'document' | 'demo';
   /** Switch the panel to the Chat tab — the In-thread action's whole point is
    *  the thread, and a scroll inside a hidden tab would be a silent no-op. */
   onShowChat: () => void;
@@ -299,7 +313,7 @@ function VersionsTab({ doc, onShowChat }: {
         style={{ color: S.faint, fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-sans)',
                  lineHeight: 1.4, margin: 0 }}
       >
-        {VERSIONS_HISTORY_NOTE}
+        {versionsHistoryNote(subject)}
       </p>
       {error !== null && (
         <span
@@ -413,8 +427,9 @@ function VersionsTab({ doc, onShowChat }: {
 // ── The panel ─────────────────────────────────────────────────────────────────
 
 export function DocPanel({
-  open, tab, onExpand, onCollapse, onTab, doc, children,
+  open, tab, onExpand, onCollapse, onTab, doc, subject = 'document', children,
 }: DocPanelProps): React.ReactElement {
+  const NO_DOC_REASON = noDocReason(subject);
   // Collapsed: the RAIL — the panel's own expand affordance, always on screen
   // (the strip carries no toggle any more). Each tab button expands straight
   // onto its tab; doc-scoped tabs are disabled with the stated reason.
@@ -536,7 +551,12 @@ export function DocPanel({
             style={{ background: S.bar, borderTop: `1px solid ${S.border}`,
                      flexShrink: 0, padding: '8px 14px' }}
           >
-            <ExportMenu projectId={doc.projectId} docId={doc.docId} version={doc.selected} />
+            <ExportMenu
+              projectId={doc.projectId}
+              docId={doc.docId}
+              version={doc.selected}
+              recording={doc.recording ?? null}
+            />
           </div>
         )}
       </div>
@@ -557,14 +577,14 @@ export function DocPanel({
       {doc !== null && tab === 'compare' && (
         <div data-testid="panel-body" data-tab="compare" className="flex flex-col"
              style={{ flex: 1, minHeight: 0 }}>
-          <CompareTab doc={doc} />
+          <CompareTab doc={doc} subject={subject} />
         </div>
       )}
 
       {doc !== null && tab === 'versions' && (
         <div data-testid="panel-body" data-tab="versions" className="flex flex-col"
              style={{ flex: 1, minHeight: 0 }}>
-          <VersionsTab doc={doc} onShowChat={() => onTab('chat')} />
+          <VersionsTab doc={doc} subject={subject} onShowChat={() => onTab('chat')} />
         </div>
       )}
 

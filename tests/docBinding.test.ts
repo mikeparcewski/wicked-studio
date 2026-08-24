@@ -26,7 +26,7 @@ describe('docBinding (§6.2 slice U)', () => {
 
   it('a demo draft through the default mount carries no binding field', () => {
     const body = demoDraftBody(UNFILED_MOUNT, {
-      name: 'unfiled-demo', targetUrl: 'https://example.com',
+      name: 'unfiled-demo', targetUrl: 'https://example.com', description: '',
       steps: [{ subject: 'the storefront', action: 'open it' }],
     }, 'msg-1');
     expect(body.project).toBeUndefined();
