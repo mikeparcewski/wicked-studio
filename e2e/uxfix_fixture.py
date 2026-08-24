@@ -418,6 +418,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # gate.decided entries and honours `?action=`. Default False: no
          # standing rig's corpus changes.
          "chronicle": False,
+         # Slice BE (DES-UX-002 §8.1): the CREW-UX-7 durable-guidance store
+         # (crew#312 — the doc's "CREW-UX-4", renamed) — {run_id: note}. A rig
+         # seeds it over /__fixture; PUT /api/v1/runs/:id/guidance upserts it
+         # exactly as the daemon does ('' clears; 8KB named 400; 404 unknown;
+         # echo {runId, guidance}); the run DTOs echo `guidance` ONLY for ids
+         # present here — the wire's absent-when-never-set contract.
+         "guidance": {},
          }
 state_lock = threading.Lock()
 
@@ -1431,14 +1438,21 @@ def assemble_runs() -> list:
         chronicle_on = state["chronicle"]
         nerve_on = state["nerve"]
         gate_now = list(state["gate_now"])
+        guidance = dict(state["guidance"])
         # Slice S (DES-UX-001 §2.3): the null-claim run + this-lifetime launches
         # join BOTH wires (list + detail) so the DTO echo decorates identically.
         if project_dto_on and not state["no_runs"]:
             runs = runs + [UNFILED_RUN] + launched_runs
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
-            or chronicle_on or nerve_on or gate_now:
+            or chronicle_on or nerve_on or gate_now or guidance:
         runs = json.loads(json.dumps(runs))
         for r in runs:
+            # Slice BE (CREW-UX-7, crew#312): the DTO echoes the durable note
+            # ONLY when one is set — ABSENT (never null/'') otherwise, the
+            # api-types 0.9.0 contract the studio's absent-when-never reads.
+            note = guidance.get(r["session"]["id"])
+            if note:
+                r["session"]["guidance"] = note
             # Slice BA: r-upload's §1.5 five-unit plan; unit_ix follows the
             # distributed review (the unit the run is genuinely ON).
             if nerve_on and r["session"]["id"] == "r-upload":
@@ -2923,6 +2937,29 @@ class W2Handler(SimpleHTTPRequestHandler):
                     settings_store.update(body)
                 snapshot = json.loads(json.dumps(settings_store))
             return self._json(200, {"settings": snapshot})
+        # Slice BE: PUT /runs/:id/guidance — the CREW-UX-7 upsert (crew#312),
+        # mirrored verbatim: strict {text} body; the 8KB cap answers a 400
+        # NAMING the limit (the daemon's exact sentence); an unknown run is the
+        # daemon's 404; '' clears (the DTO drops the field); echo what stored.
+        m = re.match(r"^/api/v1/runs/([^/]+)/guidance$", path)
+        if m:
+            rid = urllib.parse.unquote(m.group(1))
+            text = body.get("text") if isinstance(body, dict) else None
+            if not isinstance(text, str) or set(body) != {"text"}:
+                return self._json(400, {"error": "Invalid request body"})
+            if len(text.encode("utf-8")) > 8192:
+                return self._json(400, {"error": (
+                    "guidance exceeds the 8192-byte cap — a note this size belongs "
+                    "in the problem statement or a linked doc")})
+            known = {r["session"]["id"] for r in assemble_runs()}
+            if rid not in known:
+                return self._json(404, {"error": "Run not found"})
+            with state_lock:
+                if text == "":
+                    state["guidance"].pop(rid, None)
+                else:
+                    state["guidance"][rid] = text
+            return self._json(200, {"runId": rid, "guidance": text})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
 
     def do_DELETE(self):  # noqa: N802 (stdlib naming)
