@@ -71,7 +71,9 @@ FRESH_LINE = "Applying the token bucket to PUT /upload"
 SLICE_FILES = ["HomeBoard.tsx", "LiveFeed.tsx", "ProjectCard.tsx",
                "GateChip.tsx", "useBoardHeadline.ts"]
 
-EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor", "upload-endpoint"]
+# C6 (BRIEF-UX-002): upload-endpoint (executing, no gate) now renders in the
+# WORKING band — NEEDS YOU is gates + fresh failures only.
+EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor"]
 
 report: dict = {"ok": False, "steps": {}}
 

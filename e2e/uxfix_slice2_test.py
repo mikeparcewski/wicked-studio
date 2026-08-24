@@ -77,7 +77,9 @@ from playwright.sync_api import sync_playwright  # noqa: E402 (import after serv
 
 SHOTS.mkdir(parents=True, exist_ok=True)
 
-EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor", "upload-endpoint"]
+# C6 (BRIEF-UX-002): upload-endpoint (executing, no gate) now renders in the
+# WORKING band — NEEDS YOU is gates + fresh failures only.
+EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor"]
 # The §1 spine, verbatim from MODE_SPECS — labels and first-run sublabels.
 MODE_LABELS = ["Chat", "Build", "Document", "Video"]
 MODE_KEYS = ["chat", "build", "document", "video"]

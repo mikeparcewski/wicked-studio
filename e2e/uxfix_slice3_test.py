@@ -85,7 +85,12 @@ from playwright.sync_api import sync_playwright  # noqa: E402 (import after serv
 
 SHOTS.mkdir(parents=True, exist_ok=True)
 
-EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor", "upload-endpoint"]
+# C6 (BRIEF-UX-002): the BOARD's NEEDS YOU band is gates + fresh failures only —
+# upload-endpoint (executing, no gate) renders in WORKING. The RAIL stays the
+# score-ordered top of ALL items (its §3.3 contract is unchanged), so its
+# leading rows still include the live run after the three that need a human.
+EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor"]
+RAIL_ORDER = ["q3-review-deck", "api-migration", "auth-refactor", "upload-endpoint"]
 # Retired vocabulary that must not survive inside the rail (AC 1). "Chats" and
 # "Work" are checked against the RAIL's text only — the board legitimately
 # renders run problems containing the word "work" in prose.
@@ -133,7 +138,7 @@ with sync_playwright() as p:
                '[data-testid="rail-heading-projects"] [data-testid="rail-project"]'))
                .map(r => r.dataset.projectId);
              return JSON.stringify(ids.slice(0, 4)) === JSON.stringify(expected); }""",
-        EXPECTED_ORDER,
+        RAIL_ORDER,
     )
     rail_rows = page.evaluate(
         """() => Array.from(document.querySelectorAll(
