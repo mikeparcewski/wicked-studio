@@ -246,11 +246,41 @@ with sync_playwright() as p:
                      c.querySelectorAll('[data-testid="quiet-summary"]').length === 1); }""")
     preserved["quietBudgetOneLine"] = budget_ok
     preserved_ok = all(preserved.values())
+
+    # ── Slice BA re-scope (DES-UX-002 §8.3): the first ACTIVE card with a
+    #    moving run now carries the phase strip + current-unit description
+    #    (EC46) — this rig OWNS that anatomy on the default W2 board, so a
+    #    future slice removing it fails here, not only in the BA rig. At rest
+    #    nothing is escalated: gate-approaching must be ABSENT board-wide, and
+    #    quiet cards never grow a strip (their budget stays one line, above).
+    ba = page.evaluate(
+        """() => { const up = document.querySelector(
+                     '[data-testid="project-card"][data-project-id="upload-endpoint"]');
+                   return {
+                     strip: !!up?.querySelector('[data-testid="phase-strip"]'),
+                     stripNodes: up?.querySelectorAll('[data-testid="phase-node"]').length ?? 0,
+                     unitDesc: up?.querySelector('[data-testid="active-unit-description"]')
+                       ?.textContent ?? null,
+                     feedPhase: document.querySelector(
+                       '[data-testid="live-feed-block-upload-endpoint"] '
+                       + '[data-testid="feed-phase-line"]')?.textContent ?? null,
+                     approachingAnywhere: !!document.querySelector(
+                       '[data-testid="gate-approaching"]'),
+                     quietStrips: document.querySelectorAll(
+                       '[data-testid="project-card"][data-variant="quiet"] '
+                       + '[data-testid="phase-strip"]').length,
+                   }; }""")
+    ba_ok = (
+        ba["strip"] and ba["stripNodes"] == 1  # W2's r-upload plan is 1 unit
+        and ba["unitDesc"] == "add rate-limiting to the upload endpoint"
+        and ba["feedPhase"] == "phase 1/1 · build"
+        and not ba["approachingAnywhere"] and ba["quietStrips"] == 0)
     browser.close()
 
 report["steps"]["dom_acs"] = {
     "ok": all([order_ok, narration_ok, fonts_ok, feed_ok, membership_ok, feed_updated,
-               ec15_card_bg, bar_gate_ok, bar_fail_ok, ec12_ok, ec13_ok, preserved_ok]),
+               ec15_card_bg, bar_gate_ok, bar_fail_ok, ec12_ok, ec13_ok, preserved_ok,
+               ba_ok]),
     "board_settled_w2_order": order_ok,
     "live_narration_streamed": narration_ok,
     "web_fonts_loaded": fonts_ok,
@@ -265,6 +295,7 @@ report["steps"]["dom_acs"] = {
     "ec12_accent_not_a_status_color": ec12_ok,
     "ec13_mono_narration_sans_labels": ec13_ok,
     "uxfix_preserved": preserved,
+    "slice_ba_card_enrichment": {**ba, "ok": ba_ok},
     "console_errors": console_errors[:10],
     "screenshots": [str(VSHOTS / n) for n in
                     ("vision-2-home-live-feed.png", "vision-2-active-card.png")],

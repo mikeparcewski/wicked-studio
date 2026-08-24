@@ -1650,7 +1650,9 @@ try:
             selected_at_head == ["false", "false", "true"],
             head_src is not None and head_src.endswith("/doc/3"),
             v1_scroll_disabled,
-            "scroll to" in v1_scroll_title and "merge" in v1_scroll_title,
+            # Slice-T re-scope (DES-UX-001 §6.3): the null-anchor tooltip now
+            # names the transcript-anchor gap, not the pre-T "merge" copy.
+            "scroll to" in v1_scroll_title and "version anchors" in v1_scroll_title,
             v3_scroll_enabled,
             v1_src == expected_v1_src,
             v1_query == "v=1",
@@ -2106,6 +2108,13 @@ try:
         page.wait_for_function(
             """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]'))
                  .opacity === '0'""", timeout=10000)
+        # Round-3 J3 re-scope (#108): hit targets retire on transitionEND (a
+        # mid-fade click must reach the strip, not the sensor below), so
+        # pointer-events flips to none a beat AFTER opacity settles — wait for
+        # that second settling stage instead of racing it.
+        page.wait_for_function(
+            """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]'))
+                 .pointerEvents === 'none'""", timeout=10000)
         strip_hidden_css = page.evaluate(
             """() => { const s = getComputedStyle(document.querySelector('[data-testid="version-strip"]'));
                        return { opacity: s.opacity, pointerEvents: s.pointerEvents }; }""")

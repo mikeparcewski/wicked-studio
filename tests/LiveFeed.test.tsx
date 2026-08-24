@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen, within } from '@testing-library/react';
 import type { CoreEvent, Project, ProjectMember, SessionStatus, SessionView } from '../src/api/types.js';
+import { useGateStore } from '../src/store/gates.js';
 import { useRuntimeStore } from '../src/store/runtime.js';
 import { makeUnit, makeView } from './factories.js';
 
@@ -75,6 +76,7 @@ describe('LiveFeed — the home route heartbeat (vision slice 2)', () => {
   beforeEach(() => {
     projects = [];
     members = {};
+    useGateStore.setState({ gates: {}, approaching: {} });
     useRuntimeStore.setState({ outputs: {}, logs: {}, deltaSeq: {}, docActivity: {}, seq: 0 });
   });
 
@@ -86,9 +88,13 @@ describe('LiveFeed — the home route heartbeat (vision slice 2)', () => {
     await vi.waitFor(() => {
       expect(screen.getByTestId('live-feed')).toHaveAttribute('data-blocks', '2');
     });
-    // Before any output: the block narrates the run's truthful headline (rule 3).
-    expect(within(block('p-b') as HTMLElement).getByTestId('feed-line'))
-      .toHaveTextContent('build — wire the board');
+    // Before any output: the block states its subject from the plan — the
+    // §1.3 phase line + the current unit's description (slice BA), which
+    // REPLACE the old raw `phase — title` narration fallback.
+    const b = block('p-b') as HTMLElement;
+    expect(within(b).getByTestId('feed-phase-line')).toHaveTextContent('phase 1/1 · build');
+    expect(within(b).getByTestId('feed-unit-description')).toHaveTextContent('wire the board');
+    expect(within(b).queryByTestId('feed-line')).toBeNull();
 
     push({ type: 'unitOutputDelta', session: 'run-b', ord: 0, text: 'Writing AC-3 for the checkout flow\n' } as CoreEvent);
 
@@ -160,6 +166,58 @@ describe('LiveFeed — the home route heartbeat (vision slice 2)', () => {
     expect(failLine).toHaveAttribute('href', '/p/p-fresh/build/run-f');
     expect(within(failLine).getByTestId('feed-open-run')).toBeInTheDocument();
     expect(block('p-stale')).toBeNull();
+  });
+
+  it('the block carries phase n/N · stage + the current unit for the LEAD run (slice BA, §1.3)', async () => {
+    projects = [project('p-b', { updated_at: Date.now() })];
+    members = { 'p-b': [member('p-b', 'run-b')] };
+    const view = makeView({ id: 'run-b', status: 'executing', unit_ix: 1 }, [
+      makeUnit({ id: 'run-b:u0', session_id: 'run-b', ord: 0, stage: 'recon', status: 'done', description: 'survey' }),
+      makeUnit({ id: 'run-b:u1', session_id: 'run-b', ord: 1, stage: 'build', status: 'distributed', description: 'wire the endpoint' }),
+      makeUnit({ id: 'run-b:u2', session_id: 'run-b', ord: 2, stage: 'test', status: 'pending', description: 'run the suite' }),
+    ]);
+    await board([view]);
+
+    const b = block('p-b') as HTMLElement;
+    expect(within(b).getByTestId('feed-phase-line')).toHaveTextContent('phase 2/3 · build');
+    expect(within(b).getByTestId('feed-unit-description')).toHaveTextContent('wire the endpoint');
+
+    // A live dispatch moves the line — same store fold, no navigation, no fetch.
+    push({ type: 'unitDispatched', session: 'run-b', ord: 2, attempt: 0 } as CoreEvent);
+    await vi.waitFor(() => {
+      expect(within(block('p-b') as HTMLElement).getByTestId('feed-phase-line'))
+        .toHaveTextContent('phase 3/3 · test');
+    });
+    expect(within(block('p-b') as HTMLElement).getByTestId('feed-unit-description'))
+      .toHaveTextContent('run the suite');
+  });
+
+  it('an approaching gate paints the amber criterion line; it retires when the gate posts (EC47)', async () => {
+    projects = [project('p-b', { updated_at: Date.now() })];
+    members = { 'p-b': [member('p-b', 'run-b')] };
+    await board([running('run-b')]);
+
+    act(() => {
+      useGateStore.getState().ingest({
+        type: 'gateEscalated', session: 'run-b', ord: 0,
+        condition: 'All acceptance criteria demonstrably verified with evidence attached',
+      } as CoreEvent);
+    });
+    const line = await vi.waitFor(() =>
+      within(block('p-b') as HTMLElement).getByTestId('feed-gate-approaching'));
+    // Truncated to 40 chars (§1.3), amber mono, full criterion on the tooltip.
+    expect(line).toHaveTextContent('gate:');
+    expect(line.title).toBe('All acceptance criteria demonstrably verified with evidence attached');
+    expect(line.style.color).toBe('var(--status-gate)');
+
+    act(() => {
+      useGateStore.getState().ingest({
+        type: 'awaitingHuman', session: 'run-b', ord: 0, prompt: 'Approve?',
+      } as CoreEvent);
+    });
+    await vi.waitFor(() => {
+      expect(within(block('p-b') as HTMLElement).queryByTestId('feed-gate-approaching')).toBeNull();
+    });
   });
 
   it('every narration line is a real link to its run — href ends with data-run-id (§10.1, slice J)', async () => {

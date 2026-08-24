@@ -96,11 +96,15 @@ describe('HomeBoard — live activity (slice 6)', () => {
     members = { 'p-a': [member('p-a', 'run-a')], 'p-b': [member('p-b', 'run-b')] };
     await board([running('run-a'), running('run-b')]);
 
-    // Before: both cards state their subject from phase + title (§3.4(b) rule 3) —
-    // no card is ever blank, and neither says "Working…".
-    const before = within(card('p-a')).getByTestId('live-line').textContent;
-    expect(before).toBe('build — wire the board');
-    expect(within(card('p-b')).getByTestId('live-line')).toHaveTextContent('build — wire the board');
+    // Before: both cards state their subject — since slice BA (DES-UX-002 §1.3)
+    // an active-run card's subject is the current unit DESCRIPTION line (the
+    // plan region), which replaces the generic `phase — title` narration
+    // fallback; the live line renders only what genuinely streamed. No card is
+    // ever blank, and neither says "Working…".
+    const before = within(card('p-a')).getByTestId('active-unit-description').textContent;
+    expect(before).toBe('wire the board');
+    expect(within(card('p-a')).queryByTestId('live-line')).toBeNull();
+    expect(within(card('p-b')).getByTestId('active-unit-description')).toHaveTextContent('wire the board');
 
     push({ type: 'unitOutputDelta', session: 'run-b', ord: 0, text: 'Writing the acceptance criteria for AC-3\n' } as CoreEvent);
 
@@ -110,8 +114,10 @@ describe('HomeBoard — live activity (slice 6)', () => {
       expect(within(card('p-b')).getByTestId('live-line'))
         .toHaveTextContent('build — Writing the acceptance criteria for AC-3');
     });
-    // The AC's other half: the card the user was NOT looking at is unchanged.
-    expect(within(card('p-a')).getByTestId('live-line').textContent).toBe(before);
+    // The AC's other half: the card the user was NOT looking at is unchanged —
+    // still the plan-region subject, still no streamed line.
+    expect(within(card('p-a')).getByTestId('active-unit-description').textContent).toBe(before);
+    expect(within(card('p-a')).queryByTestId('live-line')).toBeNull();
   });
 
   it('keeps streaming: the newest line replaces the previous one, no scroll, no dump', async () => {
@@ -226,6 +232,9 @@ describe('HomeBoard — live activity (slice 6)', () => {
     rerender(<HomeBoard runs={[running('run-new')]} navigate={() => {}} />);
 
     await vi.waitFor(() => expect(within(card('p-a')).getByTestId('run-chip')).toHaveAttribute('data-run-id', 'run-new'));
-    expect(within(card('p-a')).getByTestId('live-line')).toHaveTextContent('build — wire the board');
+    // Slice BA: the launched run's subject is the plan region's description
+    // line (nothing has streamed yet — no generic narration fallback).
+    expect(within(card('p-a')).getByTestId('active-unit-description')).toHaveTextContent('wire the board');
+    expect(within(card('p-a')).getByTestId('phase-strip')).toBeInTheDocument();
   });
 });

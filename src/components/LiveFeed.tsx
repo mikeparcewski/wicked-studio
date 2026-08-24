@@ -1,7 +1,9 @@
-import type { SessionView } from '../api/types.js';
+import type { SessionView, WorkUnit } from '../api/types.js';
+import { currentUnitOf, MOVING, phaseLineOf, phaseNodesOf, truncate } from '../board/phaseProgress.js';
 import { activeUnit, lastMeaningfulLines, useRunHeadline } from '../hooks/useBoardHeadline.js';
 import type { BoardProject } from '../hooks/useBoardModel.js';
 import { modePath, type Navigate } from '../hooks/useRoute.js';
+import { useGateStore } from '../store/gates.js';
 import { outputKey, useRuntimeStore } from '../store/runtime.js';
 import { ago, SIGNAL_BAR } from './ProjectCard.js';
 
@@ -24,9 +26,6 @@ import { ago, SIGNAL_BAR } from './ProjectCard.js';
  * line fades in at the top of its block (`--dur-fast`), a new block fades in
  * (`--dur-base`), nothing loops (see `.wk-feed-*` in global.css).
  */
-
-/** Statuses in which a run is moving under its own power — what earns a block. */
-const MOVING: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
 
 /** Runs narrating per block, and lines for the lead run — the block never exceeds
  *  3 lines (§1.3): 2 from the newest run, 1 from the next; extras are silence. */
@@ -72,14 +71,24 @@ type PathLink = (path: string) => { href: string; onClick: (e: React.MouseEvent)
  * deep-linkable. The operator sees a run narrating and CAN click the words.
  * No underline at rest (mono narration must not read as prose links); hover
  * lifts the ink and fades in the ↗ at line-end (`.wk-feed-link`, global.css).
+ *
+ * Slice BA (DES-UX-002 §1.3): when the block's phase line + current-unit
+ * description are rendering above (`fallback: false`, the lead run with a
+ * plan), the description line REPLACES the raw narration fallback — nothing
+ * streamed means no line here, never the same unit description twice.
  */
-function RunLines({ view, max, link }: { view: SessionView; max: number; link: Link }): React.ReactElement {
+function RunLines({ view, max, link, fallback = true }: {
+  view: SessionView;
+  max: number;
+  link: Link;
+  fallback?: boolean;
+}): React.ReactElement {
   const runId = view.session.id;
   const ord = activeUnit(view)?.ord ?? 0;
   const text = useRuntimeStore((s) => s.outputs[outputKey(runId, ord)]);
   const headline = useRunHeadline(view);
   const lines = lastMeaningfulLines(text, max);
-  const shown = lines.length > 0 ? lines : [headline];
+  const shown = lines.length > 0 ? lines : fallback ? [headline] : [];
   return (
     <>
       {shown.map((line) => (
@@ -101,9 +110,55 @@ function RunLines({ view, max, link }: { view: SessionView; max: number; link: L
   );
 }
 
+/**
+ * The block's phase line + current-unit description (DES-UX-002 §1.3, slice
+ * BA): `phase n/N · stage-name` derived from the lead moving run's unit plan
+ * (§1.2's CLIENT derivation, live `unitDispatched` on top), and beneath it the
+ * unit's own description — the block names WHERE the work is, so a project
+ * accumulating evidence below the triage threshold is still legible from the
+ * periphery (the brief's "quiet accumulation" condition).
+ */
+function FeedPhase({ runId, unit, line }: {
+  runId: string;
+  unit: WorkUnit;
+  line: string;
+}): React.ReactElement {
+  return (
+    <>
+      <p data-testid="feed-phase-line" data-run-id={runId} style={{ ...CSS.line, color: 'var(--ink-muted)' }}>
+        {line}
+      </p>
+      <p
+        data-testid="feed-unit-description"
+        data-run-id={runId}
+        title={unit.description}
+        style={{ ...CSS.line, color: 'var(--ink-body)' }}
+      >
+        {truncate(unit.description, 60)}
+      </p>
+    </>
+  );
+}
+
 function FeedBlock({ item, navigate }: { item: BoardProject; navigate: Navigate }): React.ReactElement {
   const { project, runs, signal } = item;
   const moving = runs.filter((v) => MOVING.has(v.session.status));
+  // Slice BA (§1.3): the lead run's current unit + phase line, derived once at
+  // the block level so the narration fallback below KNOWS the description line
+  // is carrying its duty (`fallback: false`) — the two never render as twins.
+  const lead = moving[0];
+  const leadLog = useRuntimeStore((s) => (lead === undefined ? undefined : s.logs[lead.session.id]));
+  const leadUnit = lead === undefined ? undefined : currentUnitOf(lead.units, leadLog);
+  const leadLine = lead === undefined ? null : phaseLineOf(phaseNodesOf(lead.units, leadUnit?.ord));
+  // Slice BA (§1.3): an escalated-but-not-posted gate on any of this project's
+  // runs — the amber approaching line, same store fold the card chip reads.
+  const near = useGateStore((s) => {
+    for (const v of runs) {
+      const g = s.approaching[v.session.id];
+      if (g !== undefined) return g;
+    }
+    return undefined;
+  });
   const failing = signal !== null && signal.kind === 'failing'
     ? runs.find((v) => v.session.status === 'failed')
     : undefined;
@@ -128,9 +183,31 @@ function FeedBlock({ item, navigate }: { item: BoardProject; navigate: Navigate 
         {/* The block header keeps its project-level link — two altitudes, both real. */}
         <a {...pathLink(modePath(project.id, 'build'))} style={CSS.name}>{project.name}</a>
       </p>
+      {/* Slice BA (§1.3): phase n/N · stage + the current unit, off the lead run. */}
+      {lead !== undefined && leadUnit !== undefined && leadLine !== null && (
+        <FeedPhase runId={lead.session.id} unit={leadUnit} line={leadLine} />
+      )}
       {moving.slice(0, MAX_RUNS).map((v, i) => (
-        <RunLines key={v.session.id} view={v} max={i === 0 ? MAX_LINES : 1} link={runLink} />
+        <RunLines
+          key={v.session.id}
+          view={v}
+          max={i === 0 ? MAX_LINES : 1}
+          link={runLink}
+          // The lead run's generic fallback is REPLACED by the description
+          // line above whenever that line is rendering (§1.3).
+          fallback={!(i === 0 && leadUnit !== undefined && leadLine !== null)}
+        />
       ))}
+      {near !== undefined && (
+        <p
+          data-testid="feed-gate-approaching"
+          data-run-id={near.runId}
+          title={near.condition}
+          style={{ ...CSS.line, color: 'var(--status-gate)' }}
+        >
+          ⏳ gate: {truncate(near.condition, 40)}
+        </p>
+      )}
       {failing !== undefined && signal !== null && (
         // §10.1: the whole failure line is now the run link (anchors don't
         // nest); `[open run]` stays as the visible affordance inside it.

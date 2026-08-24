@@ -107,13 +107,27 @@ export interface HeadlineInput {
 export function deriveHeadline({ view, text, log, deltaSeq }: HeadlineInput): string {
   const unit = activeUnit(view);
   const phase = unit?.stage ?? view.session.status;
-  const structured = [...(log ?? [])].reverse().find((e) => STRUCTURED.has(e.type));
+  return (
+    deriveNarration({ view, text, log, deltaSeq }) ??
+    `${phase} — ${clamp((unit?.description ?? view.session.problem).trim())}`
+  );
+}
+
+/**
+ * Rules 1–2 only: the line is real narration (a structured status or streamed
+ * output), or `null` when only rule 3's generic fallback would remain. Slice BA
+ * (DES-UX-002 §1.3) is the consumer: on a card with an active run the phase
+ * strip + current-unit description REPLACE the generic narration line, so the
+ * card's live line renders only what actually streamed — never the same unit
+ * description twice.
+ */
+export function deriveNarration({ view, text, log, deltaSeq }: HeadlineInput): string | null {
+  const unit = activeUnit(view);
+  const phase = unit?.stage ?? view.session.status;
   const what =
-    (structured !== undefined && structured.seq > deltaSeq ? structured.detail || null : null) ??
-    lastMeaningfulLine(text) ??
-    unit?.description ??
-    view.session.problem;
-  return `${phase} — ${clamp(what.trim())}`;
+    (log ?? []).slice().reverse().find((e) => STRUCTURED.has(e.type) && e.seq > deltaSeq)?.detail ||
+    lastMeaningfulLine(text);
+  return what == null || what === '' ? null : `${phase} — ${clamp(what.trim())}`;
 }
 
 /**
@@ -128,4 +142,17 @@ export function useRunHeadline(view: SessionView): string {
   const log = useRuntimeStore((s) => s.logs[runId]);
   const deltaSeq = useRuntimeStore((s) => s.deltaSeq[runId] ?? -1);
   return deriveHeadline({ view, text, log, deltaSeq });
+}
+
+/**
+ * The live narration for one run, or `null` when nothing has genuinely
+ * streamed (rules 1–2 empty) — same store, same slices as `useRunHeadline`.
+ */
+export function useRunNarration(view: SessionView): string | null {
+  const runId = view.session.id;
+  const ord = activeUnit(view)?.ord ?? 0;
+  const text = useRuntimeStore((s) => s.outputs[outputKey(runId, ord)]);
+  const log = useRuntimeStore((s) => s.logs[runId]);
+  const deltaSeq = useRuntimeStore((s) => s.deltaSeq[runId] ?? -1);
+  return deriveNarration({ view, text, log, deltaSeq });
 }
