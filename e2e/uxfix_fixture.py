@@ -435,6 +435,19 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # echo {runId, guidance}); the run DTOs echo `guidance` ONLY for ids
          # present here — the wire's absent-when-never-set contract.
          "guidance": {},
+         # ── VIDEO-FB (the video-surface overhaul rig) ─────────────────────────
+         # demo_bare_labels — the storyboard's chapter names are the BARE step
+         #   indices ("0", "1", …), the live-observed junk-spec shape the cold
+         #   operator hit ("1 0" / "2 1" cards): the agent authored placeholder
+         #   labels into demo.spec.mjs and storyboard() rendered them verbatim.
+         #   The studio substitutes the step SUBJECTS it knows from the thread's
+         #   authored-spec message; this switch is that reproduction. Default
+         #   False: standing rigs keep the titled chapters.
+         "demo_bare_labels": False,
+         # demo_record_ms — how long one demo.requested recording run takes
+         #   before its version lands (0 = instant). >0 lets a rig witness the
+         #   record button's point-of-action pending state (EC37).
+         "demo_record_ms": 0,
          }
 state_lock = threading.Lock()
 
@@ -1135,106 +1148,178 @@ NERVE_UPLOAD_UNITS = [
 GATE_NOW_PROMPT = ("Approve unit 3 before it runs: apply the review fixes to "
                    "the middleware chain")
 
-# ── The vision-slice-4 Video surface (DES-VISION-001 §5.6): one recorded demo ──
+# ── The Video surface's recorded demo (DES-VISION-001 §5.6, re-grounded by the
+#    VIDEO-FB round) ─────────────────────────────────────────────────────────────
 #
 # The interactive bridge, reduced to what Video mode reads through crew's proxy:
-# a `kind: "demo"` doc in q3-review-deck's registry, its spec (4 ordered steps —
-# the §5.6 wireframe's `1 2 3 4` storyboard), the latest recording (a GIF, so no
-# ffmpeg/mp4 machinery is faked), a 1-version manifest, and the frames
-# themselves. All behind the `demo` switch so the board rigs' doc tiles never
-# grow a tile they did not assert. Frames are drawn lazily with Pillow (already
-# a rig prerequisite since vision slice 1) and cached per process.
+# a `kind: "demo"` doc in q3-review-deck's registry, its version manifest, the
+# storyboard version HTML, and the recording endpoint the storyboard embeds.
+#
+# VIDEO-FB re-ground: the storyboard below mirrors the REAL bridge's
+# `storyboard()` (wicked-interactive src/service/demo.js) — a `<video>` whose
+# src is the ROOT-ABSOLUTE `/d/<doc>/api/demo/recording/_v<N>.webm`, chapter
+# buttons whose thumbnails ride the same root-absolute endpoint, wi-demo__*
+# classes and the inline seek script. The previous fixture shape (a GIF at a
+# RELATIVE `../demo/` path) is exactly what let the base-href machinery
+# self-confirm while every real storyboard's root-absolute URLs fell through to
+# the SPA fallback and answered HTML (MediaError 4). The recording endpoint
+# serves a real tiny VP8 webm (e2e/fixtures/tiny.webm, checked in) with Range
+# support, so a rig can assert the <video> actually reaches loadeddata.
+# All behind the `demo` switch so the board rigs' doc tiles never grow a tile
+# they did not assert. Thumbs are drawn lazily with Pillow and cached.
 
 DEMO_NAME = "checkout-demo"
-DEMO_DOC = {"name": DEMO_NAME, "kind": "demo", "head": 1, "versions": 1,
-            "updated_at": iso(NOW0 - 5 * MIN)}
+DEMO_TARGET = "https://shop.example/"
 DEMO_STEPS = [
     {"index": 0, "title": "Open the storefront", "timestamp": 0,
-     "thumbnail": f"/d/{DEMO_NAME}/demo/thumb-0.png"},
+     "action": "land on the home page"},
     {"index": 1, "title": "Add a hoodie to the cart", "timestamp": 6,
-     "thumbnail": f"/d/{DEMO_NAME}/demo/thumb-1.png"},
+     "action": "put one in the basket"},
     {"index": 2, "title": "Enter the card details", "timestamp": 13,
-     "thumbnail": f"/d/{DEMO_NAME}/demo/thumb-2.png"},
+     "action": "fill the payment form"},
     {"index": 3, "title": "Confirm the order", "timestamp": 21,
-     "thumbnail": f"/d/{DEMO_NAME}/demo/thumb-3.png"},
+     "action": "place the order"},
 ]
-DEMO_MANIFEST = {"head": 1, "kind": "demo", "versions": [
-    {"version": 1, "parent": None, "feedback_file": None, "html_file": "v1.html",
-     "created_at": iso(NOW0 - 5 * MIN), "meta": {}}]}
+
+# The demo's AUTHORED SPEC as its conversation's opening message — the exact
+# `demoBrief()` shape the wizard writes (`N. subject — action` per step). The
+# thread-history read (GET /d/:doc/api/conversation) serves it, which is BOTH
+# the video-mode reload-restore AC's corpus AND where the studio reads the step
+# SUBJECTS it substitutes for a junk-labelled storyboard's chapter names.
+DEMO_BRIEF = f"Record a demo of {DEMO_TARGET}:\n" + "\n".join(
+    f"{i + 1}. {s['title']} — {s['action']}" for i, s in enumerate(DEMO_STEPS))
+
+# The demo's manifest is MUTABLE now (VIDEO-FB): a demo.requested recording run
+# appends a new `kind:"demo"` landing, exactly as materializeDemo commits one.
+demo_lock = threading.Lock()
+demo_versions_list: list = [
+    {"version": 1, "parent": None, "feedback_file": None, "html_file": "_v1.html",
+     "created_at": iso(NOW0 - 5 * MIN), "meta": {}}]
 
 
-def storyboard_doc_html(version: int) -> str:
-    """The demo's version HTML — its STORYBOARD (DES-FEEDBACK-001 §7.4), as the real
-    bridge's storyboard() lands it: the recording embedded above an ordered chapter
-    rail, thumbnails included. The studio frames this whole; chapter navigation
-    lives IN here (§9: never re-drawn outside the iframe)."""
+def demo_manifest() -> dict:
+    with demo_lock:
+        versions = [dict(e) for e in demo_versions_list]
+    return {"head": max(e["version"] for e in versions), "kind": "demo",
+            "versions": versions}
+
+
+def demo_doc_row() -> dict:
+    m = demo_manifest()
+    return {"name": DEMO_NAME, "kind": "demo", "head": m["head"],
+            "versions": len(m["versions"]), "updated_at": iso(NOW0 - 5 * MIN)}
+
+
+def demo_land_recording() -> int:
+    """Commit one recording landing (the materializeDemo shape) and announce it:
+    a status line naming the work, then version.created kind "demo"."""
+    with demo_lock:
+        v = max(e["version"] for e in demo_versions_list) + 1
+        demo_versions_list.append(
+            {"version": v, "parent": v - 1, "feedback_file": None,
+             "html_file": f"_v{v}.html", "created_at": iso(NOW0 + v * SEC), "meta": {}})
+    queue_interactive("wicked.interactive.version.created", {
+        "project_id": "q3-review-deck", "document_id": DEMO_NAME,
+        "version": v, "parent": v - 1, "kind": "demo", "html_file": f"_v{v}.html"})
+    return v
+
+
+def fmt_time(seconds: int) -> str:
+    s = max(0, int(seconds))
+    return f"{s // 60}:{s % 60:02d}"
+
+
+def storyboard_doc_html(version: int, bare_labels: bool = False) -> str:
+    """The demo's version HTML — its STORYBOARD, as the REAL bridge's
+    storyboard() lands it (demo.js): the `<video>` at the doc's ROOT-ABSOLUTE
+    recording endpoint, chapter buttons with root-absolute thumbnails, the
+    inline seek script. `bare_labels` reproduces the junk-spec labels the cold
+    operator hit (chapter names that are the bare step indices)."""
+    rec = f"/d/{DEMO_NAME}/api/demo/recording"
     chapters = "".join(
-        f'<li class="ch" data-step="{i}"><img src="../demo/thumb-{i}.png" alt="">'
-        f"<span>{i + 1}. {s['title']}</span></li>"
+        f'<li><button class="wi-demo__chapter" type="button" data-seek="{s["timestamp"]}"'
+        f' title="Jump to {s["title"]}">'
+        f'<span class="wi-demo__thumb">'
+        f'<img src="{rec}/_v{version}.step{i:02d}.png" alt="" loading="lazy">'
+        f'<span class="wi-demo__badge">{fmt_time(s["timestamp"])}</span></span>'
+        f'<span class="wi-demo__cap"><span class="wi-demo__idx">{i + 1}</span>'
+        f'<span class="wi-demo__name">{i if bare_labels else s["title"]}</span></span>'
+        f"</button></li>"
         for i, s in enumerate(DEMO_STEPS))
+    script = (
+        '<script>(function(){var v=document.getElementById("wi-demo-video");if(!v)return;'
+        'var cs=document.querySelectorAll(".wi-demo__chapter");'
+        "for(var i=0;i<cs.length;i++){(function(b){b.addEventListener(\"click\",function(){"
+        'var t=parseFloat(b.getAttribute("data-seek"))||0;try{v.currentTime=t;}catch(e){}'
+        "v.play().catch(function(){});});})(cs[i]);}})();</script>")
     return (
         '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-        "body{margin:0;background:#0b1020;color:#e6e9f5;font:14px system-ui}"
-        ".player{height:56vh;display:flex;align-items:center;justify-content:center;"
-        "background:#141a30;border-bottom:1px solid #26304f}"
-        ".player img{max-height:100%;max-width:100%}"
-        "ol{display:flex;gap:12px;list-style:none;margin:0;padding:14px;overflow-x:auto}"
-        ".ch{background:#1b2340;border:1px solid #26304f;border-radius:8px;"
-        "padding:8px;width:180px;flex-shrink:0}"
-        ".ch img{width:100%;border-radius:4px;display:block;margin-bottom:6px}"
-        ".ch span{white-space:nowrap;font-size:12px}"
+        "body{margin:0;background:#fff;color:#1e293b;font:14px system-ui}"
+        ".wi-demo{max-width:920px;margin:0 auto;padding:8px 4px 40px}"
+        ".wi-demo__player{margin:0 0 22px;border-radius:8px;overflow:hidden;background:#0b1020}"
+        ".wi-demo__player video{display:block;width:100%;height:auto;background:#0b1020}"
+        ".wi-demo__chapters{list-style:none;margin:0;padding:0;display:grid;"
+        "grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}"
+        ".wi-demo__chapter{display:flex;flex-direction:column;text-align:left;width:100%;"
+        "padding:0;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;"
+        "background:#fff;color:inherit;font:inherit;cursor:pointer}"
+        ".wi-demo__thumb{position:relative;display:block;width:100%;aspect-ratio:16/9;background:#0b1020}"
+        ".wi-demo__thumb img{display:block;width:100%;height:100%;object-fit:cover}"
+        ".wi-demo__badge{position:absolute;right:6px;bottom:6px;background:rgba(11,16,32,.85);"
+        "color:#fff;font-size:12px;padding:2px 6px;border-radius:4px}"
+        ".wi-demo__cap{display:flex;gap:8px;align-items:baseline;padding:10px 12px}"
+        ".wi-demo__idx{font-size:12px;font-weight:700;color:#0891b2}"
+        ".wi-demo__name{font-weight:600;color:#1e293b;font-size:14px;line-height:1.3}"
         "</style></head>"
         f'<body data-storyboard="{DEMO_NAME}" data-storyboard-version="{version}">'
-        '<div class="player"><img src="../demo/v1.gif" alt="recording"></div>'
-        f"<ol>{chapters}</ol></body></html>")
+        '<section class="wi-demo">'
+        f"<header class=\"wi-demo__head\"><h1>{DEMO_NAME}</h1>"
+        '<p class="wi-demo__target">Recorded against '
+        '<a href="https://shop.example/" target="_blank" rel="noopener">https://shop.example/</a></p>'
+        "</header>"
+        '<div class="wi-demo__player">'
+        f'<video id="wi-demo-video" controls playsinline preload="metadata"'
+        f' src="{rec}/_v{version}.webm"></video></div>'
+        '<p class="wi-demo__chaptitle">Chapters</p>'
+        f'<ol class="wi-demo__chapters">{chapters}</ol>'
+        f"{script}</section></body></html>")
+
+
+# The recording bytes: a REAL (tiny) VP8 webm, checked in — the rig's <video>
+# must reach loadeddata against real bytes, not a stand-in the browser rejects.
+_tiny_webm: list = [None]
+
+
+def tiny_webm() -> bytes:
+    if _tiny_webm[0] is None:
+        _tiny_webm[0] = (Path(__file__).resolve().parent / "fixtures" / "tiny.webm").read_bytes()
+    return _tiny_webm[0]
+
 
 _demo_frames: dict = {}
 
 
-def demo_frame(name: str) -> bytes:
-    """Draw one demo frame (the recording GIF or a chapter thumbnail) with
-    Pillow, lazily, cached. A browser-window pastiche of the recorded shop —
-    light, so the player reads as CONTENT against the app's dark chrome."""
-    cached = _demo_frames.get(name)
+def demo_frame(step: int, title: str) -> bytes:
+    """Draw one chapter thumbnail with Pillow, lazily, cached — a light
+    browser-window pastiche so the thumbs read as CONTENT."""
+    cached = _demo_frames.get(step)
     if cached is not None:
         return cached
     import io
 
     from PIL import Image, ImageDraw
 
-    if name == "v1.gif":
-        w, h = 960, 540
-        img = Image.new("RGB", (w, h), (244, 241, 234))
-        d = ImageDraw.Draw(img)
-        d.rectangle([0, 0, w, 44], fill=(255, 253, 247), outline=(221, 214, 196))
-        for i in range(3):  # traffic lights
-            d.ellipse([14 + i * 20, 16, 26 + i * 20, 28], fill=(200, 196, 186))
-        d.rounded_rectangle([120, 10, w - 120, 34], radius=12, fill=(238, 234, 224))
-        d.text((136, 15), "shop.example / checkout", fill=(120, 116, 106))
-        d.text((64, 84), "The Hoodie Shop", fill=(27, 27, 27))
-        d.rectangle([64, 130, 448, 420], fill=(255, 253, 247), outline=(221, 214, 196))
-        d.rectangle([96, 160, 416, 330], fill=(230, 226, 214))
-        d.text((96, 350), "Heavyweight hoodie", fill=(27, 27, 27))
-        d.text((96, 372), "$68", fill=(74, 70, 60))
-        d.rounded_rectangle([512, 200, 800, 248], radius=8, fill=(27, 98, 74))
-        d.text((560, 216), "Add to cart", fill=(255, 255, 255))
-        d.text((512, 280), "Step 2 of 4 - adding the hoodie", fill=(120, 116, 106))
-        buf = io.BytesIO()
-        img.save(buf, format="GIF")
-        body = buf.getvalue()
-    else:  # thumb-<n>.png
-        n = int(name.split("-")[1].split(".")[0])
-        img = Image.new("RGB", (296, 168), (244, 241, 234))
-        d = ImageDraw.Draw(img)
-        d.rectangle([0, 0, 296, 22], fill=(255, 253, 247), outline=(221, 214, 196))
-        d.rectangle([24, 44, 272, 132], fill=(255, 253, 247), outline=(221, 214, 196))
-        d.rounded_rectangle([24 + n * 30, 140, 80 + n * 30, 158], radius=6, fill=(27, 98, 74))
-        d.text((36, 52), DEMO_STEPS[n]["title"], fill=(27, 27, 27))
-        d.text((36, 76), f"step {n + 1}", fill=(120, 116, 106))
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        body = buf.getvalue()
-    _demo_frames[name] = body
+    img = Image.new("RGB", (296, 168), (244, 241, 234))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, 296, 22], fill=(255, 253, 247), outline=(221, 214, 196))
+    d.rectangle([24, 44, 272, 132], fill=(255, 253, 247), outline=(221, 214, 196))
+    d.rounded_rectangle([24 + step * 30, 140, 80 + step * 30, 158], radius=6, fill=(27, 98, 74))
+    d.text((36, 52), title, fill=(27, 27, 27))
+    d.text((36, 76), f"step {step + 1}", fill=(120, 116, 106))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    body = buf.getvalue()
+    _demo_frames[step] = body
     return body
 
 # ── The slice-E repo profile surface (DES-FEEDBACK-001 §3): one indexed repo ──
@@ -1758,6 +1843,39 @@ class W2Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _media(self, body: bytes, ctype: str) -> None:
+        """Serve media bytes the way the bridge's recording route does. A media
+        element asks in Ranges (Chromium sends `bytes=0-` for a <video>), so a
+        single-range request is answered 206 — without it the element can stall
+        before `loadeddata` and the playback AC would flake on a rig artifact."""
+        rng = self.headers.get("Range") or ""
+        m = re.match(r"^bytes=(\d*)-(\d*)$", rng)
+        if m and (m.group(1) or m.group(2)):
+            start = int(m.group(1) or 0)
+            end = int(m.group(2)) if m.group(2) else len(body) - 1
+            end = min(end, len(body) - 1)
+            if start > end:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{len(body)}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            chunk = body[start:end + 1]
+            self.send_response(206)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{len(body)}")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(len(chunk)))
+            self.end_headers()
+            self.wfile.write(chunk)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _ws(self) -> None:
         """Accept the upgrade, then stream `unitOutputDelta` frames for the live
         run — `useRuns` gates its first fetch on a connected socket, so the
@@ -2108,7 +2226,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 demo_on = state["demo"]
             seeds = NOTES_DOCS if pid == "notes" else []
             if demo_on and pid == "q3-review-deck":
-                seeds = seeds + [DEMO_DOC]
+                seeds = seeds + [demo_doc_row()]
             self._json(200, seeds + created)
             return True
         # The rest of the interactive surface the Document journey reads (slice 6).
@@ -2323,6 +2441,19 @@ class W2Handler(SimpleHTTPRequestHandler):
             pid, doc = (urllib.parse.unquote(g) for g in m.groups())
             with conversations_lock:
                 entries = [dict(e) for e in conversations.get((pid, doc), [])]
+            with state_lock:
+                demo_on = state["demo"]
+            if demo_on and doc == DEMO_NAME:
+                # The recorded demo's announce history opens with its authored
+                # spec (the wizard's brief IS the doc's first user line on the
+                # real bridge — log_conversation at create time). The seed is
+                # prepended here so flipping the `demo` switch on cannot leave
+                # the registry row and the history out of step.
+                if not any(e.get("role") == "user"
+                           and str(e.get("text", "")).startswith("Record a demo of")
+                           for e in entries):
+                    entries = [{"role": "user", "text": DEMO_BRIEF,
+                                "ts": iso(NOW0 - 6 * MIN)}] + entries
             self._json(200, entries)
             return True
         # /api/v1/projects/<pid>/interactive/d/<doc>/api/versions — the manifest.
@@ -2332,7 +2463,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 demo_on = state["demo"]
             if demo_on and doc == DEMO_NAME:
-                self._json(200, DEMO_MANIFEST)
+                self._json(200, demo_manifest())
                 return True
             versions = doc_versions(pid, doc)
             if not versions:
@@ -2352,17 +2483,27 @@ class W2Handler(SimpleHTTPRequestHandler):
         if m:
             self._json(404, {"error": f"no such route on the bridge: {path}"})
             return True
+        # GET /d/<doc>/api/demo/recording/<name> — the REAL bridge's recording
+        # stream (server.js `app.get("/api/demo/recording/:name")`), path-locked
+        # to the slug charset. Serves the tiny checked-in webm (with Range, as
+        # a media element requests it) and the Pillow chapter thumbnails.
         m = re.match(
-            r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/demo/(v1\.gif|thumb-[0-3]\.png)$",
+            r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/api/demo/recording/([A-Za-z0-9._-]+)$",
             path)
         if m:
-            body = demo_frame(m.group(3))
-            self.send_response(200)
-            self.send_header(
-                "Content-Type", "image/gif" if m.group(3).endswith(".gif") else "image/png")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            doc, name = urllib.parse.unquote(m.group(2)), m.group(3)
+            with state_lock:
+                demo_on = state["demo"]
+            head = demo_manifest()["head"] if demo_on and doc == DEMO_NAME else 0
+            vm = re.match(r"^_v(\d+)\.webm$", name)
+            tm = re.match(r"^_v(\d+)\.step(\d{2})\.png$", name)
+            if vm and int(vm.group(1)) <= head:
+                self._media(tiny_webm(), "video/webm")
+            elif tm and int(tm.group(1)) <= head and int(tm.group(2)) < len(DEMO_STEPS):
+                step = int(tm.group(2))
+                self._media(demo_frame(step, DEMO_STEPS[step]["title"]), "image/png")
+            else:
+                self._json(404, {"error": "no such recording"})
             return True
         # Slice X (§7.2): GET /d/<doc>/api/export/file/<name> — the artifact bytes,
         # exactly as server.js serves them (Content-Disposition attachment), so the
@@ -2401,8 +2542,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             # docfb2: a version a feedback batch materialized serves ITS html.
             with docs_lock:
                 override = doc_html_overrides.get((pid, doc, v))
+            with state_lock:
+                bare = bool(state["demo_bare_labels"])
             html = (override if override is not None
-                    else storyboard_doc_html(v) if doc == DEMO_NAME
+                    else storyboard_doc_html(v, bare_labels=bare) if doc == DEMO_NAME
                     else doc_html(doc, v))
             body = html.encode()
             self.send_response(200)
@@ -2585,6 +2728,30 @@ class W2Handler(SimpleHTTPRequestHandler):
                         learned_themes[(pid, doc)] = int(time.time() * 1000) + delay_ms
                 self._json(200, {"ok": True, "event_id": "evt-fixture", "correlation_id": "c-fixture"})
                 return True
+            # ── VIDEO-FB: the REAL record wire (materializeDemo, handlers.js) ────
+            # demo.requested is the bus command the per-doc workspace materializes:
+            # run the authored spec in a real browser, narrate per-step progress,
+            # land the recording as version.created {kind:"demo"}. `demo_record_ms`
+            # slows the run so a rig can witness the record button's EC37 pending.
+            if body.get("event_type") == "wicked.interactive.demo.requested" and doc:
+                with state_lock:
+                    demo_on = state["demo"]
+                    record_ms = int(state["demo_record_ms"])
+                if demo_on and doc == DEMO_NAME:
+                    def run_recording(rec_pid: str = pid, rec_doc: str = doc) -> None:
+                        queue_interactive("wicked.interactive.status.posted", {
+                            "project_id": rec_pid, "document_id": rec_doc,
+                            "state": "working",
+                            "message": f"Step 1/{len(DEMO_STEPS)}: "
+                                       f"{DEMO_STEPS[0]['title']}"})
+                        demo_land_recording()
+                    if record_ms > 0:
+                        threading.Timer(record_ms / 1000.0, run_recording).start()
+                    else:
+                        run_recording()
+                self._json(200, {"ok": True, "event_id": "evt-fixture",
+                                 "correlation_id": "c-fixture"})
+                return True
             # ── docfb2: the REAL materializeFeedback shape (handlers.js) ─────────
             # Deterministic content-edits are applied to the head HTML NOW and land
             # as version.created {kind:"deterministic"}; the structural remainder is
@@ -2667,6 +2834,25 @@ class W2Handler(SimpleHTTPRequestHandler):
                 with docs_lock:
                     fb_ids = feedback_msg_ids.get((pid, doc), set())
                 if str(payload.get("source_message_id") or "") in fb_ids:
+                    self._json(200, {"ok": True, "event_id": "evt-fixture",
+                                     "correlation_id": "c-fixture"})
+                    return True
+                with state_lock:
+                    demo_on = state["demo"]
+                if demo_on and doc == DEMO_NAME:
+                    # VIDEO-FB: the demo agent ANSWERS IN CHAT and completes —
+                    # a real reply, NO version landing (the live-observed shape
+                    # behind the stuck "generating" badge: the reply arrived and
+                    # nothing ever consumed the send's anchor). The client must
+                    # resolve the send on the run's completion, not wait for a
+                    # landing that will never come.
+                    queue_interactive("wicked.interactive.chat.posted", {
+                        "project_id": pid, "document_id": doc, "role": "agent",
+                        "text": "The spec already covers that — those steps stay "
+                                "as authored, so there is nothing to re-record."})
+                    queue_interactive("wicked.interactive.status.posted", {
+                        "project_id": pid, "document_id": doc, "state": "complete",
+                        "message": "Answered in the thread — the spec is unchanged."})
                     self._json(200, {"ok": True, "event_id": "evt-fixture",
                                      "correlation_id": "c-fixture"})
                     return True
