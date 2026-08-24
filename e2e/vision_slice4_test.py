@@ -437,9 +437,12 @@ with sync_playwright() as p:
     )
     page.locator('[data-testid="doc-canvas"][data-version="1"]').wait_for(timeout=30000)
 
-    # Themes: the popover opens WITH its explanation (the §6.3 AC's testid).
-    wake_strip(page)
-    page.locator('[data-testid="themes-open"]').click()
+    # Themes: the explanation opens WITH the form (the §6.3 AC's testid).
+    # Doc-feedback re-scope: the [Themes] strip popover became the right
+    # panel's Theme TAB (inline host, same testids, same token dress) — open
+    # the tab instead of the retired trigger, and return to Chat for the
+    # capture (the tab has no Escape-close; the panel simply shows another tab).
+    page.locator('[data-testid="panel-tab"][data-tab="theme"]').click()
     page.locator('[data-testid="themes-panel"]').wait_for(timeout=30000)
     themes = page.evaluate(
         """() => { const ex = document.querySelector('[data-testid="themes-explanation"]');
@@ -448,9 +451,7 @@ with sync_playwright() as p:
                font: ex ? getComputedStyle(ex).fontFamily : null,
                size: ex ? getComputedStyle(ex).fontSize : null,
              }; }""")
-    page.keyboard.press("Escape")
-    wake_strip(page)
-    page.locator('[data-testid="themes-open"]').click()  # toggle shut for the capture
+    page.locator('[data-testid="panel-tab"][data-tab="chat"]').click()  # back for the capture
 
     # Back to v2 for the named capture (the slice entry: v2 selected, tags visible).
     page.locator('[data-testid="version-marker"][data-version="2"]').click()
