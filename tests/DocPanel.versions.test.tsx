@@ -87,6 +87,27 @@ describe('DocPanel — the Versions tab', () => {
     }
   });
 
+  it('In-thread with a real anchor flips the panel to the Chat tab — the thread is THERE, and a scroll inside a hidden tab would be a silent no-op', async () => {
+    const onTab = vi.fn();
+    const d = doc({
+      manifest: {
+        head: 2,
+        versions: [entry(1), entry(2, { meta: { sourceMessageId: 'm-42' } })],
+      },
+      selected: 1,
+    });
+    render(
+      <DocPanel open tab="versions" onExpand={() => {}} onCollapse={() => {}} onTab={onTab} doc={d}>
+        <div data-testid="fake-thread" />
+      </DocPanel>,
+    );
+    const anchored = screen.getAllByTestId('version-scroll')
+      .find((b) => !(b as HTMLButtonElement).disabled)!;
+    expect(anchored).toBeDefined();
+    await userEvent.click(anchored);
+    expect(onTab).toHaveBeenCalledWith('chat');
+  });
+
   it('Show navigates to ?v=N and the selected row says it is on the canvas', async () => {
     const d = doc();
     mount(d);

@@ -259,7 +259,12 @@ function lineageOf(entry: VersionEntry): string {
     : `continues v${entry.parent}`;
 }
 
-function VersionsTab({ doc }: { doc: DocPanelDoc }): React.ReactElement {
+function VersionsTab({ doc, onShowChat }: {
+  doc: DocPanelDoc;
+  /** Switch the panel to the Chat tab — the In-thread action's whole point is
+   *  the thread, and a scroll inside a hidden tab would be a silent no-op. */
+  onShowChat: () => void;
+}): React.ReactElement {
   const { projectId, docId, manifest, selected, navigate, onForked } = doc;
   const [forking, setForking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -380,7 +385,14 @@ function VersionsTab({ doc }: { doc: DocPanelDoc }): React.ReactElement {
               <button
                 type="button"
                 data-testid="version-scroll"
-                onClick={() => { if (anchor !== null) scrollThreadToMessage(anchor); }}
+                onClick={() => {
+                  if (anchor === null) return;
+                  onShowChat();
+                  // The thread lives in the Chat tab's kept-mounted body, which is
+                  // display:none right now — scroll on the frame AFTER React commits
+                  // the tab switch, when the thread has geometry again.
+                  requestAnimationFrame(() => { scrollThreadToMessage(anchor); });
+                }}
                 disabled={anchor === null}
                 title={anchor === null
                   ? NO_ANCHOR_TITLE
@@ -552,7 +564,7 @@ export function DocPanel({
       {doc !== null && tab === 'versions' && (
         <div data-testid="panel-body" data-tab="versions" className="flex flex-col"
              style={{ flex: 1, minHeight: 0 }}>
-          <VersionsTab doc={doc} />
+          <VersionsTab doc={doc} onShowChat={() => onTab('chat')} />
         </div>
       )}
 
