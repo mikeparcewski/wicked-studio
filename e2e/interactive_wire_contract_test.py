@@ -219,11 +219,15 @@ try:
         # The CORRECTED record wire (§7.4): requestRecord speaks demo.requested.
         ("requestRecord",     "POST", "/api/events",
          {"event_type": "wicked.interactive.demo.requested", "payload": {"document_id": DEMO}}),
-        # The batch contract step feedback rides (§7.4 "what is kept").
+        # The batch contract step feedback rides (§7.4 "what is kept"). docfb2:
+        # items are ADR-0002 schema items — the shape writeFeedback serializes and
+        # applyFeedbackItems consumes ({selector, type, …}), which the client now sends.
         ("feedback_batch",    "POST", "/api/events",
          {"event_type": "wicked.interactive.feedback.submitted",
           "payload": {"document_id": DEMO, "version": head, "target": "demo_step",
-                      "source_message_id": "m2", "items": [{"wid": "step-0", "comment": "x"}]}}),
+                      "source_message_id": "m2",
+                      "items": [{"selector": "step-0", "type": "structural-change",
+                                 "instruction": "x"}]}}),
         # The CORRECTED theme wire (issue #65): requestThemeLearn speaks
         # theme.requested — doc-scoped, url OR path, exactly what
         # materializeThemeRequested reads. Both source kinds must be routable.
