@@ -104,10 +104,16 @@ export function PreGateAnnotate({ runId, guidance, openSignal = 0 }: Props): Rea
   }, [durable]);
 
   useEffect(() => {
-    if (openSignal > 0) {
-      wantFocus.current = true;
-      setOpen(true);
+    if (openSignal === 0) return;
+    // Already open (slice BE: a durable note mounts the widget open) — the
+    // entry point's job is FOCUS, and the open-state effect below will never
+    // re-run, so focus directly.
+    if (ref.current !== null) {
+      ref.current.focus();
+      return;
     }
+    wantFocus.current = true;
+    setOpen(true);
   }, [openSignal]);
 
   useEffect(() => {

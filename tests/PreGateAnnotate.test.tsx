@@ -62,6 +62,15 @@ describe('PreGateAnnotate (slices BD + BE)', () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it('an openSignal bump on an ALREADY-open widget focuses it (the board `n` key)', async () => {
+    useAnnotationStore.getState().setDraft('r-1', 'standing note'); // mounts open
+    const { rerender } = render(<PreGateAnnotate runId="r-1" openSignal={0} />);
+    expect(screen.getByTestId('pre-gate-annotate')).toHaveAttribute('data-open', 'true');
+    rerender(<PreGateAnnotate runId="r-1" openSignal={1} />);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByTestId('pre-gate-annotate-input')));
+  });
+
   // ── Slice BE: the durable layer ────────────────────────────────────────────
 
   it('the run DTO durable note mounts open, pre-populated, with NO scope label', () => {
