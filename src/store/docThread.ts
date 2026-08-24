@@ -27,7 +27,17 @@ import type { CoreEvent } from '../api/types.js';
  * is the document's own stable anchor (INV-1), which is what makes the item deep-linkable
  * back to its element for as long as the element exists.
  */
-export interface FeedbackItem { wid: string; text: string }
+/** One targeted-feedback item, client-side. `mode` is the original InlineComment's
+ *  split: 'comment' asks the agent (structural-change on the wire), 'change-text'
+ *  is the deterministic edit (content-edit — the typed text IS the new text, applied
+ *  by the service without a model). `before` snapshots the block's text at click
+ *  time, the staleness guard the schema has always carried (ADR-0002). */
+export interface FeedbackItem {
+  wid: string;
+  text: string;
+  mode?: 'comment' | 'change-text';
+  before?: string;
+}
 
 /** What a failed export offers to run again — the same format, at the same version. */
 export interface ExportRetry { format: ExportFormat; version: number }
@@ -91,8 +101,12 @@ const VERSION  = 'wicked.interactive.version.created';
 const EXPORTED = 'wicked.interactive.export.generated';
 
 /** Version kinds a GENERATION produces. A `fork` is a lineage move the user made, not
- *  the agent finishing — it neither ends the working state nor consumes the anchor. */
-const GENERATED: ReadonlySet<string> = new Set(['generated', 'structural', 'demo']);
+ *  the agent finishing — it neither ends the working state nor consumes the anchor.
+ *  `deterministic` is materializeFeedback's model-free landing (a content-edit batch
+ *  applied instantly): it ANSWERS the batch message exactly as a generated version
+ *  answers a steer, so it consumes the anchor and ends the working state too — without
+ *  it the feedback batch's thread entry span "generating" forever (the docfb2 find). */
+const GENERATED: ReadonlySet<string> = new Set(['generated', 'structural', 'demo', 'deterministic']);
 
 /** First non-empty string among the candidate keys of an untyped bag. */
 function pick(bag: Record<string, unknown>, ...keys: string[]): string | null {

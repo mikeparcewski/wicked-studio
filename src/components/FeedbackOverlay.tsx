@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { hitTest, overlayBox, type OverlayBox, type ScrollState } from '../interactive/anchoring.js';
 import {
   REQUEST_INVENTORY, makeScrollToWid, parseInbound,
-  type OverlayToBridgeMsg, type WidRect,
+  type OverlayToBridgeMsg, type WidBlock, type WidRect,
 } from '../interactive/instrument-protocol.js';
 import { submitFeedbackBatch } from '../interactive/feedbackBatch.js';
 import { registerWidScroller } from '../interactive/widScroller.js';
@@ -47,7 +47,16 @@ const DEGRADED_TITLE =
   'Comments need the document’s preview to finish loading — reopen the document '
   + 'or regenerate this version. It still renders, versions and exports normally.';
 
-interface Inventory { widMap: Record<string, WidRect>; measured: ScrollState }
+interface Inventory {
+  widMap: Record<string, WidRect>;
+  measured: ScrollState;
+  /** Per-block text + compositeness — sent by the injected bridge (instrumented.ts),
+   *  absent from the hand-written fixture bridges. Empty when absent: the Change-text
+   *  mode simply does not offer itself without a `before` snapshot to seed and guard. */
+  blocks: Record<string, WidBlock>;
+}
+
+type DraftMode = 'comment' | 'change-text';
 
 export interface FeedbackOverlayProps {
   /** The framed document. Null until React attaches the ref. */
@@ -68,7 +77,7 @@ export function FeedbackOverlay({
   const [timedOut, setTimedOut] = useState(false);
   const [active, setActive] = useState(false);
   const [hover, setHover] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ wid: string; text: string } | null>(null);
+  const [draft, setDraft] = useState<{ wid: string; text: string; mode: DraftMode } | null>(null);
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,10 +103,20 @@ export function FeedbackOverlay({
       if (msg === null) return;
       if (msg.type === 'wid-inventory') {
         const at = { scrollX: msg.scrollX, scrollY: msg.scrollY };
-        setInventory({ widMap: msg.widMap, measured: at });
+        setInventory({ widMap: msg.widMap, measured: at, blocks: msg.blocks ?? {} });
         setScroll(at);
       } else if (msg.type === 'scroll-state') {
         setScroll({ scrollX: msg.scrollX, scrollY: msg.scrollY });
+      } else if (msg.type === 'wid-click') {
+        // The ORIGINAL interaction grammar (the docfb2 restore): the injected bridge
+        // preempted a click on an instrumented block inside the document and reports
+        // it — the targeted card opens directly, no mode toggle first.
+        setHover(null);
+        setDraft({ wid: msg.wid, text: '', mode: 'comment' });
+      } else if (msg.type === 'wid-hover') {
+        // The original hover highlight, reported from inside the frame. The overlay's
+        // own hit layer (comment mode) drives the same state from the parent side.
+        setHover(msg.wid);
       }
     }
 
@@ -128,9 +147,29 @@ export function FeedbackOverlay({
   const widAt = (e: React.MouseEvent<HTMLDivElement>): string | null =>
     inventory === null ? null : hitTest(inventory.widMap, inventory.measured, scroll, pointIn(e));
 
+  // The clicked block's facts — undefined for bridges that predate `blocks`, and for
+  // COMPOSITE blocks the Change-text mode hides itself (the original InlineComment
+  // rule: a destructive innerText replace would flatten the nested anchors).
+  const draftBlock = draft === null ? undefined : inventory?.blocks[draft.wid];
+  const changeTextAllowed = draftBlock !== undefined && !draftBlock.composite;
+
+  function switchMode(mode: DraftMode): void {
+    if (draft === null || mode === draft.mode) return;
+    // The original's seeding: exact-text mode starts from the current text (the
+    // `before` snapshot); comment modes start blank.
+    const seed = mode === 'change-text' ? (draftBlock?.text ?? '') : '';
+    setDraft({ wid: draft.wid, text: seed, mode });
+  }
+
   function commit(): void {
     if (draft === null || draft.text.trim() === '') return;
-    setItems((prev) => [...prev, { wid: draft.wid, text: draft.text.trim() }]);
+    const before = inventory?.blocks[draft.wid]?.text;
+    setItems((prev) => [...prev, {
+      wid: draft.wid,
+      text: draft.text.trim(),
+      mode: draft.mode,
+      ...(before === undefined ? {} : { before }),
+    }]);
     setDraft(null);
   }
 
@@ -168,7 +207,7 @@ export function FeedbackOverlay({
           onMouseLeave={() => setHover(null)}
           onClick={(e) => {
             const wid = widAt(e);
-            if (wid !== null) { setDraft({ wid, text: '' }); setHover(null); }
+            if (wid !== null) { setDraft({ wid, text: '', mode: 'comment' }); setHover(null); }
           }}
         />
       )}
@@ -220,13 +259,39 @@ export function FeedbackOverlay({
           <span style={{ color: S.muted, fontFamily: 'monospace', fontSize: '10px' }}>
             {draft.wid}
           </span>
+          {/* The original InlineComment's mode pair (the docfb2 restore): a comment the
+              agent interprets vs the EXACT new text, applied deterministically. Offered
+              only when the bridge reported the block's text (the seed + `before` guard)
+              and the block is not a composite. */}
+          {changeTextAllowed && (
+            <div data-testid="feedback-mode" style={{ display: 'flex', gap: '4px' }}>
+              {([['comment', 'This block'], ['change-text', 'Change text']] as const)
+                .map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    data-testid={`feedback-mode-${mode}`}
+                    data-on={String(draft.mode === mode)}
+                    onClick={() => switchMode(mode)}
+                    style={{
+                      ...btn, fontSize: '10px', padding: '2px 8px',
+                      background: draft.mode === mode ? S.accent : 'transparent',
+                      border: `1px solid ${draft.mode === mode ? S.accent : S.border}`,
+                      color: draft.mode === mode ? 'var(--accent-fg)' : S.muted,
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+            </div>
+          )}
           <textarea
             data-testid="feedback-comment-input"
             autoFocus
             rows={3}
             value={draft.text}
-            placeholder="What should change here?"
-            onChange={(e) => setDraft({ wid: draft.wid, text: e.target.value })}
+            placeholder={draft.mode === 'change-text' ? 'Exact new text…' : 'What should change here?'}
+            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
               if (e.key === 'Escape') setDraft(null);
