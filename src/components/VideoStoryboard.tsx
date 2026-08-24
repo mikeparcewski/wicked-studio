@@ -277,6 +277,11 @@ function DemoSurface({
     setRecording(null);
     fetch(href, { headers: { Range: 'bytes=0-0' } })
       .then((res) => {
+        // The probe wants the HEADERS, never the bytes. crew's proxy honours the
+        // Range (206, content-length 1), but a server that IGNORES it answers 200
+        // with the whole recording — cancelling the stream means a long demo is
+        // never silently downloaded just to light up a download button.
+        void res.body?.cancel().catch(() => {});
         const type = res.headers.get('content-type') ?? '';
         if (!cancelled && res.ok && type.startsWith('video/')) {
           setRecording({ version: resolvedShown, href });
