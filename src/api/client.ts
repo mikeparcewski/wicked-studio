@@ -21,8 +21,10 @@ import type {
 } from './types.js';
 
 import { ApiError, apiStatus } from './errors.js';
+import type { GuidanceUpdate } from './guidance.js';
 
 export type * from './types.js';
+export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
 export { ApiError, apiStatus, apiWire, isRouteAbsent, translateWireError } from './errors.js';
 
 /**
@@ -187,6 +189,18 @@ export const api = {
   /** Cancel a running or paused run (the distinct third action, §11.1). */
   cancelRun: (id: string) =>
     apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+
+  /**
+   * Upsert the run's ONE durable operator guidance note (CREW-UX-7, crew#312 —
+   * DES-UX-002 §7.2's "CREW-UX-4", renamed; see api/guidance.ts). `''` clears;
+   * 404 unknown run; a named 400 past the 8KB cap. Slice BE's write side of
+   * the durable annotation layer — the read side is the DTO's `guidance` echo.
+   */
+  putGuidance: (id: string, text: string) =>
+    apiFetch<GuidanceUpdate>(`/runs/${encodeURIComponent(id)}/guidance`, {
+      method: 'PUT',
+      body: JSON.stringify({ text }),
+    }),
 
   /** Advance a run: confirm-gate if paused, else resume from the cursor (§11.8). */
   resumeRun: (id: string) =>
