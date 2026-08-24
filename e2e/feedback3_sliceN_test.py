@@ -40,6 +40,15 @@ Captures (§10.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/visio
 Finally: `npm run lint` must exit 0 with zero raw-color findings (EC15 is
 ERROR repo-wide).
 
+Slice-BD re-scope audit (DES-UX-002 §8.3): the design doc directed a "steer
+textarea assertions" re-scope AT THIS RIG — a doc drift: this rig is the runs
+bottom panel and asserts no steer textarea anywhere. The steer textarea's
+contract lives in tests/SteeringGate*.test.tsx, re-scoped there to the
+pre-populated state contract (the testid switches to `amend-prepopulated`
+only when a session draft existed at mount; blank mounts keep
+`steering-amend`, so every assertion in this rig and those tests holds
+unchanged). Verified green post-BD as this slice's regression suite.
+
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
 SKIP_STUDIO_BUILD=1 — ensure_build CACHES: delete a stale dist-sameorigin/
 when the source changed. Env knobs: FEEDBACK3N_PORT (default 4362),

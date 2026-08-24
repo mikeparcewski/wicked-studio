@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import type { SessionView } from '../api/types.js';
 import type { SignalKind } from '../board/boardAttention.js';
 import { leadMovingRun, truncate } from '../board/phaseProgress.js';
@@ -12,6 +12,7 @@ import { ExportMenu } from './ExportMenu.js';
 import { GateChip } from './GateChip.js';
 import { GateRejectNote } from './GateRejectNote.js';
 import { PhaseStrip, useCurrentUnit } from './PhaseStrip.js';
+import { PreGateAnnotate } from './PreGateAnnotate.js';
 import { ProjectSparkline } from './ProjectSparkline.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
@@ -53,8 +54,9 @@ import { STATUS_STYLE } from './RunCard.js';
  *  +6px over the pre-token slot — `--space-4` padding is 16px, was 14px, and the
  *  2px status bar rides inside the border-box. Slice BA: +24px for the phase
  *  strip + current-unit description an active-run card now carries, DES-UX-002
- *  §1.3.) */
-export const ACTIVE_CARD_H = 360;
+ *  §1.3. Slice BD: +92px for the pre-gate annotation widget open at its cap —
+ *  a 4-row textarea + the EC52 scope label — DES-UX-002 §4.3.) */
+export const ACTIVE_CARD_H = 452;
 
 /** QUIET-card slot height in px — one summary line plus the action row, with
  *  room for the first-run 2×2 sublabelled grid (§2.2) in the same slot. Also a
@@ -345,6 +347,17 @@ export function ProjectCard({
   /** The §2.1.2 exception: empty AND just created — not merely empty. */
   const firstRun = empty && Date.now() - project.created_at < FIRST_RUN_MS;
   const quiet = band === 'quiet';
+  // Slice BD (DES-UX-002 §4.3, EC51): the run the pre-gate annotation widget
+  // is bound to — the run under escalation when one exists, else the leading
+  // moving run. Available on ANY live run at ANY time (not only "during
+  // approach"): the measured escalation→arrival window is milliseconds (see
+  // annotations.ts), so approach-scoped composition would be a lie. A run
+  // already AT a gate is excluded — the gate card's steer textarea owns that.
+  const annotateFor = runs.find(
+    (v) => approaching[v.session.id] !== undefined && v.session.status !== 'awaiting_human',
+  ) ?? lead;
+  // Bumped by the gate-approaching chip (an entry point): opens + focuses the widget.
+  const [annotateSignal, setAnnotateSignal] = useState(0);
 
   /** Every affordance on the card is a real link — deep-linkable, middle-clickable. */
   const link: Link = (path) => ({
@@ -577,17 +590,22 @@ export function ProjectCard({
                   surface. It retires the moment `awaitingHuman` posts the gate,
                   where the full pill (GateChip, above) takes over. */}
               {!waiting && near !== undefined && (
+                // Slice BD: also an ENTRY POINT — clicking the chip opens and
+                // focuses the annotation widget below (§4.3's affordance,
+                // re-homed onto the chip itself: the widget is standing card
+                // furniture now, so the chip focuses rather than creates it).
                 <div
                   data-testid="gate-approaching"
                   data-run-id={session.id}
                   data-criterion={near.condition}
                   title={near.condition}
+                  onClick={() => setAnnotateSignal((n) => n + 1)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
                     fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
                     border: '1px solid var(--status-gate)', background: 'var(--status-gate-dim)',
                     borderRadius: 'var(--radius-sm)', padding: '3px 7px',
-                    overflow: 'hidden', whiteSpace: 'nowrap',
+                    overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'pointer',
                   }}
                 >
                   <span aria-hidden style={{ color: 'var(--status-gate)', flexShrink: 0 }}>⏳</span>
@@ -608,6 +626,15 @@ export function ProjectCard({
               {runs.length - MAX_CHIPS} more
             </span>
           )}
+        </div>
+      )}
+
+      {/* Slice BD (§4.3, EC51/EC52): the pre-gate annotation widget — steer
+          guidance composable on the card's live run at any time; a gate's
+          arrival pre-fills its steer textarea from this draft. */}
+      {annotateFor !== undefined && (
+        <div style={{ marginTop: '8px' }}>
+          <PreGateAnnotate runId={annotateFor.session.id} openSignal={annotateSignal} />
         </div>
       )}
 

@@ -19,6 +19,14 @@ export interface ShortcutChord {
   /** Chord requires Shift. Absent = Shift must be UP — this is what keeps
    *  Ctrl+K (palette) and Ctrl+Shift+K (kill) two different chords. */
   shift?: boolean;
+  /** Chord requires Alt/Option (slice BD's in-textarea steer prefixes).
+   *  Absent = Alt must be UP, the standing contract every prior entry keeps. */
+  alt?: boolean;
+  /** Match on `KeyboardEvent.code` (`'Digit1'`) instead of `key`. Required for
+   *  Alt chords: macOS Option+key mangles `e.key` into the layout's dead/special
+   *  character (`Option+1` reports `key: '¡'`) while `code` stays positional.
+   *  `key` is still declared for the overlay's label. */
+  code?: string;
 }
 
 /** The '?' overlay's section headings (DES-UX-001 §7.7, slice AC). */
@@ -39,6 +47,12 @@ export interface ShortcutEntry {
   /** §1.2 precedence: while the palette is open the table yields everything
    *  except the toggle chord itself. Only the palette toggle sets this. */
   allowWhilePaletteOpen?: boolean;
+  /** Opt OUT of the shared typing guard (slice BD): the entry fires even while
+   *  an editable element holds focus. ONLY for chords whose entire purpose is
+   *  acting inside a specific textarea (the steer prefixes) — such an entry
+   *  MUST carry a `guard` that scopes it to its own element, or it would act
+   *  in every input on the page. */
+  allowInTypingContext?: boolean;
 }
 
 /**
@@ -52,11 +66,17 @@ export function isTypingContext(e: KeyboardEvent): boolean {
   return tag === 'input' || tag === 'textarea' || tag === 'select' || (t?.isContentEditable ?? false);
 }
 
-/** Strict chord match — Alt always disqualifies; Shift and Ctrl/Meta must equal
- *  the chord's declaration, so `Ctrl+K` never fires a `Ctrl+Shift+K` entry. */
+/** Strict chord match — every modifier must equal the chord's declaration, so
+ *  `Ctrl+K` never fires a `Ctrl+Shift+K` entry and an Alt chord never fires a
+ *  plain one (the pre-BD "Alt always disqualifies" contract is the `alt`
+ *  default). Alt chords match positionally on `code` (see ShortcutChord). */
 export function chordMatches(e: KeyboardEvent, chord: ShortcutChord): boolean {
-  if (e.altKey) return false;
-  if ((e.key ?? '').toLowerCase() !== chord.key) return false;
+  if (e.altKey !== (chord.alt ?? false)) return false;
+  if (chord.code !== undefined) {
+    if (e.code !== chord.code) return false;
+  } else if ((e.key ?? '').toLowerCase() !== chord.key) {
+    return false;
+  }
   if ((e.ctrlKey || e.metaKey) !== (chord.ctrlOrMeta ?? false)) return false;
   if (e.shiftKey !== (chord.shift ?? false)) return false;
   return true;
@@ -89,8 +109,12 @@ export function isShortcutsPaletteOpen(): boolean {
 }
 
 function dispatch(e: KeyboardEvent): void {
-  if (isTypingContext(e)) return;
+  // The one typing guard, now PER-ENTRY (slice BD): entries that opted in via
+  // `allowInTypingContext` (the steer prefixes, element-guarded) still fire;
+  // every other entry keeps the EC21 contract — inert while typing.
+  const typing = isTypingContext(e);
   for (const entry of table) {
+    if (typing && entry.allowInTypingContext !== true) continue;
     if (paletteOpen && entry.allowWhilePaletteOpen !== true) continue;
     if (!chordMatches(e, entry.chord)) continue;
     if (entry.guard !== undefined && !entry.guard()) continue; // yield silently

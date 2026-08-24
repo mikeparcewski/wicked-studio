@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SteeringGate } from '../src/components/SteeringGate.js';
 import * as client from '../src/api/client.js';
+import { useAnnotationStore } from '../src/store/annotations.js';
 
 /**
  * DES-UX-001 §7.7 (slice AC) — the gate panel honors a / r: with the panel
@@ -11,6 +12,9 @@ import * as client from '../src/api/client.js';
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // Slice BD re-scope (DES-UX-002 §8.3): a leaked session draft would mount
+  // the textarea under the pre-populated contract — start draft-free.
+  useAnnotationStore.setState({ drafts: {} });
   vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'resumed' } as never);
   vi.spyOn(client.api, 'cancelRun').mockResolvedValue({ ok: true } as never);
 });

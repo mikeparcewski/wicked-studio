@@ -37,6 +37,7 @@ const KEY_LABEL: Record<string, string> = {
 export function chordLabel(chord: ShortcutChord): string {
   const parts: string[] = [];
   if (chord.ctrlOrMeta) parts.push('Ctrl/⌘');
+  if (chord.alt) parts.push('Alt/⌥');
   if (chord.shift) parts.push('Shift');
   const base = KEY_LABEL[chord.key] ?? chord.key.toUpperCase();
   // '?' already spells its shift — "Shift+?" would document a chord nobody types.

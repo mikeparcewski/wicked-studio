@@ -3,12 +3,17 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SteeringGate } from '../src/components/SteeringGate.js';
 import * as client from '../src/api/client.js';
+import { useAnnotationStore } from '../src/store/annotations.js';
 import { useGateStore } from '../src/store/gates.js';
 
 describe('SteeringGate (§11.1 — the three/four distinct actions)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     useGateStore.setState({ gates: {} });
+    // Slice BD re-scope (DES-UX-002 §8.3): the steer textarea now mounts under
+    // the PRE-POPULATED contract when a session draft exists — these tests
+    // assert the blank contract (`steering-amend`), so each starts draft-free.
+    useAnnotationStore.setState({ drafts: {} });
     vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' });
     vi.spyOn(client.api, 'cancelRun').mockResolvedValue({ status: 'cancelled' });
   });

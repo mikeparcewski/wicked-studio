@@ -92,6 +92,10 @@ Mutable switches (flipped over POST /__fixture between page loads):
   extra_gates     — a list of {session, ord?, prompt?}; each is drained ONCE
                     by the /ws loop as an `awaitingHuman` frame (slice L §8.4:
                     a gate ARRIVAL, the desktop-notification trigger).
+  gate_now        — run ids whose SessionView answers status awaiting_human on
+                    the list/detail wires, with a cached COMPLEX gate on the
+                    gate GET (slice BD §4: pair with an extra_gates frame to
+                    ARRIVE a gate at a run the operator annotated pre-gate).
   notif_prefs     — replaces the settings store's `studio.notifications`
                     (a dict; None REMOVES the key — the never-persisted
                     default case), same channel as `appearance`.
@@ -301,6 +305,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # distributed review. Default False: no standing rig's r-upload
          # grows units.
          "nerve": False,
+         # Slice BD (DES-UX-002 §4): run ids whose SessionView flips to
+         # awaiting_human on the LIST/DETAIL wires — how a rig turns a run the
+         # operator annotated pre-gate into a run whose gate has ARRIVED
+         # (paired with an extra_gates awaitingHuman frame; the refresh that
+         # frame triggers re-reads /runs and must see the new status). The
+         # cached-gate GET answers for these ids too, so a reload reconciles.
+         "gate_now": [],
          # Slice V (DES-UX-001 §3/§4): the provenance + retry corpus.
          #   provenance — GET /audit?runId= gains REAL AuditEntry rows for
          #                r-auth and r-retry (actor{id,kind,trust} + the
@@ -1101,6 +1112,12 @@ NERVE_UPLOAD_UNITS = [
     _nerve_unit(4, "run the rate-limit acceptance suite end to end", "test", "pending"),
 ]
 
+# Slice BD (DES-UX-002 §4): the prompt the arrived gate carries once a rig
+# flips `gate_now` for r-upload — before nerve unit 3, the same seam the
+# gateEscalated preview named.
+GATE_NOW_PROMPT = ("Approve unit 3 before it runs: apply the review fixes to "
+                   "the middleware chain")
+
 # ── The vision-slice-4 Video surface (DES-VISION-001 §5.6): one recorded demo ──
 #
 # The interactive bridge, reduced to what Video mode reads through crew's proxy:
@@ -1413,12 +1430,13 @@ def assemble_runs() -> list:
         project_dto_on = state["project_dto"]
         chronicle_on = state["chronicle"]
         nerve_on = state["nerve"]
+        gate_now = list(state["gate_now"])
         # Slice S (DES-UX-001 §2.3): the null-claim run + this-lifetime launches
         # join BOTH wires (list + detail) so the DTO echo decorates identically.
         if project_dto_on and not state["no_runs"]:
             runs = runs + [UNFILED_RUN] + launched_runs
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
-            or chronicle_on or nerve_on:
+            or chronicle_on or nerve_on or gate_now:
         runs = json.loads(json.dumps(runs))
         for r in runs:
             # Slice BA: r-upload's §1.5 five-unit plan; unit_ix follows the
@@ -1426,6 +1444,10 @@ def assemble_runs() -> list:
             if nerve_on and r["session"]["id"] == "r-upload":
                 r["units"] = json.loads(json.dumps(NERVE_UPLOAD_UNITS))
                 r["session"]["unit_ix"] = 2
+            # Slice BD (DES-UX-002 §4): the annotated run's gate ARRIVED — the
+            # run is now genuinely awaiting a human on both wires.
+            if r["session"]["id"] in gate_now:
+                r["session"]["status"] = "awaiting_human"
             # Slice V: the CREW-UX-2 DTO echo for the lineage pair — the retry
             # prefill's project binding reads it (`project_id`, api-types 0.8.0).
             if provenance_on and r["session"]["id"] in ("r-auth", "r-retry"):
@@ -2063,6 +2085,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 prompt, age = BATCH_GATE_PROMPTS[rid]
                 self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
                                  "prompt": prompt, "receivedAt": iso(NOW0 - age)})
+            elif rid in state["gate_now"]:
+                # Slice BD: the arrived gate for an annotated run — `options:
+                # null` = free text, the COMPLEX shape (§7.11): a steer-worthy
+                # gate answered in the thread, where pre-population lives.
+                self._json(200, {"runId": rid, "ord": 3, "lifecycle": "open",
+                                 "prompt": GATE_NOW_PROMPT,
+                                 "receivedAt": iso(NOW0), "options": None})
             else:
                 self._json(404, {"error": f"no gate cached for {rid}"})
             return True
