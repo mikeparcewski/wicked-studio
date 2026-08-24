@@ -26,12 +26,22 @@ export interface WidRect {
 
 // ── Bridge → Overlay (inbound; MUST validate before use) ─────────────────────
 
+/** One block's non-geometric facts, carried with the inventory when the bridge can
+ *  compute them. `text` is the element's normalized innerText — the seed for the
+ *  deterministic Change-text mode (interactive's `describe()` `before` snapshot);
+ *  `composite` marks an element that nests other instrumented blocks, for which a
+ *  destructive text replace would flatten the subtree (InlineComment hides the mode). */
+export interface WidBlock { text: string; composite: boolean }
+
 /** Full inventory: all [data-wid] rects plus current frame scroll. Posted in
- *  response to `request-inventory` and whenever the inventory changes substantially. */
+ *  response to `request-inventory` and whenever the inventory changes substantially.
+ *  `blocks` is OPTIONAL: the client-injected bridge (instrumented.ts) always sends it;
+ *  the hand-written fixture bridges predate the field and stay valid v1 senders. */
 export interface WidInventoryMsg {
   v: 1; type: 'wid-inventory';
   widMap: Record<string, WidRect>;
   scrollX: number; scrollY: number;
+  blocks?: Record<string, WidBlock>;
 }
 
 /** Posted by the bridge on every frame scroll event so the overlay can recompute
@@ -46,7 +56,18 @@ export interface ScrollAckMsg {
   v: 1; type: 'scroll-ack'; wid: string;
 }
 
-export type BridgeToOverlayMsg = WidInventoryMsg | ScrollStateMsg | ScrollAckMsg;
+/** The frame's own click landed on an instrumented block — the ORIGINAL interaction
+ *  grammar (wicked-interactive App.jsx: `nearestReviewable` walk-up, `preventDefault`,
+ *  select). The bridge preempts the click inside the document; the overlay opens the
+ *  targeted feedback card without any mode toggle. */
+export interface WidClickMsg { v: 1; type: 'wid-click'; wid: string }
+
+/** The frame's pointer moved onto a block (`wid`) or off every block (`null`) —
+ *  the original hover-highlight, reported from inside the document. */
+export interface WidHoverMsg { v: 1; type: 'wid-hover'; wid: string | null }
+
+export type BridgeToOverlayMsg =
+  | WidInventoryMsg | ScrollStateMsg | ScrollAckMsg | WidClickMsg | WidHoverMsg;
 
 // ── Overlay → Bridge (outbound; authored here, sent via postMessage) ──────────
 
@@ -62,6 +83,12 @@ export type OverlayToBridgeMsg = RequestInventoryMsg | ScrollToWidMsg;
 
 function isFiniteNum(x: unknown): x is number {
   return typeof x === 'number' && isFinite(x);
+}
+
+function isWidBlock(x: unknown): x is WidBlock {
+  if (typeof x !== 'object' || x === null) return false;
+  const b = x as Record<string, unknown>;
+  return typeof b['text'] === 'string' && typeof b['composite'] === 'boolean';
 }
 
 function isWidRect(x: unknown): x is WidRect {
@@ -100,7 +127,17 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
       if (!isWidRect(rect)) return null;
       widMap[wid] = rect;
     }
-    return { v: 1, type: 'wid-inventory', widMap, scrollX, scrollY };
+    // `blocks` is optional (older bridges never send it) — but when present it must
+    // be well-formed in full, by the same partial-trust-is-worse rule as the widMap.
+    const rawBlocks = d['blocks'];
+    if (rawBlocks === undefined) return { v: 1, type: 'wid-inventory', widMap, scrollX, scrollY };
+    if (typeof rawBlocks !== 'object' || rawBlocks === null) return null;
+    const blocks: Record<string, WidBlock> = {};
+    for (const [wid, block] of Object.entries(rawBlocks as Record<string, unknown>)) {
+      if (!isWidBlock(block)) return null;
+      blocks[wid] = { text: block.text, composite: block.composite };
+    }
+    return { v: 1, type: 'wid-inventory', widMap, scrollX, scrollY, blocks };
   }
 
   if (type === 'scroll-state') {
@@ -114,6 +151,18 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
     const wid = d['wid'];
     if (typeof wid !== 'string' || wid === '') return null;
     return { v: 1, type: 'scroll-ack', wid };
+  }
+
+  if (type === 'wid-click') {
+    const wid = d['wid'];
+    if (typeof wid !== 'string' || wid === '') return null;
+    return { v: 1, type: 'wid-click', wid };
+  }
+
+  if (type === 'wid-hover') {
+    const wid = d['wid'];
+    if (wid !== null && (typeof wid !== 'string' || wid === '')) return null;
+    return { v: 1, type: 'wid-hover', wid };
   }
 
   return null;

@@ -35,6 +35,25 @@ describe('parseInbound — well-formed v1 frames', () => {
     expect(parseInbound({ v: 1, type: 'wid-inventory', widMap: {}, scrollX: 0, scrollY: 0 }))
       .toEqual({ v: 1, type: 'wid-inventory', widMap: {}, scrollX: 0, scrollY: 0 });
   });
+
+  it('accepts an inventory carrying `blocks` (the injected bridge) and one without (fixture bridges)', () => {
+    const blocks = { h1: { text: 'Q3 review', composite: false } };
+    expect(parseInbound({
+      v: 1, type: 'wid-inventory', widMap: { h1: RECT }, scrollX: 0, scrollY: 0, blocks,
+    })).toEqual({
+      v: 1, type: 'wid-inventory', widMap: { h1: RECT }, scrollX: 0, scrollY: 0, blocks,
+    });
+  });
+
+  it('accepts wid-click and wid-hover — the original click-to-edit grammar, reported by the frame', () => {
+    expect(parseInbound({ v: 1, type: 'wid-click', wid: 'headline' }))
+      .toEqual({ v: 1, type: 'wid-click', wid: 'headline' });
+    expect(parseInbound({ v: 1, type: 'wid-hover', wid: 'headline' }))
+      .toEqual({ v: 1, type: 'wid-hover', wid: 'headline' });
+    // Hover OFF every block is `null` — a real state, not a malformed frame.
+    expect(parseInbound({ v: 1, type: 'wid-hover', wid: null }))
+      .toEqual({ v: 1, type: 'wid-hover', wid: null });
+  });
 });
 
 describe('parseInbound — malformed inbound messages are DROPPED', () => {
@@ -57,6 +76,16 @@ describe('parseInbound — malformed inbound messages are DROPPED', () => {
     ['ack with no wid',         { v: 1, type: 'scroll-ack' }],
     ['ack with an empty wid',   { v: 1, type: 'scroll-ack', wid: '' }],
     ['ack with a non-string',   { v: 1, type: 'scroll-ack', wid: { toString: () => 'h1' } }],
+    ['click with no wid',       { v: 1, type: 'wid-click' }],
+    ['click with an empty wid', { v: 1, type: 'wid-click', wid: '' }],
+    ['click with a null wid',   { v: 1, type: 'wid-click', wid: null }],
+    ['hover with no wid key',   { v: 1, type: 'wid-hover' }],
+    ['hover with an empty wid', { v: 1, type: 'wid-hover', wid: '' }],
+    ['blocks not an object',    { v: 1, type: 'wid-inventory', widMap: {}, scrollX: 0, scrollY: 0, blocks: 'h1' }],
+    ['a block missing text',    { v: 1, type: 'wid-inventory', widMap: {}, scrollX: 0, scrollY: 0,
+                                  blocks: { h1: { composite: false } } }],
+    ['a block with a non-bool', { v: 1, type: 'wid-inventory', widMap: {}, scrollX: 0, scrollY: 0,
+                                  blocks: { h1: { text: 'x', composite: 'no' } } }],
   ];
   it.each(junk)('drops %s', (_label, data) => {
     expect(parseInbound(data)).toBeNull();
