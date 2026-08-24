@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VideoStoryboard } from '../src/components/VideoStoryboard.js';
+import { useDocThreadStore } from '../src/store/docThread.js';
 import type { DocSummary } from '../src/api/interactive.js';
 import { apiBase } from '../src/api/client.js';
 
@@ -64,7 +65,14 @@ const DEMOS: DocSummary[] = [
   { name: 'onboarding-tour', kind: 'demo', head: 1, versions: 1, updated_at: '2026-08-17T16:00:00Z' },
 ];
 
-beforeEach(prodOrigin);
+beforeEach(() => {
+  prodOrigin();
+  // Isolate the shared thread store: hydration marks and the record control's
+  // genState must not leak across tests.
+  useDocThreadStore.setState({
+    messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastSignalAt: {},
+  });
+});
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 // ── 1 + 2. The corrected wire: storyboard HTML in a sandboxed iframe ─────────
@@ -130,12 +138,12 @@ describe('the demo surface frames the storyboard (§7.4)', () => {
   });
 });
 
-// ── 4. The thread drawer (§7.3, applied to Video by §7.4) ────────────────────
+// ── 4. The tabbed right panel (VIDEO-FB parity with the Document surface) ─────
 
-describe('the thread drawer', () => {
+describe('the right panel', () => {
   const thread = <aside data-testid="fake-thread">the conversation</aside>;
 
-  it('is CLOSED by default with a demo open; the strip toggle opens it and back', async () => {
+  it('is COLLAPSED to the rail with a demo open; the rail expands it and back', async () => {
     stubFetch({ '/api/versions': { body: MANIFEST } });
     render(
       <VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}}>
@@ -143,15 +151,36 @@ describe('the thread drawer', () => {
       </VideoStoryboard>,
     );
     await screen.findByTestId('demo-player');
-    expect(screen.queryByTestId('thread-drawer')).toBeNull();
+    expect(screen.getByTestId('doc-panel-rail')).toBeInTheDocument();
+    expect(screen.queryByTestId('doc-panel')).toBeNull();
     expect(screen.queryByTestId('fake-thread')).toBeNull();
 
-    await userEvent.click(screen.getByTestId('thread-toggle'));
-    expect(screen.getByTestId('thread-drawer')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('panel-expand'));
+    expect(screen.getByTestId('doc-panel')).toBeInTheDocument();
     expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
+    // The four Document-surface tabs, verbatim — parity is the requirement.
+    expect(screen.getAllByTestId('panel-tab').map((t) => t.getAttribute('data-tab')))
+      .toEqual(['chat', 'compare', 'theme', 'versions']);
 
-    await userEvent.click(screen.getByTestId('thread-close'));
-    expect(screen.queryByTestId('thread-drawer')).toBeNull();
+    await userEvent.click(screen.getByTestId('panel-collapse'));
+    expect(screen.queryByTestId('doc-panel')).toBeNull();
+    expect(screen.getByTestId('doc-panel-rail')).toBeInTheDocument();
+  });
+
+  it('a rail tab expands STRAIGHT onto its tab', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(
+      <VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}}>
+        {thread}
+      </VideoStoryboard>,
+    );
+    await screen.findByTestId('demo-player');
+    const railTabs = screen.getAllByTestId('panel-rail-tab');
+    const versionsTab = railTabs.find((t) => t.getAttribute('data-tab') === 'versions');
+    await userEvent.click(versionsTab!);
+    expect(screen.getByTestId('doc-panel')).toHaveAttribute('data-tab', 'versions');
+    // The Versions tab speaks the DEMO's noun, never "document" (VIDEO-FB copy).
+    expect(screen.getByTestId('versions-history-note').textContent).toContain('demo’s own version manifest');
   });
 
   it('is OPEN by default on the picker — the wizard and the invitation live there', async () => {
@@ -162,8 +191,40 @@ describe('the thread drawer', () => {
       </VideoStoryboard>,
     );
     await screen.findByTestId('demo-picker');
-    expect(screen.getByTestId('thread-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('doc-panel')).toBeInTheDocument();
     expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
+  });
+});
+
+// ── VIDEO-FB finding 2: the record affordance on the surface ─────────────────
+
+describe('the Record control', () => {
+  it('speaks demo.requested at the click site and answers there (EC37)', async () => {
+    stubFetch({
+      '/api/versions': { body: MANIFEST },
+      '/api/events': { body: { ok: true, event_id: 'e1', correlation_id: 'c1' } },
+    });
+    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
+    const button = await screen.findByTestId('video-record');
+    expect(button).toHaveAttribute('data-state', 'idle');
+    // Honest copy at the affordance: it re-records the authored steps.
+    expect(button.getAttribute('title')).toContain('re-records');
+    expect(button.getAttribute('title')).toContain('does not change the steps');
+
+    await userEvent.click(button);
+    // The wire is the REAL record trigger — demo.requested over POST /api/events.
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const eventCall = fetchMock.mock.calls.find(([u]) => String(u).includes('/api/events'));
+    expect(eventCall).toBeDefined();
+    const body = JSON.parse((eventCall![1] as RequestInit).body as string) as {
+      event_type: string; payload: { document_id: string };
+    };
+    expect(body.event_type).toBe('wicked.interactive.demo.requested');
+    expect(body.payload.document_id).toBe(DEMO);
+    // Point-of-action: the button itself wears the pending state until the run
+    // resolves (the thread store's genState — set by recordFromThread).
+    expect(screen.getByTestId('video-record')).toHaveAttribute('data-state', 'recording');
+    expect(screen.getByTestId('video-record')).toBeDisabled();
   });
 });
 

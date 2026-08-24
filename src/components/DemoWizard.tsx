@@ -2,18 +2,25 @@ import { useState } from 'react';
 import { createDemoFromDraft, draftReady, stepReady, stepTitle, type DemoDraft } from '../interactive/demoWire.js';
 import { S } from './SurfaceState.js';
 
-// The ordered demo wizard (DES-MERGE-001 §4.5, §4.1, §6.4 slice 14).
+// The demo wizard (DES-MERGE-001 §4.5, §4.1, §6.4 slice 14; reshaped by VIDEO-FB).
 //
 // §4.1 retired `CreationWizard.jsx` as REPLACED-BY-BETTER for every document kind but
-// one: the demo path has genuinely ordered steps, and an ordered thing authored through
-// a single free-text composer loses the ordering that makes it work. So the wizard
-// survives HERE, and only here — reached from the composer (§2.2 case 1), never as a
-// second front door: the message the user typed seeds the name, and completion opens the
-// demo's conversation with the authored spec as its first line.
+// one: the demo path has genuinely ordered steps. Reached from the composer (§2.2
+// case 1), never as a second front door: the message the user typed seeds the name AND
+// the description, and completion opens the demo's conversation with the authored
+// brief as its first line.
 //
-// Two stages, because there are exactly two questions: WHERE the demo runs, and WHAT
-// happens in it, in order. Each step is a subject plus an action — a step that names one
-// without the other is not authored, for the same reason a status line is never bare.
+// VIDEO-FB findings, both fixed HERE:
+//   · the wizard was an `absolute inset-0` overlay that pointer-blocked the composer
+//     beneath it — clicks died silently. It is a FLOW panel now: the composer stays
+//     visible and (deliberately, visibly) disabled with a stated reason while the
+//     wizard collects, never covered by an invisible hit target;
+//   · the target stage hid the step form with no hint. The pipeline note and the
+//     steps hint now SAY what comes next and why the form is not there yet.
+//
+// CREW-UX-9 re-grounds the promise: the DESCRIPTION is authored into the demo's spec
+// by a governed run — describe-first is the primary path. Manual Subject / Action
+// steps survive as the ADVANCED path that pins the spec by hand.
 
 const FIELD: React.CSSProperties = {
   background: 'var(--surface-rail)', border: `1px solid ${S.border}`, borderRadius: '6px',
@@ -28,7 +35,8 @@ const BTN: React.CSSProperties = {
 export interface DemoWizardProps {
   projectId: string;
   /** The composer message that opened it. §4.1: the name is DERIVED from the ask — the
-   *  wizard asks only what the ask could not have said, which is the ordering. */
+   *  wizard asks only what the ask could not have said. The ask also seeds the
+   *  DESCRIPTION the governed run authors the spec from (CREW-UX-9). */
   seed: string;
   /** The thread message id this authoring is anchored to (§7.6). */
   msgId: string;
@@ -38,7 +46,9 @@ export interface DemoWizardProps {
 }
 
 export function DemoWizard({ projectId, seed, msgId, onCancel, onCreated }: DemoWizardProps): React.ReactElement {
-  const [draft, setDraft] = useState<DemoDraft>({ name: seed, targetUrl: '', steps: [] });
+  const [draft, setDraft] = useState<DemoDraft>({
+    name: seed, targetUrl: '', description: seed, steps: [],
+  });
   const [step, setStep] = useState({ subject: '', action: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,15 +77,28 @@ export function DemoWizard({ projectId, seed, msgId, onCancel, onCreated }: Demo
   }
 
   return (
+    // A FLOW panel, not an overlay (VIDEO-FB): it takes its own space at the top of
+    // the thread pane and never claims pixels it does not draw on — the composer
+    // below stays visible, disabled with its stated reason, never pointer-trapped.
     <div
       data-testid="demo-wizard"
       data-stage={staged ? 'steps' : 'target'}
       data-steps={String(draft.steps.length)}
-      className="absolute inset-0 z-10 flex flex-col gap-2.5 overflow-y-auto p-3.5"
-      style={{ background: S.card }}
+      className="flex flex-col gap-2.5 overflow-y-auto p-3.5 shrink-0"
+      style={{ background: S.card, borderBottom: `1px solid ${S.border}`, maxHeight: '70%' }}
     >
       <p className="text-xs font-semibold" style={{ color: S.ink, margin: 0 }}>
-        Author the demo — the service records exactly these steps, in this order.
+        Author the demo — the service records exactly the spec’s steps, in order.
+      </p>
+      {/* CREW-UX-9, said where the promise is made: describe-first is the pipeline. */}
+      <p
+        data-testid="wizard-pipeline-note"
+        className="text-[11px] leading-relaxed"
+        style={{ color: S.muted, margin: 0 }}
+      >
+        Your description is authored into the demo’s spec by a governed run, and
+        recording replays exactly those steps in a real browser. Adding Subject /
+        Action steps below pins the spec by hand instead — the advanced path.
       </p>
 
       {/* Stage 1 — where it runs. Nothing can be authored against an unknown target. */}
@@ -86,7 +109,31 @@ export function DemoWizard({ projectId, seed, msgId, onCancel, onCreated }: Demo
                onChange={(e) => setDraft((d) => ({ ...d, targetUrl: e.target.value }))} />
       </label>
 
-      {/* Stage 2 — what happens, in order. */}
+      <label className="text-[10px] font-mono uppercase tracking-wide" style={{ color: S.label }}>
+        Describe it
+        <textarea
+          data-testid="wizard-description"
+          style={{ ...FIELD, minHeight: '48px', resize: 'vertical' }}
+          placeholder="What the demo walks through — the governed run authors the steps from this."
+          value={draft.description}
+          onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+        />
+      </label>
+
+      {/* The stage seam, SAID (VIDEO-FB): pre-target, the step form is not hidden
+          mystery — the hint names what unlocks it and that it is optional. */}
+      {!staged && (
+        <p
+          data-testid="wizard-steps-hint"
+          className="text-[11px]"
+          style={{ color: S.muted, margin: 0 }}
+        >
+          Add the target URL to unlock the manual step form — or skip it: with a
+          description alone, the governed run authors the steps for you.
+        </p>
+      )}
+
+      {/* Stage 2 — the ADVANCED path: exact steps, pinned by hand, in order. */}
       {staged && (
         <>
           <ol data-testid="wizard-steps" className="flex flex-col gap-1 pl-0" style={{ listStyle: 'none', margin: 0 }}>
@@ -106,6 +153,9 @@ export function DemoWizard({ projectId, seed, msgId, onCancel, onCreated }: Demo
           </ol>
 
           <div className="flex flex-col gap-1.5">
+            <p className="text-[10px] font-mono uppercase tracking-wide" style={{ color: S.label, margin: 0 }}>
+              Pin steps by hand (advanced — optional)
+            </p>
             <input data-testid="wizard-step-subject" style={FIELD} placeholder="Subject — “the cart”"
                    value={step.subject} onChange={(e) => setStep((s) => ({ ...s, subject: e.target.value }))} />
             <input data-testid="wizard-step-action" style={FIELD} placeholder="Action — “add a hoodie to it”"
@@ -125,7 +175,11 @@ export function DemoWizard({ projectId, seed, msgId, onCancel, onCreated }: Demo
         <button type="button" data-testid="wizard-create" disabled={!draftReady(draft) || busy}
                 onClick={() => void create()} className="disabled:opacity-40"
                 style={{ ...BTN, background: S.accent, color: 'var(--surface-base)' }}>
-          {busy ? 'Authoring…' : `Create demo (${draft.steps.length} steps)`}
+          {busy
+            ? 'Authoring…'
+            : draft.steps.length === 0
+              ? 'Create demo — steps authored from your description'
+              : `Create demo (${draft.steps.length} ${draft.steps.length === 1 ? 'step' : 'steps'} pinned)`}
         </button>
         <button type="button" data-testid="wizard-cancel" onClick={onCancel}
                 style={{ ...BTN, background: 'transparent', border: `1px solid ${S.border}`, color: S.muted }}>

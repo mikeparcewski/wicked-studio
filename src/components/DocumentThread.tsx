@@ -730,10 +730,20 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   }
 
   const { placeholder, submit: label } = COMPOSER[state];
+  // The surface's own noun (VIDEO-FB copy): a demo surface never says "document".
+  const noun = mode === 'video' ? 'demo' : 'document';
   // Case 1 is the only state whose words differ by artifact — what the composer DOES is
   // the same function of run state either way (§2.2), it just says what it will make.
-  const prompt = mode === 'video' && state === 'idle'
-    ? 'Describe the demo you want to record…' : placeholder;
+  const prompt = mode === 'video'
+    ? state === 'idle'
+      ? 'Describe the demo you want to record…'
+      : state === 'generating' ? 'Steer the demo agent…' : placeholder
+    : placeholder;
+  // Honesty for the working chip (VIDEO-FB: "steering the live demo run" showed
+  // with nothing running anywhere): claiming a LIVE run requires having heard
+  // one — any interactive frame for this thread. Before the first signal the
+  // chip says what is actually known: the send is out, nothing has spoken yet.
+  const heardSignal = lastSignal > 0;
 
   return (
     <div
@@ -785,9 +795,12 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
           <p className="leading-relaxed" style={{ color: S.body, fontSize: 'var(--text-sm)' }}>
             {docId === null
               ? mode === 'video'
-                ? 'Describe the demo you want — “a walkthrough of the checkout flow” — and its steps are authored from there, in order.'
+                // VIDEO-FB copy truth (CREW-UX-9): the description IS authored — a
+                // governed run turns it into the demo's spec. Manual Subject/Action
+                // steps survive in the wizard as the advanced path, not the promise.
+                ? 'Describe the demo you want — “a walkthrough of the checkout flow”. A governed run authors your description into the demo’s spec; the wizard can also pin exact steps by hand.'
                 : 'Describe the document you want — “a deck for the Q3 review”, “write this up as a report” — and it is created from that message.'
-              : 'Ask for a change and it lands as a new version. Everything the agent says about this document appears here.'}
+              : `Ask for a change and it lands as a new version. Everything the agent says about this ${noun} appears here.`}
           </p>
         )}
         {messages.map((m) =>
@@ -819,13 +832,16 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
       <div className="shrink-0 px-3.5 py-3 flex flex-col gap-2"
            style={{ borderTop: `1px solid ${S.border}`, background: S.footer }}>
         {/* §2.3: asking for a recording is an input like any other, so it is a MESSAGE —
-            the same wire the storyboard's own Record button uses, offered here because
-            the composer is where the user already is when they decide to re-run it. */}
+            the same demo.requested wire the surface's own Record button speaks, offered
+            here because the composer is where the user already is when they decide to
+            re-run it. VIDEO-FB copy truth: recording RE-RECORDS the authored steps; it
+            never edits the spec (that is what a chat ask does). */}
         {mode === 'video' && docId !== null && state !== 'generating' && (
           <button
             type="button"
             data-testid="thread-record"
             disabled={busy}
+            title={`Runs “${docId}”’s authored steps in a real browser and lands the result as a new version — it re-records, it does not change the steps`}
             onClick={() => {
               setBusy(true);
               setError(null);
@@ -837,7 +853,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             style={{ background: 'transparent', color: S.accent,
                      border: '1px solid var(--accent-subtle)', cursor: 'pointer' }}
           >
-            record this demo
+            {busy ? 'queuing the re-record…' : 're-record this demo'}
           </button>
         )}
         {/* §4.6/§4.9: what the next generation is MADE OF — the learned theme in effect and
@@ -852,7 +868,9 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
                      border: '1px solid var(--status-run-dim)' }}
           >
             <span className="w-1 h-1 rounded-full shrink-0" style={{ background: S.live }} />
-            steering the live {mode === 'video' ? 'demo' : 'document'} run
+            {heardSignal
+              ? `steering the live ${noun} run`
+              : `sent — waiting for the ${noun} service to pick this up`}
           </span>
         )}
         {/* §6.1 (J3): past the honesty budget the composer must not claim a live
@@ -900,10 +918,15 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             // cap, then scrolls — the height itself is set imperatively so it can
             // be measured, not guessed from newline counts.
             style={{ color: S.ink, fontFamily: 'var(--font-sans)', minHeight: `${COMPOSER_LINE_PX}px` }}
-            placeholder={prompt}
+            // VIDEO-FB: while the wizard is collecting, the composer is VISIBLY
+            // disabled with the reason as its words — never silently covered by
+            // an overlay's hit target (the pointer-trap the cold operator hit).
+            placeholder={wizard !== null
+              ? 'Finish or cancel the demo wizard above — it is collecting this demo…'
+              : prompt}
             value={text}
             rows={1}
-            disabled={busy}
+            disabled={busy || wizard !== null}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); }
@@ -913,7 +936,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             type="button"
             data-testid="doc-composer-submit"
             onClick={() => void submit()}
-            disabled={busy || text.trim() === ''}
+            disabled={busy || wizard !== null || text.trim() === ''}
             className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
             style={{ background: S.accent, color: 'var(--accent-fg)', border: 'none',
                      cursor: 'pointer', fontFamily: 'var(--font-sans)' }}

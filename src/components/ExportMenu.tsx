@@ -69,9 +69,18 @@ export interface ExportMenuProps {
    * visibly happened" failure. Optional — the board tile has no auto-hide to pin.
    */
   onHold?: ((held: boolean) => void) | undefined;
+  /**
+   * VIDEO-FB: the addressed version's recorded video, when the OWNER has proven
+   * one exists on the wire (`/d/:id/api/demo/recording/_v<N>.webm`, probed —
+   * never offered on faith). A same-origin project-scoped download beside the
+   * export formats: no render step, so it is an anchor from the start.
+   */
+  recording?: { href: string; file: string } | null;
 }
 
-export function ExportMenu({ projectId, docId, version, compact = false, onHold }: ExportMenuProps): React.ReactElement {
+export function ExportMenu({
+  projectId, docId, version, compact = false, onHold, recording = null,
+}: ExportMenuProps): React.ReactElement {
   const key = exportKey(projectId, docId);
   const answers = useExportAnswers((s) => s.answers[key] ?? NO_ANSWERS);
 
@@ -177,6 +186,20 @@ export function ExportMenu({ projectId, docId, version, compact = false, onHold 
             </button>
           )
         ))}
+        {/* VIDEO-FB: the recording is already an artifact — no render step, so it
+            is a download from the start, same-origin through the project proxy. */}
+        {recording !== null && (
+          <a
+            data-testid="export-recording"
+            data-version={String(version)}
+            href={recording.href}
+            download={recording.file}
+            title={`Download the recorded video of v${version} — ${recording.file}`}
+            style={{ ...(compact ? COMPACT : BUTTON), ...READY }}
+          >
+            {compact ? 'recording ↓' : 'RECORDING ↓'}
+          </a>
+        )}
         {/* Round-3 J3: answers the user has not acted on, for other versions of THIS
             doc — visible at the click site, wearing their own version. */}
         {readyElsewhere.map((a) => readyAnchor(a as Extract<ExportAnswer, { state: 'ready' }>, true))}

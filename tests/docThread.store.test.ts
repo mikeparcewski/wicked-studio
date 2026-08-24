@@ -251,6 +251,25 @@ describe('send lifecycle (§6.1, EC36)', () => {
     expect(messages()[0]).toMatchObject({ id: a, failed: false });
   });
 
+  it('a COMPLETED run resolves the head send it was working — un-tagged (VIDEO-FB)', () => {
+    // The stuck-badge shape: the agent ANSWERS IN CHAT and the run completes —
+    // no version ever arrives to consume the anchor. Without the complete-side
+    // consumption the message wears "generating — being worked now" forever.
+    const store = useDocThreadStore.getState();
+    const a = nextMsgId();
+    const b = nextMsgId();
+    store.addUserMsg(KEY, a, 'does the spec cover the cart?');
+    store.addUserMsg(KEY, b, 'and the receipt page?');
+    ingest(frame('wicked.interactive.chat.posted', { role: 'agent', text: 'It does — nothing to change.' }));
+    ingest(frame('wicked.interactive.status.posted', { state: 'complete', message: 'Answered in the thread.' }));
+    // The head send resolved; the one behind it is still awaiting its own run.
+    expect(useDocThreadStore.getState().pending[KEY]).toEqual([b]);
+    // No landing exists, so nothing is tagged — a marker never renders for a
+    // version the wire has not shown (the EC36 gaslight pin holds).
+    expect(messages().find((m) => m.kind === 'user' && m.id === a)).not.toHaveProperty('version');
+    expect(state()).toBe('terminal');
+  });
+
   it('a run death fails its whole backlog visibly — no chip generates forever', () => {
     const store = useDocThreadStore.getState();
     const a = nextMsgId();

@@ -32,6 +32,9 @@ export function stepWid(index: number): string {
 export interface DemoDraft {
   name: string;
   targetUrl: string;
+  /** The DESCRIBE-FIRST path (VIDEO-FB / CREW-UX-9): the description a governed
+   *  run authors into the demo's spec. Manual steps are the advanced path. */
+  description: string;
   steps: { subject: string; action: string }[];
 }
 
@@ -40,12 +43,14 @@ export function stepReady(step: { subject: string; action: string }): boolean {
   return step.subject.trim() !== '' && step.action.trim() !== '';
 }
 
-/** Submittable: a target to open, and at least one complete step to run against it. */
+/** Submittable: a target to open, and something to author steps FROM — either a
+ *  description (the primary path: a governed run authors the spec from it) or
+ *  at least one complete hand-pinned step (the advanced path). */
 export function draftReady(draft: DemoDraft): boolean {
   return draft.name.trim() !== ''
     && /^https?:\/\/\S+/i.test(draft.targetUrl.trim())
-    && draft.steps.length > 0
-    && draft.steps.every(stepReady);
+    && draft.steps.every(stepReady)
+    && (draft.steps.length > 0 || draft.description.trim() !== '');
 }
 
 /** One step, in the transcript's words. The subject leads because it is what the user
@@ -59,10 +64,13 @@ export function stepTitle(step: { subject: string; action: string }): string {
  * with (§2.2 case 1), so it has to be the spec a human can check against the storyboard.
  */
 export function demoBrief(draft: DemoDraft): string {
-  return [
-    `Record a demo of ${draft.targetUrl.trim()}:`,
-    ...draft.steps.map((step, i) => `${i + 1}. ${stepTitle(step)}`),
-  ].join('\n');
+  const lines = [`Record a demo of ${draft.targetUrl.trim()}:`];
+  const description = draft.description.trim();
+  // Describe-first (CREW-UX-9): with no hand-pinned steps the description IS
+  // what the governed run authors the spec from, so it IS the opening message.
+  if (description !== '' && draft.steps.length === 0) lines.push(description);
+  lines.push(...draft.steps.map((step, i) => `${i + 1}. ${stepTitle(step)}`));
+  return lines.join('\n');
 }
 
 /**
@@ -83,7 +91,10 @@ export function demoDraftBody(
     kind: 'demo',
     url: draft.targetUrl.trim(),
     brief: demoBrief(draft),
-    demo_steps: steps,
+    // Describe-first (CREW-UX-9): with no hand-pinned steps the field is OMITTED
+    // — the governed run authors the spec from the brief. An empty array would
+    // read as "author zero steps", which is not what the user said.
+    ...(steps.length > 0 ? { demo_steps: steps } : {}),
     // §6.2 (slice U): the Unfiled mount creates unbound; real projects bind.
     ...docBinding(projectId),
     source_message_id: sourceMessageId,
@@ -105,9 +116,14 @@ export async function createDemoFromDraft(
   store.addUserMsg(key, msgId, text);
   store.addNarration(
     key,
-    `Authored “${created.name}” — ${draft.steps.length} `
-    + `${draft.steps.length === 1 ? 'step' : 'steps'} against ${draft.targetUrl.trim()}. `
-    + 'Recording runs them in a real browser.',
+    draft.steps.length === 0
+      // Describe-first (CREW-UX-9): no steps were pinned by hand — the governed
+      // run authors them from the description. Say that, not a step count of 0.
+      ? `Queued “${created.name}” against ${draft.targetUrl.trim()} — a governed run `
+        + 'authors its steps from your description; recording then runs them in a real browser.'
+      : `Authored “${created.name}” — ${draft.steps.length} `
+        + `${draft.steps.length === 1 ? 'step' : 'steps'} against ${draft.targetUrl.trim()}. `
+        + 'Recording runs them in a real browser.',
   );
   return { name: created.name, text };
 }
