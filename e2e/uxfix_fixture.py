@@ -394,6 +394,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # roster-unreachable branch. A pristine first send must fail INLINE
          # (draft kept, retry) with ZERO wire calls; the trio never ships.
          "roster_fail": False,
+         # Slice BC (DES-UX-002 §3): the chronicle corpus — r-retry2 + r-hooks
+         # join the list, r-retry restates failed/attempt-1 (the 3-link chain),
+         # auth-refactor's members wire carries the chain, /audit grows real
+         # gate.decided entries and honours `?action=`. Default False: no
+         # standing rig's corpus changes.
+         "chronicle": False,
          }
 state_lock = threading.Lock()
 
@@ -549,6 +555,80 @@ AUDIT_ENTRIES = {
                  "runId": "r-retry",
                  "detail": {"workflow": "wf-w2", "retryOf": "r-auth"}}],
 }
+
+# ── Slice BC (DES-UX-002 §3): the chronicle corpus, behind `chronicle` ────────
+#
+# Extends the slice-V lineage pair to a REAL 3-link chain (r-auth failed →
+# r-retry, restated failed + attempt 1 under this corpus → r-retry2 completed,
+# attempt 2) plus a standalone in-progress episode (r-hooks) in the SAME
+# project — so the chronicle's EC50 grouping (retry siblings are sub-rows of
+# one episode, never peer rows) and the mixed-card scene both have true
+# records. The unfiled episode stays r-unfiled (`project_dto` on): a null
+# project claim that must never leak into a project's chronicle.
+RETRY_RUN2 = session("r-retry2", "completed", "refactor the auth middleware",
+                     "refactor the auth middleware")
+RETRY_RUN2["session"]["retry_of"] = "r-retry"
+RETRY_RUN2["session"]["attempt"] = 2
+# Three DONE units across three stages — the current-state strip's honest
+# "3 phases" count (§3.3) reads exactly these.
+RETRY_RUN2["units"] = [
+    {**RETRY_RUN2["units"][0], "id": f"r-retry2:u{i}", "ord": i, "stage": stage,
+     "description": desc, "status": "done"}
+    for i, (stage, desc) in enumerate([
+        ("recon", "survey the middleware call sites"),
+        ("build", "refactor the auth middleware"),
+        ("review", "review the refactor against the test suite"),
+    ])
+]
+CHRONICLE_SOLO = session("r-hooks", "executing", "add pre-commit hooks to the repo",
+                         "add pre-commit hooks to the repo")
+CHRONICLE_RUNS = [RETRY_RUN2, CHRONICLE_SOLO]
+CHRONICLE_MEMBER_REFS = ["r-retry", "r-retry2", "r-hooks"]
+ATTACHED_AT["r-retry"] = NOW0 - 5 * MIN
+ATTACHED_AT["r-retry2"] = NOW0 - 3 * MIN
+ATTACHED_AT["r-hooks"] = NOW0 - 90 * SEC
+
+# The chain tip's durable trail: sessionStarted → workflowSelected (EVT-001,
+# camelCase per event_to_json) → a PASSED gateEvaluated (the full B1 shape,
+# `combined: true`) → sessionCompleted. The current-state strip derives its
+# criterion phrase + workflow from exactly this tail.
+CHRONICLE_TIP_CRITERION = "auth middleware refactor passes the full test suite"
+CHRONICLE_EVENTS = {
+    "r-retry2": [
+        {"type": "sessionStarted", "session": "r-retry2", "ts": NOW0 - 3 * MIN},
+        {"type": "workflowSelected", "session": "r-retry2", "workflowId": "wf-w2",
+         "unitCount": 3, "ts": NOW0 - 3 * MIN + 2 * SEC},
+        {"type": "gateEvaluated", "session": "r-retry2", "ord": 2,
+         "criterion": CHRONICLE_TIP_CRITERION, "hasDeterministicFloor": True,
+         "deterministicPass": True, "agentVerdict": None, "agentReasoning": None,
+         "evaluatorPass": True, "evaluatorPolicies": ["qe-default"],
+         "denialReason": None, "combined": True, "ts": NOW0 - 2 * MIN - 10 * SEC},
+        {"type": "sessionCompleted", "session": "r-retry2", "ts": NOW0 - 2 * MIN},
+    ],
+}
+
+# GET /audit?action=gate.decided — the REAL entry shape routes.ts:983 writes:
+# detail {approve, amend?, status}. One amend per lineage decision, one plain
+# reject (no amend — a decision, not guidance) and one FOREIGN-project amend
+# (r-upload, filed under upload-endpoint) the client's scope filter must drop.
+GATE_DECIDED_ENTRIES = [
+    {"ts": NOW0 - 2 * MIN, "action": "gate.decided", "actor": AUDIT_ACTOR,
+     "runId": "r-retry2",
+     "detail": {"approve": True,
+                "amend": "keep the session-token API unchanged; refactor only the middleware layer",
+                "status": "resumed"}},
+    {"ts": NOW0 - 4 * MIN, "action": "gate.decided", "actor": AUDIT_ACTOR,
+     "runId": "r-retry", "detail": {"approve": False, "status": "cancelled"}},
+    {"ts": NOW0 - 12 * MIN, "action": "gate.decided", "actor": AUDIT_ACTOR,
+     "runId": "r-auth",
+     "detail": {"approve": True,
+                "amend": "focus on the middleware tests, skip the docs pass",
+                "status": "resumed"}},
+    {"ts": NOW0 - HOUR, "action": "gate.decided", "actor": AUDIT_ACTOR,
+     "runId": "r-upload",
+     "detail": {"approve": True, "amend": "rate-limit by API key, not by IP",
+                "status": "resumed"}},
+]
 
 # ── Slice S (DES-UX-001 §2.3): the CREW-UX-2 project_id corpus, behind
 #    `project_dto` ──────────────────────────────────────────────────────────────
@@ -1288,23 +1368,36 @@ def assemble_runs() -> list:
                 + ([LONG_RUN] if state["long_prompt"] else []) \
                 + ([CHAT_LIVE, CHAT_GATED] if state["chat_runs"] else []) \
                 + (BATCH_RUNS if state["batch_gates"] else []) \
-                + ([RETRY_RUN] if state["provenance"] else []) \
+                + ([RETRY_RUN] if state["provenance"] or state["chronicle"] else []) \
+                + (CHRONICLE_RUNS if state["chronicle"] else []) \
                 + (J5_RUNS if state["j5_runs"] else [])
         viewer_on = state["viewer"]
         repo_refs_on = state["repo_refs"]
         forensics_on = state["forensics"]
         provenance_on = state["provenance"]
         project_dto_on = state["project_dto"]
+        chronicle_on = state["chronicle"]
         # Slice S (DES-UX-001 §2.3): the null-claim run + this-lifetime launches
         # join BOTH wires (list + detail) so the DTO echo decorates identically.
         if project_dto_on and not state["no_runs"]:
             runs = runs + [UNFILED_RUN] + launched_runs
-    if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on:
+    if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
+            or chronicle_on:
         runs = json.loads(json.dumps(runs))
         for r in runs:
             # Slice V: the CREW-UX-2 DTO echo for the lineage pair — the retry
             # prefill's project binding reads it (`project_id`, api-types 0.8.0).
             if provenance_on and r["session"]["id"] in ("r-auth", "r-retry"):
+                r["session"]["project_id"] = "auth-refactor"
+            # Slice BC (DES-UX-002 §3): under the chronicle corpus r-retry is
+            # the chain's FAILED middle attempt (attempt 1 — retried again as
+            # r-retry2), and the whole chain + the solo episode claim their
+            # project on the DTO (the CREW-UX-2 echo the scope filter reads).
+            if chronicle_on and r["session"]["id"] == "r-retry":
+                r["session"]["status"] = "failed"
+                r["session"]["attempt"] = 1
+            if chronicle_on and r["session"]["id"] in (
+                    "r-auth", "r-retry", "r-retry2", "r-hooks"):
                 r["session"]["project_id"] = "auth-refactor"
             # Slice I: the live run gains a workdir (the diff route's
             # 409 gate reads it; AgentSession carries it on the wire).
@@ -1744,9 +1837,23 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/audit":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             run_id = (q.get("runId") or [""])[0]
+            action = (q.get("action") or [""])[0]
             with state_lock:
                 provenance_on = state["provenance"]
+                chronicle_on = state["chronicle"]
             entries = AUDIT_ENTRIES.get(run_id, []) if provenance_on else []
+            # Slice BC: with the chronicle corpus on, the trail serves the FULL
+            # pool (the real route is one append-only log) and honours the
+            # `?action=` filter routes.ts:292 accepts alongside `?runId=`.
+            if chronicle_on:
+                pool = [e for v in AUDIT_ENTRIES.values() for e in v] \
+                    + GATE_DECIDED_ENTRIES
+                if run_id:
+                    pool = [e for e in pool if e.get("runId") == run_id]
+                entries = pool
+            if action:
+                entries = [e for e in entries if e.get("action") == action]
+            entries = sorted(entries, key=lambda e: -e.get("ts", 0))
             self._json(200, {"entries": entries})
             return True
         # Slice I: the crew#305 file/diff routes (real contract, switch-gated).
@@ -1832,10 +1939,15 @@ class W2Handler(SimpleHTTPRequestHandler):
                 repo_member_on = state["repo_member"]
                 batch_on = state["batch_gates"]
                 j5_on = state["j5_runs"]
+                chronicle_on = state["chronicle"]
             # Fix slice J4/J5: the dated cancelled pair is filed under
             # smoke-tests (real attach clocks); the undated pair stays unfiled.
             if j5_on and pid == "smoke-tests":
                 refs.extend(J5_MEMBER_REFS)
+            # Slice BC: the retry chain + the solo episode file under
+            # auth-refactor — the membership record the DTO echo mirrors.
+            if chronicle_on and pid == "auth-refactor":
+                refs.extend(CHRONICLE_MEMBER_REFS)
             # Slice L: the batch corpus projects' runs.
             if batch_on:
                 refs.extend(BATCH_MEMBERS.get(pid, []))
@@ -1938,6 +2050,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             # the full recorded chronology, seq-ordered, deny verdict included.
             if timeline_on and rid == "r-auth":
                 events = list(TIMELINE_AUTH_EVENTS)
+            # Slice BC: the chain tip's durable tail — the current-state
+            # strip's criterion/workflow derivation reads exactly this.
+            with state_lock:
+                chronicle_on = state["chronicle"]
+            if chronicle_on and rid in CHRONICLE_EVENTS:
+                events = events + CHRONICLE_EVENTS[rid]
             self._json(200, {"events": events})
             return True
         # Slice R: the REAL unit-transcript wire (routes.ts crew — the studio's
