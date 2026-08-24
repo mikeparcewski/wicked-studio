@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
 import { api, downloadRunEvidence } from '../api/client.js';
+import { sessionGuidance } from '../api/guidance.js';
+import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import type { SessionView, StageKind, UnitStatus, WorkUnit } from '../api/types.js';
 import { executingOrd } from '../api/run-state.js';
 import { useGateStore } from '../store/gates.js';
@@ -862,6 +864,34 @@ function RunChat({
 
   const style = STATUS_STYLE[session.status] ?? { label: session.status, className: '', color: 'var(--ink-muted)' };
   const isTerminal = ['completed', 'cancelled', 'failed'].includes(session.status);
+
+  // DES-UX-002 §5.4 (slice BE): `t` / `u` switch the terminal run's two lenses
+  // — timeline / unit list — through the ONE shortcut registry (EC42: the '?'
+  // overlay documents them from the registration itself, exactly where they
+  // work). Guarded on the run being terminal: a live run has no tab row, so
+  // the keys yield silently there; the shared typing guard keeps letters as
+  // letters in the steer textarea.
+  const tabsLive = useRef(isTerminal);
+  tabsLive.current = isTerminal;
+  const tabEntries = useMemo<ShortcutEntry[]>(() => [
+    {
+      id: 'run-tab-timeline',
+      chord: { key: 't' },
+      group: 'panels',
+      description: 'Run detail: show the evidence timeline',
+      guard: () => tabsLive.current,
+      handler: (e) => { e.preventDefault(); setRunTab('timeline'); },
+    },
+    {
+      id: 'run-tab-units',
+      chord: { key: 'u' },
+      group: 'panels',
+      description: 'Run detail: show the unit list',
+      guard: () => tabsLive.current,
+      handler: (e) => { e.preventDefault(); setRunTab('units'); },
+    },
+  ], []);
+  useGlobalShortcuts(tabEntries);
   // Keep action + system events interleaved in arrival order (log is seq-ordered).
   const eventLog = log.filter((e) => SYSTEM_EVENT_TYPES.has(e.type) || ACTION_EVENT_TYPES.has(e.type));
   const dotColor = statusDotColor(session.status);
@@ -1205,6 +1235,7 @@ function RunChat({
               <div key={`gate-before-${unit.id}`} className="self-center w-full max-w-lg">
                 <SteeringGate
                   runId={session.id}
+                  guidance={sessionGuidance(session)}
                   {...(gate ? { ord: gate.ord, prompt: gate.prompt } : {})}
                   onResolved={onRefresh}
                 />
@@ -1255,6 +1286,7 @@ function RunChat({
           <div className="self-center w-full max-w-lg">
             <SteeringGate
               runId={session.id}
+              guidance={sessionGuidance(session)}
               {...(gate ? { ord: gate.ord, prompt: gate.prompt } : {})}
               onResolved={onRefresh}
             />

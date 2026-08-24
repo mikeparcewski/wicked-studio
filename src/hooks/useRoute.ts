@@ -38,6 +38,12 @@ interface Route {
   mode: Mode | null;
   /** What the mode has open: run id (Build), thread id (Chat), doc id, demo id. */
   artifactId: string | null;
+  /** True on `/p/:projectId/chronicle` (DES-UX-002 §5.2, slice BE): the work
+   *  chronicle as a REAL route — deep-linkable, back-button-correct. It rides
+   *  the Build surface (mode resolves to 'build'; the chronicle is a second
+   *  VIEW of the project's build work, §3's adopted additive position), so
+   *  this flag — not a fifth Mode — is what selects the view. */
+  chronicleView: boolean;
 }
 
 /** Route options a caller can override; everything else takes its inert default. */
@@ -51,6 +57,7 @@ const INERT: Route = {
   projectId: null,
   mode: null,
   artifactId: null,
+  chronicleView: false,
 };
 
 function route(over: Partial<Route>): Route {
@@ -75,6 +82,22 @@ export function projectPath(projectId: string): string {
 export function modePath(projectId: string, mode: Mode, artifactId?: string | null): string {
   const base = `${projectPath(projectId)}/${mode}`;
   return artifactId ? `${base}/${encodeURIComponent(artifactId)}` : base;
+}
+
+/** The work chronicle's real route (DES-UX-002 §5.2, slice BE) — see `chronicleView`. */
+export function chroniclePath(projectId: string): string {
+  return `${projectPath(projectId)}/chronicle`;
+}
+
+/**
+ * A run's evidence-timeline address (DES-UX-002 §5.2, slice BE): `/runs/:id/
+ * timeline` — the §5.2 alias of `/runs/:id`, whose default layout the timeline
+ * already is (slice BB, terminal runs). The parser resolves both spellings to
+ * the run detail; entry points (the home board's ACTIVE card, §5.3) use this
+ * one so the intent is legible in the URL.
+ */
+export function runTimelinePath(runId: string): string {
+  return `/runs/${encodeURIComponent(runId)}/timeline`;
 }
 
 /**
@@ -116,6 +139,12 @@ function parse(pathname: string): Route {
   // The project+mode parse runs AHEAD of the panel parse (DES-MERGE-001 §1.5); the
   // `Panel` union below is untouched and still owns every side panel.
   if (first === 'p' && second) {
+    // `/p/:projectId/chronicle` (DES-UX-002 §5.2, slice BE): the chronicle's
+    // real route. It resolves to the Build surface with the chronicle VIEW
+    // selected — never an artifact named "chronicle".
+    if (third === 'chronicle') {
+      return route({ projectId: safeDecode(second), mode: 'build', chronicleView: true });
+    }
     const mode = asMode(third);
     const raw = mode !== null && fourth ? safeDecode(fourth) : null;
     // `/p/:projectId/:mode/new` is the project-scoped CREATE route (DES-FEEDBACK-001

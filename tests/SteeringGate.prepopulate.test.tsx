@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { SteeringGate } from '../src/components/SteeringGate.js';
 import * as client from '../src/api/client.js';
 import { useAnnotationStore } from '../src/store/annotations.js';
+import { useGuidanceStore } from '../src/store/guidance.js';
 import { useGateStore } from '../src/store/gates.js';
 
 /**
@@ -17,6 +18,7 @@ describe('SteeringGate pre-population (slice BD)', () => {
     vi.restoreAllMocks();
     useGateStore.setState({ gates: {}, approaching: {} });
     useAnnotationStore.setState({ drafts: {} });
+    useGuidanceStore.setState({ saved: {}, saveState: {} });
     vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' } as never);
     vi.spyOn(client.api, 'cancelRun').mockResolvedValue({ status: 'cancelled' } as never);
   });
@@ -67,6 +69,29 @@ describe('SteeringGate pre-population (slice BD)', () => {
     render(<SteeringGate runId="r-1" ord={1} prompt="Proceed?" />);
     await user.type(screen.getByTestId('steering-amend'), 'newest');
     expect(useAnnotationStore.getState().drafts['r-1']).toBe('newest');
+  });
+
+  // ── Slice BE: the durable layer under the standing BD contract ────────────
+
+  it('the run DTO durable note pre-populates when no session draft exists', () => {
+    render(<SteeringGate runId="r-1" ord={1} prompt="Proceed?" guidance="rate-limit by API key" />);
+    const ta = screen.getByTestId('amend-prepopulated') as HTMLTextAreaElement;
+    expect(ta.value).toBe('rate-limit by API key');
+    expect(screen.getByTestId('steering-approve-steer')).toBeEnabled();
+  });
+
+  it('pre-population order: the session draft rides ON TOP of the durable note', () => {
+    useAnnotationStore.getState().setDraft('r-1', 'the newer local edit');
+    render(<SteeringGate runId="r-1" ord={1} prompt="Proceed?" guidance="the older durable note" />);
+    expect((screen.getByTestId('amend-prepopulated') as HTMLTextAreaElement).value)
+      .toBe('the newer local edit');
+  });
+
+  it('the save mirror out-votes a stale DTO echo (a cleared note stays cleared)', () => {
+    useGuidanceStore.setState({ saved: { 'r-1': '' }, saveState: {} });
+    render(<SteeringGate runId="r-1" ord={1} prompt="Proceed?" guidance="stale DTO echo" />);
+    expect((screen.getByTestId('steering-amend') as HTMLTextAreaElement).value).toBe('');
+    expect(screen.queryByTestId('amend-prepopulated')).toBeNull();
   });
 
   it('Alt+1 inside the steer textarea inserts "Focus: " at the cursor', async () => {

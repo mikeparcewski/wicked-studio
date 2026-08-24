@@ -4,6 +4,7 @@ import type { CoverageReport } from '../api/types.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useSteerPrefixes } from '../hooks/useSteerPrefixes.js';
 import { useAnnotationStore } from '../store/annotations.js';
+import { durableGuidance, useGuidanceStore } from '../store/guidance.js';
 import { useGateStore } from '../store/gates.js';
 import { useSteeringStore, type SteeringAction } from '../store/steering.js';
 import { GATE_HASH } from './GateChip.js';
@@ -12,6 +13,9 @@ interface Props {
   runId: string;
   ord?: number;
   prompt?: string;
+  /** The run DTO's durable guidance note (CREW-UX-7, crew#312 — slice BE):
+   *  pre-populates the steer textarea FIRST; the session draft layers on top. */
+  guidance?: string | undefined;
   /** When present, fetches coverage stats for inline display at the gate card. */
   repoRef?: string;
   onResolved?: () => void;
@@ -34,15 +38,20 @@ function coverageLabel(r: CoverageReport): string {
   return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
 }
 
-export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props): React.ReactElement {
+export function SteeringGate({ runId, ord, prompt, guidance, repoRef, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
   // Slice BD (DES-UX-002 §4.3, EC51): gate arrival pre-populates the steer
-  // textarea from whatever session-scoped draft exists for this run — the gate
-  // card MOUNTING is the arrival on this surface. No draft ⇒ blank, as today.
-  // The lazy initializer reads once; `prepopulated` is a mount-stable fact.
+  // textarea — the gate card MOUNTING is the arrival on this surface. Slice BE
+  // added the durable layer (CREW-UX-7): pre-population order is the run DTO's
+  // `guidance` note FIRST, the session-scoped draft ON TOP (the newer local
+  // edit wins). Neither ⇒ blank, as today. The lazy initializer reads once;
+  // `prepopulated` is a mount-stable fact.
   const [amend, setAmend] = useState(
-    () => useAnnotationStore.getState().drafts[runId] ?? '',
+    () =>
+      useAnnotationStore.getState().drafts[runId]
+      ?? durableGuidance(runId, guidance, useGuidanceStore.getState().saved)
+      ?? '',
   );
   const [prepopulated] = useState(amend !== '');
   const [loading, setLoading] = useState(false);

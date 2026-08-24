@@ -3,7 +3,8 @@ import type { SessionView } from '../api/types.js';
 import { windowRows } from '../board/boardWindow.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import type { Navigate } from '../hooks/useRoute.js';
-import { modePath, projectPath } from '../hooks/useRoute.js';
+import { leadMovingRun } from '../board/phaseProgress.js';
+import { modePath, projectPath, runTimelinePath } from '../hooks/useRoute.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useGateStore } from '../store/gates.js';
 import { BatchGateBar } from './BatchGateBar.js';
@@ -163,12 +164,18 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
     () =>
       needsYou.map((i) => {
         const waiting = i.runs.find((v) => v.session.status === 'awaiting_human');
+        // Slice BE (DES-UX-002 §5.3): while a run is MOVING on the card, the
+        // card's open target is that run's evidence — `/runs/:id/timeline` —
+        // instead of the project dashboard (the card's project NAME remains
+        // the shell link). A card with nothing moving keeps the dashboard.
+        const moving = leadMovingRun(i.runs);
         return {
           key: i.project.id,
           runId: waiting?.session.id ?? null,
           gate: waiting === undefined ? undefined : gates[waiting.session.id],
-          // Enter opens what clicking the card's name opens: the dashboard.
-          openPath: projectPath(i.project.id),
+          openPath: moving !== undefined
+            ? runTimelinePath(moving.session.id)
+            : projectPath(i.project.id),
           projectId: i.project.id,
         };
       }),

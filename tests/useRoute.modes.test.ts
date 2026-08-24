@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { MODES, modePath, projectPath, useRoute } from '../src/hooks/useRoute.js';
+import { chroniclePath, MODES, modePath, projectPath, runTimelinePath, useRoute } from '../src/hooks/useRoute.js';
 
 /** Render the hook against a given path — the parse reads `window.location` at mount. */
 function routeAt(path: string) {
@@ -54,6 +54,32 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
     const r = routeAt('/p/proj%20one/build/run%2F9');
     expect(r.current.projectId).toBe('proj one');
     expect(r.current.artifactId).toBe('run/9');
+  });
+});
+
+describe('useRoute — slice BE routes (DES-UX-002 §5.2)', () => {
+  it('/p/:id/chronicle is the chronicle VIEW on the Build surface — a real route', () => {
+    const r = routeAt('/p/proj-1/chronicle').current;
+    expect(r.projectId).toBe('proj-1');
+    expect(r.mode).toBe('build');
+    expect(r.chronicleView).toBe(true);
+    // Never an artifact named "chronicle": no run-selected machinery fires.
+    expect(r.artifactId).toBeNull();
+    expect(r.runId).toBeNull();
+  });
+
+  it('every other route spells chronicleView false', () => {
+    expect(routeAt('/p/proj-1/build').current.chronicleView).toBe(false);
+    expect(routeAt('/p/proj-1').current.chronicleView).toBe(false);
+    expect(routeAt('/').current.chronicleView).toBe(false);
+  });
+
+  it('chroniclePath/runTimelinePath spell the §5.2 addresses; the alias resolves', () => {
+    expect(chroniclePath('proj one')).toBe('/p/proj%20one/chronicle');
+    expect(runTimelinePath('run/9')).toBe('/runs/run%2F9/timeline');
+    // `/runs/:id/timeline` is the §5.2 alias of `/runs/:id` — same run detail,
+    // whose default layout the timeline already is (slice BB, terminal runs).
+    expect(routeAt('/runs/run-1/timeline').current).toMatchObject({ panel: 'runs', runId: 'run-1' });
   });
 });
 
