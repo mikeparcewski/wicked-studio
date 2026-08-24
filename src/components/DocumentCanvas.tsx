@@ -7,8 +7,9 @@ import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
+import { DocPanel, type DocPanelTab } from './DocPanel.js';
 import { FeedbackOverlay } from './FeedbackOverlay.js';
-import { StripSensor, ThreadDrawer, ThreadToggle, useStripAutoHide } from './ThreadDrawer.js';
+import { StripSensor, useStripAutoHide } from './ThreadDrawer.js';
 import { Failed, Loading, PANEL, S, useLoad } from './SurfaceState.js';
 import { VersionStrip } from './VersionStrip.js';
 
@@ -171,11 +172,21 @@ function PaneHeader({ label, accent }: { label: string; accent: boolean }): Reac
   );
 }
 
+/** The right panel's lifted state — owned by DocumentCanvas so it survives
+ *  picker→doc navigation AND a DocFrame remount on doc change. */
+interface PanelState {
+  open: boolean;
+  tab: DocPanelTab;
+  onExpand: (tab?: DocPanelTab) => void;
+  onCollapse: () => void;
+  onTab: (tab: DocPanelTab) => void;
+}
+
 function DocFrame({
-  projectId, docId, version, navigate, threadOpen, onToggleThread, children,
+  projectId, docId, version, navigate, panel, children,
 }: {
   projectId: string; docId: string; version: number | null; navigate: Navigate;
-  threadOpen: boolean; onToggleThread: () => void;
+  panel: PanelState;
   children?: React.ReactNode;
 }): React.ReactElement {
   // §2.6 rule 3: a landing version re-reads the manifest, so the strip advances and the
@@ -206,9 +217,10 @@ function DocFrame({
   // race left a stale "Loading" overlay over an already-loaded frame.
   const resolvedShown = manifest === null ? null : resolveVersion(manifest, version);
   useEffect(() => { setLoaded(false); }, [projectId, docId, resolvedShown]);
-  // §7.3's strip presence: visible now, gone after 3s of idleness, back on proximity.
-  // `hold` (J3): a strip control holding an un-acted answer pins it visible.
-  const { hidden, wake, hold } = useStripAutoHide();
+  // §7.3's strip presence: visible now, gone after 3s of idleness, back on
+  // proximity. (The J3 `hold` retired WITH the strip's export control: the
+  // export answers moved under the chatbox, a site auto-hide never touches.)
+  const { hidden, wake } = useStripAutoHide();
 
   // ── Compare state (DES-FEEDBACK-002 §7, slice K) — the lens, not an address ──
   // `cmp` is the comparand version; null = solo canvas. The overlay refinement
@@ -257,15 +269,11 @@ function DocFrame({
           {failure
             ? <Failed surface="doc" subject={subject} failure={failure} onRetry={retry} />
             : <Loading surface="doc" subject={subject} />}
-          {/* No manifest means no strip, so the toggle floats — the conversation must
-              stay reachable even (especially) while the bridge is down (§1.2). */}
-          {threadOpen ? null : (
-            <div style={{ position: 'absolute', right: '14px', top: '14px' }}>
-              <ThreadToggle open={false} onToggle={onToggleThread} />
-            </div>
-          )}
         </div>
-        <ThreadDrawer open={threadOpen} onClose={onToggleThread}>{children}</ThreadDrawer>
+        {/* The panel (its collapsed rail included) is ALWAYS on screen, so the
+            conversation stays reachable even — especially — while the bridge is
+            down (§1.2). Doc-scoped tabs disable themselves without a manifest. */}
+        <DocPanel {...panel} doc={null}>{children}</DocPanel>
       </div>
     );
   }
@@ -451,6 +459,9 @@ function DocFrame({
       {/* pointerEvents none on the WRAPPER: the strip re-enables itself while visible;
           while dimmed the box must not shadow the z-1 sensor, or nothing can wake it. */}
       <div style={{ bottom: 0, left: 0, pointerEvents: 'none', position: 'absolute', right: 0, zIndex: 3 }}>
+        {/* Operator feedback (doc-feedback round): the band is VERSIONS ONLY —
+            the slim variant. No fork / in-thread chiclets (they live in the
+            panel's Versions tab), no toolbar, no toggle, visibly shorter. */}
         <VersionStrip
           projectId={projectId}
           docId={docId}
@@ -458,14 +469,27 @@ function DocFrame({
           selected={shown}
           navigate={navigate}
           onForked={onForked}
+          variant="slim"
           dimmed={hidden}
           onWake={wake}
-          onHold={hold}
-          trailing={<ThreadToggle open={threadOpen} onToggle={onToggleThread} />}
-          // §7 (slice K): the strip WEARS the compare state this frame owns. The
-          // strip's auto-hide/wake and the thread drawer are untouched by compare
-          // — the panes live inside the same canvas container the sensor guards.
-          compare={{
+        />
+      </div>
+      </div>
+      {/* The right panel (operator feedback): one tabbed column — Chat | Compare |
+          Theme | Versions — with its OWN expand/collapse (the rail). A flex
+          sibling, so opening it reflows the canvas rather than covering it. */}
+      <DocPanel
+        {...panel}
+        doc={{
+          projectId,
+          docId,
+          manifest,
+          selected: shown,
+          navigate,
+          onForked,
+          // §7 (slice K): the PANEL wears the compare state this frame owns —
+          // the panes live inside the same canvas container the sensor guards.
+          compare: {
             active: comparing,
             comparand,
             disabledReason: compareDisabledReason,
@@ -478,14 +502,11 @@ function DocFrame({
             onComparand: setCmp,
             onOverlay: setOverlayOn,
             onExit: exitCompare,
-          }}
-        />
-      </div>
-      </div>
-      {/* §7.3: the thread is a DRAWER — a flex sibling, so opening it reflows the
-          canvas rather than covering it. Closed by default: the canvas is full-width
-          on first visit, and the conversation is one click away, never lost. */}
-      <ThreadDrawer open={threadOpen} onClose={onToggleThread}>{children}</ThreadDrawer>
+          },
+        }}
+      >
+        {children}
+      </DocPanel>
     </div>
   );
 }
@@ -537,31 +558,37 @@ export function DocumentCanvas({
     return () => { cancelled = true; };
   }, [projectId, docId]);
 
-  // §7.3: the drawer's state lives on the Document surface. Default CLOSED when a doc
-  // is open (the canvas is full-width on first visit); default OPEN on the picker,
-  // whose empty state points at the thread — a pointer at a hidden pane would be a
-  // dead end. The state survives picker→doc navigation, so a conversation that just
-  // created a document stays on screen while its first version lands (W3).
-  const [threadOpen, setThreadOpen] = useState(docId === null);
-  const toggleThread = (): void => { setThreadOpen((v) => !v); };
+  // The right panel's state lives on the Document surface (operator feedback:
+  // the column owns its OWN expand/collapse). Default OPEN on the picker, whose
+  // empty state points at the thread — a pointer at a hidden pane would be a
+  // dead end; default COLLAPSED (the rail) with a doc open, so the canvas is
+  // full-width on first visit. The state survives picker→doc navigation, so a
+  // conversation that just created a document stays on screen while its first
+  // version lands (W3).
+  const [panelOpen, setPanelOpen] = useState(docId === null);
+  const [panelTab, setPanelTab] = useState<DocPanelTab>('chat');
+  const panel: PanelState = {
+    open: panelOpen,
+    tab: panelTab,
+    onExpand: (tab?: DocPanelTab): void => {
+      setPanelOpen(true);
+      if (tab !== undefined) setPanelTab(tab);
+    },
+    onCollapse: (): void => { setPanelOpen(false); },
+    onTab: setPanelTab,
+  };
   return (
     <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
       {docId === null
         ? (
           // No doc means no versions, so there is no spine row — the picker's empty
-          // state points at the thread instead (§2.6 rule 5, W3 step 2).
+          // state points at the thread instead (§2.6 rule 5, W3 step 2). Doc-scoped
+          // tabs disable themselves (there is no document to compare/theme/list).
           <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
             <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
               <DocPicker projectId={projectId} navigate={navigate} />
-              {/* The picker has no strip to host the toggle, so a closed drawer gets
-                  its reopen affordance here — same testid, never both mounted. */}
-              {threadOpen ? null : (
-                <div style={{ position: 'absolute', right: '14px', top: '14px' }}>
-                  <ThreadToggle open={false} onToggle={toggleThread} />
-                </div>
-              )}
             </div>
-            <ThreadDrawer open={threadOpen} onClose={toggleThread}>{children}</ThreadDrawer>
+            <DocPanel {...panel} doc={null}>{children}</DocPanel>
           </div>
         )
         : (
@@ -571,8 +598,7 @@ export function DocumentCanvas({
             docId={docId}
             version={version}
             navigate={navigate}
-            threadOpen={threadOpen}
-            onToggleThread={toggleThread}
+            panel={panel}
           >
             {children}
           </DocFrame>

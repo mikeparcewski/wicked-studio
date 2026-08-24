@@ -84,9 +84,18 @@ type LearnPhase =
 export interface ThemesMenuProps {
   projectId: string;
   docId: string;
+  /**
+   * Inline host (operator feedback, doc-surface round): the Document surface's
+   * right panel hosts the learn form as its THEME TAB — always visible while
+   * the tab is, no trigger button, no popover positioning. Everything inside
+   * (testids, the learn lifecycle, the honest timeout) is the same surface;
+   * only where it sits changed. Default false: Video mode's strip keeps the
+   * [Themes] popover verbatim.
+   */
+  inline?: boolean;
 }
 
-export function ThemesMenu({ projectId, docId }: ThemesMenuProps): React.ReactElement {
+export function ThemesMenu({ projectId, docId, inline = false }: ThemesMenuProps): React.ReactElement {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<LearnKind>('url');
   const [value, setValue] = useState('');
@@ -161,29 +170,37 @@ export function ThemesMenu({ projectId, docId }: ThemesMenuProps): React.ReactEl
   }
 
   return (
-    <div style={{ alignSelf: 'center', flexShrink: 0, position: 'relative' }}>
-      <button
-        type="button"
-        data-testid="themes-open"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        title={`${THEMES_EXPLAINER} ${THEMES_STICKS}`}
-        style={{ ...BUTTON, ...(busy ? { color: S.accent } : {}) }}
-      >
-        {/* The in-flight state survives a closed popover — the control still answers. */}
-        {busy ? <span className="animate-pulse">Themes…</span> : 'Themes'}
-      </button>
+    <div style={inline
+      ? { display: 'flex', flexDirection: 'column', minHeight: 0 }
+      : { alignSelf: 'center', flexShrink: 0, position: 'relative' }}
+    >
+      {!inline && (
+        <button
+          type="button"
+          data-testid="themes-open"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          title={`${THEMES_EXPLAINER} ${THEMES_STICKS}`}
+          style={{ ...BUTTON, ...(busy ? { color: S.accent } : {}) }}
+        >
+          {/* The in-flight state survives a closed popover — the control still answers. */}
+          {busy ? <span className="animate-pulse">Themes…</span> : 'Themes'}
+        </button>
+      )}
 
-      {open && (
+      {(inline || open) && (
         <div
           data-testid="themes-panel"
           className="flex flex-col gap-1.5"
-          style={{
-            background: S.card, border: '1px solid var(--surface-overlay)',
-            borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-overlay)',
-            bottom: 'calc(100% + 6px)', padding: '8px 10px',
-            position: 'absolute', right: 0, width: '260px', zIndex: 30,
-          }}
+          style={inline
+            // The tab host owns the box — the form flows in it, no overlay dress.
+            ? { padding: '10px 12px' }
+            : {
+                background: S.card, border: '1px solid var(--surface-overlay)',
+                borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-overlay)',
+                bottom: 'calc(100% + 6px)', padding: '8px 10px',
+                position: 'absolute', right: 0, width: '260px', zIndex: 30,
+              }}
         >
           {/* §5.5: the one-line explanation opens WITH the popover, in
               --font-sans --ink-body --text-sm — prose, never tooltip-only. */}

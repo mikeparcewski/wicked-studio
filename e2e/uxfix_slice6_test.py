@@ -16,14 +16,19 @@ project: create a deck from a brief, watch v1 land, continue with a change,
 watch v2 land — then walk the relationship in both directions.
 
 What it asserts (design §4.3, the slice-6 DOM AC — the GEOMETRY half re-scoped
-by DES-FEEDBACK-001 §7.3, which made Document mode canvas-first):
-  1. The spine (§2.6 rules 1+2, as §7.3 re-drew them): the version strip floats
-     INSIDE the canvas container over its bottom edge (measured from
-     getBoundingClientRect, not inferred), the canvas and the OPEN thread
-     drawer are non-overlapping siblings in one row, the caption still names
-     what selecting does, and there is no dead middle column between the panes.
-     (The thread is open throughout this journey: it starts on the picker,
-     whose empty state points at it, and the drawer state survives the
+by DES-FEEDBACK-001 §7.3, which made Document mode canvas-first, and AGAIN by
+the doc-feedback round, which replaced the thread drawer with the tabbed right
+PANEL and slimmed the band to version pills only):
+  1. The spine (§2.6 rules 1+2, as re-drawn): the version strip — the SLIM
+     band now — floats INSIDE the canvas container over its bottom edge
+     (measured from getBoundingClientRect, not inferred), the canvas and the
+     OPEN right panel (whose Chat tab holds the thread) are non-overlapping
+     siblings in one row, and there is no dead middle column between the
+     panes. The spine caption retired with the slim band; Themes and Export
+     moved into the panel (the Theme tab; the chat-export box), and the strip
+     carries NEITHER any more.
+     (The panel is open throughout this journey: it starts on the picker,
+     whose empty state points at the thread, and the panel state survives the
      navigation the composer makes.)
   2. Thread tags: each message that produced a version carries
      data-testid="version-marker" with its data-version, reading
@@ -33,13 +38,14 @@ by DES-FEEDBACK-001 §7.3, which made Document mode canvas-first):
      canvas to that version AND scrolls/focuses the thread message whose id
      the manifest's meta.sourceMessageId names — the id the CLIENT minted at
      submit, echoed back through the fixture's manifest.
-  4. Themes (V19, corrected by issue #65): data-testid="themes-open" reads
-     "Themes", sits on the strip beside Export, and opening it reveals the
-     one-line explanation ("Borrow a look from a site, PDF, or image.") plus
-     the REAL capability — learn a look for THIS document. Submitting a URL
-     rides the corrected wire (POST /api/events, theme.requested) and lands as
-     a thread message; there is NO theme list, NO picking, NO composer chip.
-     NO data-testid and NO copy reading "theme library" anywhere.
+  4. Themes (V19, corrected by issue #65; re-homed by the doc-feedback round):
+     the control is the panel's Theme TAB (the [Themes] strip trigger retired
+     with the slim band), and opening it reveals the one-line explanation
+     ("Borrow a look from a site, PDF, or image.") plus the REAL capability —
+     learn a look for THIS document. Submitting a URL rides the corrected wire
+     (POST /api/events, theme.requested) and lands as a thread message; there
+     is NO theme list, NO picking, NO composer chip. NO data-testid and NO
+     copy reading "theme library" anywhere.
 
 Captures (§4.0 contract: 1440x900 viewport, device_scale_factor=1, waits on
 data-testid, never a sleep) into e2e/shots/uxfix/ — gitignored evidence:
@@ -169,41 +175,49 @@ with sync_playwright() as p:
         "ok": no_divider == 0, "dividers": no_divider,
     }
 
-    # AC 1 — the spine, in the §7.3 canvas-first geometry: the strip floats INSIDE
-    # the canvas container over its bottom edge; the canvas and the OPEN thread
-    # drawer are non-overlapping siblings in one row (no dead middle column).
+    # AC 1 — the spine, in the §7.3 canvas-first geometry, RE-SCOPED by the
+    # doc-feedback round: the strip (now the SLIM band — version pills only)
+    # still floats INSIDE the canvas container over its bottom edge; the canvas
+    # and the OPEN right PANEL (which replaced the thread drawer on the doc
+    # surface — its Chat tab holds the thread) are non-overlapping siblings in
+    # one row (no dead middle column). Themes and Export left the strip for the
+    # panel: the Theme tab and the chat-export box under the composer.
     wake_strip(page)  # the strip auto-hides after 3s idle — measure it awake
     spine = page.evaluate(
         """() => {
              const strip = document.querySelector('[data-testid="version-strip"]');
              const container = document.querySelector('[data-testid="document-canvas"]');
              const canvas = document.querySelector('[data-testid="doc-canvas"]');
-             const drawer = document.querySelector('[data-testid="thread-drawer"]');
+             const panel = document.querySelector('[data-testid="doc-panel"]');
              const thread = document.querySelector('[data-testid="thread"]');
-             const caption = document.querySelector('[data-testid="version-spine-caption"]');
-             const themes = document.querySelector('[data-testid="version-strip"] [data-testid="themes-open"]');
-             const exportMenu = document.querySelector('[data-testid="version-strip"] [data-testid="export-menu"]');
+             const themeTab = document.querySelector('[data-testid="panel-tab"][data-tab="theme"]');
+             const exportBox = panel?.querySelector('[data-testid="chat-export"] [data-testid="export-menu"]');
              const sr = strip?.getBoundingClientRect(), cr = container?.getBoundingClientRect();
-             const kr = canvas?.getBoundingClientRect(), dr = drawer?.getBoundingClientRect();
+             const kr = canvas?.getBoundingClientRect(), pr = panel?.getBoundingClientRect();
              return {
+               stripVariant: strip?.getAttribute('data-variant'),
                stripInsideCanvasContainer: !!container && container.contains(strip),
                stripOverBottomEdge: !!sr && !!cr && Math.abs(sr.bottom - cr.bottom) < 3
                  && sr.left >= cr.left - 1 && sr.right <= cr.right + 1,
-               drawerHoldsThread: !!drawer && drawer.contains(thread),
-               canvasBesideDrawer: !!kr && !!dr && kr.right <= dr.left + 1
-                 && dr.right - dr.left > 300,
-               captionText: caption ? caption.textContent : null,
-               themesOnStrip: !!themes, exportOnStrip: !!exportMenu,
+               panelHoldsThread: !!panel && panel.contains(thread),
+               canvasBesidePanel: !!kr && !!pr && kr.right <= pr.left + 1
+                 && pr.right - pr.left > 300,
+               noCaption: !document.querySelector('[data-testid="version-spine-caption"]'),
+               themesOffStrip: !!strip && !strip.querySelector('[data-testid="themes-open"]'),
+               exportOffStrip: !!strip && !strip.querySelector('[data-testid="export-menu"]'),
+               themeTabUp: !!themeTab, exportUnderChatbox: !!exportBox,
                entries: document.querySelectorAll('[data-testid="version-entry"]').length,
              };
            }"""
     )
     report["steps"]["slice6_spine"] = {
         "ok": all([
+            spine["stripVariant"] == "slim",
             spine["stripInsideCanvasContainer"], spine["stripOverBottomEdge"],
-            spine["drawerHoldsThread"], spine["canvasBesideDrawer"],
-            spine["themesOnStrip"], spine["exportOnStrip"],
-            "scrolls the thread" in (spine["captionText"] or ""),
+            spine["panelHoldsThread"], spine["canvasBesidePanel"],
+            spine["noCaption"],
+            spine["themesOffStrip"], spine["exportOffStrip"],
+            spine["themeTabUp"], spine["exportUnderChatbox"],
             spine["entries"] == 2,
         ]),
         **spine,
@@ -230,15 +244,19 @@ with sync_playwright() as p:
     }
 
     # AC 4 (half) — no spelling of "theme library" anywhere on the surface.
+    # Doc-feedback re-scope: the [Themes] strip trigger retired — the control
+    # is the panel's Theme TAB now, labeled "Theme" (PANEL_TABS), same ban on
+    # the invented "theme library" spelling.
     v19 = page.evaluate(
         """() => ({
              libraryTestids: document.querySelectorAll('[data-testid*="theme-library"]').length,
              libraryCopy: document.body.innerText.toLowerCase().includes('theme library'),
-             themesLabel: document.querySelector('[data-testid="themes-open"]')?.textContent.trim(),
+             themesLabel: document.querySelector('[data-testid="panel-tab"][data-tab="theme"]')
+               ?.textContent.trim(),
            })"""
     )
     report["steps"]["slice6_v19_rename"] = {
-        "ok": v19["libraryTestids"] == 0 and not v19["libraryCopy"] and v19["themesLabel"] == "Themes",
+        "ok": v19["libraryTestids"] == 0 and not v19["libraryCopy"] and v19["themesLabel"] == "Theme",
         **v19,
     }
 
@@ -262,22 +280,30 @@ with sync_playwright() as p:
              v1Selected: document.querySelector('[data-testid="version-entry"][data-version="1"]')
                ?.getAttribute('data-selected'),
              focusedMessageId: document.activeElement?.getAttribute('data-message-id') || null,
-             inThreadEnabled: Array.from(document.querySelectorAll('[data-testid="version-scroll"]'))
-               .every(b => !b.disabled),
            })"""
     )
+    page.screenshot(path=str(SHOTS / "uxfix-6-version-crosslink.png"))
+    # Doc-feedback re-scope: the In-thread affordances moved off the band into
+    # the panel's Versions tab — open it to read them, then return to Chat (the
+    # thread must be visible for the thread→strip direction below).
+    page.locator('[data-testid="panel-tab"][data-tab="versions"]').click()
+    page.locator('[data-testid="version-detail"]').first.wait_for(timeout=30000)
+    in_thread_enabled = page.evaluate(
+        """() => { const b = Array.from(document.querySelectorAll('[data-testid="version-scroll"]'));
+                   return b.length > 0 && b.every(x => !x.disabled); }""")
+    page.locator('[data-testid="panel-tab"][data-tab="chat"]').click()
     report["steps"]["slice6_strip_to_thread"] = {
         "ok": all([
             strip_to_thread["url"].endswith("?v=1"),
             strip_to_thread["canvasVersion"] == "1",
             strip_to_thread["v1Selected"] == "true",
             v1_msg_id is not None and strip_to_thread["focusedMessageId"] == v1_msg_id,
-            strip_to_thread["inThreadEnabled"],
+            in_thread_enabled,
         ]),
         "v1_message_id": v1_msg_id,
+        "inThreadEnabled": in_thread_enabled,
         **strip_to_thread,
     }
-    page.screenshot(path=str(SHOTS / "uxfix-6-version-crosslink.png"))
 
     # thread → strip: clicking a tag navigates to ITS version; the strip follows.
     page.locator('[data-testid="version-marker"][data-version="2"]').click()
@@ -290,10 +316,11 @@ with sync_playwright() as p:
     }
 
     # ── Scene D: Themes explains itself and offers the REAL capability (#65) ──────
-    # No list, no picking: the popover is the doc-scoped learn form, and a submit
-    # rides the corrected wire — theme.requested over POST /api/events.
-    wake_strip(page)
-    page.locator('[data-testid="themes-open"]').click()
+    # No list, no picking: the doc-scoped learn form (the SAME testids the popover
+    # carried), hosted inline by the panel's Theme tab since the doc-feedback
+    # round; a submit rides the corrected wire — theme.requested over POST
+    # /api/events.
+    page.locator('[data-testid="panel-tab"][data-tab="theme"]').click()
     page.locator('[data-testid="themes-panel"]').wait_for(timeout=30000)
     page.locator('[data-testid="themes-input"]').wait_for(timeout=30000)
     themes = page.evaluate(
@@ -317,16 +344,20 @@ with sync_playwright() as p:
     VSHOTS.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(VSHOTS / "theme-wire-fix-themes-menu.png"))
 
-    wake_strip(page)  # the panel rides the strip — keep it awake for the submit
+    # (No wake: the form rides the panel now, which never auto-hides.)
     page.locator('[data-testid="themes-input"]').fill("https://acme.example/brand")
     page.locator('[data-testid="themes-submit"]').click()
     # DES-UX-001 §7.2 (slice X, EC37) SUPERSEDES the close-on-submit here: the popover
     # now STAYS OPEN and answers — in-flight, then done when the readback ripens. The
     # submission is still a MESSAGE (§2.3): the ask lands in the thread verbatim.
     page.locator('[data-testid="learn-inflight"]').wait_for(timeout=30000)
+    # The ask lands in the thread, which lives in the KEPT-MOUNTED Chat tab body
+    # (display:none while the Theme tab shows) — assert its DOM presence
+    # (state="attached"), not visibility; the Chat tab's visible transcript is
+    # covered by the scenes that run on it.
     page.locator('[data-testid="doc-message"]',
                  has_text="Learn a theme from https://acme.example/brand") \
-        .first.wait_for(timeout=30000)
+        .first.wait_for(state="attached", timeout=30000)
     learned = page.evaluate(
         """() => ({
              askInThread: Array.from(document.querySelectorAll('[data-testid="doc-message"]'))
@@ -340,11 +371,11 @@ with sync_playwright() as p:
     # its own status line, arriving over the bus — never an HTTP 4xx on the ack. The
     # fixture emits exactly the frame materializeThemeRequested writes. The panel is
     # still open (slice X) — editing the input starts the fresh ask.
-    wake_strip(page)
     page.locator('[data-testid="themes-input"]').fill("http://169.254.169.254/")
     page.locator('[data-testid="themes-submit"]').click()
+    # Same kept-mounted-but-hidden thread: presence, not visibility.
     page.locator('[data-testid="doc-narration"]', has_text="Couldn't grab that URL") \
-        .first.wait_for(timeout=30000)
+        .first.wait_for(state="attached", timeout=30000)
     refusal = page.evaluate(
         """() => {
              const lines = Array.from(document.querySelectorAll('[data-testid="doc-narration"]'))

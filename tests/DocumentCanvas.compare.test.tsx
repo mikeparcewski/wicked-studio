@@ -93,6 +93,11 @@ async function mountDoc(manifest: VersionManifest, version: number | null = null
   const navigate = vi.fn();
   render(<DocumentCanvas projectId={PROJECT} docId={DOC} version={version} navigate={navigate} />);
   await screen.findByTestId('doc-canvas');
+  // RE-SCOPED (doc-feedback round): the compare controls moved off the band
+  // into the right panel's COMPARE TAB — the rail button opens straight onto it.
+  await userEvent.click(document.querySelector(
+    '[data-testid="panel-rail-tab"][data-tab="compare"]') as HTMLElement);
+  expect(screen.getByTestId('doc-panel').getAttribute('data-tab')).toBe('compare');
   return navigate;
 }
 

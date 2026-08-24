@@ -9,6 +9,14 @@ progress, timeout, or error").
 EC37, mechanically enforced: the control you clicked answers — pending,
 ready, or failed — WHERE you clicked it.
 
+DOC-FEEDBACK RE-SCOPE (operator round on the doc surface): the click sites
+MOVED — export now renders under the chatbox in the right panel's Chat tab,
+and the Themes popover became the panel's Theme tab (inline form, no
+trigger button). Same testids, same EC37 lifecycle, new geometry; every
+scene below drives the same contract at the new sites. The in-flight pulse
+that lived on the [Themes] trigger is asserted on the form's own submit
+button now.
+
 The §7.2 DOM ACs, verbatim mapping:
 
   1. clicking an export format renders `[data-testid="export-pending"]` on
@@ -39,10 +47,10 @@ The §7.2 DOM ACs, verbatim mapping:
 
 Captures (§12.0 contract: 1440x900, device_scale_factor=1) into
 e2e/shots/vision/:
-  ux-X-export-ready.png   the version strip: the clicked HTML control now IS
-                          the download (accent anchor), the thread's export
-                          message beside it.
-  ux-X-learn-timeout.png  the Themes popover: the honest timeout copy + Retry
+  ux-X-export-ready.png   the export box under the chatbox: the clicked HTML
+                          control now IS the download (accent anchor), the
+                          thread's export message above it.
+  ux-X-learn-timeout.png  the Theme tab: the honest timeout copy + Retry
                           after the bounded wait on a silent bridge.
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
@@ -64,7 +72,6 @@ from uxfix_fixture import (
     ensure_build,
     set_fixture,
     start_server,
-    wake_strip,
 )
 
 FEEDBACK_PORT = int(os.environ.get("FEEDBACK_PORT", "4388"))
@@ -124,15 +131,17 @@ with sync_playwright() as p:
         page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
 
     # ── Scene 1 (AC 1): export answers PENDING then READY at the click site ────
+    # Doc-feedback re-scope: the export controls moved UNDER THE CHATBOX in the
+    # right panel's Chat tab (operator: "export should move under chat box in
+    # right panel") — same testids, same EC37 contract, new click site. The
+    # panel is collapsed to its rail by default on a doc route; its own rail
+    # tab expands it straight onto Chat (the thread + the export box together —
+    # the strip carries no thread-toggle and no export any more).
     set_fixture(ORIGIN, export_delay_ms=1500)
     goto_doc()
-    wake_strip(page)
-    # §7.3: the thread is a DRAWER, closed by default when a doc is open — WHY the
-    # click site must answer (EC37). Open it so AC 1's "the thread message remains"
-    # is checked against a visible transcript (and the shot shows both truths).
-    page.locator('[data-testid="thread-toggle"]').click()
+    page.locator('[data-testid="panel-rail-tab"][data-tab="chat"]').click()
     page.locator('[data-testid="thread"]').wait_for(timeout=15000)
-    wake_strip(page)
+    page.locator('[data-testid="chat-export"]').wait_for(timeout=15000)
     html_btn = page.locator('[data-testid="export-format"][data-format="html"]')
     html_btn.wait_for(timeout=15000)
     html_btn.click()
@@ -186,8 +195,9 @@ with sync_playwright() as p:
     page.screenshot(path=str(VSHOTS / "ux-X-export-ready.png"))
 
     # ── Scene 2 (AC 2): a refused export answers FAILED at the click site ──────
+    # (No wake needed: the click site lives in the panel now, which never
+    # auto-hides — only the version band does.)
     set_fixture(ORIGIN, export_delay_ms=0, export_pptx_missing=True)
-    wake_strip(page)
     page.locator('[data-testid="export-format"][data-format="pptx"]').click()
     hint = page.locator('[data-testid="export-hint"]')
     hint.wait_for(timeout=15000)
@@ -205,9 +215,14 @@ with sync_playwright() as p:
     set_fixture(ORIGIN, export_pptx_missing=False)
 
     # ── Scene 3 (AC 3): learn answers IN-FLIGHT (staged) then DONE ─────────────
+    # Doc-feedback re-scope: the Themes popover became the panel's THEME TAB
+    # (operator: "Compare & Theme should become tabs on chat panel to right") —
+    # the inline host renders the SAME learn form (same testids, same EC37
+    # lifecycle) with no [Themes] trigger button; the tab is how it opens. The
+    # in-flight state that used to pulse on the trigger now shows on the form's
+    # own submit button ("Learning…") — asserted per scene below.
     set_fixture(ORIGIN, learn_delay_s=4)  # long enough to witness the stage line
-    wake_strip(page)
-    page.locator('[data-testid="themes-open"]').click()
+    page.locator('[data-testid="panel-tab"][data-tab="theme"]').click()
     page.locator('[data-testid="themes-panel"]').wait_for(timeout=15000)
     page.locator('[data-testid="themes-input"]').fill("https://acme.example/brand")
     page.locator('[data-testid="themes-submit"]').click()
@@ -222,12 +237,12 @@ with sync_playwright() as p:
     inflight = page.evaluate(
         """() => ({
              stage: document.querySelector('[data-testid="learn-stage"]')?.textContent ?? null,
-             trigger: document.querySelector('[data-testid="themes-open"]')?.textContent ?? null,
+             submitLabel: document.querySelector('[data-testid="themes-submit"]')?.textContent ?? null,
              inputHeld: !!document.querySelector('[data-testid="themes-input"]')?.disabled,
            })""")
     check("learn_inflight_stages_bridge_frame",
           "Grabbing the page" in (inflight["stage"] or "")
-          and "Themes…" in (inflight["trigger"] or "")
+          and "Learning…" in (inflight["submitLabel"] or "")
           and inflight["inputHeld"], **inflight)
 
     # DONE: the readback ripening is the one completion truth; the popover says so.
@@ -237,7 +252,7 @@ with sync_playwright() as p:
     # ── Scene 4 (AC 4): a learn the bridge REFUSES answers with ITS sentence ───
     # §8.4.1 probe 4 (re-verified at slice time): one doc-scoped status.posted
     # {state:"error"} — surfaced verbatim, never re-worded into the timeout copy.
-    wake_strip(page)  # §7.3 auto-hide owns the strip; clicks need it awake
+    # (No wake: the form lives in the panel's Theme tab, which never auto-hides.)
     page.locator('[data-testid="themes-input"]').fill("http://169.254.169.254/")
     page.locator('[data-testid="themes-submit"]').click()
     err = page.locator('[data-testid="learn-error"]')
@@ -257,7 +272,6 @@ with sync_playwright() as p:
     # readback. The client's bounded poll (~66s hard cap, the REAL schedule) is
     # the only thing standing between the user and eternal narration.
     set_fixture(ORIGIN, learn_silent=True, reset_learn=True)
-    wake_strip(page)
     page.locator('[data-testid="themes-input"]').fill("https://slow.example/never")
     page.locator('[data-testid="themes-submit"]').click()
     page.locator('[data-testid="learn-inflight"]').wait_for(timeout=10000)
@@ -265,26 +279,20 @@ with sync_playwright() as p:
 
     # Within the budget: the poll caps at ~66s — 100s here is the rig's margin,
     # not the promise. Past the cap there must be NO unresolved in-flight state.
+    # (The panel never auto-hides, so no strip wake/fade dance before capture.)
     timeout_el = page.locator('[data-testid="learn-timeout"]')
     timeout_el.wait_for(timeout=100000)
-    wake_strip(page)  # the long wait dimmed the strip — wake it for the capture
-    # …and let the strip's opacity transition FINISH: data-hidden flips at the
-    # start of the fade-in, and a capture mid-fade ghosts the popover.
-    page.wait_for_function(
-        """() => getComputedStyle(
-                 document.querySelector('[data-testid="version-strip"]')).opacity === '1'""",
-        timeout=10000)
     silence = page.evaluate(
         """() => ({
              copy: document.querySelector('[data-testid="learn-timeout"]')?.textContent ?? '',
              retry: !!document.querySelector('[data-testid="learn-retry"]'),
              stillInflight: !!document.querySelector('[data-testid="learn-inflight"]'),
-             triggerSettled: (document.querySelector('[data-testid="themes-open"]')
-                              ?.textContent ?? '').trim() === 'Themes',
+             submitSettled: (document.querySelector('[data-testid="themes-submit"]')
+                             ?.textContent ?? '').startsWith('Learn from this'),
            })""")
     check("silence_resolves_to_honest_timeout",
           TIMEOUT_COPY in silence["copy"] and silence["retry"]
-          and not silence["stillInflight"] and silence["triggerSettled"],
+          and not silence["stillInflight"] and silence["submitSettled"],
           **silence)
 
     page.screenshot(path=str(VSHOTS / "ux-X-learn-timeout.png"))
@@ -292,7 +300,6 @@ with sync_playwright() as p:
     # The retry is LIVE: with the bridge speaking again, the same control lands
     # the learn — the §3.3 rule that a failure state always carries its own fix.
     set_fixture(ORIGIN, learn_silent=False, reset_learn=True, learn_delay_s=0.75)
-    wake_strip(page)
     page.locator('[data-testid="learn-retry"]').click()
     page.locator('[data-testid="learn-inflight"]').wait_for(timeout=10000)
     page.locator('[data-testid="learn-done"]').wait_for(timeout=90000)

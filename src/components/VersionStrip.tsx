@@ -48,7 +48,7 @@ const S = {
 /** §7.6: no anchor known ⇒ nothing to scroll to, and the reason is the tooltip.
  *  DES-UX-001 §6.3: the transcript read carries no version anchors (BRIDGE-UX-1
  *  §8.4.1), so anchors survive only for what this session observed. */
-const NO_ANCHOR_TITLE =
+export const NO_ANCHOR_TITLE =
   'The message that produced this version is not known to this session, so there is '
   + 'nothing to scroll to. The document service does not yet record version anchors '
   + 'in the transcript — they survive for what this session observed; older documents '
@@ -72,7 +72,7 @@ function byVersion(a: VersionEntry, b: VersionEntry): number {
  * A BRANCH is a version whose parent is not the one immediately before it — the
  * lineage the linear strip cannot show positionally, so it is named instead.
  */
-function forkedFrom(entry: VersionEntry): number | null {
+export function forkedFrom(entry: VersionEntry): number | null {
   return entry.parent !== null && entry.parent !== entry.version - 1 ? entry.parent : null;
 }
 
@@ -85,12 +85,12 @@ function forkedFrom(entry: VersionEntry): number | null {
  * stopgap after a reload. `meta` stays the first look for any bridge that does echo
  * it; the store map is what actually answers today.
  */
-function anchorOf(entry: VersionEntry, byVersion: Map<number, string>): string | null {
+export function anchorOf(entry: VersionEntry, byVersion: Map<number, string>): string | null {
   return entry.meta?.sourceMessageId ?? byVersion.get(entry.version) ?? null;
 }
 
 /** version → the id of the user message tagged with it, from one thread's transcript. */
-function anchorsFrom(msgs: DocMsg[]): Map<number, string> {
+export function anchorsFrom(msgs: DocMsg[]): Map<number, string> {
   const map = new Map<number, string>();
   for (const m of msgs) {
     if (m.kind === 'user' && m.version !== undefined) map.set(m.version, m.id);
@@ -106,39 +106,6 @@ const ACTION: React.CSSProperties = {
   fontFamily: 'var(--font-sans)', lineHeight: 1.6, padding: '1px 6px',
 };
 
-/**
- * The compare lens (DES-FEEDBACK-002 §7, slice K): the strip's toolbar carries the
- * `[⇆ Compare]` toggle and, while comparing, the `v(N) ↔ v(M) · overlay · vs: · ✕`
- * cluster. The strip only WEARS the state — the panes (and the state itself) are
- * the canvas owner's (DocumentCanvas), because comparing is a lens on the canvas,
- * not an address (§7.2: the left pane stays the `?v=N` navigation; the comparand
- * is ephemeral UI state). Video mode never passes this prop, so the storyboard's
- * strip is untouched.
- */
-export interface CompareControl {
-  /** Comparing right now. */
-  active: boolean;
-  /** The right pane's version (null only while inactive). */
-  comparand: number | null;
-  /** §7.5/§7.6 disabled-with-reason: non-null renders the toggle disabled with
-   *  the reason as its title ("only one version exists" on a v1-only doc). */
-  disabledReason: string | null;
-  /** The `[▣ overlay]` sub-toggle inside compare (§7.2). */
-  overlay: boolean;
-  onToggle: () => void;
-  onComparand: (version: number) => void;
-  onOverlay: (on: boolean) => void;
-  onExit: () => void;
-}
-
-/** §6.4 segmented dress (shared by §7.4): active = --surface-raised + --ink-high,
- *  inactive = --ink-muted; --radius-md. */
-const SEGMENT: React.CSSProperties = {
-  background: 'transparent', border: 'none', borderRadius: 'var(--radius-md)',
-  color: S.muted, cursor: 'pointer', fontFamily: 'var(--font-sans)',
-  fontSize: 'var(--text-2xs)', lineHeight: 1.6, padding: '1px 7px',
-};
-
 export interface VersionStripProps {
   projectId: string;
   docId: string;
@@ -148,6 +115,22 @@ export interface VersionStripProps {
   navigate: Navigate;
   /** The service's fork result; the owner re-reads the manifest and routes to it. */
   onForked: (result: ForkResult) => void;
+  /**
+   * The band's dress (operator feedback, doc-surface round: "The banner at
+   * bottom should only be versions … remove the 'fork' and 'in thread'
+   * chiclets and reduce the overall height of the band").
+   *
+   * - 'full' (default): the historical band — multi-row entries with Fork /
+   *   In-thread actions, the spine caption, and the [Themes] [Export] toolbar.
+   *   Video mode still wears this.
+   * - 'slim': VERSION PILLS ONLY, one row, visibly shorter. No chiclets, no
+   *   caption, no toolbar, and `compare`/`trailing` are never rendered — those
+   *   affordances live in the Document surface's right panel now (DocPanel).
+   *   Selecting a pill keeps the §7.6 cross-link (navigate + scroll the thread
+   *   to the producing message); the fork gesture SURVIVES in the panel's
+   *   Versions tab (§0: a protected gesture moves, it never silently dies).
+   */
+  variant?: 'full' | 'slim';
   /** Which mode route a selection navigates (DES-FEEDBACK-001 §7.4): Video reuses
    *  the strip verbatim, so the ONLY thing that differs is the path it builds. */
   mode?: 'document' | 'video';
@@ -159,11 +142,10 @@ export interface VersionStripProps {
   /** §7.2 (the J3 closed-drawer pin): a strip control holding an unanswered/
    *  un-acted answer pins the strip visible — see `useStripAutoHide().hold`. */
   onHold?: ((held: boolean) => void) | undefined;
-  /** The canvas-first chrome's extra control — the thread-drawer toggle (§7.3). */
+  /** The canvas-first chrome's extra control — the thread-drawer toggle (§7.3).
+   *  Full variant only (Video); the Document surface's panel owns its own
+   *  expand/collapse now, so its slim band carries no toggle. */
   trailing?: React.ReactNode;
-  /** DES-FEEDBACK-002 §7 (slice K): the compare toggle/cluster. Absent = no
-   *  compare affordance (Video mode reuses the strip without one). */
-  compare?: CompareControl;
 }
 
 /** How long the strip stays CLICKABLE after auto-hide dims it — the fade itself
@@ -174,7 +156,7 @@ export const STRIP_FADE_GRACE_MS = 320;
 
 export function VersionStrip({
   projectId, docId, manifest, selected, navigate, onForked,
-  mode = 'document', dimmed = false, onWake, onHold, trailing, compare,
+  variant = 'full', mode = 'document', dimmed = false, onWake, onHold, trailing,
 }: VersionStripProps): React.ReactElement {
   const [forking, setForking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -211,6 +193,91 @@ export function VersionStrip({
     } finally {
       setForking(null);
     }
+  }
+
+  // ── The slim band (operator feedback): version pills ONLY, one short row ────
+  if (variant === 'slim') {
+    return (
+      <div
+        data-testid="version-strip"
+        data-variant="slim"
+        data-hidden={dimmed ? 'true' : 'false'}
+        onMouseMove={onWake}
+        onPointerDown={onWake}
+        style={{
+          alignItems: 'center', background: S.bar,
+          borderTop: '2px solid var(--accent-subtle)',
+          display: 'flex', flexShrink: 0, gap: '8px', padding: '4px 10px',
+          opacity: dimmed ? 0 : 1,
+          pointerEvents: dimmed && inert ? 'none' : 'auto',
+          transition: 'opacity var(--dur-base)',
+        }}
+      >
+        <span style={{
+          color: S.faint, flexShrink: 0, fontSize: 'var(--text-2xs)', fontWeight: 600,
+          fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', textTransform: 'uppercase',
+        }}>
+          Versions
+        </span>
+        <div style={{ alignItems: 'center', display: 'flex', flex: 1, gap: '6px',
+                      minWidth: 0, overflowX: 'auto' }}>
+          {[...manifest.versions].sort(byVersion).map((entry) => {
+            const isSelected = entry.version === selected;
+            const branchOf = forkedFrom(entry);
+            return (
+              <div
+                key={entry.version}
+                data-testid="version-entry"
+                data-version={entry.version}
+                data-parent={entry.parent === null ? '' : entry.parent}
+                data-selected={isSelected ? 'true' : 'false'}
+                style={{
+                  background: isSelected ? S.selected : 'transparent',
+                  border: `1px solid ${isSelected ? S.accent : S.border}`,
+                  borderRadius: 'var(--radius-full)', display: 'inline-flex',
+                  flexShrink: 0, padding: '1px 8px',
+                }}
+              >
+                <button
+                  type="button"
+                  data-testid="version-select"
+                  aria-current={isSelected ? 'true' : undefined}
+                  onClick={() => select(entry)}
+                  title={branchOf === null
+                    ? `Show version ${entry.version}`
+                    : `Show version ${entry.version} — continues from v${branchOf}`}
+                  style={{
+                    alignItems: 'center', background: 'transparent', border: 'none',
+                    color: isSelected ? S.ink : S.muted, cursor: 'pointer',
+                    display: 'inline-flex', gap: '5px', padding: 0,
+                  }}
+                >
+                  {isSelected && (
+                    <span
+                      data-testid="version-active-dot"
+                      style={{
+                        background: S.accent, borderRadius: 'var(--radius-full)',
+                        display: 'inline-block', flexShrink: 0, height: '6px', width: '6px',
+                      }}
+                    />
+                  )}
+                  <span style={{
+                    fontSize: 'var(--text-xs)', fontWeight: 600, fontFamily: 'var(--font-mono)',
+                  }}>
+                    v{entry.version}
+                  </span>
+                  <span data-testid="version-stamp" style={{
+                    color: S.muted, fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+                  }}>
+                    {stamp(entry.created_at)}
+                  </span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -366,93 +433,9 @@ export function VersionStrip({
         selecting a version scrolls the thread to the message that made it ▸
       </span>
 
-      {/* DES-FEEDBACK-002 §7.2 (slice K): the compare toggle rides the toolbar
-          beside [Themes] [Export]. Inactive: one button (disabled with a stated
-          reason on a v1-only doc — §7.6's rule). Active: the comparing cluster —
-          what is compared, the overlay sub-toggle, the `vs:` comparand picker
-          (every OTHER version), and the ✕ exit. */}
-      {compare !== undefined && !compare.active && (
-        <button
-          type="button"
-          data-testid="version-compare-toggle"
-          disabled={compare.disabledReason !== null}
-          onClick={compare.onToggle}
-          title={compare.disabledReason
-            ?? `Compare v${selected} with another version side by side`}
-          style={{
-            ...ACTION,
-            alignSelf: 'center', flexShrink: 0,
-            cursor: compare.disabledReason !== null ? 'not-allowed' : 'pointer',
-            opacity: compare.disabledReason !== null ? 0.4 : 1,
-          }}
-        >
-          ⇆ Compare
-        </button>
-      )}
-      {compare !== undefined && compare.active && compare.comparand !== null && (
-        <span
-          data-testid="compare-controls"
-          style={{
-            alignItems: 'center', alignSelf: 'center',
-            border: `1px solid ${S.border}`, borderRadius: 'var(--radius-md)',
-            display: 'inline-flex', flexShrink: 0, gap: '6px', padding: '1px 6px',
-          }}
-        >
-          <span style={{
-            color: S.ink, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)',
-          }}>
-            ⇆ Comparing v{selected} ↔ v{compare.comparand}
-          </span>
-          <button
-            type="button"
-            data-testid="compare-overlay-toggle"
-            aria-pressed={compare.overlay}
-            onClick={() => compare.onOverlay(!compare.overlay)}
-            title={compare.overlay
-              ? 'Back to the side-by-side split'
-              : 'Stack the two versions with adjustable opacity — spot layout shifts'}
-            style={{
-              ...SEGMENT,
-              background: compare.overlay ? 'var(--surface-raised)' : 'transparent',
-              color: compare.overlay ? S.ink : S.muted,
-            }}
-          >
-            ▣ overlay
-          </button>
-          <label style={{
-            alignItems: 'center', color: S.faint, display: 'inline-flex', gap: '4px',
-            fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)',
-          }}>
-            vs:
-            <select
-              data-testid="compare-vs"
-              value={compare.comparand}
-              onChange={(e) => compare.onComparand(Number(e.target.value))}
-              title="Pick which version the right pane shows"
-              style={{
-                background: 'var(--surface-raised)', border: `1px solid ${S.border}`,
-                borderRadius: 'var(--radius-sm)', color: S.ink,
-                fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', padding: '0 2px',
-              }}
-            >
-              {[...manifest.versions].sort(byVersion)
-                .filter((e) => e.version !== selected)
-                .map((e) => (
-                  <option key={e.version} value={e.version}>v{e.version}</option>
-                ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            data-testid="compare-exit"
-            onClick={compare.onExit}
-            title="Exit compare — back to the solo canvas (Escape works too)"
-            style={{ ...SEGMENT, padding: '1px 4px' }}
-          >
-            ✕
-          </button>
-        </span>
-      )}
+      {/* NOTE (doc-feedback round): the slice-K compare toggle/cluster used to ride
+          this toolbar. Compare moved to the Document panel's Compare tab (DocPanel)
+          — the strip never wears it now, in either variant. */}
 
       {/* The canvas toolbar (§2.6 rule 4): [Themes] [Export], acting on the document. */}
       <ThemesMenu projectId={projectId} docId={docId} />
