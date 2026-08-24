@@ -24,6 +24,7 @@ import { useSteeringStore } from '../store/steering.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
+import { WorkChronicle } from './WorkChronicle.js';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -803,6 +804,17 @@ export function CenterDashboard({
 
   const filteredRuns = useMemo(() => filterByRange(scopedRuns), [scopedRuns, filterByRange]);
 
+  // ── The work chronicle (DES-UX-002 §3, slice BC) — a second VIEW of the
+  // project's build work, additive beside the flat list (§10's adopted
+  // position: additive tab; slice BE wires the §5.2 route + default). It
+  // reads the FULL scoped history — episode chains are the project's story,
+  // not a time-window slice — so its input skips the range filter.
+  const [view, setView] = useState<'runs' | 'chronicle'>('runs');
+  const chronicleRuns = useMemo(
+    () => scopedRuns.filter((v) => !!v.session.workflow_id && v.session.workflow_id !== 'chat'),
+    [scopedRuns],
+  );
+
   // ── Derived: active sessions only (feed + send panel scope) ──────────────
   const activeRuns = useMemo(
     () => filteredRuns.filter((v) => ACTIVE_STATUSES.has(v.session.status)),
@@ -974,6 +986,42 @@ export function CenterDashboard({
         >
           {BUILD_PURPOSE}
         </p>
+
+        {/* ── The Runs | Chronicle view toggle (DES-UX-002 §3.3 + §5.3, slice
+               BC): project context only. The flat list stays the default — the
+               §10 open question's adopted additive position; BE may re-default. */}
+        {projectId !== null && (
+          <div role="tablist" aria-label="Build view" style={{ display: 'flex', gap: '4px', marginBottom: '20px' }}>
+            {(['runs', 'chronicle'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={view === v}
+                data-testid={`build-view-${v}`}
+                onClick={() => setView(v)}
+                style={{
+                  background: view === v ? 'var(--surface-raised)' : 'transparent',
+                  border: '1px solid var(--surface-raised)',
+                  borderRadius: 'var(--radius-md)',
+                  color: view === v ? 'var(--ink-high)' : 'var(--ink-muted)',
+                  cursor: 'pointer',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  ...sans,
+                  padding: '5px 12px',
+                }}
+              >
+                {v === 'runs' ? 'Runs' : 'Chronicle'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {projectId !== null && view === 'chronicle' ? (
+          <WorkChronicle runs={chronicleRuns} projectId={projectId} navigate={navigate} />
+        ) : (
+        <>
 
         {/* ── 2. Gate inbox — only when gates are pending (§2.7 rule 5, W4) ───── */}
         {openGates.length > 0 && (
@@ -1181,6 +1229,9 @@ export function CenterDashboard({
         {/* ── 6. Send-to-agents — only while something is running (empty-state
                budget: an idle surface does not announce the absence). ────────── */}
         {activeRuns.length > 0 && <SendPanel activeRuns={activeRuns} />}
+
+        </>
+        )}
 
       </div>
     </div>

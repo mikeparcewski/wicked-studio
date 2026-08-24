@@ -154,6 +154,16 @@ export const api = {
   getAudit: (runId: string) =>
     apiFetch<AuditPage>(`/audit?runId=${encodeURIComponent(runId)}`),
 
+  /**
+   * The audit trail filtered by ACTION (`GET /audit?action=`, newest first —
+   * crew routes.ts:292 accepts `?runId=` / `?action=` / `?limit=`). The work
+   * chronicle's guidance summary reads `gate.decided` this way — ONE request,
+   * gesture-gated, filtered client-side to the project's runs (DES-UX-002
+   * §3.3; a `?projectId=` filter does not exist on this wire, §10).
+   */
+  getAuditByAction: (action: string) =>
+    apiFetch<AuditPage>(`/audit?action=${encodeURIComponent(action)}`),
+
   /** A run's durably-persisted event trail (`GET /runs/:id/events`). Used to backfill the event
    * store on a reload with no live `/ws` replay so Burn/insight panels are not empty (FINDING-013).
    * Rejects (503) when the engine build has no event-log binding — callers treat that as "no backfill". */
