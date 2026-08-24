@@ -1650,7 +1650,9 @@ try:
             selected_at_head == ["false", "false", "true"],
             head_src is not None and head_src.endswith("/doc/3"),
             v1_scroll_disabled,
-            "scroll to" in v1_scroll_title and "merge" in v1_scroll_title,
+            # Slice-T re-scope (DES-UX-001 §6.3): the null-anchor tooltip now
+            # names the transcript-anchor gap, not the pre-T "merge" copy.
+            "scroll to" in v1_scroll_title and "version anchors" in v1_scroll_title,
             v3_scroll_enabled,
             v1_src == expected_v1_src,
             v1_query == "v=1",
