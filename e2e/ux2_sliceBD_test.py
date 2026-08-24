@@ -31,8 +31,10 @@ The §4.5 DOM ACs, as re-scoped:
      with the typed text as its value, auto-expanded to the draft's line count;
      ZERO /api/v1 requests fire between the annotation save and gate arrival
      (request-tap) — the draft is client state, no invented wire;
-  3. the session-scope label renders `[data-testid="annotation-scope-label"]`
-     with the exact honest copy (EC52) — present until CREW-UX-4 lands;
+  3. (RE-SCOPED by slice BE — CREW-UX-7/crew#312 landed, so the whole-widget
+     session-scope label RETIRED with the gap it named): the EC52 label now
+     names ONLY the unsaved edit — ABSENT on the freshly-opened widget,
+     present with the honest-split copy once text is typed and unsaved;
   4. Alt+1 within the steer textarea inserts `Focus: ` at the cursor
      (keyboard event assert); Alt+2 `Skip: `; Alt+3 `Context: `;
   5. the '?' overlay lists the Focus:/Skip:/Context: steer prefixes under the
@@ -82,8 +84,10 @@ DRAFT = ("keep the burst budget tests green\n"
          "prefer the token-bucket middleware\n"
          "do not touch the upload handler itself")
 
-# EC52's honest copy — must match src/store/annotations.ts SCOPE_LABEL verbatim.
-SCOPE_COPY = "saved for this browser session only — durable annotations land with CREW-UX-4."
+# EC52's honest copy after slice BE — must match src/store/annotations.ts
+# DRAFT_SCOPE_LABEL verbatim (the durable endpoint landed: only the UNSAVED
+# edit is still session-scoped, and the label says exactly that).
+SCOPE_COPY = "unsaved edit — this browser session only until you save guidance."
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -173,16 +177,23 @@ with sync_playwright() as p:
         }""", arg=CARD, timeout=5000)
     check("chip_click_opens_and_focuses", True)
 
-    # ── Scene 2 (AC 3 / EC52): the honest scope label, exact copy ──────────────
+    # ── Scene 2 (AC 3 / EC52, slice-BE re-scope): a freshly-opened widget has
+    #    NOTHING session-scoped — the label must be absent (durability holds) ───
+    check("scope_label_absent_before_edit",
+          page.evaluate(
+              """(card) => !document.querySelector(
+                   card + ' [data-testid="annotation-scope-label"]')""",
+              CARD))
+
+    # ── Scene 3 (AC 2, the save half): type the draft; the label now names the
+    #    UNSAVED edit (exact honest-split copy); the window between the draft
+    #    landing and gate arrival fires ZERO /api/v1 requests ───────────────────
+    page.locator(INPUT).fill(DRAFT)
     scope = page.evaluate(
         """(card) => document.querySelector(
              card + ' [data-testid="annotation-scope-label"]')?.textContent ?? null""",
         CARD)
     check("scope_label_exact_honest_copy", scope == SCOPE_COPY, label=scope)
-
-    # ── Scene 3 (AC 2, the save half): type the draft; the window between save
-    #    and gate arrival fires ZERO /api/v1 requests ───────────────────────────
-    page.locator(INPUT).fill(DRAFT)
     page.wait_for_timeout(1500)  # let any (illegal) debounced write surface
     reads_before = len(api_requests)
     page.wait_for_timeout(1000)
