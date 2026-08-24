@@ -72,7 +72,7 @@ function byVersion(a: VersionEntry, b: VersionEntry): number {
  * A BRANCH is a version whose parent is not the one immediately before it — the
  * lineage the linear strip cannot show positionally, so it is named instead.
  */
-function forkedFrom(entry: VersionEntry): number | null {
+export function forkedFrom(entry: VersionEntry): number | null {
   return entry.parent !== null && entry.parent !== entry.version - 1 ? entry.parent : null;
 }
 
@@ -85,12 +85,12 @@ function forkedFrom(entry: VersionEntry): number | null {
  * stopgap after a reload. `meta` stays the first look for any bridge that does echo
  * it; the store map is what actually answers today.
  */
-function anchorOf(entry: VersionEntry, byVersion: Map<number, string>): string | null {
+export function anchorOf(entry: VersionEntry, byVersion: Map<number, string>): string | null {
   return entry.meta?.sourceMessageId ?? byVersion.get(entry.version) ?? null;
 }
 
 /** version → the id of the user message tagged with it, from one thread's transcript. */
-function anchorsFrom(msgs: DocMsg[]): Map<number, string> {
+export function anchorsFrom(msgs: DocMsg[]): Map<number, string> {
   const map = new Map<number, string>();
   for (const m of msgs) {
     if (m.kind === 'user' && m.version !== undefined) map.set(m.version, m.id);
@@ -148,6 +148,22 @@ export interface VersionStripProps {
   navigate: Navigate;
   /** The service's fork result; the owner re-reads the manifest and routes to it. */
   onForked: (result: ForkResult) => void;
+  /**
+   * The band's dress (operator feedback, doc-surface round: "The banner at
+   * bottom should only be versions … remove the 'fork' and 'in thread'
+   * chiclets and reduce the overall height of the band").
+   *
+   * - 'full' (default): the historical band — multi-row entries with Fork /
+   *   In-thread actions, the spine caption, and the [Themes] [Export] toolbar.
+   *   Video mode still wears this.
+   * - 'slim': VERSION PILLS ONLY, one row, visibly shorter. No chiclets, no
+   *   caption, no toolbar, and `compare`/`trailing` are never rendered — those
+   *   affordances live in the Document surface's right panel now (DocPanel).
+   *   Selecting a pill keeps the §7.6 cross-link (navigate + scroll the thread
+   *   to the producing message); the fork gesture SURVIVES in the panel's
+   *   Versions tab (§0: a protected gesture moves, it never silently dies).
+   */
+  variant?: 'full' | 'slim';
   /** Which mode route a selection navigates (DES-FEEDBACK-001 §7.4): Video reuses
    *  the strip verbatim, so the ONLY thing that differs is the path it builds. */
   mode?: 'document' | 'video';
@@ -174,7 +190,7 @@ export const STRIP_FADE_GRACE_MS = 320;
 
 export function VersionStrip({
   projectId, docId, manifest, selected, navigate, onForked,
-  mode = 'document', dimmed = false, onWake, onHold, trailing, compare,
+  variant = 'full', mode = 'document', dimmed = false, onWake, onHold, trailing, compare,
 }: VersionStripProps): React.ReactElement {
   const [forking, setForking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -211,6 +227,91 @@ export function VersionStrip({
     } finally {
       setForking(null);
     }
+  }
+
+  // ── The slim band (operator feedback): version pills ONLY, one short row ────
+  if (variant === 'slim') {
+    return (
+      <div
+        data-testid="version-strip"
+        data-variant="slim"
+        data-hidden={dimmed ? 'true' : 'false'}
+        onMouseMove={onWake}
+        onPointerDown={onWake}
+        style={{
+          alignItems: 'center', background: S.bar,
+          borderTop: '2px solid var(--accent-subtle)',
+          display: 'flex', flexShrink: 0, gap: '8px', padding: '4px 10px',
+          opacity: dimmed ? 0 : 1,
+          pointerEvents: dimmed && inert ? 'none' : 'auto',
+          transition: 'opacity var(--dur-base)',
+        }}
+      >
+        <span style={{
+          color: S.faint, flexShrink: 0, fontSize: 'var(--text-2xs)', fontWeight: 600,
+          fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', textTransform: 'uppercase',
+        }}>
+          Versions
+        </span>
+        <div style={{ alignItems: 'center', display: 'flex', flex: 1, gap: '6px',
+                      minWidth: 0, overflowX: 'auto' }}>
+          {[...manifest.versions].sort(byVersion).map((entry) => {
+            const isSelected = entry.version === selected;
+            const branchOf = forkedFrom(entry);
+            return (
+              <div
+                key={entry.version}
+                data-testid="version-entry"
+                data-version={entry.version}
+                data-parent={entry.parent === null ? '' : entry.parent}
+                data-selected={isSelected ? 'true' : 'false'}
+                style={{
+                  background: isSelected ? S.selected : 'transparent',
+                  border: `1px solid ${isSelected ? S.accent : S.border}`,
+                  borderRadius: 'var(--radius-full)', display: 'inline-flex',
+                  flexShrink: 0, padding: '1px 8px',
+                }}
+              >
+                <button
+                  type="button"
+                  data-testid="version-select"
+                  aria-current={isSelected ? 'true' : undefined}
+                  onClick={() => select(entry)}
+                  title={branchOf === null
+                    ? `Show version ${entry.version}`
+                    : `Show version ${entry.version} — continues from v${branchOf}`}
+                  style={{
+                    alignItems: 'center', background: 'transparent', border: 'none',
+                    color: isSelected ? S.ink : S.muted, cursor: 'pointer',
+                    display: 'inline-flex', gap: '5px', padding: 0,
+                  }}
+                >
+                  {isSelected && (
+                    <span
+                      data-testid="version-active-dot"
+                      style={{
+                        background: S.accent, borderRadius: 'var(--radius-full)',
+                        display: 'inline-block', flexShrink: 0, height: '6px', width: '6px',
+                      }}
+                    />
+                  )}
+                  <span style={{
+                    fontSize: 'var(--text-xs)', fontWeight: 600, fontFamily: 'var(--font-mono)',
+                  }}>
+                    v{entry.version}
+                  </span>
+                  <span data-testid="version-stamp" style={{
+                    color: S.muted, fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+                  }}>
+                    {stamp(entry.created_at)}
+                  </span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   return (
