@@ -176,7 +176,10 @@ describe('DocumentCanvas — the routed version drives the frame (§4.2, slice 9
     expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/${DOC}?v=1`);
   });
 
-  it('a fork re-reads the manifest and routes to the version the SERVICE reported', async () => {
+  it('a fork (now in the panel’s Versions tab) re-reads the manifest and routes to the version the SERVICE reported', async () => {
+    // RE-SCOPED (doc-feedback round): the band's Fork chiclet is gone — the
+    // fork gesture LIVES in the right panel's Versions tab (§0: protected
+    // gestures move, they never silently die).
     const forked = {
       head: 4,
       versions: [...MANIFEST.versions, {
@@ -193,12 +196,21 @@ describe('DocumentCanvas — the routed version drives the frame (§4.2, slice 9
     render(<DocumentCanvas projectId={PROJECT} docId={DOC} version={null} navigate={navigate} />);
 
     await screen.findByTestId('doc-canvas');
-    await userEvent.click(screen.getAllByTestId('version-fork')[0]!);
+    // The rail's Versions button expands the panel straight onto the tab.
+    await userEvent.click(screen.getByTestId('doc-panel-rail')
+      .querySelector('[data-testid="panel-rail-tab"][data-tab="versions"]') as HTMLElement);
+    // Detail rows are NEWEST FIRST; v1's row is the last. Fork from v1.
+    const rows = screen.getAllByTestId('version-detail');
+    expect(rows.map((r) => r.getAttribute('data-version'))).toEqual(['3', '2', '1']);
+    await userEvent.click(rows[2]!.querySelector('[data-testid="version-fork"]') as HTMLElement);
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/document/${DOC}?v=4`));
     // The manifest is re-read rather than patched locally (§4.2: the service is authority).
     await waitFor(() => expect(screen.getAllByTestId('version-entry')).toHaveLength(4));
-    expect(screen.getByTestId('version-lineage')).toHaveTextContent('continues from v1');
+    // The band pill names the branch in its title; the DETAIL row states it.
+    await waitFor(() => expect(
+      screen.getAllByTestId('version-detail-lineage').map((l) => l.textContent),
+    ).toContain('branched from v1'));
   });
 });
 
@@ -313,16 +325,17 @@ describe('DocumentCanvas — the picker (§6.3: no :docId in the route)', () => 
   });
 });
 
-// ── DES-UXFIX-001 §2.6 (slice 6): the three-pane spine ───────────────────────
+// ── DES-UXFIX-001 §2.6 (slice 6) → RE-SCOPED by the doc-feedback round: the
+//    right panel replaced the drawer, the band is versions-only ───────────────
 
-describe('DocumentCanvas — canvas-first: drawer + floating strip (DES-FEEDBACK-001 §7.3)', () => {
+describe('DocumentCanvas — canvas-first: right panel + slim strip (doc-feedback round)', () => {
   const thread = <aside data-testid="fake-thread">the thread pane</aside>;
 
   beforeEach(() => {
     useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
   });
 
-  it('AC: with a doc open the thread drawer is CLOSED by default and the strip lives INSIDE the canvas container', async () => {
+  it('AC: with a doc open the panel is COLLAPSED to its rail by default and the strip lives INSIDE the canvas container', async () => {
     stubFetch({ '/api/versions': { body: MANIFEST } });
     render(
       <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
@@ -331,9 +344,12 @@ describe('DocumentCanvas — canvas-first: drawer + floating strip (DES-FEEDBACK
     );
 
     await screen.findByTestId('doc-canvas');
-    // §7.3: the canvas owns the viewport — no thread column on first visit.
-    expect(screen.queryByTestId('thread-drawer')).toBeNull();
+    // The canvas owns the viewport — the panel is a RAIL on first visit, and
+    // the rail is the panel's OWN expand affordance (no strip toggle).
+    expect(screen.queryByTestId('doc-panel')).toBeNull();
     expect(screen.queryByTestId('fake-thread')).toBeNull();
+    expect(screen.getByTestId('doc-panel-rail')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-expand')).toBeInTheDocument();
     // The strip floats over the canvas's bottom edge, inside its container.
     const container = screen.getByTestId('document-canvas');
     const strip = screen.getByTestId('version-strip');
@@ -341,7 +357,7 @@ describe('DocumentCanvas — canvas-first: drawer + floating strip (DES-FEEDBACK
     expect(container.contains(screen.getByTestId('doc-canvas'))).toBe(true);
   });
 
-  it('AC: the strip toggle opens the drawer (canvas reflows to a flex sibling) and closes it again', async () => {
+  it('AC: the panel expands from its OWN rail (canvas reflows to a flex sibling) and collapses again', async () => {
     stubFetch({ '/api/versions': { body: MANIFEST } });
     render(
       <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
@@ -350,33 +366,61 @@ describe('DocumentCanvas — canvas-first: drawer + floating strip (DES-FEEDBACK
     );
     await screen.findByTestId('doc-canvas');
 
-    await userEvent.click(screen.getByTestId('thread-toggle'));
-    const drawer = screen.getByTestId('thread-drawer');
-    expect(drawer).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('panel-expand'));
+    const panel = screen.getByTestId('doc-panel');
+    expect(panel).toBeInTheDocument();
+    expect(panel.getAttribute('data-tab')).toBe('chat');
     expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
     // A flex SIBLING of the canvas container — reflow, not overlay (§7.3).
     const container = screen.getByTestId('document-canvas');
-    expect(drawer.parentElement).toBe(container.parentElement);
-    expect(drawer.style.width).toBe('min(440px, 40vw)');
+    expect(panel.parentElement).toBe(container.parentElement);
+    expect(panel.style.width).toBe('min(440px, 40vw)');
 
-    await userEvent.click(screen.getByTestId('thread-close'));
-    expect(screen.queryByTestId('thread-drawer')).toBeNull();
+    await userEvent.click(screen.getByTestId('panel-collapse'));
+    expect(screen.queryByTestId('doc-panel')).toBeNull();
+    expect(screen.getByTestId('doc-panel-rail')).toBeInTheDocument();
   });
 
-  it('the strip says what selecting does, and carries [Themes] [Export] + the thread toggle', async () => {
+  it('the band is VERSIONS ONLY: no chiclets, no toolbar, no toggle, no caption — pills with stamps', async () => {
     stubFetch({ '/api/versions': { body: MANIFEST } });
     render(<DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}} />);
 
     await screen.findByTestId('doc-canvas');
     const strip = screen.getByTestId('version-strip');
-    expect(strip.querySelector('[data-testid="version-spine-caption"]'))
-      .toHaveTextContent(/selecting a version scrolls the thread/i);
-    expect(strip.querySelector('[data-testid="themes-open"]')).toHaveTextContent('Themes');
-    expect(strip.querySelector('[data-testid="export-menu"]')).not.toBeNull();
-    expect(strip.querySelector('[data-testid="thread-toggle"]')).not.toBeNull();
+    expect(strip.getAttribute('data-variant')).toBe('slim');
+    // The operator's list, verbatim: no Threads/toggle, no fork, no in-thread.
+    expect(strip.querySelector('[data-testid="thread-toggle"]')).toBeNull();
+    expect(strip.querySelector('[data-testid="version-fork"]')).toBeNull();
+    expect(strip.querySelector('[data-testid="version-scroll"]')).toBeNull();
+    expect(strip.querySelector('[data-testid="version-spine-caption"]')).toBeNull();
+    expect(strip.querySelector('[data-testid="themes-open"]')).toBeNull();
+    expect(strip.querySelector('[data-testid="export-menu"]')).toBeNull();
+    // What remains: one pill per version, each with its number and stamp.
+    expect(strip.querySelectorAll('[data-testid="version-entry"]')).toHaveLength(3);
+    expect(strip.querySelectorAll('[data-testid="version-stamp"]')).toHaveLength(3);
   });
 
-  it('the conversation stays REACHABLE while loading and on failure: the floating toggle opens it (§1.2)', async () => {
+  it('export lives UNDER THE CHATBOX in the Chat tab (the moved slice-X click site)', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(
+      <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
+        {thread}
+      </DocumentCanvas>,
+    );
+    await screen.findByTestId('doc-canvas');
+    await userEvent.click(screen.getByTestId('panel-expand'));
+
+    const chatBody = document.querySelector('[data-testid="panel-body"][data-tab="chat"]')!;
+    const exportBlock = screen.getByTestId('chat-export');
+    expect(chatBody.contains(exportBlock)).toBe(true);
+    // The chat body's order: the thread first, the export block after it.
+    expect(exportBlock.previousSibling).toBe(screen.getByTestId('fake-thread'));
+    // The same slice-X control, addressing the shown version.
+    expect(exportBlock.querySelector('[data-testid="export-menu"]'))
+      .toHaveAttribute('data-version', '3');
+  });
+
+  it('the conversation stays REACHABLE while loading and on failure: the rail expands it (§1.2)', async () => {
     stubFetch({ '/api/versions': { status: 500, body: { error: 'versions.json is corrupt' } } });
     render(
       <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
@@ -386,11 +430,15 @@ describe('DocumentCanvas — canvas-first: drawer + floating strip (DES-FEEDBACK
 
     await screen.findByTestId('doc-canvas-error');
     expect(screen.queryByTestId('version-strip')).toBeNull();          // no manifest, no strip
-    await userEvent.click(screen.getByTestId('thread-toggle'));        // …but the thread is one click away
+    await userEvent.click(screen.getByTestId('panel-expand'));         // …but the thread is one click away
     expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
+    // Doc-scoped tabs are honest about needing a manifest: disabled with a reason.
+    const compareTab = document.querySelector('[data-testid="panel-tab"][data-tab="compare"]')!;
+    expect((compareTab as HTMLButtonElement).disabled).toBe(true);
+    expect(compareTab.getAttribute('title')).toMatch(/open a document/i);
   });
 
-  it('the doc-less picker keeps the thread OPEN beside it (its empty state points there), with no strip', async () => {
+  it('the doc-less picker keeps the panel OPEN on Chat beside it (its empty state points there), with no strip', async () => {
     stubFetch({ '/api/docs': { body: [] } });
     render(
       <DocumentCanvas projectId={PROJECT} docId={null} navigate={() => {}}>
@@ -399,9 +447,12 @@ describe('DocumentCanvas — canvas-first: drawer + floating strip (DES-FEEDBACK
     );
 
     await screen.findByTestId('doc-picker-empty');
-    expect(screen.getByTestId('thread-drawer')).toBeInTheDocument();
+    const panel = screen.getByTestId('doc-panel');
+    expect(panel.getAttribute('data-tab')).toBe('chat');
     expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
     expect(screen.queryByTestId('version-strip')).toBeNull();
+    // Nothing to export on the picker — the block waits for a document.
+    expect(screen.queryByTestId('chat-export')).toBeNull();
   });
 
   it('§7.3 auto-hide: the strip retires after 3s idle and the bottom sensor wakes it', async () => {

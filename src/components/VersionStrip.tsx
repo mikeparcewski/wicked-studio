@@ -48,7 +48,7 @@ const S = {
 /** §7.6: no anchor known ⇒ nothing to scroll to, and the reason is the tooltip.
  *  DES-UX-001 §6.3: the transcript read carries no version anchors (BRIDGE-UX-1
  *  §8.4.1), so anchors survive only for what this session observed. */
-const NO_ANCHOR_TITLE =
+export const NO_ANCHOR_TITLE =
   'The message that produced this version is not known to this session, so there is '
   + 'nothing to scroll to. The document service does not yet record version anchors '
   + 'in the transcript — they survive for what this session observed; older documents '
@@ -106,39 +106,6 @@ const ACTION: React.CSSProperties = {
   fontFamily: 'var(--font-sans)', lineHeight: 1.6, padding: '1px 6px',
 };
 
-/**
- * The compare lens (DES-FEEDBACK-002 §7, slice K): the strip's toolbar carries the
- * `[⇆ Compare]` toggle and, while comparing, the `v(N) ↔ v(M) · overlay · vs: · ✕`
- * cluster. The strip only WEARS the state — the panes (and the state itself) are
- * the canvas owner's (DocumentCanvas), because comparing is a lens on the canvas,
- * not an address (§7.2: the left pane stays the `?v=N` navigation; the comparand
- * is ephemeral UI state). Video mode never passes this prop, so the storyboard's
- * strip is untouched.
- */
-export interface CompareControl {
-  /** Comparing right now. */
-  active: boolean;
-  /** The right pane's version (null only while inactive). */
-  comparand: number | null;
-  /** §7.5/§7.6 disabled-with-reason: non-null renders the toggle disabled with
-   *  the reason as its title ("only one version exists" on a v1-only doc). */
-  disabledReason: string | null;
-  /** The `[▣ overlay]` sub-toggle inside compare (§7.2). */
-  overlay: boolean;
-  onToggle: () => void;
-  onComparand: (version: number) => void;
-  onOverlay: (on: boolean) => void;
-  onExit: () => void;
-}
-
-/** §6.4 segmented dress (shared by §7.4): active = --surface-raised + --ink-high,
- *  inactive = --ink-muted; --radius-md. */
-const SEGMENT: React.CSSProperties = {
-  background: 'transparent', border: 'none', borderRadius: 'var(--radius-md)',
-  color: S.muted, cursor: 'pointer', fontFamily: 'var(--font-sans)',
-  fontSize: 'var(--text-2xs)', lineHeight: 1.6, padding: '1px 7px',
-};
-
 export interface VersionStripProps {
   projectId: string;
   docId: string;
@@ -175,11 +142,10 @@ export interface VersionStripProps {
   /** §7.2 (the J3 closed-drawer pin): a strip control holding an unanswered/
    *  un-acted answer pins the strip visible — see `useStripAutoHide().hold`. */
   onHold?: ((held: boolean) => void) | undefined;
-  /** The canvas-first chrome's extra control — the thread-drawer toggle (§7.3). */
+  /** The canvas-first chrome's extra control — the thread-drawer toggle (§7.3).
+   *  Full variant only (Video); the Document surface's panel owns its own
+   *  expand/collapse now, so its slim band carries no toggle. */
   trailing?: React.ReactNode;
-  /** DES-FEEDBACK-002 §7 (slice K): the compare toggle/cluster. Absent = no
-   *  compare affordance (Video mode reuses the strip without one). */
-  compare?: CompareControl;
 }
 
 /** How long the strip stays CLICKABLE after auto-hide dims it — the fade itself
@@ -190,7 +156,7 @@ export const STRIP_FADE_GRACE_MS = 320;
 
 export function VersionStrip({
   projectId, docId, manifest, selected, navigate, onForked,
-  variant = 'full', mode = 'document', dimmed = false, onWake, onHold, trailing, compare,
+  variant = 'full', mode = 'document', dimmed = false, onWake, onHold, trailing,
 }: VersionStripProps): React.ReactElement {
   const [forking, setForking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -467,93 +433,9 @@ export function VersionStrip({
         selecting a version scrolls the thread to the message that made it ▸
       </span>
 
-      {/* DES-FEEDBACK-002 §7.2 (slice K): the compare toggle rides the toolbar
-          beside [Themes] [Export]. Inactive: one button (disabled with a stated
-          reason on a v1-only doc — §7.6's rule). Active: the comparing cluster —
-          what is compared, the overlay sub-toggle, the `vs:` comparand picker
-          (every OTHER version), and the ✕ exit. */}
-      {compare !== undefined && !compare.active && (
-        <button
-          type="button"
-          data-testid="version-compare-toggle"
-          disabled={compare.disabledReason !== null}
-          onClick={compare.onToggle}
-          title={compare.disabledReason
-            ?? `Compare v${selected} with another version side by side`}
-          style={{
-            ...ACTION,
-            alignSelf: 'center', flexShrink: 0,
-            cursor: compare.disabledReason !== null ? 'not-allowed' : 'pointer',
-            opacity: compare.disabledReason !== null ? 0.4 : 1,
-          }}
-        >
-          ⇆ Compare
-        </button>
-      )}
-      {compare !== undefined && compare.active && compare.comparand !== null && (
-        <span
-          data-testid="compare-controls"
-          style={{
-            alignItems: 'center', alignSelf: 'center',
-            border: `1px solid ${S.border}`, borderRadius: 'var(--radius-md)',
-            display: 'inline-flex', flexShrink: 0, gap: '6px', padding: '1px 6px',
-          }}
-        >
-          <span style={{
-            color: S.ink, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)',
-          }}>
-            ⇆ Comparing v{selected} ↔ v{compare.comparand}
-          </span>
-          <button
-            type="button"
-            data-testid="compare-overlay-toggle"
-            aria-pressed={compare.overlay}
-            onClick={() => compare.onOverlay(!compare.overlay)}
-            title={compare.overlay
-              ? 'Back to the side-by-side split'
-              : 'Stack the two versions with adjustable opacity — spot layout shifts'}
-            style={{
-              ...SEGMENT,
-              background: compare.overlay ? 'var(--surface-raised)' : 'transparent',
-              color: compare.overlay ? S.ink : S.muted,
-            }}
-          >
-            ▣ overlay
-          </button>
-          <label style={{
-            alignItems: 'center', color: S.faint, display: 'inline-flex', gap: '4px',
-            fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)',
-          }}>
-            vs:
-            <select
-              data-testid="compare-vs"
-              value={compare.comparand}
-              onChange={(e) => compare.onComparand(Number(e.target.value))}
-              title="Pick which version the right pane shows"
-              style={{
-                background: 'var(--surface-raised)', border: `1px solid ${S.border}`,
-                borderRadius: 'var(--radius-sm)', color: S.ink,
-                fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', padding: '0 2px',
-              }}
-            >
-              {[...manifest.versions].sort(byVersion)
-                .filter((e) => e.version !== selected)
-                .map((e) => (
-                  <option key={e.version} value={e.version}>v{e.version}</option>
-                ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            data-testid="compare-exit"
-            onClick={compare.onExit}
-            title="Exit compare — back to the solo canvas (Escape works too)"
-            style={{ ...SEGMENT, padding: '1px 4px' }}
-          >
-            ✕
-          </button>
-        </span>
-      )}
+      {/* NOTE (doc-feedback round): the slice-K compare toggle/cluster used to ride
+          this toolbar. Compare moved to the Document panel's Compare tab (DocPanel)
+          — the strip never wears it now, in either variant. */}
 
       {/* The canvas toolbar (§2.6 rule 4): [Themes] [Export], acting on the document. */}
       <ThemesMenu projectId={projectId} docId={docId} />
