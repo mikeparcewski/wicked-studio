@@ -482,14 +482,15 @@ with sync_playwright() as p:
         "flash_on": flash_on, "flash_off": flash_off, "themes_explanation": themes,
     }
 
-    # ══ Scene 4 — Video, REWIRED by DES-FEEDBACK-001 §7.4: the framed storyboard ═
-    # The client-side player (chapter cards, demo-gif, spec state) is GONE — it
-    # spoke routes the real bridge never served. The §5.6 claim this scene still
-    # makes is token-side and studio-side: the demo surface frames the demo's
-    # version HTML (the bridge-built storyboard) in a fully sandboxed iframe at
-    # the real /doc/:version route, inside the same token-built canvas framing
-    # as Document mode, addressed by the same version strip — and the §7.3
-    # canvas-first geometry (EC18) holds on this 1440px viewport.
+    # ══ Scene 4 — Video, REWIRED by DES-FEEDBACK-001 §7.4, re-grounded by the ═══
+    # VIDEO-FB round. The §5.6 claim this scene makes is token-side and
+    # studio-side: the demo surface frames the demo's version HTML (the
+    # bridge-built storyboard — now the REAL demo.js shape with root-absolute
+    # recording URLs, re-homed at render via srcdoc) inside the same token-built
+    # canvas framing as Document mode, addressed by the same (now slim) version
+    # strip, with the Document surface's tabbed panel collapsed to its rail —
+    # and the §7.3 canvas-first geometry (EC18) holds on this 1440px viewport.
+    # Playback itself (loadeddata, play, the record wire) is ux2_videofb's gate.
     set_fixture(ORIGIN, demo=True)
     page.goto(f"{ORIGIN}/p/q3-review-deck/video/checkout-demo", wait_until="domcontentloaded")
     # Park the pointer mid-canvas before measuring EC18: the rail is
@@ -502,9 +503,10 @@ with sync_playwright() as p:
     player_el = page.locator('[data-testid="demo-player"]')
     player_el.wait_for(timeout=30000)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
-    # The storyboard rendered INSIDE the frame: its chapters, thumbnails decoded.
+    # The storyboard rendered INSIDE the frame (the real wi-demo__* markup):
+    # its chapters, thumbnails decoded.
     sb = page.frame_locator('[data-testid="demo-player"]')
-    sb.locator(".ch").nth(3).wait_for(timeout=30000)
+    sb.locator(".wi-demo__chapter").nth(3).wait_for(timeout=30000)
 
     video = page.evaluate(
         f"""() => {{
@@ -512,7 +514,6 @@ with sync_playwright() as p:
              const frame = document.querySelector('[data-testid="demo-player"]');
              const canvas = document.querySelector('[data-testid="video-canvas"]');
              const strip = document.querySelector('[data-testid="version-strip"]');
-             const drawer = document.querySelector('[data-testid="thread-drawer"]');
              const cs = canvas ? getComputedStyle(canvas) : null;
              const cr = canvas ? canvas.getBoundingClientRect() : null;
              return {{
@@ -524,21 +525,29 @@ with sync_playwright() as p:
                canvasBorder: cs ? cs.borderTopColor : null,
                canvasBg: cs ? cs.backgroundColor : null,
                canvasRatio: cr ? cr.width / 1440 : null,
-               drawerClosed: !drawer,
+               panelCollapsed: !document.querySelector('[data-testid="doc-panel"]')
+                 && !!document.querySelector('[data-testid="doc-panel-rail"]'),
+               stripVariant: strip ? strip.dataset.variant : null,
                stripBg: strip ? getComputedStyle(strip).backgroundColor : null,
                stripEntries: document.querySelectorAll('[data-testid="version-entry"]').length,
                headSelected: !!document.querySelector(
                  '[data-testid="version-entry"][data-version="1"][data-selected="true"]'),
+               recordControl: !!document.querySelector('[data-testid="video-record"]'),
              }}; }}""")
     pv = video["probes"]
-    # In-frame: 4 chapters in spec order, every image decoded (thumbnails + recording).
-    chapters_in_frame = sb.locator(".ch").count()
-    chapter_texts = [sb.locator(".ch").nth(i).inner_text() for i in range(chapters_in_frame)]
-    sb_frame = next(f for f in page.frames if "/d/checkout-demo/doc/" in (f.url or ""))
+    # In-frame: 4 chapters in spec order, every image decoded (the thumbnails
+    # ride the re-homed project-scoped recording endpoint).
+    chapters_in_frame = sb.locator(".wi-demo__chapter").count()
+    chapter_texts = [sb.locator(".wi-demo__chapter").nth(i).inner_text()
+                     for i in range(chapters_in_frame)]
+    # The frame renders via srcdoc (url about:srcdoc), so it is addressed
+    # through its OWNER element, never by URL.
+    sb_frame = player_el.element_handle().content_frame()
     frame_imgs_ok = False
     try:
         sb_frame.wait_for_function(
-            "() => Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)",
+            "() => document.images.length > 0 && "
+            "Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)",
             timeout=15000)
         frame_imgs_ok = True
     except Exception:
@@ -551,10 +560,12 @@ with sync_playwright() as p:
         video["canvasBorder"] == pv["surfaceRaised"],              # EC15: token framing
         video["canvasBg"] == pv["surfaceBase"],
         video["canvasRatio"] is not None and video["canvasRatio"] > 0.8,  # EC18
-        video["drawerClosed"],
+        video["panelCollapsed"],
+        video["stripVariant"] == "slim",
         video["stripBg"] == pv["surfaceRail"],
         video["stripEntries"] == 1,
         video["headSelected"],
+        video["recordControl"],
         chapters_in_frame == 4,
         all(t in " / ".join(chapter_texts) for t in
             ("Open the storefront", "Add a hoodie to the cart",
