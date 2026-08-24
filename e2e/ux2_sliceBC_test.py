@@ -213,10 +213,19 @@ with sync_playwright() as p:
     # AC 2: attempt 2's "view timeline" navigates to run B's evidence timeline.
     page.locator(f'{chain_sel} [data-testid="attempt-row"][data-attempt="2"] '
                  '[data-testid="view-timeline"]').click()
+    # The link's own spelling is §5.2's `/runs/:id/timeline`; the app's
+    # legacy-redirect then re-homes a FILED run into its project shell
+    # (`/p/auth-refactor/build/r-retry`, DES-MERGE-001 §1.5) — the race
+    # between the two spellings is the app's, so the rig accepts either and
+    # pins the SURFACE: run B open, evidence timeline visible (slice BB's
+    # terminal-run default tab).
     page.wait_for_function(
-        """() => window.location.pathname === '/runs/r-retry/timeline'""", timeout=10000)
-    page.locator('[data-testid="thread"]').wait_for(timeout=15000)
-    check("view_timeline_navigates", True,
+        """() => window.location.pathname === '/runs/r-retry/timeline'
+              || window.location.pathname === '/p/auth-refactor/build/r-retry'""",
+        timeout=10000)
+    page.locator('[data-testid="timeline"]').wait_for(timeout=15000)
+    check("view_timeline_navigates",
+          "r-retry" in page.evaluate("() => window.location.pathname"),
           pathname=page.evaluate("() => window.location.pathname"))
 
     # ── Scene 4 (AC 3, EC53): the honest empty state — no completed run ─────────
