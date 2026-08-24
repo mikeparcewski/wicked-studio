@@ -110,10 +110,13 @@ export function deriveAttention(runs: SessionView[], docs: DocSummary[]): Attent
  *   gate    → the gate store's `receivedAt` (server ISO on reconcile, arrival live)
  *   failing → the run's durable-log tail `ts` (backfilled once per run id, capped)
  *   running → the newest structured frame the runtime store has logged for the run,
- *             else the run's membership `attached_at` (the C6 fix: a fresh page
- *             load has no frames yet, and the PROJECT clock — which anything on
- *             the project moves — read hours stale while the run was executing
- *             NOW; the run's own attach clock is the more honest floor), or a
+ *             else the FRESHER of the run's membership `attached_at` and the
+ *             project clock (the C6 fix: a fresh page load has no frames yet;
+ *             either clock alone can read hours stale while the run executes
+ *             NOW — the C6 posture was a 15h-stale project clock, while the
+ *             standing W2 corpus has the attach clock as the stale one — so a
+ *             frameless live run is ordered by the freshest evidence held, and
+ *             the BAND never hangs off this clock at all), or a
  *             relayed interactive `status.posted` (a document being edited NOW
  *             is live work — it is what puts the doc-activity line on an ACTIVE
  *             card now that a quiet card renders no activity at all, slice 2)
@@ -145,7 +148,7 @@ function signalsOf(
     } else if (status === 'failed') {
       signals.push({ kind: 'failing', at: failedAt[id] ?? fallback, runId: id });
     } else if (ACTIVE.has(status)) {
-      signals.push({ kind: 'running', at: logTail(id) ?? attachedAt[id] ?? fallback, runId: id });
+      signals.push({ kind: 'running', at: logTail(id) ?? Math.max(attachedAt[id] ?? 0, fallback), runId: id });
     }
   }
   if (docs.length > 0) {
