@@ -7,6 +7,7 @@ import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
+import { hasInstrumentBridge, instrumentDocHtml } from '../interactive/instrumented.js';
 import { DocPanel, type DocPanelTab } from './DocPanel.js';
 import { FeedbackOverlay } from './FeedbackOverlay.js';
 import { StripSensor, useStripAutoHide } from './ThreadDrawer.js';
@@ -217,6 +218,39 @@ function DocFrame({
   // race left a stale "Loading" overlay over an already-loaded frame.
   const resolvedShown = manifest === null ? null : resolveVersion(manifest, version);
   useEffect(() => { setLoaded(false); }, [projectId, docId, resolvedShown]);
+  // ── The docfb2 restore: give bridge-less documents an instrument bridge ──────
+  // The promised production injector half-shipped (see instrumented.ts): every real
+  // document carries data-wid anchors but NO bridge script, so the overlay's
+  // handshake starved and point-and-comment rendered permanently disabled. The
+  // frame's HTML is fetched (same origin, same bytes the iframe was about to load),
+  // and a document that does not already answer the protocol is rendered via
+  // `srcdoc` with the bridge appended — still `sandbox="allow-scripts"`, still an
+  // opaque origin. A document that brought its own bridge keeps the plain `src`
+  // path untouched, and a failed fetch degrades to it too (the overlay then
+  // disables with its reason, exactly the pre-restore posture).
+  const [instrumented, setInstrumented] =
+    useState<{ version: number; srcDoc: string | null } | null>(null);
+  useEffect(() => {
+    if (resolvedShown === null) return undefined;
+    let cancelled = false;
+    setInstrumented(null);
+    const url = interactiveDocUrl(projectId, docId, resolvedShown);
+    fetch(url)
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
+      .then((html) => {
+        if (cancelled) return;
+        setInstrumented({
+          version: resolvedShown,
+          srcDoc: hasInstrumentBridge(html)
+            ? null
+            : instrumentDocHtml(html, new URL(url, window.location.href).href),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setInstrumented({ version: resolvedShown, srcDoc: null });
+      });
+    return () => { cancelled = true; };
+  }, [projectId, docId, resolvedShown]);
   // §7.3's strip presence: visible now, gone after 3s of idleness, back on
   // proximity. (The J3 `hold` retired WITH the strip's export control: the
   // export answers moved under the chatbox, a site auto-hide never touches.)
@@ -417,26 +451,34 @@ function DocFrame({
         </div>
       ) : (
         <>
+          {instrumented !== null && instrumented.version === shown && (
           <iframe
             // Keyed on the VERSION so a swap REPLACES the element instead of mutating its
             // src. Mutating it navigates the frame, and a frame navigation lands in the
             // joint session history — so Back undid the frame's move rather than the route's
             // (§4.2: the version lives in the URL, and Back must rewind it in one press).
-            // A freshly created frame's first load replaces its own entry instead.
+            // A freshly created frame's first load replaces its own entry instead — true
+            // for the srcdoc path too, because the srcdoc is set at CREATION, never mutated.
             key={shown}
             ref={setFrameEl}
             data-testid="doc-canvas"
             data-doc-id={docId}
             data-version={shown}
+            // `src` is ALWAYS the version's address (what the tests and the copy-link
+            // gestures read); when the fetched HTML needed the injected bridge, `srcDoc`
+            // carries the same bytes plus the bridge, and the browser renders THAT.
             src={src}
+            {...(instrumented.srcDoc === null ? {} : { srcDoc: instrumented.srcDoc })}
             title={`Document ${docId}, version ${shown}`}
             onLoad={() => { setLoaded(true); setLoadNonce((n) => n + 1); }}
             // §5.5, §7.3: `allow-scripts` because documents ARE interactive HTML, and NOTHING
             // else. `allow-same-origin` is not "not yet" here — it is gone, and the overlay
-            // below is what made removing it possible. Pinned by a regression test.
+            // below is what made removing it possible. Pinned by a regression test. The
+            // srcdoc path keeps the SAME sandbox: an opaque origin either way.
             sandbox="allow-scripts"
             style={{ border: 'none', display: 'block', height: '100%', width: '100%' }}
           />
+          )}
           {/* The frame is in the DOM while it loads, so the named status sits over it. */}
           {loaded ? null : (
             <div style={{ background: 'var(--surface-base)', inset: 0, position: 'absolute' }}>
