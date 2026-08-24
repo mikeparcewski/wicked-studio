@@ -65,8 +65,9 @@ export function SteeringGate({ runId, ord, prompt, repoRef, onResolved }: Props)
     [runId],
   );
   // Alt+1/2/3 insert Focus:/Skip:/Context: at the cursor (§4.3, bindings per
-  // the operator steer — see useSteerPrefixes).
-  useSteerPrefixes(`gate-${runId}`, steerRef, applyAmend);
+  // the operator steer — see useSteerPrefixes; the insert arrives through the
+  // textarea's own onChange → applyAmend).
+  useSteerPrefixes(`gate-${runId}`, steerRef);
 
   // Arrived from a board gate chip (§1.4 complex gate): put the MESSAGE in view and
   // give it focus, so a keyboard lands on the question rather than wherever the

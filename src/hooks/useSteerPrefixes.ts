@@ -39,14 +39,16 @@ export function insertPrefix(
 
 /**
  * Arm the three prefix chords on one steer textarea. `idPrefix` keeps the two
- * mounting surfaces' entries distinct in the registry; `apply` receives the
- * new text (the caller owns the controlled value). The caret is restored after
- * React commits the value.
+ * mounting surfaces' entries distinct in the registry. DOM-first insertion:
+ * the value + caret are set on the element through the native setter, then a
+ * real `input` event carries the change into the caller's React `onChange` —
+ * so the controlled re-render sees a DOM that already matches the state and
+ * never yanks the caret to the end (a post-commit `setSelectionRange` races
+ * React's flush; this ordering cannot).
  */
 export function useSteerPrefixes(
   idPrefix: string,
   ref: RefObject<HTMLTextAreaElement>,
-  apply: (text: string) => void,
 ): void {
   const entries = useMemo<ShortcutEntry[]>(
     () =>
@@ -62,15 +64,16 @@ export function useSteerPrefixes(
           if (el === null) return;
           e.preventDefault();
           const next = insertPrefix(el.value, el.selectionStart ?? el.value.length, prefix);
-          apply(next.text);
-          // After React commits the controlled value, put the caret after the
-          // inserted prefix (setting value resets the caret to the end).
-          requestAnimationFrame(() => {
-            el.setSelectionRange(next.caret, next.caret);
-          });
+          const setter = Object.getOwnPropertyDescriptor(
+            HTMLTextAreaElement.prototype, 'value',
+          )?.set;
+          if (setter === undefined) return;
+          setter.call(el, next.text);
+          el.setSelectionRange(next.caret, next.caret);
+          el.dispatchEvent(new Event('input', { bubbles: true }));
         },
       })),
-    [idPrefix, ref, apply],
+    [idPrefix, ref],
   );
   useGlobalShortcuts(entries);
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SCOPE_LABEL, useAnnotationStore } from '../store/annotations.js';
 import { useSteerPrefixes } from '../hooks/useSteerPrefixes.js';
 
@@ -52,20 +52,26 @@ export function PreGateAnnotate({ runId, openSignal = 0 }: Props): React.ReactEl
   // secret behind a click.
   const [open, setOpen] = useState(draft !== '');
   const ref = useRef<HTMLTextAreaElement>(null);
+  // Focus intent, resolved AFTER the textarea commits (a rAF here would race
+  // the mount — and the board's triage cursor refocuses the card on the very
+  // click that opened us, so the focus must land after that, not before).
+  const wantFocus = useRef(false);
 
   useEffect(() => {
     if (openSignal > 0) {
+      wantFocus.current = true;
       setOpen(true);
-      // Focus after the textarea mounts.
-      requestAnimationFrame(() => ref.current?.focus());
     }
   }, [openSignal]);
 
-  const apply = useCallback(
-    (text: string) => setDraft(runId, text),
-    [setDraft, runId],
-  );
-  useSteerPrefixes(`annotate-${runId}`, ref, apply);
+  useEffect(() => {
+    if (open && wantFocus.current) {
+      wantFocus.current = false;
+      ref.current?.focus();
+    }
+  }, [open]);
+
+  useSteerPrefixes(`annotate-${runId}`, ref);
 
   if (!open) {
     return (
@@ -77,8 +83,8 @@ export function PreGateAnnotate({ runId, openSignal = 0 }: Props): React.ReactEl
         title="Compose steer guidance now — it pre-fills the gate's steer box when a gate arrives"
         style={CSS.affordance}
         onClick={() => {
+          wantFocus.current = true;
           setOpen(true);
-          requestAnimationFrame(() => ref.current?.focus());
         }}
       >
         <span aria-hidden>+</span> steer note for the next gate
