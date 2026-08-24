@@ -35,6 +35,7 @@ import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalSh
 import { useLegacyRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
+import { useAnnotationStore } from './store/annotations.js';
 import { useGateStore } from './store/gates.js';
 import { useElicitationStore } from './store/elicitations.js';
 import { useLiveChatsStore } from './store/liveChats.js';
@@ -71,6 +72,7 @@ export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
+  const ingestAnnotation = useAnnotationStore((s) => s.ingest);
   const ingestElicitation = useElicitationStore((s) => s.ingest);
   const ingestNotif = useNotificationStore((s) => s.ingest);
   const ingestRuntime = useRuntimeStore((s) => s.ingest);
@@ -92,6 +94,8 @@ export function App(): React.ReactElement {
   const handleEvent = useCallback(
     (event: CoreEvent) => {
       ingestGate(event);
+      // Slice BD: terminal frames retire a run's pre-gate annotation draft.
+      ingestAnnotation(event);
       ingestElicitation(event);
       ingestNotif(event);
       ingestRuntime(event);
@@ -107,7 +111,7 @@ export function App(): React.ReactElement {
       notifyGateIfUnfocused(event);
       if (LIFECYCLE_EVENTS.has(event.type)) refresh();
     },
-    [ingestGate, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, ingestLiveChat, refresh],
+    [ingestGate, ingestAnnotation, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, ingestLiveChat, refresh],
   );
 
   useEventStream(handleEvent);

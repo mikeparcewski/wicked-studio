@@ -184,6 +184,10 @@ code, pre, .font-mono {
    reads --ink-dim — a pseudo-element needs CSS, so the rule lives here. */
 .wk-reject-note::placeholder { color: var(--ink-dim); }
 
+/* Slice-BD pre-gate annotation widget (DES-UX-002 §4.4): the placeholder reads
+   --ink-muted — a pseudo-element needs CSS, so the rule lives here. */
+.wk-annotate::placeholder { color: var(--ink-muted); }
+
 /* Slice-J switcher keyboard repair (DES-FEEDBACK-002 §4.3, EC22): the arrows
    move REAL DOM focus among the dropdown's rows, and focus wears the visible
    --accent ring — the cursor is focus, on every ProjectSwitcher call site. */
