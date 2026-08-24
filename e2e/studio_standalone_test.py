@@ -2108,6 +2108,13 @@ try:
         page.wait_for_function(
             """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]'))
                  .opacity === '0'""", timeout=10000)
+        # Round-3 J3 re-scope (#108): hit targets retire on transitionEND (a
+        # mid-fade click must reach the strip, not the sensor below), so
+        # pointer-events flips to none a beat AFTER opacity settles — wait for
+        # that second settling stage instead of racing it.
+        page.wait_for_function(
+            """() => getComputedStyle(document.querySelector('[data-testid="version-strip"]'))
+                 .pointerEvents === 'none'""", timeout=10000)
         strip_hidden_css = page.evaluate(
             """() => { const s = getComputedStyle(document.querySelector('[data-testid="version-strip"]'));
                        return { opacity: s.opacity, pointerEvents: s.pointerEvents }; }""")
