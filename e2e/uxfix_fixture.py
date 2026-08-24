@@ -298,6 +298,16 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # (the units + output wires). Default False: sliceR's tail keeps its
          # historical 4-event shape.
          "timeline": False,
+         # C6 fix (BRIEF-UX-002 final gate): the stale-clock reproduction —
+         # EVERY clock the board could read for upload-endpoint goes 15h stale
+         # (project.updated_at, the r-upload attach clock) AND the /ws
+         # narration for r-upload goes silent, exactly the live-observed
+         # posture (2 executing runs, chip "·15h", zero fresh frames). The run
+         # DTO status stays `executing` — the ONE truth the C6 fix derives the
+         # band from. Pre-fix code decays this project into QUIET; fixed code
+         # keeps it WORKING forever. Default False: standing rigs keep the
+         # fresh clocks + narration they assert.
+         "c6_stale": False,
          # Slice BA (DES-UX-002 §1): the nerve-center plan corpus — r-upload's
          # SessionView carries the §1.5 five-unit plan (2 done, 1 distributed,
          # 2 pending; the return-to-build leg IS the 5th strip node — StageKind
@@ -1868,10 +1878,17 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # One burn frame per tick until the slice-E drip drains.
                 if newest and burn_drip:
                     self.wfile.write(ws_frame(burn_drip.pop(0)))
-                self.wfile.write(ws_frame({
-                    "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
-                    "text": NARRATION + "\n",
-                }))
+                # C6 fix: under the stale-clock reproduction r-upload streams
+                # NOTHING — the run executes with zero fresh frames, so the
+                # only working-band evidence the board holds is the DTO status.
+                # Read per-tick so a rig can flip it without reconnecting.
+                with state_lock:
+                    c6_mute = state["c6_stale"]
+                if not c6_mute:
+                    self.wfile.write(ws_frame({
+                        "type": "unitOutputDelta", "session": "r-upload", "ord": 0,
+                        "text": NARRATION + "\n",
+                    }))
                 self.wfile.flush()
                 time.sleep(1.0)
         except OSError:
@@ -1952,10 +1969,16 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/projects":
             with state_lock:
                 batch_on = state["batch_gates"]
+                c6_on = state["c6_stale"]
                 # Slice X2: this-lifetime created projects ride the list too.
                 created = json.loads(json.dumps(created_projects))
-            self._json(200, {"projects": PROJECTS
-                             + (BATCH_PROJECTS if batch_on else []) + created})
+            rows = PROJECTS + (BATCH_PROJECTS if batch_on else []) + created
+            # C6 fix: the stale-clock reproduction — upload-endpoint's project
+            # clock reads 15 HOURS old while its run executes NOW.
+            if c6_on:
+                rows = [{**p, "updated_at": NOW0 - 15 * HOUR}
+                        if p["id"] == "upload-endpoint" else p for p in rows]
+            self._json(200, {"projects": rows})
             return True
         if path == "/api/v1/repos":
             with state_lock:
@@ -2054,6 +2077,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 kinds[REPO_ID] = "crew.repo"
             # Slice Q: the 24h-spread clocks override the W2 defaults (river on).
             clocks = {**ATTACHED_AT, **(RIVER_ATTACHED_AT if river_on else {})}
+            # C6 fix: the attach clock — the running signal's floor — goes just
+            # as stale as everything else; only the DTO status stays honest.
+            with state_lock:
+                if state["c6_stale"]:
+                    clocks = {**clocks, "r-upload": NOW0 - 15 * HOUR}
             self._json(200, {"members": [
                 {"id": f"{pid}:{kinds.get(ref, 'crew.run')}:{ref}", "project_id": pid,
                  "member_kind": kinds.get(ref, "crew.run"), "member_ref": ref, "meta": None,

@@ -92,12 +92,17 @@ describe('HomeBoard — the orchestrator board', () => {
       makeView({ id: 'run-gate', status: 'awaiting_human' }),
     ]);
 
-    // Slice 1 bands: the projects that need a human are CARDS inside NEEDS YOU,
-    // score-ordered; the quiet one is a one-line preview chip, not a card.
+    // Slice 1 bands, re-pinned by C6: the project that needs a HUMAN (the gate)
+    // is a card inside NEEDS YOU; the executing one is a card inside WORKING —
+    // its own honest band; the quiet one is a one-line preview chip, not a card.
     await vi.waitFor(() => {
-      const band = screen.getByTestId('band-needs-you');
-      const cards = within(band).getAllByTestId('project-card');
-      expect(cards.map((c) => c.getAttribute('data-project-id'))).toEqual(['p-gate', 'p-run']);
+      const needs = within(screen.getByTestId('band-needs-you')).getAllByTestId('project-card');
+      expect(needs.map((c) => c.getAttribute('data-project-id'))).toEqual(['p-gate']);
+      const workingBand = screen.getByTestId('band-working');
+      const workingCards = within(workingBand).getAllByTestId('project-card');
+      expect(workingCards.map((c) => c.getAttribute('data-project-id'))).toEqual(['p-run']);
+      expect(workingCards[0]).toHaveAttribute('data-band', 'working');
+      expect(workingCards[0]).toHaveAttribute('data-variant', 'active');
     });
     expect(screen.getByTestId('quiet-chip')).toHaveAttribute('data-project-id', 'p-quiet');
     // AC: the first card IS the gate-waiting one, and says so.

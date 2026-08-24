@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  bandFor,
   bandOf,
   compareScored,
   scoreOf,
@@ -81,6 +82,43 @@ describe('bandOf', () => {
   it('exactly the threshold is still needs-you', () => {
     expect(bandOf(TRIAGE_THRESHOLD)).toBe('needs-you');
     expect(bandOf(TRIAGE_THRESHOLD - 0.001)).toBe('quiet');
+  });
+});
+
+describe('bandFor — the C6 status-first band verdict', () => {
+  it('a project with ANY non-terminal run is NEVER quiet — however stale every clock is', () => {
+    // The live-observed C6 bug: an executing run whose only clock was 15h old
+    // scored ~0 and the project read "quiet" while the footer said "working".
+    const stale: Signal[] = [{ kind: 'running', at: at(15 * HOUR), runId: 'r1' }];
+    expect(bandFor(stale, true, NOW)).toBe('working');
+    // Even with NO running signal at all (a fresh reload before any frame),
+    // the DTO status alone holds the band.
+    expect(bandFor([], true, NOW)).toBe('working');
+  });
+
+  it('a gate puts the project in NEEDS YOU — above working, regardless of age', () => {
+    const s: Signal[] = [
+      { kind: 'gate', at: at(8 * DAY), runId: 'rg' },
+      { kind: 'running', at: at(0), runId: 'rr' },
+    ];
+    expect(bandFor(s, true, NOW)).toBe('needs-you');
+  });
+
+  it('a fresh failure is NEEDS YOU; an 8-day-old one is not (F3 decay preserved)', () => {
+    expect(bandFor([sig('failing', 12 * MIN)], false, NOW)).toBe('needs-you');
+    expect(bandFor([sig('failing', 8 * DAY)], false, NOW)).toBe('quiet');
+    // …and a stale failure beside a live run leaves the project WORKING.
+    expect(bandFor([sig('failing', 8 * DAY)], true, NOW)).toBe('working');
+  });
+
+  it('fresh doc activity (a running signal without an active run) is WORKING, not NEEDS YOU', () => {
+    expect(bandFor([sig('running', 0)], false, NOW)).toBe('working');
+    expect(bandFor([sig('running', 31 * MIN)], false, NOW)).toBe('quiet');
+  });
+
+  it('drafts never leave QUIET (D2), and no signals at all is QUIET', () => {
+    expect(bandFor([sig('drafts', 0)], false, NOW)).toBe('quiet');
+    expect(bandFor([], false, NOW)).toBe('quiet');
   });
 });
 

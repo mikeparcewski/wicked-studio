@@ -136,7 +136,9 @@ from playwright.sync_api import sync_playwright  # noqa: E402 (import after serv
 
 VSHOTS.mkdir(parents=True, exist_ok=True)
 
-EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor", "upload-endpoint"]
+# C6 (BRIEF-UX-002): upload-endpoint (executing, no gate) now renders in the
+# WORKING band — NEEDS YOU is gates + fresh failures only.
+EXPECTED_ORDER = ["q3-review-deck", "api-migration", "auth-refactor"]
 console_errors: list[str] = []
 
 with sync_playwright() as p:

@@ -24,7 +24,8 @@ import { STATUS_STYLE } from './RunCard.js';
  * One orchestrator-board card, in TWO variants chosen by the decayed attention
  * band (DES-UXFIX-001 §2.1.1, slice 2):
  *
- *   ACTIVE (band `needs-you`) — rich: header + attention pill, live headline,
+ *   ACTIVE (bands `needs-you` and `working` — C6: any non-quiet band) — rich:
+ *   header + attention pill, live headline,
  *   answerable run/gate chips, doc tiles. A region with no content is OMITTED,
  *   never filled with a "nothing" line — the empty-state budget (§2.1.2, F1).
  *   QUIET (band `quiet`) — calm, not empty: ONE line of absence

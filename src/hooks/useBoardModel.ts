@@ -3,7 +3,7 @@ import { api } from '../api/client.js';
 import { listDocs, type DocSummary } from '../api/interactive.js';
 import type { Project, ProjectMember, SessionView } from '../api/types.js';
 import {
-  bandOf,
+  bandFor,
   compareScored,
   topSignal,
   type Band,
@@ -110,11 +110,22 @@ export function deriveAttention(runs: SessionView[], docs: DocSummary[]): Attent
  *   gate    → the gate store's `receivedAt` (server ISO on reconcile, arrival live)
  *   failing → the run's durable-log tail `ts` (backfilled once per run id, capped)
  *   running → the newest structured frame the runtime store has logged for the run,
- *             or a relayed interactive `status.posted` (a document being edited NOW
+ *             else the FRESHER of the run's membership `attached_at` and the
+ *             project clock (the C6 fix: a fresh page load has no frames yet;
+ *             either clock alone can read hours stale while the run executes
+ *             NOW — the C6 posture was a 15h-stale project clock, while the
+ *             standing W2 corpus has the attach clock as the stale one — so a
+ *             frameless live run is ordered by the freshest evidence held, and
+ *             the BAND never hangs off this clock at all), or a
+ *             relayed interactive `status.posted` (a document being edited NOW
  *             is live work — it is what puts the doc-activity line on an ACTIVE
  *             card now that a quiet card renders no activity at all, slice 2)
  *   drafts  → the newest doc's `updated_at`
  *   any     → `project.updated_at`
+ *
+ * Note (C6): the running clock no longer decides whether a live project leaves
+ * the working band — `bandFor` reads the DTO statuses directly — it only orders
+ * and labels. A decayed clock can demote a card WITHIN a band, never to QUIET.
  */
 function signalsOf(
   project: Project,
@@ -124,6 +135,7 @@ function signalsOf(
   logTail: (runId: string) => number | undefined,
   failedAt: Record<string, number>,
   activityAt: number | undefined,
+  attachedAt: Record<string, number>,
 ): Signal[] {
   const fallback = project.updated_at;
   const signals: Signal[] = [];
@@ -136,7 +148,7 @@ function signalsOf(
     } else if (status === 'failed') {
       signals.push({ kind: 'failing', at: failedAt[id] ?? fallback, runId: id });
     } else if (ACTIVE.has(status)) {
-      signals.push({ kind: 'running', at: logTail(id) ?? fallback, runId: id });
+      signals.push({ kind: 'running', at: logTail(id) ?? Math.max(attachedAt[id] ?? 0, fallback), runId: id });
     }
   }
   if (docs.length > 0) {
@@ -379,14 +391,19 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
         .map((project): BoardProject => {
           const b = bindings[project.id] ?? EMPTY;
           const mine = runs.filter((v) => belongsTo(v, project.id, b.runIds));
-          const { score, signal } = topSignal(
-            signalsOf(project, mine, b.docs, gates, logTail, failedAt, docActivity[project.id]?.at),
-            now,
+          const signals = signalsOf(
+            project, mine, b.docs, gates, logTail, failedAt,
+            docActivity[project.id]?.at, b.attachedAt,
           );
+          const { score, signal } = topSignal(signals, now);
+          // C6: the band verdict reads the run DTO statuses the board ALREADY
+          // holds — a project with any non-terminal run is never QUIET, no
+          // matter how stale the clocks are. Decay orders; status bands.
+          const hasActiveRun = mine.some((v) => ACTIVE.has(v.session.status));
           return {
             project, repo: b.repo, runs: mine, docs: b.docs, attachedAt: b.attachedAt,
             attention: deriveAttention(mine, b.docs),
-            score, band: bandOf(score), signal,
+            score, band: bandFor(signals, hasActiveRun, now), signal,
           };
         })
         .sort((a, b) =>
