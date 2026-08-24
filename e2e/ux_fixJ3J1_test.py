@@ -20,10 +20,13 @@ The four ACs, verbatim mapping:
      NO `continues as vN` divider and NO new version chip render before the
      thread OBSERVES a `version.created` arrival — the anchor lands only with
      the wire's proof, positioned immediately above its continuation message.
-  3. J3 closed-drawer export: with the thread drawer CLOSED, the export click
-     site keeps its answer VISIBLE — the strip must not auto-hide while the
-     export is pending or its READY answer sits un-acted (pre-fix: the whole
-     strip faded to opacity 0 three seconds after the click; zero response).
+  3. J3 export answers at the click site (re-scoped to the #115 anatomy: the
+     export control moved off the strip into the tabbed panel's Chat tab,
+     under the chatbox; a doc address starts with the panel collapsed to its
+     rail — the drawer's successor to "closed by default"): the pending and
+     READY answers stay VISIBLE at the click site past the idle budget — the
+     slim band may fade; the panel never does (pre-fix: the whole strip faded
+     to opacity 0 three seconds after the click; zero response).
   4. J1 governance non-contradiction: on the r-auth-class run (halt banner +
      Decisions DENY, EMPTY /governance/claims), the Governance panel must NOT
      say "No governance claims recorded for this run" — it states which wire
@@ -54,7 +57,6 @@ from uxfix_fixture import (
     ensure_build,
     set_fixture,
     start_server,
-    wake_strip,
 )
 
 FEEDBACK_PORT = int(os.environ.get("FEEDBACK_PORT", "4401"))
@@ -183,8 +185,9 @@ with sync_playwright() as p:
     page.goto(f"{ORIGIN}/p/{PID}/document/{DOC2}", wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
-    wake_strip(page)
-    page.locator('[data-testid="thread-toggle"]').click()
+    # #115: the drawer became the tabbed panel — rail by default on a doc
+    # address; expand to the Chat tab (the thread).
+    page.locator('[data-testid="panel-expand"]').click()
     # A reloaded doc with nothing in flight is TERMINAL — the continue path.
     page.locator('[data-testid="thread"][data-composer-state="terminal"]').wait_for(timeout=15000)
 
@@ -225,8 +228,7 @@ with sync_playwright() as p:
     page.goto(f"{ORIGIN}/p/{PID}/document/{DOC2}?v=1", wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-canvas"][data-version="1"]').wait_for(timeout=30000)
-    wake_strip(page)
-    page.locator('[data-testid="thread-toggle"]').click()
+    page.locator('[data-testid="panel-expand"]').click()  # #115: rail → Chat tab
     page.locator('[data-testid="thread"][data-composer-state="terminal"]').wait_for(timeout=15000)
     page.locator('[data-testid="doc-composer"]').fill("branch: keep the original intro")
     page.keyboard.press("Enter")
@@ -270,44 +272,58 @@ with sync_playwright() as p:
           **anchored)
     set_fixture(ORIGIN, doc_run_ms=0)
 
-    # ── Scene 3 (AC 3): the export answers with the drawer CLOSED ──────────────
+    # ── Scene 3 (AC 3): the export answers at the click site, ALWAYS ───────────
+    # Re-scoped to the #115 anatomy: the export control moved off the strip into
+    # the panel's Chat tab, under the chatbox — a site no auto-hide reaches (the
+    # strip `hold` retired with the move). The AC's spirit is unchanged: past
+    # the idle budget the click site is still answering, visibly.
     created = api_create_doc("closed-drawer-export", "the closed-drawer brief")
     DOC3 = created["name"]
     set_fixture(ORIGIN, export_delay_ms=4500)
     page.goto(f"{ORIGIN}/p/{PID}/document/{DOC3}", wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
-    drawer_closed = page.evaluate(
-        "() => !document.querySelector('[data-testid=\"thread-drawer\"]')")
-    check("drawer_is_closed_by_default", drawer_closed)
+    # Canvas-first posture: a doc address starts with the panel collapsed to its
+    # rail — the drawer's successor to "closed by default".
+    check("panel_rail_by_default",
+          page.locator('[data-testid="doc-panel-rail"]').count() == 1
+          and page.locator('[data-testid="doc-panel"]').count() == 0)
 
-    wake_strip(page)
+    page.locator('[data-testid="panel-expand"]').click()  # the export lives in Chat
+    page.locator('[data-testid="chat-export"]').wait_for(timeout=15000)
     page.locator('[data-testid="export-format"][data-format="html"]').click()
     # Do NOT move the mouse again: pre-fix, the strip auto-hid 3s from now and
     # took the pending answer with it. Past the idle budget the click site must
-    # still be answering, visibly.
+    # still be answering, visibly — the slim band may fade; the panel never does.
     page.wait_for_timeout(3600)
     mid = page.evaluate(
-        """() => ({
-             stripHidden: document.querySelector('[data-testid="version-strip"]')?.getAttribute('data-hidden'),
-             pending: !!document.querySelector('[data-testid="export-pending"]'),
-           })""")
+        """() => {
+             const pend = document.querySelector('[data-testid="export-pending"]');
+             return {
+               pending: !!pend,
+               visible: !!pend && pend.offsetParent !== null,
+               inPanel: !!pend && !!pend.closest('[data-testid="chat-export"]'),
+             };
+           }""")
     check("pending_answer_survives_the_idle_budget",
-          mid["stripHidden"] == "false" and mid["pending"], **mid)
+          mid["pending"] and mid["visible"] and mid["inPanel"], **mid)
 
     ready = page.locator('[data-testid="export-ready"][data-format="html"]')
     ready.wait_for(timeout=15000)
     page.wait_for_timeout(3600)  # past another idle budget with the mouse still parked
     landed = page.evaluate(
-        """() => ({
-             stripHidden: document.querySelector('[data-testid="version-strip"]')?.getAttribute('data-hidden'),
-             opacity: getComputedStyle(document.querySelector('[data-testid="version-strip"]')).opacity,
-             readyHref: document.querySelector('[data-testid="export-ready"]')?.getAttribute('href'),
-             drawerStillClosed: !document.querySelector('[data-testid="thread-drawer"]'),
-           })""")
-    check("ready_answer_holds_the_strip_visible_drawer_closed",
-          landed["stripHidden"] == "false" and landed["opacity"] == "1"
-          and bool(landed["readyHref"]) and landed["drawerStillClosed"],
+        """() => {
+             const r = document.querySelector('[data-testid="export-ready"]');
+             return {
+               readyVisible: !!r && r.offsetParent !== null,
+               inPanel: !!r && !!r.closest('[data-testid="chat-export"]'),
+               readyHref: r?.getAttribute('href'),
+               panelStillUp: !!document.querySelector('[data-testid="doc-panel"]'),
+             };
+           }""")
+    check("ready_answer_visible_at_the_click_site_past_the_budget",
+          landed["readyVisible"] and landed["inPanel"]
+          and bool(landed["readyHref"]) and landed["panelStillUp"],
           **landed)
 
     # The affordance is REAL: its href serves the artifact bytes, attachment-framed.
