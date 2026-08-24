@@ -1,6 +1,8 @@
+import { Fragment } from 'react';
 import type { SessionView } from '../api/types.js';
 import type { SignalKind } from '../board/boardAttention.js';
-import { isLive, useRunHeadline } from '../hooks/useBoardHeadline.js';
+import { leadMovingRun, truncate } from '../board/phaseProgress.js';
+import { isLive, useRunHeadline, useRunNarration } from '../hooks/useBoardHeadline.js';
 import { modePath, MODES, projectPath, type Navigate } from '../hooks/useRoute.js';
 import type { Attention, BoardProject } from '../hooks/useBoardModel.js';
 import { useGateStore } from '../store/gates.js';
@@ -9,6 +11,7 @@ import { BatchSelectBox } from './BatchGateBar.js';
 import { ExportMenu } from './ExportMenu.js';
 import { GateChip } from './GateChip.js';
 import { GateRejectNote } from './GateRejectNote.js';
+import { PhaseStrip, useCurrentUnit } from './PhaseStrip.js';
 import { ProjectSparkline } from './ProjectSparkline.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
@@ -48,8 +51,10 @@ import { STATUS_STYLE } from './RunCard.js';
  *  treats this as a `maxHeight`, so a light card is short, not hollow — the
  *  SLOT stays fixed for the windowing math, the pixels do not. (Vision slice 2:
  *  +6px over the pre-token slot — `--space-4` padding is 16px, was 14px, and the
- *  2px status bar rides inside the border-box.) */
-export const ACTIVE_CARD_H = 336;
+ *  2px status bar rides inside the border-box. Slice BA: +24px for the phase
+ *  strip + current-unit description an active-run card now carries, DES-UX-002
+ *  §1.3.) */
+export const ACTIVE_CARD_H = 360;
 
 /** QUIET-card slot height in px — one summary line plus the action row, with
  *  room for the first-run 2×2 sublabelled grid (§2.2) in the same slot. Also a
@@ -251,19 +256,60 @@ function DocTile({ projectId, name, kind, head, when }: {
  * One run's newest narration line (§1.4 live activity, derived per §3.4(b)). One
  * line, ellipsised, never scrolling — the card is scanned, not watched; the thread
  * is where a user goes to watch.
+ *
+ * Slice BA (DES-UX-002 §1.3): on the card's LEADING moving run the phase strip +
+ * current-unit description below now carry rule 3's duty, so `narrationOnly`
+ * renders the line only when something genuinely streamed (rules 1–2) — never
+ * the generic `<phase> — <unit title>` fallback twice on one card.
  */
-function LiveLine({ view }: { view: SessionView }): React.ReactElement {
+function LiveLine({ view, narrationOnly = false }: {
+  view: SessionView;
+  narrationOnly?: boolean;
+}): React.ReactElement | null {
   const headline = useRunHeadline(view);
+  const narration = useRunNarration(view);
+  const line = narrationOnly ? narration : headline;
+  if (line === null) return null;
   return (
     <p
       data-testid="live-line"
       data-run-id={view.session.id}
-      title={headline}
+      title={line}
       style={CSS.line}
     >
       <span aria-hidden style={CSS.pulse} />
-      {headline}
+      {line}
     </p>
+  );
+}
+
+/**
+ * The active-run plan region (DES-UX-002 §1.3, slice BA): the phase progress
+ * strip over the run's unit plan, and beneath it the current unit's
+ * description — the card says WHERE the run is, from data the board already
+ * holds (`SessionView.units` + the shared runtime log; zero new requests).
+ */
+function ActivePlan({ view }: { view: SessionView }): React.ReactElement | null {
+  const unit = useCurrentUnit(view);
+  if (view.units.length === 0) return null;
+  return (
+    <div data-testid="active-plan" data-run-id={view.session.id}>
+      <PhaseStrip units={view.units} currentOrd={unit?.ord} />
+      {unit !== undefined && (
+        <p
+          data-testid="active-unit-description"
+          data-run-id={view.session.id}
+          title={unit.description}
+          style={{
+            margin: '4px 0 0', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
+            color: 'var(--ink-muted)', overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {truncate(unit.description, 60)}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -284,9 +330,14 @@ export function ProjectCard({
 }: Props): React.ReactElement {
   const { project, repo, runs, docs, attention, band, score, signal } = item;
   const gates = useGateStore((s) => s.gates);
+  // Slice BA (DES-UX-002 §1.3): escalated-but-not-yet-posted gates — the
+  // approaching preview chip renders from this, the same store fold as gates.
+  const approaching = useGateStore((s) => s.approaching);
   // Relayed interactive status for THIS project — one line, plus the tile date it implies.
   const activity = useRuntimeStore((s) => s.docActivity[project.id]);
   const live = runs.filter(isLive);
+  // The leading MOVING run — whose plan the phase strip + description show (§1.3).
+  const lead = leadMovingRun(runs);
   // Slice L (§9.2): the card's batch-selectable gate is its LEADING waiting
   // run — the same run the triage cursor's `x` toggles (TriageItem.runId).
   const leadingWaiting = runs.find((v) => v.session.status === 'awaiting_human')?.session.id;
@@ -436,7 +487,9 @@ export function ProjectCard({
       {(live.length > 0 || activity !== undefined) && (
         <div data-testid="live-activity" style={{ marginTop: '10px' }}>
           {live.slice(0, MAX_LINES).map((v) => (
-            <LiveLine key={v.session.id} view={v} />
+            // The lead moving run narrates only what genuinely streamed —
+            // the strip + description below replace its generic fallback (§1.3).
+            <LiveLine key={v.session.id} view={v} narrationOnly={v === lead} />
           ))}
           {activity !== undefined && (
             <p data-testid="doc-activity" title={activity.message} style={CSS.line}>
@@ -452,6 +505,9 @@ export function ProjectCard({
               {live.length - MAX_LINES} more running
             </span>
           )}
+          {/* Slice BA (§1.3): the phase strip + current-unit description —
+              below the narration, above the gate chip. */}
+          {lead !== undefined && <ActivePlan view={lead} />}
         </div>
       )}
 
@@ -474,11 +530,13 @@ export function ProjectCard({
                 />
               );
             }
+            const near = approaching[session.id];
             return (
               // A waiting gate is ANSWERABLE, not a badge (§1.4) — so the row is a row:
               // the run link, and beside it a chip carrying its own controls. Nesting
               // buttons inside the link would be neither valid nor operable.
-              <div key={session.id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Fragment key={session.id}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {/* Slice L (§9.2): the selection slot — checkbox for a simple
                     gate, the ↗ needs-the-thread marker for a complex one;
                     renders only once ≥1 gate is selected anywhere. */}
@@ -512,6 +570,34 @@ export function ProjectCard({
                   <GateChip runId={session.id} projectId={project.id} gate={gate} navigate={navigate} />
                 )}
               </div>
+              {/* Slice BA (DES-UX-002 §1.3, EC47): the gate-APPROACHING posture —
+                  `gateEscalated` fired, the gate is not yet posted. An amber ring
+                  and the criterion preview, deliberately with NO Approve/Reject:
+                  this is a signal to compose pre-gate guidance, not an action
+                  surface. It retires the moment `awaitingHuman` posts the gate,
+                  where the full pill (GateChip, above) takes over. */}
+              {!waiting && near !== undefined && (
+                <div
+                  data-testid="gate-approaching"
+                  data-run-id={session.id}
+                  data-criterion={near.condition}
+                  title={near.condition}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
+                    border: '1px solid var(--status-gate)', background: 'var(--status-gate-dim)',
+                    borderRadius: 'var(--radius-sm)', padding: '3px 7px',
+                    overflow: 'hidden', whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span aria-hidden style={{ color: 'var(--status-gate)', flexShrink: 0 }}>⏳</span>
+                  <span style={{ color: 'var(--status-gate)', flexShrink: 0 }}>gate approaching</span>
+                  <span style={{ color: 'var(--ink-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {near.condition}
+                  </span>
+                </div>
+              )}
+              </Fragment>
             );
           })}
           {runs.length > MAX_CHIPS && (

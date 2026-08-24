@@ -59,9 +59,33 @@ export function isSimpleGate(gate: OpenGate | undefined): boolean {
   return (gate.choices ?? ['approve', 'reject']).length <= 2;
 }
 
+/**
+ * A gate the daemon has ESCALATED but not yet posted (DES-UX-002 §1.3, slice
+ * BA): `gateEscalated` fires before the operator is pinged, so this record IS
+ * the "gate approaching" signal — the card's preview chip and the feed's amber
+ * line render from it. Event-sourced only (session-scoped: a reload before the
+ * gate posts simply loses the preview — the gate itself is never at risk).
+ */
+export interface ApproachingGate {
+  runId: string;
+  ord: number;
+  /** The gate's criterion — the wire spells the field `condition`. */
+  condition: string;
+  receivedAt: number;
+}
+
+/** Frames on which an approaching-gate preview retires: the gate posted
+ *  (`awaitingHuman`), resolved without a human (`gateDecided`), or the run
+ *  moved past it. */
+const APPROACH_CLEARS: ReadonlySet<string> = new Set([
+  'awaitingHuman', 'gateDecided', 'resumed', 'sessionCompleted', 'runCancelled', 'sessionFailed',
+]);
+
 interface GateStore {
   /** Open gates keyed by run id. */
   gates: Record<string, OpenGate>;
+  /** Escalated-but-not-yet-posted gates keyed by run id (§1.3's preview). */
+  approaching: Record<string, ApproachingGate>;
   /** Upsert a gate (from a live event or a `GET /runs/:id/gate` reconcile). */
   setGate: (gate: OpenGate) => void;
   /** Drop a run's gate. */
@@ -74,6 +98,7 @@ interface GateStore {
 
 export const useGateStore = create<GateStore>((set) => ({
   gates: {},
+  approaching: {},
 
   setGate: (gate) => set((s) => ({ gates: { ...s.gates, [gate.runId]: gate } })),
 
@@ -89,11 +114,30 @@ export const useGateStore = create<GateStore>((set) => ({
     const session = typeof event.session === 'string' ? event.session : undefined;
     if (session === undefined) return;
     set((s) => {
+      // The approaching preview folds FIRST (slice BA): it opens on
+      // `gateEscalated` and retires on any frame that supersedes it —
+      // `awaitingHuman` below both retires the preview AND opens the gate,
+      // which is exactly the §1.3 approaching → awaiting posture switch.
+      let approaching = s.approaching;
+      if (
+        event.type === 'gateEscalated' &&
+        typeof event.ord === 'number' &&
+        typeof event.condition === 'string'
+      ) {
+        approaching = {
+          ...approaching,
+          [session]: { runId: session, ord: event.ord, condition: event.condition, receivedAt: Date.now() },
+        };
+      } else if (APPROACH_CLEARS.has(event.type) && session in approaching) {
+        approaching = { ...approaching };
+        delete approaching[session];
+      }
       switch (event.type) {
         case 'awaitingHuman': {
           if (typeof event.ord === 'number' && typeof event.prompt === 'string') {
             const choices = choicesOf(event as unknown as Record<string, unknown>);
             return {
+              approaching,
               gates: {
                 ...s.gates,
                 [session]: {
@@ -108,19 +152,19 @@ export const useGateStore = create<GateStore>((set) => ({
               },
             };
           }
-          return s;
+          return approaching === s.approaching ? s : { approaching };
         }
         case 'resumed':
         case 'sessionCompleted':
         case 'runCancelled':
         case 'sessionFailed': {
-          if (!(session in s.gates)) return s;
+          if (!(session in s.gates)) return approaching === s.approaching ? s : { approaching };
           const next = { ...s.gates };
           delete next[session];
-          return { gates: next };
+          return { approaching, gates: next };
         }
         default:
-          return s;
+          return approaching === s.approaching ? s : { approaching };
       }
     });
   },
