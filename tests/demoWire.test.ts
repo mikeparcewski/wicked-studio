@@ -182,10 +182,12 @@ describe('commenting on a step asks for the SPEC to be re-authored', () => {
       version: 2,
       // What makes this a spec diff rather than an HTML fragment edit — and therefore
       // what keeps the re-record deterministic instead of a fresh take (ADR-0018).
+      // Items ride the ADR-0002 schema shape (docfb2): a step comment is an
+      // instruction for the agent — structural-change on the step's anchor.
       target: 'demo_step',
       items: [
-        { wid: 'step-1', comment: 'add TWO hoodies, not one' },
-        { wid: 'step-3', comment: 'pause on the receipt' },
+        { selector: 'step-1', type: 'structural-change', instruction: 'add TWO hoodies, not one' },
+        { selector: 'step-3', type: 'structural-change', instruction: 'pause on the receipt' },
       ],
     });
     expect(stepWid(1)).toBe('step-1');

@@ -73,9 +73,12 @@ describe('submitFeedbackBatch — §7.7: the client authors BOTH writes', () => 
       payload: expect.objectContaining({
         document_id: DOC,
         version: 3,
+        // The ADR-0002 schema shape — what the real materializeFeedback loop consumes.
+        // The pre-docfb2 `{wid, comment}` spelling was rejected per item by the real
+        // regenerate loop as "selector-not-found" (item.selector was undefined).
         items: [
-          { wid: 'slide-2-heading-1', comment: 'make this title punchier' },
-          { wid: 'slide-4-body-2',    comment: 'cut this paragraph in half' },
+          { selector: 'slide-2-heading-1', type: 'structural-change', instruction: 'make this title punchier' },
+          { selector: 'slide-4-body-2',    type: 'structural-change', instruction: 'cut this paragraph in half' },
         ],
       }),
     }));

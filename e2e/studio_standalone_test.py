@@ -1425,9 +1425,11 @@ try:
                     rows = doc_versions.get(name)
                     if steps is not None and rows:
                         for item in payload.get("items") or []:
-                            at = re.match(r"^step-(\d+)$", str(item.get("wid") or ""))
+                            # docfb2: items arrive schema-shaped — the step anchor is
+                            # the item's `selector`, the ask its `instruction`.
+                            at = re.match(r"^step-(\d+)$", str(item.get("selector") or ""))
                             if at and int(at.group(1)) < len(steps):
-                                steps[int(at.group(1))]["title"] = str(item.get("comment") or "")
+                                steps[int(at.group(1))]["title"] = str(item.get("instruction") or "")
                         created = max(r["version"] for r in rows) + 1
                         rows.append({"version": created, "parent": created - 1,
                                      "feedback_file": f"feedback-v{created}.json",
@@ -2017,8 +2019,13 @@ try:
             messages_added == 1,
             FB_ONE in batch_text, FB_TWO in batch_text,
             len(feedback_events) == 2,  # the batch of two, then the unrecordable one
-            [i.get("wid") for i in (batch_event.get("items") or [])] == ["h1", "p1"],
-            [i.get("comment") for i in (batch_event.get("items") or [])] == [FB_ONE, FB_TWO],
+            # docfb2: items ride the ADR-0002 schema shape ({selector, type, …}) —
+            # what the real materializeFeedback loop consumes. The old {wid, comment}
+            # spelling was rejected per item as selector-not-found by the real bridge.
+            [i.get("selector") for i in (batch_event.get("items") or [])] == ["h1", "p1"],
+            [i.get("type") for i in (batch_event.get("items") or [])]
+            == ["structural-change", "structural-change"],
+            [i.get("instruction") for i in (batch_event.get("items") or [])] == [FB_ONE, FB_TWO],
             batch_event.get("version") == 2,
             len(batch_injects) == 1,
             # The deep-link brought the element back over the protocol.

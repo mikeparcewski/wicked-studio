@@ -223,9 +223,11 @@ describe('FeedbackOverlay — batching and submit (§4.3, §7.7)', () => {
     expect(user).toHaveLength(1);
     expect(user[0]!.text).toContain('make this title punchier');
     expect(user[0]!.text).toContain('cut this in half');
+    // The fixture bridge sends no `blocks`, so items carry no `before` snapshot and
+    // the card stays in comment mode (Change-text never offers itself without a seed).
     expect(user[0]!.kind === 'user' && user[0]!.items).toEqual([
-      { wid: 'h1', text: 'make this title punchier' },
-      { wid: 'p1', text: 'cut this in half' },
+      { wid: 'h1', text: 'make this title punchier', mode: 'comment' },
+      { wid: 'p1', text: 'cut this in half', mode: 'comment' },
     ]);
     expect(injectDocMessage).toHaveBeenCalledTimes(1);
   });
@@ -273,5 +275,97 @@ describe('FeedbackOverlay — deep-linking back to the element (§4.3)', () => {
   it('a deep-link with no overlay mounted no-ops rather than throwing', () => {
     cleanup();
     expect(() => scrollToWid('h1')).not.toThrow();
+  });
+});
+
+// ── The docfb2 restore: the ORIGINAL interaction grammar, over the protocol ──
+// wicked-interactive's retired SPA selected on a direct click and highlighted on
+// hover (App.jsx onIframeLoad). Studio cannot reach into the sandboxed frame, so
+// the INJECTED bridge (instrumented.ts) preempts the click inside the document
+// and reports it — these tests drive that wire.
+
+const BLOCKS = {
+  section: { text: 'Q3 grew in every segment', composite: true },
+  h1:      { text: 'Q3 in review',             composite: false },
+  p1:      { text: 'Pipeline grew in every segment', composite: false },
+};
+
+describe('FeedbackOverlay — click-to-edit without a mode toggle (docfb2)', () => {
+  it('AC: a wid-click from the frame opens the targeted card directly — no toggle first', async () => {
+    const bridge = makeFixtureBridge({ widMap: WIDS, blocks: BLOCKS });
+    mount(bridge);
+    await waitFor(() => expect(screen.getByTestId('feedback-toggle')).toBeEnabled());
+    expect(screen.getByTestId('feedback-toggle').getAttribute('data-active')).toBe('false');
+
+    act(() => { bridge.clickWid('h1'); });
+
+    const card = await screen.findByTestId('feedback-comment');
+    expect(card.getAttribute('data-wid')).toBe('h1');
+    // Still NOT in comment mode: the direct grammar needs no hit layer.
+    expect(screen.queryByTestId('feedback-hitlayer')).toBeNull();
+  });
+
+  it('a wid-hover from the frame highlights the block, and null clears it', async () => {
+    const bridge = makeFixtureBridge({ widMap: WIDS, blocks: BLOCKS });
+    mount(bridge);
+    await waitFor(() => expect(screen.getByTestId('feedback-toggle')).toBeEnabled());
+
+    act(() => { bridge.hoverWid('p1'); });
+    expect((await screen.findByTestId('feedback-hover')).getAttribute('data-wid')).toBe('p1');
+
+    act(() => { bridge.hoverWid(null); });
+    await waitFor(() => expect(screen.queryByTestId('feedback-hover')).toBeNull());
+  });
+});
+
+describe('FeedbackOverlay — the Change-text mode (docfb2, the original InlineComment pair)', () => {
+  it('AC: Change text seeds the EXACT current text and the item rides as a deterministic edit', async () => {
+    const bridge = makeFixtureBridge({ widMap: WIDS, blocks: BLOCKS });
+    mount(bridge);
+    await waitFor(() => expect(screen.getByTestId('feedback-toggle')).toBeEnabled());
+
+    act(() => { bridge.clickWid('h1'); });
+    await screen.findByTestId('feedback-comment');
+    await userEvent.click(screen.getByTestId('feedback-mode-change-text'));
+
+    // Seeded with the block's own text — the original's `before` snapshot.
+    const input = screen.getByTestId('feedback-comment-input');
+    expect(input).toHaveValue('Q3 in review');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Q3: the year we shipped');
+    await userEvent.click(screen.getByTestId('feedback-comment-add'));
+    await userEvent.click(screen.getByTestId('feedback-submit'));
+
+    await waitFor(() => expect(postEvent).toHaveBeenCalledTimes(1));
+    // The wire carries the ADR-0002 schema item: deterministic content-edit with
+    // the before guard — what materializeFeedback applies WITHOUT a model.
+    expect(postEvent).toHaveBeenCalledWith(PROJECT, expect.objectContaining({
+      payload: expect.objectContaining({
+        items: [{
+          selector: 'h1', type: 'content-edit',
+          value: 'Q3: the year we shipped', before: 'Q3 in review',
+        }],
+      }),
+    }));
+  });
+
+  it('a COMPOSITE block hides Change text (the destructive-replace rule)', async () => {
+    const bridge = makeFixtureBridge({ widMap: WIDS, blocks: BLOCKS });
+    mount(bridge);
+    await waitFor(() => expect(screen.getByTestId('feedback-toggle')).toBeEnabled());
+
+    act(() => { bridge.clickWid('section'); });
+    await screen.findByTestId('feedback-comment');
+    expect(screen.queryByTestId('feedback-mode')).toBeNull();
+  });
+
+  it('a bridge without `blocks` (the fixture contract) never offers the mode pair', async () => {
+    const bridge = makeFixtureBridge({ widMap: WIDS });
+    mount(bridge);
+    await waitFor(() => expect(screen.getByTestId('feedback-toggle')).toBeEnabled());
+
+    act(() => { bridge.clickWid('h1'); });
+    await screen.findByTestId('feedback-comment');
+    expect(screen.queryByTestId('feedback-mode')).toBeNull();
   });
 });

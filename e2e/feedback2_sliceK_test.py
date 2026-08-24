@@ -30,16 +30,21 @@ DES-FEEDBACK-003 §8.6 — the canvas REGION, panes included, ends above the bar
    3. Toggling fires ZERO /api requests (C1), keeps the composer's focus and
       draft, and Enter still sends from columns mode.
 
-  Version compare (§7.5):
-   4. On the 3-version doc, [data-testid="version-compare-toggle"] enters
-      compare: two [data-testid="compare-pane"] iframes, src ending /doc/3 and
-      /doc/2 (the lineage parent); the pane pair spans >80% viewport width
-      (EC18-as-region); the URL keeps ?v=3 throughout.
+  Version compare (§7.5, re-scoped to the #115 anatomy — tabbed right panel +
+  slim band: the compare cluster lives in the panel's Compare tab, the strip is
+  version pills only, and the thread drawer is the panel's always-on Chat tab):
+   4. On the 3-version doc — after selecting v3 on the slim band (landings
+      follow the head WITHOUT minting a route; ?v=N is the pill's §7.6
+      cross-link) — [data-testid="version-compare-toggle"] in the Compare tab
+      enters compare: two [data-testid="compare-pane"] iframes, src ending
+      /doc/3 and /doc/2 (the lineage parent); the pane pair spans >80% of the
+      CANVAS REGION (EC18-as-region — the permanent panel is a flex sibling);
+      the URL keeps ?v=3 throughout.
    5. The vs: dropdown lists every OTHER version; picking v1 re-points ONLY the
       right pane. Overlay stacks the two frames with the opacity slider.
-   6. The slice-F strip machinery survives compare: the strip auto-hides after
-      idle WITH TWO IFRAMES PRESENT and wakes on bottom proximity; the thread
-      drawer still opens/closes.
+   6. The slice-F strip machinery survives compare: the slim band auto-hides
+      after idle WITH TWO IFRAMES PRESENT and wakes on bottom proximity; the
+      panel's Chat tab still shows the thread over the pane pair.
    7. Exits: Escape returns to the solo canvas at the selected version; a strip
       selection while comparing re-points the LEFT pane only; ✕ exits. Entering
       compare adds no history entry.
@@ -47,7 +52,7 @@ DES-FEEDBACK-003 §8.6 — the canvas REGION, panes included, ends above the bar
 
 Captures (§12.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/vision/:
   feedback2-K-chat-columns.png    4-seat rounds side by side, one empty cell
-  feedback2-K-compare-split.png   v3 ↔ v2 split with the strip toolbar cluster
+  feedback2-K-compare-split.png   v3 ↔ v2 split with the panel's compare cluster
   feedback2-K-compare-overlay.png overlay mode, slider at 50
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
@@ -227,17 +232,19 @@ with sync_playwright() as p:
     page.keyboard.press("Enter")
     page.locator('[data-testid="doc-canvas"][data-version="3"]').wait_for(timeout=30000)
     page.locator('[data-testid="thread"][data-composer-state="terminal"]').wait_for(timeout=30000)
-    if "?v=3" not in page.url:
-        fail("K3_journey", f"expected the route at ?v=3 after the third landing, got {page.url}")
-
-    # Close the drawer: EC18 measures the canvas-first posture (drawer closed by
-    # default; this journey opened it on the picker and it survived — by design).
+    # Re-scoped to the #115 anatomy: a LANDING follows the head without minting a
+    # route — the URL stays the doc's base address; `?v=N` is the pill's §7.6
+    # cross-link, a gesture the user makes. Make it: select v3 on the slim band.
+    if "?v=" in page.url:
+        fail("K3_journey", f"expected the base doc route after landings (head-follow), got {page.url}")
     wake_strip(page)
-    page.locator('[data-testid="thread-toggle"]').click()
-    page.locator('[data-testid="thread-drawer"]').wait_for(state="detached", timeout=30000)
+    page.locator('[data-testid="version-entry"][data-version="3"] [data-testid="version-select"]').click()
+    page.wait_for_function("() => location.search.includes('v=3')", timeout=15000)
 
-    # Enter compare from the strip toolbar (§7.2).
-    wake_strip(page)
+    # Enter compare from the panel's Compare tab (§7.2 as re-homed by #115: the
+    # strip is the slim band — versions only — and the compare cluster lives in
+    # the tabbed right panel, which is on screen throughout; no drawer exists).
+    page.locator('[data-testid="panel-tab"][data-tab="compare"]').click()
     history_before = page.evaluate("() => history.length")
     page.locator('[data-testid="version-compare-toggle"]').click()
     page.locator('[data-testid="compare-pane"]').first.wait_for(timeout=30000)
@@ -247,22 +254,28 @@ with sync_playwright() as p:
              const rects = panes.map(p => p.getBoundingClientRect());
              const left = Math.min(...rects.map(r => r.left));
              const right = Math.max(...rects.map(r => r.right));
+             // EC18-as-region, re-scoped by #115: the permanent tabbed panel is a
+             // flex SIBLING of the canvas region, so the pane pair is measured
+             // against the canvas region it owns — not the whole viewport.
+             const region = document.querySelector('[data-testid="document-canvas"]')
+               .getBoundingClientRect();
              return {
                count: panes.length,
                srcs: panes.map(p => new URL(p.src).pathname),
-               pairWidthFrac: (right - left) / window.innerWidth,
+               pairWidthFrac: (right - left) / region.width,
                soloGone: !document.querySelector('[data-testid="doc-canvas"]'),
                cluster: document.querySelector('[data-testid="compare-controls"]')?.textContent || '',
-               parentLabel: [...document.querySelectorAll('span')]
-                 .some(s => (s.textContent || '').trim() === 'v2 (parent)'),
                url: location.search,
              };
            }""")
+    # (The old strip cluster's literal "v2 (parent)" span retired with the strip
+    # toolbar; the LINEAGE-PARENT default is still what the src assertion proves —
+    # v3's comparand came up as /doc/2 with nobody picking it.)
     step("K3_compare_split",
          split["count"] == 2
          and split["srcs"][0].endswith("/doc/3") and split["srcs"][1].endswith("/doc/2")
          and split["pairWidthFrac"] > 0.8 and split["soloGone"]
-         and "Comparing v3 ↔ v2" in split["cluster"] and split["parentLabel"]
+         and "Comparing v3 ↔ v2" in split["cluster"]
          and "v=3" in split["url"],
          **split)
     # No history entry was added by entering compare (a lens, not an address).
@@ -333,15 +346,15 @@ with sync_playwright() as p:
     wake_strip(page)  # asserts data-hidden flips back to 'false'
     step("K6_strip_hides_and_wakes_in_compare", two_iframes == 2, iframes=two_iframes)
 
-    # …and the thread drawer still opens/closes over the pane pair.
-    page.locator('[data-testid="thread-toggle"]').click()
-    page.locator('[data-testid="thread-drawer"]').wait_for(timeout=30000)
+    # …and the panel's CHAT tab (the drawer's #115 successor) still shows the
+    # thread over the pane pair — switching tabs must not tear down compare.
+    page.locator('[data-testid="panel-tab"][data-tab="chat"]').click()
+    page.locator('[data-testid="panel-body"][data-tab="chat"] [data-testid="thread"]').wait_for(timeout=30000)
     drawer_panes = page.evaluate(
         "() => document.querySelectorAll('[data-testid=\"compare-pane\"]').length")
-    wake_strip(page)
-    page.locator('[data-testid="thread-toggle"]').click()
-    page.locator('[data-testid="thread-drawer"]').wait_for(state="detached", timeout=30000)
-    step("K6_drawer_works_in_compare", drawer_panes == 2, panes_while_open=drawer_panes)
+    page.locator('[data-testid="panel-tab"][data-tab="compare"]').click()
+    page.locator('[data-testid="compare-controls"]').wait_for(timeout=30000)
+    step("K6_panel_chat_works_in_compare", drawer_panes == 2, panes_while_open=drawer_panes)
 
     # AC 7 exits. Escape → solo canvas at the selected version.
     page.keyboard.press("Escape")
@@ -383,7 +396,8 @@ with sync_playwright() as p:
     page.keyboard.press("Enter")
     page.locator('[data-testid="version-marker"][data-version="1"]').wait_for(timeout=30000)
     page.locator('[data-testid="doc-canvas"][data-version="1"]').wait_for(timeout=30000)
-    wake_strip(page)
+    # #115: the toggle lives in the panel's Compare tab now.
+    page.locator('[data-testid="panel-tab"][data-tab="compare"]').click()
     v1only = page.evaluate(
         """() => {
              const t = document.querySelector('[data-testid="version-compare-toggle"]');

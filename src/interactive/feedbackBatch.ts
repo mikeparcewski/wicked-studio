@@ -19,6 +19,37 @@ import { nextMsgId, threadKey, useDocThreadStore, type FeedbackItem } from '../s
 export const FEEDBACK_EVENT = 'wicked.interactive.feedback.submitted';
 
 /**
+ * One item as the SERVICE consumes it — the ADR-0002 schema `materializeFeedback` →
+ * `applyFeedbackItems` reads: `{selector, type, …}` with per-type operation fields
+ * (content-edit → value; structural-change → instruction), `before` as the staleness
+ * guard. The docfb2 diagnosis: the batch used to ride `{wid, comment}`, a shape the
+ * real regenerate loop rejects per item as "selector-not-found" (`item.selector` is
+ * undefined) — so even a delivered batch could never land an edit. The client keeps
+ * its own `FeedbackItem` spelling and translates HERE, at the one wire crossing.
+ */
+export interface WireFeedbackItem {
+  selector: string;
+  type: 'content-edit' | 'structural-change';
+  value?: string;
+  instruction?: string;
+  before?: string;
+}
+
+/** Client item → schema item. 'change-text' is the deterministic content-edit (the
+ *  typed text IS the new text); everything else asks the agent (structural-change). */
+export function toWireItem(item: FeedbackItem): WireFeedbackItem {
+  return item.mode === 'change-text'
+    ? {
+        selector: item.wid, type: 'content-edit', value: item.text,
+        ...(item.before === undefined ? {} : { before: item.before }),
+      }
+    : {
+        selector: item.wid, type: 'structural-change', instruction: item.text,
+        ...(item.before === undefined ? {} : { before: item.before }),
+      };
+}
+
+/**
  * The batch, as the one line of conversation it is. The `[wid]` tag is not decoration:
  * it is the same anchor the item's deep-link resolves through, so the message a human
  * reads and the target the agent edits are provably the same element.
@@ -67,12 +98,20 @@ export async function submitFeedbackBatch(
       version,
       source_message_id: msgId,
       ...(target === undefined ? {} : { target }),
-      items: items.map((item) => ({ wid: item.wid, comment: item.text })),
+      // The ADR-0002 schema shape (see `toWireItem`) — what the real
+      // materializeFeedback loop consumes, not the client's own spelling.
+      items: items.map(toWireItem),
     },
   });
 
   const store = useDocThreadStore.getState();
   store.addUserMsg(key, msgId, text, items);
+  // The batch is a SEND awaiting its landing, exactly like a composer steer — the
+  // service is already materializing it (write 1 succeeded). A deterministic batch
+  // lands `version.created {kind:"deterministic"}` moments later, which consumes the
+  // anchor and turns this terminal; a structural batch stays working until the
+  // agent's follow-on version (docfb2 — before this the batch never even pended).
+  store.setGenState(key, 'generating');
   try {
     await injectDocMessage(projectId, docId, text, msgId);
     return { msgId, text, recorded: true };

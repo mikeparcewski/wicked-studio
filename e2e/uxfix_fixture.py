@@ -1508,6 +1508,17 @@ docs_lock = threading.Lock()
 # pid -> docId -> [version entries, manifest-shaped]. Grown by create/fork below.
 docs_created: dict = {}
 
+# ── docfb2: materialized feedback (the REAL materializeFeedback shape) ────────
+# A feedback.submitted batch's content-edits are applied DETERMINISTICALLY to the
+# head HTML and land as a new version (kind "deterministic"), mirroring
+# wicked-interactive handlers.js materializeFeedback → applyFeedbackItems. The
+# landed HTML lives here, keyed by version; the doc GET route serves it verbatim.
+doc_html_overrides: dict = {}  # (pid, doc, version) -> html
+# The batch's write 2 is a chat.posted inject carrying the SAME source_message_id.
+# The real answerer does not regenerate on it (the batch already landed its own
+# version), so the fixture must not mint a steer version for that inject either.
+feedback_msg_ids: dict = {}    # (pid, doc) -> {source_message_id, …}
+
 # ── Slice K (DES-FEEDBACK-002 §6): per-chat reply bookkeeping ─────────────────
 # Which seats each fixture chat warmed, which have since failed, and how many
 # sends it has taken — so the switch-gated reply drip fans out to exactly the
@@ -2343,9 +2354,14 @@ class W2Handler(SimpleHTTPRequestHandler):
         # storyboard() lands them.
         m = re.match(r"^/api/v1/projects/([^/]+)/interactive/d/([^/]+)/doc/(\d+)$", path)
         if m:
-            doc = urllib.parse.unquote(m.group(2))
-            html = (storyboard_doc_html(int(m.group(3))) if doc == DEMO_NAME
-                    else doc_html(doc, int(m.group(3))))
+            pid, doc = (urllib.parse.unquote(g) for g in (m.group(1), m.group(2)))
+            v = int(m.group(3))
+            # docfb2: a version a feedback batch materialized serves ITS html.
+            with docs_lock:
+                override = doc_html_overrides.get((pid, doc, v))
+            html = (override if override is not None
+                    else storyboard_doc_html(v) if doc == DEMO_NAME
+                    else doc_html(doc, v))
             body = html.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -2527,6 +2543,67 @@ class W2Handler(SimpleHTTPRequestHandler):
                         learned_themes[(pid, doc)] = int(time.time() * 1000) + delay_ms
                 self._json(200, {"ok": True, "event_id": "evt-fixture", "correlation_id": "c-fixture"})
                 return True
+            # ── docfb2: the REAL materializeFeedback shape (handlers.js) ─────────
+            # Deterministic content-edits are applied to the head HTML NOW and land
+            # as version.created {kind:"deterministic"}; the structural remainder is
+            # handed off inline on feedback.processed. Items are ADR-0002 schema
+            # items ({selector, type, value|instruction, before}).
+            if body.get("event_type") == "wicked.interactive.feedback.submitted" and doc:
+                items = payload.get("items") or []
+                src_msg = str(payload.get("source_message_id") or "")
+                applied: list = []
+                rejected: list = []
+                structural: list = []
+                landed_v = None
+                with docs_lock:
+                    versions = docs_created.get(pid, {}).get(doc)
+                    if versions is not None:
+                        head = max(e["version"] for e in versions)
+                        html = doc_html_overrides.get((pid, doc, head)) or doc_html(doc, head)
+                        for item in items:
+                            sel = str(item.get("selector") or "")
+                            typ = str(item.get("type") or "")
+                            if typ == "content-edit":
+                                pat = re.compile(
+                                    r'(data-wid="' + re.escape(sel) + r'"[^>]*>)([^<]*)')
+                                if sel and pat.search(html):
+                                    new_text = str(item.get("value") or "")
+                                    html = pat.sub(
+                                        lambda mm: mm.group(1) + new_text, html, count=1)
+                                    applied.append(sel)
+                                else:
+                                    rejected.append({"selector": sel,
+                                                     "reason": "selector-not-found"})
+                            elif typ == "structural-change":
+                                structural.append({"selector": sel, "type": typ,
+                                                   "instruction": str(item.get("instruction") or "")})
+                            else:
+                                rejected.append({"selector": sel,
+                                                 "reason": f"unsupported-type:{typ}"})
+                        if applied:
+                            landed_v = head + 1
+                            versions.append({"version": landed_v, "parent": head,
+                                             "feedback_file": f"_v{landed_v}.md",
+                                             "html_file": f"_v{landed_v}.html",
+                                             "created_at": iso(NOW0 + landed_v * SEC)})
+                            doc_html_overrides[(pid, doc, landed_v)] = html
+                        if src_msg:
+                            feedback_msg_ids.setdefault((pid, doc), set()).add(src_msg)
+                if versions is not None:
+                    if landed_v is not None:
+                        queue_interactive("wicked.interactive.version.created", {
+                            "project_id": pid, "document_id": doc,
+                            "version": landed_v, "parent": landed_v - 1,
+                            "kind": "deterministic", "html_file": f"_v{landed_v}.html"})
+                    queue_interactive("wicked.interactive.feedback.processed", {
+                        "project_id": pid, "document_id": doc,
+                        "version": landed_v if landed_v is not None else head,
+                        "applied": applied, "rejected": rejected, "stale": [],
+                        "awaiting_structural": len(structural),
+                        "structural_items": structural})
+                self._json(200, {"ok": True, "event_id": "evt-fixture",
+                                 "correlation_id": "c-fixture"})
+                return True
             if body.get("event_type") == "wicked.interactive.chat.posted" and doc:
                 # Slice T (§6.1): a refused send is a LOUD 500 — the client's
                 # visible-failure branch. Real shape: the bridge reports {error}.
@@ -2541,6 +2618,16 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # order (BRIDGE-UX-1 probe 1: the bus is the queue) …
                 if payload.get("role") == "user" and payload.get("text"):
                     log_conversation(pid, doc, "user", str(payload.get("text")))
+                # docfb2: the feedback batch's write 2 (the inject) carries the same
+                # source_message_id the batch event carried. The batch already landed
+                # its own version, so the answerer does NOT regenerate on the inject —
+                # it lands in the transcript and nothing else.
+                with docs_lock:
+                    fb_ids = feedback_msg_ids.get((pid, doc), set())
+                if str(payload.get("source_message_id") or "") in fb_ids:
+                    self._json(200, {"ok": True, "event_id": "evt-fixture",
+                                     "correlation_id": "c-fixture"})
+                    return True
                 if silent_doc:
                     # J3 no-answerer shape: 200 {ok}, landed durably — and then
                     # NOTHING answers it (no status frame, no landing, ever).

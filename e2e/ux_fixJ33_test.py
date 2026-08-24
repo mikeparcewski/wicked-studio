@@ -17,12 +17,17 @@ The four ACs, verbatim mapping to the round-2 findings:
   2. LIVE FIRST GENERATION: with the page OPEN on the v0 placeholder, the
      answerer landing v1 swaps the canvas to v1 WITHOUT a reload — the frames
      of an Unfiled (project-unbound) doc reach the canvas.
-  3. EXPORT ANSWERS SOMEWHERE, ALWAYS (drawer CLOSED): an export whose pending
-     answer is re-addressed by a mid-flight landing (the head advances, the
-     strip follows) stays visible at the click site, labeled with ITS version;
-     the strip stays clickable while it is still visibly fading (pointer-events
-     retire only after the fade), and a press on the hidden sensor band summons
-     the strip instead of dying silently.
+  3. EXPORT ANSWERS SOMEWHERE, ALWAYS (re-scoped to the #115 anatomy: the
+     export click site moved off the strip into the tabbed panel's Chat tab,
+     under the chatbox — the doc address starts with the panel collapsed to
+     its rail, the drawer's successor to "closed by default"): an export whose
+     pending answer is re-addressed by a mid-flight landing (the head advances,
+     the menu follows) stays visible at the click site, labeled with ITS
+     version, a full idle budget later — no auto-hide touches the panel. The
+     slim band keeps the fade machinery: the strip stays clickable while it is
+     still visibly fading (pointer-events retire only after the fade), and a
+     press on the hidden sensor band summons the strip instead of dying
+     silently.
   4. SEND-STATE SURVIVES RELOAD: a send that was PENDING at reload comes back
      pending with its ORIGINAL clock (an already-stalled send re-renders the
      honest timeout + a WORKING retry, not a plain accepted message); a REFUSED
@@ -202,8 +207,9 @@ with sync_playwright() as p:
     page.reload(wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
-    wake_strip(page)
-    page.locator('[data-testid="thread-toggle"]').click()
+    # #115: the drawer became the tabbed right panel; on a doc address it starts
+    # collapsed to the rail — expand it (Chat is the default tab, the thread).
+    page.locator('[data-testid="panel-expand"]').click()
     # The restored send is STALLED, visibly — honest copy + a retry — never a
     # plain accepted message, and never a fresh "being worked now" claim.
     page.locator('[data-testid="thread-generating-timeout"]').wait_for(timeout=15000)
@@ -249,8 +255,7 @@ with sync_playwright() as p:
     page.reload(wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
-    wake_strip(page)
-    page.locator('[data-testid="thread-toggle"]').click()
+    page.locator('[data-testid="panel-expand"]').click()  # #115: rail → Chat tab
     page.locator('[data-testid="thread-send-failed"]').wait_for(timeout=15000)
     refused = page.evaluate(
         """() => {
@@ -268,42 +273,56 @@ with sync_playwright() as p:
     page.locator('[data-testid="version-marker"][data-version="4"]').wait_for(timeout=20000)
     check("C6_refused_retry_lands", True)
 
-    # ── Scene D (AC 3): the export answers with the drawer CLOSED, through churn ─
+    # ── Scene D (AC 3): the export answers SOMEWHERE, ALWAYS, through churn ─────
+    # Re-scoped to the #115 anatomy: the export click site moved off the strip
+    # into the panel's Chat tab, UNDER the chatbox — a site no auto-hide touches
+    # (the J3 strip `hold` retired with the move). The AC's spirit is unchanged:
+    # the answer stays visible at the click site, labeled with ITS version,
+    # through a mid-flight re-addressing.
     set_fixture(ORIGIN, export_delay_ms=4000, doc_run_ms=1500)
     page.goto(f"{ORIGIN}/p/{PID}/document/{DOC}", wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-canvas"][data-version="4"]').wait_for(timeout=30000)
-    check("D1_drawer_closed_by_default",
-          page.locator('[data-testid="thread-drawer"]').count() == 0)
+    # Canvas-first posture (#115): a doc address starts with the panel collapsed
+    # to its rail — the drawer's successor to "closed by default".
+    check("D1_panel_rail_by_default",
+          page.locator('[data-testid="doc-panel-rail"]').count() == 1
+          and page.locator('[data-testid="doc-panel"]').count() == 0)
 
-    wake_strip(page)
+    page.locator('[data-testid="panel-expand"]').click()  # the export lives in Chat
+    page.locator('[data-testid="chat-export"]').wait_for(timeout=15000)
     page.locator('[data-testid="export-format"][data-format="html"]').click()  # exports v4
     post_chat("one more tweak from another client")  # lands v5 in 1.5s — the churn
-    # Mid-flight, PAST the landing: the strip has re-addressed to v5, and the
+    # Mid-flight, PAST the landing: the menu has re-addressed to v5, and the
     # pending answer is STILL VISIBLE at the click site (pre-fix: wiped here).
     page.locator('[data-testid="export-menu"][data-version="5"]').wait_for(timeout=15000)
     mid = page.evaluate(
         """() => ({
              pending: !!document.querySelector('[data-testid="export-pending"]'),
              ready: !!document.querySelector('[data-testid="export-ready"]'),
-             stripHidden: document.querySelector('[data-testid="version-strip"]')?.getAttribute('data-hidden'),
            })""")
     check("D2_pending_answer_survives_the_readdressing",
-          (mid["pending"] or mid["ready"]) and mid["stripHidden"] == "false", **mid)
+          mid["pending"] or mid["ready"], **mid)
 
-    # The READY answer lands labeled with ITS version (v4) under the v5 label row.
+    # The READY answer lands labeled with ITS version (v4) under the v5 label row —
+    # and a full idle budget later it is STILL at the click site: the panel is
+    # not the strip; nothing fades it.
     ready = page.locator('[data-testid="export-ready"][data-version="4"]')
     ready.wait_for(timeout=15000)
     page.wait_for_timeout(3600)  # a full idle budget with the mouse parked: still up
     answered = page.evaluate(
-        """() => ({
-             stripHidden: document.querySelector('[data-testid="version-strip"]')?.getAttribute('data-hidden'),
-             label: document.querySelector('[data-testid="export-ready"]')?.textContent ?? '',
-             href: document.querySelector('[data-testid="export-ready"]')?.getAttribute('href'),
-             menuVersion: document.querySelector('[data-testid="export-menu"]')?.getAttribute('data-version'),
-           })""")
-    check("D3_ready_answer_visible_v_labeled_strip_held",
-          answered["stripHidden"] == "false" and "v4" in answered["label"]
+        """() => {
+             const r = document.querySelector('[data-testid="export-ready"]');
+             return {
+               visible: !!r && r.offsetParent !== null,
+               inPanel: !!r && !!r.closest('[data-testid="chat-export"]'),
+               label: r?.textContent ?? '',
+               href: r?.getAttribute('href'),
+               menuVersion: document.querySelector('[data-testid="export-menu"]')?.getAttribute('data-version'),
+             };
+           }""")
+    check("D3_ready_answer_visible_v_labeled_at_the_click_site",
+          answered["visible"] and answered["inPanel"] and "v4" in answered["label"]
           and bool(answered["href"]) and answered["menuVersion"] == "5",
           **answered)
     page.screenshot(path=str(VSHOTS / "ux-fixJ33-export-relabel.png"))
@@ -320,6 +339,9 @@ with sync_playwright() as p:
 
     # D5: the fading strip keeps its hit targets until the fade FINISHES, and a
     # press on the hidden sensor band summons the strip instead of dying.
+    # (#115: no export holds the strip any more, so RAISE it first — the fade
+    # must be caught in progress, not sampled hours after it finished.)
+    wake_strip(page)
     page.mouse.move(700, 300)  # park away from the strip; let the idle budget run
     page.wait_for_function(
         """() => document.querySelector('[data-testid="version-strip"]')?.getAttribute('data-hidden') === 'true'""",
@@ -349,8 +371,7 @@ with sync_playwright() as p:
     page.reload(wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
-    wake_strip(page)
-    page.locator('[data-testid="thread-toggle"]').click()
+    page.locator('[data-testid="panel-expand"]').click()  # #115: rail → Chat tab
     page.locator('[data-testid="doc-artifact-download"]').wait_for(timeout=15000)
     entry = page.evaluate(
         """() => ({

@@ -87,6 +87,21 @@ describe('composer state mapping (§2.2)', () => {
     expect(state()).toBe('terminal');
   });
 
+  // The docfb2 restore: materializeFeedback's model-free landing (`kind:
+  // "deterministic"`) ANSWERS the feedback batch — it consumes the pending anchor
+  // and ends the working state, exactly as a generated version answers a steer.
+  // Before the fix the batch's message span "generating" forever.
+  it('a DETERMINISTIC landing (a content-edit batch) answers the batch message', () => {
+    const id = nextMsgId();
+    useDocThreadStore.getState().addUserMsg(KEY, id, 'Feedback on 1 place…',
+      [{ wid: 'headline', text: 'Q3: shipped', mode: 'change-text', before: 'Q3 review' }]);
+    useDocThreadStore.getState().setGenState(KEY, 'generating');
+    ingest(frame('wicked.interactive.version.created', { version: 2, parent: 1, kind: 'deterministic' }));
+    expect(messages()[0]).toMatchObject({ kind: 'user', id, version: 2 });
+    expect(state()).toBe('terminal');
+    expect(useDocThreadStore.getState().pending[KEY]).toEqual([]);
+  });
+
   it('ignores frames that are not relayed interactive events, and unkeyable ones', () => {
     ingest({ type: 'unitOutputDelta', session: 's1', ord: 0, text: 'hi' } as unknown as CoreEvent);
     ingest({

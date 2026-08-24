@@ -10,13 +10,16 @@
 // What this deliberately does NOT do is bypass the protocol. Every byte the overlay
 // consumes in these tests went through `postMessage` shape and `parseInbound`.
 
-import type { WidRect } from '../../src/interactive/instrument-protocol.js';
+import type { WidBlock, WidRect } from '../../src/interactive/instrument-protocol.js';
 
 export interface FixtureBridgeOptions {
   /** Rects the fixture reports, as measured at `scrollY`. */
   widMap: Record<string, WidRect>;
   scrollX?: number;
   scrollY?: number;
+  /** Per-block text/composite — the INJECTED bridge's extra field (docfb2). Absent
+   *  models the hand-written fixture bridges, which never send it. */
+  blocks?: Record<string, WidBlock>;
   /** A frame that never answers — the graceful-degradation path (§7.12-shaped). */
   silent?: boolean;
 }
@@ -28,6 +31,10 @@ export interface FixtureBridge {
   sent: unknown[];
   /** Push a scroll the way a real document would, without a new inventory. */
   scrollTo: (scrollX: number, scrollY: number) => void;
+  /** The injected bridge preempted a click on a block INSIDE the frame (docfb2). */
+  clickWid: (wid: string) => void;
+  /** The frame's pointer moved onto a block, or off every block (null). */
+  hoverWid: (wid: string | null) => void;
   /** Post a raw payload the overlay must survive — malformed, stale, or hostile. */
   postRaw: (data: unknown) => void;
   dispose: () => void;
@@ -42,7 +49,7 @@ export function rect(left: number, top: number, width: number, height: number): 
 }
 
 export function makeFixtureBridge(opts: FixtureBridgeOptions): FixtureBridge {
-  const { widMap, scrollX = 0, scrollY = 0, silent = false } = opts;
+  const { widMap, scrollX = 0, scrollY = 0, blocks, silent = false } = opts;
   const sent: unknown[] = [];
 
   // Identity is what the overlay checks (a sandboxed frame's origin is the string
@@ -67,7 +74,10 @@ export function makeFixtureBridge(opts: FixtureBridgeOptions): FixtureBridge {
     const msg = data as { v?: number; type?: string; wid?: string };
     if (msg?.v !== 1) return;
     if (msg.type === 'request-inventory') {
-      deliver({ v: 1, type: 'wid-inventory', widMap, scrollX, scrollY });
+      deliver({
+        v: 1, type: 'wid-inventory', widMap, scrollX, scrollY,
+        ...(blocks === undefined ? {} : { blocks }),
+      });
     } else if (msg.type === 'scroll-to-wid') {
       deliver({ v: 1, type: 'scroll-ack', wid: msg.wid });
     }
@@ -77,6 +87,8 @@ export function makeFixtureBridge(opts: FixtureBridgeOptions): FixtureBridge {
     frame,
     sent,
     scrollTo: (x, y) => deliver({ v: 1, type: 'scroll-state', scrollX: x, scrollY: y }),
+    clickWid: (wid) => deliver({ v: 1, type: 'wid-click', wid }),
+    hoverWid: (wid) => deliver({ v: 1, type: 'wid-hover', wid }),
     postRaw: deliver,
     dispose: () => { sent.length = 0; },
   };
