@@ -69,7 +69,7 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
 const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestAnnotation = useAnnotationStore((s) => s.ingest);
@@ -274,6 +274,9 @@ export function App(): React.ReactElement {
         onRejectGate={onDashboardRejectGate}
         navigate={navigate}
         projectId={projectId}
+        // Slice BE (DES-UX-002 §5.2): the Runs|Chronicle view is ROUTE state —
+        // `/p/:id/chronicle` — so the chronicle is deep-linkable and Back works.
+        chronicleView={chronicleView}
       />
     </div>
   );

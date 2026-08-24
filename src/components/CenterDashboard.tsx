@@ -22,6 +22,7 @@ import { useMembershipStore } from '../store/membership.js';
 import { useRunEventStore } from '../store/events.js';
 import { useSteeringStore } from '../store/steering.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
+import { chroniclePath, modePath } from '../hooks/useRoute.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 import { WorkChronicle } from './WorkChronicle.js';
@@ -41,6 +42,12 @@ interface Props {
    * unbound `/runs/new`.
    */
   projectId?: string | null;
+  /**
+   * Slice BE (DES-UX-002 §5.2): true on `/p/:id/chronicle` — the chronicle
+   * view selected by ROUTE, not local state, so it is deep-linkable and the
+   * Back button restores the flat list. The toggle below navigates.
+   */
+  chronicleView?: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -777,6 +784,7 @@ export function CenterDashboard({
   onRejectGate,
   navigate,
   projectId = null,
+  chronicleView = false,
 }: Props): React.ReactElement {
   const byRun = useRunEventStore((s) => s.byRun);
   const gates = useGateStore((s) => s.gates);
@@ -806,10 +814,13 @@ export function CenterDashboard({
 
   // ── The work chronicle (DES-UX-002 §3, slice BC) — a second VIEW of the
   // project's build work, additive beside the flat list (§10's adopted
-  // position: additive tab; slice BE wires the §5.2 route + default). It
-  // reads the FULL scoped history — episode chains are the project's story,
-  // not a time-window slice — so its input skips the range filter.
-  const [view, setView] = useState<'runs' | 'chronicle'>('runs');
+  // position: additive tab — the flat list stays the default; re-defaulting
+  // remains the named open question). Slice BE wired the §5.2 route: the view
+  // IS the route (`/p/:id/chronicle` vs `/p/:id/build`), so the toggle
+  // navigates and the chronicle is deep-linkable. It reads the FULL scoped
+  // history — episode chains are the project's story, not a time-window
+  // slice — so its input skips the range filter.
+  const view: 'runs' | 'chronicle' = chronicleView ? 'chronicle' : 'runs';
   const chronicleRuns = useMemo(
     () => scopedRuns.filter((v) => !!v.session.workflow_id && v.session.workflow_id !== 'chat'),
     [scopedRuns],
@@ -988,8 +999,11 @@ export function CenterDashboard({
         </p>
 
         {/* ── The Runs | Chronicle view toggle (DES-UX-002 §3.3 + §5.3, slice
-               BC): project context only. The flat list stays the default — the
-               §10 open question's adopted additive position; BE may re-default. */}
+               BC): project context only. The flat list stays the default (the
+               §10 open question's adopted additive position). Slice BE
+               re-pointed the toggle at the §5.2 ROUTES: each segment is a
+               navigation, so the chronicle has a real URL and Back restores
+               the list. */}
         {projectId !== null && (
           <div role="tablist" aria-label="Build view" style={{ display: 'flex', gap: '4px', marginBottom: '20px' }}>
             {(['runs', 'chronicle'] as const).map((v) => (
@@ -999,7 +1013,11 @@ export function CenterDashboard({
                 role="tab"
                 aria-selected={view === v}
                 data-testid={`build-view-${v}`}
-                onClick={() => setView(v)}
+                onClick={() => {
+                  if (v !== view) {
+                    navigate(v === 'chronicle' ? chroniclePath(projectId) : modePath(projectId, 'build'));
+                  }
+                }}
                 style={{
                   background: view === v ? 'var(--surface-raised)' : 'transparent',
                   border: '1px solid var(--surface-raised)',
