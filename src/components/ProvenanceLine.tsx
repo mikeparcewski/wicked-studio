@@ -58,7 +58,7 @@ interface Props {
   /** Forward lineage — run ids the loaded index shows as retries of this run. */
   retriedAs?: readonly string[] | undefined;
   onSelectRun?: ((id: string) => void) | undefined;
-  testId: 'run-provenance' | 'notif-provenance';
+  testId: 'run-provenance' | 'notif-provenance' | 'timeline-provenance';
 }
 
 export function ProvenanceLine({ provenance, retryOf, retriedAs, onSelectRun, testId }: Props): React.ReactElement {

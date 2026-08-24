@@ -12,6 +12,13 @@ beforeEach(() => {
   vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] });
 });
 
+// Slice BB (DES-UX-002 §2.3): a terminal run's DEFAULT lens is the evidence
+// timeline; the pre-BB output blocks live under the preserved Units tab —
+// these tests re-verify that view renders UNCHANGED there (§8.3's re-scope).
+async function openUnitsTab(): Promise<void> {
+  await userEvent.click(await screen.findByTestId('tab-unit-list'));
+}
+
 describe('ChatPanel unit outputs in the main panel (crew#272)', () => {
   it('auto-renders each completed unit output as a primary block, in ord order', async () => {
     vi.spyOn(client.api, 'getUnitOutput').mockImplementation(
@@ -29,6 +36,7 @@ describe('ChatPanel unit outputs in the main panel (crew#272)', () => {
         onRefresh={vi.fn()}
       />,
     );
+    await openUnitsTab();
 
     // Outputs load with NO click and render in the main flow (crew#272).
     const first = await screen.findByTestId('unit-output-1');
@@ -63,6 +71,7 @@ describe('ChatPanel unit outputs in the main panel (crew#272)', () => {
         onRefresh={vi.fn()}
       />,
     );
+    await openUnitsTab();
     const block = await screen.findByTestId('unit-output-0');
     expect(await within(block).findByText('free-text result')).toBeInTheDocument();
     // 'u0' is not a phase name — the stage is the closest thing a free-text unit has.
@@ -83,6 +92,7 @@ describe('ChatPanel unit outputs in the main panel (crew#272)', () => {
         onRefresh={vi.fn()}
       />,
     );
+    await openUnitsTab();
     expect(await screen.findByText('collapsible body')).toBeInTheDocument();
 
     await user.click(screen.getByTestId('unit-output-toggle-1'));
@@ -109,6 +119,7 @@ describe('ChatPanel unit outputs in the main panel (crew#272)', () => {
         onRefresh={vi.fn()}
       />,
     );
+    await openUnitsTab();
     expect(
       await screen.findByText(/recorded as done \(approved\) but the transcript read returned nothing/),
     ).toBeInTheDocument();

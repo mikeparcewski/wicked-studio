@@ -37,7 +37,11 @@ const FAILED_VIEW = makeView({ status: 'failed' }, [
   }),
 ]);
 
-function renderPanel(view = FAILED_VIEW): void {
+// Slice BB (DES-UX-002 §2.3): a terminal run's DEFAULT lens is the evidence
+// timeline; the slice-R post-mortem spine is the preserved Units tab. These
+// tests re-verify every spine AC holds UNCHANGED there (§8.3's re-scope) —
+// the panel opens on the Units tab before each assertion.
+async function renderPanel(view = FAILED_VIEW): Promise<void> {
   render(
     <ChatPanel
       view={view}
@@ -46,6 +50,7 @@ function renderPanel(view = FAILED_VIEW): void {
       onRefresh={vi.fn()}
     />,
   );
+  await userEvent.click(await screen.findByTestId('tab-unit-list'));
 }
 
 describe('ChatPanel — the failed-run post-mortem spine (slice R)', () => {
@@ -56,7 +61,7 @@ describe('ChatPanel — the failed-run post-mortem spine (slice R)', () => {
           ? { output: 'captured survey transcript' }
           : { output: null, outputUnavailable: 'denied — output not retained past a deny' },
     );
-    renderPanel();
+    await renderPanel();
 
     // The spine renders (§1.5 AC 1) …
     const units = await screen.findAllByTestId('work-unit');
@@ -74,7 +79,7 @@ describe('ChatPanel — the failed-run post-mortem spine (slice R)', () => {
 
   it('FailureBanner is the headline ABOVE the unit list — demoted, not removed', async () => {
     vi.spyOn(client.api, 'getUnitOutput').mockResolvedValue({ output: 'x' });
-    renderPanel();
+    await renderPanel();
 
     const banner = await screen.findByTestId('failure-banner');
     const list = await screen.findByTestId('unit-list');
@@ -86,7 +91,7 @@ describe('ChatPanel — the failed-run post-mortem spine (slice R)', () => {
 
   it('a CANCELLED run renders the same spine under its banner', async () => {
     vi.spyOn(client.api, 'getUnitOutput').mockResolvedValue({ output: 'partial work' });
-    renderPanel(makeView({ status: 'cancelled' }, [
+    await renderPanel(makeView({ status: 'cancelled' }, [
       makeUnit({ id: 'run-1:survey', ord: 0, stage: 'recon', status: 'done' }),
     ]));
 
@@ -109,7 +114,7 @@ describe('ChatPanel — the failed-run post-mortem spine (slice R)', () => {
         }],
       },
     });
-    renderPanel();
+    await renderPanel();
 
     const card = await screen.findByTestId('verdict-detail');
     expect(card).toHaveAttribute('data-phase-ord', '1');
@@ -126,7 +131,7 @@ describe('ChatPanel — the failed-run post-mortem spine (slice R)', () => {
     const getRunFile = vi.spyOn(client.api, 'getRunFile').mockResolvedValue({
       path: '/w2/evidence/NOTES.md', content: 'the notes', size: 9, truncated: false, binary: false,
     });
-    renderPanel();
+    await renderPanel();
 
     const link = await screen.findByTestId('evidence-ref');
     expect(link.tagName).toBe('A');
