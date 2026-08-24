@@ -17,13 +17,17 @@ import { ProjectSparkline } from './ProjectSparkline.js';
  * The orchestrator home board (DES-MERGE-001 §1.2/§1.4; bands per DES-UXFIX-001
  * §2.1.4, slice 1) — the route `/`.
  *
- * A wall of what is happening across many unrelated projects at once, in TWO
- * bands read off each project's decayed attention score (§2.1.3):
+ * A wall of what is happening across many unrelated projects at once, in THREE
+ * bands (BRIEF-UX-002 C6: bands derive from run STATUS first, decay second —
+ * `bandFor` in boardAttention.ts):
  *
- *   NEEDS YOU — score at or above the triage threshold, score-ordered. Full
- *   cards. This is what a returning operator scans first.
+ *   NEEDS YOU — a human is the blocker: waiting gates, fresh failures.
+ *   Score-ordered full cards. This is what a returning operator scans first.
+ *   WORKING — runs accumulating fine without needing anyone (any non-terminal
+ *   run puts its project here — never in QUIET, however stale the clocks).
+ *   Full ACTIVE cards under their own honest header.
  *   QUIET (N) — the calm majority, collapsed to a header + a preview strip of
- *   one-line chips; expandable into a second windowed grid of full cards.
+ *   one-line chips; expandable into a third windowed grid of full cards.
  *
  * "Many projects at once is the default case" (§1.4), so both grids are
  * WINDOWED against the ONE shared scroller (`boardWindow.ts`): cards are a
@@ -153,6 +157,11 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
   }, []);
 
   const needsYou = items.filter((i) => i.band === 'needs-you');
+  // C6 (BRIEF-UX-002): accumulating-without-gates is its OWN band — WORKING is
+  // named honestly, never conflated with NEEDS YOU (gates + fresh failures) and
+  // never allowed to decay into QUIET while a run is non-terminal (bandFor
+  // derives it from the DTO statuses the board already holds).
+  const working = items.filter((i) => i.band === 'working');
   const quiet = items.filter((i) => i.band === 'quiet');
 
   // ── Slice H (DES-FEEDBACK-002 §2): the keyboard triage cursor ──────────────
@@ -195,9 +204,14 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
   // header-height error is smaller than the overscan row that absorbs it.
   const needsTop = BAND_H;
   const needsH = needsYou.length === 0 ? BAND_H : Math.ceil(needsYou.length / columns) * activeRowH;
-  const quietGridTop = needsTop + needsH + BAND_H;
+  // The WORKING band sits between NEEDS YOU and QUIET; absent entirely when
+  // nothing is accumulating (the empty-state budget applies to bands too).
+  const workingTop = needsTop + needsH + BAND_H;
+  const workingH = working.length === 0 ? 0 : Math.ceil(working.length / columns) * activeRowH;
+  const quietGridTop = workingTop + (working.length === 0 ? 0 : workingH + BAND_H);
 
   const needsWin = windowRows(needsYou.length, columns, activeRowH, scrollTop, viewH, needsTop);
+  const workingWin = windowRows(working.length, columns, activeRowH, scrollTop, viewH, workingTop);
   const quietWin = quietOpen
     ? windowRows(quiet.length, columns, quietRowH, scrollTop, viewH, quietGridTop)
     : null;
@@ -206,6 +220,9 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
     (needsWin.lastRow < needsWin.firstRow
       ? 0
       : Math.min(needsYou.length, (needsWin.lastRow + 1) * columns) - needsWin.firstRow * columns) +
+    (workingWin.lastRow < workingWin.firstRow
+      ? 0
+      : Math.min(working.length, (workingWin.lastRow + 1) * columns) - workingWin.firstRow * columns) +
     (quietWin === null || quietWin.lastRow < quietWin.firstRow
       ? 0
       : Math.min(quiet.length, (quietWin.lastRow + 1) * columns) - quietWin.firstRow * columns);
@@ -276,6 +293,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
         data-testid="project-board"
         data-total={items.length}
         data-needs-you={needsYou.length}
+        data-working={working.length}
         data-quiet={quiet.length}
         data-rendered={mounted}
         style={{ flex: 1, overflowY: 'auto', padding: '0 var(--space-6) var(--space-6)' }}
@@ -334,6 +352,25 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
                 j/k select · a approve · r reject · ↵ open
               </p>
             )}
+          </section>
+        )}
+
+        {/* C6: the WORKING band — runs accumulating fine, no gate posted. Full
+            ACTIVE cards (the slice-BA anatomy: live lines, phase strip, chips),
+            always expanded — but under its OWN honest header, never under
+            "Needs you", and never decaying into QUIET while a run is live.
+            Blue names the band because blue MEANS "work is moving" (§2.6). */}
+        {working.length > 0 && (
+          <section data-testid="band-working" data-count={working.length} style={{ marginTop: '18px' }}>
+            <p style={{ ...CSS.bandLabel, color: 'var(--status-run)' }}>Working</p>
+            <BandGrid
+              items={working}
+              columns={columns}
+              rowH={activeRowH}
+              firstRow={workingWin.firstRow}
+              lastRow={workingWin.lastRow}
+              navigate={navigate}
+            />
           </section>
         )}
 

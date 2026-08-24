@@ -104,6 +104,11 @@ const needsYouIds = (): (string | null)[] =>
   [...screen.getByTestId('band-needs-you').querySelectorAll('[data-testid="project-card"]')]
     .map((c) => c.getAttribute('data-project-id'));
 
+/** C6: the WORKING band — absent from the DOM entirely when nothing is moving. */
+const workingIds = (): (string | null)[] =>
+  [...(screen.queryByTestId('band-working')?.querySelectorAll('[data-testid="project-card"]') ?? [])]
+    .map((c) => c.getAttribute('data-project-id'));
+
 async function board(runs: SessionView[], expectedTotal = projects.length): Promise<void> {
   render(<HomeBoard runs={runs} navigate={() => {}} />);
   await vi.waitFor(() => {
@@ -136,7 +141,8 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
       ).toBeTruthy();
     });
     expect(needsYouIds()).not.toContain('legacy-spike');
-    expect(needsYouIds()).toContain('upload-endpoint');
+    // C6: a live run is WORKING — its own honest band, not NEEDS YOU (no gate).
+    expect(workingIds()).toContain('upload-endpoint');
 
     // Its card (mounted once QUIET expands) carries the decay verdict.
     fireEvent.click(screen.getByTestId('band-quiet-toggle'));
@@ -146,7 +152,7 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
     expect(legacy).toHaveAttribute('data-signal', 'failing');
   });
 
-  it('orders NEEDS YOU by decayed score: gates, then the fresh failure, then the live run', async () => {
+  it('orders NEEDS YOU by decayed score (gates, then the fresh failure); the live run is WORKING', async () => {
     const runs = seedW2(Date.now());
     await board(runs);
 
@@ -155,16 +161,25 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
         'q3-review-deck',   // gate, 30s — no decay
         'api-migration',    // gate, 2m — no decay, older than q3
         'auth-refactor',    // failing, 12m — ≈67.6, still urgent
-        'upload-endpoint',  // running now — 40
       ]);
+      // C6: the executing run is accumulating fine — WORKING, not NEEDS YOU.
+      expect(workingIds()).toEqual(['upload-endpoint']);
     });
-    // The band boundary, off the DOM: nothing below the threshold leads, nothing
-    // above it hides (slice-1 AC / §5.5 assertion 6).
+    // The band boundary, off the DOM (C6 re-pin of the slice-1 AC): NEEDS YOU
+    // holds exactly the gate/fresh-failure cards; WORKING holds live runs
+    // regardless of score; nothing urgent hides in QUIET.
     const cards = [...document.querySelectorAll('[data-testid="project-card"]')];
     for (const c of cards) {
+      const band = c.getAttribute('data-band');
+      const signal = c.getAttribute('data-signal');
       const score = Number(c.getAttribute('data-score'));
-      const inBand = c.closest('[data-testid="band-needs-you"]') !== null;
-      expect(inBand).toBe(score >= 20);
+      const inNeeds = c.closest('[data-testid="band-needs-you"]') !== null;
+      const inWorking = c.closest('[data-testid="band-working"]') !== null;
+      expect(inNeeds).toBe(band === 'needs-you');
+      expect(inWorking).toBe(band === 'working');
+      if (band === 'needs-you') {
+        expect(signal === 'gate' || (signal === 'failing' && score >= 20)).toBe(true);
+      }
     }
   });
 
@@ -280,7 +295,7 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
     expect(screen.getByTestId('unfiled-run')).toHaveAttribute('data-run-id', 'r-orphan');
   });
 
-  it('the 60s tick demotes a running project silent for a half-life — no new data needed', async () => {
+  it('the 60s tick can NEVER demote an executing run out of WORKING — the C6 fix', async () => {
     vi.useFakeTimers();
     try {
       const t0 = Date.now();
@@ -291,14 +306,23 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
       );
       // Flush the project + binding loads (microtask chains, no timers involved).
       for (let i = 0; i < 6; i++) await act(async () => { await Promise.resolve(); });
-      expect(needsYouIds()).toEqual(['silent']);
-
-      // 31 minutes of narration silence: one half-life past 40 → ~19.5, under the
-      // threshold. The tick alone must carry the card out of the live band (D7).
-      await act(async () => { vi.advanceTimersByTime(31 * MIN); });
+      // No gate anywhere: nothing NEEDS the user — but the run is WORKING.
       expect(needsYouIds()).toEqual([]);
-      expect(screen.getByTestId('quiet-chip')).toHaveAttribute('data-project-id', 'silent');
-      expect(screen.getByTestId('board-all-quiet')).toBeTruthy();
+      expect(workingIds()).toEqual(['silent']);
+
+      // C6 (BRIEF-UX-002): 31 minutes of narration silence decays the SCORE past
+      // the old threshold — but the band derives from the run DTO's status, so
+      // an executing run's project must STAY in WORKING, never fall to QUIET.
+      // (This test previously pinned the opposite — the exact live-observed bug:
+      // 2 executing runs, board saying "Nothing needs you right now", chip ·15h.)
+      await act(async () => { vi.advanceTimersByTime(31 * MIN); });
+      expect(workingIds()).toEqual(['silent']);
+      expect(screen.queryByTestId('quiet-chip')).toBeNull();
+
+      // …and hours of silence still cannot: WORKING ends when the STATUS does.
+      await act(async () => { vi.advanceTimersByTime(6 * 60 * MIN); });
+      expect(workingIds()).toEqual(['silent']);
+      expect(screen.queryByTestId('quiet-chip')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

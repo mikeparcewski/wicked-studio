@@ -87,11 +87,42 @@ export function topSignal(
   return signal === null ? { score: 0, signal: null } : { score, signal };
 }
 
-export type Band = 'needs-you' | 'quiet';
+export type Band = 'needs-you' | 'working' | 'quiet';
 
-/** Which band a score renders in. Exactly the threshold is still NEEDS YOU. */
+/** Which band a score renders in. Exactly the threshold is still NEEDS YOU.
+ *  Score-only — the C6 fix demoted it from the board's band verdict (that is
+ *  `bandFor`, which reads run STATUS first); it survives for score→band
+ *  labelling where no run status exists. */
 export function bandOf(score: number): Band {
   return score >= TRIAGE_THRESHOLD ? 'needs-you' : 'quiet';
+}
+
+/**
+ * The board's band verdict (BRIEF-UX-002 C6 fix). Bands are DERIVED FROM RUN
+ * STATUS first and decay second — the C6 finding was a project with two
+ * EXECUTING runs reading "Nothing needs you right now" because its band hung
+ * off a decaying live-frame clock instead of the run DTO the board already held.
+ *
+ *   NEEDS YOU — a human is the blocker: a waiting gate (never decays), or a
+ *               failure fresh enough to still demand triage (the F3 decay).
+ *   WORKING   — work is accumulating fine WITHOUT needing anyone: any
+ *               non-terminal run (`hasActiveRun`, read off DTO statuses — a
+ *               project with one is NEVER quiet, no matter what any clock
+ *               says), or live doc activity fresh enough to score.
+ *   QUIET     — genuinely nothing moving and nothing demanding.
+ *
+ * Pure in all arguments including `now`, like everything else in this file.
+ */
+export function bandFor(signals: Signal[], hasActiveRun: boolean, now: number): Band {
+  if (signals.some((s) => s.kind === 'gate')) return 'needs-you';
+  if (signals.some((s) => s.kind === 'failing' && scoreOf(s, now) >= TRIAGE_THRESHOLD)) {
+    return 'needs-you';
+  }
+  if (hasActiveRun) return 'working';
+  if (signals.some((s) => s.kind === 'running' && scoreOf(s, now) >= TRIAGE_THRESHOLD)) {
+    return 'working';
+  }
+  return 'quiet';
 }
 
 /** Score desc → newest signal first → name asc — the parent's deterministic tail,
