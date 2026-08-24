@@ -294,6 +294,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # (the units + output wires). Default False: sliceR's tail keeps its
          # historical 4-event shape.
          "timeline": False,
+         # Slice BA (DES-UX-002 §1): the nerve-center plan corpus — r-upload's
+         # SessionView carries the §1.5 five-unit plan (2 done, 1 distributed,
+         # 2 pending; the return-to-build leg IS the 5th strip node — StageKind
+         # has only 4 spellings on the wire) and unit_ix moves to the
+         # distributed review. Default False: no standing rig's r-upload
+         # grows units.
+         "nerve": False,
          # Slice V (DES-UX-001 §3/§4): the provenance + retry corpus.
          #   provenance — GET /audit?runId= gains REAL AuditEntry rows for
          #                r-auth and r-retry (actor{id,kind,trust} + the
@@ -1066,6 +1073,34 @@ TIMELINE_AUTH_EVENTS = [
 # real fetch (the zero-request-hang regression trap, §1.3-4b).
 FORENSICS_DIFF_HANG_SECONDS = 30
 
+# ── Slice BA (DES-UX-002 §1): the nerve-center plan corpus, behind `nerve` ────
+#
+# r-upload's plan grows to §1.5's shape: 5 ordered units, 2 done, 1 active
+# (distributed), 2 pending. Every field is the REAL WorkUnit DTO; the stages
+# are the wire's own 4 StageKind spellings, so the 5th strip node is the
+# return-to-build leg after review — a distinct leg of the plan, not an
+# invented stage. u2's description exceeds 60 chars on purpose: the §1.5
+# truncation AC needs a real overflow to prove the honest ellipsis.
+
+
+def _nerve_unit(ord_: int, desc: str, stage: str, status: str) -> dict:
+    return {"id": f"r-upload:u{ord_}", "session_id": "r-upload", "ord": ord_,
+            "description": desc, "stage": stage,
+            "assigned_cli": "claude" if status != "pending" else None,
+            "assigned_invocation": None, "council_task_ref": None, "routing": None,
+            "denial_reason": None, "phase_ref": None, "conformance_ref": None,
+            "phase_status": None, "collection_scope": None, "status": status}
+
+
+NERVE_UPLOAD_UNITS = [
+    _nerve_unit(0, "survey the upload endpoint's rate-limit surface", "recon", "done"),
+    _nerve_unit(1, "wire the token-bucket middleware into /upload", "build", "done"),
+    _nerve_unit(2, "review the rate-limit middleware against the acceptance criteria list",
+                "review", "distributed"),
+    _nerve_unit(3, "apply the review fixes to the middleware chain", "build", "pending"),
+    _nerve_unit(4, "run the rate-limit acceptance suite end to end", "test", "pending"),
+]
+
 # ── The vision-slice-4 Video surface (DES-VISION-001 §5.6): one recorded demo ──
 #
 # The interactive bridge, reduced to what Video mode reads through crew's proxy:
@@ -1377,14 +1412,21 @@ def assemble_runs() -> list:
         provenance_on = state["provenance"]
         project_dto_on = state["project_dto"]
         chronicle_on = state["chronicle"]
+        nerve_on = state["nerve"]
         # Slice S (DES-UX-001 §2.3): the null-claim run + this-lifetime launches
         # join BOTH wires (list + detail) so the DTO echo decorates identically.
         if project_dto_on and not state["no_runs"]:
             runs = runs + [UNFILED_RUN] + launched_runs
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on:
+    if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on or nerve_on:
         runs = json.loads(json.dumps(runs))
         for r in runs:
+            # Slice BA: r-upload's §1.5 five-unit plan; unit_ix follows the
+            # distributed review (the unit the run is genuinely ON).
+            if nerve_on and r["session"]["id"] == "r-upload":
+                r["units"] = json.loads(json.dumps(NERVE_UPLOAD_UNITS))
+                r["session"]["unit_ix"] = 2
             # Slice V: the CREW-UX-2 DTO echo for the lineage pair — the retry
             # prefill's project binding reads it (`project_id`, api-types 0.8.0).
             if provenance_on and r["session"]["id"] in ("r-auth", "r-retry"):
