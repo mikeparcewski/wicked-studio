@@ -25,8 +25,13 @@ The §6.1 / §6.3 DOM ACs, verbatim mapping:
      ONE `GET /d/:doc/api/conversation` on doc open — the one sanctioned mount
      fetch this slice adds; the other doc-open reads stay the standing manifest
      + rendered-doc pair), the version markers are back from the session-storage
-     stopgap, the strip's "In thread" is enabled and scrolls, and the stopgap
-     note is ABSENT (nothing is missing).
+     stopgap, "In thread" is enabled and scrolls, and the stopgap note is
+     ABSENT (nothing is missing).
+
+     DOC-FEEDBACK RE-SCOPE: the thread opens via the right panel's own rail
+     (the strip's thread-toggle retired with the slim band), and the In-thread
+     gesture lives in the panel's Versions tab per-version rows — clicking it
+     flips the panel to Chat first, so the focus assertion is awaited.
   4. §6.3 fresh-session reload (cleared session storage + bridge restart): the
      text is STILL back from the wire — never an empty state — while the
      version-anchor gap (the only thing the wire lacks) is stated by
@@ -55,7 +60,6 @@ from uxfix_fixture import (
     ensure_build,
     set_fixture,
     start_server,
-    wake_strip,
 )
 
 FEEDBACK_PORT = int(os.environ.get("FEEDBACK_PORT", "4383"))
@@ -281,9 +285,10 @@ with sync_playwright() as p:
           conv_reads == [conv_path] and unsanctioned == [],
           conversation_reads=conv_reads, unsanctioned=unsanctioned, mount_gets=mount_gets)
 
-    # Open the drawer (closed by default on a doc route) and assert the thread.
-    wake_strip(page)
-    page.locator('[data-testid="thread-toggle"]').click()
+    # Open the panel onto Chat (doc-feedback re-scope: the thread is no longer
+    # a strip-toggled drawer — the right panel collapses to its own rail on a
+    # doc route, and a rail tab expands it straight onto its tab).
+    page.locator('[data-testid="panel-rail-tab"][data-tab="chat"]').click()
     page.locator('[data-testid="thread"]').wait_for(timeout=30000)
     same_session = page.evaluate(
         """(brief) => {
@@ -309,20 +314,30 @@ with sync_playwright() as p:
           and same_session["stopgapAbsent"],
           **same_session)
 
-    # §6.3: the strip's "In thread" is ENABLED for the reloaded session's v1 and
-    # actually scrolls — the anchor survived the reload.
-    wake_strip(page)
-    v1_scroll = page.locator('[data-testid="version-entry"][data-version="1"] [data-testid="version-scroll"]')
-    v1_enabled = v1_scroll.is_enabled()
-    v1_scroll.click()
-    landed_on_msg = page.evaluate(
-        """() => {
-             const el = document.activeElement;
-             return el?.getAttribute('data-testid') === 'doc-message'
-               ? el.getAttribute('data-message-id') : null;
-           }""")
+    # §6.3: "In thread" is ENABLED for the reloaded session's v1 and actually
+    # scrolls — the anchor survived the reload. Doc-feedback re-scope: the
+    # In-thread gesture moved off the band into the panel's VERSIONS TAB
+    # (per-version detail rows); clicking it flips the panel to Chat first —
+    # the thread lives there — and focuses the producing message on the next
+    # frame, so the focus is awaited, not read synchronously.
     v1_cause = page.locator('[data-testid="version-marker"][data-version="1"]') \
         .get_attribute("data-caused-by")
+    page.locator('[data-testid="panel-tab"][data-tab="versions"]').click()
+    v1_scroll = page.locator(
+        '[data-testid="version-detail"][data-version="1"] [data-testid="version-scroll"]')
+    v1_scroll.wait_for(timeout=30000)
+    v1_enabled = v1_scroll.is_enabled()
+    v1_scroll.click()
+    page.locator('[data-testid="doc-panel"][data-tab="chat"]').wait_for(timeout=15000)
+    try:
+        page.wait_for_function(
+            """(id) => document.activeElement?.getAttribute('data-testid') === 'doc-message'
+                       && document.activeElement?.getAttribute('data-message-id') === id""",
+            arg=v1_cause, timeout=15000)
+        landed_on_msg = v1_cause
+    except Exception:
+        landed_on_msg = page.evaluate(
+            """() => document.activeElement?.getAttribute('data-message-id') ?? null""")
     check("T11_in_thread_enabled_and_scrolls_after_reload",
           v1_enabled and landed_on_msg == v1_cause,
           enabled=v1_enabled, focused=landed_on_msg, expected=v1_cause)
@@ -334,8 +349,8 @@ with sync_playwright() as p:
     page.reload(wait_until="domcontentloaded")
     page.add_style_tag(content=HIDE_GATE_TOASTS)  # re-add: styles die with the reload
     page.locator('[data-testid="doc-canvas"]').wait_for(timeout=30000)
-    wake_strip(page)
-    page.locator('[data-testid="thread-toggle"]').click()
+    # Doc-feedback re-scope: rail tab instead of the retired strip toggle.
+    page.locator('[data-testid="panel-rail-tab"][data-tab="chat"]').click()
     page.locator('[data-testid="thread"]').wait_for(timeout=30000)
     page.locator('[data-testid="thread-stopgap"]').wait_for(timeout=30000)
 
@@ -345,28 +360,38 @@ with sync_playwright() as p:
              const texts = Array.from(document.querySelectorAll('[data-testid="doc-message"]'))
                .map((m) => m.textContent || '');
              const stopgap = document.querySelector('[data-testid="thread-stopgap"]')?.textContent || '';
-             const scrolls = Array.from(document.querySelectorAll('[data-testid="version-scroll"]'));
              return {
                textBack: texts.some((t) => t.includes(brief)) && texts.some((t) => t.includes(steer)),
                narrationBack: !!document.querySelector('[data-testid="doc-narration"]'),
                noMarkerFaked: !document.querySelector('[data-testid="version-marker"]'),
                noEmptyState: !!texts.length,
                stopgap,
-               inThreadAllDisabled: scrolls.length > 0 && scrolls.every((b) => b.disabled),
-               disabledReasonHonest: (scrolls[0]?.title || '').includes('version anchors'),
              };
            }""", [BRIEF, STEER])
     stopgap_ok = all(phrase in fresh["stopgap"] for phrase in STOPGAP_MUST_SAY)
     conv_reads = [g for g in interactive_gets if g.endswith("/api/conversation")]
+
+    page.screenshot(path=str(VSHOTS / "ux-T-thread-reload.png"))
+
+    # The In-thread affordances live in the panel's Versions tab now (doc-
+    # feedback re-scope) — open it to read their disabled-with-reason state.
+    page.locator('[data-testid="panel-tab"][data-tab="versions"]').click()
+    page.locator('[data-testid="version-detail"]').first.wait_for(timeout=30000)
+    scroll_state = page.evaluate(
+        """() => {
+             const scrolls = Array.from(document.querySelectorAll('[data-testid="version-scroll"]'));
+             return {
+               inThreadAllDisabled: scrolls.length > 0 && scrolls.every((b) => b.disabled),
+               disabledReasonHonest: (scrolls[0]?.title || '').includes('version anchors'),
+             };
+           }""")
     check("T12_fresh_session_text_back_stopgap_on_anchor_gap_only",
           fresh["textBack"] and fresh["narrationBack"] and fresh["noMarkerFaked"]
           and fresh["noEmptyState"] and stopgap_ok
-          and fresh["inThreadAllDisabled"] and fresh["disabledReasonHonest"]
+          and scroll_state["inThreadAllDisabled"] and scroll_state["disabledReasonHonest"]
           and conv_reads == [conv_path],
-          stopgap_copy_ok=stopgap_ok, conversation_reads=conv_reads,
+          stopgap_copy_ok=stopgap_ok, conversation_reads=conv_reads, **scroll_state,
           **{k: v for k, v in fresh.items() if k != "stopgap"})
-
-    page.screenshot(path=str(VSHOTS / "ux-T-thread-reload.png"))
 
     # Console hygiene: the deliberate 500 refusal logs one resource error; nothing
     # else may.
