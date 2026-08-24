@@ -77,6 +77,29 @@ export type SendState = 'generating' | 'queued' | 'failed' | 'stalled';
 export const GENERATING_TIMEOUT_COPY =
   'no worker has picked this up — the generation service may be down';
 
+// ── Composer growth (operator feedback, doc-surface round: "chatbox should
+// expand when typing (to like a max of 5 lines, the[n] scroll with more
+// content (can't stay one line)") ─────────────────────────────────────────────
+//
+// The textarea auto-grows with its content from one line up to COMPOSER_MAX_LINES,
+// then becomes its own scroll region. Growth is measured from scrollHeight on
+// every text change — never a rows= guess, which counts newlines but not wraps.
+
+/** The growth cap, in lines. Beyond it the composer scrolls (never grows). */
+export const COMPOSER_MAX_LINES = 5;
+/** One composer line in px — the `leading-6` line height the textarea wears. */
+export const COMPOSER_LINE_PX = 24;
+
+/** Resize `el` to fit its content, clamped to the 5-line cap; overflow scrolls. */
+export function growComposer(el: HTMLTextAreaElement): void {
+  // Collapse first so scrollHeight reports the CONTENT height, not the old box.
+  el.style.height = 'auto';
+  const max = COMPOSER_MAX_LINES * COMPOSER_LINE_PX;
+  const fit = Math.max(el.scrollHeight, COMPOSER_LINE_PX);
+  el.style.height = `${Math.min(fit, max)}px`;
+  el.style.overflowY = fit > max ? 'auto' : 'hidden';
+}
+
 function Bubble({
   msg, projectId, docId, onShowVersion, sendState, onRetrySend,
 }: {
@@ -505,6 +528,13 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   // different case.
   const [wizard, setWizard] = useState<{ seed: string; msgId: string } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  // The growing composer (operator feedback): re-measured on every text change —
+  // including the programmatic clears a submit makes — so it always fits what it
+  // actually holds, 1 line minimum, 5 lines maximum, scrolling past that.
+  const composerEl = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (composerEl.current !== null) growComposer(composerEl.current);
+  }, [text]);
 
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }); }, [messages.length]);
 
@@ -862,9 +892,14 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
                       border: '1px solid var(--surface-overlay)',
                       borderRadius: 'var(--radius-xl)' }}>
           <textarea
+            ref={composerEl}
             data-testid="doc-composer"
+            data-max-lines={COMPOSER_MAX_LINES}
             className="flex-1 resize-none text-sm outline-none border-0 bg-transparent leading-6"
-            style={{ color: S.ink, fontFamily: 'var(--font-sans)', minHeight: '28px' }}
+            // Grows with its content (growComposer) from one line to the 5-line
+            // cap, then scrolls — the height itself is set imperatively so it can
+            // be measured, not guessed from newline counts.
+            style={{ color: S.ink, fontFamily: 'var(--font-sans)', minHeight: `${COMPOSER_LINE_PX}px` }}
             placeholder={prompt}
             value={text}
             rows={1}
