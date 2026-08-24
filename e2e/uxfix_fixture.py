@@ -1418,8 +1418,7 @@ def assemble_runs() -> list:
         if project_dto_on and not state["no_runs"]:
             runs = runs + [UNFILED_RUN] + launched_runs
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
-            or chronicle_on:
-    if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on or nerve_on:
+            or chronicle_on or nerve_on:
         runs = json.loads(json.dumps(runs))
         for r in runs:
             # Slice BA: r-upload's §1.5 five-unit plan; unit_ix follows the
