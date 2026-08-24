@@ -7,6 +7,7 @@ import { useGateStore } from '../store/gates.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill } from '../store/retryPrefill.js';
+import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { ContextPopover } from './ContextPopover.js';
 import type { ConfirmMode } from './ContextPopover.js';
@@ -122,6 +123,17 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }, [prefill]);
   /** Lineage claim carried to the launch (`retryOf`, CREW-UX-3) — clearable. */
   const [retryOf, setRetryOf] = useState<string | null>(prefill?.retryOf ?? null);
+
+  // Guidance-as-prefill (DES-UX-002 §3.3, slice BC): the chronicle's "use in
+  // next run" deposits a past gate amendment; the launch form shows it in an
+  // EDITABLE steer field and folds it into the problem body at launch — the
+  // wire has no launch-time guidance field (CREW-UX-4/slice BE is the durable
+  // one), so the fold is visible, labelled, and clearable, never silent.
+  const [steerSeed] = useState(() => (runId ? null : peekSteerPrefill()));
+  useEffect(() => {
+    if (steerSeed !== null) clearSteerPrefill();
+  }, [steerSeed]);
+  const [launchSteer, setLaunchSteer] = useState(steerSeed?.steer ?? '');
 
   // ── Steer mode state ───────────────────────────────────────────────────────
   const [steerText, setSteerText] = useState('');
@@ -399,7 +411,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // TODO: ingest attachedFiles via api.ingestKnowledge(title, chunks) before launching
     // (api.ingestKnowledge does not yet exist on the client surface)
 
-    const body: LaunchRunBody = { problem: problem.trim() };
+    // The steer prefill rides the problem body as a labelled trailing
+    // paragraph (see the steer field's own caption) — LaunchRunBody carries
+    // no guidance key until CREW-UX-4 lands (DES-UX-002 §7.2).
+    const guidance = launchSteer.trim();
+    const body: LaunchRunBody = {
+      problem: guidance.length > 0 ? `${problem.trim()}\n\nOperator guidance: ${guidance}` : problem.trim(),
+    };
     const seats = roster.filter((s) => selectedClis.has(s.key));
     if (seats.length > 0) body.clisJson = JSON.stringify(seats);
     body.entityMode = entityMode;
@@ -894,6 +912,32 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           >
             Launch anyway
           </button>
+        </div>
+      )}
+
+      {/* ── Guidance steer field (DES-UX-002 §3.3, slice BC) — rendered only
+             when the chronicle deposited a prefill; `--surface-raised` with the
+             `--accent-subtle` left border (operator-authored content, §3.4). ── */}
+      {steerSeed !== null && (
+        <div
+          style={{
+            background: 'var(--surface-raised)',
+            borderLeft: '3px solid var(--accent-subtle)',
+            borderRadius: 'var(--radius-md)',
+            padding: '8px 12px',
+          }}
+        >
+          <p style={{ margin: '0 0 4px', fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-sans)' }}>
+            Guidance for this run — sent with the launch prompt as an “Operator guidance” paragraph. Edit or clear it before sending.
+          </p>
+          <textarea
+            data-testid="steer-prefill"
+            className="w-full resize-none outline-none border-0 bg-transparent leading-5"
+            style={{ color: 'var(--ink-high)', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}
+            value={launchSteer}
+            onChange={(e) => setLaunchSteer(e.target.value)}
+            rows={2}
+          />
         </div>
       )}
 
