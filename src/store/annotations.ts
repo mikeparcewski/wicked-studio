@@ -6,8 +6,9 @@ import type { CoreEvent } from '../api/types.js';
  * operator composes on the home board BEFORE a gate exists, keyed by run id.
  * Pure CLIENT state — §4.2's wire verdict: no new wire; a draft resolves into
  * the EXISTING `amend` field of `POST /runs/:id/gate` when the gate card
- * consumes it. Session-scoped and honestly labelled so (EC52,
- * {@link SCOPE_LABEL}); the durable endpoint is CREW-UX-4 / slice BE.
+ * consumes it. Session-scoped and honestly labelled so while an edit is
+ * unsaved (EC52, {@link DRAFT_SCOPE_LABEL}); the durable layer landed with
+ * slice BE (CREW-UX-7, crew#312 — store/guidance.ts).
  *
  * MEASURED DEVIATION from §4.3 (operator steer at the design run's gate,
  * 2026-08, applied here): the doc scoped the widget to the "gate approaching"
@@ -23,9 +24,16 @@ import type { CoreEvent } from '../api/types.js';
  * pre-populates from whatever draft exists (EC51).
  */
 
-/** EC52's honest scope copy, verbatim per §4.3 — retired when CREW-UX-4 lands. */
-export const SCOPE_LABEL =
-  'saved for this browser session only — durable annotations land with CREW-UX-4.';
+/**
+ * EC52's honest scope copy after slice BE — the honest SPLIT: the durable
+ * endpoint landed (CREW-UX-7, crew#312 — the doc's "CREW-UX-4"), so saved
+ * guidance survives sessions and the old whole-widget session-scope label
+ * RETIRED with the gap it described. What is STILL session-scoped is exactly
+ * the unsaved edit, so this label names only that, renders only while an
+ * unsaved edit exists, and disappears where durability holds.
+ */
+export const DRAFT_SCOPE_LABEL =
+  'unsaved edit — this browser session only until you save guidance.';
 
 /** Frames on which a run's draft is moot: the run can never gate again. A
  *  `resumed` does NOT clear — the next gate of the same run should still

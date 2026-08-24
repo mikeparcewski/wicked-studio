@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react';
+import { sessionGuidance } from '../api/guidance.js';
 import type { SessionView } from '../api/types.js';
 import type { SignalKind } from '../board/boardAttention.js';
 import { leadMovingRun, truncate } from '../board/phaseProgress.js';
@@ -634,7 +635,13 @@ export function ProjectCard({
           arrival pre-fills its steer textarea from this draft. */}
       {annotateFor !== undefined && (
         <div style={{ marginTop: '8px' }}>
-          <PreGateAnnotate runId={annotateFor.session.id} openSignal={annotateSignal} />
+          <PreGateAnnotate
+            runId={annotateFor.session.id}
+            // Slice BE: the durable note off the run DTO (CREW-UX-7 echo) —
+            // pre-populates first; the session draft layers on top.
+            guidance={sessionGuidance(annotateFor.session)}
+            openSignal={annotateSignal}
+          />
         </div>
       )}
 

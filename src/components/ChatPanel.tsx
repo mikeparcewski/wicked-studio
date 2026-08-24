@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
 import { api, downloadRunEvidence } from '../api/client.js';
+import { sessionGuidance } from '../api/guidance.js';
 import type { SessionView, StageKind, UnitStatus, WorkUnit } from '../api/types.js';
 import { executingOrd } from '../api/run-state.js';
 import { useGateStore } from '../store/gates.js';
@@ -1205,6 +1206,7 @@ function RunChat({
               <div key={`gate-before-${unit.id}`} className="self-center w-full max-w-lg">
                 <SteeringGate
                   runId={session.id}
+                  guidance={sessionGuidance(session)}
                   {...(gate ? { ord: gate.ord, prompt: gate.prompt } : {})}
                   onResolved={onRefresh}
                 />
@@ -1255,6 +1257,7 @@ function RunChat({
           <div className="self-center w-full max-w-lg">
             <SteeringGate
               runId={session.id}
+              guidance={sessionGuidance(session)}
               {...(gate ? { ord: gate.ord, prompt: gate.prompt } : {})}
               onResolved={onRefresh}
             />

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SCOPE_LABEL, useAnnotationStore } from '../src/store/annotations.js';
+import { DRAFT_SCOPE_LABEL, useAnnotationStore } from '../src/store/annotations.js';
 import type { CoreEvent } from '../src/api/types.js';
 
 /**
@@ -41,9 +41,12 @@ describe('annotation draft store (slice BD)', () => {
     expect(Object.keys(drafts)).toEqual(['r-live']);
   });
 
-  it('EC52: the honest scope label names the session scope and CREW-UX-4, verbatim §4.3', () => {
-    expect(SCOPE_LABEL).toBe(
-      'saved for this browser session only — durable annotations land with CREW-UX-4.',
+  it('EC52 after slice BE: the label names ONLY the unsaved edit (the honest split)', () => {
+    // CREW-UX-7 landed (crew#312 — the doc's "CREW-UX-4"), so the old
+    // whole-widget session-scope copy retired; what is still session-scoped
+    // is exactly the unsaved edit, and the copy says so — nothing more.
+    expect(DRAFT_SCOPE_LABEL).toBe(
+      'unsaved edit — this browser session only until you save guidance.',
     );
   });
 });
