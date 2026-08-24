@@ -181,12 +181,21 @@ describe('the ACTIVE variant — rich, but an empty region is OMITTED (§2.1.1)'
     const pill = within(card()).getByTestId('attention-pill');
     expect(pill).toHaveAttribute('data-kind', 'running');
     expect(pill).toHaveTextContent('working');
-    expect(within(card()).getByTestId('live-line')).toBeInTheDocument();
+    // Slice BA (DES-UX-002 §1.3): with nothing streamed, the active card's
+    // subject is the plan region — strip + unit description, not the old
+    // generic narration fallback.
+    expect(within(card()).getByTestId('phase-strip')).toBeInTheDocument();
+    expect(within(card()).getByTestId('active-unit-description')).toBeInTheDocument();
   });
 });
 
 describe('the vision-slice-2 card language (DES-VISION-001 §5.1)', () => {
   it('the card is token-built: --surface-card ground, --shadow-card, mono narration (EC13/EC15)', () => {
+    // Slice BA: the live line renders only what genuinely STREAMED — seed the
+    // run's delta buffer so the narration pin below has a real line to style.
+    useRuntimeStore.getState().ingest({
+      type: 'unitOutputDelta', session: 'r-live', ord: 0, text: 'Writing the token-bucket middleware\n',
+    } as never);
     render(
       <ProjectCard
         item={item('upload-endpoint', {
@@ -201,6 +210,7 @@ describe('the vision-slice-2 card language (DES-VISION-001 §5.1)', () => {
     expect(card().style.boxShadow).toBe('var(--shadow-card)');
     // Narration is DATA — the mono face at body ink (§1.5 rule 3).
     const line = within(card()).getByTestId('live-line');
+    expect(line).toHaveTextContent('Writing the token-bucket middleware');
     expect(line.style.fontFamily).toBe('var(--font-mono)');
     expect(line.style.color).toBe('var(--ink-body)');
   });
