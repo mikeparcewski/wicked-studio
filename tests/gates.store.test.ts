@@ -32,7 +32,7 @@ describe('simple vs. complex gates (§7.11 — ≤2 choices and no free text)', 
   });
 });
 
-const reset = (): void => useGateStore.setState({ gates: {} });
+const reset = (): void => useGateStore.setState({ gates: {}, approaching: {} });
 
 describe('gate cache (§3.3 — event-sourced, self-healing, keyed by run id)', () => {
   beforeEach(reset);
@@ -80,6 +80,55 @@ describe('gate cache (§3.3 — event-sourced, self-healing, keyed by run id)', 
   it('leaves `choices` absent for the plain workflow gate the daemon sends today', () => {
     useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'run-1', ord: 0, prompt: 'Proceed?' } as CoreEvent);
     expect(useGateStore.getState().gates['run-1']).not.toHaveProperty('choices');
+  });
+
+  it('gateEscalated opens the APPROACHING preview — the wire spells the field `condition` (slice BA)', () => {
+    useGateStore.getState().ingest({
+      type: 'gateEscalated', session: 'run-1', ord: 2,
+      condition: 'All acceptance criteria demonstrably verified',
+    } as CoreEvent);
+    expect(useGateStore.getState().approaching['run-1']).toMatchObject({
+      runId: 'run-1', ord: 2, condition: 'All acceptance criteria demonstrably verified',
+    });
+    // The gate itself has NOT posted — the preview is not an open gate.
+    expect(useGateStore.getState().gates['run-1']).toBeUndefined();
+  });
+
+  it('a gateEscalated missing ord or condition is dropped, never a half-record', () => {
+    useGateStore.getState().ingest({ type: 'gateEscalated', session: 'run-1', ord: 2 } as CoreEvent);
+    useGateStore.getState().ingest({ type: 'gateEscalated', session: 'run-1', condition: 'x' } as CoreEvent);
+    expect(useGateStore.getState().approaching['run-1']).toBeUndefined();
+  });
+
+  it('awaitingHuman retires the preview AND opens the gate — the §1.3 posture switch', () => {
+    useGateStore.getState().ingest({
+      type: 'gateEscalated', session: 'run-1', ord: 2, condition: 'criterion',
+    } as CoreEvent);
+    useGateStore.getState().ingest({
+      type: 'awaitingHuman', session: 'run-1', ord: 2, prompt: 'Proceed?',
+    } as CoreEvent);
+    expect(useGateStore.getState().approaching['run-1']).toBeUndefined();
+    expect(useGateStore.getState().gates['run-1']).toMatchObject({ runId: 'run-1', ord: 2 });
+  });
+
+  it.each(['gateDecided', 'resumed', 'sessionCompleted', 'runCancelled', 'sessionFailed'])(
+    'the preview retires on a %s frame — a superseded signal never lingers',
+    (type) => {
+      useGateStore.getState().ingest({
+        type: 'gateEscalated', session: 'run-1', ord: 0, condition: 'criterion',
+      } as CoreEvent);
+      useGateStore.getState().ingest({ type, session: 'run-1' } as CoreEvent);
+      expect(useGateStore.getState().approaching['run-1']).toBeUndefined();
+    },
+  );
+
+  it('an unrelated run-scoped frame leaves the store untouched (same state identity)', () => {
+    useGateStore.getState().ingest({
+      type: 'gateEscalated', session: 'run-1', ord: 0, condition: 'criterion',
+    } as CoreEvent);
+    const before = useGateStore.getState();
+    useGateStore.getState().ingest({ type: 'unitDispatched', session: 'run-1', ord: 1 } as CoreEvent);
+    expect(useGateStore.getState()).toBe(before);
   });
 
   it('reconcile keeps only still-awaiting runs (self-healing)', () => {
