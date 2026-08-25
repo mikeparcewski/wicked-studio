@@ -100,11 +100,13 @@ export function RunDelivery({ view }: Props): React.ReactElement {
   const fetched = useDeliveryStore((s) => s.byRun[runId]);
 
   // The ONE per-run fetch, and only when there is something to point at: a
-  // delivered run whose url the daemon does not already carry.
-  const needsFetch = state === 'delivered' && url === null && unitId !== null;
+  // delivered run whose url the daemon does not already carry. `unitKey` is the
+  // deliver unit's FULL id — the output route's most-specific pass matches
+  // `u.id === unitKey`, so an overlay-named phase needs no key guessing (EC61).
+  const unitKey = state === 'delivered' && url === null ? unitId : null;
   useEffect(() => {
-    if (needsFetch) useDeliveryStore.getState().load(runId, unitId as string);
-  }, [needsFetch, runId, unitId]);
+    if (unitKey !== null) useDeliveryStore.getState().load(runId, unitKey);
+  }, [runId, unitKey]);
 
   const href = url ?? fetched?.url ?? null;
   const workdir = view.session.workdir;

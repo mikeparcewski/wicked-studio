@@ -7,6 +7,7 @@ import type { RunModel } from '../hooks/useRunModel.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
 import { LiveNarration } from './ChatPanel.js';
+import { isChatRun } from './ChatsPage.js';
 import { Burn } from './Burn.js';
 import { FileViewer } from './FileViewer.js';
 import { CoverageView } from './CoverageView.js';
@@ -14,6 +15,7 @@ import { DataUsed } from './DataUsed.js';
 import { DecisionsLedger } from './DecisionsLedger.js';
 import { GovernanceAudit } from './GovernanceAudit.js';
 import { Modal } from './Modal.js';
+import { DeliveryBadge, RunDelivery } from './RunDelivery.js';
 import { SteeringTimeline } from './SteeringTimeline.js';
 import { Terminal } from './Terminal.js';
 import { WhatWhere } from './WhatWhere.js';
@@ -33,8 +35,24 @@ type AccordionId =
   | 'steering'
   | 'whatwhere'
   | 'assumptions'
-  | 'files';
+  | 'files'
+  | 'delivery';
 
+/**
+ * The rail's sections (studio#122 revised EC54): NINE, with `delivery` the
+ * ninth. Delivery is a section like every other — not a pinned band above the
+ * list, not a tablist — because "delivery isn't a top level class, it goes in
+ * the right chat panel as a tab" (operator decision 2026-08-24), and the rail's
+ * one-open-at-a-time `openAccordion` IS that tab behaviour. `whatwhere` keeps
+ * the default open slot; the at-a-glance signal the band would have bought back
+ * lives on the Delivery header's {@link DeliveryBadge} instead, which is legible
+ * with no gesture.
+ *
+ * `files` reads "Files referenced" for the reason the caption in
+ * {@link FilesPanel} spells out: the panel counts what the agents TOUCHED, which
+ * is not a changeset and never was (run 665a9aeb reported 13 under
+ * "MODIFIED / CREATED" while its deliver phase pushed an empty branch).
+ */
 const ACCORDIONS: { id: AccordionId; label: string }[] = [
   { id: 'whatwhere', label: 'What / Where' },
   { id: 'decisions', label: 'Decisions' },
@@ -43,7 +61,8 @@ const ACCORDIONS: { id: AccordionId; label: string }[] = [
   { id: 'data', label: 'Data' },
   { id: 'steering', label: 'Steering' },
   { id: 'assumptions', label: 'Assumptions' },
-  { id: 'files', label: 'Files' },
+  { id: 'files', label: 'Files referenced' },
+  { id: 'delivery', label: 'Delivery' },
 ];
 
 /**
@@ -349,6 +368,17 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* studio#122: what this panel actually counts, said before the counts are
+          read. The rows come from each unit's `filesRead` set — every file the
+          agents opened in the worktree, with "MODIFIED / CREATED" inferred from
+          governance hook fires — so the number is a measure of ATTENTION, not of
+          delivered change. Run 665a9aeb reported 13 files here while its deliver
+          phase pushed a branch with zero commits; the Delivery section below
+          carries the outcome claim, and this one stops making it. */}
+      <p data-testid="files-scope-note" className="text-[10px] font-mono leading-snug" style={{ color: 'var(--ink-dim)' }}>
+        files the agents read or wrote in the worktree — not a delivered changeset
+      </p>
+
       {/* Panel header: the whole-run diff affordance (§3.4) */}
       <div className="flex items-center gap-2">
         <button
@@ -459,6 +489,16 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
     ? new Set(model.units.flatMap((u) => u.filesRead)).size
     : null;
 
+  // studio#122 EC57: a chat thread has no deliver phase and never will, so it
+  // gets no Delivery section at all — silence, not a section that says "none"
+  // on every chat. The predicate is studio's own (`isChatRun`, the one every
+  // surface routes by); nothing in the DELIVERY derivation reads
+  // `session.workflow_id` (EC61) — this is a visibility gate, not a wire read.
+  const sections = useMemo(
+    () => (isChatRun(view) ? ACCORDIONS.filter((a) => a.id !== 'delivery') : ACCORDIONS),
+    [view],
+  );
+
   function toggleAccordion(id: AccordionId): void {
     setOpenAccordion((prev) => (prev === id ? null : id));
   }
@@ -555,7 +595,7 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
 
       {/* Accordion sections */}
       <div className="flex-1 overflow-y-auto">
-        {ACCORDIONS.map(({ id, label }) => (
+        {sections.map(({ id, label }) => (
           <div key={id} style={{ borderBottom: '1px solid var(--surface-raised)' }}>
             <button
               type="button"
@@ -576,12 +616,26 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
                     {fileCount}
                   </span>
                 )}
+                {/* studio#122 revised EC54: the state on the HEADER, so "did this
+                    run open a PR" is answerable without opening anything. Same
+                    badge shape as the file count beside it; derived from `view`
+                    alone, so it paints before (and without) the run model. */}
+                {id === 'delivery' && <DeliveryBadge view={view} />}
               </div>
               <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>
                 {openAccordion === id ? '▲' : '▼'}
               </span>
             </button>
-            {openAccordion === id && model && (
+            {/* Delivery derives from the `view` prop alone (zero events, zero
+                model), so it never waits on the snapshot the other bodies need
+                — a run that opened a PR says so on the first paint of the
+                section, not after the re-hydrate lands. */}
+            {openAccordion === id && id === 'delivery' && (
+              <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
+                <RunDelivery view={view} />
+              </div>
+            )}
+            {openAccordion === id && id !== 'delivery' && model && (
               <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
                 {id === 'decisions' && <DecisionsLedger model={model} />}
                 {id === 'governance' && <GovernanceAudit model={model} />}
@@ -600,7 +654,7 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
                 {id === 'files' && <FilesPanel model={model} />}
               </div>
             )}
-            {openAccordion === id && !model && (
+            {openAccordion === id && id !== 'delivery' && !model && (
               <div className="px-4 py-3">
                 <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>Loading…</p>
               </div>
