@@ -5,8 +5,10 @@ import type { SessionView } from '../api/types.js';
 import { useRunModel } from '../hooks/useRunModel.js';
 import type { RunModel } from '../hooks/useRunModel.js';
 import { useProvenanceStore } from '../store/provenance.js';
+import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
 import { LiveNarration } from './ChatPanel.js';
+import { canDeliver } from './delivery.js';
 import { Burn } from './Burn.js';
 import { FileViewer } from './FileViewer.js';
 import { CoverageView } from './CoverageView.js';
@@ -14,6 +16,7 @@ import { DataUsed } from './DataUsed.js';
 import { DecisionsLedger } from './DecisionsLedger.js';
 import { GovernanceAudit } from './GovernanceAudit.js';
 import { Modal } from './Modal.js';
+import { DeliveryBadge, RunDelivery } from './RunDelivery.js';
 import { SteeringTimeline } from './SteeringTimeline.js';
 import { Terminal } from './Terminal.js';
 import { WhatWhere } from './WhatWhere.js';
@@ -33,8 +36,29 @@ type AccordionId =
   | 'steering'
   | 'whatwhere'
   | 'assumptions'
-  | 'files';
+  | 'files'
+  | 'delivery';
 
+/**
+ * The rail's sections. The contract is **nine on a run that can deliver, eight
+ * on every run that cannot** — chat threads, the other system workflows, and
+ * freeform runs, per `canDeliver`. There is no fixed count of nine: `delivery`
+ * is the conditional ninth, and a surface that says otherwise is describing
+ * build runs only.
+ *
+ * Delivery is a section like every other — not a pinned band above the list,
+ * not a tablist — because "delivery isn't a top level class, it goes in the
+ * right chat panel as a tab" (operator decision 2026-08-24), and the rail's
+ * one-open-at-a-time `openAccordion` IS that tab behaviour. `whatwhere` keeps
+ * the default open slot; the at-a-glance signal the band would have bought back
+ * lives on the Delivery header's {@link DeliveryBadge} instead, which is legible
+ * with no gesture.
+ *
+ * `files` reads "Files referenced" for the reason the caption in
+ * {@link FilesPanel} spells out: the panel counts what the agents TOUCHED, which
+ * is not a changeset and never was (run 665a9aeb reported 13 under
+ * "MODIFIED / CREATED" while its deliver phase pushed an empty branch).
+ */
 const ACCORDIONS: { id: AccordionId; label: string }[] = [
   { id: 'whatwhere', label: 'What / Where' },
   { id: 'decisions', label: 'Decisions' },
@@ -43,7 +67,8 @@ const ACCORDIONS: { id: AccordionId; label: string }[] = [
   { id: 'data', label: 'Data' },
   { id: 'steering', label: 'Steering' },
   { id: 'assumptions', label: 'Assumptions' },
-  { id: 'files', label: 'Files' },
+  { id: 'files', label: 'Files referenced' },
+  { id: 'delivery', label: 'Delivery' },
 ];
 
 /**
@@ -349,6 +374,17 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* studio#122: what this panel actually counts, said before the counts are
+          read. The rows come from each unit's `filesRead` set — every file the
+          agents opened in the worktree, with "MODIFIED / CREATED" inferred from
+          governance hook fires — so the number is a measure of ATTENTION, not of
+          delivered change. Run 665a9aeb reported 13 files here while its deliver
+          phase pushed a branch with zero commits; the Delivery section below
+          carries the outcome claim, and this one stops making it. */}
+      <p data-testid="files-scope-note" className="text-[10px] font-mono leading-snug" style={{ color: 'var(--ink-dim)' }}>
+        files the agents read or wrote in the worktree — not a delivered changeset
+      </p>
+
       {/* Panel header: the whole-run diff affordance (§3.4) */}
       <div className="flex items-center gap-2">
         <button
@@ -459,8 +495,59 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
     ? new Set(model.units.flatMap((u) => u.filesRead)).size
     : null;
 
+  // studio#122 EC57: a run that cannot deliver gets no Delivery section at all —
+  // silence, not a section that says "none" on every chat. `canDeliver` is the
+  // SAME predicate the project census filters by (D5), the row chips gate on
+  // (D2) AND the one the COMPOSER classifies with (D-1), so the rail, the rows,
+  // the census and the launch form can never disagree about what a deliverable
+  // run is. The lookup is the authoritative `is_system` flag off the app's one
+  // `GET /workflows`.
+  //
+  // A run with a deliver PHASE keeps this section whatever its workflow id says
+  // — 5c5e08b7 opened a real PR under a materialised `wf-<runId>` def. A run
+  // WITHOUT one gets it only once a def in hand says the workflow is ordinary:
+  // "this run has no deliver phase" is a claim about a classification, and 86 of
+  // the 129 live runs carry an id no catalog serves, so `undefined` is the
+  // permanent answer for them and the sentence would be unevidenced. Nothing in
+  // the delivery DERIVATION reads `session.workflow_id` (EC61) — the
+  // classification half is a visibility gate, not a wire read.
+  const isSystemWorkflow = useIsSystemWorkflow();
+  const sections = useMemo(
+    () => (canDeliver(view, isSystemWorkflow) ? ACCORDIONS : ACCORDIONS.filter((a) => a.id !== 'delivery')),
+    [view, isSystemWorkflow],
+  );
+
+  /**
+   * The EFFECTIVE open section (Copilot on #125). `openAccordion` is mount-scoped state and the
+   * panel does not remount between runs, so opening `delivery` on a deliverable run and then
+   * selecting a run that cannot deliver leaves the id pointing at a section `sections` no longer
+   * contains — and the rail renders with nothing open, silently losing What/Where's default.
+   *
+   * Healed by derivation rather than an effect: an effect would paint the broken frame first and
+   * then correct it. `null` is passed through untouched because it is a REAL state — the operator
+   * collapsed everything — and must not be confused with a stale id.
+   */
+  const openId: AccordionId | null =
+    openAccordion === null || sections.some((s) => s.id === openAccordion)
+      ? openAccordion
+      : 'whatwhere';
+
   function toggleAccordion(id: AccordionId): void {
-    setOpenAccordion((prev) => (prev === id ? null : id));
+    // Functional update, and heal INSIDE it (Copilot on #125, twice).
+    //
+    // First round: comparing the raw `openAccordion` was wrong — after a run switch drops the
+    // open section it still names the vanished id while the rail RENDERS the healed one, so
+    // clicking the visibly-open What/Where compared 'delivery' with 'whatwhere' and did nothing
+    // until a second click.
+    //
+    // Second round: reading the derived `openId` from the closure fixed that but reintroduced a
+    // stale read — two clicks inside one render batch both see the first render's value, so the
+    // second is swallowed. Taking `prev` from the updater and applying the SAME healing rule to
+    // it gets both: fresh state, and the section the operator can actually see.
+    setOpenAccordion((prev) => {
+      const effective = prev === null || sections.some((s) => s.id === prev) ? prev : 'whatwhere';
+      return effective === id ? null : id;
+    });
   }
 
   if (collapsed) {
@@ -555,16 +642,16 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
 
       {/* Accordion sections */}
       <div className="flex-1 overflow-y-auto">
-        {ACCORDIONS.map(({ id, label }) => (
+        {sections.map(({ id, label }) => (
           <div key={id} style={{ borderBottom: '1px solid var(--surface-raised)' }}>
             <button
               type="button"
               onClick={() => toggleAccordion(id)}
               className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
-              style={{ color: openAccordion === id ? 'var(--ink-high)' : 'var(--ink-muted)' }}
+              style={{ color: openId === id ? 'var(--ink-high)' : 'var(--ink-muted)' }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-raised)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              aria-expanded={openAccordion === id}
+              aria-expanded={openId === id}
             >
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium font-mono">{label}</span>
@@ -576,12 +663,26 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
                     {fileCount}
                   </span>
                 )}
+                {/* studio#122 revised EC54: the state on the HEADER, so "did this
+                    run open a PR" is answerable without opening anything. Same
+                    badge shape as the file count beside it; derived from `view`
+                    alone, so it paints before (and without) the run model. */}
+                {id === 'delivery' && <DeliveryBadge view={view} />}
               </div>
               <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>
-                {openAccordion === id ? '▲' : '▼'}
+                {openId === id ? '▲' : '▼'}
               </span>
             </button>
-            {openAccordion === id && model && (
+            {/* Delivery derives from the `view` prop alone (zero events, zero
+                model), so it never waits on the snapshot the other bodies need
+                — a run that opened a PR says so on the first paint of the
+                section, not after the re-hydrate lands. */}
+            {openId === id && id === 'delivery' && (
+              <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
+                <RunDelivery view={view} />
+              </div>
+            )}
+            {openId === id && id !== 'delivery' && model && (
               <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
                 {id === 'decisions' && <DecisionsLedger model={model} />}
                 {id === 'governance' && <GovernanceAudit model={model} />}
@@ -600,7 +701,7 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
                 {id === 'files' && <FilesPanel model={model} />}
               </div>
             )}
-            {openAccordion === id && !model && (
+            {openId === id && id !== 'delivery' && !model && (
               <div className="px-4 py-3">
                 <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>Loading…</p>
               </div>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { GateSpec, PhaseDef, PhaseExecutor, WorkflowDef } from '../api/types.js';
+import { setCachedWorkflows } from '../store/workflowCache.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -597,6 +598,10 @@ export function WorkflowViewer(): React.ReactElement {
     setError(null);
     try {
       const { workflows: wfs } = await api.listWorkflows();
+      // Deposit for the app (studio#122 D-1): this surface RE-loads after every
+      // create/delete, so the shared `is_system` cache the delivery surfaces
+      // read stays current with the edits made here — and costs no extra GET.
+      setCachedWorkflows(wfs);
       setWorkflows(wfs);
       if (wfs.length > 0 && !selectedRef.current) setSelected(wfs[0]?.id ?? null);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }

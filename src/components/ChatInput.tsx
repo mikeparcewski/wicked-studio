@@ -10,11 +10,12 @@ import { useProvenanceStore } from '../store/provenance.js';
 import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill } from '../store/retryPrefill.js';
 import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
+import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { ContextPopover } from './ContextPopover.js';
 import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
-import { runKindOf, SYSTEM_WORKFLOW_IDS, type RunKind, type RunMode } from './runMode.js';
+import { deliverKindOf, SYSTEM_WORKFLOW_IDS, type RunKind, type RunMode } from './runMode.js';
 
 interface Props {
   /** If set, we're in "run selected" mode — steer if gated, inject if executing, placeholder otherwise. */
@@ -154,23 +155,23 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [roster, setRoster] = useState<RosterSeat[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
   /**
-   * The run kind for delivery, off the AUTHORITATIVE signal where we have one.
-   * `runKindOf` matches a hardcoded denylist, which by its own comment only
-   * "catches system workflows that predate the is_system flag" — a system
-   * workflow shipped under a new id is invisible to it. The selector below
-   * already reads `is_system` off the fetched defs, and the launch form can be
-   * seeded from a RETRY PREFILL (`prefill.workflowId`, ~:153) that never passed
-   * through that selector, so the denylist alone can classify a genuinely
-   * system workflow as build work and let it carry `deliver`.
+   * The run kind for delivery, off the AUTHORITATIVE signal where we have one:
+   * a hardcoded denylist only "catches system workflows that predate the
+   * is_system flag", and a system workflow shipped under a new id is invisible
+   * to it — the launch form can be seeded from a RETRY PREFILL
+   * (`prefill.workflowId`, ~:153) that never passed through the `is_system`-
+   * reading selector below.
    *
-   * Deliberately one-directional: a positively-known `is_system` DEMOTES to
-   * 'system', but a missing def (workflows still loading, or the fetch failed)
-   * never promotes — it falls back to the denylist verdict. So this can only
-   * ever withhold delivery, never add it.
+   * The RULE now lives in `runMode.deliverKindOf` — the single definition the
+   * delivery surfaces classify with too (studio#122 D-1: this callback used to
+   * carry its own copy, `canDeliver` carried another, and the two disagreed
+   * about `collab` and every `interactive-*`). This is the LOOKUP and nothing
+   * else. Its one-directional guarantee is unchanged and now stated there: a
+   * positively-known `is_system` DEMOTES to 'system', a missing def (workflows
+   * still loading, or the fetch failed) never promotes.
    */
-  const deliverKindOf = useCallback(
-    (id: string): RunKind =>
-      workflows.find((w) => w.id === id)?.is_system === true ? 'system' : runKindOf(id),
+  const deliverKind = useCallback(
+    (id: string): RunKind => deliverKindOf(id, (wf) => isSystemWorkflowIn(workflows, wf)),
     [workflows],
   );
 
@@ -289,7 +290,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       .catch(() => {});
     api
       .listWorkflows()
-      .then(({ workflows: wfs }) => setWorkflows(wfs))
+      .then(({ workflows: wfs }) => {
+        // Deposit for the app (studio#122 D-1), exactly as the roster fetch
+        // above does: the delivery surfaces need `is_system` and have no fetch
+        // of their own, and the composer's answer is the same list. Whichever
+        // side asks first, the session pays for ONE `GET /workflows`.
+        setCachedWorkflows(wfs);
+        setWorkflows(wfs);
+      })
       .catch(() => {});
     // `prefill` is lazy-initialized state: stable for the component's lifetime,
     // so this still runs exactly once per mount.
@@ -463,7 +471,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // script pushes to a remote, which is the attached repo. Either one missing
     // and the run launches WITHOUT the key — never a body crew rejects. The
     // same verdict is on screen before the operator sends (`deliverNotice`).
-    if (deliverPr && deliverKindOf(wf) === 'build' && firstRepo) body.deliver = 'pr';
+    if (deliverPr && deliverKind(wf) === 'build' && firstRepo) body.deliver = 'pr';
     // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
@@ -719,7 +727,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const deliverWorkflow = workflowOverride?.trim() || workflow;
   const deliverNotice: { state: string; text: string } | null = ((): { state: string; text: string } | null => {
     if (!deliverPr) return null;
-    switch (deliverKindOf(deliverWorkflow)) {
+    switch (deliverKind(deliverWorkflow)) {
       case 'system':
         return null;
       case 'freeform':

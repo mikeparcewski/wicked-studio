@@ -17,6 +17,9 @@ import { GateChip } from './GateChip.js';
 import { GateRejectNote } from './GateRejectNote.js';
 import { MODE_LABEL } from './ProjectShell.js';
 import { ago, ATTENTION_DOT } from './ProjectCard.js';
+import { deliverySummary } from './delivery.js';
+import { useIsSystemWorkflow } from '../store/workflowCache.js';
+import { DeliveryChip } from './RunDelivery.js';
 import { RunSparkline } from './RunSparkline.js';
 import { STATUS_STYLE } from './RunCard.js';
 
@@ -90,6 +93,12 @@ const CSS = {
   },
   empty: { fontSize: 'var(--text-xs)', color: 'var(--ink-dim)', margin: 0 },
   overflow: { fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', margin: '6px 0 0' },
+  // studio#122: the delivery census, directly under the RUNS head. Data, so mono
+  // and dim — the tile's own count stays the headline.
+  deliverySummary: {
+    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+    color: 'var(--ink-dim)', margin: '-6px 0 10px',
+  },
 } as const satisfies Record<string, React.CSSProperties>;
 
 /** The per-run attention signal — the home board's model (§2.1.3) scoped to one run. */
@@ -200,6 +209,26 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         { score: b.score, at: b.at, name: b.view.session.problem },
       ));
   }, [runs, memberKinds, attachedAt, gates, fallbackAt, projectId]);
+
+  // studio#122: the delivery census, over every run in the project (not the
+  // MAX_ROWS window) and over deliverable runs only (not the chats). `''` when
+  // there is nothing to census — see the render guard below.
+  //
+  // The `is_system` lookup is the app's ONE `GET /workflows`, shared and cached
+  // (D-1): the denylist alone knows five of the daemon's eleven system
+  // workflows, so an interactive doc or video thread was counted under "no
+  // deliver phase" — a number about chats dressed as a delivery finding, which
+  // is the exact D5 complaint. The "no deliver phase" bucket now counts only
+  // runs a def in hand says could have delivered: a materialised `wf-<runId>`
+  // workflow — 86 of the 129 live runs — is unclassifiable forever, and this
+  // project's line read "8 no deliver phase" over eight document threads.
+  // O(1) per app, never O(runs): the cache is module state, so the row chips
+  // share this same one request rather than adding any of their own.
+  const isSystemWorkflow = useIsSystemWorkflow();
+  const deliveryCensus = useMemo(
+    () => deliverySummary(myRuns.map(({ view }) => view), isSystemWorkflow),
+    [myRuns, isSystemWorkflow],
+  );
 
   const openRuns = myRuns.filter(({ view }) => !['completed', 'cancelled', 'failed'].includes(view.session.status));
   const waiting = myRuns.filter(({ view }) => view.session.status === 'awaiting_human');
@@ -335,6 +364,20 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
             Runs ({myRuns.length > MAX_ROWS ? `${MAX_ROWS} of ${myRuns.length}` : myRuns.length}){' '}
             <span data-testid="dashboard-runs-window" style={WINDOW_LABEL_STYLE}>all</span>
           </p>
+          {/* ── studio#122: what these runs PRODUCED, counted over ALL of them,
+              never the MAX_ROWS window — 665a9aeb (the run that read as the most
+              productive in the project and delivered nothing) is not in the
+              visible six, and a census that could not see it would be exactly
+              the lie this slice exists to remove. Pure DTO: zero requests.
+
+              `deliverySummary` counts DELIVERABLE runs only, so a project whose
+              runs are all chats has nothing to census and gets no line rather
+              than an empty paragraph — the `!== ''` guard, not `length > 0`. ── */}
+          {deliveryCensus !== '' && (
+            <p data-testid="dashboard-delivery-summary" style={CSS.deliverySummary}>
+              {deliveryCensus}
+            </p>
+          )}
           {myRuns.length === 0 ? (
             <p style={CSS.empty}>No runs yet — Build starts one.</p>
           ) : (
@@ -360,6 +403,9 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
                       }}
                     />
                     <span style={CSS.rowText}>{session.problem}</span>
+                    {/* studio#122: what the run produced, beside what it is
+                        doing — DTO-derived, so the row costs no request. */}
+                    <DeliveryChip view={view} />
                     <span style={{ flexShrink: 0, color: style?.color ?? 'var(--ink-dim)' }}>
                       {style?.label ?? session.status}
                     </span>

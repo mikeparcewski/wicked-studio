@@ -24,6 +24,7 @@ import { useSteeringStore } from '../store/steering.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { chroniclePath, modePath } from '../hooks/useRoute.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
+import { DeliveryChip } from './RunDelivery.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 import { WorkChronicle } from './WorkChronicle.js';
 
@@ -628,6 +629,10 @@ function RunRow({ view, failReason, onSelect }: RunRowProps): React.ReactElement
       >
         {intent}
       </span>
+      {/* studio#122: the same delivery chip the project rows carry — what the
+          run PRODUCED, next to what it is doing. Pure DTO, zero requests; a run
+          with no deliver phase renders nothing rather than an "unknown" badge. */}
+      <DeliveryChip view={view} />
       {/* Status word + phase detail: data, so mono; the detail dims (§5.4). */}
       <span style={{ fontSize: 'var(--text-xs)', color: m.color, ...mono, flexShrink: 0, transition: 'color var(--dur-base)' }}>
         {m.status}
