@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RightPanel } from '../src/components/RightPanel.js';
 import * as client from '../src/api/client.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -405,6 +405,24 @@ describe('the rail heals a stale open section (Copilot on #125)', () => {
     fireEvent.click(screen.getByRole('button', { name: /What \/ Where/ }));
     await waitFor(() => {
       expect(document.querySelectorAll('[aria-expanded="true"]').length).toBe(0);
+    });
+  });
+
+  it('two rapid clicks toggle twice — no swallowed second click', async () => {
+    // A non-functional update read `openId` from the closure, so both clicks in one batch saw
+    // the first render's value and the second was lost (Copilot on #125, round two).
+    render(<RightPanel view={run('r-rapid', 'done')} />);
+    const header = screen.getByRole('button', { name: /What \/ Where/ });
+    // BOTH clicks inside ONE act() so React batches them — `fireEvent` on its own flushes
+    // between calls, which is why a naive two-click test cannot see this bug at all.
+    act(() => {
+      header.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      header.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await waitFor(() => {
+      const open = document.querySelectorAll('[aria-expanded="true"]');
+      expect(open.length).toBe(1);
+      expect(open[0]?.textContent).toContain('What / Where');
     });
   });
 

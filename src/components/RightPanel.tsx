@@ -533,12 +533,21 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
       : 'whatwhere';
 
   function toggleAccordion(id: AccordionId): void {
-    // Compare against the EFFECTIVE open section, not the raw state (Copilot on #125). After a
-    // run switch drops the open section, `openAccordion` still names the vanished id while the
-    // rail RENDERS `openId` — so clicking the visibly-open What/Where compared 'delivery' with
-    // 'whatwhere', re-opened what was already open, and did nothing until a second click.
-    // Deliberately not a functional update: the correct input is what the operator can SEE.
-    setOpenAccordion(openId === id ? null : id);
+    // Functional update, and heal INSIDE it (Copilot on #125, twice).
+    //
+    // First round: comparing the raw `openAccordion` was wrong — after a run switch drops the
+    // open section it still names the vanished id while the rail RENDERS the healed one, so
+    // clicking the visibly-open What/Where compared 'delivery' with 'whatwhere' and did nothing
+    // until a second click.
+    //
+    // Second round: reading the derived `openId` from the closure fixed that but reintroduced a
+    // stale read — two clicks inside one render batch both see the first render's value, so the
+    // second is swallowed. Taking `prev` from the updater and applying the SAME healing rule to
+    // it gets both: fresh state, and the section the operator can actually see.
+    setOpenAccordion((prev) => {
+      const effective = prev === null || sections.some((s) => s.id === prev) ? prev : 'whatwhere';
+      return effective === id ? null : id;
+    });
   }
 
   if (collapsed) {
