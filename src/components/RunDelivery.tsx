@@ -200,8 +200,12 @@ export const HEADLINE: Record<DeliveryClaim, string> = {
  *  - the "no deliver phase" SENTENCE and the `deliver: pr` remedy appear only
  *    once a def in hand says the workflow is ordinary.
  *
- * An `is_system` run still renders nothing at all, warm or cold: `deliverKindOf`
- * answers 'system' off the denylist without the catalog.
+ * An `is_system` run WITHOUT a deliver phase still renders nothing at all, warm
+ * or cold: `deliverKindOf` answers 'system' off the denylist without the
+ * catalog. One WITH a deliver phase keeps its section like any other — the first
+ * bullet is unconditional, because a unit that actually ran is evidence and the
+ * classification does not get to overrule it (pinned by "so does an is_system
+ * workflow that somehow ran one").
  *
  * The sentence licence is re-checked HERE as well as in the caller because this
  * component is exported and rendered directly by tests and by any future

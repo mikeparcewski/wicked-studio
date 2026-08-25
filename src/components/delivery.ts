@@ -390,14 +390,22 @@ export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflo
  *
  * So the rail renders on the FACT and {@link RunDelivery} gates the SENTENCE:
  *  - a deliver phase in the units ⇒ section, unconditionally (`canDeliver`);
- *  - otherwise a known `workdir` on an ordinary workflow ⇒ section, worktree
- *    line only, no classification claim and no remedy.
+ *  - otherwise a known `workdir` on a workflow NOTHING HAS RULED OUT as system
+ *    (`deliverKindOf(...) === 'build'`) ⇒ section, worktree line only, no
+ *    classification claim and no remedy.
  *
- * What this does NOT widen: `deliverKindOf(...) !== 'build'` still returns false,
- * so an `is_system` run renders nothing warm OR cold (the denylist answers
- * without the catalog), and a `'freeform'` run — no workflow at all, which
- * `deliver` cannot accompany — stays out. The predicate reaches exactly the runs
- * whose section was flickering, and no others.
+ * That second arm is deliberately weaker than `canDeliver`'s licence, and the
+ * difference is the point: it does NOT require `is_system === false`, so it also
+ * covers the runs the catalog can never classify — a materialised `wf-<runId>`
+ * id gets its worktree line and never gets the sentence. Requiring the licence
+ * here would put those runs straight back into the flicker this fixes.
+ *
+ * What it does NOT widen: `deliverKindOf(...) !== 'build'` still returns false,
+ * so a run on a KNOWN system workflow gets no section from this arm warm or cold
+ * (the denylist answers without the catalog — such a run reaches the rail only
+ * via `canDeliver`, by actually having a deliver phase), and a `'freeform'` run
+ * — no workflow at all, which `deliver` cannot accompany — stays out. The
+ * predicate reaches exactly the runs whose section was flickering.
  *
  * The census and the chips deliberately keep using `canDeliver`: widening THEM
  * would put these 24 unclassifiable runs back into a "24 no deliver phase"
