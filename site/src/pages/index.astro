@@ -259,6 +259,63 @@ const RAIL = [
     </div>
   </section>
 
+  <!-- ── A project is a CONTEXT: one graph over all its repos (crew 0.7.0) ── -->
+  <section class="ctx" aria-labelledby="ctx-h">
+    <div class="wrap">
+      <div class="sec-head sec-head--wide">
+        <div class="kicker">Context · crew 0.7.0</div>
+        <h2 id="ctx-h">A project is a context, not a folder.</h2>
+        <p class="sec-sub">
+          Real work spans repos. A change in an engine lands in the daemon that embeds it and the
+          console that renders it — and an agent that can only see one of them answers
+          <b>“not found”</b> about the other two, confidently, because a per-repo graph has no way
+          to know it was asked about something outside itself. Attach repos to a project and crew
+          builds <b>one co-located code graph</b> over all of them
+          (<code>POST /api/v1/projects/:id/graph/refresh</code>). Runs filed into that project are
+          <b>bound to it</b>.
+        </p>
+      </div>
+
+      <div class="ctx-grid">
+        <div class="ctx-card">
+          <span class="ctx-k">one query · three repos</span>
+          <p class="ctx-p">
+            <code>register</code> across a project holding studio + crew + core returns
+            <b>8 hits</b> — 4 in <code>wicked-core</code>, 3 in <code>wicked-crew</code>, 1 in
+            <code>wicked-studio</code> — each attributed to the repo it came from, spanning
+            <b>Rust and TypeScript</b> in one answer. Blast radius works the same way.
+          </p>
+        </div>
+        <div class="ctx-card">
+          <span class="ctx-k">the run says what it saw</span>
+          <p class="ctx-p">
+            The binding decision is recorded on <b>both</b> outcomes. “This run sees the project”
+            and “this run sees one repo, <b>because X</b>” are equally facts about what the run
+            could observe — and the second is the one you need when a worker reports that a sibling
+            repo does not exist.
+          </p>
+        </div>
+        <div class="ctx-card ctx-card--limit">
+          <span class="ctx-k">the limit, stated on the wire</span>
+          <p class="ctx-p">
+            <b>Co-located is not linked.</b> Each repo is indexed under its own label and edges do
+            <b>not</b> resolve across repos — <code>studio → api-types → crew</code> does not
+            traverse. What you get is per-repo results gathered into one answer with the repo named
+            on every hit. Every response carries <code>linkage: "co-located"</code> and a note
+            saying so, so a consumer cannot mistake it for a cross-repo trace.
+          </p>
+        </div>
+      </div>
+
+      <p class="ctx-foot">
+        A refresh is <code>wicked-estate index</code> per member, bounded at ten minutes
+        <b>each</b> — so it never happens implicitly at launch, and a missing or stale graph
+        degrades the run to its own repo’s graph and says so. Needs
+        <code>wicked-estate ≥ 0.14.6</code>, capability-probed before anything is indexed.
+      </p>
+    </div>
+  </section>
+
   <!-- ── The client seam — a pure client, nothing privileged ─────────────── -->
   <section class="pair" id="client" aria-labelledby="pair-h">
     <div class="wrap">
