@@ -146,6 +146,11 @@ export function isPrUrl(candidate: string): boolean {
   // Deliberately NOT host-restricted: crew re-derives this url from the run's own git remote
   // (deliver.ts), GitHub Enterprise is a real deployment, and an allowlist here would be a second,
   // weaker copy of a decision that belongs server-side. This validates SHAPE, not provenance.
+  // `/pull/new/` is REJECTED outright, not merely out-shaped (Copilot on #125). The end-anchored
+  // test alone lets a crafted path through — `…/pull/new/pull/5` ends in `/pull/5` and would be
+  // rendered as "PR open" with a link to a create-PR form. That form is the exact trap the
+  // operator hit first in the raw transcript, so it is refused by name rather than by shape.
+  if (parsed.pathname.includes('/pull/new/')) return false;
   return parsed.protocol === 'https:' && /\/pull\/\d+$/.test(parsed.pathname);
 }
 

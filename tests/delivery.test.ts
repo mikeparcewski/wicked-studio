@@ -517,6 +517,8 @@ describe('isPrUrl — one gate for BOTH url sources (Copilot on #125)', () => {
     'http://github.com/o/r/pull/1',                        // not https
     'https://e.test/o/r/pull/new/b?x=/pull/9',             // digits smuggled in the QUERY
     'https://github.com/o/r/pull/new/wicked/branch',       // the create-PR form
+    'https://github.com/o/r/pull/new/pull/5',              // crafted: ends /pull/5 but IS a form
+    'https://github.com/o/r/compare/pull/new/x/pull/9',    // …and buried mid-path
     'https://github.com/o/r/pull/',
     'https://github.com/o/r/pull/abc',
     'not a url at all',
