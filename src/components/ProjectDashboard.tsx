@@ -218,8 +218,12 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   // (D-1): the denylist alone knows five of the daemon's eleven system
   // workflows, so an interactive doc or video thread was counted under "no
   // deliver phase" — a number about chats dressed as a delivery finding, which
-  // is the exact D5 complaint. O(1) per app, never O(runs): the rows below read
-  // no defs at all.
+  // is the exact D5 complaint. The "no deliver phase" bucket now counts only
+  // runs a def in hand says could have delivered: a materialised `wf-<runId>`
+  // workflow — 86 of the 129 live runs — is unclassifiable forever, and this
+  // project's line read "8 no deliver phase" over eight document threads.
+  // O(1) per app, never O(runs): the cache is module state, so the row chips
+  // share this same one request rather than adding any of their own.
   const isSystemWorkflow = useIsSystemWorkflow();
   const deliveryCensus = useMemo(
     () => deliverySummary(myRuns.map(({ view }) => view), isSystemWorkflow),

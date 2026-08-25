@@ -5,6 +5,7 @@ import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import {
   DELIVERY_COLOR,
   DELIVERY_LABEL,
+  canDeliver,
   deliveryOf,
   resolveDelivery,
   type DeliveryClaim,
@@ -76,9 +77,22 @@ export function DeliveryBadge({ view }: Props): React.ReactElement | null {
  * is `'in-flight'`: the row already carries the run's status pill, and a
  * cancelled run's deliver unit stays `pending` forever — a second motion word
  * there would claim progress that stopped.
+ *
+ * D2: it gates on {@link canDeliver} FIRST, the same predicate the rail's
+ * section and the census gate on, so a row can never chip a run whose Delivery
+ * section studio itself withholds. The objection to this was cost — that a
+ * per-row `is_system` read would break the O(1) request budget — and it is
+ * false: `useIsSystemWorkflow` reads MODULE state behind at most one
+ * `GET /workflows` per session, so 120 rows fire one request between them and
+ * ZERO per row (pinned in `tests/delivery.workflowBudget.test.tsx`). Today the
+ * gate is also implied — every chipped claim has a deliver unit, which
+ * `canDeliver` licenses outright — and that is precisely why it is written down:
+ * an implied invariant is one a later edit to either side silently breaks.
  */
 export function DeliveryChip({ view }: Props): React.ReactElement | null {
+  const isSystemWorkflow = useIsSystemWorkflow();
   const { claim } = resolveDelivery(deliveryOf(view));
+  if (!canDeliver(view, isSystemWorkflow)) return null;
   if (claim === 'none' || claim === 'in-flight') return null;
   return (
     <span
@@ -131,32 +145,42 @@ export const HEADLINE: Record<DeliveryClaim, string> = {
  *  - `nothing-to-deliver` / `failed` — `denial_reason` VERBATIM. Zero fetches: a
  *    rejected unit has no stored transcript by design, and re-wording a gate's
  *    own message is how a surface starts lying.
- *  - `none` — deliverable runs only (the caller gates the rest out): names the
- *    worktree the work is sitting in, and — only when the workflow is
- *    POSITIVELY known deliverable — the launch option that would deliver it.
+ *  - `none` — positively-classified deliverable runs only (`canDeliver` gates
+ *    the rest out, defs in hand): names the worktree the work is sitting in and
+ *    the launch option that would deliver it.
  *
  * ── THE COLD-CACHE INVARIANT (D-1) ───────────────────────────────────────────
- * **The "launch with deliver: pr" remedy never renders for a run studio cannot
- * prove is deliverable — the loading window included.**
+ * **Nothing studio cannot prove is deliverable gets a "no deliver phase"
+ * sentence or a "launch with deliver: pr" remedy — the loading window, and the
+ * permanently-unclassifiable run, included.**
  *
- * `canDeliver` gates this component in, and before the workflow defs land it can
- * only consult the five-id denylist, which does not know `collab` or any of the
- * five `interactive-*` — the document and video seams. So for one paint the rail
- * would offer a remedy studio's OWN composer refuses (its `deliverKindOf` reads
- * `is_system` and demotes exactly those to 'system'). The suppression is on the
- * REMEDY LINE, not the section, and that is the deliberate half:
+ * The first cut suppressed the REMEDY LINE and kept the section, on the argument
+ * that the rest of the body is derived from the run's own units and is true
+ * whatever composed them. That argument holds for every claim EXCEPT `'none'`,
+ * which is not a fact about units at all — it is a claim about a classification
+ * studio may not have. And that is the case the live corpus is made of: 86 of
+ * 129 runs carry a materialised `wf-<runId>` id that `GET /workflows` never
+ * serves, so the lookup answers `undefined` for them forever, not just for a
+ * paint. Thirty interactive document threads therefore rendered a Delivery
+ * section whose entire body read "This run has no deliver phase."
  *
- *  - Every OTHER claim in this body — delivered / pr-open / nothing-to-deliver /
- *    failed — is derived from the run's own units and is true no matter what
- *    kind of workflow produced them. Hiding the section would withhold facts to
- *    avoid a suggestion.
- *  - The remedy is the ONLY thing here that can be false, because it is the only
- *    thing that speaks about a FUTURE launch. Withholding it costs the operator
- *    a sentence they can get from the composer; printing it wrongly tells them
- *    to do something the composer will not do.
+ * So `canDeliver` now withholds the SECTION on the `'none'` arm under the same
+ * `is_system === false` licence this line has always used, and the two halves
+ * are one rule:
  *
- * Erring toward saying less. The line appears the moment the defs land — and for
- * a system workflow the whole section correctly disappears instead.
+ *  - a run WITH a deliver phase keeps its section unconditionally — 5c5e08b7's
+ *    own workflow id is materialised, and gating that arm would hide a real PR;
+ *  - a run WITHOUT one gets a section only once a def in hand says the workflow
+ *    is ordinary. `undefined` is not a licence.
+ *
+ * Erring toward saying less: withholding costs the operator a sentence they can
+ * get from the composer; printing it wrongly tells them a run failed to do
+ * something it was never asked to do. The section and the line appear together
+ * the moment the defs land — and for a system workflow neither ever does.
+ *
+ * The licence is re-checked HERE as well as in the caller because this component
+ * is exported and rendered directly by tests and by any future surface: one
+ * rule, held on both sides of the seam, never a second rule.
  */
 export function RunDelivery({ view }: Props): React.ReactElement {
   const runId = view.session.id;
@@ -180,10 +204,12 @@ export function RunDelivery({ view }: Props): React.ReactElement {
 
   const workdir = view.session.workdir;
 
-  // The remedy's licence: `is_system === false` — a def IN HAND that carries no
-  // flag (the daemon omits `is_system` on ordinary workflows). `undefined` — the
-  // defs have not loaded, the fetch degraded, or this id is not in the list — is
-  // NOT a licence. See the cold-cache invariant above.
+  // The licence — for the remedy line, and (in the caller) for the whole `'none'`
+  // arm this body would otherwise open with "This run has no deliver phase":
+  // `is_system === false`, a def IN HAND that carries no flag (the daemon omits
+  // `is_system` on ordinary workflows). `undefined` — the defs have not loaded,
+  // the fetch degraded, or the id is a materialised `wf-<runId>` that no catalog
+  // will ever carry — is NOT a licence. See the cold-cache invariant above.
   const isSystemWorkflow = useIsSystemWorkflow();
   const remedyLicensed = isSystemWorkflow(view.session.workflow_id?.trim() ?? '') === false;
 

@@ -15,9 +15,14 @@ import type { Project, SessionView } from '../src/api/types.js';
  *
  * `is_system` is app-level reference data, so reading it must cost the app ONE
  * request — never one per run. A list surface rendering 120 rows fires at most
- * a single `GET /workflows` and ZERO per-row requests; the row chips read no
- * defs at all, and a second list surface mounting after it fires none, because
- * the cache is module state, not component state.
+ * a single `GET /workflows` and ZERO per-row requests; the row chips READ the
+ * defs (D2 — a row may not chip what the rail's section would withhold) but
+ * read them out of MODULE state, and a second list surface mounting after it
+ * fires none, because the cache is not component state.
+ *
+ * That is the measured answer to the objection against fixing D2 — "a per-row
+ * `is_system` read would break the O(1) budget". It does not: 120 chips share
+ * one request between them, and the surface that mounts second shares it too.
  *
  * Everything is counted at the client boundary — one `vi.fn` per api method,
  * plus a global `fetch` counter for the raw-transport call `client.ts:103`
@@ -120,6 +125,32 @@ describe('120 runs, ONE workflows request', () => {
     // interactive-* seams — are out entirely, not counted as "no deliver phase".
     const summary = await screen.findByTestId('dashboard-delivery-summary');
     expect(summary.textContent).toStrictEqual('60 ran deliver');
+  });
+
+  it('D2: the Build list ALONE — 120 gated chips, still ONE request and none per row', async () => {
+    // The cost objection to gating the chip, measured on a COLD cache: every
+    // chip calls `useIsSystemWorkflow`, and between them they fire one request.
+    const runs = corpus();
+    render(
+      <CenterDashboard
+        runs={runs}
+        onSelectRun={() => {}}
+        navigate={() => {}}
+        onApproveGate={() => {}}
+        onRejectGate={() => {}}
+      />,
+    );
+    const chips = await screen.findAllByTestId('run-delivery-chip');
+
+    expect(runs).toHaveLength(120);
+    // Every rendered row is a gated chip's worth of lookups; only the build runs
+    // chip (the system ones have no deliver phase and stay silent).
+    expect(chips.length).toBeGreaterThan(0);
+    expect(chips.length).toBeLessThanOrEqual(screen.getAllByTestId('build-run-row').length);
+    expect(calls.listWorkflows, 'one request for 120 rows').toHaveBeenCalledTimes(1);
+    expect(calls.getUnitOutput, 'zero per-row reads').toHaveBeenCalledTimes(0);
+    expect(calls.getRun).toHaveBeenCalledTimes(0);
+    expect(fetchSpy, 'zero raw-transport requests').toHaveBeenCalledTimes(0);
   });
 
   it('a SECOND list surface mounting after it fires none — the cache is app-level', async () => {

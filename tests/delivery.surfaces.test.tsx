@@ -5,8 +5,10 @@ import { CenterDashboard } from '../src/components/CenterDashboard.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useProjectsStore } from '../src/store/projects.js';
 import { useRunEventStore } from '../src/store/events.js';
+import { clearCachedWorkflows } from '../src/store/workflowCache.js';
 import { makeUnit, makeView } from './factories.js';
 import { NOTHING_REASON } from './fixtures/deliverOutput.js';
+import { LIVE_WORKFLOWS } from './fixtures/workflows.js';
 import type { Project, SessionView, UnitStatus } from '../src/api/types.js';
 
 /**
@@ -25,6 +27,10 @@ const getUnitOutput = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
   api: {
+    // The app's ONE workflow-defs read. Both surfaces gate on `is_system` now
+    // (the census bucket AND the row chips, D2), so the mock serves the real
+    // daemon table rather than leaving every id unknown.
+    listWorkflows: () => Promise.resolve({ workflows: LIVE_WORKFLOWS }),
     listProjects: () => Promise.resolve({ projects: [] }),
     listProjectMembers: (...a: unknown[]) => listProjectMembers(...a),
     listRepos: () => Promise.resolve({ repos: [] }),
@@ -99,12 +105,13 @@ beforeEach(() => {
   useGateStore.setState({ gates: {} });
   useRunEventStore.setState({ byRun: {} });
   useProjectsStore.setState({ projects: [project('proj-1')], loading: false, error: null });
+  clearCachedWorkflows();
   // The evidence bundle is a bare `fetch`, not an `api` method (client.ts:103) —
   // EC58 names it, so the budget is asserted at the transport.
   fetchSpy = vi.fn().mockRejectedValue(new Error('no request should reach the wire'));
   vi.stubGlobal('fetch', fetchSpy);
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); clearCachedWorkflows(); });
 
 describe('the project page (EC57, EC58)', () => {
   it('chips each run row with what it produced, and stays silent for runs that have no deliver phase', async () => {
@@ -154,8 +161,14 @@ describe('the project page (EC57, EC58)', () => {
     const summary = await screen.findByTestId('dashboard-delivery-summary');
     // 19 runs; 6 rows rendered. The census sees all nineteen — and says "ran
     // deliver", never "delivered": zero fetches means zero urls in hand.
-    expect(summary.textContent)
-      .toStrictEqual('3 ran deliver · 2 delivered nothing · 14 no deliver phase');
+    // The fourteen land in "no deliver phase" only because the defs prove
+    // `feature` is an ordinary workflow — the bucket is a claim about a
+    // classification, so it waits for one. (`delivery.materialised.test.tsx`
+    // owns the other side: a run whose def no catalog carries is never counted.)
+    await waitFor(() =>
+      expect(screen.getByTestId('dashboard-delivery-summary').textContent)
+        .toStrictEqual('3 ran deliver · 2 delivered nothing · 14 no deliver phase'),
+    );
     expect(summary.textContent).not.toMatch(/\bPR\b/);
     expect(screen.getAllByTestId('dashboard-run')).toHaveLength(6);
   });

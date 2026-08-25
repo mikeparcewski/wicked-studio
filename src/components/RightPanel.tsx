@@ -497,13 +497,20 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
 
   // studio#122 EC57: a run that cannot deliver gets no Delivery section at all —
   // silence, not a section that says "none" on every chat. `canDeliver` is the
-  // SAME predicate the project census filters by (D5) AND the same one the
-  // COMPOSER classifies with (D-1), so the rail, the census and the launch form
-  // can never disagree about what a deliverable run is. The lookup is the
-  // authoritative `is_system` flag off the app's one `GET /workflows` — the
-  // five-id denylist alone left `collab` and every `interactive-*` looking like
-  // build work here. Nothing in the delivery DERIVATION reads
-  // `session.workflow_id` (EC61) — this is a visibility gate, not a wire read.
+  // SAME predicate the project census filters by (D5), the row chips gate on
+  // (D2) AND the one the COMPOSER classifies with (D-1), so the rail, the rows,
+  // the census and the launch form can never disagree about what a deliverable
+  // run is. The lookup is the authoritative `is_system` flag off the app's one
+  // `GET /workflows`.
+  //
+  // A run with a deliver PHASE keeps this section whatever its workflow id says
+  // — 5c5e08b7 opened a real PR under a materialised `wf-<runId>` def. A run
+  // WITHOUT one gets it only once a def in hand says the workflow is ordinary:
+  // "this run has no deliver phase" is a claim about a classification, and 86 of
+  // the 129 live runs carry an id no catalog serves, so `undefined` is the
+  // permanent answer for them and the sentence would be unevidenced. Nothing in
+  // the delivery DERIVATION reads `session.workflow_id` (EC61) — the
+  // classification half is a visibility gate, not a wire read.
   const isSystemWorkflow = useIsSystemWorkflow();
   const sections = useMemo(
     () => (canDeliver(view, isSystemWorkflow) ? ACCORDIONS : ACCORDIONS.filter((a) => a.id !== 'delivery')),

@@ -166,13 +166,17 @@ describe('the rail keeps its shape (revised EC54)', () => {
     expect(body.style.color).not.toBe('var(--status-fail)');
   });
 
-  it('EC57: a run with no deliver phase carries no badge — silence, not "unknown"', () => {
+  it('EC57: a run with no deliver phase carries no badge — silence, not "unknown"', async () => {
     const view = makeView({ id: 'r-none', workflow_id: 'feature', workdir: '/w/tree' }, [
       makeUnit({ id: 'r-none:build', session_id: 'r-none', ord: 0, status: 'done' }),
     ]);
     render(<RightPanel view={view} />);
 
-    expect(screen.getByRole('button', { name: /Delivery/ })).toBeInTheDocument();
+    // The section itself waits for the def that proves `feature` deliverable —
+    // `tests/delivery.coldCache.test.tsx` owns that half. Once it is here, the
+    // header carries no badge: a run with no deliver phase has no state worth a
+    // chip, and silence beats an "unknown" one.
+    expect(await screen.findByRole('button', { name: /Delivery/ })).toBeInTheDocument();
     expect(screen.queryByTestId('run-delivery-badge')).not.toBeInTheDocument();
   });
 
@@ -325,13 +329,15 @@ describe('a run that delivered NOTHING (EC56)', () => {
       makeUnit({ id: 'r-nodeliver:build', session_id: 'r-nodeliver', ord: 0, status: 'done' }),
     ]);
     render(<RightPanel view={view} />);
-    fireEvent.click(screen.getByRole('button', { name: /Delivery/ }));
+    // The SECTION waits for the defs, not just the remedy line (D-1's cold-cache
+    // invariant, tightened): "this run has no deliver phase" is a claim about a
+    // classification, so `feature` gets it only once the daemon's own flag
+    // confirms the workflow is ordinary. `tests/delivery.coldCache.test.tsx`
+    // owns the withheld half.
+    fireEvent.click(await screen.findByRole('button', { name: /Delivery/ }));
 
     const body = await screen.findByTestId('run-delivery');
     expect(body).toHaveAttribute('data-state', 'none');
-    // The remedy waits for the DEFS (D-1's cold-cache invariant): `feature` is
-    // deliverable, but studio says so only once the daemon's own flag confirms
-    // it. `tests/delivery.coldCache.test.tsx` owns the withheld half.
     await waitFor(() => expect(body).toHaveTextContent('deliver: pr'));
     expect(getUnitOutput).not.toHaveBeenCalled();
   });

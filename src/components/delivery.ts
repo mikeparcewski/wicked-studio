@@ -241,28 +241,56 @@ export const DELIVERY_COLOR: Record<DeliveryClaim, string> = {
  * project read "3 delivered · 30 no deliver phase" — a number about chats,
  * dressed as a delivery finding).
  *
- * It calls studio#124's `deliverKindOf` — literally the same function the
- * COMPOSER classifies with, not a second copy of the rule (D-1: the composer
- * read `is_system` and this predicate read a five-id denylist, so `collab` and
- * every `interactive-*` were 'system' there and 'build' here). Only `'build'`
- * may deliver. `'system'` is machine-owned work the launch form hides;
- * `'freeform'` carries no workflow at all and `deliver` without `workflow` is a
- * 400 (api-types index.d.ts:955-956). Neither can ever produce a PR, so neither
- * gets a Delivery surface or a line in the census.
+ * ── EVIDENCE FIRST, CLASSIFICATION SECOND ────────────────────────────────────
+ * **A run that HAS a deliver phase is deliverable — it demonstrably delivered,
+ * whatever its workflow id says. A run that has NONE is deliverable only when
+ * its workflow is POSITIVELY KNOWN not to be a system workflow.**
+ *
+ * The two arms are asymmetric on purpose, because the two claims cost different
+ * things:
+ *
+ *  - The delivering arms (delivered / pr-open / nothing-to-deliver / failed /
+ *    in-flight) are read off the run's OWN units and are true no matter what
+ *    composed them. Gating them on the catalog would hide a REAL PR: run
+ *    5c5e08b7 opened one, and its `workflow_id` is `wf-5c5e08b7-…`, a
+ *    materialised per-run def that `GET /workflows` does not serve. So this arm
+ *    ignores the lookup entirely.
+ *  - `'none'` is a CLAIM ABOUT A CLASSIFICATION — "this run has no deliver
+ *    phase" is only worth saying about a run that could have had one. On the
+ *    live corpus 86 of 129 runs carry a materialised `wf-<runId>`, which is in
+ *    no catalog, so the lookup answers `undefined` for them PERMANENTLY. The
+ *    denylist then called every one of them build work and 30 interactive
+ *    document threads grew a Delivery section reading "This run has no deliver
+ *    phase", with a project whose census line said, in full, "8 no deliver
+ *    phase" — a number about documents, dressed as a delivery finding. That is
+ *    D5 again, and the first `is_system` fix did not touch it because it never
+ *    reaches a def at all.
+ *
+ * So the `'none'` arm takes the SAME licence the remedy line has always taken:
+ * `is_system === false` — a def IN HAND that carries no flag. `undefined` is not
+ * a licence. Never assert what the wire cannot evidence; where studio cannot
+ * classify the run, it says nothing rather than a sentence about documents.
+ *
+ * {@link deliverKindOf} still fronts it — literally the same function the
+ * COMPOSER classifies with, not a second copy of the rule (D-1) — so a
+ * denylisted id stays 'system' even if a def turns up without the flag, and
+ * `'freeform'` (no workflow at all; `deliver` without `workflow` is a 400,
+ * api-types index.d.ts:955-956) stays out.
  *
  * @param isSystemWorkflow the AUTHORITATIVE `is_system` lookup, three-valued —
  *   see {@link IsSystemWorkflow}. This module stays PURE and table-testable: it
  *   imports no store and fires no fetch, so the caller (which has React) passes
- *   `store/workflowCache.useIsSystemWorkflow()`. Omitted, the derivation falls
- *   back to the denylist, which can only ever over-report deliverability — so a
- *   caller that renders a REMEDY must additionally require a positively-known
- *   def before saying it out loud (see `RunDelivery`).
+ *   `store/workflowCache.useIsSystemWorkflow()`. Omitted — or answering
+ *   `undefined`, which is the same thing — no run without a deliver phase is
+ *   deliverable. The predicate can only ever WITHHOLD, never invent.
  *
- * This is a VISIBILITY gate, not a wire read: {@link deliveryOf} stays
- * indifferent to `session.workflow_id` (EC61).
+ * The classification half is a VISIBILITY gate, not a wire read: {@link
+ * deliveryOf} stays indifferent to `session.workflow_id` (EC61).
  */
 export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflow): boolean {
-  return deliverKindOf(view.session.workflow_id, isSystemWorkflow) === 'build';
+  if (deliveryOf(view).state !== 'none') return true;
+  const wf = view.session.workflow_id?.trim() ?? '';
+  return deliverKindOf(wf, isSystemWorkflow) === 'build' && isSystemWorkflow?.(wf) === false;
 }
 
 /**
@@ -274,7 +302,14 @@ export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflo
  * {@link canDeliver} — pass the SAME `isSystemWorkflow` lookup the rail uses, or
  * the six ids the denylist misses (`collab`, the five `interactive-*`) come back
  * as "no deliver phase" and the D5 complaint is recreated for the document and
- * video threads. Wording tracks {@link DELIVERY_LABEL} exactly: the
+ * video threads.
+ *
+ * The "no deliver phase" bucket is the one that can lie, and it is the one
+ * {@link canDeliver} now withholds: a run studio cannot positively classify is
+ * not counted at all, so the bucket only ever counts runs that could have
+ * delivered and didn't. The delivering buckets count every run that has a
+ * deliver phase, catalog or not — a materialised `wf-<runId>` def hides nothing.
+ * Wording tracks {@link DELIVERY_LABEL} exactly: the
  * `in-flight` bucket says "deliver pending", never "still to deliver" — the
  * label refuses forward-looking words because a cancelled run's unit stays
  * `pending` forever, and the census may not smuggle them back in (D3).

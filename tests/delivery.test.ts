@@ -11,7 +11,9 @@ import {
   type DeliveryState,
 } from '../src/components/delivery.js';
 import { HEADLINE } from '../src/components/RunDelivery.js';
+import { isSystemWorkflowIn } from '../src/store/workflowCache.js';
 import { makeUnit, makeView } from './factories.js';
+import { LIVE_WORKFLOWS, materialised } from './fixtures/workflows.js';
 import {
   EMPTY_PUSH_OUTPUT,
   NO_URL_REASON,
@@ -363,6 +365,9 @@ describe('HEADLINE — the rail body says what the badge says', () => {
   });
 });
 
+/** The authoritative lookup, as the app's workflow cache serves it. */
+const KNOWN = (id: string): boolean | undefined => isSystemWorkflowIn(LIVE_WORKFLOWS, id);
+
 describe('deliverySummary — the census over ALL DELIVERABLE runs', () => {
   it('counts every claim, in the brief\'s own order', () => {
     const views = [
@@ -371,7 +376,11 @@ describe('deliverySummary — the census over ALL DELIVERABLE runs', () => {
       ...Array.from({ length: 11 }, () => makeView({ id: 'r', workflow_id: 'feature' }, [] as WorkUnit[])),
     ];
     // "3 delivered" was the lie: three approved phases, zero known PRs.
-    expect(deliverySummary(views)).toBe('3 ran deliver · 2 delivered nothing · 11 no deliver phase');
+    // The lookup is what licenses the "no deliver phase" bucket at all: eleven
+    // `feature` runs are countable because a def in hand says `feature` is an
+    // ordinary workflow. The three delivering runs need no such licence — they
+    // have a deliver unit, and their `wf-run-1` def is in no catalog.
+    expect(deliverySummary(views, KNOWN)).toBe('3 ran deliver · 2 delivered nothing · 11 no deliver phase');
   });
 
   it('D3: the in-flight bucket matches its own label — no forward-looking wording', () => {
@@ -409,24 +418,69 @@ describe('deliverySummary — the census over ALL DELIVERABLE runs', () => {
   });
 });
 
-describe('canDeliver — the ONE predicate both surfaces gate on (D5)', () => {
-  const cases: { workflow_id: string | null; want: boolean }[] = [
-    { workflow_id: 'feature', want: true },
-    { workflow_id: 'feature-pr', want: true },
-    { workflow_id: 'wf-665a9aeb-285d-407b-b869-813b67e50973', want: true },
-    { workflow_id: 'chat', want: false },
-    { workflow_id: 'onboarding', want: false },
-    { workflow_id: 'survey-repo', want: false },
-    { workflow_id: 'memories', want: false },
-    { workflow_id: '', want: false },
-    { workflow_id: null, want: false },
-  ];
+describe('canDeliver — the ONE predicate every surface gates on (D5)', () => {
+  /** A run on `workflow_id` with NO deliver phase — the arm that needs a licence. */
+  const plainOn = (workflow_id: string | null): SessionView => {
+    const view = makeView({ id: 'run-1' }, [makeUnit({ id: 'run-1:build', status: 'done' })]);
+    return { ...view, session: { ...view.session, workflow_id } as typeof view.session };
+  };
 
-  for (const { workflow_id, want } of cases) {
-    it(`${JSON.stringify(workflow_id)} → ${want ? 'deliverable' : 'not deliverable'}`, () => {
-      const view = makeView({ id: 'run-1' }, [] as WorkUnit[]);
-      const session = { ...view.session, workflow_id } as typeof view.session;
-      expect(canDeliver({ ...view, session })).toBe(want);
+  describe('NO deliver phase: only a def in hand licenses the claim', () => {
+    const cases: { workflow_id: string | null; want: boolean; why: string }[] = [
+      { workflow_id: 'feature', want: true, why: 'in the catalog, no is_system flag' },
+      { workflow_id: 'feature-pr', want: true, why: 'in the catalog, no is_system flag' },
+      // THE CHANGE. 86 of the 129 live runs carry a materialised `wf-<runId>`
+      // def that `GET /workflows` does not serve, so the lookup answers
+      // `undefined` for them forever. Saying "this run has no deliver phase"
+      // about a run studio cannot classify is asserting past the wire — and it
+      // put a Delivery section on 30 interactive document threads.
+      { workflow_id: materialised('665a9aeb-285d-407b-b869-813b67e50973'), want: false, why: 'materialised: in no catalog, ever' },
+      { workflow_id: 'a-workflow-shipped-tomorrow', want: false, why: 'unknown id, nothing proves it' },
+      { workflow_id: 'chat', want: false, why: 'is_system' },
+      { workflow_id: 'onboarding', want: false, why: 'is_system' },
+      { workflow_id: 'interactive-draft', want: false, why: 'is_system (the denylist never knew it)' },
+      { workflow_id: 'survey-repo', want: false, why: 'is_system' },
+      { workflow_id: 'memories', want: false, why: 'is_system' },
+      { workflow_id: '', want: false, why: 'freeform — deliver without workflow is a 400' },
+      { workflow_id: null, want: false, why: 'freeform' },
+    ];
+
+    for (const { workflow_id, want, why } of cases) {
+      it(`${JSON.stringify(workflow_id)} → ${want ? 'deliverable' : 'withheld'} (${why})`, () => {
+        expect(canDeliver(plainOn(workflow_id), KNOWN)).toBe(want);
+      });
+    }
+
+    it('with NO lookup nothing is deliverable — the predicate withholds, never invents', () => {
+      for (const { workflow_id } of cases) {
+        expect(canDeliver(plainOn(workflow_id)), `${workflow_id} with a cold cache`).toBe(false);
+      }
     });
-  }
+  });
+
+  describe('a deliver phase IN HAND licenses itself, whatever the workflow id', () => {
+    // 5c5e08b7 opened a real PR and its `workflow_id` is `wf-5c5e08b7-…`.
+    // Gating this arm on the catalog would hide a PR the operator has.
+    const statuses: UnitStatus[] = ['done', 'rejected', 'pending', 'distributed'];
+    for (const status of statuses) {
+      it(`${status} on a materialised def is shown and counted, warm cache or cold`, () => {
+        const view = composed(status, status === 'rejected' ? NOTHING_REASON : null);
+        expect(view.session.workflow_id, 'the fixture is a materialised def').toBe('wf-run-1');
+        expect(KNOWN('wf-run-1'), 'which the catalog does not carry').toBeUndefined();
+        expect(canDeliver(view, KNOWN)).toBe(true);
+        expect(canDeliver(view)).toBe(true);
+      });
+    }
+
+    it('an OVERLAY-named deliver unit counts too — resolution is by unit, not by id', () => {
+      expect(canDeliver(overlay('done'), KNOWN)).toBe(true);
+      expect(canDeliver(overlay('done'))).toBe(true);
+    });
+
+    it('…and a deliver phase on a SYSTEM workflow is still evidence, not a guess', () => {
+      const view = composed('done');
+      const session = { ...view.session, workflow_id: 'interactive-draft' } as typeof view.session;
+      expect(canDeliver({ ...view, session }, KNOWN)).toBe(true);
+    });
+  });
 });

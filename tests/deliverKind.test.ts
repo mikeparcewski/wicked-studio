@@ -112,12 +112,19 @@ describe('the census stops counting document and video threads (D5, re-opened by
     ...DENYLIST_BLIND_SPOT.map((wf, i) => plain(`i-${i}`, wf)),
   ];
 
-  it('without the lookup the six read as "no deliver phase" — the reported symptom', () => {
-    expect(deliverySummary(runs)).toBe('2 ran deliver · 6 no deliver phase');
-  });
-
   it('with the lookup they are out of the census entirely', () => {
     expect(deliverySummary(runs, KNOWN)).toBe('2 ran deliver');
+  });
+
+  it('and without it they are out for the OTHER reason — nothing proves they could deliver', () => {
+    // The reported symptom was "2 ran deliver · 6 no deliver phase": the six
+    // read as build work because the denylist does not know them. The flag is
+    // one half of the answer and the licence is the other — the "no deliver
+    // phase" bucket counts a run only when a def IN HAND says the workflow is
+    // ordinary, so an unproven id is never counted whichever way it would have
+    // classified. The delivering runs need no licence: they have a deliver unit.
+    expect(deliverySummary(runs)).toBe('2 ran deliver');
+    for (const id of DENYLIST_BLIND_SPOT) expect(runKindOf(id)).toBe<RunKind>('build');
   });
 });
 
