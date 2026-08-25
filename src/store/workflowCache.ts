@@ -41,6 +41,14 @@ let inFlight: Promise<void> | null = null;
  * (the same "cache the degraded answer" posture as `store/delivery.ts`).
  */
 let attempted = false;
+/**
+ * How many deposits have landed. Read before a fetch starts and re-read when it resolves, so an
+ * in-flight response cannot clobber a deposit that arrived while it was on the wire
+ * (Copilot on #125): the composer and `WorkflowViewer` fetch this list themselves and deposit it,
+ * and the app-level fetch may have STARTED earlier, so its answer can be the older one.
+ * Silently regressing `is_system` would re-open the exact classification hole this module closed.
+ */
+let deposits = 0;
 const listeners = new Set<() => void>();
 
 /** The cached defs, or `null` when nothing has been deposited yet. */
@@ -52,6 +60,7 @@ export function getCachedWorkflows(): WorkflowDef[] | null {
 export function setCachedWorkflows(defs: WorkflowDef[]): void {
   cached = defs;
   attempted = true;
+  deposits += 1;
   for (const fn of [...listeners]) fn();
 }
 
@@ -78,10 +87,14 @@ export function subscribeWorkflows(fn: () => void): () => void {
  */
 export function fetchWorkflowsCached(): void {
   if (attempted || inFlight !== null) return;
+  const depositsAtStart = deposits;
   try {
     inFlight = api
       .listWorkflows()
       .then(({ workflows }) => {
+        // A deposit landed while this was in flight — it is at least as fresh as this
+        // response and possibly newer, so leave it alone.
+        if (deposits !== depositsAtStart) return;
         setCachedWorkflows(workflows);
       })
       .catch(() => {
@@ -140,5 +153,6 @@ export function clearCachedWorkflows(): void {
   cached = null;
   inFlight = null;
   attempted = false;
+  deposits = 0;
   listeners.clear();
 }
