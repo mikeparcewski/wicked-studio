@@ -7,7 +7,7 @@ import type { RunModel } from '../hooks/useRunModel.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
 import { LiveNarration } from './ChatPanel.js';
-import { isChatRun } from './ChatsPage.js';
+import { canDeliver } from './delivery.js';
 import { Burn } from './Burn.js';
 import { FileViewer } from './FileViewer.js';
 import { CoverageView } from './CoverageView.js';
@@ -39,10 +39,15 @@ type AccordionId =
   | 'delivery';
 
 /**
- * The rail's sections (studio#122 revised EC54): NINE, with `delivery` the
- * ninth. Delivery is a section like every other — not a pinned band above the
- * list, not a tablist — because "delivery isn't a top level class, it goes in
- * the right chat panel as a tab" (operator decision 2026-08-24), and the rail's
+ * The rail's sections. The contract is **nine on a run that can deliver, eight
+ * on every run that cannot** — chat threads, the other system workflows, and
+ * freeform runs, per `canDeliver`. There is no fixed count of nine: `delivery`
+ * is the conditional ninth, and a surface that says otherwise is describing
+ * build runs only.
+ *
+ * Delivery is a section like every other — not a pinned band above the list,
+ * not a tablist — because "delivery isn't a top level class, it goes in the
+ * right chat panel as a tab" (operator decision 2026-08-24), and the rail's
  * one-open-at-a-time `openAccordion` IS that tab behaviour. `whatwhere` keeps
  * the default open slot; the at-a-glance signal the band would have bought back
  * lives on the Delivery header's {@link DeliveryBadge} instead, which is legible
@@ -489,13 +494,14 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
     ? new Set(model.units.flatMap((u) => u.filesRead)).size
     : null;
 
-  // studio#122 EC57: a chat thread has no deliver phase and never will, so it
-  // gets no Delivery section at all — silence, not a section that says "none"
-  // on every chat. The predicate is studio's own (`isChatRun`, the one every
-  // surface routes by); nothing in the DELIVERY derivation reads
-  // `session.workflow_id` (EC61) — this is a visibility gate, not a wire read.
+  // studio#122 EC57: a run that cannot deliver gets no Delivery section at all —
+  // silence, not a section that says "none" on every chat. `canDeliver` is the
+  // SAME predicate the project census filters by (D5), so the rail and the
+  // census can never disagree about what a deliverable run is. Nothing in the
+  // delivery DERIVATION reads `session.workflow_id` (EC61) — this is a
+  // visibility gate, not a wire read.
   const sections = useMemo(
-    () => (isChatRun(view) ? ACCORDIONS.filter((a) => a.id !== 'delivery') : ACCORDIONS),
+    () => (canDeliver(view) ? ACCORDIONS : ACCORDIONS.filter((a) => a.id !== 'delivery')),
     [view],
   );
 

@@ -68,6 +68,14 @@ function plain(id: string): SessionView {
   );
 }
 
+/** A CHAT thread filed into `proj-1` — a run that can never deliver (D5). */
+function chat(id: string): SessionView {
+  return makeView(
+    { id, workflow_id: 'chat', status: 'completed', problem: `chat ${id}`, project_id: 'proj-1' },
+    [],
+  );
+}
+
 /**
  * Nineteen runs: 3 delivered, 2 delivered nothing, 14 with no deliver phase —
  * deliberately more than the tile's MAX_ROWS of 6, and with the interesting ones
@@ -109,6 +117,8 @@ describe('the project page (EC57, EC58)', () => {
     for (const row of chipped) {
       const chip = within(row).getByTestId('run-delivery-chip');
       expect(['delivered', 'nothing-to-deliver', 'failed']).toContain(chip.getAttribute('data-state'));
+      // D2: a list surface holds no url, so no chip on it may claim a PR.
+      expect(chip.textContent).not.toMatch(/\bPR\b/);
     }
     // Rows for runs with no deliver phase carry no chip — silence, never "unknown".
     const plainRow = rows.find((r) => r.getAttribute('data-run-id')?.startsWith('r-plain-'));
@@ -142,9 +152,42 @@ describe('the project page (EC57, EC58)', () => {
     render(<ProjectDashboard projectId="proj-1" runs={corpus()} navigate={() => {}} />);
 
     const summary = await screen.findByTestId('dashboard-delivery-summary');
-    // 19 runs; 6 rows rendered. The census sees all nineteen.
-    expect(summary).toHaveTextContent('3 delivered · 2 delivered nothing · 14 no deliver phase');
+    // 19 runs; 6 rows rendered. The census sees all nineteen — and says "ran
+    // deliver", never "delivered": zero fetches means zero urls in hand.
+    expect(summary.textContent)
+      .toStrictEqual('3 ran deliver · 2 delivered nothing · 14 no deliver phase');
+    expect(summary.textContent).not.toMatch(/\bPR\b/);
     expect(screen.getAllByTestId('dashboard-run')).toHaveLength(6);
+  });
+
+  it('D5: chat threads are OUT of the census — the rail hides Delivery from them', async () => {
+    // The reported symptom, exactly: a chat-heavy project read
+    // "3 delivered · 30 no deliver phase", a count of conversations dressed up
+    // as a delivery finding. The rail already refused to show Delivery on those
+    // threads; now both surfaces agree on what a deliverable run is.
+    const runs = [
+      run('r-pr-1', 'done'), run('r-pr-2', 'done'), run('r-pr-3', 'done'),
+      ...Array.from({ length: 30 }, (_, i) => chat(`c-${i}`)),
+    ];
+    render(<ProjectDashboard projectId="proj-1" runs={runs} navigate={() => {}} />);
+
+    const summary = await screen.findByTestId('dashboard-delivery-summary');
+    expect(summary.textContent).toStrictEqual('3 ran deliver');
+    expect(summary.textContent).not.toContain('no deliver phase');
+  });
+
+  it('a project of ONLY chats shows no census line at all, not an empty one', async () => {
+    render(
+      <ProjectDashboard
+        projectId="proj-1"
+        runs={Array.from({ length: 5 }, (_, i) => chat(`c-${i}`))}
+        navigate={() => {}}
+      />,
+    );
+
+    await screen.findByTestId('dashboard-runs');
+    expect(screen.getAllByTestId('dashboard-run').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('dashboard-delivery-summary')).not.toBeInTheDocument();
   });
 
   it('a project with no runs shows no census line rather than "0 delivered"', async () => {
@@ -194,14 +237,31 @@ describe('the Build run list (EC57, EC58)', () => {
     build([run('r-pr-1', 'done'), run('r-empty-1', 'rejected', NOTHING_REASON), plain('r-plain-0')]);
 
     const rows = screen.getAllByTestId('build-run-row');
-    const stateOf = (id: string): string | null | undefined => {
+    const chipOf = (id: string): HTMLElement | null => {
       const row = rows.find((r) => r.getAttribute('title')?.includes(id));
-      return within(row as HTMLElement).queryByTestId('run-delivery-chip')?.getAttribute('data-state');
+      return within(row as HTMLElement).queryByTestId('run-delivery-chip');
     };
-    expect(stateOf('r-pr-1')).toBe('delivered');
-    expect(stateOf('r-empty-1')).toBe('nothing-to-deliver');
+    expect(chipOf('r-pr-1')?.getAttribute('data-state')).toBe('delivered');
+    expect(chipOf('r-empty-1')?.getAttribute('data-state')).toBe('nothing-to-deliver');
     // No deliver phase → no chip (the status pill already says what it is doing).
-    expect(stateOf('r-plain-0')).toBeUndefined();
+    expect(chipOf('r-plain-0')).toBeNull();
+  });
+
+  it('D2: an approved deliver phase reads as the PHASE here — never "PR open"', () => {
+    // The 665a9aeb wire shape on a zero-fetch surface: `done`, `denial_reason`
+    // null, and no url anywhere on the DTO. The first cut rendered "PR open" for
+    // exactly this run — the false productivity signal the slice exists to kill.
+    build([run('r-665a9aeb', 'done')]);
+
+    const chip = screen.getByTestId('run-delivery-chip');
+    expect(chip).toHaveAttribute('data-state', 'delivered');
+    expect(chip.textContent).toStrictEqual('deliver ran');
+    expect(chip.textContent).not.toMatch(/\bPR\b/);
+    // Nothing was read to reach that word, and nothing on the row links a PR.
+    expect(getUnitOutput).not.toHaveBeenCalled();
+    const row = screen.getByTestId('build-run-row');
+    const hrefs = [...row.querySelectorAll('[href]')].map((e) => e.getAttribute('href') ?? '');
+    expect(hrefs.filter((h) => h.includes('/pull/'))).toEqual([]);
   });
 
   it('an UNRESOLVED deliver phase gets no chip here either', () => {

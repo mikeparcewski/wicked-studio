@@ -1,17 +1,28 @@
 import { useEffect } from 'react';
 import type { SessionView } from '../api/types.js';
 import { useDeliveryStore } from '../store/delivery.js';
-import { DELIVERY_COLOR, DELIVERY_LABEL, deliveryOf, type DeliveryState } from './delivery.js';
+import {
+  DELIVERY_COLOR,
+  DELIVERY_LABEL,
+  deliveryOf,
+  resolveDelivery,
+  type DeliveryClaim,
+} from './delivery.js';
 import { compactPath } from './WhatWhere.js';
 
 /**
  * The Delivery views (wicked-studio#122, slice DA) — what a run PRODUCED, in the
- * three places an operator looks for it. Every one of them derives from
- * {@link deliveryOf}, so none of them can disagree, and only the rail body ever
- * fetches (once, for a run that actually delivered).
+ * three places an operator looks for it. Every one of them goes through
+ * {@link deliveryOf} and then {@link resolveDelivery}, so none of them can
+ * disagree, and only the rail body ever fetches (once, for a run whose phase
+ * completed and whose url the wire does not already carry).
  *
- * Copy rule, load-bearing: the deliver phase opens a PR and STOPS. Nothing here
- * says "shipped" and nothing says "merged" — merge stays human.
+ * Copy rules, both load-bearing:
+ *  - **"A PR is open" needs a url in hand.** `status === 'done'` buys the
+ *    phase-only wording ("deliver ran") and nothing more; the PR claim, the
+ *    accent and the link arrive together with the url or not at all.
+ *  - The deliver phase opens a PR and STOPS. Nothing here says "shipped" and
+ *    nothing says "merged" — merge stays human.
  */
 
 interface Props {
@@ -19,33 +30,46 @@ interface Props {
 }
 
 /**
- * The rail header's state badge — the at-a-glance signal the operator decision
+ * The rail header's claim badge — the at-a-glance signal the operator decision
  * bought back when the pinned band was reverted (revised EC54): Delivery is the
- * ninth accordion, so its body costs a click, but its STATE is legible on the
+ * last accordion, so its body costs a click, but its state is legible on the
  * header without one. Same shape as the Files count badge it sits beside.
+ *
+ * It reads the SAME resolved truth its body renders, store included (D1). The
+ * first cut derived from `deliveryOf(view)` alone and ignored the store, so with
+ * the section open on run 665a9aeb the header said "PR open" in `--accent` while
+ * the body directly beneath it said no PR link was recorded. A badge that can
+ * contradict its own body is worse than no badge.
  *
  * `'none'` renders nothing: a run with no deliver phase has no state worth a
  * chip, and silence beats an "unknown" badge.
  */
 export function DeliveryBadge({ view }: Props): React.ReactElement | null {
-  const { state } = deliveryOf(view);
-  if (state === 'none') return null;
+  const fetched = useDeliveryStore((s) => s.byRun[view.session.id]);
+  const { claim } = resolveDelivery(deliveryOf(view), fetched?.url ?? null);
+  if (claim === 'none') return null;
   return (
     <span
       data-testid="run-delivery-badge"
-      data-state={state}
+      data-state={claim}
       className="text-[9px] font-mono px-1 py-0.5 rounded"
-      style={{ background: 'var(--surface-raised)', color: DELIVERY_COLOR[state] }}
+      style={{ background: 'var(--surface-raised)', color: DELIVERY_COLOR[claim] }}
     >
-      {DELIVERY_LABEL[state]}
+      {DELIVERY_LABEL[claim]}
     </span>
   );
 }
 
 /**
  * The list-row chip (project dashboard rows, build run rows). Pure DTO — a list
- * surface fires ZERO requests, which is why the chip is a word and not a link
- * until `session.delivery` (CREW-UX-8) makes the url free.
+ * surface fires ZERO requests and reads no store, so the only url it can ever
+ * hold is the wire-carried `session.delivery.url` (CREW-UX-8 / crew#321). Until
+ * that field ships, every chip on every list is the phase-only word; it never
+ * says "PR open" on the strength of `done` alone.
+ *
+ * The chip stays a `<span>` even when a url IS in hand, because both callers
+ * render the row as an `<a>` and a nested anchor is invalid HTML. The link lives
+ * in the rail body, which is where the operator went to get it.
  *
  * Rendered only for a RESOLVED delivery fact. `'none'` is silence (EC57), and so
  * is `'in-flight'`: the row already carries the run's status pill, and a
@@ -53,71 +77,83 @@ export function DeliveryBadge({ view }: Props): React.ReactElement | null {
  * there would claim progress that stopped.
  */
 export function DeliveryChip({ view }: Props): React.ReactElement | null {
-  const { state } = deliveryOf(view);
-  if (state === 'none' || state === 'in-flight') return null;
+  const { claim } = resolveDelivery(deliveryOf(view));
+  if (claim === 'none' || claim === 'in-flight') return null;
   return (
     <span
       data-testid="run-delivery-chip"
-      data-state={state}
+      data-state={claim}
       style={{
         flexShrink: 0,
         fontSize: 'var(--text-2xs)',
         fontFamily: 'var(--font-mono)',
-        color: DELIVERY_COLOR[state],
+        color: DELIVERY_COLOR[claim],
       }}
     >
-      {DELIVERY_LABEL[state]}
+      {DELIVERY_LABEL[claim]}
     </span>
   );
 }
 
-/** The rail body's one-line lead, per state. */
-const HEADLINE: Record<DeliveryState, string> = {
+/** The rail body's one-line lead, per claim. */
+const HEADLINE: Record<DeliveryClaim, string> = {
   'none':               'This run has no deliver phase.',
   'in-flight':          'The deliver phase has not finished — no PR exists yet.',
-  'delivered':          'PR open — merge stays human.',
+  // The 665a9aeb wording. Approved is not the same as produced, and this line
+  // is the whole difference said out loud.
+  'delivered':          'The deliver phase ran and crew approved it. That alone is not a PR.',
+  'pr-open':            'PR open — merge stays human.',
   'nothing-to-deliver': 'Delivered nothing. Crew refused the push:',
   'failed':             'Delivery failed. Crew recorded:',
 };
 
 /**
- * The Delivery accordion body. States, and what each one costs:
+ * The Delivery accordion body. Claims, and what each one costs:
  *
- *  - `delivered` — the PR as a real external anchor. The url comes free from
- *    `session.delivery` when the daemon carries it (crew#321); otherwise ONE
+ *  - `pr-open` — the PR as a real external anchor. The url comes free from
+ *    `session.delivery` when the daemon carries it (crew#321); otherwise it is
+ *    what the one transcript read below recovered.
+ *  - `delivered` — the phase completed and no url is in hand. ONE
  *    `GET /runs/:id/units/:unitKey/output`, fired here and only here, gated on
- *    the operator opening this section. A delivered run whose transcript holds
- *    no url says exactly that — never a silently linkless "Delivered" (EC59).
+ *    the operator opening this section. If the read comes back without a url the
+ *    body says so plainly and the headline never upgrades — the 665a9aeb case,
+ *    which is a `done` unit with a `null` denial_reason and a transcript holding
+ *    one `/pull/new/` form and no numbered PR (EC59).
  *  - `nothing-to-deliver` / `failed` — `denial_reason` VERBATIM. Zero fetches: a
  *    rejected unit has no stored transcript by design, and re-wording a gate's
  *    own message is how a surface starts lying.
- *  - `none` — build runs only (the caller gates chat runs out): names the
+ *  - `none` — deliverable runs only (the caller gates the rest out): names the
  *    worktree the work is sitting in, and the launch option that would deliver it.
  */
 export function RunDelivery({ view }: Props): React.ReactElement {
   const runId = view.session.id;
-  const { state, unitId, reason, url } = deliveryOf(view);
   const fetched = useDeliveryStore((s) => s.byRun[runId]);
+  const { state, claim, unitId, reason, href } = resolveDelivery(
+    deliveryOf(view),
+    fetched?.url ?? null,
+  );
 
-  // The ONE per-run fetch, and only when there is something to point at: a
-  // delivered run whose url the daemon does not already carry. `unitKey` is the
-  // deliver unit's FULL id — the output route's most-specific pass matches
+  // The ONE per-run fetch, and only when there may be something to point at: an
+  // approved deliver phase whose url the daemon does not already carry. `unitKey`
+  // is the deliver unit's FULL id — the output route's most-specific pass matches
   // `u.id === unitKey`, so an overlay-named phase needs no key guessing (EC61).
-  const unitKey = state === 'delivered' && url === null ? unitId : null;
+  // Keyed off `state`, not `claim`: once the read lands `claim` may flip to
+  // `pr-open`, and gating on that would make the effect re-evaluate its own
+  // result. `load` is idempotent per run either way.
+  const unitKey = state === 'delivered' && href === null ? unitId : null;
   useEffect(() => {
     if (unitKey !== null) useDeliveryStore.getState().load(runId, unitKey);
   }, [runId, unitKey]);
 
-  const href = url ?? fetched?.url ?? null;
   const workdir = view.session.workdir;
 
   return (
-    <div data-testid="run-delivery" data-state={state} className="flex flex-col gap-1.5 text-[11px]">
-      <p style={{ color: state === 'delivered' ? 'var(--ink-muted)' : DELIVERY_COLOR[state] }}>
-        {HEADLINE[state]}
+    <div data-testid="run-delivery" data-state={claim} className="flex flex-col gap-1.5 text-[11px]">
+      <p style={{ color: claim === 'pr-open' ? 'var(--ink-muted)' : DELIVERY_COLOR[claim] }}>
+        {HEADLINE[claim]}
       </p>
 
-      {state === 'delivered' && href !== null && (
+      {claim === 'pr-open' && href !== null && (
         <a
           data-testid="run-delivery-link"
           href={href}
@@ -129,28 +165,32 @@ export function RunDelivery({ view }: Props): React.ReactElement {
           {href} <span aria-hidden>↗</span>
         </a>
       )}
-      {state === 'delivered' && href === null && fetched === undefined && (
+      {claim === 'delivered' && fetched === undefined && (
         <p className="font-mono" style={{ color: 'var(--ink-dim)' }}>
           reading the deliver phase transcript for the PR link…
         </p>
       )}
-      {state === 'delivered' && href === null && fetched !== undefined && (
+      {claim === 'delivered' && fetched !== undefined && (
         // The 665a9aeb case, said out loud: crew approved the phase and the
         // transcript carries no PR url (its overlay pushed an empty branch and
         // reported success — crew#317). `unavailable` is the daemon's OWN words
-        // when it has any; otherwise the absence itself is the finding.
-        <p data-testid="run-delivery-nolink" className="font-mono" style={{ color: 'var(--status-fail)' }}>
+        // when it has any; otherwise the absence itself is the finding. Muted,
+        // not `--status-fail`: an approved phase that produced no PR is a gap in
+        // the EVIDENCE, not a run that failed.
+        <p data-testid="run-delivery-nolink" className="font-mono" style={{ color: 'var(--ink-muted)' }}>
           {fetched.unavailable ?? 'the deliver phase recorded no PR link — nothing can be pointed at'}
         </p>
       )}
 
-      {(state === 'nothing-to-deliver' || state === 'failed') && (
+      {(claim === 'nothing-to-deliver' || claim === 'failed') && (
         <>
           <p
             data-testid="run-delivery-reason"
             className="font-mono break-words whitespace-pre-wrap"
             style={{ color: 'var(--status-fail)' }}
           >
+            {/* `reason` is already empty-normalized to `null` by the derivation,
+                so `??` cannot paint a blank paragraph here. */}
             {reason ?? 'crew recorded no reason'}
           </p>
           {workdir !== undefined && workdir !== null && (
@@ -161,7 +201,7 @@ export function RunDelivery({ view }: Props): React.ReactElement {
         </>
       )}
 
-      {state === 'none' && (
+      {claim === 'none' && (
         <p className="font-mono" style={{ color: 'var(--ink-dim)' }}
           {...(workdir !== undefined && workdir !== null ? { title: workdir } : {})}
         >

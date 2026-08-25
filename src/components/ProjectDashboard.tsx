@@ -209,6 +209,11 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
       ));
   }, [runs, memberKinds, attachedAt, gates, fallbackAt, projectId]);
 
+  // studio#122: the delivery census, over every run in the project (not the
+  // MAX_ROWS window) and over deliverable runs only (not the chats). `''` when
+  // there is nothing to census — see the render guard below.
+  const deliveryCensus = useMemo(() => deliverySummary(myRuns.map(({ view }) => view)), [myRuns]);
+
   const openRuns = myRuns.filter(({ view }) => !['completed', 'cancelled', 'failed'].includes(view.session.status));
   const waiting = myRuns.filter(({ view }) => view.session.status === 'awaiting_human');
 
@@ -347,10 +352,14 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
               never the MAX_ROWS window — 665a9aeb (the run that read as the most
               productive in the project and delivered nothing) is not in the
               visible six, and a census that could not see it would be exactly
-              the lie this slice exists to remove. Pure DTO: zero requests. ── */}
-          {myRuns.length > 0 && (
+              the lie this slice exists to remove. Pure DTO: zero requests.
+
+              `deliverySummary` counts DELIVERABLE runs only, so a project whose
+              runs are all chats has nothing to census and gets no line rather
+              than an empty paragraph — the `!== ''` guard, not `length > 0`. ── */}
+          {deliveryCensus !== '' && (
             <p data-testid="dashboard-delivery-summary" style={CSS.deliverySummary}>
-              {deliverySummary(myRuns.map(({ view }) => view))}
+              {deliveryCensus}
             </p>
           )}
           {myRuns.length === 0 ? (

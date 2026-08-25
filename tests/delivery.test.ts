@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DELIVERY_COLOR,
   DELIVERY_LABEL,
+  canDeliver,
   deliverUnit,
   deliveryOf,
   deliverySummary,
   prUrlFrom,
+  resolveDelivery,
   type DeliveryState,
 } from '../src/components/delivery.js';
 import { makeUnit, makeView } from './factories.js';
 import {
+  EMPTY_PUSH_OUTPUT,
   NO_URL_REASON,
   NOTHING_REASON,
   REAL_DELIVER_OUTPUT,
@@ -55,6 +59,11 @@ describe('prUrlFrom — crew\'s own grep, mirrored (deliver.ts:162)', () => {
     {
       name: 'a create-PR form ALONE resolves to nothing (the digits are the whole gate)',
       text: 'remote:      https://github.com/o/r/pull/new/wicked/665a9aeb-285d-407b\n',
+      want: null,
+    },
+    {
+      name: 'the REAL 665a9aeb transcript — an approved phase that opened no PR',
+      text: EMPTY_PUSH_OUTPUT,
       want: null,
     },
     {
@@ -185,11 +194,112 @@ describe('deliveryOf — five mutually exclusive states, zero fetches', () => {
     expect(deliveryOf(view).state).toBe('none');
   });
 
+  it('a unit that only MENTIONS `gh pr create` is not the deliver phase', () => {
+    // The fallback used a bare `.includes()`, so any Tool phase carrying the
+    // string anywhere in its joined command inherited the whole delivery claim.
+    const mentions = [
+      ['bash', '-lc', "grep -rn 'gh pr create' docs/"],
+      ['bash', '-lc', 'echo "run gh pr create yourself when the review lands"'],
+      ['bash', '-lc', "sed -i 's/gh pr create/gh pr view/' scripts/deliver.sh"],
+      ['rg', '--fixed-strings', 'gh pr create'],
+    ];
+    for (const tool_cmd of mentions) {
+      const view = makeView({ id: 'run-1' }, [
+        makeUnit({ id: 'run-1:tool', ord: 0, status: 'done', tool_cmd }),
+      ]);
+      expect(deliverUnit(view), tool_cmd.join(' ')).toBeNull();
+      expect(deliveryOf(view).state).toBe('none');
+    }
+  });
+
+  it('…but a real INVOCATION still resolves, in every shape the live daemon runs', () => {
+    // Both strings are the live daemon's own deliver commands, joined.
+    const invocations = [
+      ['gh', 'pr', 'create', '--head', 'B', '--fill'],
+      ['bash', '-lc', 'git push -u origin "$B"; gh pr create --head "$B" --fill 2>&1 | tail -1'],
+      ['bash', '-lc', 'set -euo pipefail\ngit push …\ngh pr create --head "$B" --fill'],
+      ['bash', '-lc', 'git push && gh pr create --fill'],
+      ['bash', '-lc', 'URL=$(gh pr create --fill)'],
+    ];
+    for (const tool_cmd of invocations) {
+      const view = makeView({ id: 'run-1' }, [
+        makeUnit({ id: 'run-1:tool', ord: 0, status: 'done', tool_cmd }),
+      ]);
+      expect(deliverUnit(view)?.id, tool_cmd.join(' ')).toBe('run-1:tool');
+    }
+  });
+
+  it('an EMPTY denial_reason normalizes to null — `?? "…"` may not paint a blank line', () => {
+    // The same absent-and-empty class of bug already fixed in `store/delivery.ts`.
+    const d = deliveryOf(composed('rejected', ''));
+    expect(d.state).toBe('failed');
+    expect(d.reason).toBeNull();
+  });
+
   it('reads the server-carried url when the daemon carries one (crew#321)', () => {
     const view = composed('done');
     const session = { ...view.session, delivery: { kind: 'pull_request', url: 'https://x/pull/9' } };
     expect(deliveryOf({ ...view, session: session as typeof view.session }).url)
       .toBe('https://x/pull/9');
+  });
+});
+
+describe('resolveDelivery — the PR claim needs a URL IN HAND (D1/D2)', () => {
+  /** The REAL 665a9aeb shape: `done`, `denial_reason: null`, no url anywhere. */
+  const realShape = composed('done');
+
+  it('the 665a9aeb shape claims the PHASE, never the artifact — with no read', () => {
+    const r = resolveDelivery(deliveryOf(realShape));
+    expect(r.state).toBe('delivered'); // the phase WAS approved…
+    expect(r.claim).toBe('delivered'); // …and that alone claims nothing
+    expect(r.href).toBeNull();
+    expect(DELIVERY_LABEL[r.claim]).toBe('deliver ran');
+    expect(DELIVERY_LABEL[r.claim]).not.toContain('PR');
+  });
+
+  it('the 665a9aeb shape STILL claims the phase after its transcript is read', () => {
+    // `prUrlFrom` over the real 677-byte transcript is the read's whole result.
+    const readUrl = prUrlFrom(EMPTY_PUSH_OUTPUT);
+    expect(readUrl).toBeNull();
+
+    const r = resolveDelivery(deliveryOf(realShape), readUrl);
+    expect(r.claim).toBe('delivered');
+    expect(r.href).toBeNull();
+    expect(DELIVERY_COLOR[r.claim]).not.toBe('var(--accent)');
+    // …and it is not painted as a failure either: an approved phase that
+    // produced no PR is missing evidence, not a run that failed.
+    expect(DELIVERY_COLOR[r.claim]).not.toBe('var(--status-fail)');
+  });
+
+  it('a url from the ONE transcript read earns `pr-open`, the accent and the href', () => {
+    const r = resolveDelivery(deliveryOf(composed('done')), prUrlFrom(REAL_DELIVER_OUTPUT));
+    expect(r.claim).toBe('pr-open');
+    expect(r.href).toBe(REAL_PR_URL);
+    expect(DELIVERY_LABEL[r.claim]).toBe('PR open');
+    expect(DELIVERY_COLOR[r.claim]).toBe('var(--accent)');
+  });
+
+  it('a WIRE-carried url earns it with no read at all (crew#321)', () => {
+    const view = composed('done');
+    const session = { ...view.session, delivery: { kind: 'pull_request', url: 'https://x/pull/9' } };
+    const r = resolveDelivery(deliveryOf({ ...view, session: session as typeof view.session }));
+    expect(r.claim).toBe('pr-open');
+    expect(r.href).toBe('https://x/pull/9');
+  });
+
+  it('a read url can never upgrade a state that was not approved', () => {
+    const states: DeliveryState[] = ['none', 'in-flight', 'nothing-to-deliver', 'failed'];
+    const views = [
+      makeView({ id: 'run-1' }, [] as WorkUnit[]),
+      composed('pending'),
+      composed('rejected', NOTHING_REASON),
+      composed('rejected', NO_URL_REASON),
+    ];
+    for (const [i, v] of views.entries()) {
+      const r = resolveDelivery(deliveryOf(v), REAL_PR_URL);
+      expect(r.claim).toBe(states[i]);
+      expect(r.href).toBeNull();
+    }
   });
 });
 
@@ -200,24 +310,79 @@ describe('DELIVERY_LABEL', () => {
     expect(words).not.toContain('shipped');
     expect(words).not.toContain('merged');
   });
+
+  it('exactly ONE claim may mention a PR, and it is the one that holds a url', () => {
+    const mentions = Object.entries(DELIVERY_LABEL)
+      .filter(([, w]) => /\bPR\b/i.test(w))
+      .map(([k]) => k);
+    expect(mentions).toStrictEqual(['pr-open']);
+  });
 });
 
-describe('deliverySummary — the census over ALL runs', () => {
-  it('counts every state, in the brief\'s own order', () => {
+describe('deliverySummary — the census over ALL DELIVERABLE runs', () => {
+  it('counts every claim, in the brief\'s own order', () => {
     const views = [
       composed('done'), composed('done'), composed('done'),
       composed('rejected', NOTHING_REASON), composed('rejected', NOTHING_REASON),
-      ...Array.from({ length: 11 }, () => makeView({ id: 'r' }, [] as WorkUnit[])),
+      ...Array.from({ length: 11 }, () => makeView({ id: 'r', workflow_id: 'feature' }, [] as WorkUnit[])),
     ];
-    expect(deliverySummary(views)).toBe('3 delivered · 2 delivered nothing · 11 no deliver phase');
+    // "3 delivered" was the lie: three approved phases, zero known PRs.
+    expect(deliverySummary(views)).toBe('3 ran deliver · 2 delivered nothing · 11 no deliver phase');
   });
 
-  it('names failures and in-flight deliveries too, and omits empty buckets', () => {
-    expect(deliverySummary([composed('rejected', NO_URL_REASON), composed('pending')]))
-      .toBe('1 failed to deliver · 1 still to deliver');
+  it('D3: the in-flight bucket matches its own label — no forward-looking wording', () => {
+    const line = deliverySummary([composed('rejected', NO_URL_REASON), composed('pending')]);
+    expect(line).toBe('1 failed to deliver · 1 deliver pending');
+    // The label refuses "still"/"to deliver" because a cancelled run's unit
+    // stays `pending` forever; the census may not smuggle them back in.
+    expect(line).not.toContain('still');
+    expect(DELIVERY_LABEL['in-flight']).toBe('pending');
+  });
+
+  it('D5: chats are not counted — the rail hides Delivery from them, so does the census', () => {
+    const chats = Array.from({ length: 30 }, () =>
+      makeView({ id: 'c', workflow_id: 'chat' }, [] as WorkUnit[]));
+    const freeform = makeView({ id: 'f', workflow_id: '' }, [] as WorkUnit[]);
+    const system = makeView({ id: 's', workflow_id: 'onboarding' }, [] as WorkUnit[]);
+
+    // The exact reported symptom: "3 delivered · 30 no deliver phase".
+    expect(deliverySummary([composed('done'), composed('done'), composed('done'), ...chats]))
+      .toBe('3 ran deliver');
+    expect(deliverySummary([...chats, freeform, system])).toBe('');
   });
 
   it('an empty project says nothing rather than "0 delivered"', () => {
     expect(deliverySummary([])).toBe('');
   });
+
+  it('a wire-carried url is counted as an open PR, separately from the phase', () => {
+    const view = composed('done');
+    const withUrl = {
+      ...view,
+      session: { ...view.session, delivery: { kind: 'pull_request', url: 'https://x/pull/9' } } as typeof view.session,
+    };
+    expect(deliverySummary([withUrl, composed('done')])).toBe('1 PR open · 1 ran deliver');
+  });
+});
+
+describe('canDeliver — the ONE predicate both surfaces gate on (D5)', () => {
+  const cases: { workflow_id: string | null; want: boolean }[] = [
+    { workflow_id: 'feature', want: true },
+    { workflow_id: 'feature-pr', want: true },
+    { workflow_id: 'wf-665a9aeb-285d-407b-b869-813b67e50973', want: true },
+    { workflow_id: 'chat', want: false },
+    { workflow_id: 'onboarding', want: false },
+    { workflow_id: 'survey-repo', want: false },
+    { workflow_id: 'memories', want: false },
+    { workflow_id: '', want: false },
+    { workflow_id: null, want: false },
+  ];
+
+  for (const { workflow_id, want } of cases) {
+    it(`${JSON.stringify(workflow_id)} → ${want ? 'deliverable' : 'not deliverable'}`, () => {
+      const view = makeView({ id: 'run-1' }, [] as WorkUnit[]);
+      const session = { ...view.session, workflow_id } as typeof view.session;
+      expect(canDeliver({ ...view, session })).toBe(want);
+    });
+  }
 });

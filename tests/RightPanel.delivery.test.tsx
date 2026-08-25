@@ -7,6 +7,7 @@ import { useDeliveryStore } from '../src/store/delivery.js';
 import { useProvenanceStore } from '../src/store/provenance.js';
 import { makeUnit, makeView } from './factories.js';
 import {
+  EMPTY_PUSH_OUTPUT,
   NO_URL_REASON,
   NOTHING_REASON,
   REAL_DELIVER_OUTPUT,
@@ -17,9 +18,12 @@ import type { SessionView, UnitStatus } from '../src/api/types.js';
 /**
  * The Delivery rail section (wicked-studio#122, slice DA) under the OPERATOR's
  * amended spec (2026-08-24): "delivery isn't a top level class, it goes in the
- * right chat panel as a tab". So — a ninth accordion governed by the same
- * `openAccordion`, never a pinned band and never a tablist conversion; the
+ * right chat panel as a tab". So — a conditional last accordion governed by the
+ * same `openAccordion`, never a pinned band and never a tablist conversion; the
  * at-a-glance signal lives on the header badge instead (revised EC54).
+ *
+ * The section count is NINE on a run that can deliver and EIGHT on one that
+ * cannot. There is no fixed nine.
  */
 
 let getUnitOutput: ReturnType<typeof vi.fn>;
@@ -53,14 +57,25 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the rail keeps its shape (revised EC54)', () => {
-  it('has exactly 9 sections and still opens on What / Where', () => {
-    render(<RightPanel view={run('r-shape', 'done')} />);
+  const sectionCount = (): number =>
+    screen.getAllByRole('button', { expanded: false })
+      .concat(screen.getAllByRole('button', { expanded: true })).length;
 
-    const headers = screen.getAllByRole('button', { expanded: false })
-      .concat(screen.getAllByRole('button', { expanded: true }));
-    expect(headers).toHaveLength(9);
+  it('the real contract: NINE sections on a build run, EIGHT on a chat thread', () => {
+    // "Exactly nine" was never the contract — Delivery is the CONDITIONAL ninth,
+    // and hiding it on threads that can never deliver is the product decision
+    // (the operator put delivery in the right panel as a tab; a chat thread has
+    // no deliver phase and never will). Both halves are pinned here so neither
+    // can drift into a fixed count.
+    render(<RightPanel view={run('r-shape', 'done')} />);
+    expect(sectionCount()).toBe(9);
     expect(screen.getByRole('button', { name: /What \/ Where/ })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('button', { name: /Delivery/ })).toHaveAttribute('aria-expanded', 'false');
+    cleanup();
+
+    render(<RightPanel view={makeView({ id: 'r-shape-chat', workflow_id: 'chat' }, [])} />);
+    expect(sectionCount()).toBe(8);
+    expect(screen.queryByRole('button', { name: /Delivery/ })).not.toBeInTheDocument();
   });
 
   it('renders no delivery element outside the rail, and no band above it', () => {
@@ -78,9 +93,11 @@ describe('the rail keeps its shape (revised EC54)', () => {
     expect(container.querySelector('[role="tablist"]')).toBeNull();
   });
 
-  it('the badge states the outcome WITHOUT any gesture', () => {
+  it('the badge states the outcome WITHOUT any gesture — and never claims a PR unread', () => {
     const cases: { status: UnitStatus; denial: string | null; state: string; label: string }[] = [
-      { status: 'done', denial: null, state: 'delivered', label: 'PR open' },
+      // `done` with no url in hand is the PHASE, not the artifact (D2). This is
+      // the 665a9aeb row: the first cut said "PR open" here.
+      { status: 'done', denial: null, state: 'delivered', label: 'deliver ran' },
       { status: 'rejected', denial: NOTHING_REASON, state: 'nothing-to-deliver', label: 'nothing delivered' },
       { status: 'rejected', denial: NO_URL_REASON, state: 'failed', label: 'deliver failed' },
       { status: 'pending', denial: null, state: 'in-flight', label: 'pending' },
@@ -90,8 +107,44 @@ describe('the rail keeps its shape (revised EC54)', () => {
       const badge = screen.getByTestId('run-delivery-badge');
       expect(badge).toHaveAttribute('data-state', c.state);
       expect(badge).toHaveTextContent(c.label);
+      expect(badge.textContent).not.toMatch(/\bPR\b/);
       cleanup();
     }
+  });
+
+  it('the badge upgrades to the PR claim ONLY once a url is in hand', async () => {
+    render(<RightPanel view={run('r-badge-up', 'done')} />);
+    const badge = () => screen.getByTestId('run-delivery-badge');
+    expect(badge()).toHaveAttribute('data-state', 'delivered');
+    expect(badge()).toHaveTextContent('deliver ran');
+
+    fireEvent.click(screen.getByRole('button', { name: /Delivery/ }));
+    await screen.findByTestId('run-delivery-link');
+
+    expect(badge()).toHaveAttribute('data-state', 'pr-open');
+    expect(badge()).toHaveTextContent('PR open');
+  });
+
+  it('D1: the badge cannot contradict its own body — the 665a9aeb shape, both halves', async () => {
+    // The REAL wire shape: deliver unit `done`, `denial_reason: null`, and the
+    // real 677-byte transcript, which carries one `/pull/new/` form and zero
+    // numbered PRs. The first cut painted "PR open" in `--accent` on the header
+    // while the body underneath said no PR link was recorded.
+    getUnitOutput.mockResolvedValue({ output: EMPTY_PUSH_OUTPUT });
+    render(<RightPanel view={run('r-665a9aeb', 'done')} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Delivery/ }));
+    const body = await screen.findByTestId('run-delivery-nolink');
+
+    const badge = screen.getByTestId('run-delivery-badge');
+    expect(badge).toHaveAttribute('data-state', 'delivered');
+    expect(badge).toHaveTextContent('deliver ran');
+    // Body and badge agree, and neither claims an artifact.
+    expect(screen.getByTestId('run-delivery')).toHaveAttribute('data-state', 'delivered');
+    expect(body).toHaveTextContent('the deliver phase recorded no PR link — nothing can be pointed at');
+    expect(screen.queryByTestId('run-delivery-link')).not.toBeInTheDocument();
+    // And the badge is not painted as the PR accent nor as a failure.
+    expect(badge.style.color).toBe('var(--ink-muted)');
   });
 
   it('EC57: a run with no deliver phase carries no badge — silence, not "unknown"', () => {
@@ -127,7 +180,8 @@ describe('opening Delivery for a run that DID open a PR (EC55, EC59)', () => {
     expect(link.getAttribute('href')).toMatch(/^https:\/\/\S+\/pull\/\d+$/);
     expect(getUnitOutput).toHaveBeenCalledTimes(1);
     expect(getUnitOutput).toHaveBeenCalledWith('r-pr', 'r-pr:deliver');
-    expect(screen.getByTestId('run-delivery')).toHaveAttribute('data-state', 'delivered');
+    // The url is in hand, so — and only so — the claim becomes the artifact.
+    expect(screen.getByTestId('run-delivery')).toHaveAttribute('data-state', 'pr-open');
   });
 
   it('EC55 negative pin: no href anywhere in the panel contains /pull/new/', async () => {
@@ -235,6 +289,16 @@ describe('a run that delivered NOTHING (EC56)', () => {
     expect((await screen.findByTestId('run-delivery-reason')).textContent)
       .toStrictEqual('crew recorded no reason');
     expect(getUnitOutput).not.toHaveBeenCalled();
+  });
+
+  it('an EMPTY denial_reason takes the same fallback, never a blank paragraph', async () => {
+    // `reason ?? '…'` keeps `''` — the same absent-vs-empty bug already fixed in
+    // `store/delivery.ts`, one field over. Normalized at the derivation now.
+    render(<RightPanel view={run('r-blank-reason', 'rejected', '')} />);
+    fireEvent.click(screen.getByRole('button', { name: /Delivery/ }));
+
+    expect((await screen.findByTestId('run-delivery-reason')).textContent)
+      .toStrictEqual('crew recorded no reason');
   });
 
   it('a run with no deliver phase names the worktree and the remedy, and reads nothing', async () => {
