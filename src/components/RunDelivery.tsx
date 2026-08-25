@@ -78,7 +78,7 @@ export function DeliveryBadge({ view }: Props): React.ReactElement | null {
  * cancelled run's deliver unit stays `pending` forever — a second motion word
  * there would claim progress that stopped.
  *
- * D2: it gates on {@link canDeliver} FIRST, the same predicate the rail's
+ * D2: it gates on {@link canDeliver} — the same predicate the rail's
  * section and the census gate on, so a row can never chip a run whose Delivery
  * section studio itself withholds. The objection to this was cost — that a
  * per-row `is_system` read would break the O(1) request budget — and it is
@@ -91,8 +91,11 @@ export function DeliveryBadge({ view }: Props): React.ReactElement | null {
  */
 export function DeliveryChip({ view }: Props): React.ReactElement | null {
   const isSystemWorkflow = useIsSystemWorkflow();
-  const { claim } = resolveDelivery(deliveryOf(view));
+  // The gate runs before anything is derived (Copilot on #125): the comment said "FIRST" while
+  // `claim` was resolved above it. Harmless as written — the gate still governed the return —
+  // but a doc that misdescribes evaluation order is what a later edit trusts.
   if (!canDeliver(view, isSystemWorkflow)) return null;
+  const { claim } = resolveDelivery(deliveryOf(view));
   if (claim === 'none' || claim === 'in-flight') return null;
   return (
     <span

@@ -361,6 +361,12 @@ export const DELIVERY_COLOR: Record<DeliveryClaim, string> = {
 export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflow): boolean {
   if (deliveryOf(view).state !== 'none') return true;
   const wf = view.session.workflow_id?.trim() ?? '';
+  // The lookup is deliberately called TWICE — once inside `deliverKindOf`, once for the licence.
+  // Collapsing it into a closure over one memoized answer was tried (Copilot on #125 raised the
+  // repeat) and REVERTED: `tests/deliverKind.shared.test.tsx` pins that `canDeliver` hands
+  // `deliverKindOf` the very lookup it received, which is the guard stopping this slice and the
+  // composer from re-forking the rule — the defect that took a whole round to find. Weakening a
+  // structural invariant to save a map lookup on an array of at most 17 defs is the wrong trade.
   return deliverKindOf(wf, isSystemWorkflow) === 'build' && isSystemWorkflow?.(wf) === false;
 }
 
