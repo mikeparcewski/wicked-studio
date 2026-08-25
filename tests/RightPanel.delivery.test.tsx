@@ -391,6 +391,23 @@ describe('the rail heals a stale open section (Copilot on #125)', () => {
     expect(expanded[0]?.textContent).toContain('What / Where');
   });
 
+  it('the healed section collapses on the FIRST click, not the second', async () => {
+    // The toggle compared the RAW `openAccordion` while the rail rendered the healed `openId`,
+    // so after a run switch the visibly-open section needed two clicks to close (Copilot on #125).
+    const { rerender } = render(<RightPanel view={run('r-tog-yes', 'done')} />);
+    fireEvent.click(screen.getByRole('button', { name: /Delivery/ }));
+    await screen.findByTestId('run-delivery');
+
+    rerender(<RightPanel view={makeView({ id: 'r-tog-no', workflow_id: 'chat' }, [])} />);
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Delivery/ })).toBeNull());
+
+    // What / Where is the section now showing. ONE click must close it.
+    fireEvent.click(screen.getByRole('button', { name: /What \/ Where/ }));
+    await waitFor(() => {
+      expect(document.querySelectorAll('[aria-expanded="true"]').length).toBe(0);
+    });
+  });
+
   it('a deliberately collapsed rail STAYS collapsed — null is a real state, not a stale id', async () => {
     render(<RightPanel view={run('r-stale-null', 'done')} />);
     fireEvent.click(screen.getByRole('button', { name: /What \/ Where/ }));

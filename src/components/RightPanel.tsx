@@ -533,7 +533,12 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
       : 'whatwhere';
 
   function toggleAccordion(id: AccordionId): void {
-    setOpenAccordion((prev) => (prev === id ? null : id));
+    // Compare against the EFFECTIVE open section, not the raw state (Copilot on #125). After a
+    // run switch drops the open section, `openAccordion` still names the vanished id while the
+    // rail RENDERS `openId` — so clicking the visibly-open What/Where compared 'delivery' with
+    // 'whatwhere', re-opened what was already open, and did nothing until a second click.
+    // Deliberately not a functional update: the correct input is what the operator can SEE.
+    setOpenAccordion(openId === id ? null : id);
   }
 
   if (collapsed) {
