@@ -362,3 +362,34 @@ describe('EC60: the Files panel stops presenting attention as outcome', () => {
     expect(screen.getByTestId('run-delivery-badge')).toHaveAttribute('data-state', 'nothing-to-deliver');
   });
 });
+
+describe('the rail heals a stale open section (Copilot on #125)', () => {
+  it('falls back to What / Where when the open section disappears with the run', async () => {
+    // `openAccordion` is mount-scoped and RightPanel does not remount between runs. Open
+    // Delivery on a run that CAN deliver, then hand the SAME mounted panel a run that cannot:
+    // the id is now absent from `sections`, and the rail must not render with nothing open.
+    const deliverable = run('r-stale-yes', 'done');
+    const notDeliverable = makeView({ id: 'r-stale-no', workflow_id: 'chat' }, []);
+
+    const { rerender } = render(<RightPanel view={deliverable} />);
+    fireEvent.click(screen.getByRole('button', { name: /Delivery/ }));
+    await screen.findByTestId('run-delivery');
+
+    rerender(<RightPanel view={notDeliverable} />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Delivery/ })).toBeNull();
+    });
+    const expanded = document.querySelectorAll('[aria-expanded="true"]');
+    expect(expanded.length).toBe(1);
+    expect(expanded[0]?.textContent).toContain('What / Where');
+  });
+
+  it('a deliberately collapsed rail STAYS collapsed — null is a real state, not a stale id', async () => {
+    render(<RightPanel view={run('r-stale-null', 'done')} />);
+    fireEvent.click(screen.getByRole('button', { name: /What \/ Where/ }));
+    await waitFor(() => {
+      expect(document.querySelectorAll('[aria-expanded="true"]').length).toBe(0);
+    });
+  });
+});

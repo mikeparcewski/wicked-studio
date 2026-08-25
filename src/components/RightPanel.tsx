@@ -517,6 +517,21 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
     [view, isSystemWorkflow],
   );
 
+  /**
+   * The EFFECTIVE open section (Copilot on #125). `openAccordion` is mount-scoped state and the
+   * panel does not remount between runs, so opening `delivery` on a deliverable run and then
+   * selecting a run that cannot deliver leaves the id pointing at a section `sections` no longer
+   * contains — and the rail renders with nothing open, silently losing What/Where's default.
+   *
+   * Healed by derivation rather than an effect: an effect would paint the broken frame first and
+   * then correct it. `null` is passed through untouched because it is a REAL state — the operator
+   * collapsed everything — and must not be confused with a stale id.
+   */
+  const openId: AccordionId | null =
+    openAccordion === null || sections.some((s) => s.id === openAccordion)
+      ? openAccordion
+      : 'whatwhere';
+
   function toggleAccordion(id: AccordionId): void {
     setOpenAccordion((prev) => (prev === id ? null : id));
   }
@@ -619,10 +634,10 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
               type="button"
               onClick={() => toggleAccordion(id)}
               className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
-              style={{ color: openAccordion === id ? 'var(--ink-high)' : 'var(--ink-muted)' }}
+              style={{ color: openId === id ? 'var(--ink-high)' : 'var(--ink-muted)' }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-raised)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              aria-expanded={openAccordion === id}
+              aria-expanded={openId === id}
             >
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium font-mono">{label}</span>
@@ -641,19 +656,19 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
                 {id === 'delivery' && <DeliveryBadge view={view} />}
               </div>
               <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>
-                {openAccordion === id ? '▲' : '▼'}
+                {openId === id ? '▲' : '▼'}
               </span>
             </button>
             {/* Delivery derives from the `view` prop alone (zero events, zero
                 model), so it never waits on the snapshot the other bodies need
                 — a run that opened a PR says so on the first paint of the
                 section, not after the re-hydrate lands. */}
-            {openAccordion === id && id === 'delivery' && (
+            {openId === id && id === 'delivery' && (
               <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
                 <RunDelivery view={view} />
               </div>
             )}
-            {openAccordion === id && id !== 'delivery' && model && (
+            {openId === id && id !== 'delivery' && model && (
               <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
                 {id === 'decisions' && <DecisionsLedger model={model} />}
                 {id === 'governance' && <GovernanceAudit model={model} />}
@@ -672,7 +687,7 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
                 {id === 'files' && <FilesPanel model={model} />}
               </div>
             )}
-            {openAccordion === id && id !== 'delivery' && !model && (
+            {openId === id && id !== 'delivery' && !model && (
               <div className="px-4 py-3">
                 <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>Loading…</p>
               </div>
