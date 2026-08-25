@@ -12,13 +12,33 @@ export const MODE_LABELS: Record<RunMode, string> = {
  * `is_system` flag, and covers the window before the defs have loaded.
  *
  * It is a FALLBACK and nothing more — never the answer when a def is in hand.
- * The live daemon serves ELEVEN system workflows and this list names five, so
- * on its own it classifies `collab` and every `interactive-*` (the document and
- * video seams) as build work. That was studio#122 D-1: the rail offered
- * "launch with deliver: pr" on an interactive thread, a remedy the composer —
- * which reads `is_system` — refuses. Use {@link deliverKindOf}, not this set.
+ *
+ * It used to name FIVE of the daemon's eleven system workflows, leaving `collab`
+ * and every `interactive-*` (the document and video seams) classified as build
+ * work whenever the catalog was unavailable. That gap was studio#122 D-1: the
+ * rail offered "launch with deliver: pr" on an interactive thread, a remedy the
+ * composer — which reads `is_system` — refuses.
+ *
+ * studio#126 made closing it a correctness requirement rather than a nicety.
+ * Once the Delivery section renders on a DTO fact (a known `workdir`) instead of
+ * waiting for the catalog, "show a `feature` run's worktree while the defs load"
+ * and "never show an `interactive-draft` run a Delivery section, warm or cold"
+ * are the same cold-cache instant — and with the blind spot open, studio has
+ * nothing to tell the two apart by. So the list now names all eleven, verified
+ * against the live daemon's catalog (17 defs, 11 `is_system: true`, these
+ * exactly).
+ *
+ * Adding an id here can only ever WITHHOLD delivery, never invent it
+ * ({@link deliverKindOf} is one-directional), and every id is one of crew's own
+ * reserved workflow names — so the failure mode of a stale entry is a surface
+ * saying less, which is the direction this module always errs in.
  */
-export const SYSTEM_WORKFLOW_IDS = new Set(['chat', 'onboarding', 'survey-repo', 'domain-graph-slice', 'memories']);
+export const SYSTEM_WORKFLOW_IDS = new Set([
+  'chat', 'onboarding', 'survey-repo', 'domain-graph-slice', 'memories',
+  // The former blind spot — crew's document and video seams (crew's interactive/*-events.ts).
+  'collab', 'interactive-chat', 'interactive-demo', 'interactive-demo-reauthor',
+  'interactive-draft', 'interactive-edit',
+]);
 
 /**
  * What KIND of run a launch body describes, read off its effective workflow —

@@ -74,10 +74,22 @@ function delivering(id: string, status: UnitStatus, denial: string | null = null
  * A wicked-interactive DOCUMENT thread, as the wire carries them: a materialised
  * def, `:outline`/`:draft` units, no deliver phase anywhere.
  */
+/**
+ * A real interactive document thread: a materialised `wf-<runId>` id no catalog
+ * serves, and **no worktree**.
+ *
+ * `workdir: null` is not incidental — it is measured. All three
+ * `DOC_THREAD_RUN_IDS` report `workdir: null` on the live daemon, because a
+ * document thread writes into the interactive doc workspace, not a run
+ * worktree. The fixture said `/w/tree` until studio#126, which was the one field
+ * that had never mattered: with the Delivery section gated on a DTO fact, an
+ * imaginary worktree here would have modelled these runs as gaining a section
+ * that the real ones cannot.
+ */
 function docThread(id: string): SessionView {
   return makeView(
     {
-      id, workflow_id: materialised(id), status: 'completed', workdir: '/w/tree',
+      id, workflow_id: materialised(id), status: 'completed', workdir: null,
       problem: `Produce the first draft of the wicked-interactive document "${id}"`,
       project_id: 'proj-1',
     },
@@ -226,8 +238,10 @@ describe('the rail (RightPanel)', () => {
 
   it('a CATALOG feature run gets its section back once the defs land, remedy included', async () => {
     render(<RightPanel view={catalogPlain('r-feature-late')} />);
-    // Cold: nothing is proven, so nothing is claimed — including the section.
-    expect(screen.queryByRole('button', { name: /Delivery/ })).not.toBeInTheDocument();
+    // Cold: nothing is CLAIMED, but the section itself is already here on the run's
+    // own `workdir` (studio#126). What the defs add is the sentence and the remedy.
+    expect(screen.getByRole('button', { name: /Delivery/ })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('This run has no deliver phase.');
 
     const header = await screen.findByRole('button', { name: /Delivery/ });
     fireEvent.click(header);

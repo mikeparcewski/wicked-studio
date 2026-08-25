@@ -371,6 +371,50 @@ export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflo
 }
 
 /**
+ * Whether the RAIL shows a Delivery section — which is a strictly wider question
+ * than {@link canDeliver}, and the two must not be collapsed (studio#126).
+ *
+ * `canDeliver` licenses a CLAIM: "this run has no deliver phase", the census
+ * bucket, the row chip. It requires `is_system === false` — a def in hand —
+ * because 86 of 129 live runs carry a materialised `wf-<runId>` the catalog
+ * never serves, and asserting a classification about them is D5.
+ *
+ * But the `'none'` body also carries the WORKTREE PATH, and that is not a claim.
+ * `session.workdir` comes straight off the run's own DTO; it is true whatever
+ * composed the run, needs no lookup to know, and is the one thing an operator
+ * opening Delivery on an undelivered run actually wants — where is the work. The
+ * `canDeliver` gate withheld it along with the sentence, so for **24 live runs**
+ * the section vanished on a cold cache and popped in a tick later, and vanished
+ * ENTIRELY when `GET /workflows` failed — a daemon hiccup silently removing a
+ * surface that does not depend on the daemon's workflow list at all.
+ *
+ * So the rail renders on the FACT and {@link RunDelivery} gates the SENTENCE:
+ *  - a deliver phase in the units ⇒ section, unconditionally (`canDeliver`);
+ *  - otherwise a known `workdir` on an ordinary workflow ⇒ section, worktree
+ *    line only, no classification claim and no remedy.
+ *
+ * What this does NOT widen: `deliverKindOf(...) !== 'build'` still returns false,
+ * so an `is_system` run renders nothing warm OR cold (the denylist answers
+ * without the catalog), and a `'freeform'` run — no workflow at all, which
+ * `deliver` cannot accompany — stays out. The predicate reaches exactly the runs
+ * whose section was flickering, and no others.
+ *
+ * The census and the chips deliberately keep using `canDeliver`: widening THEM
+ * would put these 24 unclassifiable runs back into a "24 no deliver phase"
+ * census line, which is the precise unevidenced claim #125 removed.
+ */
+export function hasDeliverySection(
+  view: SessionView,
+  isSystemWorkflow?: IsSystemWorkflow,
+): boolean {
+  if (canDeliver(view, isSystemWorkflow)) return true;
+  const wf = view.session.workflow_id?.trim() ?? '';
+  if (deliverKindOf(wf, isSystemWorkflow) !== 'build') return false;
+  const workdir = view.session.workdir;
+  return typeof workdir === 'string' && workdir.trim() !== '';
+}
+
+/**
  * The project-page census over ALL deliverable runs (never the MAX_ROWS window —
  * run 665a9aeb, the one that read as the most productive in the project while
  * delivering nothing, is not in the visible six).

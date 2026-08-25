@@ -177,23 +177,35 @@ export const HEADLINE: Record<DeliveryClaim, string> = {
  * paint. Thirty interactive document threads therefore rendered a Delivery
  * section whose entire body read "This run has no deliver phase."
  *
- * So `canDeliver` now withholds the SECTION on the `'none'` arm under the same
- * `is_system === false` licence this line has always used, and the two halves
- * are one rule:
+ * So the CLAIM is gated on `is_system === false` — a def in hand. `undefined` is
+ * not a licence. Erring toward saying less: withholding costs the operator a
+ * sentence they can get from the composer; printing it wrongly tells them a run
+ * failed to do something it was never asked to do.
+ *
+ * ── AND THE FACT IS NOT (studio#126) ─────────────────────────────────────────
+ * The first cut of that gate took the WORKTREE PATH down with the sentence,
+ * because `canDeliver` withheld the whole section. But `session.workdir` is a
+ * DTO fact, not a classification: it is true whatever composed the run and needs
+ * no `GET /workflows` answer to know. For 24 live runs the effect was a section
+ * that popped in a tick after every navigation, and vanished outright whenever
+ * the workflow fetch failed — a daemon hiccup removing a surface that does not
+ * depend on the daemon's workflow list.
+ *
+ * The two halves are now one rule split at the right seam:
  *
  *  - a run WITH a deliver phase keeps its section unconditionally — 5c5e08b7's
  *    own workflow id is materialised, and gating that arm would hide a real PR;
- *  - a run WITHOUT one gets a section only once a def in hand says the workflow
- *    is ordinary. `undefined` is not a licence.
+ *  - a run WITHOUT one keeps its section, and its worktree line, whenever
+ *    `workdir` is known (`hasDeliverySection`);
+ *  - the "no deliver phase" SENTENCE and the `deliver: pr` remedy appear only
+ *    once a def in hand says the workflow is ordinary.
  *
- * Erring toward saying less: withholding costs the operator a sentence they can
- * get from the composer; printing it wrongly tells them a run failed to do
- * something it was never asked to do. The section and the line appear together
- * the moment the defs land — and for a system workflow neither ever does.
+ * An `is_system` run still renders nothing at all, warm or cold: `deliverKindOf`
+ * answers 'system' off the denylist without the catalog.
  *
- * The licence is re-checked HERE as well as in the caller because this component
- * is exported and rendered directly by tests and by any future surface: one
- * rule, held on both sides of the seam, never a second rule.
+ * The sentence licence is re-checked HERE as well as in the caller because this
+ * component is exported and rendered directly by tests and by any future
+ * surface: one rule, held on both sides of the seam, never a second rule.
  */
 export function RunDelivery({ view }: Props): React.ReactElement {
   const runId = view.session.id;
