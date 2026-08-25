@@ -151,6 +151,13 @@ export function isPrUrl(candidate: string): boolean {
   // rendered as "PR open" with a link to a create-PR form. That form is the exact trap the
   // operator hit first in the raw transcript, so it is refused by name rather than by shape.
   if (parsed.pathname.includes('/pull/new/')) return false;
+  // No query, no fragment (Copilot on #125). EC55 pins the rendered href as
+  // `^https://\S+/pull/\d+$`, and a url ending `…/pull/121?diff=split` satisfies the pathname
+  // test while violating that contract — the validator would admit a link the slice's own
+  // acceptance criterion rejects. Nothing upstream produces one either: crew greps
+  // `https://[^[:space:]]+/pull/[0-9]+`, which stops at the digits. Refusing is honest;
+  // silently stripping would alter what crew actually reported.
+  if (parsed.search !== '' || parsed.hash !== '') return false;
   return parsed.protocol === 'https:' && /\/pull\/\d+$/.test(parsed.pathname);
 }
 

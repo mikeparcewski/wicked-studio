@@ -519,6 +519,8 @@ describe('isPrUrl — one gate for BOTH url sources (Copilot on #125)', () => {
     'https://github.com/o/r/pull/new/wicked/branch',       // the create-PR form
     'https://github.com/o/r/pull/new/pull/5',              // crafted: ends /pull/5 but IS a form
     'https://github.com/o/r/compare/pull/new/x/pull/9',    // …and buried mid-path
+    'https://github.com/o/r/pull/121?diff=split',          // query breaks the pinned href shape
+    'https://github.com/o/r/pull/121#discussion_r1',       // …so does a fragment
     'https://github.com/o/r/pull/',
     'https://github.com/o/r/pull/abc',
     'not a url at all',
@@ -579,5 +581,22 @@ describe('resolveDelivery validates its own input (Copilot on #125)', () => {
     const d = { state: 'delivered' as const, unitId: 'u', reason: null, url: null };
     expect(resolveDelivery(d, 'javascript:alert(1)').claim).toBe('delivered');
     expect(resolveDelivery(d, 'https://github.com/o/r/pull/9').claim).toBe('pr-open');
+  });
+});
+
+describe('isPrUrl agrees with the href shape EC55 pins', () => {
+  it('every url it accepts satisfies the acceptance criterion', () => {
+    // The validator and the AC must not disagree: anything isPrUrl admits gets rendered as the
+    // external link, and EC55 asserts that href matches this exact shape.
+    const EC55 = /^https:\/\/\S+\/pull\/\d+$/;
+    const accepted = [
+      'https://github.com/mikeparcewski/wicked-studio/pull/121',
+      'https://x/pull/9',
+      'https://ghe.internal.example/o/r/pull/7',
+    ];
+    for (const u of accepted) {
+      expect(isPrUrl(u)).toBe(true);
+      expect(EC55.test(u)).toBe(true);
+    }
   });
 });
