@@ -407,14 +407,14 @@ export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflo
  * Arm 3 is the flicker fix. "A run with no workdir renders nothing" is true only
  * of a run that ALSO fails arms 1 and 2 — the document-thread case.
  *
- * That second arm is deliberately weaker than `canDeliver`'s licence, and the
- * difference is the point: it does NOT require `is_system === false`, so it also
- * covers the runs the catalog can never classify — a materialised `wf-<runId>`
- * id gets its worktree line and never gets the sentence. Requiring the licence
- * here would put those runs straight back into the flicker this fixes.
+ * Arm 3 is deliberately weaker than arm 2's licence, and the difference is the
+ * point: it does NOT require `is_system === false`, so it also covers the runs
+ * the catalog can never classify — a materialised `wf-<runId>` id gets its
+ * worktree line and never gets the sentence. Requiring the licence there would
+ * put those runs straight back into the flicker this fixes.
  *
- * What it does NOT widen: `deliverKindOf(...) !== 'build'` still returns false,
- * so a run on a KNOWN system workflow gets no section from this arm warm or cold
+ * What arm 3 does NOT widen: `deliverKindOf(...) !== 'build'` returns false, so
+ * a run on a KNOWN system workflow gets no section from it warm or cold
  * (the denylist answers without the catalog — such a run reaches the rail only
  * via `canDeliver`, by actually having a deliver phase), and a `'freeform'` run
  * — no workflow at all, which `deliver` cannot accompany — stays out. The
