@@ -219,9 +219,22 @@ export function RunDelivery({ view }: Props): React.ReactElement {
 
   return (
     <div data-testid="run-delivery" data-state={claim} className="flex flex-col gap-1.5 text-[11px]">
-      <p style={{ color: claim === 'pr-open' ? 'var(--ink-muted)' : DELIVERY_COLOR[claim] }}>
-        {HEADLINE[claim]}
-      </p>
+      {/*
+        * The `'none'` headline is a CLASSIFICATION claim ("this run has no deliver phase"), so it
+        * needs the same `is_system === false` licence the remedy does. The rail already withholds
+        * the whole section unlicensed, which is why this is unreachable today — but the invariant
+        * lived only in the caller (Copilot on #125), and this component is exported. Enforcing it
+        * here too means a future call site cannot reintroduce the claim by accident.
+        *
+        * Only the SENTENCE is gated, not the section: the worktree line below is a DTO fact
+        * (`session.workdir`) that holds whatever produced the run, and withholding facts along
+        * with claims is the separate bug tracked in #126.
+        */}
+      {(claim !== 'none' || remedyLicensed) && (
+        <p style={{ color: claim === 'pr-open' ? 'var(--ink-muted)' : DELIVERY_COLOR[claim] }}>
+          {HEADLINE[claim]}
+        </p>
+      )}
 
       {claim === 'pr-open' && href !== null && (
         <a

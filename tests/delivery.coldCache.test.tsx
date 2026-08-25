@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as client from '../src/api/client.js';
 import { RightPanel } from '../src/components/RightPanel.js';
+import { RunDelivery } from '../src/components/RunDelivery.js';
 import { useDeliveryStore } from '../src/store/delivery.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useProvenanceStore } from '../src/store/provenance.js';
@@ -161,5 +162,31 @@ describe('once the defs land', () => {
     expect(body.textContent?.trim()).toStrictEqual(
       'This run has no deliver phase.launch with deliver: pr to have the run open a PR from its worktree',
     );
+  });
+});
+
+describe('RunDelivery enforces the licence itself, not just via the rail (Copilot on #125)', () => {
+  it('rendered DIRECTLY for an unclassifiable run, it withholds the "no deliver phase" claim', async () => {
+    // The rail would filter this section out entirely; the component is exported, so it must not
+    // depend on that. A materialised `wf-<runId>` id is never in the catalog, so the licence is
+    // permanently `undefined` — not `false`.
+    clearCachedWorkflows();
+    vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: LIVE_WORKFLOWS });
+    const view = makeView(
+      { id: 'r-direct', workflow_id: 'wf-r-direct', workdir: '/w/tree' },
+      [],
+    );
+    render(<RunDelivery view={view} />);
+    await waitFor(() => expect(client.api.listWorkflows).toHaveBeenCalled());
+    expect(screen.queryByText(/no deliver phase/i)).toBeNull();
+    expect(screen.queryByText(/deliver: pr/i)).toBeNull();
+  });
+
+  it('but a positively-classified feature run rendered directly DOES state it', async () => {
+    clearCachedWorkflows();
+    vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: LIVE_WORKFLOWS });
+    const view = makeView({ id: 'r-direct-ok', workflow_id: 'feature', workdir: '/w/tree' }, []);
+    render(<RunDelivery view={view} />);
+    await waitFor(() => expect(screen.queryByText(/no deliver phase/i)).not.toBeNull());
   });
 });
