@@ -364,6 +364,18 @@ describe('HEADLINE — the rail body says what the badge says', () => {
     expect(offenders).toStrictEqual([]);
   });
 
+  it('NO headline asserts a phase is EXECUTING — `pending` means unresolved, not running', () => {
+    // The second own-goal (Copilot on #125): the fix for "no PR exists yet" replaced it with
+    // "is still running", which this module elsewhere states is false — a cancelled run's
+    // deliver unit stays `pending` forever, and 10 of the live corpus's 12 `distributed` units
+    // sit in terminal sessions. We know a unit has not RESOLVED; we do not know it is RUNNING.
+    const MOTION = /\b(still running|in progress|currently running|executing|underway|in flight)\b/i;
+    const offenders = Object.entries(HEADLINE)
+      .filter(([, sentence]) => MOTION.test(sentence))
+      .map(([k]) => k);
+    expect(offenders).toStrictEqual([]);
+  });
+
   it('the phase-only headline names the PHASE and denies the artifact', () => {
     const line = HEADLINE['delivered'];
     expect(line).toContain('deliver phase');

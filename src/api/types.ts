@@ -12,9 +12,10 @@
  * (DES-STUDIO-001 §5.1); no `any` at the boundary.
  */
 
+import type { AgentSession } from 'wicked-crew-api-types';
+
 export type * from 'wicked-crew-api-types';
 
-import type { AgentSession } from 'wicked-crew-api-types';
 
 /**
  * `AgentSession.delivery` — the server-carried PR reference (CREW-UX-8,
