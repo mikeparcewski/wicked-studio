@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RightPanel } from '../src/components/RightPanel.js';
 import * as client from '../src/api/client.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useDeliveryStore } from '../src/store/delivery.js';
 import { useProvenanceStore } from '../src/store/provenance.js';
+import { clearCachedWorkflows } from '../src/store/workflowCache.js';
 import { makeUnit, makeView } from './factories.js';
+import { LIVE_WORKFLOWS } from './fixtures/workflows.js';
 import {
   EMPTY_PUSH_OUTPUT,
   NO_URL_REASON,
@@ -45,6 +47,11 @@ beforeEach(() => {
   useRunEventStore.setState({ byRun: {} });
   useDeliveryStore.setState({ byRun: {} });
   useProvenanceStore.setState({ byRun: {}, launchedHere: {} });
+  // The app's ONE workflow-defs read (studio#122 D-1). The rail's visibility
+  // gate and its remedy line both consult `is_system` now, so the panel is
+  // rendered here against the REAL daemon table, cold cache each time.
+  clearCachedWorkflows();
+  vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: LIVE_WORKFLOWS });
   vi.spyOn(client.api, 'getAudit').mockResolvedValue({ entries: [] });
   vi.spyOn(client.api, 'getRun').mockImplementation((id: string) =>
     Promise.resolve({ run: run(id, 'done') }),
@@ -322,7 +329,10 @@ describe('a run that delivered NOTHING (EC56)', () => {
 
     const body = await screen.findByTestId('run-delivery');
     expect(body).toHaveAttribute('data-state', 'none');
-    expect(body).toHaveTextContent('deliver: pr');
+    // The remedy waits for the DEFS (D-1's cold-cache invariant): `feature` is
+    // deliverable, but studio says so only once the daemon's own flag confirms
+    // it. `tests/delivery.coldCache.test.tsx` owns the withheld half.
+    await waitFor(() => expect(body).toHaveTextContent('deliver: pr'));
     expect(getUnitOutput).not.toHaveBeenCalled();
   });
 });

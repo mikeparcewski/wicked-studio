@@ -5,6 +5,7 @@ import type { SessionView } from '../api/types.js';
 import { useRunModel } from '../hooks/useRunModel.js';
 import type { RunModel } from '../hooks/useRunModel.js';
 import { useProvenanceStore } from '../store/provenance.js';
+import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
 import { LiveNarration } from './ChatPanel.js';
 import { canDeliver } from './delivery.js';
@@ -496,13 +497,17 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
 
   // studio#122 EC57: a run that cannot deliver gets no Delivery section at all —
   // silence, not a section that says "none" on every chat. `canDeliver` is the
-  // SAME predicate the project census filters by (D5), so the rail and the
-  // census can never disagree about what a deliverable run is. Nothing in the
-  // delivery DERIVATION reads `session.workflow_id` (EC61) — this is a
-  // visibility gate, not a wire read.
+  // SAME predicate the project census filters by (D5) AND the same one the
+  // COMPOSER classifies with (D-1), so the rail, the census and the launch form
+  // can never disagree about what a deliverable run is. The lookup is the
+  // authoritative `is_system` flag off the app's one `GET /workflows` — the
+  // five-id denylist alone left `collab` and every `interactive-*` looking like
+  // build work here. Nothing in the delivery DERIVATION reads
+  // `session.workflow_id` (EC61) — this is a visibility gate, not a wire read.
+  const isSystemWorkflow = useIsSystemWorkflow();
   const sections = useMemo(
-    () => (canDeliver(view) ? ACCORDIONS : ACCORDIONS.filter((a) => a.id !== 'delivery')),
-    [view],
+    () => (canDeliver(view, isSystemWorkflow) ? ACCORDIONS : ACCORDIONS.filter((a) => a.id !== 'delivery')),
+    [view, isSystemWorkflow],
   );
 
   function toggleAccordion(id: AccordionId): void {

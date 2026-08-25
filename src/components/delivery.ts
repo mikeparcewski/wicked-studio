@@ -1,5 +1,5 @@
 import type { SessionView, SessionWithDelivery, WorkUnit } from '../api/types.js';
-import { runKindOf } from './runMode.js';
+import { deliverKindOf, type IsSystemWorkflow } from './runMode.js';
 
 /**
  * Delivery — the one derivation every surface reads (wicked-studio#122, slice DA).
@@ -241,19 +241,28 @@ export const DELIVERY_COLOR: Record<DeliveryClaim, string> = {
  * project read "3 delivered · 30 no deliver phase" — a number about chats,
  * dressed as a delivery finding).
  *
- * It reuses studio#124's `runKindOf` rather than re-deriving a chat test: that
- * helper is already the composer's own answer to "may this run carry
- * `deliver: 'pr'`", and only `'build'` may. `'system'` (chat, onboarding,
- * survey-repo, …) is machine-owned work the launch form hides; `'freeform'`
- * carries no workflow at all and `deliver` without `workflow` is a 400
- * (api-types index.d.ts:955-956). Neither can ever produce a PR, so neither
+ * It calls studio#124's `deliverKindOf` — literally the same function the
+ * COMPOSER classifies with, not a second copy of the rule (D-1: the composer
+ * read `is_system` and this predicate read a five-id denylist, so `collab` and
+ * every `interactive-*` were 'system' there and 'build' here). Only `'build'`
+ * may deliver. `'system'` is machine-owned work the launch form hides;
+ * `'freeform'` carries no workflow at all and `deliver` without `workflow` is a
+ * 400 (api-types index.d.ts:955-956). Neither can ever produce a PR, so neither
  * gets a Delivery surface or a line in the census.
+ *
+ * @param isSystemWorkflow the AUTHORITATIVE `is_system` lookup, three-valued —
+ *   see {@link IsSystemWorkflow}. This module stays PURE and table-testable: it
+ *   imports no store and fires no fetch, so the caller (which has React) passes
+ *   `store/workflowCache.useIsSystemWorkflow()`. Omitted, the derivation falls
+ *   back to the denylist, which can only ever over-report deliverability — so a
+ *   caller that renders a REMEDY must additionally require a positively-known
+ *   def before saying it out loud (see `RunDelivery`).
  *
  * This is a VISIBILITY gate, not a wire read: {@link deliveryOf} stays
  * indifferent to `session.workflow_id` (EC61).
  */
-export function canDeliver(view: SessionView): boolean {
-  return runKindOf(view.session.workflow_id) === 'build';
+export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflow): boolean {
+  return deliverKindOf(view.session.workflow_id, isSystemWorkflow) === 'build';
 }
 
 /**
@@ -262,17 +271,23 @@ export function canDeliver(view: SessionView): boolean {
  * delivering nothing, is not in the visible six).
  *
  * Chats and the other non-deliverable kinds are filtered out entirely, per
- * {@link canDeliver}. Wording tracks {@link DELIVERY_LABEL} exactly: the
+ * {@link canDeliver} — pass the SAME `isSystemWorkflow` lookup the rail uses, or
+ * the six ids the denylist misses (`collab`, the five `interactive-*`) come back
+ * as "no deliver phase" and the D5 complaint is recreated for the document and
+ * video threads. Wording tracks {@link DELIVERY_LABEL} exactly: the
  * `in-flight` bucket says "deliver pending", never "still to deliver" — the
  * label refuses forward-looking words because a cancelled run's unit stays
  * `pending` forever, and the census may not smuggle them back in (D3).
  */
-export function deliverySummary(views: readonly SessionView[]): string {
+export function deliverySummary(
+  views: readonly SessionView[],
+  isSystemWorkflow?: IsSystemWorkflow,
+): string {
   const counts: Record<DeliveryClaim, number> = {
     'none': 0, 'in-flight': 0, 'delivered': 0, 'pr-open': 0, 'nothing-to-deliver': 0, 'failed': 0,
   };
   for (const v of views) {
-    if (!canDeliver(v)) continue;
+    if (!canDeliver(v, isSystemWorkflow)) continue;
     // No `readUrl`: the census is a list surface and fires zero requests, so the
     // only url it can ever see is the wire-carried one (crew#321).
     counts[resolveDelivery(deliveryOf(v)).claim] += 1;

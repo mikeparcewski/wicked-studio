@@ -18,6 +18,7 @@ import { GateRejectNote } from './GateRejectNote.js';
 import { MODE_LABEL } from './ProjectShell.js';
 import { ago, ATTENTION_DOT } from './ProjectCard.js';
 import { deliverySummary } from './delivery.js';
+import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { DeliveryChip } from './RunDelivery.js';
 import { RunSparkline } from './RunSparkline.js';
 import { STATUS_STYLE } from './RunCard.js';
@@ -212,7 +213,18 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   // studio#122: the delivery census, over every run in the project (not the
   // MAX_ROWS window) and over deliverable runs only (not the chats). `''` when
   // there is nothing to census — see the render guard below.
-  const deliveryCensus = useMemo(() => deliverySummary(myRuns.map(({ view }) => view)), [myRuns]);
+  //
+  // The `is_system` lookup is the app's ONE `GET /workflows`, shared and cached
+  // (D-1): the denylist alone knows five of the daemon's eleven system
+  // workflows, so an interactive doc or video thread was counted under "no
+  // deliver phase" — a number about chats dressed as a delivery finding, which
+  // is the exact D5 complaint. O(1) per app, never O(runs): the rows below read
+  // no defs at all.
+  const isSystemWorkflow = useIsSystemWorkflow();
+  const deliveryCensus = useMemo(
+    () => deliverySummary(myRuns.map(({ view }) => view), isSystemWorkflow),
+    [myRuns, isSystemWorkflow],
+  );
 
   const openRuns = myRuns.filter(({ view }) => !['completed', 'cancelled', 'failed'].includes(view.session.status));
   const waiting = myRuns.filter(({ view }) => view.session.status === 'awaiting_human');

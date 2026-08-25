@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { SessionView } from '../api/types.js';
 import { useDeliveryStore } from '../store/delivery.js';
+import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import {
   DELIVERY_COLOR,
   DELIVERY_LABEL,
@@ -131,7 +132,31 @@ export const HEADLINE: Record<DeliveryClaim, string> = {
  *    rejected unit has no stored transcript by design, and re-wording a gate's
  *    own message is how a surface starts lying.
  *  - `none` — deliverable runs only (the caller gates the rest out): names the
- *    worktree the work is sitting in, and the launch option that would deliver it.
+ *    worktree the work is sitting in, and — only when the workflow is
+ *    POSITIVELY known deliverable — the launch option that would deliver it.
+ *
+ * ── THE COLD-CACHE INVARIANT (D-1) ───────────────────────────────────────────
+ * **The "launch with deliver: pr" remedy never renders for a run studio cannot
+ * prove is deliverable — the loading window included.**
+ *
+ * `canDeliver` gates this component in, and before the workflow defs land it can
+ * only consult the five-id denylist, which does not know `collab` or any of the
+ * five `interactive-*` — the document and video seams. So for one paint the rail
+ * would offer a remedy studio's OWN composer refuses (its `deliverKindOf` reads
+ * `is_system` and demotes exactly those to 'system'). The suppression is on the
+ * REMEDY LINE, not the section, and that is the deliberate half:
+ *
+ *  - Every OTHER claim in this body — delivered / pr-open / nothing-to-deliver /
+ *    failed — is derived from the run's own units and is true no matter what
+ *    kind of workflow produced them. Hiding the section would withhold facts to
+ *    avoid a suggestion.
+ *  - The remedy is the ONLY thing here that can be false, because it is the only
+ *    thing that speaks about a FUTURE launch. Withholding it costs the operator
+ *    a sentence they can get from the composer; printing it wrongly tells them
+ *    to do something the composer will not do.
+ *
+ * Erring toward saying less. The line appears the moment the defs land — and for
+ * a system workflow the whole section correctly disappears instead.
  */
 export function RunDelivery({ view }: Props): React.ReactElement {
   const runId = view.session.id;
@@ -154,6 +179,13 @@ export function RunDelivery({ view }: Props): React.ReactElement {
   }, [runId, unitKey]);
 
   const workdir = view.session.workdir;
+
+  // The remedy's licence: `is_system === false` — a def IN HAND that carries no
+  // flag (the daemon omits `is_system` on ordinary workflows). `undefined` — the
+  // defs have not loaded, the fetch degraded, or this id is not in the list — is
+  // NOT a licence. See the cold-cache invariant above.
+  const isSystemWorkflow = useIsSystemWorkflow();
+  const remedyLicensed = isSystemWorkflow(view.session.workflow_id?.trim() ?? '') === false;
 
   return (
     <div data-testid="run-delivery" data-state={claim} className="flex flex-col gap-1.5 text-[11px]">
@@ -209,12 +241,14 @@ export function RunDelivery({ view }: Props): React.ReactElement {
         </>
       )}
 
-      {claim === 'none' && (
+      {claim === 'none' && ((workdir !== undefined && workdir !== null) || remedyLicensed) && (
         <p className="font-mono" style={{ color: 'var(--ink-dim)' }}
           {...(workdir !== undefined && workdir !== null ? { title: workdir } : {})}
         >
           {workdir !== undefined && workdir !== null
-            ? `the work is in ${compactPath(workdir)} — launch with deliver: pr to open a PR from it`
+            ? remedyLicensed
+              ? `the work is in ${compactPath(workdir)} — launch with deliver: pr to open a PR from it`
+              : `the work is in ${compactPath(workdir)}`
             : 'launch with deliver: pr to have the run open a PR from its worktree'}
         </p>
       )}
