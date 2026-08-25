@@ -600,3 +600,36 @@ describe('isPrUrl agrees with the href shape EC55 pins', () => {
     }
   });
 });
+
+describe('the deliver-unit fallback errs toward silence (Copilot on #125)', () => {
+  const unitWith = (cmd: string[]) =>
+    makeView({ id: 'r-fb', workflow_id: 'feature' }, [
+      makeUnit({ id: 'r-fb:build', status: 'done', tool_cmd: cmd }),
+    ]);
+
+  it('a quoted MENTION is never mistaken for the deliver phase', () => {
+    // The separator form matched `grep -rn "(gh pr create)" .` because `(` counted as an
+    // invocation separator regardless of the quote before it — a false positive that would
+    // assert a Delivery section on a unit that never delivered.
+    for (const cmd of [
+      ['grep', '-rn', '"(gh pr create)"', '.'],
+      ['bash', '-lc', 'echo (gh pr create)'],
+      ['bash', '-lc', 'echo "run gh pr create yourself"'],
+      ['sed', '-i', 's/gh pr create/…/', 'x.sh'],
+    ]) {
+      expect(deliverUnit(unitWith(cmd))).toBeNull();
+    }
+  });
+
+  it('a real invocation at a line start is still found', () => {
+    const u = deliverUnit(unitWith(['bash', '-lc', 'git push -u origin "$B"\ngh pr create --fill']));
+    expect(u).not.toBeNull();
+  });
+
+  it('the id suffix remains the PRIMARY key — the fallback is only for overlays', () => {
+    const v = makeView({ id: 'r-pri', workflow_id: 'feature' }, [
+      makeUnit({ id: 'r-pri:deliver', status: 'done' }),
+    ]);
+    expect(deliverUnit(v)?.id).toBe('r-pri:deliver');
+  });
+});

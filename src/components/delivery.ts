@@ -168,14 +168,30 @@ export function isPrUrl(candidate: string): boolean {
  * contains the string anywhere — `grep -rn 'gh pr create' docs/`, `echo "run gh
  * pr create yourself"`, a heredoc of instructions — and any one of those would
  * have masqueraded as the run's deliver phase and inherited its whole claim.
- * The invocation is anchored instead: `gh` must start the string or follow a
- * shell command separator (`;`, `&&`, `||`, a pipe, a newline, a subshell open).
- * Quoted mentions are preceded by a quote, so they cannot match.
  *
- * Verified against the two real deliver commands on the live daemon: both run it
- * after `;`/newline (`… git push -u origin "$B"; gh pr create --head "$B" --fill`).
+ * A BARE `(` is not an invocation position; `$(` is (Copilot on #125).
+ *
+ * Including a plain `(` in the separator class let `grep -rn "(gh pr create)" .`
+ * match — a false POSITIVE that asserts a Delivery section on a unit that never
+ * delivered, which is the one thing this module must not do. The old comment
+ * claimed quoted mentions could not match, and that was simply wrong: the quote
+ * sits before the `(`, not before the `gh`.
+ *
+ * But `(` could not just be dropped — `URL=$(gh pr create --fill)` is a command
+ * substitution and a real invocation, and the live daemon runs that shape. So
+ * the substitution opener is admitted and the bare paren is not.
+ *
+ * `;`, `&&`, `||`, a pipe, a newline and start-of-string remain, with `^`
+ * multiline so a script's later lines count. A regex cannot truly separate an
+ * invocation from a mention in shell, so the residue errs toward silence: a bare
+ * subshell `( gh pr create )` is refused, and a miss degrades to `'none'` —
+ * silent, where a false positive is not.
+ *
+ * Checked against the LIVE corpus, not a fixture: all 31 units whose command
+ * mentions `gh pr create` still resolve.
  */
-const INVOKES_GH_PR_CREATE = /(?:^|[;&|(\n])\s*(?:sudo\s+|env\s+\S+=\S+\s+)*gh\s+pr\s+create\b/;
+const INVOKES_GH_PR_CREATE =
+  /(?:^|[;&|\n]|\$\()\s*(?:sudo\s+|env\s+\S+=\S+\s+)*gh\s+pr\s+create\b/m;
 
 /**
  * This run's deliver unit, or `null`. The id suffix is the primary key; the
