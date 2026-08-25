@@ -234,8 +234,13 @@ export function resolveDelivery(d: Delivery, readUrl: string | null = null): Res
   // empty string: the claim would become `pr-open` in `--accent` over an
   // `href=""` link that points at the app itself. The ONE invariant this module
   // exists to hold is re-checked here rather than trusted from upstream.
+  // Re-check the SHAPE, not just emptiness (Copilot on #125). The note above was right about
+  // why — this function is exported and takes a hand-built `Delivery` — and then stopped at one
+  // member of the class: `resolveDelivery({state:'delivered', url:'javascript:alert(1)'})`
+  // returned `pr-open` with that href. This is the single choke point every surface's PR claim
+  // passes through, so it validates rather than trusts, for both sources.
   const candidate = d.url ?? readUrl;
-  const href = candidate === null || candidate === '' ? null : candidate;
+  const href = candidate !== null && isPrUrl(candidate) ? candidate : null;
   return { ...d, claim: href === null ? 'delivered' : 'pr-open', href };
 }
 

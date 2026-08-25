@@ -558,3 +558,26 @@ describe('isPrUrl — one gate for BOTH url sources (Copilot on #125)', () => {
     }
   });
 });
+
+describe('resolveDelivery validates its own input (Copilot on #125)', () => {
+  it('a hand-built Delivery cannot smuggle a bad url into the PR claim', () => {
+    // The function is exported, so `deliveryOf`'s validation is not on this path.
+    for (const bad of [
+      'javascript:alert(1)',
+      'https://github.com/o/r/pull/new/pull/5',
+      'not-a-url',
+      'http://github.com/o/r/pull/1',
+      '',
+    ]) {
+      const r = resolveDelivery({ state: 'delivered', unitId: 'u', reason: null, url: bad });
+      expect(r.href).toBeNull();
+      expect(r.claim).toBe('delivered');
+    }
+  });
+
+  it('…and the transcript-read url gets the same gate', () => {
+    const d = { state: 'delivered' as const, unitId: 'u', reason: null, url: null };
+    expect(resolveDelivery(d, 'javascript:alert(1)').claim).toBe('delivered');
+    expect(resolveDelivery(d, 'https://github.com/o/r/pull/9').claim).toBe('pr-open');
+  });
+});
