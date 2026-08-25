@@ -456,7 +456,15 @@ code {
    of the page rather than an appendix. Three cards, the last one carrying the
    LIMIT — given the accent border because "co-located is not linked" is the
    sentence a reader most needs to leave with, not a footnote. */
-.ctx { border-top: 1px solid var(--hairline); padding: clamp(48px, 8svh, 96px) 0; }
+.ctx {
+  border-top: 1px solid var(--hairline);
+  /* vh first, svh second: a browser without `svh` drops the SECOND declaration and keeps the
+     first, where a bare `svh` shorthand would be dropped entirely and collapse the band's
+     vertical rhythm. The rest of this file still uses `svh` bare (7 sites) — same latent issue,
+     tracked separately rather than swept into a docs PR. */
+  padding: clamp(48px, 8vh, 96px) 0;
+  padding: clamp(48px, 8svh, 96px) 0;
+}
 .ctx-grid {
   display: grid; gap: 14px; margin-top: 28px;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

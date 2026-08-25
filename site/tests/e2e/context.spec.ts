@@ -33,13 +33,15 @@ test.describe('a project is a context [.ctx]', () => {
     await bringIntoView(limit);
     await expect(limit).toBeVisible();
 
-    // The exact sentence a reader must leave with, and the wire field that proves it is not
-    // marketing: a consumer can check `linkage` at runtime.
+    // WHOLE phrases, never fragments. The first cut asserted `'do'` and `'not'` separately, which
+    // matched "does" and "cannot" — so the pair passed even with the limitation deleted. A guard
+    // that reports success while asserting nothing is exactly the failure this section warns about.
     await expect(limit).toContainText('Co-located is not linked');
-    await expect(limit).toContainText('do');
-    await expect(limit).toContainText('not');
-    await expect(limit).toContainText('linkage');
-    await expect(limit).toContainText('co-located');
+    await expect(limit).toContainText('resolve across repos');
+    // The concrete non-example, and the wire field a consumer can check at runtime.
+    await expect(limit).toContainText('studio → api-types → crew');
+    await expect(limit).toContainText('does not');
+    await expect(limit).toContainText('linkage: "co-located"');
   });
 
   test('does not oversell: the refresh cost and the version floor are both stated', async ({ page }) => {
