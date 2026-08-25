@@ -116,6 +116,28 @@ describe('the project page (EC57, EC58)', () => {
     expect(within(plainRow as HTMLElement).queryByTestId('run-delivery-chip')).toBeNull();
   });
 
+  it('an UNRESOLVED deliver phase gets no row chip — the status pill already owns motion', async () => {
+    // Verification gap closed: `DeliveryChip` returns null for `in-flight` by
+    // deliberate design (a cancelled run's deliver unit stays `pending` forever,
+    // so a second motion word on the row would claim progress that stopped) and
+    // nothing pinned it — dropping the `in-flight` arm left every test green.
+    render(
+      <ProjectDashboard
+        projectId="proj-1"
+        runs={[run('r-pending', 'pending'), run('r-dist', 'distributed'), run('r-pr-1', 'done')]}
+        navigate={() => {}}
+      />,
+    );
+
+    const rows = await screen.findAllByTestId('dashboard-run');
+    const chipOf = (id: string): string | null | undefined =>
+      within(rows.find((r) => r.getAttribute('data-run-id') === id) as HTMLElement)
+        .queryByTestId('run-delivery-chip')?.getAttribute('data-state');
+    expect(chipOf('r-pending')).toBeUndefined();
+    expect(chipOf('r-dist')).toBeUndefined();
+    expect(chipOf('r-pr-1')).toBe('delivered');
+  });
+
   it('the RUNS-tile census counts ALL runs, not the MAX_ROWS window', async () => {
     render(<ProjectDashboard projectId="proj-1" runs={corpus()} navigate={() => {}} />);
 
@@ -180,6 +202,12 @@ describe('the Build run list (EC57, EC58)', () => {
     expect(stateOf('r-empty-1')).toBe('nothing-to-deliver');
     // No deliver phase → no chip (the status pill already says what it is doing).
     expect(stateOf('r-plain-0')).toBeUndefined();
+  });
+
+  it('an UNRESOLVED deliver phase gets no chip here either', () => {
+    build([run('r-pending', 'pending'), run('r-dist', 'distributed')]);
+
+    expect(screen.queryByTestId('run-delivery-chip')).toBeNull();
   });
 
   it('EC58: the list fires ZERO per-run output reads', () => {

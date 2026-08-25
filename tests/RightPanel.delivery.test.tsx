@@ -178,6 +178,18 @@ describe('opening Delivery for a run that DID open a PR (EC55, EC59)', () => {
     expect(screen.queryByTestId('run-delivery-link')).not.toBeInTheDocument();
   });
 
+  it('an EMPTY `outputUnavailable` falls back to studio\'s sentence, never a blank line', async () => {
+    // `outputUnavailable ?? null` kept the empty string and the panel painted an
+    // empty red paragraph where the reason belongs — absent and empty both mean
+    // "the daemon said nothing", so both take the fallback.
+    getUnitOutput.mockResolvedValue({ output: null, outputUnavailable: '' });
+    render(<RightPanel view={run('r-blank', 'done')} />);
+    fireEvent.click(screen.getByRole('button', { name: /Delivery/ }));
+
+    expect((await screen.findByTestId('run-delivery-nolink')).textContent)
+      .toStrictEqual('the deliver phase recorded no PR link — nothing can be pointed at');
+  });
+
   it('EC59: `outputUnavailable` renders the DAEMON\'s words, never an indefinite Loading…', async () => {
     getUnitOutput.mockResolvedValue({
       output: null,

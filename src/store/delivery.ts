@@ -61,7 +61,12 @@ export const useDeliveryStore = create<DeliveryStore>((set, get) => ({
             ...s.byRun,
             [runId]: {
               url: output === null ? null : prUrlFrom(output),
-              unavailable: outputUnavailable ?? null,
+              // `??` alone would keep an EMPTY `outputUnavailable` and the panel
+              // would render a blank line where the daemon's reason belongs —
+              // absent and empty are the same "nothing to say" here, and the
+              // caller's own sentence is the honest fallback for both.
+              unavailable:
+                outputUnavailable !== undefined && outputUnavailable !== '' ? outputUnavailable : null,
             },
           },
         }));
