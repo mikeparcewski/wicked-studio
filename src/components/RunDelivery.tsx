@@ -121,7 +121,11 @@ export function DeliveryChip({ view }: Props): React.ReactElement | null {
  */
 export const HEADLINE: Record<DeliveryClaim, string> = {
   'none':               'This run has no deliver phase.',
-  'in-flight':          'The deliver phase has not finished — no PR exists yet.',
+  // NOT "no PR exists yet" (Copilot on #125). The deliver script pushes the branch, THEN runs
+  // `gh pr create`, THEN echoes the url — a unit that is still `pending`/`distributed` can be at
+  // any point in that sequence, so a PR may already be open. Asserting its non-existence is the
+  // same unevidenced claim as asserting its existence, pointed the other way.
+  'in-flight':          'The deliver phase is still running — what it produced is not known yet.',
   // The 665a9aeb wording. Approved is not the same as produced, and this line
   // is the whole difference said out loud.
   'delivered':          'The deliver phase ran and crew approved it. That alone is not a PR.',

@@ -351,6 +351,18 @@ describe('HEADLINE — the rail body says what the badge says', () => {
     expect(asserts).toStrictEqual(['pr-open']);
   });
 
+  it('NO headline asserts a PR exists or does not exist, except the url-bearing one', () => {
+    // The guard above pinned the POSITIVE lie ("PR open") because that is the one round 3
+    // found. It said nothing about the negative — and `in-flight` shipped "no PR exists yet",
+    // which the wire cannot evidence either: the deliver script creates the PR partway through
+    // the phase, so a still-running unit may already have one. Same rule, both directions.
+    const EXISTENCE = /\b(no PR|PR exists|PR was (?:not )?(?:created|opened)|there is no PR|without a PR)\b/i;
+    const offenders = Object.entries(HEADLINE)
+      .filter(([k, sentence]) => k !== 'pr-open' && EXISTENCE.test(sentence))
+      .map(([k]) => k);
+    expect(offenders).toStrictEqual([]);
+  });
+
   it('the phase-only headline names the PHASE and denies the artifact', () => {
     const line = HEADLINE['delivered'];
     expect(line).toContain('deliver phase');
