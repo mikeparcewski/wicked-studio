@@ -8,7 +8,7 @@ import { useProvenanceStore } from '../store/provenance.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
 import { LiveNarration } from './ChatPanel.js';
-import { canDeliver } from './delivery.js';
+import { hasDeliverySection } from './delivery.js';
 import { Burn } from './Burn.js';
 import { FileViewer } from './FileViewer.js';
 import { CoverageView } from './CoverageView.js';
@@ -505,15 +505,21 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
   //
   // A run with a deliver PHASE keeps this section whatever its workflow id says
   // — 5c5e08b7 opened a real PR under a materialised `wf-<runId>` def. A run
-  // WITHOUT one gets it only once a def in hand says the workflow is ordinary:
-  // "this run has no deliver phase" is a claim about a classification, and 86 of
-  // the 129 live runs carry an id no catalog serves, so `undefined` is the
-  // permanent answer for them and the sentence would be unevidenced. Nothing in
-  // the delivery DERIVATION reads `session.workflow_id` (EC61) — the
-  // classification half is a visibility gate, not a wire read.
+  // WITHOUT one keeps it when its `workdir` is known: that path is a DTO fact,
+  // not a classification, so no `GET /workflows` answer is needed to show it and
+  // none can take it away (studio#126). The CLAIM built on top of it — "this run
+  // has no deliver phase", and the `deliver: pr` remedy — stays gated inside
+  // {@link RunDelivery} on `is_system === false`, because 86 of the 129 live runs
+  // carry an id no catalog serves and `undefined` is their permanent answer.
+  //
+  // `hasDeliverySection`, not `canDeliver`: the census and the row chips keep the
+  // narrower predicate on purpose (widening them would recreate a "24 no deliver
+  // phase" census line about runs studio cannot classify). Nothing in the
+  // delivery DERIVATION reads `session.workflow_id` (EC61) — the classification
+  // half is a visibility gate, not a wire read.
   const isSystemWorkflow = useIsSystemWorkflow();
   const sections = useMemo(
-    () => (canDeliver(view, isSystemWorkflow) ? ACCORDIONS : ACCORDIONS.filter((a) => a.id !== 'delivery')),
+    () => (hasDeliverySection(view, isSystemWorkflow) ? ACCORDIONS : ACCORDIONS.filter((a) => a.id !== 'delivery')),
     [view, isSystemWorkflow],
   );
 

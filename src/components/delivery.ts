@@ -371,6 +371,71 @@ export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflo
 }
 
 /**
+ * Whether the RAIL shows a Delivery section — which is a strictly wider question
+ * than {@link canDeliver}, and the two must not be collapsed (studio#126).
+ *
+ * `canDeliver` licenses a CLAIM: "this run has no deliver phase", the census
+ * bucket, the row chip. It requires `is_system === false` — a def in hand —
+ * because 86 of 129 live runs carry a materialised `wf-<runId>` the catalog
+ * never serves, and asserting a classification about them is D5.
+ *
+ * But the `'none'` body also carries the WORKTREE PATH, and that is not a claim.
+ * `session.workdir` comes straight off the run's own DTO; it is true whatever
+ * composed the run, needs no lookup to know, and is the one thing an operator
+ * opening Delivery on an undelivered run actually wants — where is the work. The
+ * `canDeliver` gate withheld it along with the sentence, so for **24 live runs**
+ * the section vanished on a cold cache and popped in a tick later, and vanished
+ * ENTIRELY when `GET /workflows` failed — a daemon hiccup silently removing a
+ * surface that does not depend on the daemon's workflow list at all.
+ *
+ * So the rail renders on the FACT and {@link RunDelivery} gates the SENTENCE.
+ * THREE arms reach the section, and each is independently evidenced — no path
+ * renders on nothing:
+ *
+ *  1. a deliver phase in the units ⇒ the unit itself is the evidence
+ *     (`canDeliver`, unconditional — classification never overrules a unit that
+ *     actually ran);
+ *  2. `is_system === false` ⇒ a def IN HAND licenses the CLAIM, so the sentence
+ *     and the remedy are evidenced (`canDeliver`) — this arm needs no `workdir`,
+ *     and a licensed run without one has stated the phase fact and the remedy
+ *     since #125. Gating it on `workdir` would withhold something the wire DOES
+ *     evidence, which is this bug pointed the other way;
+ *  3. **new** — a known `workdir` on a workflow nothing has ruled out as system
+ *     (`deliverKindOf(...) === 'build'`) ⇒ the DTO fact is the evidence:
+ *     section, worktree line only, no classification claim and no remedy.
+ *
+ * Arm 3 is the flicker fix. "A run with no workdir renders nothing" is true only
+ * of a run that ALSO fails arms 1 and 2 — the document-thread case.
+ *
+ * Arm 3 is deliberately weaker than arm 2's licence, and the difference is the
+ * point: it does NOT require `is_system === false`, so it also covers the runs
+ * the catalog can never classify — a materialised `wf-<runId>` id gets its
+ * worktree line and never gets the sentence. Requiring the licence there would
+ * put those runs straight back into the flicker this fixes.
+ *
+ * What arm 3 does NOT widen: `deliverKindOf(...) !== 'build'` returns false, so
+ * a run on a KNOWN system workflow gets no section from it warm or cold
+ * (the denylist answers without the catalog — such a run reaches the rail only
+ * via `canDeliver`, by actually having a deliver phase), and a `'freeform'` run
+ * — no workflow at all, which `deliver` cannot accompany — stays out. The
+ * predicate reaches exactly the runs whose section was flickering.
+ *
+ * The census and the chips deliberately keep using `canDeliver`: widening THEM
+ * would put these 24 unclassifiable runs back into a "24 no deliver phase"
+ * census line, which is the precise unevidenced claim #125 removed.
+ */
+export function hasDeliverySection(
+  view: SessionView,
+  isSystemWorkflow?: IsSystemWorkflow,
+): boolean {
+  if (canDeliver(view, isSystemWorkflow)) return true;
+  const wf = view.session.workflow_id?.trim() ?? '';
+  if (deliverKindOf(wf, isSystemWorkflow) !== 'build') return false;
+  const workdir = view.session.workdir;
+  return typeof workdir === 'string' && workdir.trim() !== '';
+}
+
+/**
  * The project-page census over ALL deliverable runs (never the MAX_ROWS window —
  * run 665a9aeb, the one that read as the most productive in the project while
  * delivering nothing, is not in the visible six).

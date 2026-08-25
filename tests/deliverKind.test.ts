@@ -40,16 +40,37 @@ describe('the ELEVEN real is_system ids all classify system', () => {
     });
   }
 
-  it('the six the denylist never knew: build BEFORE the fix, system after', () => {
+  /**
+   * The former blind spot, now closed (studio#126). These six were the daemon's
+   * system workflows the denylist did not name, so with the catalog unavailable
+   * studio classified `collab` and every `interactive-*` as build work — the
+   * flag was the ONLY thing ruling them out.
+   *
+   * #126 made that gap load-bearing: once the Delivery section renders on a DTO
+   * fact rather than waiting for the catalog, "show a `feature` run's worktree
+   * while the defs load" and "never show an `interactive-draft` run a section,
+   * warm or cold" are the same instant, and with the gap open there was nothing
+   * to tell the two apart by. So the list names all eleven now, and these six
+   * classify system with NO lookup at all.
+   */
+  it('the six the denylist never knew are on it now — system with no lookup', () => {
     for (const id of DENYLIST_BLIND_SPOT) {
-      // The defect, pinned: the denylist alone — which is exactly what
-      // `canDeliver` used to consult — calls every one of these build work.
-      expect(SYSTEM_WORKFLOW_IDS.has(id), `${id} is not on the denylist`).toBe(false);
-      expect(runKindOf(id)).toBe<RunKind>('build');
-      // The fix: the daemon's own flag wins.
+      expect(SYSTEM_WORKFLOW_IDS.has(id), `${id} must be on the denylist`).toBe(true);
+      expect(runKindOf(id), `${id} cold`).toBe<RunKind>('system');
+      // Cold, warm, and with a flag that agrees — every path says system.
+      expect(deliverKindOf(id, undefined), `${id} with no lookup`).toBe<RunKind>('system');
       expect(deliverKindOf(id, KNOWN), `${id} must be system`).toBe<RunKind>('system');
+      expect(canDeliver(viewOf(id), undefined), `${id} cannot deliver cold`).toBe(false);
     }
     expect(DENYLIST_BLIND_SPOT).toHaveLength(6);
+  });
+
+  /** The denylist is now exactly the daemon's system set — measured, not assumed. */
+  it('names all ELEVEN system workflows the live daemon serves', () => {
+    expect(SYSTEM_WORKFLOW_IDS.size).toBe(11);
+    for (const id of [...SYSTEM_IDS, ...DENYLIST_BLIND_SPOT]) {
+      expect(SYSTEM_WORKFLOW_IDS.has(id), `${id} missing from the denylist`).toBe(true);
+    }
   });
 });
 
@@ -124,7 +145,9 @@ describe('the census stops counting document and video threads (D5, re-opened by
     // ordinary, so an unproven id is never counted whichever way it would have
     // classified. The delivering runs need no licence: they have a deliver unit.
     expect(deliverySummary(runs)).toBe('2 ran deliver');
-    for (const id of DENYLIST_BLIND_SPOT) expect(runKindOf(id)).toBe<RunKind>('build');
+    // Since #126 the denylist rules them out on its own too, so the census is now
+    // right for BOTH reasons — unproven licence and a positive system verdict.
+    for (const id of DENYLIST_BLIND_SPOT) expect(runKindOf(id)).toBe<RunKind>('system');
   });
 });
 

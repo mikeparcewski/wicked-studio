@@ -88,21 +88,63 @@ describe('before the defs load, a run with no deliver phase gets no section at a
     });
   }
 
-  it('an ORDINARY workflow is withheld from too — a def in hand is the only licence', () => {
-    // Erring toward saying less: `feature` IS deliverable, but nothing has
-    // proved it yet. The section arrives with the defs, one tick later.
+  it('an ORDINARY workflow keeps its WORKTREE cold — the fact, never the claim (#126)', async () => {
+    // #125 withheld this section entirely until the defs landed, which took the
+    // worktree path down with the sentence. The path is `session.workdir`, a DTO
+    // fact needing no lookup — so the section renders NOW, carrying only that.
     render(<RightPanel view={noDeliverRun('r-feature', 'feature')} />);
-    expect(screen.queryByRole('button', { name: /Delivery/ })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /Delivery/ }));
+    const body = await screen.findByTestId('run-delivery');
+
+    expect(body).toHaveTextContent('the work is in /w/tree');
+    // The two things that ARE claims stay withheld until a def proves the run ordinary.
+    expect(body).not.toHaveTextContent('This run has no deliver phase.');
+    expect(body).not.toHaveTextContent('deliver: pr');
   });
 
-  it('and a MATERIALISED def is withheld forever — it is in no catalog to arrive in', async () => {
+  it('and a MATERIALISED def gets the same — a worktree is true whatever composed it', async () => {
     const id = 'r-materialised';
     render(<RightPanel view={noDeliverRun(id, materialised(id))} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Delivery/ }));
+    expect(await screen.findByTestId('run-delivery')).toHaveTextContent('the work is in /w/tree');
+
+    // The catalog will NEVER carry this id, so the claim never becomes licensed —
+    // unlike the `feature` run above, this one stays fact-only forever.
+    resolveWorkflows({ workflows: LIVE_WORKFLOWS });
+    await waitFor(() => expect(client.api.listWorkflows).toHaveBeenCalled());
+    const body = screen.getByTestId('run-delivery');
+    expect(body).toHaveTextContent('the work is in /w/tree');
+    expect(body).not.toHaveTextContent('This run has no deliver phase.');
+    expect(body).not.toHaveTextContent('deliver: pr');
+  });
+
+  /**
+   * The self-limiting half of the fact-gate, and the reason widening it does not
+   * re-open D5. Interactive document threads carry materialised ids the catalog
+   * never serves — but they have NO worktree (`workdir: null`, verified across
+   * all three live DOC_THREAD_RUN_IDS), so there is no fact to show and they stay
+   * exactly as silent as #125 made them.
+   */
+  it('a run with NO workdir is still withheld entirely — no fact, no section', async () => {
+    const id = 'r-doc-thread';
+    const v = noDeliverRun(id, materialised(id));
+    render(<RightPanel view={{ ...v, session: { ...v.session, workdir: null } }} />);
     expect(screen.queryByRole('button', { name: /Delivery/ })).not.toBeInTheDocument();
 
     resolveWorkflows({ workflows: LIVE_WORKFLOWS });
     await waitFor(() => expect(client.api.listWorkflows).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: /Delivery/ })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('This run has no deliver phase.');
+  });
+
+  it('a FAILED /workflows fetch cannot remove the worktree either', async () => {
+    vi.spyOn(client.api, 'listWorkflows').mockRejectedValue(new Error('daemon hiccup'));
+    render(<RightPanel view={noDeliverRun('r-feature-fail', 'feature')} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Delivery/ }));
+    const body = await screen.findByTestId('run-delivery');
+    expect(body).toHaveTextContent('the work is in /w/tree');
+    expect(body).not.toHaveTextContent('This run has no deliver phase.');
   });
 });
 
@@ -137,7 +179,9 @@ describe('once the defs land', () => {
 
   it('the ordinary workflow gets its section, its phase fact and its remedy', async () => {
     render(<RightPanel view={noDeliverRun('r-feature-2', 'feature')} />);
-    expect(screen.queryByRole('button', { name: /Delivery/ })).not.toBeInTheDocument();
+    // #126: the section is already here on the DTO fact — what ARRIVES with the defs is the
+    // claim and the remedy, asserted below. (Before #126 the whole section waited.)
+    expect(screen.getByRole('button', { name: /Delivery/ })).toBeInTheDocument();
 
     resolveWorkflows({ workflows: LIVE_WORKFLOWS });
 
