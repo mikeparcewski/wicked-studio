@@ -4,6 +4,7 @@ import { windowRows } from '../board/boardWindow.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { leadMovingRun } from '../board/phaseProgress.js';
+import { bandHint, bandLabel } from '../board/bandCopy.js';
 import { modePath, projectPath, runTimelinePath } from '../hooks/useRoute.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useGateStore } from '../store/gates.js';
@@ -322,7 +323,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
           <section data-testid="band-needs-you" data-count={needsYou.length}>
             {/* Amber names the band because amber MEANS "you are the blocker"
                 (§2.6) — a status color, not the accent (§1.5 rule 2). */}
-            <p style={{ ...CSS.bandLabel, color: 'var(--status-gate)' }}>Needs you</p>
+            <p style={{ ...CSS.bandLabel, color: 'var(--status-gate)' }} title={bandHint('needs-you')}>{bandLabel('needs-you')}</p>
             {needsYou.length === 0 ? (
               // The all-quiet state (§3.1): calm is one line, not a wall of absence.
               <p data-testid="board-all-quiet" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', margin: '0 0 6px' }}>
@@ -362,7 +363,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
             Blue names the band because blue MEANS "work is moving" (§2.6). */}
         {working.length > 0 && (
           <section data-testid="band-working" data-count={working.length} style={{ marginTop: '18px' }}>
-            <p style={{ ...CSS.bandLabel, color: 'var(--status-run)' }}>Working</p>
+            <p style={{ ...CSS.bandLabel, color: 'var(--status-run)' }} title={bandHint('working')}>{bandLabel('working')}</p>
             <BandGrid
               items={working}
               columns={columns}
@@ -382,7 +383,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
             style={{ marginTop: '18px' }}
           >
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-              <p style={{ ...CSS.bandLabel, color: 'var(--ink-dim)', margin: 0 }}>Quiet ({quiet.length})</p>
+              <p style={{ ...CSS.bandLabel, color: 'var(--ink-dim)', margin: 0 }} title={bandHint('quiet')}>{bandLabel('quiet')} ({quiet.length})</p>
               <button
                 type="button"
                 data-testid="band-quiet-toggle"
