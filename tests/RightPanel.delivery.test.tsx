@@ -201,6 +201,12 @@ describe('opening Delivery for a run that DID open a PR (EC55, EC59)', () => {
     const link = await screen.findByTestId('run-delivery-link');
     expect(link).toHaveAttribute('href', REAL_PR_URL);
     expect(link.getAttribute('href')).toMatch(/^https:\/\/\S+\/pull\/\d+$/);
+    // The link opens a third-party origin, so pin BOTH tokens (Copilot on #125). Modern
+    // browsers imply `noopener` for `target="_blank"`, but the repo's own external links
+    // (Markdown.tsx, RepoDetailPage.tsx) state it explicitly and this must not be the
+    // one that drifts.
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     expect(getUnitOutput).toHaveBeenCalledTimes(1);
     expect(getUnitOutput).toHaveBeenCalledWith('r-pr', 'r-pr:deliver');
     // The url is in hand, so — and only so — the claim becomes the artifact.

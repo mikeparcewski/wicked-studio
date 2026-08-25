@@ -224,7 +224,7 @@ export function RunDelivery({ view }: Props): React.ReactElement {
           data-testid="run-delivery-link"
           href={href}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           className="font-mono break-all transition-opacity hover:opacity-70"
           style={{ color: 'var(--accent)' }}
         >
