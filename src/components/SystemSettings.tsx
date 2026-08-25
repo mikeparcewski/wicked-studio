@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
+import { useComposerPrefsStore } from '../store/composerPrefs.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { NotificationSettings } from './NotificationSettings.js';
@@ -66,6 +67,12 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const [signInSeat, setSignInSeat] = useState<RosterSeat | null>(null);
   /** Daemon 400 from a save whose patch included worker_config_root — rendered inline at the field. */
   const [workerRootError, setWorkerRootError] = useState<string | null>(null);
+
+  // Runs (studio#123): `studio.composer` on the crew settings wire — the
+  // `useNotifPrefsStore` pattern, self-saving, outside the `dirty` patch.
+  const deliverPr = useComposerPrefsStore((s) => s.prefs.deliverPr);
+  const composerPersist = useComposerPrefsStore((s) => s.persist);
+  const updateComposerPrefs = useComposerPrefsStore((s) => s.update);
 
   useEffect(() => {
     api.getSettings()
@@ -192,6 +199,53 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           crew-persisted (`studio.notifications`), permission asked only on
           the toggle's own gesture (EC25). */}
       <NotificationSettings />
+
+      {/* ── Runs (studio#123) ─────────────────────────────────────────────────
+          Crew-persisted under `studio.composer`, like Notifications above —
+          it saves itself (debounced), so the Save button below governs only
+          the daemon tunables, never this row. */}
+      <section
+        data-testid="runs-settings"
+        className="rounded-xl px-5 mb-6"
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+      >
+        <h2
+          className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
+          style={{ color: 'var(--ink-dim)' }}
+        >
+          Runs
+        </h2>
+
+        <SettingRow
+          label="Open a PR when a build run finishes"
+          description="On a finished build run the daemon pushes the run's branch, rebases it onto the default branch, and opens a pull request. Merging stays human — nothing lands without you. Runs with no workflow or no attached repository launch without delivery; the composer says so before you send."
+        >
+          <div className="flex flex-col items-end gap-1">
+            <input
+              type="checkbox"
+              aria-label="Open a PR when a build run finishes"
+              data-testid="deliver-pr-toggle"
+              checked={deliverPr}
+              onChange={(e) => updateComposerPrefs({ deliverPr: e.target.checked })}
+              className="w-3.5 h-3.5 shrink-0"
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            {/* wicked-crew#323: an unfixed daemon answers 200 and drops
+                `studio.*` keys. The read-back is the only proof the write
+                landed, so an unverified write says so rather than sitting
+                there looking saved. */}
+            {composerPersist === 'dropped' && (
+              <p
+                className="text-xs text-right"
+                style={{ color: 'var(--status-gate)' }}
+                data-testid="deliver-pr-unsaved"
+              >
+                Not stored by this daemon — applies to this session only.
+              </p>
+            )}
+          </div>
+        </SettingRow>
+      </section>
 
       <section
         className="rounded-xl px-5 mb-6"

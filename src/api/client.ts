@@ -544,6 +544,16 @@ export const api = {
       body: JSON.stringify({ 'studio.notifications': prefs }),
     }),
 
+  /** studio#123: `studio.composer` rides the SAME settings store, same
+   *  namespaced-key contract as `studio.appearance`. The returned merged blob
+   *  is the read-back the store checks — an unfixed daemon (wicked-crew#323)
+   *  answers 200 with the key silently absent. */
+  putComposerSettings: (prefs: import('../store/composerPrefs.js').StudioComposerPrefs) =>
+    apiFetch<{ settings: Record<string, unknown> }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ 'studio.composer': prefs }),
+    }),
+
   // ── Projects (DES-PROJECT-001) ───────────────────────────────────────────────
 
   /** All projects; `status=active` (default) or `archived` filters. Includes the synthesized "Unfiled" default. */

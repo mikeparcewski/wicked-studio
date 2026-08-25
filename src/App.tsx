@@ -47,6 +47,7 @@ import type { CoreEvent, RepoEntry } from './api/types.js';
 import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
 import { useNotifPrefsStore } from './store/notifPrefs.js';
+import { useComposerPrefsStore } from './store/composerPrefs.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
@@ -125,6 +126,10 @@ export function App(): React.ReactElement {
     // once at startup; the defaults (Off) stand if the surface is absent.
     // Never touches the Notification API (EC25: no prompt on load).
     void useNotifPrefsStore.getState().load();
+    // studio#123: `studio.composer` rides the same settings store — read once
+    // at startup; the default (open a PR when a build run finishes) stands if
+    // the surface, or the key, is absent.
+    void useComposerPrefsStore.getState().load();
   }, []);
 
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
