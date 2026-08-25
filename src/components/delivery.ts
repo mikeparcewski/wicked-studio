@@ -111,7 +111,42 @@ const NOTHING_TO_DELIVER = /nothing to deliver/i;
  */
 export function prUrlFrom(text: string): string | null {
   const matches = text.match(/https:\/\/\S+\/pull\/\d+/g);
-  return matches === null ? null : (matches[matches.length - 1] ?? null);
+  const last = matches === null ? null : (matches[matches.length - 1] ?? null);
+  return last === null ? null : (isPrUrl(last) ? last : null);
+}
+
+/**
+ * The ONE shape a PR url may have, for BOTH sources (Copilot on #125).
+ *
+ * The transcript path was validated by the extracting regex; the wire-carried
+ * `session.delivery.url` (wicked-crew#321) was trusted as "any non-empty string" —
+ * and it is rendered straight into an external `<a href>` AND decides the `pr-open`
+ * claim. A malformed or hostile value (`javascript:…`, an attacker-controlled host,
+ * a `/pull/new/` form) would have become a clickable link labelled "PR open".
+ *
+ * Latent today — no shipping daemon sends the field — which is exactly why it had to
+ * be fixed now: this module is written to light up the moment the server starts
+ * sending it, with no further change here.
+ *
+ * Anchored at both ends: scheme must be `https:`, path must END in `/pull/<digits>`,
+ * so `/pull/new/<branch>` (the create-PR form the operator hit first in the raw
+ * transcript) can never satisfy it.
+ */
+export function isPrUrl(candidate: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return false;
+  }
+  // `https:` only — this becomes an external `<a href>`, so `javascript:` and `data:` must not
+  // survive. Shape is checked on `pathname`, so a query or fragment cannot smuggle the digits
+  // (`…/pull/new/branch?x=/pull/9` has pathname `/pull/new/branch` and is refused).
+  //
+  // Deliberately NOT host-restricted: crew re-derives this url from the run's own git remote
+  // (deliver.ts), GitHub Enterprise is a real deployment, and an allowlist here would be a second,
+  // weaker copy of a decision that belongs server-side. This validates SHAPE, not provenance.
+  return parsed.protocol === 'https:' && /\/pull\/\d+$/.test(parsed.pathname);
 }
 
 /**
@@ -158,7 +193,10 @@ export function deliveryOf(view: SessionView): Delivery {
   // `session.delivery` is declared in ../api/types.js, not in the installed
   // api-types — the cast is the honest spelling until studio bumps (see there).
   const declared = (view.session as SessionWithDelivery).delivery;
-  const url = typeof declared?.url === 'string' && declared.url !== '' ? declared.url : null;
+  // Same gate as the transcript path — a wire-carried url is not more trustworthy
+  // for being wire-carried (Copilot on #125). Non-conforming ⇒ no url ⇒ no PR claim.
+  const url =
+    typeof declared?.url === 'string' && isPrUrl(declared.url) ? declared.url : null;
 
   return { state, unitId: unit.id, reason, url };
 }

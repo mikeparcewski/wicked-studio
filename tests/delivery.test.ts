@@ -6,6 +6,7 @@ import {
   deliverUnit,
   deliveryOf,
   deliverySummary,
+  isPrUrl,
   prUrlFrom,
   resolveDelivery,
   type DeliveryState,
@@ -494,5 +495,52 @@ describe('canDeliver — the ONE predicate every surface gates on (D5)', () => {
       const session = { ...view.session, workflow_id: 'interactive-draft' } as typeof view.session;
       expect(canDeliver({ ...view, session }, KNOWN)).toBe(true);
     });
+  });
+});
+
+describe('isPrUrl — one gate for BOTH url sources (Copilot on #125)', () => {
+  const HOSTILE = [
+    'javascript:alert(1)',                                 // would execute in an <a href>
+    'data:text/html,<script>alert(1)</script>',
+    'http://github.com/o/r/pull/1',                        // not https
+    'https://e.test/o/r/pull/new/b?x=/pull/9',             // digits smuggled in the QUERY
+    'https://github.com/o/r/pull/new/wicked/branch',       // the create-PR form
+    'https://github.com/o/r/pull/',
+    'https://github.com/o/r/pull/abc',
+    'not a url at all',
+    '',
+    '   ',
+  ];
+  it.each(HOSTILE)('refuses %j', (bad) => {
+    expect(isPrUrl(bad)).toBe(false);
+  });
+
+  it('accepts a real PR url, and a bare-host one', () => {
+    expect(isPrUrl('https://github.com/mikeparcewski/wicked-studio/pull/121')).toBe(true);
+    expect(isPrUrl('https://x/pull/9')).toBe(true);
+  });
+
+  it('validates SHAPE, not provenance — a foreign https host of the right shape passes', () => {
+    // Stated so nobody mistakes this for a trust boundary: crew re-derives the url from the
+    // run's own git remote and GitHub Enterprise is a real deployment, so an allowlist here
+    // would be a second, weaker copy of a server-side decision.
+    expect(isPrUrl('https://ghe.internal.example/o/r/pull/7')).toBe(true);
+  });
+
+  it('a WIRE-carried url gets the same gate as a transcript-derived one', () => {
+    // The whole point: `session.delivery.url` is not more trustworthy for arriving on the wire.
+    for (const bad of HOSTILE) {
+      const view = makeView({ id: 'r-wire', workflow_id: 'feature' }, [
+        makeUnit({ id: 'r-wire:deliver', status: 'done', tool_cmd: ['bash', '-lc', 'gh pr create'] }),
+      ]);
+      (view.session as unknown as { delivery: { kind: string; url: string } }).delivery = {
+        kind: 'pull_request',
+        url: bad,
+      };
+      const d = deliveryOf(view);
+      expect(d.url).toBeNull();
+      // …and with no url in hand the claim can never be the artifact.
+      expect(resolveDelivery(d).claim).not.toBe('pr-open');
+    }
   });
 });
