@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { EntityMode, LaunchRunBody, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
+import { useComposerPrefsStore } from '../store/composerPrefs.js';
 import { useGateStore } from '../store/gates.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useProvenanceStore } from '../store/provenance.js';
@@ -13,7 +14,7 @@ import { ContextPopover } from './ContextPopover.js';
 import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
-import type { RunMode } from './runMode.js';
+import { runKindOf, SYSTEM_WORKFLOW_IDS, type RunMode } from './runMode.js';
 
 interface Props {
   /** If set, we're in "run selected" mode — steer if gated, inject if executing, placeholder otherwise. */
@@ -105,9 +106,6 @@ function ActivePill({
 
 
 
-// Defense-in-depth denylist: catches system workflows that predate the is_system flag.
-const SYSTEM_WORKFLOW_IDS = new Set(['chat', 'onboarding', 'survey-repo', 'domain-graph-slice', 'memories']);
-
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
 
@@ -175,6 +173,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     prefill !== null ? prefillGate.beforeOrd : COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd,
   );
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+
+  // Delivery (studio#123): the composer carries no default of its own — the
+  // persisted `studio.composer` preference decides, and it ships ON. The two
+  // guards below are what keeps an ON default from producing a body crew 400s.
+  const deliverPr = useComposerPrefsStore((s) => s.prefs.deliverPr);
 
   // ── Preflight (DES-UX-001 §7.8, EC43, slice AC) ────────────────────────────
   // A code-shaped intent with no repo attached warns-and-blocks: zero POST
@@ -432,6 +435,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (firstRepo) body.repoRef = firstRepo;
     const wf = workflowOverride?.trim() || workflow;
     if (wf) body.workflow = wf;
+    // Delivery (crew#293, studio#123): `deliver: 'pr'` appends the daemon's
+    // hardened deliver phase — push the branch, open the PR; merge stays human.
+    // BUILD-kind runs only, and only with both guards met: `deliver` without
+    // `workflow` is a 400 (api-types index.d.ts:955-956), and the deliver
+    // script pushes to a remote, which is the attached repo. Either one missing
+    // and the run launches WITHOUT the key — never a body crew rejects. The
+    // same verdict is on screen before the operator sends (`deliverNotice`).
+    if (deliverPr && runKindOf(wf) === 'build' && firstRepo) body.deliver = 'pr';
     // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
@@ -677,6 +688,37 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     (s) => selectedClis.has(s.key) && s.signed_in === false,
   );
 
+  // Delivery verdict, said out loud BEFORE the send (studio#123): with the
+  // preference ON the operator must be able to READ — not hover — whether this
+  // launch will open a PR, and when it will not, which guard stopped it. The
+  // three states mirror the `submit` condition exactly, off the same inputs, so
+  // the line can never disagree with the body that goes on the wire. Silent
+  // when the preference is off (the setting is the answer) and on the chat
+  // surface (a system workflow has nothing to deliver).
+  const deliverWorkflow = workflowOverride?.trim() || workflow;
+  const deliverNotice: { state: string; text: string } | null = ((): { state: string; text: string } | null => {
+    if (!deliverPr) return null;
+    switch (runKindOf(deliverWorkflow)) {
+      case 'system':
+        return null;
+      case 'freeform':
+        return {
+          state: 'no-workflow',
+          text: 'No PR when this finishes — a run needs a workflow to deliver one. Pick one in launch options.',
+        };
+      case 'build':
+        return repoRefs.length > 0
+          ? {
+              state: 'on',
+              text: 'When this finishes it pushes its branch and opens a PR. Merging stays yours.',
+            }
+          : {
+              state: 'no-repo',
+              text: 'No PR when this finishes — delivery pushes to a repository, and none is attached.',
+            };
+    }
+  })();
+
   // Determine whether CLIs differ from the defaults that loaded from the roster
   const defaultCliSet = new Set(
     roster.filter((s) => s.enabled_for_council).map((s) => s.key),
@@ -913,6 +955,22 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             Launch anyway
           </button>
         </div>
+      )}
+
+      {/* ── Delivery verdict (studio#123) — visible text, never a tooltip: the
+          operator reads whether a PR is coming, or which guard stopped it,
+          before sending. `--ink-muted` when delivery is on (a statement of
+          fact), `--status-gate` when a guard withheld it (something to act
+          on) — the composer's own warn dress, one notch below the fail red. ── */}
+      {deliverNotice !== null && (
+        <p
+          data-testid="deliver-notice"
+          data-deliver-state={deliverNotice.state}
+          className="text-xs px-1 font-mono"
+          style={{ color: deliverNotice.state === 'on' ? 'var(--ink-muted)' : 'var(--status-gate)' }}
+        >
+          {deliverNotice.text}
+        </p>
       )}
 
       {/* ── Guidance steer field (DES-UX-002 §3.3, slice BC) — rendered only
