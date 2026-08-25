@@ -388,11 +388,24 @@ export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflo
  * ENTIRELY when `GET /workflows` failed — a daemon hiccup silently removing a
  * surface that does not depend on the daemon's workflow list at all.
  *
- * So the rail renders on the FACT and {@link RunDelivery} gates the SENTENCE:
- *  - a deliver phase in the units ⇒ section, unconditionally (`canDeliver`);
- *  - otherwise a known `workdir` on a workflow NOTHING HAS RULED OUT as system
- *    (`deliverKindOf(...) === 'build'`) ⇒ section, worktree line only, no
- *    classification claim and no remedy.
+ * So the rail renders on the FACT and {@link RunDelivery} gates the SENTENCE.
+ * THREE arms reach the section, and each is independently evidenced — no path
+ * renders on nothing:
+ *
+ *  1. a deliver phase in the units ⇒ the unit itself is the evidence
+ *     (`canDeliver`, unconditional — classification never overrules a unit that
+ *     actually ran);
+ *  2. `is_system === false` ⇒ a def IN HAND licenses the CLAIM, so the sentence
+ *     and the remedy are evidenced (`canDeliver`) — this arm needs no `workdir`,
+ *     and a licensed run without one has stated the phase fact and the remedy
+ *     since #125. Gating it on `workdir` would withhold something the wire DOES
+ *     evidence, which is this bug pointed the other way;
+ *  3. **new** — a known `workdir` on a workflow nothing has ruled out as system
+ *     (`deliverKindOf(...) === 'build'`) ⇒ the DTO fact is the evidence:
+ *     section, worktree line only, no classification claim and no remedy.
+ *
+ * Arm 3 is the flicker fix. "A run with no workdir renders nothing" is true only
+ * of a run that ALSO fails arms 1 and 2 — the document-thread case.
  *
  * That second arm is deliberately weaker than `canDeliver`'s licence, and the
  * difference is the point: it does NOT require `is_system === false`, so it also
