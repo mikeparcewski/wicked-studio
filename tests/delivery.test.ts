@@ -10,6 +10,7 @@ import {
   resolveDelivery,
   type DeliveryState,
 } from '../src/components/delivery.js';
+import { HEADLINE } from '../src/components/RunDelivery.js';
 import { makeUnit, makeView } from './factories.js';
 import {
   EMPTY_PUSH_OUTPUT,
@@ -287,6 +288,24 @@ describe('resolveDelivery — the PR claim needs a URL IN HAND (D1/D2)', () => {
     expect(r.href).toBe('https://x/pull/9');
   });
 
+  it('an EMPTY url is an ABSENT url — at the derivation AND at the claim', () => {
+    // Third member of the same absent-vs-empty class as `denial_reason` and
+    // `outputUnavailable`. Un-normalized, `'' ?? readUrl` keeps the empty
+    // string, `href === null` is false, and the surface paints "PR open" in
+    // `--accent` over an `href=""` that points back at studio. Both layers are
+    // pinned: the wire read, and `resolveDelivery`'s own re-check (it is
+    // exported and takes a hand-built `Delivery`).
+    const view = composed('done');
+    const session = { ...view.session, delivery: { kind: 'pull_request', url: '' } };
+    expect(deliveryOf({ ...view, session: session as typeof view.session }).url).toBeNull();
+
+    const hand = { state: 'delivered' as const, unitId: 'r:deliver', reason: null, url: '' };
+    expect(resolveDelivery(hand).claim).toBe('delivered');
+    expect(resolveDelivery(hand).href).toBeNull();
+    expect(resolveDelivery({ ...hand, url: null }, '').claim).toBe('delivered');
+    expect(resolveDelivery({ ...hand, url: null }, '').href).toBeNull();
+  });
+
   it('a read url can never upgrade a state that was not approved', () => {
     const states: DeliveryState[] = ['none', 'in-flight', 'nothing-to-deliver', 'failed'];
     const views = [
@@ -316,6 +335,31 @@ describe('DELIVERY_LABEL', () => {
       .filter(([, w]) => /\bPR\b/i.test(w))
       .map(([k]) => k);
     expect(mentions).toStrictEqual(['pr-open']);
+  });
+});
+
+describe('HEADLINE — the rail body says what the badge says', () => {
+  // The badge WORD carried a structural guard and this sentence did not, so
+  // `HEADLINE['delivered']` could be edited back to "PR open — merge stays
+  // human." (the review's own example of the lie) with the suite still green.
+  it('exactly ONE headline asserts an open PR, and it is the url-bearing claim', () => {
+    const asserts = Object.entries(HEADLINE)
+      .filter(([, s]) => /\bPR open\b/i.test(s))
+      .map(([k]) => k);
+    expect(asserts).toStrictEqual(['pr-open']);
+  });
+
+  it('the phase-only headline names the PHASE and denies the artifact', () => {
+    const line = HEADLINE['delivered'];
+    expect(line).toContain('deliver phase');
+    expect(line).toMatch(/not a PR/i);
+    expect(line).not.toMatch(/\bPR open\b/i);
+  });
+
+  it('no headline says shipped or merged-without-a-human', () => {
+    const words = Object.values(HEADLINE).join(' ').toLowerCase();
+    expect(words).not.toContain('shipped');
+    expect(words).not.toContain('merged');
   });
 });
 

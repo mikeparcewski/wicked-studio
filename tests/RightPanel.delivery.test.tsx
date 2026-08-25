@@ -140,11 +140,23 @@ describe('the rail keeps its shape (revised EC54)', () => {
     expect(badge).toHaveAttribute('data-state', 'delivered');
     expect(badge).toHaveTextContent('deliver ran');
     // Body and badge agree, and neither claims an artifact.
-    expect(screen.getByTestId('run-delivery')).toHaveAttribute('data-state', 'delivered');
+    const panel = screen.getByTestId('run-delivery');
+    expect(panel).toHaveAttribute('data-state', 'delivered');
     expect(body).toHaveTextContent('the deliver phase recorded no PR link — nothing can be pointed at');
     expect(screen.queryByTestId('run-delivery-link')).not.toBeInTheDocument();
     // And the badge is not painted as the PR accent nor as a failure.
     expect(badge.style.color).toBe('var(--ink-muted)');
+
+    // The HEADLINE is the loudest sentence in the section and was the one the
+    // first cut got wrong; pin the rendered words, not just the badge's.
+    expect(panel).toHaveTextContent('The deliver phase ran and crew approved it. That alone is not a PR.');
+    expect(panel.textContent ?? '').not.toMatch(/\bPR open\b/i);
+
+    // …and the "no link" line is MUTED, not `--status-fail`: an approved phase
+    // that produced no PR is missing evidence, not a run that failed. The
+    // colour is the claim as much as the words are.
+    expect(body.style.color).toBe('var(--ink-muted)');
+    expect(body.style.color).not.toBe('var(--status-fail)');
   });
 
   it('EC57: a run with no deliver phase carries no badge — silence, not "unknown"', () => {

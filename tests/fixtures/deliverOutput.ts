@@ -16,6 +16,11 @@ export const REAL_DELIVER_OUTPUT = [
   "branch 'wicked/5c5e08b7-9e06-43cc-9b15-300bfc599e21' set up to track 'origin/wicked/5c5e08b7-9e06-43cc-9b15-300bfc599e21'.",
   'https://github.com/mikeparcewski/wicked-studio/pull/121',
   'https://github.com/mikeparcewski/wicked-studio/pull/121',
+  // The daemon's trailing newline. Without it this fixture is 724 bytes and the
+  // "725 bytes, VERBATIM" above is false — small, but a fixture that claims to
+  // be the wire has to BE the wire (re-verified byte-for-byte against
+  // `GET /runs/5c5e08b7…/units/5c5e08b7…:deliver/output`).
+  '',
 ].join('\n');
 
 /** The PR the transcript above actually opened. */

@@ -184,7 +184,15 @@ export interface ResolvedDelivery extends Delivery {
  */
 export function resolveDelivery(d: Delivery, readUrl: string | null = null): ResolvedDelivery {
   if (d.state !== 'delivered') return { ...d, claim: d.state, href: null };
-  const href = d.url ?? readUrl;
+  // Empty is absent — the third member of the same class already normalized at
+  // `Delivery.reason` and in `store/delivery.ts`. `deliveryOf` maps an empty
+  // `session.delivery.url` to `null` at the derivation, but this function is
+  // exported and takes a hand-built `Delivery`, and `'' ?? readUrl` keeps the
+  // empty string: the claim would become `pr-open` in `--accent` over an
+  // `href=""` link that points at the app itself. The ONE invariant this module
+  // exists to hold is re-checked here rather than trusted from upstream.
+  const candidate = d.url ?? readUrl;
+  const href = candidate === null || candidate === '' ? null : candidate;
   return { ...d, claim: href === null ? 'delivered' : 'pr-open', href };
 }
 

@@ -95,8 +95,16 @@ export function DeliveryChip({ view }: Props): React.ReactElement | null {
   );
 }
 
-/** The rail body's one-line lead, per claim. */
-const HEADLINE: Record<DeliveryClaim, string> = {
+/**
+ * The rail body's one-line lead, per claim.
+ *
+ * EXPORTED so the same structural guard that pins {@link DELIVERY_LABEL} can be
+ * pointed at it: the badge word was tested and this sentence was not, so
+ * `'delivered'` could be edited back to "PR open — merge stays human." — the
+ * exact claim this slice was re-cut to remove — with the whole suite still
+ * green. Only `'pr-open'` may assert an open PR.
+ */
+export const HEADLINE: Record<DeliveryClaim, string> = {
   'none':               'This run has no deliver phase.',
   'in-flight':          'The deliver phase has not finished — no PR exists yet.',
   // The 665a9aeb wording. Approved is not the same as produced, and this line
