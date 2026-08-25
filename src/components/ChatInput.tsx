@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { EntityMode, LaunchRunBody, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
@@ -14,7 +14,7 @@ import { ContextPopover } from './ContextPopover.js';
 import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
-import { runKindOf, SYSTEM_WORKFLOW_IDS, type RunMode } from './runMode.js';
+import { runKindOf, SYSTEM_WORKFLOW_IDS, type RunKind, type RunMode } from './runMode.js';
 
 interface Props {
   /** If set, we're in "run selected" mode — steer if gated, inject if executing, placeholder otherwise. */
@@ -153,6 +153,27 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [workflow, setWorkflow] = useState(prefill?.workflowId ?? '');
   const [roster, setRoster] = useState<RosterSeat[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
+  /**
+   * The run kind for delivery, off the AUTHORITATIVE signal where we have one.
+   * `runKindOf` matches a hardcoded denylist, which by its own comment only
+   * "catches system workflows that predate the is_system flag" — a system
+   * workflow shipped under a new id is invisible to it. The selector below
+   * already reads `is_system` off the fetched defs, and the launch form can be
+   * seeded from a RETRY PREFILL (`prefill.workflowId`, ~:153) that never passed
+   * through that selector, so the denylist alone can classify a genuinely
+   * system workflow as build work and let it carry `deliver`.
+   *
+   * Deliberately one-directional: a positively-known `is_system` DEMOTES to
+   * 'system', but a missing def (workflows still loading, or the fetch failed)
+   * never promotes — it falls back to the denylist verdict. So this can only
+   * ever withhold delivery, never add it.
+   */
+  const deliverKindOf = useCallback(
+    (id: string): RunKind =>
+      workflows.find((w) => w.id === id)?.is_system === true ? 'system' : runKindOf(id),
+    [workflows],
+  );
+
   const selectableWorkflows = useMemo(
     () => workflows.filter((w) => !w.is_system && !SYSTEM_WORKFLOW_IDS.has(w.id)),
     [workflows],
@@ -442,7 +463,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // script pushes to a remote, which is the attached repo. Either one missing
     // and the run launches WITHOUT the key — never a body crew rejects. The
     // same verdict is on screen before the operator sends (`deliverNotice`).
-    if (deliverPr && runKindOf(wf) === 'build' && firstRepo) body.deliver = 'pr';
+    if (deliverPr && deliverKindOf(wf) === 'build' && firstRepo) body.deliver = 'pr';
     // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
@@ -698,7 +719,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const deliverWorkflow = workflowOverride?.trim() || workflow;
   const deliverNotice: { state: string; text: string } | null = ((): { state: string; text: string } | null => {
     if (!deliverPr) return null;
-    switch (runKindOf(deliverWorkflow)) {
+    switch (deliverKindOf(deliverWorkflow)) {
       case 'system':
         return null;
       case 'freeform':
@@ -707,7 +728,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           text: 'No PR when this finishes — a run needs a workflow to deliver one. Pick one in launch options.',
         };
       case 'build':
-        return repoRefs.length > 0
+        // The SAME truthiness the submit site guards on (`const firstRepo =
+        // repoRefs[0]`), not `repoRefs.length > 0` — otherwise a falsy first
+        // entry renders "a PR is coming" over a body that carries no
+        // `deliver`, and the notice's whole contract is that it cannot
+        // disagree with the wire.
+        return repoRefs[0]
           ? {
               state: 'on',
               text: 'When this finishes it pushes its branch and opens a PR. Merging stays yours.',

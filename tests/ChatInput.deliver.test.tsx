@@ -5,6 +5,7 @@ import { ChatInput } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
 import type { LaunchRunBody } from '../src/api/types.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
+import { clearRetryPrefill, setRetryPrefill } from '../src/store/retryPrefill.js';
 
 /**
  * studio#123 — the composer reaches for `deliver: 'pr'` (crew#293,
@@ -37,6 +38,7 @@ beforeEach(() => {
     prefs: DEFAULT_COMPOSER_PREFS, loaded: true, persist: 'unknown',
   });
   localStorage.clear();
+  clearRetryPrefill();
 });
 
 /** Bind workflow and/or repo through the launch options drawer — the controls
@@ -134,6 +136,34 @@ describe('ChatInput delivery (#123)', () => {
     await send(user, 'add the delivery toggle');
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
     expect('deliver' in sentBody(), 'preference off = no deliver key at all').toBe(false);
+  });
+
+  it('a retry prefill of an is_system workflow NOT on the denylist never delivers', async () => {
+    // The denylist only "catches system workflows that predate the is_system
+    // flag". A daemon shipping a system workflow under a NEW id is invisible to
+    // it, and the retry prefill seeds `workflow` directly — bypassing the
+    // selector that DOES read is_system. The authoritative flag must win.
+    vi.mocked(client.api.listWorkflows).mockResolvedValue({
+      workflows: [
+        { id: 'feature', is_system: false, phases: [] },
+        { id: 'estate-reindex', is_system: true, phases: [] },
+      ],
+    });
+    setRetryPrefill({
+      retryOf: 'r-old', problem: 'redo it', clis: ['claude'], workflowId: 'estate-reindex',
+      repoRef: 'studio-api', entityMode: 'shared', humanConfirm: 'none', projectId: null,
+    });
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await waitFor(() => expect(client.api.listWorkflows).toHaveBeenCalled());
+
+    // A system workflow has nothing to deliver — no notice, and no key.
+    await waitFor(() => expect(screen.queryByTestId('deliver-notice')).toBeNull());
+    await send(user, ' now');
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    const body = sentBody();
+    expect(body.workflow).toBe('estate-reindex');
+    expect('deliver' in body, 'is_system:true is not build work').toBe(false);
   });
 
   it('the chat surface (workflowOverride: chat) never delivers and stays silent', async () => {
