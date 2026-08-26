@@ -41,7 +41,7 @@ import Footer from 'wicked-web/components/Footer.astro';
 import SameGarden from 'wicked-web/components/SameGarden.astro';
 import '../styles/studio.css';
 
-const title = 'wicked-studio — nothing approves its own work';
+const title = 'wicked-studio — no agent approves its own work';
 const description =
   'The orchestrator IDE: brainstorm it, build it under a gate nothing self-approves, then produce the doc, deck or demo — on your own machine, driving the coding CLIs you already pay for.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
@@ -80,12 +80,14 @@ const RAIL = [
     <div class="amber-floor" aria-hidden="true"></div>
     <div class="wrap hero-head">
       <div class="kicker kicker--plane">brainstorm it, build it, then produce the thing you show people</div>
-      <h1>The agent that wrote the code<br><span class="y">never decides it’s done.</span></h1>
+      <h1>No agent can approve its own work<br><span class="y">into your codebase.</span></h1>
       <p class="lede">
         The daemon behind it drives the coding CLIs you already pay for as workers on your machine,
-        and calls a change done only when two independent things agree: a <b>deterministic check that
-        actually runs</b>, and a <b>separate judge that can reject but can never approve on its
-        own</b>. With the document surface installed, the same window also holds the brainstorm that
+        and calls a change done only when a <b>deterministic check actually runs and passes</b>. A
+        second agent judges it too, and that judge <b>can reject but is never enough to approve</b> —
+        a deterministic pass is always also required. Crew picks a judge that is identity-distinct
+        from the author where the roster allows it, and falls back to a single runner when it does
+        not, so the <b>veto</b> is the guarantee, not the separation. With the document surface installed, the same window also holds the brainstorm that
         starts the work and the doc, deck or demo that comes out of it — <b>those share the project,
         not that check</b>. Below is not a mock: it <b>is</b> the interface. Drive it.
       </p>

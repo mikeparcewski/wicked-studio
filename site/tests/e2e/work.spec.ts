@@ -54,7 +54,11 @@ test.describe('four kinds of work [.work]', () => {
 
   test('the hero scopes the mechanism to code rather than to everything', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('h1')).toContainText('wrote the code');
+    // Was "wrote the code" — the headline claimed the AUTHOR never grades its own work, and
+    // wicked-core/src/validator.rs:1131-1146 has a single-runner FALLBACK for an empty or
+    // fully-excluded roster, so on one seat the same binary can judge. Identity separation is
+    // best-effort; the VETO is unconditional (validator.rs:10, "can NEVER be the sole approver").
+    await expect(page.locator('h1')).toContainText('approve its own work');
     await expect(page.locator('.lede')).toContainText('not that check');
   });
 });
