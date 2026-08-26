@@ -42,8 +42,12 @@ import SameGarden from 'wicked-web/components/SameGarden.astro';
 import '../styles/studio.css';
 
 const title = 'wicked-studio — no agent approves its own work';
+// Same attribution boundary as the on-page copy: the DAEMON drives the CLIs, studio is its
+// client. This string is what search results and social cards show, so it is read far more often
+// than the page — getting the boundary right on the page and wrong here would put the inaccurate
+// version in front of most people who ever see either.
 const description =
-  'The orchestrator IDE: brainstorm it, build it under a gate nothing self-approves, then produce the doc, deck or demo — on your own machine, driving the coding CLIs you already pay for.';
+  'Where product work happens: brainstorm it, build it under a check no agent can approve on its own, then produce the doc, deck or demo. A browser client of the wicked-crew daemon, which drives the coding CLIs you already pay for — on your own machine.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
 // The run board: the SPA's real panels (src/hooks/useRoute.ts), each fed by a
