@@ -224,8 +224,8 @@ code {
 .mock-dots i { width: 10px; height: 10px; border-radius: 50%; background: color-mix(in oklab, var(--ink) 22%, transparent); }
 .mock-url { font-family: var(--font-mono); font-size: 0.66rem; color: color-mix(in oklab, var(--ink) 70%, transparent); border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 3px 12px; background: color-mix(in oklab, var(--canvas) 40%, transparent); flex: 1; text-align: center; }
 
-.console-body { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
-.console-launch { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 8px 14px; background: color-mix(in oklab, var(--canvas) 35%, transparent); }
+.console-body { padding: 9px; display: flex; flex-direction: column; gap: 5px; }
+.console-launch { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 6px 14px; background: color-mix(in oklab, var(--canvas) 35%, transparent); }
 .console-launch:focus-within { border-color: color-mix(in oklab, var(--accent) 45%, var(--hairline-strong)); }
 .cl-k { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
 .cl-input { flex: 1; min-width: 180px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink); background: transparent; border: none; outline: none; }
@@ -234,12 +234,12 @@ code {
 .cl-go:hover { transform: translateY(-1px); }
 
 .console-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: stretch; }
-.console-feed, .console-gate { display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 10px 14px; background: color-mix(in oklab, var(--surface) 60%, transparent); }
+.console-feed, .console-gate { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 8px 12px; background: color-mix(in oklab, var(--surface) 60%, transparent); }
 .cf-k, .cg-k { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
 /* The GATE, not the feed, is what sets this row's height — it is the taller of the two once it
    raises. Keep this clamp at or above the gate's own content height or the Approve/Reject buttons
    end up inside a scroller, which is the one thing on this page that must never be hidden. */
-.console-feed { height: clamp(104px, 17svh, 150px); overflow-y: auto; }
+.console-feed { height: clamp(92px, 14svh, 128px); overflow-y: auto; }
 .console-gate { overflow-y: auto; }
 .cf-row { font-family: var(--font-mono); font-size: 0.72rem; color: color-mix(in oklab, var(--ink) 74%, transparent); animation: row-in .28s var(--ease) backwards; }
 .cf-row b { color: var(--ink); }

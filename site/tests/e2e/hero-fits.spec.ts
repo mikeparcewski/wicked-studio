@@ -118,11 +118,14 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
         };
       }, vp.height);
 
-      const MIN_SLACK = 12; // twice the observed cross-platform font delta
+      // Calibrated from the real gap, not a guess: the same page measured 618px of content on
+      // macOS and 642px on CI's Linux runner — a 24px delta, not the ~6px the rendered height
+      // first suggested. 30px leaves margin above that.
+      const MIN_SLACK = 30;
       expect(
         usable - content,
         `.hero content is ${content}px in ${usable}px of usable height — only ` +
-          `${usable - content}px of slack, and Linux renders these fonts ~6px taller than macOS`,
+          `${usable - content}px of slack, and CI's Linux runner renders this page ~24px taller`,
       ).toBeGreaterThanOrEqual(MIN_SLACK);
     });
 
