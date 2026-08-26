@@ -84,17 +84,19 @@ const RAIL = [
     <div class="amber-floor" aria-hidden="true"></div>
     <div class="wrap hero-head">
       <div class="kicker kicker--plane">brainstorm it, build it, then produce the thing you show people</div>
-      <h1>No agent can approve its own work<br><span class="y">into your codebase.</span></h1>
+      <!-- No forced <br>. It used to sit after "work", which bought a THIRD line (the first
+           clause wrapped anyway) and — since a <br> contributes no text node — shipped the
+           textContent as "...own workinto your codebase.". A real space, and 66px cheaper. -->
+      <h1>No agent can approve its own work <span class="y">into your codebase.</span></h1>
       <p class="lede">
-        The daemon behind it drives the coding CLIs you already pay for as workers on your machine,
-        and calls a change done only when a <b>deterministic check actually runs and passes</b>. A second agent judges
-        it too — and that judge <b>can reject, but is never enough to approve</b>.
+        The daemon behind it drives the coding CLIs you already pay for, on your own machine, and calls a
+        change done only when a <b>deterministic check passes</b>. A second agent judges it too — and
+        <b>can reject, but is never enough to approve</b>.
       </p>
       <p class="fine">
-        Crew prefers a judge identity-distinct from the author and falls back to a single runner when
-        the roster can’t supply one, so the <b>veto</b> is the guarantee, not the separation.
-        Brainstorms, docs and demos share the project, <b>not that check</b>. Below is not a mock —
-        it <b>is</b> the interface.
+        The judge is identity-distinct where the roster allows one and a single runner where it doesn’t,
+        so the <b>veto</b> is the guarantee, not the separation. Brainstorms, docs and demos share the
+        project, <b>not that check</b>. Below is not a mock — it <b>is</b> the interface.
       </p>
     </div>
 
@@ -121,8 +123,13 @@ const RAIL = [
               <span class="cf-k">live events · ws /ws</span>
             </div>
             <div class="console-gate" data-console-gate hidden>
-              <span class="cg-k">steering gate · awaiting your decision</span>
-              <span class="cg-stamp" data-cg-stamp>DENY</span>
+              <!-- Verdict badge and panel label share the header row. Stacked, the raised gate
+                   measured 176px, and the gate — not the feed beside it — is what sets the height
+                   of the console row. A verdict badge belongs in a panel header anyway. -->
+              <div class="cg-head">
+                <span class="cg-stamp" data-cg-stamp>DENY</span>
+                <span class="cg-k">steering gate · awaiting your decision</span>
+              </div>
               <span class="cg-t" data-cg-t>schema-drift · re-verified against the worktree</span>
               <div class="cg-actions">
                 <button type="button" class="cg-btn cg-btn--ok" data-cg-action="approve">Approve</button>
@@ -158,17 +165,14 @@ const RAIL = [
     </div>
 
     <div class="wrap hero-foot">
+      <!-- Four tags, not six: with the CTAs these share one row (43px) instead of stacking into
+           two (85px). "the decision is yours" now lives on the gate itself, where it is doing
+           work, and "dark / light" was the least load-bearing claim on the page. -->
       <div class="hero-tags" role="list">
         <span role="listitem">pure client of /api/v1 + /ws</span>
         <span role="listitem">zero crew source imported</span>
         <span role="listitem">bundled or standalone</span>
-        <span role="listitem">the decision is yours</span>
-        <span role="listitem">dark / light</span>
         <span role="listitem">local-first</span>
-      </div>
-      <div class="hero-cta">
-        <a class="btn btn-primary" href="#get">Get it</a>
-        <a class="btn btn-ghost" href="#client">See the seam</a>
       </div>
     </div>
   </section>
@@ -581,8 +585,11 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
         var cue = document.createElement('span');
         cue.className = 'cg-cue';
         cue.setAttribute('data-cg-cue', '');
-        cue.textContent = '☝ The decision is yours';
-        gate.appendChild(cue);
+        cue.textContent = 'The decision is yours';
+        // Into the ACTIONS row, not the gate: a line of its own cost 33px of hero height, which
+        // pushed these very buttons below the fold on a 1440x700 laptop. Beside them it points at
+        // them by adjacency, so it also drops the ☝ it used to need.
+        (gate.querySelector('.cg-actions') || gate).appendChild(cue);
       }
 
       // Feed steps in the daemon's real vocabulary: POST /runs launches, /ws

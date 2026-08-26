@@ -166,45 +166,66 @@ code {
 .sec-sub a { color: var(--link); }
 
 /* ── Hero ─────────────────────────────────────────────────────────────── */
-.hero { position: relative; overflow: hidden; padding: clamp(36px, 6svh, 68px) 0 clamp(28px, 4.5svh, 52px); }
+/* HEIGHT BUDGET. The hero has to hold a working console AND fit a laptop viewport. Measured at
+   1440x700 it was 970px idle and 999px once the steering gate raised — the gate buttons, which
+   are the whole point of the section, sat ~300px below the fold. The console is the argument
+   ("Below is not a mock — it is the interface"), so the height came out of the type, spacing and
+   copy around it, plus the gate's own stacking. Every vertical value in this block is part of
+   that budget; pinned by tests/e2e/hero-fits.spec.ts. */
+.hero { position: relative; overflow: hidden; padding: clamp(10px, 1.5svh, 26px) 0 clamp(8px, 1.2svh, 20px); }
 .amber-floor {
   position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(ellipse 60% 60% at 82% 8%, color-mix(in oklab, var(--amb) 15%, transparent), transparent 60%);
 }
 .hero-head { text-align: center; }
-.hero-head h1 { font-size: clamp(2.1rem, 4.4vw, 3.4rem); margin: 12px 0 0; }
-.lede { margin: 14px auto 0; font-size: clamp(0.96rem, 1.2vw, 1.05rem); line-height: 1.55; color: color-mix(in oklab, var(--ink) 80%, transparent); max-width: 72ch; }
+/* The headline used to force its break with <br> after "work". The first clause still wrapped on
+   its own, so the hard break bought a THIRD line and left "into your codebase." short: 160px.
+   Dropping the <br> lets `text-wrap: balance` (h1 sets it above) pick the break — two even lines,
+   94px. The <br> also joined "work" and "into" in textContent, since a <br> contributes no text
+   node; a real space is both the correct string and 66px cheaper. */
+.hero-head h1 { font-size: clamp(2rem, 3.9vw, 3rem); margin: 6px 0 0; }
+/* The lede and the small print are both capped at two lines at 1440px. The measure is wider than
+   the 72ch body default on purpose: this is centred display prose, and a third line here costs
+   more than the extra measure does. */
+.lede { margin: 10px auto 0; font-size: clamp(0.94rem, 1.15vw, 1.02rem); line-height: 1.5; color: color-mix(in oklab, var(--ink) 80%, transparent); max-width: 94ch; }
 .lede b { color: var(--ink); font-weight: 700; }
 /* Small print under the lede. The hero has to state real caveats (single-runner fallback, what
    documents do NOT share) without those caveats costing 200px of hero height. */
 .fine {
-  margin: 12px auto 0; max-width: 76ch;
-  font-size: 0.78rem; line-height: 1.55;
+  margin: 8px auto 0; max-width: 104ch;
+  font-size: 0.74rem; line-height: 1.45;
   color: color-mix(in oklab, var(--ink) 58%, transparent);
 }
 .fine b { color: color-mix(in oklab, var(--ink) 82%, transparent); font-weight: 650; }
-.hero-foot { margin-top: clamp(18px, 3svh, 30px); display: flex; flex-direction: column; align-items: center; gap: 15px; }
+/* Tags and CTAs share one row on a laptop rather than stacking into two — 36px, from 86px.
+   `flex-wrap` keeps the phone behaviour: the tag block shrinks to its chips and the buttons drop
+   to their own line. */
+.hero-foot {
+  margin-top: clamp(9px, 1.3svh, 18px);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 10px 18px;
+}
 .hero-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .hero-tags span {
   font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--muted); border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 5px 12px;
 }
-.hero-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+/* Hero-only: the rest of the page has room for the full-size button. */
 
 /* ── The console (the hero visual IS the product) ─────────────────────── */
-.hero-console-wrap { margin-top: clamp(20px, 3.6svh, 40px); }
+.hero-console-wrap { margin-top: clamp(9px, 1.3svh, 18px); }
 .console {
   border: 1px solid var(--hairline-strong); border-radius: 16px; overflow: hidden;
   background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
   box-shadow: 0 30px 60px -44px rgba(0,0,0,.7);
 }
-.mock-bar { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 45%, transparent); }
+.mock-bar { display: flex; align-items: center; gap: 12px; padding: 5px 14px; border-bottom: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 45%, transparent); }
 .mock-dots { display: inline-flex; gap: 6px; flex-shrink: 0; }
 .mock-dots i { width: 10px; height: 10px; border-radius: 50%; background: color-mix(in oklab, var(--ink) 22%, transparent); }
 .mock-url { font-family: var(--font-mono); font-size: 0.66rem; color: color-mix(in oklab, var(--ink) 70%, transparent); border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 3px 12px; background: color-mix(in oklab, var(--canvas) 40%, transparent); flex: 1; text-align: center; }
 
-.console-body { padding: 14px; display: flex; flex-direction: column; gap: 11px; }
-.console-launch { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 11px 14px; background: color-mix(in oklab, var(--canvas) 35%, transparent); }
+.console-body { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.console-launch { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 8px 14px; background: color-mix(in oklab, var(--canvas) 35%, transparent); }
 .console-launch:focus-within { border-color: color-mix(in oklab, var(--accent) 45%, var(--hairline-strong)); }
 .cl-k { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
 .cl-input { flex: 1; min-width: 180px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink); background: transparent; border: none; outline: none; }
@@ -212,10 +233,13 @@ code {
 .cl-go { font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700; color: var(--accent-ink); background: var(--accent); border: none; border-radius: 7px; padding: 6px 13px; cursor: pointer; transition: transform .2s var(--ease); }
 .cl-go:hover { transform: translateY(-1px); }
 
-.console-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; align-items: stretch; }
-.console-feed, .console-gate { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 13px 14px; background: color-mix(in oklab, var(--surface) 60%, transparent); }
+.console-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: stretch; }
+.console-feed, .console-gate { display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--hairline-strong); border-radius: 10px; padding: 10px 14px; background: color-mix(in oklab, var(--surface) 60%, transparent); }
 .cf-k, .cg-k { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
-.console-feed { height: clamp(120px, 21svh, 180px); overflow-y: auto; }
+/* The GATE, not the feed, is what sets this row's height — it is the taller of the two once it
+   raises. Keep this clamp at or above the gate's own content height or the Approve/Reject buttons
+   end up inside a scroller, which is the one thing on this page that must never be hidden. */
+.console-feed { height: clamp(104px, 17svh, 150px); overflow-y: auto; }
 .console-gate { overflow-y: auto; }
 .cf-row { font-family: var(--font-mono); font-size: 0.72rem; color: color-mix(in oklab, var(--ink) 74%, transparent); animation: row-in .28s var(--ease) backwards; }
 .cf-row b { color: var(--ink); }
@@ -225,32 +249,38 @@ code {
 .cf-row--ok b { color: var(--ok); }
 @keyframes row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-.cg-stamp { font-family: var(--font-mono); font-weight: 700; font-size: 0.86rem; letter-spacing: 0.12em; width: max-content; color: #fff; background: var(--deny); border-radius: 6px; padding: 5px 12px; }
+/* Verdict badge and panel label on one line. Stacked, the raised gate measured 176px and it —
+   not the feed beside it — is what sets the height of the whole console row. It is 119px now. */
+.cg-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cg-stamp { font-family: var(--font-mono); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.12em; width: max-content; color: #fff; background: var(--deny); border-radius: 6px; padding: 4px 11px; }
 .console-gate[data-verdict="allow"] .cg-stamp { color: var(--accent-ink); background: var(--accent); }
 .cg-t { font-family: var(--font-mono); font-size: 0.7rem; color: color-mix(in oklab, var(--ink) 70%, transparent); }
-.cg-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
+.cg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 2px; }
 .cg-btn { font-family: var(--font-mono); font-size: 0.68rem; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--hairline-strong); color: color-mix(in oklab, var(--ink) 78%, transparent); background: color-mix(in oklab, var(--surface) 70%, transparent); cursor: pointer; transition: border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease); }
 .cg-btn:hover { border-color: var(--accent); color: var(--accent); }
 .cg-btn--ok { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 700; }
 .cg-btn--ok:hover { color: var(--accent-ink); background: color-mix(in oklab, var(--accent) 88%, #000 6%); border-color: var(--accent); }
 .cg-btn:disabled { opacity: 0.5; cursor: default; }
-.cg-amend { display: flex; gap: 8px; margin-top: 6px; }
+.cg-amend { display: flex; gap: 8px; margin-top: 3px; }
 .cg-amend input {
   flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink);
   background: color-mix(in oklab, var(--canvas) 35%, transparent);
-  border: 1px solid var(--hairline-strong); border-radius: 7px; padding: 6px 10px; outline: none;
+  border: 1px solid var(--hairline-strong); border-radius: 7px; padding: 5px 10px; outline: none;
 }
 .cg-amend input:focus { border-color: var(--accent); }
 .cg-amend button { flex-shrink: 0; border: none; cursor: pointer; }
+/* The cue rides INSIDE the actions row (JS appends it to .cg-actions), not on a line of its own
+   below it — a row of its own cost 33px of hero height for six words. Sitting beside the buttons
+   it also points at them by adjacency, so it no longer needs the ☝ glyph it used to carry. */
 .cg-cue {
-  width: max-content; margin-top: 2px;
+  width: max-content;
   font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.03em; font-weight: 700;
   color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 4px 11px;
   animation: cue-pulse 1.7s var(--ease) infinite;
 }
-@keyframes cue-pulse { 50% { transform: translateY(-2px); opacity: .85; } }
+@keyframes cue-pulse { 50% { transform: translateX(2px); opacity: .85; } }
 
-.console-term { display: flex; flex-direction: column; gap: 5px; border: 1px solid var(--hairline); border-radius: 10px; padding: 11px 14px; background: color-mix(in oklab, var(--surface-2) 70%, #000 6%); }
+.console-term { display: flex; flex-direction: column; gap: 5px; border: 1px solid var(--hairline); border-radius: 10px; padding: 8px 14px; background: color-mix(in oklab, var(--surface-2) 70%, #000 6%); }
 .ct-line { font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink); white-space: nowrap; overflow-x: auto; }
 .ct-p { color: var(--accent); font-weight: 700; margin-right: 8px; }
 .ct-c { color: color-mix(in oklab, var(--ink) 46%, transparent); }
@@ -258,7 +288,7 @@ code {
 /* the insight rail: interactive chips + one caption line */
 .console-rail {
   display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
-  border: 1px solid var(--hairline); border-radius: 10px; padding: 9px 14px;
+  border: 1px solid var(--hairline); border-radius: 10px; padding: 6px 14px;
   background: color-mix(in oklab, var(--surface) 45%, transparent);
 }
 .cr-k { font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); margin-right: 3px; }
