@@ -61,11 +61,14 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
         ).toBeLessThanOrEqual(vp.height);
       }
 
-      // The CTA is the last thing in the section; if it is on screen, the whole hero is.
-      const ctaBottom = await page
-        .locator('.hero-cta')
+      // The tag row is the last thing in the section now that the hero CTAs are gone; if it is
+      // on screen, the whole hero is. (It used to be .hero-cta -- "Get it" / "See the seam" --
+      // which was removed: the page already ends on a Get it section, and the topbar carries the
+      // links, so the hero was spending its last 43px repeating navigation.)
+      const footBottom = await page
+        .locator('.hero-tags')
         .evaluate((el) => el.getBoundingClientRect().bottom);
-      expect(Math.round(ctaBottom), 'the hero CTAs are below the fold').toBeLessThanOrEqual(vp.height);
+      expect(Math.round(footBottom), 'the hero foot is below the fold').toBeLessThanOrEqual(vp.height);
     });
 
     test('the platform band fits the viewport', async ({ page }) => {

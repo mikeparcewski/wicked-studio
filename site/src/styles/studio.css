@@ -210,9 +210,7 @@ code {
   font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--muted); border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 5px 12px;
 }
-.hero-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 /* Hero-only: the rest of the page has room for the full-size button. */
-.hero-cta .btn { padding: 8px 17px; font-size: 0.76rem; }
 
 /* ── The console (the hero visual IS the product) ─────────────────────── */
 .hero-console-wrap { margin-top: clamp(9px, 1.3svh, 18px); }
