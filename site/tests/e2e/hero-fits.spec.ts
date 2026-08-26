@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
  * page pairs a fixed 64px topbar with `scroll-snap-align: start`, so the hero is pinned at y=64
  * and everything past y=700 is simply not on screen. What fell off the bottom was the whole
  * bottom half of the console: the Approve / Approve with steer / Reject buttons, the terminal
- * line, the insight rail, and both CTAs. The section's entire argument — "Below is not a mock —
+ * line, and the insight rail. The section's entire argument — "Below is not a mock —
  * it IS the interface" — was below the fold, and the copy above it was making a promise the
  * viewport never delivered on.
  *
@@ -30,6 +30,18 @@ async function gateRaised(page: import('@playwright/test').Page) {
 }
 
 for (const vp of [LAPTOP, LAPTOP_TALL]) {
+  // The topbar is position:fixed and overlays the page, so the height a section actually gets is
+  // the viewport MINUS the topbar -- which is exactly what the sections are sized to
+  // (min-height: calc(100svh - var(--topbar-h))). Comparing against the raw viewport height is
+  // therefore ~64px too generous: a section could clear it and still sit partly under the bar.
+  // Measure the bar rather than hardcoding 64px, so a token change cannot silently loosen this.
+  const usableHeight = async (page: import('@playwright/test').Page) =>
+    vp.height -
+    (await page.evaluate(() => {
+      const bar = document.querySelector('.topbar, header[class*="topbar"]');
+      return bar ? Math.round(bar.getBoundingClientRect().height) : 0;
+    }));
+
   test.describe(`hero at ${vp.width}x${vp.height}`, () => {
     test.use({ viewport: vp });
 
@@ -39,11 +51,12 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
         page.evaluate(() => Math.round(document.querySelector('.hero')!.getBoundingClientRect().height));
 
       const idle = await heroH();
-      expect(idle, `.hero is ${idle}px in a ${vp.height}px viewport before the gate raises`).toBeLessThanOrEqual(vp.height);
+      const usable = await usableHeight(page);
+      expect(idle, `.hero is ${idle}px in ${usable}px of usable height before the gate raises`).toBeLessThanOrEqual(usable);
 
       await gateRaised(page);
       const raised = await heroH();
-      expect(raised, `.hero grows to ${raised}px once the steering gate raises`).toBeLessThanOrEqual(vp.height);
+      expect(raised, `.hero grows to ${raised}px, past ${usable}px of usable height, once the steering gate raises`).toBeLessThanOrEqual(usable);
     });
 
     test('the steering decision is on screen without scrolling', async ({ page }) => {
@@ -58,7 +71,7 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
         expect(
           Math.round(bottom),
           `the "${action}" control ends ${Math.round(bottom)}px down a ${vp.height}px window — below the fold`,
-        ).toBeLessThanOrEqual(vp.height);
+        ).toBeLessThanOrEqual(vp.height);  // absolute page position, so the raw viewport is right here
       }
 
       // The tag row is the last thing in the section now that the hero CTAs are gone; if it is
@@ -68,7 +81,7 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
       const footBottom = await page
         .locator('.hero-tags')
         .evaluate((el) => el.getBoundingClientRect().bottom);
-      expect(Math.round(footBottom), 'the hero foot is below the fold').toBeLessThanOrEqual(vp.height);
+      expect(Math.round(footBottom), 'the hero foot is below the fold').toBeLessThanOrEqual(vp.height);  // absolute position
     });
 
     test('the platform band fits the viewport', async ({ page }) => {
@@ -78,7 +91,8 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
       const h = await page.evaluate(() =>
         Math.round(document.querySelector('.same-garden')!.getBoundingClientRect().height),
       );
-      expect(h, `.same-garden is ${h}px in a ${vp.height}px viewport`).toBeLessThanOrEqual(vp.height);
+      const usable = await usableHeight(page);
+      expect(h, `.same-garden is ${h}px in ${usable}px of usable height`).toBeLessThanOrEqual(usable);
     });
   });
 }
