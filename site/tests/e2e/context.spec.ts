@@ -44,7 +44,7 @@ test.describe('a project is a context [.ctx]', () => {
     await expect(limit).toContainText('linkage: "co-located"');
   });
 
-  test('does not oversell: the refresh cost and the version floor are both stated', async ({ page }) => {
+  test('does not oversell: the refresh cost and the dependency are both stated', async ({ page }) => {
     await page.goto('/');
     const foot = page.locator('.ctx-foot');
     await bringIntoView(foot);
@@ -52,7 +52,13 @@ test.describe('a project is a context [.ctx]', () => {
     // feature sound free, and the first person to run it on a large project would find out
     // otherwise at the worst moment.
     await expect(foot).toContainText('ten minutes');
-    await expect(foot).toContainText('wicked-estate ≥ 0.14.6');
+    // The DEPENDENCY, not a version number. A researched sentence naming crates.io's published
+    // estate version went false while the publish that fixed it was still running — so versions
+    // live where something re-checks them (install command, badges, README,
+    // scripts/verify-ecosystem.sh) and prose names the capability instead.
+    await expect(foot).toContainText('--repo');
+    await expect(foot).toContainText('accepts the flag');
+    await expect(foot).not.toContainText('0.14.6');
   });
 });
 

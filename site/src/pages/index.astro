@@ -336,11 +336,17 @@ const RAIL = [
     </div>
   </section>
 
-  <!-- ── A project is a CONTEXT: one graph over all its repos (crew 0.7.0) ── -->
+  <!-- ── A project is a CONTEXT: one graph over all its repos ─────────────────
+       No version numbers in this copy, deliberately. The family's other four sites carry zero
+       product versions in prose, and the reason showed up the day this was written: a carefully
+       researched sentence about crates.io serving estate 0.14.5 went false while the publish that
+       fixed it was still running. Versions belong where something re-checks them — the install
+       command, the registry badges, the README beside the code, and scripts/verify-ecosystem.sh,
+       which FAILS when a tag and a registry disagree. Prose is the one place nothing re-checks. -->
   <section class="ctx" aria-labelledby="ctx-h">
     <div class="wrap">
       <div class="sec-head sec-head--wide">
-        <div class="kicker">Context · crew 0.7.0</div>
+        <div class="kicker">Context · one graph, every repo in the project</div>
         <h2 id="ctx-h">A project is a context, not a folder.</h2>
         <p class="sec-sub">
           Real work spans repos. A change in an engine lands in the daemon that embeds it and the
@@ -387,8 +393,9 @@ const RAIL = [
       <p class="ctx-foot">
         A refresh is <code>wicked-estate index</code> per member, bounded at ten minutes
         <b>each</b> — so it never happens implicitly at launch, and a missing or stale graph
-        degrades the run to its own repo’s graph and says so. Needs
-        <code>wicked-estate ≥ 0.14.6</code>, capability-probed before anything is indexed.
+        degrades the run to its own repo’s graph and says so. It needs an estate that supports
+        <code>--repo</code> co-location, capability-probed before anything is indexed — an older
+        binary accepts the flag, <b>ignores it</b>, and exits 0.
       </p>
     </div>
   </section>
