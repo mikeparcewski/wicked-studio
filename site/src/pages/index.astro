@@ -8,7 +8,8 @@
  * daemon: launch and steer governed runs, answer human gates, watch live
  * CoreEvent streams, drive terminals — everything the daemon exposes on
  * /api/v1 and /ws, and nothing else. Its sibling front door is
- * wicked-interactive (the creator skin); both are pure clients of the same
+ * wicked-interactive (now the document ENGINE, not a skin — its UI moved here); this
+ * surface is a pure client of the same
  * control plane.
  *
  * HONEST BOUNDARIES honored on this page:
@@ -210,14 +211,14 @@ const RAIL = [
     <div class="wrap">
       <div class="sec-head sec-head--wide">
         <div class="kicker kicker--plane">The experience plane · one project model</div>
-        <h2 id="proj-h">One project. Two front doors.</h2>
+        <h2 id="proj-h">One project, whichever kind of work you are doing.</h2>
         <p class="sec-sub">
           The Project model lives in the <b>control plane</b> — <code>/api/v1/projects</code>, nine
-          routes — and both skins are pure clients of it. A project groups runs, chats, and docs;
-          its activity feed <b>merges</b> crew’s durable core events with
-          <a href="https://wi.wickedagile.com">wicked-interactive</a>’s bus events carrying the same
-          <code>project_id</code>. The coder’s door and the creator’s door open onto the
-          <b>same room</b> — flip the skin below and watch the same project re-render.
+          routes — and this surface is a pure client of it. A project groups runs, chats and docs;
+          its activity feed <b>merges</b> crew’s durable core events with the document engine’s bus
+          events carrying the same <code>project_id</code>. A governed run and the deck you write
+          about it land in the <b>same room</b> — flip the view below and watch the same project
+          re-render.
         </p>
       </div>
 
@@ -225,8 +226,8 @@ const RAIL = [
         <div class="proj-bar">
           <span class="proj-id">project · <b>payments-refresh</b></span>
           <div class="proj-skins" role="tablist" aria-label="Which skin renders this project">
-            <button type="button" role="tab" class="proj-skin is-active" data-proj-skin="studio" aria-selected="true">studio · coder</button>
-            <button type="button" role="tab" class="proj-skin" data-proj-skin="interactive" aria-selected="false">interactive · creator</button>
+            <button type="button" role="tab" class="proj-skin is-active" data-proj-skin="studio" aria-selected="true">as a run board</button>
+            <button type="button" role="tab" class="proj-skin" data-proj-skin="interactive" aria-selected="false">as a document</button>
           </div>
         </div>
 
@@ -248,7 +249,7 @@ const RAIL = [
 
         <div class="proj-foot">
           <code class="proj-call">GET /api/v1/projects/payments-refresh/activity</code>
-          <span class="proj-same" data-proj-same>same project · same feed · rendered by the <b data-proj-skin-label>coder’s</b> skin</span>
+          <span class="proj-same" data-proj-same>same project · same feed · rendered by the <b data-proj-skin-label>run board</b> skin</span>
         </div>
       </div>
 
@@ -846,7 +847,7 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
             b.classList.toggle('is-active', active);
             b.setAttribute('aria-selected', active ? 'true' : 'false');
           });
-          if (label) label.textContent = skin === 'studio' ? 'coder’s' : 'creator’s';
+          if (label) label.textContent = skin === 'studio' ? 'run board' : 'document';
         });
       });
     })();
