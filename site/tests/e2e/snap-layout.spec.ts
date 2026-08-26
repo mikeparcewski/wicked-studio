@@ -18,6 +18,32 @@ import { test, expect } from '@playwright/test';
 
 const LAPTOP = { width: 1440, height: 700 };
 
+/**
+ * Wait for scrolling to actually finish rather than sleeping a guessed interval.
+ *
+ * `scrollend` fires once the scroll position is final AND scroll-snap has settled, which is
+ * precisely the state these tests sample. It is the deterministic signal; the timeout below is
+ * only a floor for the case where the gesture produces NO scroll at all — which is exactly the
+ * wedged-page failure being tested for, so it must not hang there.
+ */
+async function settled(page: import('@playwright/test').Page, cap = 700) {
+  await page.evaluate(
+    (ms) =>
+      new Promise<void>((resolve) => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          window.removeEventListener('scrollend', finish);
+          resolve();
+        };
+        window.addEventListener('scrollend', finish, { once: true });
+        window.setTimeout(finish, ms);
+      }),
+    cap,
+  );
+}
+
 test.describe('scroll-snap layout', () => {
   test('every section on the page has a snap point', async ({ page }) => {
     await page.setViewportSize(LAPTOP);
@@ -51,7 +77,7 @@ test.describe('scroll-snap layout', () => {
   test('scrolling top to bottom reaches every section', async ({ page }) => {
     await page.setViewportSize(LAPTOP);
     await page.goto('/');
-    await page.waitForTimeout(300);
+    await page.waitForLoadState('networkidle');
 
     const all = await page.$$eval('section', (ns) => ns.map((n) => n.className.split(' ')[0]));
     const seen = new Set<string>();
@@ -75,7 +101,7 @@ test.describe('scroll-snap layout', () => {
         window.scrollBy(0, step);
         return window.scrollY + window.innerHeight >= document.body.scrollHeight - 2;
       }, Math.round(LAPTOP.height * 0.85));
-      await page.waitForTimeout(100);
+      await settled(page);
       if (atEnd) break;
     }
     await sweep();
@@ -93,12 +119,12 @@ test.describe('scroll-snap layout', () => {
     // past it, because .work had no snap point and `mandatory` had nowhere to put the viewport.
     await page.setViewportSize(LAPTOP);
     await page.goto('/');
-    await page.waitForTimeout(500);
+    await page.waitForLoadState('networkidle');
 
     const restedOn: string[] = [];
     for (let i = 0; i < 45; i++) {
       await page.mouse.wheel(0, 320);
-      await page.waitForTimeout(240); // let the snap settle before sampling
+      await settled(page); // resolves on `scrollend` — the snap has finished moving
       const top = await page.evaluate((vh) => {
         let best = '';
         let cover = 0;
