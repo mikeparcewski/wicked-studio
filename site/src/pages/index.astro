@@ -40,9 +40,9 @@ import Footer from 'wicked-web/components/Footer.astro';
 import SameGarden from 'wicked-web/components/SameGarden.astro';
 import '../styles/studio.css';
 
-const title = 'wicked-studio — the coder’s front door: launch, watch, steer, verified';
+const title = 'wicked-studio — nothing approves its own work';
 const description =
-  'wicked-studio is the coder-facing skin of the wicked platform’s experience plane — the run board for governed agent delivery. Launch a run from a plain-text brief, watch live CoreEvents stream over WebSocket, answer the human gates that hold it, and drive a real terminal into the worker’s worktree. A pure HTTP/WS client of the wicked-crew daemon’s /api/v1: zero crew source imported, the wire contract (wicked-crew-api-types) is the only shared artifact. Ships bundled inside `npx wicked-crew serve` or standalone against any daemon via VITE_API_HOST. One project model, two skins: the same projects the creator skin (wicked-interactive) drives.';
+  'The orchestrator IDE: brainstorm it, build it under a gate nothing self-approves, then produce the doc, deck or demo — on your own machine, driving the coding CLIs you already pay for.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
 // The run board: the SPA's real panels (src/hooks/useRoute.ts), each fed by a
@@ -78,13 +78,15 @@ const RAIL = [
   <section class="hero">
     <div class="amber-floor" aria-hidden="true"></div>
     <div class="wrap hero-head">
-      <div class="kicker kicker--plane">wicked-studio · the coder’s front door of the wicked platform</div>
-      <h1>Launch. Watch. Steer.<br><span class="y">Verified.</span></h1>
+      <div class="kicker kicker--plane">brainstorm it, build it, then produce the thing you show people</div>
+      <h1>The agent that wrote the code<br><span class="y">never decides it’s done.</span></h1>
       <p class="lede">
-        The run board for governed agent delivery. Describe the problem, watch the live
-        event stream phase by phase, and answer the gates that hold it — <b>the decision
-        is always yours</b>. This is not a mock of the product: it <b>is</b> the interface,
-        and the one below is live. Drive it.
+        The daemon behind it drives the coding CLIs you already pay for as workers on your machine,
+        and calls a change done only when two independent things agree: a <b>deterministic check that
+        actually runs</b>, and a <b>separate judge that can reject but can never approve on its
+        own</b>. With the document surface installed, the same window also holds the brainstorm that
+        starts the work and the doc, deck or demo that comes out of it — <b>those share the project,
+        not that check</b>. Below is not a mock: it <b>is</b> the interface. Drive it.
       </p>
     </div>
 
@@ -255,6 +257,80 @@ const RAIL = [
         routes, the merged activity feed, durable gate prompts across member runs
         (<code>GET /projects/:id/prompts</code>). The studio’s <b>dedicated project browser is
         landing in this skin next</b>; the run board you saw above already rides the same daemon.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Four kinds of product work; ONE of them carries the gate ─────────── -->
+  <section class="work" aria-labelledby="work-h">
+    <div class="wrap">
+      <div class="sec-head sec-head--wide">
+        <div class="kicker">One window · four kinds of work</div>
+        <h2 id="work-h">Where product work actually happens.</h2>
+        <p class="sec-sub">
+          A feature is rarely just code. It starts as a question, becomes a change, and ends as
+          something you show someone. All four live in the same window and share the same project —
+          <b>but only one of them carries the gate</b>, and the page says which.
+        </p>
+      </div>
+
+      <div class="work-grid">
+        <article class="work-card work-card--gated">
+          <span class="work-k">software · gated</span>
+          <h3>Code that clears twice</h3>
+          <p>
+            Launch a run against your own repos, watch the worker’s raw output as it happens, and
+            clear the human gates yourself. Nothing counts as done until a deterministic check and a
+            separate judge both agree — <b>either can stop it, neither can approve alone</b>.
+          </p>
+          <p class="work-n">the deepest surface here, by a wide margin</p>
+        </article>
+
+        <article class="work-card">
+          <span class="work-k">materials</span>
+          <h3>Decks and docs</h3>
+          <p>
+            Write in a document canvas, point at an element and leave a note for an agent to change
+            it, and teach one document a brand. Three export formats are offered over one wire — a
+            self-contained HTML file, a PDF, a PPTX — and the document service does the rendering.
+          </p>
+          <p class="work-n">a brand you teach one document stays with that document</p>
+        </article>
+
+        <article class="work-card">
+          <span class="work-k">brainstorming</span>
+          <h3>Ask several models</h3>
+          <p>
+            Put one question to more than one model in the same thread and see how many seats
+            answered out of how many were convened — then hand the thread off as a run the moment
+            it turns into actual work.
+          </p>
+          <p class="work-n">“3 of 5 seats”, or “3 polled” when the count is unknown — never backfilled</p>
+        </article>
+
+        <article class="work-card">
+          <span class="work-k">demos</span>
+          <h3>A recorded walkthrough</h3>
+          <p>
+            A wizard authors the steps; the document service runs them in a real browser and hands
+            back a recording of the click-through — a screen capture with a script behind it, not a
+            narrated film.
+          </p>
+          <p class="work-n">the thinnest surface here — judge it last</p>
+        </article>
+      </div>
+
+      <p class="work-foot">
+        <b>The two-sided check covers code, and only code.</b> Documents do have human gates — an
+        agent asks in the thread and you answer there — but they do not carry the deterministic
+        check plus independent judge that a code run carries. All four share the project: the same
+        members, the same activity feed. They do not share that verdict, and anyone telling you a
+        deck was “governed” is selling you something.
+      </p>
+      <p class="work-foot work-foot--deps">
+        <b>What the last three need.</b> Documents, decks and demos require wicked-garden present and
+        a reachable document service; without them those modes do not open. Code runs and chat never
+        gate on either.
       </p>
     </div>
   </section>
