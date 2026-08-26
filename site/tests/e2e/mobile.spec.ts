@@ -46,7 +46,7 @@ test.describe('mobile (390×844)', () => {
     const card = page.locator('[data-proj]');
     await bringIntoView(card);
     await expect(card).toBeVisible();
-    await card.getByRole('tab', { name: /interactive · creator/ }).click();
+    await card.getByRole('tab', { name: /as a document/ }).click();
     await expect(card).toHaveAttribute('data-skin', 'interactive');
 
     // The seam panel keeps both modes reachable.

@@ -485,3 +485,34 @@ code {
   margin: 22px 0 0; font-size: 0.88rem; line-height: 1.6;
   color: color-mix(in oklab, var(--ink) 68%, transparent);
 }
+
+/* ── Four kinds of product work (one of them gated) ──────────────────────────
+   The gated card gets the accent border because the scope boundary is the most
+   load-bearing fact on the page: three of these four share the project, not the
+   check, and a reader who misses that leaves believing their deck was governed. */
+.work { border-top: 1px solid var(--hairline); padding: clamp(48px, 8vh, 96px) 0; padding: clamp(48px, 8svh, 96px) 0; }
+.work-grid {
+  display: grid; gap: 14px; margin-top: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.work-card {
+  border: 1px solid var(--hairline-strong); border-radius: 14px; padding: 18px;
+  background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.work-card--gated { border-color: color-mix(in oklab, var(--accent) 46%, var(--hairline-strong)); }
+.work-k {
+  font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em;
+  color: var(--amb); text-transform: lowercase;
+}
+.work-card--gated .work-k { color: var(--accent); }
+.work-card h3 { margin: 0; font-size: 1.02rem; line-height: 1.3; }
+.work-card p { margin: 0; font-size: 0.9rem; line-height: 1.58; color: color-mix(in oklab, var(--ink) 84%, transparent); }
+.work-n {
+  margin-top: auto !important; padding-top: 8px; font-family: var(--font-mono);
+  font-size: 0.68rem; color: color-mix(in oklab, var(--ink) 55%, transparent) !important;
+}
+.work-foot {
+  margin: 22px 0 0; font-size: 0.9rem; line-height: 1.62;
+  color: color-mix(in oklab, var(--ink) 74%, transparent);
+}
