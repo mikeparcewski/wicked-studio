@@ -47,6 +47,7 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
 
     test('the hero fits the viewport before and after the gate raises', async ({ page }) => {
       await page.goto('/');
+      await page.evaluate(() => document.fonts.ready);
       const heroH = () =>
         page.evaluate(() => Math.round(document.querySelector('.hero')!.getBoundingClientRect().height));
 
@@ -61,6 +62,7 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
 
     test('the steering decision is on screen without scrolling', async ({ page }) => {
       await page.goto('/');
+      await page.evaluate(() => document.fonts.ready);
       await gateRaised(page);
 
       // The page has not been scrolled, so every one of these must sit inside the window.
@@ -84,10 +86,51 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
       expect(Math.round(footBottom), 'the hero foot is below the fold').toBeLessThanOrEqual(vp.height);  // absolute position
     });
 
+    test('the hero has content headroom, not just a passing rendered height', async ({ page }) => {
+      // The rendered height of .hero is CLAMPED by min-height: calc(100svh - var(--topbar-h)),
+      // so it reports exactly the usable height right up until the content outgrows it -- at
+      // which point it jumps past in one step. Measuring the rendered box therefore reads
+      // "fits, 0px to spare" both when there is room and when there is none.
+      //
+      // That is not academic: CI (Linux) renders this page's webfonts about 6px taller than
+      // macOS. A hero tuned to exactly the usable height passed locally and failed on CI with
+      // ".hero is 642px in 636px of usable height". Measure the CONTENT and require slack.
+      await page.goto('/');
+      await page.evaluate(() => document.fonts.ready);
+
+      const { content, usable } = await page.evaluate((vh) => {
+        const hero = document.querySelector('.hero') as HTMLElement;
+        const bar = document.querySelector('.topbar, header[class*="topbar"]');
+        const st = getComputedStyle(hero);
+        let total = parseFloat(st.paddingTop) + parseFloat(st.paddingBottom);
+        Array.from(hero.children).forEach((c) => {
+          const el = c as HTMLElement;
+          if (el.classList.contains('amber-floor')) return; // absolutely positioned decoration
+          const cs = getComputedStyle(el);
+          total +=
+            el.getBoundingClientRect().height +
+            parseFloat(cs.marginTop) +
+            parseFloat(cs.marginBottom);
+        });
+        return {
+          content: Math.round(total),
+          usable: vh - (bar ? Math.round(bar.getBoundingClientRect().height) : 0),
+        };
+      }, vp.height);
+
+      const MIN_SLACK = 12; // twice the observed cross-platform font delta
+      expect(
+        usable - content,
+        `.hero content is ${content}px in ${usable}px of usable height — only ` +
+          `${usable - content}px of slack, and Linux renders these fonts ~6px taller than macOS`,
+      ).toBeGreaterThanOrEqual(MIN_SLACK);
+    });
+
     test('the platform band fits the viewport', async ({ page }) => {
       // Shared chrome (wicked-web SameGarden). It rendered 1115px before the band was rebuilt;
       // a site that has not re-pinned the chrome commit will fail here.
       await page.goto('/');
+      await page.evaluate(() => document.fonts.ready);
       const h = await page.evaluate(() =>
         Math.round(document.querySelector('.same-garden')!.getBoundingClientRect().height),
       );
