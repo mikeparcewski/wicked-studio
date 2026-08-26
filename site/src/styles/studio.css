@@ -34,8 +34,18 @@ body { padding-top: var(--topbar-h); }
 @media (max-width: 560px) { .wrap { padding-inline: 18px; } }
 
 /* ── Scroll-lock to section + per-section viewport sizing ────────────────── */
-html { scroll-snap-type: y mandatory; scroll-padding-top: var(--topbar-h); }
-.hero, .board, .proj, .pair, .get {
+/* PROXIMITY, not mandatory. Mandatory snapping makes anything taller than the viewport
+   unreachable: the browser pulls you to the next snap point before you can scroll through the
+   overflow. The hero is 1179px tall in a 900px viewport, so its last ~280px were already being
+   swallowed; adding sections made the page long enough for it to be obvious. Proximity snaps when
+   you land near a boundary and otherwise lets you scroll normally, which is the behaviour a
+   variable-height page needs.
+
+   And the section list is a LIST, so every new section has to be added to it or the browser snaps
+   straight past — that is exactly what happened to .work and .ctx, which read as "the snap skips
+   sections". Anything added below must join this selector. */
+html { scroll-snap-type: y proximity; scroll-padding-top: var(--topbar-h); }
+.hero, .board, .proj, .work, .ctx, .pair, .get {
   min-height: calc(100svh - var(--topbar-h));
   scroll-snap-align: start;
   display: flex;
@@ -45,9 +55,9 @@ html { scroll-snap-type: y mandatory; scroll-padding-top: var(--topbar-h); }
 /* Alternating section bands — translucent darkening so the background art
    shows THROUGH instead of being painted over. */
 .board, .pair { background: color-mix(in oklab, #000 7%, transparent); }
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   html { scroll-snap-type: none; }
-  .hero, .board, .proj, .pair, .get { min-height: 0; }
+  .hero, .board, .proj, .work, .ctx, .pair, .get { min-height: 0; }
 }
 
 /* ── Studio background — ITS OWN motif: the CODER'S FRONT DOOR ─────────────
@@ -147,7 +157,7 @@ code {
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Section heads: left-aligned, spanning the container. */
-.sec-head { max-width: none; margin: 0 0 clamp(26px, 4svh, 46px); }
+.sec-head { max-width: none; margin: 0 0 clamp(20px, 3svh, 34px); }
 .sec-head--wide { text-align: left; }
 .sec-head h2 { font-size: clamp(1.9rem, 3.6vw, 3rem); margin: 12px 0 0; }
 .sec-head h2 code { font-size: 0.82em; }
@@ -156,15 +166,23 @@ code {
 .sec-sub a { color: var(--link); }
 
 /* ── Hero ─────────────────────────────────────────────────────────────── */
-.hero { position: relative; overflow: hidden; padding: clamp(44px, 8svh, 96px) 0 clamp(36px, 6svh, 72px); }
+.hero { position: relative; overflow: hidden; padding: clamp(36px, 6svh, 68px) 0 clamp(28px, 4.5svh, 52px); }
 .amber-floor {
   position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(ellipse 60% 60% at 82% 8%, color-mix(in oklab, var(--amb) 15%, transparent), transparent 60%);
 }
 .hero-head { text-align: center; }
-.hero-head h1 { font-size: clamp(2.3rem, 5.2vw, 4rem); margin: 14px 0 0; }
-.lede { margin: 18px auto 0; font-size: clamp(0.98rem, 1.35vw, 1.1rem); line-height: 1.6; color: color-mix(in oklab, var(--ink) 80%, transparent); max-width: 62%; }
+.hero-head h1 { font-size: clamp(2.1rem, 4.4vw, 3.4rem); margin: 12px 0 0; }
+.lede { margin: 14px auto 0; font-size: clamp(0.96rem, 1.2vw, 1.05rem); line-height: 1.55; color: color-mix(in oklab, var(--ink) 80%, transparent); max-width: 72ch; }
 .lede b { color: var(--ink); font-weight: 700; }
+/* Small print under the lede. The hero has to state real caveats (single-runner fallback, what
+   documents do NOT share) without those caveats costing 200px of hero height. */
+.fine {
+  margin: 12px auto 0; max-width: 76ch;
+  font-size: 0.78rem; line-height: 1.55;
+  color: color-mix(in oklab, var(--ink) 58%, transparent);
+}
+.fine b { color: color-mix(in oklab, var(--ink) 82%, transparent); font-weight: 650; }
 .hero-foot { margin-top: clamp(18px, 3svh, 30px); display: flex; flex-direction: column; align-items: center; gap: 15px; }
 .hero-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .hero-tags span {
@@ -256,7 +274,7 @@ code {
 .console-rail-line { margin: 0; padding: 0 4px; font-family: var(--font-mono); font-size: 0.68rem; line-height: 1.5; color: var(--muted); min-height: 1.5em; }
 
 /* ── The run board (panel switcher) ───────────────────────────────────── */
-.board { border-top: 1px solid var(--hairline); padding: clamp(48px, 8svh, 96px) 0; }
+.board { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
 .board-layout { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 1fr); gap: clamp(14px, 2vw, 26px); align-items: start; }
 .board-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .board-item {
@@ -293,7 +311,7 @@ code {
 .board-status-btn.is-playing .bs-ic { color: var(--amb); }
 
 /* ── One project, two skins ───────────────────────────────────────────── */
-.proj { border-top: 1px solid var(--hairline); padding: clamp(48px, 8svh, 96px) 0; }
+.proj { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
 .proj-card {
   border: 1px solid var(--hairline-strong); border-radius: 16px; overflow: hidden;
   background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
@@ -338,7 +356,7 @@ code {
 .honest-note b { color: var(--ink); }
 
 /* ── The client seam (pairing modes) ──────────────────────────────────── */
-.pair { border-top: 1px solid var(--hairline); padding: clamp(48px, 8svh, 96px) 0; }
+.pair { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
 .pair-panel {
   border: 1px solid var(--hairline-strong); border-radius: 16px; overflow: hidden;
   background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
@@ -368,7 +386,7 @@ code {
 .pair-proof-t { font-size: 0.84rem; line-height: 1.6; color: color-mix(in oklab, var(--ink) 74%, transparent); }
 
 /* ── Get it / finale ──────────────────────────────────────────────────── */
-.get { border-top: 1px solid var(--hairline); padding: clamp(48px, 8svh, 96px) 0; }
+.get { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
 .get-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: clamp(24px, 3vw, 48px); align-items: center; }
 .get-intro { min-width: 0; }
 .get-intro h2 { font-size: clamp(1.8rem, 3.4vw, 2.8rem); margin: 12px 0 0; }
@@ -462,8 +480,8 @@ code {
      first, where a bare `svh` shorthand would be dropped entirely and collapse the band's
      vertical rhythm. The rest of this file still uses `svh` bare (7 sites) — same latent issue,
      tracked separately rather than swept into a docs PR. */
-  padding: clamp(48px, 8vh, 96px) 0;
-  padding: clamp(48px, 8svh, 96px) 0;
+  padding: clamp(40px, 6vh, 68px) 0;
+  padding: clamp(40px, 6svh, 68px) 0;
 }
 .ctx-grid {
   display: grid; gap: 14px; margin-top: 28px;
@@ -490,7 +508,7 @@ code {
    The gated card gets the accent border because the scope boundary is the most
    load-bearing fact on the page: three of these four share the project, not the
    check, and a reader who misses that leaves believing their deck was governed. */
-.work { border-top: 1px solid var(--hairline); padding: clamp(48px, 8vh, 96px) 0; padding: clamp(48px, 8svh, 96px) 0; }
+.work { border-top: 1px solid var(--hairline); padding: clamp(40px, 6vh, 68px) 0; padding: clamp(40px, 6svh, 68px) 0; }
 .work-grid {
   display: grid; gap: 14px; margin-top: 28px;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

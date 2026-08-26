@@ -15,5 +15,15 @@ export default defineConfig({
   // assets resolve from '/', so the CNAME root serves CSS/JS correctly.
   site: 'https://ws.wickedagile.com',
   output: 'static',
+  // Astro's HTML compressor (on by default) deletes the whitespace between a text node and a
+  // following inline tag rather than collapsing it to a single space, so prose wrapped as
+  //     ...core returns
+  //     <b>8 hits</b>
+  // ships as "returns8 hits". It hit this page in a dozen places — "arebound to it",
+  // "spanningRust", "donot resolve", "studio'sdedicated". The copy here wraps for readability, so
+  // every line break landing before a <b> or <code> was a latent word-join, invisible in source
+  // review and invisible to layout measurement. A few KB of retained whitespace is cheaper than
+  // shipping mashed sentences. Pinned by tests/e2e/prose.spec.ts.
+  compressHTML: false,
   vite: { resolve: { alias } },
 });

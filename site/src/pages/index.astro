@@ -87,13 +87,14 @@ const RAIL = [
       <h1>No agent can approve its own work<br><span class="y">into your codebase.</span></h1>
       <p class="lede">
         The daemon behind it drives the coding CLIs you already pay for as workers on your machine,
-        and calls a change done only when a <b>deterministic check actually runs and passes</b>. A
-        second agent judges it too, and that judge <b>can reject but is never enough to approve</b> —
-        a deterministic pass is always also required. Crew picks a judge that is identity-distinct
-        from the author where the roster allows it, and falls back to a single runner when it does
-        not, so the <b>veto</b> is the guarantee, not the separation. With the document surface installed, the same window also holds the brainstorm that
-        starts the work and the doc, deck or demo that comes out of it — <b>those share the project,
-        not that check</b>. Below is not a mock: it <b>is</b> the interface. Drive it.
+        and calls a change done only when a <b>deterministic check actually runs and passes</b>. A second agent judges
+        it too — and that judge <b>can reject, but is never enough to approve</b>.
+      </p>
+      <p class="fine">
+        Crew prefers a judge identity-distinct from the author and falls back to a single runner when
+        the roster can’t supply one, so the <b>veto</b> is the guarantee, not the separation.
+        Brainstorms, docs and demos share the project, <b>not that check</b>. Below is not a mock —
+        it <b>is</b> the interface.
       </p>
     </div>
 
@@ -219,12 +220,10 @@ const RAIL = [
         <div class="kicker kicker--plane">The experience plane · one project model</div>
         <h2 id="proj-h">One project, whichever kind of work you are doing.</h2>
         <p class="sec-sub">
-          The Project model lives in the <b>control plane</b> — <code>/api/v1/projects</code>, nine
-          routes — and this surface is a pure client of it. A project groups runs, chats and docs;
-          its activity feed <b>merges</b> crew’s durable core events with the document engine’s bus
-          events carrying the same <code>project_id</code>. A governed run and the deck you write
-          about it land in the <b>same room</b> — flip the view below and watch the same project
-          re-render.
+          A project groups runs, chats and docs, and its activity feed <b>merges</b> crew’s durable
+          core events with the document engine’s bus events carrying the same <code>project_id</code>.
+          A governed run and the deck you write about it land in the <b>same room</b> — flip the view
+          below and watch the same project re-render.
         </p>
       </div>
 
@@ -261,9 +260,8 @@ const RAIL = [
 
       <p class="honest-note">
         <b>Where this stands:</b> the Project model is <b>shipped in the control plane</b> — nine
-        routes, the merged activity feed, durable gate prompts across member runs
-        (<code>GET /projects/:id/prompts</code>). The studio’s <b>dedicated project browser is
-        landing in this skin next</b>; the run board you saw above already rides the same daemon.
+        routes, the merged feed, durable gate prompts across member runs. The studio’s <b>dedicated
+        project browser is landing in this skin next</b>; the run board above rides that daemon.
       </p>
     </div>
   </section>
@@ -275,9 +273,8 @@ const RAIL = [
         <div class="kicker">One window · four kinds of work</div>
         <h2 id="work-h">Where product work actually happens.</h2>
         <p class="sec-sub">
-          A feature is rarely just code. It starts as a question, becomes a change, and ends as
-          something you show someone. All four live in the same window and share the same project —
-          <b>but only one of them carries the gate</b>, and the page says which.
+          A feature starts as a question, becomes a change, and ends as something you show someone.
+          All four share one project — <b>but only one carries the gate</b>.
         </p>
       </div>
 
@@ -286,9 +283,9 @@ const RAIL = [
           <span class="work-k">software · gated</span>
           <h3>Code that clears twice</h3>
           <p>
-            Launch a run against your own repos, watch the worker’s raw output as it happens, and
-            clear the human gates yourself. Nothing counts as done until a deterministic check and a
-            separate judge both agree — <b>either can stop it, neither can approve alone</b>.
+            Launch a run against your own repos, watch the worker’s raw output live, clear the gates
+            yourself. A deterministic check and a separate judge must both agree —
+            <b>either can stop it, neither can approve alone</b>.
           </p>
           <p class="work-n">the deepest surface here, by a wide margin</p>
         </article>
@@ -297,9 +294,9 @@ const RAIL = [
           <span class="work-k">materials</span>
           <h3>Decks and docs</h3>
           <p>
-            Write in a document canvas, point at an element and leave a note for an agent to change
-            it, and teach one document a brand. Three export formats are offered over one wire — a
-            self-contained HTML file, a PDF, a PPTX — and the document service does the rendering.
+            Write in a document canvas, point at an element to leave a note for an agent, and teach
+            one document a brand. Three formats over one wire — self-contained HTML, PDF, PPTX — and
+            the document service does the rendering.
           </p>
           <p class="work-n">a brand you teach one document stays with that document</p>
         </article>
@@ -308,9 +305,8 @@ const RAIL = [
           <span class="work-k">brainstorming</span>
           <h3>Ask several models</h3>
           <p>
-            Put one question to more than one model in the same thread and see how many seats
-            answered out of how many were convened — then hand the thread off as a run the moment
-            it turns into actual work.
+            Put one question to several models in the same thread and see how many seats answered —
+            then hand the thread off as a run the moment it turns into actual work.
           </p>
           <p class="work-n">“3 of 5 seats”, or “3 polled” when the count is unknown — never backfilled</p>
         </article>
@@ -320,8 +316,7 @@ const RAIL = [
           <h3>A recorded walkthrough</h3>
           <p>
             A wizard authors the steps; the document service runs them in a real browser and hands
-            back a recording of the click-through — a screen capture with a script behind it, not a
-            narrated film.
+            back a recording of the click-through — a screen capture, not a narrated film.
           </p>
           <p class="work-n">the thinnest surface here — judge it last</p>
         </article>
@@ -329,15 +324,10 @@ const RAIL = [
 
       <p class="work-foot">
         <b>The two-sided check covers code, and only code.</b> Documents do have human gates — an
-        agent asks in the thread and you answer there — but they do not carry the deterministic
-        check plus independent judge that a code run carries. All four share the project: the same
-        members, the same activity feed. They do not share that verdict, and anyone telling you a
-        deck was “governed” is selling you something.
-      </p>
-      <p class="work-foot work-foot--deps">
-        <b>What the last three need.</b> Documents, decks and demos require wicked-garden present and
-        a reachable document service; without them those modes do not open. Code runs and chat never
-        gate on either.
+        agent asks in the thread, you answer there — but not the deterministic check plus independent
+        judge a code run carries. All four share the project; they do not share that verdict.
+        Docs, decks and demos also need wicked-garden and a reachable document service to open at
+        all — code runs and chat never gate on either.
       </p>
     </div>
   </section>

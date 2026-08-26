@@ -59,7 +59,9 @@ test.describe('four kinds of work [.work]', () => {
     // fully-excluded roster, so on one seat the same binary can judge. Identity separation is
     // best-effort; the VETO is unconditional (validator.rs:10, "can NEVER be the sole approver").
     await expect(page.locator('h1')).toContainText('approve its own work');
-    await expect(page.locator('.lede')).toContainText('not that check');
+    // Lives in the hero's .fine small print now, not .lede — the lede was cut to two sentences
+    // because it had grown into a 700-char wall. Asserting on .hero keeps the guard on the CLAIM.
+    await expect(page.locator('.hero')).toContainText('not that check');
   });
 });
 
@@ -89,6 +91,11 @@ test.describe('claims the adversarial pass required', () => {
 
   test('names the dependency that gates three of the four modes', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.work-foot--deps')).toContainText('require wicked-garden present');
+    // The two work-foot paragraphs were merged into one; .work-foot--deps no longer exists.
+    // Same three facts in one paragraph: both named dependencies, and what does NOT gate on them.
+    const deps = page.locator('.work-foot');
+    await expect(deps).toContainText('wicked-garden');
+    await expect(deps).toContainText('document service');
+    await expect(deps).toContainText('never gate on either');
   });
 });
