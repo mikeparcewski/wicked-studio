@@ -85,6 +85,48 @@ test.describe('scroll-snap layout', () => {
     );
   });
 
+  test('wheel scrolling can come to rest on every section', async ({ page }) => {
+    // The strongest reproduction of the reported symptom -- "I can't stop on the section at all".
+    // scrollBy() moves the scroll position without producing a wheel event, so it walks the page
+    // even when snapping is actively fighting the user. Real wheel events do not: against the
+    // deployed build this sequence settled on hero -> board -> proj and could not rest anywhere
+    // past it, because .work had no snap point and `mandatory` had nowhere to put the viewport.
+    await page.setViewportSize(LAPTOP);
+    await page.goto('/');
+    await page.waitForTimeout(500);
+
+    const restedOn: string[] = [];
+    for (let i = 0; i < 45; i++) {
+      await page.mouse.wheel(0, 320);
+      await page.waitForTimeout(240); // let the snap settle before sampling
+      const top = await page.evaluate((vh) => {
+        let best = '';
+        let cover = 0;
+        document.querySelectorAll('section').forEach((s) => {
+          const r = s.getBoundingClientRect();
+          const shown = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+          if (shown > cover) {
+            cover = shown;
+            best = s.className.split(' ')[0];
+          }
+        });
+        return best;
+      }, LAPTOP.height);
+      if (restedOn[restedOn.length - 1] !== top) restedOn.push(top);
+      const atEnd = await page.evaluate(
+        () => window.scrollY + window.innerHeight >= document.body.scrollHeight - 2,
+      );
+      if (atEnd) break;
+    }
+
+    for (const section of ['work', 'ctx']) {
+      expect(
+        restedOn,
+        `wheel scrolling never came to rest on .${section} — it was scrolled past`,
+      ).toContain(section);
+    }
+  });
+
   test('the page never scrolls sideways', async ({ page }) => {
     for (const vp of [LAPTOP, { width: 390, height: 844 }]) {
       await page.setViewportSize(vp);
