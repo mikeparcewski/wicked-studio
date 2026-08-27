@@ -445,7 +445,12 @@ describe('happy-path shapes', () => {
 describe('no invented unmake wire (studio#119)', () => {
   // Scoped to the doc/demo nouns on purpose: `wicked.interactive.source.removed` IS
   // UI-emittable, so a future `removeSource` is legitimate and must not trip this.
-  const UNMAKE = /^(delete|remove|destroy|purge|discard|archive)(Doc|Docs|Demo|Demos|Document)/i;
+  // `retire` and `unmake` belong here: the event guard below already covers
+  // `wicked.interactive.doc.retired`, so leaving them out of the EXPORT guard let the two
+  // disagree — a `retireDoc()` wrapper would have passed this while the event it emits was
+  // banned three lines down.
+  const UNMAKE =
+    /^(delete|remove|destroy|purge|discard|archive|retire|unmake)(Doc|Docs|Demo|Demos|Document)/i;
 
   it('the client module exports no doc/demo unmake wrapper', async () => {
     const mod = (await import('../src/api/interactive.js')) as Record<string, unknown>;
