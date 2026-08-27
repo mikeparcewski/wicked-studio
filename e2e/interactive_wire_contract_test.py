@@ -36,6 +36,13 @@ file — the wire studio's restored brand-learn flow polls. The remaining
 known-invented wire OUTSIDE scope (sources attach: slice 19) is still probed as
 ADVISORY — reported, not fatal.
 
+studio#119 adds section 8, the same pin turned on a wire that has never existed
+in EITHER shape: the doc registry serves create + read only — no delete route
+(every spelling is Express's route-missing 404) and no delete bus command (the
+`docs` subdomain owns only `doc.created`). It is FATAL in the "absent" direction
+for the same reason section 4 is: studio must not grow a delete affordance for a
+wire nobody serves, and the day the bridge does serve one, this is what says so.
+
 BRIDGE-UX-1 (DES-UX-001 §8.4): section 7 grows the FATAL probes for the four
 bridge-contract questions DES-UX-001 is gated on — mid-run sends (queue or
 drop, B1), the thread-history read (B3), unfiled-doc hosting (B2), and per-seat
@@ -116,9 +123,19 @@ import re  # noqa: E402 (grouped with its one use, harness style)
 # that helper now speaks the corrected event wire; `api/theme/learn\b` does not match
 # `api/theme/learned` — the REAL interactive#181 readback route getLearnedTheme
 # builds, whose existence is asserted as a FATAL positive step below.)
+# studio#119 adds the delete spellings PRE-EMPTIVELY — the one entry here that bans a
+# wire nobody has invented yet, because the ask is live and the wire is absent in both
+# shapes (section 8). The vitest guard covers the client module's exports; this covers
+# the rest of src/, where a component could build the URL inline and skip it.
 BANNED_SPELLINGS = re.compile(
     r"getDemoSpec|getLatestRecording|api/demo/(spec|recordings|record)\b"
-    r"|api/themes|api/theme/learn\b|listThemes|getTheme\b|learnTheme\b")
+    r"|api/themes|api/theme/learn\b|listThemes|getTheme\b|learnTheme\b"
+    # Keep this verb list IDENTICAL to UNMAKE in tests/interactive.client.test.ts. They guard the
+    # same absence from two sides, and when they drifted apart (this list was missing archive,
+    # discard, retire and unmake) a wrapper could clear one while the other banned the event it
+    # emits. If you add a verb, add it in both places.
+    r"|(delete|remove|purge|destroy|archive|discard|retire|unmake)(Doc|Docs|Demo|Demos|Document)"
+    r"|wicked\.interactive\.doc\.(deleted|removed|retired|archived)")
 spelled: list[str] = []
 for f in sorted((REPO / "src").rglob("*")):
     if f.suffix not in (".ts", ".tsx"):
@@ -129,8 +146,8 @@ for f in sorted((REPO / "src").rglob("*")):
 report["steps"]["client_never_spells_invented_wire"] = {"ok": spelled == [], "hits": spelled}
 if spelled:
     fail("client_grep_verdict",
-         "src/ still spells an invented demo wire — remove it before contract-checking: "
-         + "; ".join(spelled[:5]))
+         "src/ spells a wire the bridge does not serve — land it upstream (and move the "
+         "matching pin below) before contract-checking: " + "; ".join(spelled[:5]))
 
 # ── 1. The real bridge, on a temp root ─────────────────────────────────────────
 cli = WI_DIR / "bin" / "wicked-interactive.js"
@@ -587,6 +604,80 @@ try:
                      "entry_keys": sorted({k for e in entries for k in e})},
         "survives_restart": {"ok": survives_restart, "texts": landed_after},
         "doc_remounted_after_restart": remounted,
+    }
+
+    # ── 8. The doc registry is CREATE + READ only (studio#119) — FATAL ─────────
+    # studio#119 asks for a delete affordance for docs/demos. This section is the
+    # answer, PINNED against the real bridge rather than asserted in prose: there is
+    # no wire to hang one on, so studio (a pure client) cannot grow the button.
+    #
+    # Both escape hatches are checked, because the record (§7.4) and theme (issue #65)
+    # wires each answered "no HTTP route" by turning out to be a UI-emittable bus
+    # COMMAND — the shape an invented `deleteDoc` would most plausibly be waved
+    # through as:
+    #   a. every plausible HTTP spelling is Express's route-missing 404, and the
+    #      "Cannot <METHOD> …" body is the proof it is route-missing rather than a
+    #      service refusal (which would be JSON, as GET /d/:doc/api/theme/learned is);
+    #   b. the bus has no unmake verb in the `docs` subdomain at all — the ownership
+    #      table (src/service/events.js) holds only doc.created — so both candidate
+    #      spellings are rejected `400 unknown event type`, one step BEFORE the
+    #      403 uiEmittable check an existing-but-service-owned type would hit;
+    #   c. the doc is still listed afterwards — no probe accidentally deleted it,
+    #      which is what makes (a) and (b) a real absence rather than a lucky 404.
+    #
+    # When this section FAILS, the bridge grew the wire: adopt it in
+    # src/api/interactive.ts, drop the CI guard in tests/interactive.client.test.ts,
+    # and move this pin — all in the same change. Cleanup is not done at the bridge
+    # alone: crew keeps a per-document replay-dedup row in
+    # ~/.wicked-crew/interactive-draft-ledger.json (keyed by document id for the draft
+    # leg), so a delete that leaves the row behind means a doc re-created under the
+    # same name never gets its first draft again.
+    DELETE_SPELLINGS = [
+        ("DELETE", f"/api/docs/{DEMO}"),
+        ("DELETE", f"/d/{DEMO}"),
+        ("DELETE", f"/d/{DEMO}/api/doc"),
+        ("DELETE", f"/d/{DEMO}/api/versions"),
+        ("POST",   f"/api/docs/{DEMO}/delete"),
+    ]
+    delete_rows = []
+    delete_absent = True
+    for method, path in DELETE_SPELLINGS:
+        status, text, _ = http(method, f"{base}{path}", {} if method == "POST" else None)
+        ok = status == 404 and f"Cannot {method} " in text
+        delete_absent = delete_absent and ok
+        delete_rows.append({
+            "method": method, "path": path, "status": status, "ok": ok,
+            **({} if ok else {"body": text[:200],
+                              "error": "the bridge now answers here — adopt the wire in "
+                                       "src/api/interactive.ts, drop the CI guard in "
+                                       "tests/interactive.client.test.ts, and move this pin"}),
+        })
+    bus_rows = []
+    bus_absent = True
+    for verb in ("deleted", "removed", "retired", "archived"):
+        status, text, _ = http("POST", f"{base}/api/events", {
+            "event_type": f"wicked.interactive.doc.{verb}",
+            "payload": {"document_id": DEMO}})
+        ok = status == 400 and "unknown event type" in text
+        bus_absent = bus_absent and ok
+        bus_rows.append({"event_type": f"wicked.interactive.doc.{verb}",
+                         "status": status, "ok": ok,
+                         **({} if ok else {"body": text[:200]})})
+    s_list3, t_list3, _ = http("GET", f"{base}/api/docs")
+    survives = s_list3 == 200 and any(d.get("name") == DEMO for d in json.loads(t_list3))
+    report["steps"]["doc_delete_wire_absent"] = {
+        "ok": delete_absent and bus_absent and survives,
+        "verdict": "studio#119 = NO delete wire EXISTS: not an HTTP route (every spelling is "
+                   "Express's route-missing 404) and not a bus command (the docs subdomain "
+                   "owns only doc.created, so every unmake verb is `unknown event type`). "
+                   "Crew's proxy is not the blocker — registerInteractiveProxy mounts "
+                   "scope.all(…) and forwards any method verbatim. The UI has no delete "
+                   "affordance BECAUSE the wire has none; it must land in wicked-interactive "
+                   "(route + doc.* unmake event) and wicked-crew (drop the doc's "
+                   "interactive-draft-ledger.json row) before studio grows the button.",
+        "http_spellings": delete_rows,
+        "bus_spellings": bus_rows,
+        "doc_survives_every_probe": survives,
     }
 
     # ── Advisory: invented wires OUTSIDE this scope (on the record, not fatal) ──
