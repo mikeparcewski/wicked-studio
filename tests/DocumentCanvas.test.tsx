@@ -497,15 +497,28 @@ describe('DocumentCanvas — canvas-first: right panel + slim strip (doc-feedbac
     stubFetch({ '/api/versions': { get body() { reads += 1; return reads === 1 ? MANIFEST : grown; } } });
     render(<DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}} />);
 
-    await screen.findByTestId('doc-canvas');
+    expect(await screen.findByTestId('doc-canvas')).toHaveAttribute('data-version', '3');
     expect(screen.getAllByTestId('version-entry')).toHaveLength(3);
+    // "No reload" is a claim about THIS node — the canvas surface itself. Hold its
+    // identity now so the assertion below can be about the surface surviving the
+    // re-read rather than about whichever iframe is mounted at the instant we look.
+    const surface = screen.getByTestId('document-canvas');
 
     // The stream lands v4 (the docThread store's `landed` fact — same trigger
     // VideoStoryboard re-reads on). The strip must advance without a remount.
     act(() => { useDocThreadStore.setState({ landed: { [threadKey(PROJECT, DOC)]: 4 } }); });
 
     await waitFor(() => expect(screen.getAllByTestId('version-entry')).toHaveLength(4));
-    // …and the strip never blinked: the canvas stayed mounted through the re-read.
-    expect(screen.getByTestId('doc-canvas')).toBeInTheDocument();
+    // The frame follows the strip, one async hop behind it: advancing the shown
+    // version RE-INSTRUMENTS the frame (DocFrame re-reads the version's HTML before
+    // re-creating the iframe), so between the manifest landing and that read the
+    // iframe is legitimately absent — the named loading state covers it. Wait for
+    // the frame the landing produced instead of reading the DOM inside that gap;
+    // reading it there is what made this case fail on CI and pass locally (#136),
+    // because the stub answers in a microtask that a loaded runner reorders.
+    await waitFor(() => expect(screen.getByTestId('doc-canvas')).toHaveAttribute('data-version', '4'));
+    // …and the strip never blinked: the SAME canvas surface carried the re-read
+    // from end to end — a reload would have replaced this node.
+    expect(screen.getByTestId('document-canvas')).toBe(surface);
   });
 });
