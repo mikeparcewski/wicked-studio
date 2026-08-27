@@ -468,7 +468,12 @@ describe('no invented unmake wire (studio#119)', () => {
     const src = readFileSync(join(process.cwd(), 'src/api/interactive.ts'), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^[ \t]*\/\/.*$/gm, '');
-    expect(src).not.toMatch(/['"]DELETE['"]/);
+    // Match how a DELETE is actually BUILT, not every occurrence of the word. Banning the bare
+    // string meant this module could not legitimately mention DELETE for any other reason —
+    // including an allow-list, or another resource that does support it. The test name says
+    // "builds a DELETE against the doc registry", so assert on the construction.
+    expect(src, 'a fetch with method DELETE').not.toMatch(/method\s*:\s*['"]DELETE['"]/i);
+    expect(src, 'an http-client .delete( call').not.toMatch(/\.\s*delete\s*\(/);
     // …and no bus command invented to stand in for it.
     expect(src).not.toMatch(/wicked\.interactive\.doc\.(deleted|removed|retired|archived)/);
   });

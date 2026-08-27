@@ -130,7 +130,11 @@ import re  # noqa: E402 (grouped with its one use, harness style)
 BANNED_SPELLINGS = re.compile(
     r"getDemoSpec|getLatestRecording|api/demo/(spec|recordings|record)\b"
     r"|api/themes|api/theme/learn\b|listThemes|getTheme\b|learnTheme\b"
-    r"|(delete|remove|purge|destroy)(Doc|Docs|Demo|Demos|Document)"
+    # Keep this verb list IDENTICAL to UNMAKE in tests/interactive.client.test.ts. They guard the
+    # same absence from two sides, and when they drifted apart (this list was missing archive,
+    # discard, retire and unmake) a wrapper could clear one while the other banned the event it
+    # emits. If you add a verb, add it in both places.
+    r"|(delete|remove|purge|destroy|archive|discard|retire|unmake)(Doc|Docs|Demo|Demos|Document)"
     r"|wicked\.interactive\.doc\.(deleted|removed|retired|archived)")
 spelled: list[str] = []
 for f in sorted((REPO / "src").rglob("*")):
