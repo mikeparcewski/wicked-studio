@@ -47,7 +47,7 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
 
     test('the hero fits the viewport before and after the gate raises', async ({ page }) => {
       await page.goto('/');
-      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(async () => { await document.fonts.ready; });
       const heroH = () =>
         page.evaluate(() => Math.round(document.querySelector('.hero')!.getBoundingClientRect().height));
 
@@ -62,7 +62,7 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
 
     test('the steering decision is on screen without scrolling', async ({ page }) => {
       await page.goto('/');
-      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(async () => { await document.fonts.ready; });
       await gateRaised(page);
 
       // The page has not been scrolled, so every one of these must sit inside the window.
@@ -96,7 +96,7 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
       // macOS. A hero tuned to exactly the usable height passed locally and failed on CI with
       // ".hero is 642px in 636px of usable height". Measure the CONTENT and require slack.
       await page.goto('/');
-      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(async () => { await document.fonts.ready; });
 
       const { content, usable } = await page.evaluate((vh) => {
         const hero = document.querySelector('.hero') as HTMLElement;
@@ -134,7 +134,7 @@ for (const vp of [LAPTOP, LAPTOP_TALL]) {
       // Shared chrome (wicked-web SameGarden). It rendered 1115px before the band was rebuilt;
       // a site that has not re-pinned the chrome commit will fail here.
       await page.goto('/');
-      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(async () => { await document.fonts.ready; });
       const h = await page.evaluate(() =>
         Math.round(document.querySelector('.same-garden')!.getBoundingClientRect().height),
       );
