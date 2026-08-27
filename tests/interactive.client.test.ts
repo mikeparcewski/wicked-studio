@@ -8,6 +8,8 @@
 //   3. Happy path: each wrapper hits the right method/path/body and returns the
 //      declared shape, pinned against the bridge's real responses.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   BridgeUnavailableError,
   ServiceHintError,
@@ -422,5 +424,47 @@ describe('happy-path shapes', () => {
     // A dead bridge stays the typed 503, exactly as every other wrapper.
     stubFetch({ code: 'bridge_unavailable', hint: 'npm i -g wicked-interactive' }, 503);
     await expect(getLearnedTheme(PROJECT, DOC)).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+});
+
+// ── The registry is CREATE + READ only (studio#119) ──────────────────────────
+//
+// A delete affordance is missing from studio because the wire is missing from the
+// bridge, verified against a REAL one: every DELETE spelling is Express's
+// route-missing 404 ("Cannot DELETE /api/docs/<doc>"), and — unlike the record and
+// theme wires, which answered "no HTTP route" with a UI-emittable bus COMMAND —
+// there is no unmake verb in the bridge's `docs` subdomain either, so the bus
+// refuses with `400 unknown event type`.
+//
+// This is the CI-visible half of the guard: it fails on the PR that grows a wrapper
+// for a route nobody serves, which is the slice-13 (`getDemoSpec`,
+// `getLatestRecording`) and slice-16 (`learnTheme`, `listThemes`) break both times.
+// Its sibling — section 8 of e2e/interactive_wire_contract_test.py — fails from the
+// other side, the moment the bridge DOES grow the wire. Adopt the real route here
+// and move both guards in the same change; never one without the other.
+describe('no invented unmake wire (studio#119)', () => {
+  // Scoped to the doc/demo nouns on purpose: `wicked.interactive.source.removed` IS
+  // UI-emittable, so a future `removeSource` is legitimate and must not trip this.
+  const UNMAKE = /^(delete|remove|destroy|purge|discard|archive)(Doc|Docs|Demo|Demos|Document)/i;
+
+  it('the client module exports no doc/demo unmake wrapper', async () => {
+    const mod = (await import('../src/api/interactive.js')) as Record<string, unknown>;
+    const offenders = Object.keys(mod).filter((k) => UNMAKE.test(k));
+    expect(offenders, `src/api/interactive.ts exports ${offenders.join(', ')} — but the `
+      + 'wicked-interactive bridge serves no delete route and no delete bus command '
+      + '(studio#119). Land the wire upstream first, then move this guard and section 8 '
+      + 'of e2e/interactive_wire_contract_test.py together.').toEqual([]);
+  });
+
+  it('no wrapper in the module builds a DELETE against the doc registry', () => {
+    // The export name is the easy half to rename around; the request itself is not.
+    // Comments are stripped first so this file's own prose (and interactive.ts's
+    // NOTE block, which quotes the 404s verbatim) cannot satisfy or trip the check.
+    const src = readFileSync(join(process.cwd(), 'src/api/interactive.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^[ \t]*\/\/.*$/gm, '');
+    expect(src).not.toMatch(/['"]DELETE['"]/);
+    // …and no bus command invented to stand in for it.
+    expect(src).not.toMatch(/wicked\.interactive\.doc\.(deleted|removed|retired|archived)/);
   });
 });

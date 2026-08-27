@@ -278,6 +278,43 @@ export function createDoc(projectId: string, body: CreateDocBody): Promise<Creat
   return iFetch<CreateDocResult>(`${interactiveBase(projectId)}/api/docs`, jsonPost(body));
 }
 
+// ── The registry is CREATE + READ only (studio#119) ──────────────────────────
+//
+// There is deliberately no unmake wrapper below `createDoc`, and adding one would be
+// the slice-13/slice-16 mistake a third time: a wrapper for a route the bridge does
+// not serve, whose break only shows up in production. Verified against a REAL bridge
+// (`bin/wicked-interactive.js serve`, wicked-interactive @ 0.8.x) — every plausible
+// spelling is Express's route-missing 404, HTML, not a service answer:
+//
+//   DELETE /api/docs/:doc        → 404 "Cannot DELETE /api/docs/<doc>"
+//   DELETE /d/:doc               → 404 "Cannot DELETE /d/<doc>"
+//   DELETE /d/:doc/api/doc       → 404 "Cannot DELETE /d/<doc>/api/doc"
+//   POST   /api/docs/:doc/delete → 404 "Cannot POST /api/docs/<doc>/delete"
+//
+// …and the bus escape hatch is shut too. `requestRecord` and `requestThemeLearn` both
+// answer "no HTTP route" by speaking a UI-emittable COMMAND over `POST /api/events`;
+// there is no such command here. The bridge's ownership table (`src/service/events.js`)
+// has no unmake verb in the `docs` subdomain at all — only `wicked.interactive.doc.created`
+// — so the bus refuses both candidate spellings with `400 {"error":"unknown event type: …"}`.
+// `wicked.interactive.source.removed` is UI-emittable but detaches ONE source file from a
+// doc; it cannot retire the doc.
+//
+// Crew's proxy is NOT the blocker: `registerInteractiveProxy` mounts `scope.all(…)`, so it
+// already forwards any method verbatim. The moment the bridge serves the route, the wrapper
+// here is a two-line addition.
+//
+// Nor is the doc dir the whole of it: crew keeps a durable replay-dedup row per document in
+// `~/.wicked-crew/interactive-draft-ledger.json`, keyed by document id for the draft leg.
+// Removing a doc without dropping that row means a doc later re-created under the same name
+// never gets its first draft — which is exactly why today's cleanup is hand-editing that JSON
+// plus an `rm -rf` of the bridge's doc dir.
+//
+// So the UI has no affordance BECAUSE the wire has none, not because it was forgotten.
+// The guards that keep it honest: `tests/interactive.client.test.ts` fails in CI if this
+// module grows an unmake wrapper, and section 8 of `e2e/interactive_wire_contract_test.py`
+// pins the absence against the real bridge — it fails the moment the bridge grows the wire,
+// which is the signal to adopt it here and move the pin in the same change.
+
 /**
  * `POST /d/:docId/api/fork` — branch a new version off `version`. `sourceMessageId`
  * (§7.6) is the thread message the branch came from, carried for the manifest's
