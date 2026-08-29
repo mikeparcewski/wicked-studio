@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { SETTINGS_ITEMS, SettingsShortcutRows } from '../src/components/SettingsRailSection.js';
+import { version as pkgVersion } from '../package.json';
 
 /**
  * The Settings shortcut rows (slice A, re-homed by DES-FEEDBACK-003 §3.1
@@ -26,7 +27,10 @@ describe('SettingsShortcutRows', () => {
       expect(screen.getByRole('menuitem', { name: item.label })).toBeInTheDocument();
     }
     // The quiet version row rode along from the dropdown — moved, not dropped.
+    // It must MATCH package.json (not a hardcoded literal): the row sat stale
+    // at "v0.3.2" while the app shipped 0.4.0.
     expect(screen.getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument();
+    expect(screen.getByText(`v${pkgVersion}`)).toBeInTheDocument();
   });
 
   it('each entry is a navigate() shortcut — never a parallel settings surface', () => {

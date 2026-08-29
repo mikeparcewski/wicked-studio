@@ -9,14 +9,24 @@ const SEVERITY_COLOR: Record<string, string> = {
   info: 'var(--ink-muted)',
 };
 
-const RULE_TEMPLATE: ConformanceRule = {
-  id: '',
+/**
+ * Seed JSON for the "+ New rule" editor. Every field must pass the engine's
+ * fail-closed write invariants (`wicked-governance::ConformanceRule::validate`),
+ * or the template can never save as-is:
+ * - INV-C1: id matches `^(PAT|POL)-[0-9]{3,6}$` with the prefix agreeing with
+ *   `rule_type` (PAT ⇔ pattern) — `PAT-100` is a valid placeholder to edit.
+ * - INV-C4: `provenance.source_kinds` values come from the shared wire enum
+ *   `code-body | type-def | comment | doc` ('policy' is NOT in it).
+ * Exported so the template's validity contract stays pinned by test.
+ */
+export const RULE_TEMPLATE: ConformanceRule = {
+  id: 'PAT-100',
   rule_type: 'pattern',
   statement: '',
   severity: 'warn',
   confidence: 0.9,
   targets: {},
-  provenance: { source: 'manual', source_kinds: ['policy'] },
+  provenance: { source: 'manual', source_kinds: ['code-body'] },
 };
 
 function RuleRow({
