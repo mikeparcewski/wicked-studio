@@ -80,6 +80,13 @@ The connection surface is deliberately small (`src/api/client.ts`):
 The daemon's loopback CORS admits any `http://localhost:*` / `http://127.0.0.1:*` origin, so a
 standalone studio on its own port can drive a local daemon out of the box.
 
+## Install
+
+You rarely install studio directly: **`npx wicked-crew serve` ships this UI bundled**,
+same-origin on one port. Or use the family installer — [`npx wicked-installer`](https://www.npmjs.com/package/wicked-installer)
+installs/updates the whole wicked-\* family (wicked-crew, which serves this skin, included).
+For a studio you build and host yourself, see [Standalone build](#standalone-build).
+
 ## Develop
 
 ```sh
