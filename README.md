@@ -123,6 +123,18 @@ absent). Installs from git get a fresh `dist/` via the `prepare` hook
 (`scripts/prepare-dist.mjs`); publishers run `npm run build && npm publish` so the tarball is
 built from the tagged source.
 
+### The data-testid contract (`testid-inventory.json`)
+
+`testid-inventory.json` (repo root, committed; emitted into `dist/testid-inventory.json` by the
+build) is the machine-readable inventory of every `data-testid` the UI declares — the selector
+contract that test generators and the model-free campaign runner build against, versioned with
+this package. `tests/testidInventory.test.ts` re-scans `src/` and fails CI on any drift, so a
+testid change (or a `package.json` version bump — the artifact carries `studioVersion`) ships
+only together with a reviewed `npm run manifest:testids` regeneration. The drift-handling
+doctrine downstream is embedded in the file's `$doc` header: a selector miss fails the
+deterministic run; the authoring agent re-authors against the live DOM; the runner re-records;
+the substitution lands in the spec diff. No agentic fallback inside the runner.
+
 ## Provenance
 
 Extracted from the wicked-crew monorepo (`packages/studio`) as its own product — the carve kept
