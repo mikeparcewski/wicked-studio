@@ -150,7 +150,11 @@ function NodeDetailPanel({
               blast radius · {blast.dependents.length} dependents
             </span>
             {blast.unresolved > 0 && (
-              <span className="text-[10px] font-mono" style={{ color: T.deny }}>
+              <span
+                className="text-[10px] font-mono"
+                style={{ color: T.deny }}
+                title="References no resolver could bind — repeat call sites of resolved relationships are not counted; 0 is normal for fully-resolved symbols"
+              >
                 +{blast.unresolved} unresolved call(s) — impact may be larger
               </span>
             )}
@@ -765,7 +769,7 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus }: Pro
                     </div>
                   ) : (
                     <p className="text-[11px] font-mono" style={{ color: T.faint }}>
-                      No coverage data — run onboarding first.
+                      No coverage data — run onboarding first, or re-run the annotation workflow below after a graph re-index.
                     </p>
                   )}
                   <button
