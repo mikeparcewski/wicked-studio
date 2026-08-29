@@ -113,6 +113,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
 
 ### Added
 
+- `ws.wickedagile.com` — the product site, with its own e2e suite and Pages deploy (#1).
+- Wire contract consumed from npm: `wicked-crew-api-types` (#2).
 - Projects UI: list, detail, create, archive (DES-PROJECT-001, #13) — the first projects
   surface in the skin.
 - Run view: outputs primary in the main panel + Files tab system-open (#17); Archived chip
@@ -135,8 +137,6 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   (`packages/studio`) with the package's full in-monorepo history preserved via
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
-- `ws.wickedagile.com` — the product site, with its own e2e suite and Pages deploy (#1).
-- Wire contract consumed from npm: `wicked-crew-api-types` (#2).
 
 [Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.3.0...v0.4.0

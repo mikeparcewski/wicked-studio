@@ -10,9 +10,10 @@ on `/api/v1` and `/ws`, and nothing else.
 
 ## What the skin surfaces (0.4.x)
 
-Every capability below is a real `/api/v1` or `/ws` wire — no invented routes — and the full
-set was verified end-to-end by a 21-scenario functional campaign against an isolated daemon
-(21/21 PASS, evidence-graded).
+Every capability below is a real `/api/v1` or `/ws` wire — no invented routes — verified by a
+21-scenario functional campaign against an isolated daemon (21/21 PASS, evidence-graded;
+`estate-review/STUDIO-CAMPAIGN.md`). Legs the campaign could only prove over the wire rather
+than through the UI are marked as such below.
 
 - **Projects** — create/rename/archive/restore, attach and detach members (repos, runs, chats,
   docs), a merged activity feed with a prompt inbox, a per-project dashboard, and a four-mode
@@ -25,8 +26,9 @@ set was verified end-to-end by a 21-scenario functional campaign against an isol
 - **Governed runs** — the composer (Ask / Balanced / Autonomous, seat selection, repo binding,
   PR delivery), run list/detail/timeline with event backfill on reload, **HITL steering gates**
   (approve / approve-with-steer / reject, plus keyboard batch triage), elicitation prompts,
-  durable pre-gate guidance notes, and the lifecycle verbs: cancel, resume, inject a message,
-  archive/unarchive, retry lineage.
+  durable pre-gate guidance notes, and the lifecycle verbs the UI wires today: cancel, inject
+  a message, unarchive, retry lineage. (Resume and archive exist as typed client wires,
+  campaign-verified over the API — the UI affordances are a filed gap, not yet shipped.)
 - **Evidence** — per-unit transcripts, the worktree file & diff viewer, and one-click
   **evidence bundle download** for any run. The skin surfaces the gates; it never grades.
 - **Group chat** — fan one question out to your whole warm CLI roster and watch each seat
