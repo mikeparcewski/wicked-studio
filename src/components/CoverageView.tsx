@@ -385,7 +385,7 @@ export function CoverageView(): React.ReactElement {
         <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           No coverage data — run{' '}
           <code className="font-mono" style={{ color: 'var(--ink-muted)' }}>wicked-core rules ingest</code>{' '}
-          to populate.
+          to populate. After a graph re-index (migration), re-run the annotation workflow to restore coverage.
         </p>
       )}
 
