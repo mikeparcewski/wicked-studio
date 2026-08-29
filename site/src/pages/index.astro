@@ -26,9 +26,13 @@
  *    live daemon.
  *  - The Project model is SHIPPED in the control plane (/api/v1/projects,
  *    nine routes; a project's activity feed merges crew core events with
- *    wicked.interactive.* bus events carrying the same project_id). The
- *    studio's DEDICATED project browser is the next surface to land in this
- *    skin — say "landing in this skin", never "shipped here".
+ *    wicked.interactive.* bus events carrying the same project_id) — AND the
+ *    studio's DEDICATED project browser is SHIPPED IN THIS SKIN: project-shell
+ *    routing in App.tsx, /projects + /p/:id routes, ProjectsPage /
+ *    ProjectDetailPage / ProjectDashboard / ProjectShell, verified end-to-end
+ *    by the 0.4.0 functional campaign (21/21 scenarios,
+ *    estate-review/STUDIO-CAMPAIGN.md). Say "shipped", present tense —
+ *    never "landing next".
  *  - Governance vocabulary (deny-dominates, evaluator ≠ creator, gates) is
  *    crew's — studio SURFACES it, it does not own it. The skin never grades
  *    anything.
@@ -264,8 +268,9 @@ const RAIL = [
 
       <p class="honest-note">
         <b>Where this stands:</b> the Project model is <b>shipped in the control plane</b> — nine
-        routes, the merged feed, durable gate prompts across member runs. The studio’s <b>dedicated
-        project browser is landing in this skin next</b>; the run board above rides that daemon.
+        routes, the merged feed, durable gate prompts across member runs — and the studio’s
+        <b>dedicated project browser is shipped in this skin</b>: project pages, the per-project
+        dashboard, and the four-mode shell, all riding that daemon.
       </p>
     </div>
   </section>
@@ -487,7 +492,7 @@ wsBase()  → ws://127.0.0.1:7701                  <span class="c"># same contra
                 onclick="navigator.clipboard&&navigator.clipboard.writeText('npx wicked-crew serve').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
             </div>
             <pre class="install__code"><code>npx wicked-crew serve   <span class="c"># daemon + this studio · one port · same origin</span></code></pre>
-            <p class="install__note">Node ≥ 22. The daemon serves the studio at its own origin — open the printed URL and launch a run. <span class="install__ver">wicked-studio npm v0.1.0</span></p>
+            <p class="install__note">Node ≥ 22. The daemon serves the studio at its own origin — open the printed URL and launch a run. <span class="install__ver">wicked-studio npm v0.4.0</span></p>
           </div>
 
           <div class="install-or" aria-hidden="true"><span>or run the skin standalone</span></div>

@@ -1,12 +1,50 @@
 # wicked-studio
 
-> **v0.1.0** · [![CI](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml) · [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+> [![npm](https://img.shields.io/npm/v/wicked-studio)](https://www.npmjs.com/package/wicked-studio) · [![CI](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml) · [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 **The coder-facing skin of the wicked experience plane.** A React SPA that is a *pure HTTP/WS
 client* of the [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon: launch and
 steer governed agent runs, answer human gates, watch live CoreEvent streams, browse projects,
-evidence, coverage, and the decisions ledger — everything the daemon exposes on `/api/v1` and
-`/ws`, and nothing else.
+repo intelligence, evidence, coverage, and the decisions ledger — everything the daemon exposes
+on `/api/v1` and `/ws`, and nothing else.
+
+## What the skin surfaces (0.4.x)
+
+Every capability below is a real `/api/v1` or `/ws` wire — no invented routes — verified by a
+21-scenario functional campaign against an isolated daemon (21/21 PASS, evidence-graded;
+`estate-review/STUDIO-CAMPAIGN.md`). Legs the campaign could only prove over the wire rather
+than through the UI are marked as such below.
+
+- **Projects** — create/rename/archive/restore, attach and detach members (repos, runs, chats,
+  docs), a merged activity feed with a prompt inbox, a per-project dashboard, and a four-mode
+  project shell (chat / build / document / video) with deep-linkable routes (`/p/:id/…`).
+- **Repo intelligence** — register a local path or clone from a URL; either launches a governed
+  onboarding run (`index` → `annotate`, two tool units) that builds the repo's code graph. Then:
+  graph view with ego-focus navigation, **blast radius** for any symbol, hotspots, the domain
+  graph + coverage view, and a requirements browser with operator overrides (PATCH
+  title/notes/status/risk).
+- **Governed runs** — the composer (Ask / Balanced / Autonomous, seat selection, repo binding,
+  PR delivery), run list/detail/timeline with event backfill on reload, **HITL steering gates**
+  (approve / approve-with-steer / reject, plus keyboard batch triage), elicitation prompts,
+  durable pre-gate guidance notes, and the lifecycle verbs the UI wires today: cancel, inject
+  a message, unarchive, retry lineage. (Resume and archive exist as typed client wires,
+  campaign-verified over the API — the UI affordances are a filed gap, not yet shipped.)
+- **Evidence** — per-unit transcripts, the worktree file & diff viewer, and one-click
+  **evidence bundle download** for any run. The skin surfaces the gates; it never grades.
+- **Group chat** — fan one question out to your whole warm CLI roster and watch each seat
+  answer side by side.
+- **Governed PTY terminals** — real terminals (xterm over `/ws/terminals/:id`), including the
+  seat sign-in flow from settings.
+- **Workflow builder** — inspect and create WorkflowDefs (phases, gates, validation) and their
+  inline tool scripts, then launch runs against them.
+- **Governance** — policies, conformance rules (with facet preview), the decisions/claims
+  ledger, and the audit view.
+- **Settings** — daemon settings plus `studio.*` namespaced keys: appearance/theme (including
+  brand-learn), notifications, composer preferences.
+- **Document & Video modes** — the merged creator surface, riding crew's proxied interactive
+  bridge under `/api/v1/projects/:id/interactive/*`.
+- **Command palette + deep links** — Cmd+K verbs (open terminal, answer prompts), bookmarkable
+  routes throughout, desktop gate notifications.
 
 ```
 ┌─────────────────────┐         HTTP /api/v1  +  WS /ws          ┌──────────────────────┐
@@ -89,7 +127,11 @@ the code as-is and preserved the package's full in-monorepo history via `git sub
 
 - Node.js ≥ 22.0.0
 - npm ≥ 10 (for workspaces and `prepare` hooks)
-- A running [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon (v0.4.0+) for the SPA to connect to
+- A running [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon (**v0.7.0+**) for
+  the SPA to connect to. The floor is real, not ceremonial: the UI calls routes that first
+  shipped in crew 0.7.0 — `PUT /runs/:id/guidance` (the durable pre-gate note) exists only
+  there, and the projects surface, `/audit`, and run archiving need ≥ 0.6.0 — so an older
+  daemon 404s on surfaces the skin treats as present.
 - A modern browser (Chrome, Edge, Firefox, Safari)
 - macOS, Linux, or Windows
 

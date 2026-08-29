@@ -187,8 +187,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                 className="text-[10px] font-mono"
                 style={{ color: 'var(--ink-dim)' }}
               >
-                re-indexes this repo as a governed run (index → annotate → domain) —
-                rewrites its code graph + domain model; typically minutes
+                re-indexes this repo as a governed run (index → annotate, two units) —
+                rewrites its code graph and cluster annotations; typically minutes
               </span>
               <button
                 type="button"
