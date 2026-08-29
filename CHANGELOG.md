@@ -12,7 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- The data-testid contract (TH-13 / test-R13): `testid-inventory.json` — a committed, versioned
+  inventory of every `data-testid` the UI declares (545 static values, 38 dynamic `*` patterns,
+  4 computed expressions), regenerated with `npm run manifest:testids` and emitted into
+  `dist/testid-inventory.json` by the build so consumers verify against the dist actually
+  served. `tests/testidInventory.test.ts` re-scans `src/` and fails CI on any drift; the
+  drift-handling doctrine (deterministic miss → fail → re-author against the live DOM →
+  re-record → substitution lands in the spec diff; no agentic fallback inside the model-free
+  runner) travels in the artifact's `$doc` header.
 
 ## [0.4.1] — 2026-08-29
 

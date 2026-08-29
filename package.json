@@ -30,6 +30,7 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "lint": "eslint src tests",
+    "manifest:testids": "node scripts/generate-testid-inventory.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepare": "node scripts/prepare-dist.mjs"
