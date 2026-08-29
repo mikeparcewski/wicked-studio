@@ -1,3 +1,5 @@
+import { version } from '../../package.json';
+
 /**
  * The Settings shortcut rows (DES-FEEDBACK-001 §1.2/§4.4, slice A — re-homed by
  * DES-FEEDBACK-003 §3.1, slice M): Settings is a PRIMARY heading in the rail's
@@ -41,12 +43,14 @@ export function SettingsShortcutRows({ navigate }: Props): React.ReactElement {
           {item.label}
         </button>
       ))}
-      {/* The quiet version row the retired dropdown carried — moved, not dropped. */}
+      {/* The quiet version row the retired dropdown carried — moved, not dropped.
+          Read from package.json at build time so it can never go stale again
+          (it sat hardcoded at "v0.3.2" while the app shipped 0.4.0). */}
       <p
         className="px-6 pt-1.5 pb-0.5 text-[10px] font-mono select-none"
         style={{ color: 'var(--ink-dim)', margin: 0 }}
       >
-        v0.3.2
+        {`v${version}`}
       </p>
     </div>
   );
