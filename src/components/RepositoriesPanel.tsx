@@ -473,9 +473,12 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
             {/* §7.8 (slice AC, EC43): the named action previews what it does,
                 what it writes, and roughly how long it takes. */}
             <p data-testid="action-preview" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+              {/* The onboarding workflow is TWO tool units — index, then annotate (crew's
+                  BUILTIN_WORKFLOWS; the third `domain` phase was removed in FINDING-068 —
+                  domain extraction is a separate downstream workflow). Don't re-add it here. */}
               {sourceMode === 'remote'
-                ? `Clones to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then runs the onboarding workflow as a governed run — writes the repo's code graph + domain model; typically minutes.`
-                : "Runs the onboarding workflow (index → annotate → domain) as a governed run — writes the repo's code graph + domain model; typically minutes."}
+                ? `Clones to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then runs the onboarding workflow as a governed run — writes the repo's code graph and annotates its clusters; typically minutes.`
+                : "Runs the onboarding workflow (index → annotate) as a governed run — writes the repo's code graph and annotates its clusters; typically minutes."}
             </p>
 
             {registerError && (
@@ -555,8 +558,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                 No repositories
               </p>
               <p className="text-sm font-mono" style={{ color: 'var(--ink-muted)' }}>
-                Register a local git repo or clone a remote one. wicked-crew will index it,
-                annotate the domain model, and keep the knowledge graph up to date.
+                Register a local git repo or clone a remote one. wicked-crew will index it
+                into a code graph and annotate its clusters as a governed onboarding run.
               </p>
               <button
                 type="button"

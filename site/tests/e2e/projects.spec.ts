@@ -5,7 +5,8 @@ import { bringIntoView } from './utils';
  * One project, two skins [data-proj] — the experience-plane interchangeability
  * story. The same project (payments-refresh) re-renders under either skin;
  * the API call in the foot never changes, and the honest note keeps the
- * studio's own project browser labeled as landing.
+ * studio's own project browser labeled as shipped — present tense, since it
+ * is (project pages, dashboard, four-mode shell; 0.4.0 campaign-verified).
  */
 test.describe('one project, two skins [data-proj]', () => {
   test('defaults to the run-board view; flipping renders the same project as a document', async ({ page }) => {
@@ -43,11 +44,13 @@ test.describe('one project, two skins [data-proj]', () => {
     await expect(card.locator('.proj-feed--studio')).toBeVisible();
   });
 
-  test('the honest note ships: model shipped in the control plane, browser landing in the skin', async ({ page }) => {
+  test('the honest note ships: model shipped in the control plane, browser shipped in the skin', async ({ page }) => {
     await page.goto('/');
     const note = page.locator('.proj .honest-note');
     await bringIntoView(note);
     await expect(note).toContainText('shipped in the control plane');
-    await expect(note).toContainText('landing in this skin');
+    await expect(note).toContainText('shipped in this skin');
+    // The stale future-tense claim must never come back (docs-R9).
+    await expect(note).not.toContainText('landing in this skin');
   });
 });
