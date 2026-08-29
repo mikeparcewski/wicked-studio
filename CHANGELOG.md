@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.4.1] — 2026-08-29
+
+The truth-pass release: the docs and the site describe the product that shipped, and the
+governance rule template actually saves. This is the version wicked-crew 0.7.1 bundles as its
+default local skin.
+
 ### Changed
 
 - Board attention bands read their copy from one source of truth (#121).
@@ -138,7 +146,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.1.1...v0.2.0
