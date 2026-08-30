@@ -23,6 +23,18 @@ npm publish dates. Every version listed here exists on
   re-record → substitution lands in the spec diff; no agentic fallback inside the model-free
   runner) travels in the artifact's `$doc` header.
 
+## [0.4.2] — 2026-08-30
+
+### Added
+- **Architecture Wiki page** (nav): scoreboard health header, faceted rules browser
+  (provenance, wiki URIs, evidence counts), RuleSet grouping, retire kill-switch with
+  typed confirmation, About/authoring panel; honest 501/unseeded/empty states throughout.
+- **Campaign scoreboard** (TH-14): ladder + node status from Campaign* WS frames, verdict
+  chips, evidence links, cost column; sibling-run delivery rollup off `session.delivery`.
+- **GovernanceAudit honesty** (AW-18): renders the acceptance conformance section with an
+  explicit "unenforced" state — an unenforced run is never claimed guardrailed.
+- **data-testid inventory** as a versioned build artifact with a CI drift test (TH-13).
+
 ## [0.4.1] — 2026-08-29
 
 The truth-pass release: the docs and the site describe the product that shipped, and the
