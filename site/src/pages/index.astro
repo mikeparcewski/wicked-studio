@@ -78,6 +78,10 @@ const RAIL = [
   { id: 'Term',        line: 'A real PTY into the worker’s worktree — raw bytes over /ws/terminals/:id.' },
   { id: 'Cov',         line: 'Repo-scoped coverage, one click from the run that changed it.' },
 ];
+
+// Injected at build time from the repo's package.json via astro.config.mjs
+// (vite define). Never hardcode a version in this file — it re-stales. (DT-7)
+const studioVersion = __WICKED_STUDIO_VERSION__;
 ---
 
 <Base title={title} description={description} favicon="/favicon.svg">
@@ -492,7 +496,7 @@ wsBase()  → ws://127.0.0.1:7701                  <span class="c"># same contra
                 onclick="navigator.clipboard&&navigator.clipboard.writeText('npx wicked-crew serve').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
             </div>
             <pre class="install__code"><code>npx wicked-crew serve   <span class="c"># daemon + this studio · one port · same origin</span></code></pre>
-            <p class="install__note">Node ≥ 22. The daemon serves the studio at its own origin — open the printed URL and launch a run. <span class="install__ver">wicked-studio npm v0.4.0</span></p>
+            <p class="install__note">Node ≥ 22. The daemon serves the studio at its own origin — open the printed URL and launch a run. <span class="install__ver">wicked-studio npm v{studioVersion}</span></p>
           </div>
 
           <div class="install-or" aria-hidden="true"><span>or run the skin standalone</span></div>
