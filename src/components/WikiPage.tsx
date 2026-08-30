@@ -550,7 +550,9 @@ export function WikiPage(): React.ReactElement {
         else setScoreboard({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
       });
     void getWikiMeta()
-      .then(({ meta: m }) => setMeta(m))
+      // `?? null`: a mis-shaped payload (no `meta` wrapper) must degrade exactly like an
+      // unanswerable meta route — it is a contract bug to report, never a page crash.
+      .then(({ meta: m }) => setMeta(m ?? null))
       // An unsupported (or failed) meta route means the page cannot tell whether the store is
       // seeded — it must NOT claim "unseeded", so meta stays null and the browser's own empty
       // copy covers the zero-rules case.

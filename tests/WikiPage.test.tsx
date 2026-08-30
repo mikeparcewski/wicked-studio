@@ -170,6 +170,17 @@ describe('WikiPage — seededness', () => {
     expect(await screen.findByTestId('wiki-rules-empty')).toHaveTextContent('No rules in the store.');
     expect(screen.queryByTestId('wiki-unseeded')).toBeNull();
   });
+
+  it('a mis-shaped meta payload (no wrapper) degrades like an unanswerable route, never a crash', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [] });
+    // A daemon serving the meta object BARE instead of `{ meta: ... }` — a contract bug on the
+    // wire, which must read as "cannot tell", not throw through the page render.
+    wire({ meta: () => Promise.resolve({ seeded: false } as unknown as { meta: WikiMeta }) });
+    render(<WikiPage />);
+
+    expect(await screen.findByTestId('wiki-rules-empty')).toHaveTextContent('No rules in the store.');
+    expect(screen.queryByTestId('wiki-unseeded')).toBeNull();
+  });
 });
 
 describe('WikiPage — rules browser facets', () => {
