@@ -172,6 +172,12 @@ export const api = {
   getRunEvents: (id: string) =>
     apiFetch<{ events: CoreEvent[] }>(`/runs/${encodeURIComponent(id)}/events`),
 
+  /** The acceptance view (`GET /runs/:id/acceptance`): the QE gate plus — on crew ≥ 0.8 — the
+   * conformance section (run-scoped governance claims with wiki-rule citations + enforcement
+   * honesty). Callers treat a missing `conformance` as "older daemon" and fall back (AW-18). */
+  getRunAcceptance: (id: string) =>
+    apiFetch<import('./types.js').RunAcceptanceView>(`/runs/${encodeURIComponent(id)}/acceptance`),
+
   /** Launch a run → the new run id. */
   launchRun: (body: LaunchRunBody) =>
     apiFetch<{ runId: string }>('/runs', { method: 'POST', body: JSON.stringify(body) }),

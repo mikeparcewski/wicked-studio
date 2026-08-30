@@ -11,8 +11,8 @@
   "studioVersion": "0.4.1",
   "counts": {
     "files": 93,
-    "occurrences": 647,
-    "static": 545,
+    "occurrences": 655,
+    "static": 552,
     "dynamic": 38,
     "computed": 4
   },
@@ -21,6 +21,12 @@
       "testId": "accent-reset",
       "files": [
         "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "acceptance-gate-line",
+      "files": [
+        "src/components/GovernanceAudit.tsx"
       ]
     },
     {
@@ -579,6 +585,18 @@
       "testId": "compare-vs",
       "files": [
         "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "conformance-claim",
+      "files": [
+        "src/components/GovernanceAudit.tsx"
+      ]
+    },
+    {
+      "testId": "conformance-rule-citation",
+      "files": [
+        "src/components/GovernanceAudit.tsx"
       ]
     },
     {
@@ -1206,6 +1224,24 @@
       ]
     },
     {
+      "testId": "governance-claims-unavailable",
+      "files": [
+        "src/components/GovernanceAudit.tsx"
+      ]
+    },
+    {
+      "testId": "governance-coverage-boundary",
+      "files": [
+        "src/components/GovernanceAudit.tsx"
+      ]
+    },
+    {
+      "testId": "governance-enforcement",
+      "files": [
+        "src/components/GovernanceAudit.tsx"
+      ]
+    },
+    {
       "testId": "governance-run-decision",
       "files": [
         "src/components/GovernanceAudit.tsx"
@@ -1213,6 +1249,12 @@
     },
     {
       "testId": "governance-run-record",
+      "files": [
+        "src/components/GovernanceAudit.tsx"
+      ]
+    },
+    {
+      "testId": "governance-unenforced-unit",
       "files": [
         "src/components/GovernanceAudit.tsx"
       ]
