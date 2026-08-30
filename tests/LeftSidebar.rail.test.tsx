@@ -339,7 +339,8 @@ describe('accordion contents (§3.3)', () => {
 
     const settings = screen.getByTestId('rail-heading-settings');
     expect(settings.getAttribute('aria-expanded')).toBe('true');
-    expect(within(settings).getAllByRole('menuitem')).toHaveLength(7);
+    // 8 rows: Theme, Coverage, Domain, Workflows, Policies, Rules, Arch Wiki, System.
+    expect(within(settings).getAllByRole('menuitem')).toHaveLength(8);
     expect(within(settings).getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument();
   });
 });

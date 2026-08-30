@@ -23,6 +23,7 @@ import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { RuleManager } from './components/RuleManager.js';
+import { WikiPage } from './components/WikiPage.js';
 import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { GroupChat } from './components/GroupChat.js';
@@ -463,6 +464,13 @@ export function App(): React.ReactElement {
       return (
         <div className="flex-1 overflow-y-auto p-6">
           <RuleManager />
+        </div>
+      );
+    }
+    if (panel === 'wiki') {
+      return (
+        <div className="flex-1 overflow-y-auto p-6">
+          <WikiPage />
         </div>
       );
     }

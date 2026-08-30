@@ -80,7 +80,7 @@ const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Re
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
 const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_SETTINGS];
 
-const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows', 'policies', 'rules']);
+const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows', 'policies', 'rules', 'wiki']);
 
 /**
  * The route→heading map (§3.2): which primary path owns a pathname. `/` and
