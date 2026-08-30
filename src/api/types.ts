@@ -40,3 +40,76 @@ export interface SessionDelivery {
 
 /** `AgentSession` as the post-#321 daemon sends it. See {@link SessionDelivery}. */
 export type SessionWithDelivery = AgentSession & { delivery?: SessionDelivery | null };
+
+// ── GET /runs/:id/acceptance (AW-14 / AW-18 — arch-R13a + R16) ────────────────
+//
+// Hand-declared, same contract as SessionDelivery above: `wicked-crew-api-types`
+// does not carry the acceptance view (it is daemon-owned, `qe/acceptance.ts`),
+// so studio declares the SUBSET it reads. Every field optional-or-null-tolerant
+// where the daemon may predate the conformance section (crew < 0.8): a missing
+// `conformance` means "older daemon", and the surface must fall back — never
+// invent a guardrailed claim the wire did not make.
+
+/** A wiki/conformance rule cited by a claim's `conform:` obligation. */
+export interface AcceptanceRuleCitation {
+  /** `Critical` | `Error` | `Warn` | `Info`. */
+  severity: string;
+  /** The conformance-rule id (`PAT-*` / `POL-*`) — the wiki rule the claim cites. */
+  ruleId: string;
+  statement: string;
+}
+
+/** One run-scoped governance decision, with its rule citations parsed daemon-side. */
+export interface AcceptanceConformanceClaim {
+  claimId: string;
+  scope: string;
+  phase: string;
+  decision: 'allow' | 'deny' | 'allow_with_conditions';
+  policyIds: string[];
+  rules: AcceptanceRuleCitation[];
+  obligations: string[];
+  evaluator: string;
+  /** Unix-seconds. */
+  evaluatedAt: number;
+  /** An advisory boundary-READ deny: blocked + audited, not unit-fatal. */
+  advisory: boolean;
+}
+
+/** What the run's durable event log proved about governance being IN FORCE. */
+export interface AcceptanceEnforcement {
+  status: 'enforced' | 'unenforced' | 'ungoverned' | 'unverifiable';
+  unenforced: { ord: number; attempt: number; cli: string; reason: string }[];
+  armedUnits: number[];
+  reason: string;
+}
+
+/** The conformance half of the acceptance view — served beside the QE gate. */
+export interface AcceptanceConformance {
+  claimsAvailable: boolean;
+  claimsError?: string;
+  claims: AcceptanceConformanceClaim[];
+  denials: number;
+  advisoryDenials: number;
+  denied: boolean;
+  enforcement: AcceptanceEnforcement;
+  /** True ONLY when claims were readable, undenied, and enforcement verified. */
+  guardrailed: boolean;
+  summary: string;
+}
+
+/** The QE acceptance gate's deny-dominates resolution (unchanged wire, Phase 6a). */
+export interface AcceptanceGate {
+  required: boolean;
+  satisfied: boolean;
+  verdict: string | null;
+  runStatus: string | null;
+  reason: string;
+}
+
+/** The subset of `GET /runs/:id/acceptance` studio reads. */
+export interface RunAcceptanceView {
+  runId: string;
+  gate: AcceptanceGate;
+  /** Absent on daemons older than the conformance section (crew < 0.8). */
+  conformance?: AcceptanceConformance;
+}
