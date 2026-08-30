@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.1",
   "counts": {
-    "files": 95,
-    "occurrences": 676,
-    "static": 572,
+    "files": 96,
+    "occurrences": 710,
+    "static": 602,
     "dynamic": 38,
     "computed": 5
   },
@@ -3357,6 +3357,186 @@
       ]
     },
     {
+      "testId": "wiki-about",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-about-toggle",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-group-toggle",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-groups-unsupported",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-health",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-health-error",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-health-loading",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-health-unsupported",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-page",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-recall-unavailable",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-retire-cancel",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-retire-confirm",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-retire-confirm-input",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-retire-error",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-retire-modal",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-retire-open",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-retire-reason",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-retired-note",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-rule-detail",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-rule-retired-chip",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-rule-retired-note",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-rule-row",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-rules-empty",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-rules-error",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-rules-loading",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-ruleset-group",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-runbook-link",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-seed-command",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-unseeded",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
+      "testId": "wiki-verdict",
+      "files": [
+        "src/components/WikiPage.tsx"
+      ]
+    },
+    {
       "testId": "wizard-cancel",
       "files": [
         "src/components/DemoWizard.tsx"
@@ -3730,7 +3910,8 @@
     {
       "expression": "testid",
       "files": [
-        "src/components/CampaignScoreboard.tsx"
+        "src/components/CampaignScoreboard.tsx",
+        "src/components/WikiPage.tsx"
       ]
     },
     {

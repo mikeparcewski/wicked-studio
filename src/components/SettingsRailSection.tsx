@@ -21,6 +21,7 @@ export const SETTINGS_ITEMS: { label: string; path: string }[] = [
   { label: 'Workflows', path: '/workflows' },
   { label: 'Policies', path: '/policies' },
   { label: 'Rules', path: '/rules' },
+  { label: 'Arch Wiki', path: '/wiki' },
   { label: 'System', path: '/system' },
 ];
 

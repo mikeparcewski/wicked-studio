@@ -3,9 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 // `make` is the round-4 primary-path dashboard route (DES-FEEDBACK-003 §2.1) —
 // a CLIENT route (a new panel id in this union), not a wire. Slice M registers
 // it with a placeholder surface; the real dashboard is slice O (§4.2).
-export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'campaigns' | 'campaign-detail';
+export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'wiki' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'campaigns' | 'campaign-detail';
 
-const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make', 'campaigns'];
+const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'wiki', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make', 'campaigns'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
