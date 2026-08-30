@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CenterDashboard } from './components/CenterDashboard.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
+import { CampaignScoreboard } from './components/CampaignScoreboard.js';
+import { CampaignsPage } from './components/CampaignsPage.js';
 import { ChatsPage } from './components/ChatsPage.js';
 import { CoverageView } from './components/CoverageView.js';
 import { DomainModelBrowser } from './components/DomainModelBrowser.js';
@@ -36,6 +38,7 @@ import { useLegacyRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
+import { useCampaignsStore } from './store/campaigns.js';
 import { useGateStore } from './store/gates.js';
 import { useElicitationStore } from './store/elicitations.js';
 import { useLiveChatsStore } from './store/liveChats.js';
@@ -70,9 +73,10 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
 const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignId, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
+  const ingestCampaign = useCampaignsStore((s) => s.ingest);
   const ingestAnnotation = useAnnotationStore((s) => s.ingest);
   const ingestElicitation = useElicitationStore((s) => s.ingest);
   const ingestNotif = useNotificationStore((s) => s.ingest);
@@ -107,12 +111,15 @@ export function App(): React.ReactElement {
       // J4 round 2: chat frames announce/retire live sessions for the rail's
       // Chat accordion — evidence this subscription already carries, no fetch.
       ingestLiveChat(event);
+      // TH-14: fold core's Campaign* frames (a cheap prefix miss for everything else) so the
+      // campaign scoreboard's node status is live the moment the daemon relays them (TH-9).
+      ingestCampaign(event);
       // Slice L (DES-FEEDBACK-002 §8.2): the desktop layer folds off the SAME
       // subscription — hidden-tab-only, opt-in, permission-gated, never prompts.
       notifyGateIfUnfocused(event);
       if (LIFECYCLE_EVENTS.has(event.type)) refresh();
     },
-    [ingestGate, ingestAnnotation, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, ingestLiveChat, refresh],
+    [ingestGate, ingestCampaign, ingestAnnotation, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, ingestLiveChat, refresh],
   );
 
   useEventStream(handleEvent);
@@ -515,6 +522,22 @@ export function App(): React.ReactElement {
       return (
         <div className="flex-1 overflow-y-auto" data-testid="make-dashboard">
           <MakeDashboard runs={runs} navigate={navigate} runPath={runPath} />
+        </div>
+      );
+    }
+    // `/campaigns` + `/campaigns/:id` — the read-only campaign surface (TH-14, extends
+    // studio#27): the escape-hatch list and the sibling-run scoreboard.
+    if (panel === 'campaigns') {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <CampaignsPage navigate={navigate} />
+        </div>
+      );
+    }
+    if (panel === 'campaign-detail' && campaignId) {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <CampaignScoreboard campaignId={campaignId} runs={runs} navigate={navigate} />
         </div>
       );
     }

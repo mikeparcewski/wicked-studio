@@ -3,9 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 // `make` is the round-4 primary-path dashboard route (DES-FEEDBACK-003 §2.1) —
 // a CLIENT route (a new panel id in this union), not a wire. Slice M registers
 // it with a placeholder surface; the real dashboard is slice O (§4.2).
-export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make';
+export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'campaigns' | 'campaign-detail';
 
-const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
+const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make', 'campaigns'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
@@ -44,6 +44,8 @@ interface Route {
    *  VIEW of the project's build work, §3's adopted additive position), so
    *  this flag — not a fifth Mode — is what selects the view. */
   chronicleView: boolean;
+  /** Non-null only on `/campaigns/:id` (DES-CAMPAIGN-001 §3.5 / TH-14) — the campaign label. */
+  campaignId: string | null;
 }
 
 /** Route options a caller can override; everything else takes its inert default. */
@@ -58,6 +60,7 @@ const INERT: Route = {
   mode: null,
   artifactId: null,
   chronicleView: false,
+  campaignId: null,
 };
 
 function route(over: Partial<Route>): Route {
@@ -164,6 +167,11 @@ function parse(pathname: string): Route {
       runId: mode === 'build' || mode === 'chat' ? artifactId : null,
       chatMode: mode === 'chat',
     });
+  }
+  // `/campaigns/:id` — one campaign's scoreboard (DES-CAMPAIGN-001 §3.5 / TH-14); the bare
+  // `/campaigns` list resolves through the PANELS catch-all below, same as `/repos`.
+  if (first === 'campaigns' && second) {
+    return route({ panel: 'campaign-detail', campaignId: safeDecode(second) });
   }
   if (first === 'repo-detail' && second) {
     return route({ panel: 'repo-detail', repoId: safeDecode(second) });
