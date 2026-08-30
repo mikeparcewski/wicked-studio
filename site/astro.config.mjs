@@ -1,6 +1,16 @@
 import { defineConfig } from 'astro/config';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+
+// The install CTA's version stamp is injected at build time from the repo's
+// own package.json (the published `wicked-studio` npm manifest), so the stamp
+// can never re-stale the way a hardcoded string does (it sat at v0.1.0, then
+// v0.4.0, while npm moved on). Deliberately NOT an npm-registry fetch: that
+// would make the build non-hermetic. The release train keeps package.json in
+// sync with npm, so stamp == npm at every deploy from main. (DT-7)
+const studioPkg = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+);
 
 // Shared chrome lives in the `wicked-web` package. Develop against the local
 // source when it sits beside this repo (../../wicked-web from this site dir),
@@ -25,5 +35,8 @@ export default defineConfig({
   // review and invisible to layout measurement. A few KB of retained whitespace is cheaper than
   // shipping mashed sentences. Pinned by tests/e2e/prose.spec.ts.
   compressHTML: false,
-  vite: { resolve: { alias } },
+  vite: {
+    resolve: { alias },
+    define: { __WICKED_STUDIO_VERSION__: JSON.stringify(studioPkg.version) },
+  },
 });
