@@ -1,0 +1,164 @@
+# affordances.toml — wicked-studio's data-testid declarations → UI affordance
+# nodes, as wicked-estate ExtraEdgeExtractor rules (TH-15 / recon test-R18;
+# format per wicked-estate docs/extractor-sdk.md Part 2).
+#
+# `wicked-estate index <repo>` auto-discovers this file and injects, per
+# data-testid DECLARATION, a synthetic affordance node plus a `declares` edge
+# from the declaring component file. BlastRadius over a diff then answers
+# "which UI capabilities changed": a change to a component surfaces every
+# affordance it declares, and blast-radius on an affordance node surfaces its
+# declaring component(s). Consumers: wicked-garden's qe campaign Lens 1 and
+# qe-test-impact-analyzer (change-scoped scenario selection: browser
+# scenarios select by the testids they drive).
+#
+# The id vocabulary matches the committed selector contract
+# (testid-inventory.json, TH-13): static values verbatim, template-literal
+# testids with the `${expr}` normalised to `*` (affordance:seat-signin-*,
+# affordance:*-canvas-loading). Declaration forms covered (verified against
+# src/ at studio 0.4.1 — 545 static + 38 dynamic occurrences; the inventory's
+# 4 `computed` entries carry a raw JSX expression and are inherently
+# invisible to a regex extractor — resolvable only against a live DOM, as
+# the inventory itself documents):
+#
+#   1. affordance-jsx      — JSX attribute: data-testid="run-card". The
+#      leading [\s{(] guard excludes selector REFERENCES (querySelector(
+#      '[data-testid="thread"]') and friends are preceded by `[`) — the same
+#      declarations-only rule the TH-13 inventory scanner applies.
+#   2. affordance-prop     — quoted props-object key: 'data-testid': 'run-title'.
+#      Selector references never carry the `:` — no guard needed.
+#   3. affordance-ternary-a / -b — conditional declarations, one rule per arm:
+#      data-testid={overlayOn ? 'compare-overlay' : 'compare-split'} mints
+#      BOTH nodes; a non-string arm minting nothing is correct
+#      (… ? 'preview-mode-active' : undefined mints only the first arm, the
+#      same answer the TH-13 scanner gives). The greedy [^{}]* prefix rides
+#      over quotes inside the condition (m === 'Build' ? …) and anchors on
+#      the LAST `?`/`:` before a quoted arm.
+#   4. affordance-template-prefix — template literal with a static prefix:
+#      data-testid={`batch-select-${runId}`} → affordance:batch-select-*.
+#      (A multi-${} template collapses to its first static prefix + `*` —
+#      today every dynamic testid in src/ has exactly one ${expr}.)
+#   5. affordance-template-suffix / -suffix-b — template literal with a
+#      leading ${expr}: data-testid={`${surface}-canvas-loading`} →
+#      affordance:*-canvas-loading. The [^`{}\n]* prefix also admits the
+#      ternary first arm (… ? `${surface}-bridge-hint` : …) while staying
+#      bounded to the expression — it cannot cross a brace or newline, so a
+#      pass-through data-testid={testId} never leaks into a later template
+#      literal in the file. -suffix-b anchors the ternary SECOND arm
+#      (`…` : `${surface}-error-detail`).
+#
+# All rules share node_scheme = "ui-affordance", so the same testid declared
+# by several components converges on ONE node (e.g. action-preview is
+# declared by three components — blast-radius over it surfaces all three).
+# The glob stays under src/ — tests/ and e2e specs never mint affordances.
+
+[[rule]]
+name      = "affordance-jsx"
+file_glob = "src/**/*.tsx"
+pattern   = '(?m)(?:^|[\s{(])data-testid="(?P<testid>[^"]+)"'
+
+[rule.emit_node]
+id_template   = "affordance:{testid}"
+label_capture = "testid"
+kind          = "other:affordance"
+node_scheme   = "ui-affordance"
+
+[rule.emit_edge]
+kind               = "other:declares"
+target_id_template = "affordance:{testid}"
+target_node_scheme = "ui-affordance"
+
+[[rule]]
+name      = "affordance-prop"
+file_glob = "src/**/*.ts*"
+pattern   = '''['"]data-testid['"]\s*:\s*['"](?P<testid>[^'"]+)['"]'''
+
+[rule.emit_node]
+id_template   = "affordance:{testid}"
+label_capture = "testid"
+kind          = "other:affordance"
+node_scheme   = "ui-affordance"
+
+[rule.emit_edge]
+kind               = "other:declares"
+target_id_template = "affordance:{testid}"
+target_node_scheme = "ui-affordance"
+
+[[rule]]
+name      = "affordance-ternary-a"
+file_glob = "src/**/*.tsx"
+pattern   = '''data-testid=\{[^{}]*\?\s*'(?P<testid>[A-Za-z0-9][A-Za-z0-9_-]*)''''
+
+[rule.emit_node]
+id_template   = "affordance:{testid}"
+label_capture = "testid"
+kind          = "other:affordance"
+node_scheme   = "ui-affordance"
+
+[rule.emit_edge]
+kind               = "other:declares"
+target_id_template = "affordance:{testid}"
+target_node_scheme = "ui-affordance"
+
+[[rule]]
+name      = "affordance-ternary-b"
+file_glob = "src/**/*.tsx"
+pattern   = '''data-testid=\{[^{}]*:\s*'(?P<testid>[A-Za-z0-9][A-Za-z0-9_-]*)'\s*\}'''
+
+[rule.emit_node]
+id_template   = "affordance:{testid}"
+label_capture = "testid"
+kind          = "other:affordance"
+node_scheme   = "ui-affordance"
+
+[rule.emit_edge]
+kind               = "other:declares"
+target_id_template = "affordance:{testid}"
+target_node_scheme = "ui-affordance"
+
+[[rule]]
+name      = "affordance-template-prefix"
+file_glob = "src/**/*.tsx"
+pattern   = 'data-testid=\{`(?P<testid>[A-Za-z0-9][A-Za-z0-9_-]*)\$\{'
+
+[rule.emit_node]
+id_template   = "affordance:{testid}*"
+label_capture = "testid"
+kind          = "other:affordance"
+node_scheme   = "ui-affordance"
+
+[rule.emit_edge]
+kind               = "other:declares"
+target_id_template = "affordance:{testid}*"
+target_node_scheme = "ui-affordance"
+
+[[rule]]
+name      = "affordance-template-suffix"
+file_glob = "src/**/*.tsx"
+pattern   = 'data-testid=\{[^`{}\n]*`\$\{[^}]+\}(?P<testid>[A-Za-z0-9_-]+)`'
+
+[rule.emit_node]
+id_template   = "affordance:*{testid}"
+label_capture = "testid"
+kind          = "other:affordance"
+node_scheme   = "ui-affordance"
+
+[rule.emit_edge]
+kind               = "other:declares"
+target_id_template = "affordance:*{testid}"
+target_node_scheme = "ui-affordance"
+
+[[rule]]
+name      = "affordance-template-suffix-b"
+file_glob = "src/**/*.tsx"
+pattern   = 'data-testid=\{[^`{}\n]*`[^`]*`\s*:\s*`\$\{[^}]+\}(?P<testid>[A-Za-z0-9_-]+)`'
+
+[rule.emit_node]
+id_template   = "affordance:*{testid}"
+label_capture = "testid"
+kind          = "other:affordance"
+node_scheme   = "ui-affordance"
+
+[rule.emit_edge]
+kind               = "other:declares"
+target_id_template = "affordance:*{testid}"
+target_node_scheme = "ui-affordance"
