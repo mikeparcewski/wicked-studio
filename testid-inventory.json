@@ -10,11 +10,11 @@
   "version": 1,
   "studioVersion": "0.4.1",
   "counts": {
-    "files": 93,
-    "occurrences": 655,
-    "static": 552,
+    "files": 95,
+    "occurrences": 676,
+    "static": 572,
     "dynamic": 38,
-    "computed": 4
+    "computed": 5
   },
   "static": [
     {
@@ -371,6 +371,126 @@
       "testId": "burn-unavailable",
       "files": [
         "src/components/Burn.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-cost-cell",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-delivery-rollup",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-evidence-link",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-ladder",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-ladder-row",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-load-failed",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-load-verdicts",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-loading",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-notfound",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-pending-node",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-pending-nodes",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-progress",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-row",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-run-delivery",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-run-link",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-scoreboard",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-empty",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-page",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-probing",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-unsupported",
+      "files": [
+        "src/components/CampaignsPage.tsx"
       ]
     },
     {
@@ -3605,6 +3725,12 @@
         "src/components/ProvenanceLine.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/RunsBottomPanel.tsx"
+      ]
+    },
+    {
+      "expression": "testid",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
       ]
     },
     {
