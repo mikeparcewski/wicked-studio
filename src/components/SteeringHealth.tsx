@@ -87,11 +87,14 @@ export function SteeringHealth({ state, type, typeRuleCount }: {
     );
   }
   const sb = state.scoreboard;
-  const perType = sb.by_steering_type?.[type];
+  // The engine's `by_type` map (wicked-governance Scoreboard) holds one row per
+  // type that HAS rules — an absent row on a served map means zero, so the map's
+  // presence alone selects the wire path.
+  const perType = sb.by_type?.[type] ?? (sb.by_type !== undefined ? { total: 0, active: 0, retired: 0 } : undefined);
   // An EMPTY type page loses the stats entirely (review #5): the rule list's
   // empty state + the Add menu carry the message; store-wide numbers rendered
   // here read as this type's and lie.
-  const empty = perType !== undefined ? perType.rules_total === 0 : typeRuleCount === 0;
+  const empty = perType !== undefined ? perType.total === 0 : typeRuleCount === 0;
   if (empty) return null;
   return (
     <div data-testid="steering-health" className="flex flex-wrap gap-2">
@@ -99,8 +102,8 @@ export function SteeringHealth({ state, type, typeRuleCount }: {
         <Stat
           testid="steering-stat-rules-type"
           label={`${STEERING_TYPE_LABELS[type]} rules`}
-          value={`${perType.rules_active} active`}
-          sub={`${perType.rules_total} total · ${perType.rules_retired} retired`}
+          value={`${perType.active} active`}
+          sub={`${perType.total} total · ${perType.retired} retired`}
         />
       ) : (
         <Stat

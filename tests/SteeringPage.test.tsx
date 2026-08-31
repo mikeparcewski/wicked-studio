@@ -17,8 +17,8 @@ import type { WikiMeta, WikiScoreboard } from '../src/api/wiki.js';
  *    steering_type, with absent `steering_type` folding to architecture (the engine's serde
  *    default); the breadcrumb walks back to the landing;
  *  - the health header renders the AW-23 raw signals; PER-TYPE numbers when the wire serves
- *    `by_steering_type`, the store-wide numbers LABELED store-wide when it does not; a 501 is
- *    the honest adoption state, never an error card;
+ *    `by_type` (the wicked-governance Scoreboard spelling), the store-wide numbers LABELED
+ *    store-wide when it does not; a 501 is the honest adoption state, never an error card;
  *  - `meta.seeded === false` + an empty store is the unseeded state (seed command shown), and a
  *    daemon that cannot answer meta is never accused of an unseeded store; an empty TYPE on a
  *    populated store names the management flows instead;
@@ -255,12 +255,13 @@ describe('filterSteeringRules — the page-scope + facet predicate, pinned', () 
 });
 
 describe('SteeringPage — health header (TYPE-scoped, usability review #5)', () => {
-  it('renders per-type numbers when the wire serves by_steering_type — and NOTHING store-wide', async () => {
+  it('renders per-type numbers when the wire serves by_type — and NOTHING store-wide', async () => {
     listConformanceRules.mockResolvedValue({ rules: [rule({ steering_type: 'security' })] });
+    // The wicked-governance `Scoreboard.by_type` shape, serde spellings verbatim.
     const sb = scoreboard({
-      by_steering_type: {
-        security: { rules_total: 5, rules_active: 4, rules_retired: 1 },
-        architecture: { rules_total: 30, rules_active: 28, rules_retired: 2 },
+      by_type: {
+        security: { total: 5, active: 4, retired: 1, enforcing: 0 },
+        architecture: { total: 30, active: 28, retired: 2, enforcing: 3 },
       },
     });
     wire({ scoreboard: () => Promise.resolve({ scoreboard: sb }) });
@@ -276,6 +277,20 @@ describe('SteeringPage — health header (TYPE-scoped, usability review #5)', ()
     expect(screen.queryByTestId('steering-verdict')).toBeNull();
     expect(screen.queryByTestId('steering-stat-typed')).toBeNull();
     expect(screen.queryByTestId('steering-diagnostics')).toBeNull();
+  });
+
+  it('a served by_type map with NO row for this type means zero — no stats block (only types holding rules appear)', async () => {
+    // The live 0.7.3 shape: by_type carries architecture only; Security must
+    // read as empty through the WIRE path, never inherit a fallback count.
+    listConformanceRules.mockResolvedValue({ rules: [rule({ steering_type: 'security' })] });
+    const sb = scoreboard({ by_type: { architecture: { total: 36, active: 36, retired: 0, enforcing: 0 } } });
+    wire({ scoreboard: () => Promise.resolve({ scoreboard: sb }) });
+    page('security');
+
+    await screen.findByTestId('steering-page');
+    await waitFor(() => expect(listConformanceRules).toHaveBeenCalled());
+    expect(screen.queryByTestId('steering-health')).toBeNull();
+    expect(screen.queryByTestId('steering-stat-rules-type')).toBeNull();
   });
 
   it('falls back to a CLIENT-side count of this type’s loaded rules when the wire has no per-type split', async () => {

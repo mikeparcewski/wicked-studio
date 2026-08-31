@@ -81,12 +81,14 @@ export interface WikiRecallVolume {
   reason: string;
 }
 
-/** Per-steering-type rule counts — the steering-model lane's scoreboard growth. Optional on
- *  every wire shipping today; the Steering pages render per-type numbers only when served. */
+/** Per-steering-type rule counts — one row of the engine's `by_type` map
+ *  (wicked-governance `SteeringTypeCount`, serde field spellings verbatim). */
 export interface SteeringTypeCounts {
-  rules_total: number;
-  rules_active: number;
-  rules_retired: number;
+  total: number;
+  active: number;
+  retired: number;
+  /** Decide-lane (effect-bearing) rows within this type. */
+  enforcing?: number;
   [k: string]: unknown;
 }
 
@@ -99,9 +101,10 @@ export interface WikiScoreboard {
   connection: WikiConnectionCoverage;
   evidence: WikiEnforcementEvidence;
   recall_volume: WikiRecallVolume;
-  /** Keyed by steering type (`architecture` … `design-ux`). Absent pre-0.7.5 — the pages then
-   *  show the store-wide numbers, labeled as store-wide, never a fabricated per-type zero. */
-  by_steering_type?: Record<string, SteeringTypeCounts>;
+  /** Keyed by steering type (`architecture` … `design-ux`) — only types holding rules appear
+   *  (wicked-governance `Scoreboard.by_type`). Optional so a pre-steering engine's report still
+   *  parses — the pages then fall back to a client-side count, labeled as exactly that. */
+  by_type?: Record<string, SteeringTypeCounts>;
   [k: string]: unknown;
 }
 
