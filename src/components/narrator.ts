@@ -24,6 +24,14 @@ export interface NarrationLine {
 export interface NarratorContext {
   /** Phase name for a unit ord (unit-id suffix, stage fallback) — '?'-safe. */
   phaseOf: (ord: number | null | undefined) => string;
+  /**
+   * The run's intent (`session.problem`), when the caller has it. The daemon's
+   * `unitPlanned.description` is "<phase> — <the full intent>" for every unit
+   * of a planned workflow; with the intent known, the narrator drops that
+   * restatement — the intent bubble already opens the feed, and six identical
+   * raw-prompt lines are exactly the noise the usability review flagged.
+   */
+  intent?: string | null;
 }
 
 /** Longest free-text fragment kept on one narration line. */
@@ -40,6 +48,23 @@ function num(v: unknown): number | null {
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v : '';
+}
+
+function norm(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * True when one string restates the other's head — either may be the daemon's
+ * truncated copy of the other. Requires ≥24 significant chars in common so a
+ * short genuine description never false-positives against a long intent.
+ */
+function restates(a: string, b: string): boolean {
+  const na = norm(a);
+  const nb = norm(b);
+  const n = Math.min(na.length, nb.length);
+  if (n < 24) return false;
+  return na.slice(0, n) === nb.slice(0, n);
 }
 
 /**
@@ -70,7 +95,17 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
       return line(`Workflow "${id || 'unnamed'}"${n !== null ? ` — ${n} phase${n === 1 ? '' : 's'} planned` : ''}`, 'info');
     }
     case 'unitPlanned': {
-      const desc = clip(str(event.description));
+      // The daemon writes description as "<phase> — <intent…>"; the narrator
+      // already speaks the phase, so the duplicated prefix goes.
+      let raw = str(event.description);
+      const dash = raw.indexOf('—');
+      if (dash > 0 && raw.slice(0, dash).trim().toLowerCase() === phase.toLowerCase()) {
+        raw = raw.slice(dash + 1).trim();
+      }
+      // A description that merely restates the run's intent says nothing the
+      // feed's opening bubble didn't — "Planned <phase>" alone is the story.
+      if (restates(raw, str(ctx.intent ?? ''))) raw = '';
+      const desc = clip(raw, 120);
       return line(`Planned ${phase}${desc ? ` — ${desc}` : ''}`, 'info');
     }
     case 'councilConvened': {

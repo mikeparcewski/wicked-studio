@@ -10,11 +10,11 @@
   "version": 1,
   "studioVersion": "0.4.3",
   "counts": {
-    "files": 112,
-    "occurrences": 809,
-    "static": 694,
+    "files": 114,
+    "occurrences": 827,
+    "static": 710,
     "dynamic": 40,
-    "computed": 5
+    "computed": 6
   },
   "static": [
     {
@@ -489,6 +489,12 @@
     },
     {
       "testId": "campaigns-empty",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-empty-cta",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
@@ -2085,6 +2091,24 @@
       ]
     },
     {
+      "testId": "not-found",
+      "files": [
+        "src/components/NotFoundPage.tsx"
+      ]
+    },
+    {
+      "testId": "not-found-link",
+      "files": [
+        "src/components/NotFoundPage.tsx"
+      ]
+    },
+    {
+      "testId": "not-found-path",
+      "files": [
+        "src/components/NotFoundPage.tsx"
+      ]
+    },
+    {
       "testId": "notif-chime",
       "files": [
         "src/components/NotificationSettings.tsx"
@@ -2896,6 +2920,12 @@
       ]
     },
     {
+      "testId": "skip-link",
+      "files": [
+        "src/components/SkipLink.tsx"
+      ]
+    },
+    {
       "testId": "source-attach",
       "files": [
         "src/components/ComposerContext.tsx"
@@ -3025,6 +3055,18 @@
       "testId": "steering-chip",
       "files": [
         "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "steering-diagnostics",
+      "files": [
+        "src/components/SteeringHealth.tsx"
+      ]
+    },
+    {
+      "testId": "steering-diagnostics-toggle",
+      "files": [
+        "src/components/SteeringHealth.tsx"
       ]
     },
     {
@@ -3378,6 +3420,12 @@
       ]
     },
     {
+      "testId": "steering-store-health",
+      "files": [
+        "src/components/SteeringHealth.tsx"
+      ]
+    },
+    {
       "testId": "steering-timeline",
       "files": [
         "src/components/SteeringTimeline.tsx"
@@ -3504,6 +3552,12 @@
       ]
     },
     {
+      "testId": "testing-evals-blocked",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
       "testId": "testing-evals-busy",
       "files": [
         "src/components/TestingPage.tsx"
@@ -3546,6 +3600,12 @@
       ]
     },
     {
+      "testId": "testing-evals-gaps",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
       "testId": "testing-evals-nearest",
       "files": [
         "src/components/TestingPage.tsx"
@@ -3558,7 +3618,25 @@
       ]
     },
     {
+      "testId": "testing-evals-nearest-link",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
       "testId": "testing-evals-nearest-rule",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-passed",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-provenance",
       "files": [
         "src/components/TestingPage.tsx"
       ]
@@ -3594,7 +3672,19 @@
       ]
     },
     {
+      "testId": "testing-evals-verdict-word",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
       "testId": "testing-harness",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-harness-explainer",
       "files": [
         "src/components/TestingPage.tsx"
       ]
@@ -4176,6 +4266,12 @@
       ]
     },
     {
+      "testId": "work-hidden-chip",
+      "files": [
+        "src/components/WorkPage.tsx"
+      ]
+    },
+    {
       "testId": "work-range-hidden-note",
       "files": [
         "src/components/WorkPage.tsx"
@@ -4460,6 +4556,12 @@
       "expression": "a.testId",
       "files": [
         "src/components/ComposerContext.tsx"
+      ]
+    },
+    {
+      "expression": "s.testid",
+      "files": [
+        "src/components/WorkPage.tsx"
       ]
     },
     {

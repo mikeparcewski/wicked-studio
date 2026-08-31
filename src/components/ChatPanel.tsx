@@ -543,7 +543,10 @@ function RunChat({
     },
     [byOrd, session.id],
   );
-  const ctx: NarratorContext = useMemo(() => ({ phaseOf }), [phaseOf]);
+  const ctx: NarratorContext = useMemo(
+    () => ({ phaseOf, intent: session.problem ?? null }),
+    [phaseOf, session.problem],
+  );
   const lastLine = useMemo(() => lastNarration(events, ctx), [events, ctx]);
   const artifacts = useMemo(() => deriveArtifacts(events, view, ctx), [events, view, ctx]);
 

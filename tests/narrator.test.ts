@@ -71,6 +71,31 @@ describe('narrate — the event → status-line templates (§4)', () => {
     expect(line!.tone).toBe(tone);
   });
 
+  it('unitPlanned strips the daemon\'s duplicated "<phase> — " description prefix', () => {
+    const line = narrate(
+      ev({ type: 'unitPlanned', session: 'r', ord: 1, description: 'phase-1 — survey the repo' }),
+      ctx,
+    );
+    expect(line!.text).toBe('Planned phase-1 — survey the repo');
+  });
+
+  it('unitPlanned drops a description that merely restates the run intent (ctx.intent)', () => {
+    const intent = 'Implement GitHub issue #167 in this repo: the doc-creation wizard project picker lists stale projects';
+    const withIntent: NarratorContext = { ...ctx, intent };
+    // The daemon truncates the restated intent per-unit; head-match still catches it.
+    const line = narrate(
+      ev({ type: 'unitPlanned', session: 'r', ord: 2, description: `phase-2 — ${intent.slice(0, 80)}` }),
+      withIntent,
+    );
+    expect(line!.text).toBe('Planned phase-2');
+    // A REAL description (not the intent) survives untouched.
+    const real = narrate(
+      ev({ type: 'unitPlanned', session: 'r', ord: 3, description: 'write the acceptance test plan for the picker' }),
+      withIntent,
+    );
+    expect(real!.text).toBe('Planned phase-3 — write the acceptance test plan for the picker');
+  });
+
   it('stays silent on noise frames (deltas, heartbeat, terminal bytes, burn, allow-hooks, unknown)', () => {
     for (const bag of [
       { type: 'unitOutputDelta', session: 'r', ord: 0, text: 'x' },

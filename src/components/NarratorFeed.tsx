@@ -133,7 +133,10 @@ export function NarratorFeed({
   const [raw, setRaw] = useState(false);
 
   const feedEvents = lens === 'feed' ? events : EMPTY_EVENTS;
-  const ctx: NarratorContext = useMemo(() => ({ phaseOf }), [phaseOf]);
+  const ctx: NarratorContext = useMemo(
+    () => ({ phaseOf, intent: session.problem ?? null }),
+    [phaseOf, session.problem],
+  );
   const items: FeedItem[] = useMemo(
     () => buildFeed(feedEvents, orderedUnits, executingUnitOrd, ctx),
     [feedEvents, orderedUnits, executingUnitOrd, ctx],
@@ -155,6 +158,15 @@ export function NarratorFeed({
     Record<number, { text: string | null; loading: boolean; visible: boolean }>
   >({});
   const autoLoadedOrds = useRef<Set<number>>(new Set());
+  // Component-lifetime guard: transcript fetches resolve after unmount when the
+  // user navigates away mid-load — never setState on a dead tree.
+  const disposedRef = useRef(false);
+  useEffect(
+    () => () => {
+      disposedRef.current = true;
+    },
+    [],
+  );
   useEffect(() => {
     for (const unit of orderedUnits) {
       if (unit.status === 'done' && !autoLoadedOrds.current.has(unit.ord)) {
@@ -163,6 +175,7 @@ export function NarratorFeed({
         void api
           .getUnitOutput(session.id, unitKey(session.id, unit.id, unit.ord))
           .then(({ output, outputUnavailable }) => {
+            if (disposedRef.current) return;
             // "(no transcript captured)" is FALSE for a denied unit — say what
             // the daemon says (FINDING-006).
             setTranscripts((prev) => ({
@@ -175,6 +188,7 @@ export function NarratorFeed({
             }));
           })
           .catch(() => {
+            if (disposedRef.current) return;
             setTranscripts((prev) => ({
               ...prev,
               [unit.ord]: { text: '(transcript unavailable)', loading: false, visible: true },

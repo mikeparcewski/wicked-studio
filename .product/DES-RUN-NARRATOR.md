@@ -107,7 +107,7 @@ frames the feed does not speak. Tones: `info` (dim ink) · `work` (run-emerald) 
 |---|---|---|
 | `sessionStarted` | `Run started` | work |
 | `workflowSelected` | `Workflow "<id>" — <n> phases planned` | info |
-| `unitPlanned` | `Planned <phase> — <description ≤120>` | info |
+| `unitPlanned` | `Planned <phase> — <description ≤120>`; the daemon's duplicated `<phase> — ` prefix is stripped, and a description that merely restates the run intent (already the feed's opening bubble) is dropped — `Planned <phase>` alone | info |
 | `councilConvened` | `Council convened — polling <n> agents` | info |
 | `councilDeliberated` | `Ballot <round>: <pct>% — below the <needed>% bar, runoff` | info |
 | `councilVoted` | `Council voted — <pct>% agreement (<votes> votes)` | info |
@@ -140,7 +140,8 @@ frames the feed does not speak. Tones: `info` (dim ink) · `work` (run-emerald) 
 | `sessionFailed` | `Run failed` | fail |
 | `runCancelled` | `Run cancelled` | info |
 | `error` | `Error: <message ≤160>` | fail |
-| deltas, heartbeat, terminal*, cliUsage, workerSession*, acp*, validationPin*, unitContextInjected, allow-hooks, assumptionRecorded | *(silent — burn/terminal/assumption panels own these)* | — |
+| deltas, heartbeat, terminal*, cliUsage, workerSession*, acp*, validationPin*, unitContextInjected, allow-hooks, governanceContextArmed, toolExecutorDispatched, assumptionRecorded | *(silent — burn/terminal/assumption panels own these)* | — |
+| chat* (GroupChat's surface), campaign*, repoRegistered, runOrphaned, toolInvoked, unknown | *(silent — not run-follow frames; other surfaces own them)* | — |
 
 Unknown/future types are silent (additive-safe, §5.1 of the wire contract).
 
