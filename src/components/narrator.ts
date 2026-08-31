@@ -476,7 +476,9 @@ export function narrateChatSeat(m: ChatSeatView): { text: string; tone: Narratio
     return { text: `failed${head ? ` — ${head}` : ''}`, tone: 'fail' };
   }
   if (isConversationalReply(m.text)) return null;
-  const firstLine = clip(m.text.trim(), 100);
+  // The headline drops a leading markdown heading marker — "## Root cause"
+  // reads as syntax, not narration.
+  const firstLine = clip(m.text.trim().replace(/^#+\s*/, ''), 100);
   return { text: `replied (${chatSizeLabel(m.text)})${firstLine ? ` — ${firstLine}` : ''}`, tone: 'work' };
 }
 
