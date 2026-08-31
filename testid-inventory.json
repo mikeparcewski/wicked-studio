@@ -11,8 +11,8 @@
   "studioVersion": "0.4.3",
   "counts": {
     "files": 114,
-    "occurrences": 827,
-    "static": 710,
+    "occurrences": 830,
+    "static": 713,
     "dynamic": 40,
     "computed": 6
   },
@@ -1165,6 +1165,24 @@
     },
     {
       "testId": "failure-banner",
+      "files": [
+        "src/components/FailureBanner.tsx"
+      ]
+    },
+    {
+      "testId": "failure-engine-detail",
+      "files": [
+        "src/components/FailureBanner.tsx"
+      ]
+    },
+    {
+      "testId": "failure-plain",
+      "files": [
+        "src/components/FailureBanner.tsx"
+      ]
+    },
+    {
+      "testId": "failure-rule-link",
       "files": [
         "src/components/FailureBanner.tsx"
       ]
