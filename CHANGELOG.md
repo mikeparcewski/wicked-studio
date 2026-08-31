@@ -12,16 +12,41 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-08-31
+
 ### Added
 
+- **Steering** — the governance surface, rebuilt end-to-end. A top-level Steering nav item
+  (above Settings) lands on seven compact type cards (Architecture, Development, Security,
+  Testing, Operations, Compliance, Design/UX) with live rule counts; each type page is a clean
+  rule list (severity chip, id + statement, non-default weight) with a single **Add ▾** action
+  offering Add individual / Import / Add with chat (the governed-run authoring flow) — nothing
+  renders open by default. Rule detail, provenance, retire/update live in a click drawer.
+  Replaces the Wiki page and the old always-open management forms (#153, #154, #156).
+- **Testing** — a top-level Testing nav item (above Steering) with three pages: **Harness**
+  (campaign recon trigger, intake gate, launch, add-with-chat), **Campaigns** (the scoreboard,
+  moved here; the old route redirects), and **Evals** (run the steering-rule evals per type or
+  all, caught/gap/false-positive summary + results table, gap rows expand to the nearest
+  non-firing rules with similarity, corpus upload). Honest states throughout: a pre-0.7.5
+  engine answers with the upgrade callout, a hint run without an embedder shows the
+  facet-only-degrade notice, an empty corpus renders an empty state (#155).
 - The data-testid contract (TH-13 / test-R13): `testid-inventory.json` — a committed, versioned
-  inventory of every `data-testid` the UI declares (545 static values, 38 dynamic `*` patterns,
-  4 computed expressions), regenerated with `npm run manifest:testids` and emitted into
-  `dist/testid-inventory.json` by the build so consumers verify against the dist actually
-  served. `tests/testidInventory.test.ts` re-scans `src/` and fails CI on any drift; the
-  drift-handling doctrine (deterministic miss → fail → re-author against the live DOM →
-  re-record → substitution lands in the spec diff; no agentic fallback inside the model-free
-  runner) travels in the artifact's `$doc` header.
+  inventory of every `data-testid` the UI declares, regenerated with `npm run manifest:testids`
+  and emitted into `dist/testid-inventory.json` by the build so consumers verify against the
+  dist actually served. `tests/testidInventory.test.ts` re-scans `src/` and fails CI on drift.
+
+### Changed
+
+- The steering client is reconciled to crew's shipped wire byte-for-byte — import
+  `{type?, entries[]}`, author `{instructions, type?, documents?}` → `{runId}` (#154).
+
+### Removed
+
+- The Settings **Policies** panel and PolicyManager (policies merged into steering rules;
+  `/policies` redirects to `/steering`), and the context-free **Domain** and **Coverage**
+  Settings panels (`/domain` and `/coverage` redirect to `/system`; per-run coverage evidence
+  keeps its home in the run view; the project-scoped successor is tracked in #157/#158) (#156).
+
 
 ## [0.4.2] — 2026-08-30
 
