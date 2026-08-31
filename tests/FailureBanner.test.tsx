@@ -36,6 +36,38 @@ describe('FailureBanner (§11.5 — run-halted explainer)', () => {
 
   // Slice Y (DES-UX-001 §7.4): the banner's All-runs is a FAILURE-CONTEXT entry —
   // it lands on /work with the Failed filter active, never on the retired /runs.
+
+  // Review Top-10 #1: the deny banner speaks plain language FIRST; the engine prose survives
+  // as a dim detail line, and rule denials link into the Steering drawer.
+  it('translates a boundary-deny into plain words with the engine detail beneath', () => {
+    const view = makeView({ status: 'failed' }, [
+      makeUnit({
+        id: 'u2', ord: 2, status: 'rejected',
+        denial_reason: 'input governance denied a tool-call in unit-2 (claim boundary-deny:unit-2)',
+      }),
+    ]);
+    render(<FailureBanner view={view} log={[]} />);
+    expect(screen.getByTestId('failure-plain')).toHaveTextContent(
+      'Unit #2 tried to write outside its workspace and was stopped to protect your files.',
+    );
+    expect(screen.getByTestId('failure-engine-detail')).toHaveTextContent('claim boundary-deny:unit-2');
+  });
+
+  it('links a rule denial to the Steering drawer via /steering?rule=', () => {
+    const navigate = vi.fn();
+    const view = makeView({ status: 'failed' }, [
+      Object.assign(
+        makeUnit({ id: 'u3', ord: 3, status: 'rejected', denial_reason: 'denied by policy' }),
+        { denial: { claim_id: 'gate:unit-3', rule_ids: ['SEC-101'] } },
+      ),
+    ]);
+    render(<FailureBanner view={view} log={[]} navigate={navigate} />);
+    const link = screen.getByTestId('failure-rule-link');
+    expect(link).toHaveTextContent('SEC-101');
+    fireEvent.click(link);
+    expect(navigate).toHaveBeenCalledWith('/steering?rule=SEC-101');
+  });
+
   it('carries the failure-context "All runs ›" link to /work?filter=failed', () => {
     const navigate = vi.fn();
     render(<FailureBanner view={makeView({ status: 'failed' })} log={errorLog} navigate={navigate} />);

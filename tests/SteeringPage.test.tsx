@@ -614,4 +614,29 @@ describe('SteeringPage — ?rule deep link opens the drawer (qe finding: eval ga
     await screen.findByTestId('steering-rule-row');
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
   });
+
+  // The failure banner links `/steering?rule=<id>` (a rule id alone does not name its type
+  // page): the LANDING resolves the id to its type once rules load and navigates there with
+  // the drawer param intact. Unknown ids stay put — no dead redirect.
+  it('landing resolves ?rule=<id> to the rule\'s type page', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [
+      { id: 'SEC-101', rule_type: 'policy', statement: 's', severity: 'critical', confidence: 1,
+        targets: {}, provenance: { source: 'policy', source_kinds: [] }, retired: false,
+        steering_type: 'security' },
+    ] });
+    wire();
+    const navigate = vi.fn();
+    render(<SteeringPage type={null} navigate={navigate} search="?rule=SEC-101" />);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/steering/security?rule=SEC-101'));
+  });
+
+  it('landing stays put on an unknown ?rule id', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [] });
+    wire();
+    const navigate = vi.fn();
+    render(<SteeringPage type={null} navigate={navigate} search="?rule=NOPE-1" />);
+    await screen.findByTestId('steering-landing');
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
 });

@@ -112,6 +112,17 @@ export function SteeringPage({ type, navigate, search = '' }: {
     if (routed !== null && rules.some((r) => r.id === routed)) setSelectedId(routed);
   }, [search, rules]);
 
+  // A `?rule=<id>` deep link on the LANDING (the failure banner links here because a rule id
+  // alone does not name its type page): once rules load, resolve the id to its type and land on
+  // that page with the drawer open. Unknown ids stay on the landing — no dead redirect.
+  useEffect(() => {
+    if (type !== null || rulesLoading || rulesError !== null) return;
+    const routed = new URLSearchParams(search).get('rule');
+    if (routed === null) return;
+    const hit = rules.find((r) => r.id === routed);
+    if (hit !== undefined) navigate(`/steering/${steeringTypeOf(hit)}?rule=${encodeURIComponent(routed)}`);
+  }, [type, search, rules, rulesLoading, rulesError, navigate]);
+
   /** evidence_count join: the AW-23 per-rule evidence rows, when the scoreboard is served. */
   const evidenceOf = (id: string): { denial_claims: number; governs_evidence: number } | null => {
     if (scoreboard.kind !== 'loaded') return null;

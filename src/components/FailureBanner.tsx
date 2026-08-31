@@ -1,5 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import type { LoggedEvent } from '../store/runtime.js';
+import { denialAdvice, denialHeadline, parseDenial, type StructuredDenial } from './denialCopy.js';
 
 interface Props {
   view: SessionView;
@@ -64,13 +65,42 @@ export function FailureBanner({ view, log, navigate }: Props): React.ReactElemen
       <p className="font-semibold">Run halted.</p>
       {lastError && <p className="mt-1" style={{ color: 'var(--ink-muted)' }}>{lastError.detail}</p>}
       {denied.length > 0 && (
-        <ul className="mt-1 list-disc pl-4" style={{ color: 'var(--ink-muted)' }}>
-          {denied.map((u) => (
-            <li key={u.id}>
-              Unit #{u.ord}: {u.denial_reason ?? 'rejected'}
-            </li>
-          ))}
-        </ul>
+        <div className="mt-1 flex flex-col gap-2">
+          {denied.map((u) => {
+            // 0.7.6+ engines attach a structured denial to the rejected unit; older engines
+            // leave only the prose — parseDenial reads whichever this daemon serves.
+            const facts = parseDenial(
+              u.denial_reason,
+              (u as unknown as { denial?: StructuredDenial }).denial ?? null,
+            );
+            return (
+              <div key={u.id} data-testid="failure-plain">
+                <p style={{ color: 'var(--ink)' }}>{denialHeadline(facts, u.ord)}</p>
+                <p className="mt-0.5" style={{ color: 'var(--ink-muted)' }}>
+                  {denialAdvice(facts)}
+                  {navigate !== undefined &&
+                    facts.ruleIds.map((id) => (
+                      <a
+                        key={id}
+                        href={`/steering?rule=${id}`}
+                        data-testid="failure-rule-link"
+                        className="ml-2 transition-opacity hover:opacity-80"
+                        style={{ color: 'var(--accent)', textDecoration: 'none' }}
+                        onClick={(e) => { e.preventDefault(); navigate(`/steering?rule=${id}`); }}
+                      >
+                        Review {id} ›
+                      </a>
+                    ))}
+                </p>
+                {facts.raw.length > 0 && (
+                  <p className="mt-0.5 opacity-70" style={{ color: 'var(--ink-muted)' }} data-testid="failure-engine-detail">
+                    engine detail: {facts.raw}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
       {navigate !== undefined && <AllRunsLink navigate={navigate} />}
     </div>
