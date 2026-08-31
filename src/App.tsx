@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CenterDashboard } from './components/CenterDashboard.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
 import { ChatsPage } from './components/ChatsPage.js';
-import { CoverageView } from './components/CoverageView.js';
-import { DomainModelBrowser } from './components/DomainModelBrowser.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { HomeBoard } from './components/HomeBoard.js';
 import { MakeDashboard } from './components/MakeDashboard.js';
@@ -11,7 +9,6 @@ import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
 import { VideoStoryboard } from './components/VideoStoryboard.js';
-import { PolicyManager } from './components/PolicyManager.js';
 import { ProjectDashboard } from './components/ProjectDashboard.js';
 import { ProjectShell } from './components/ProjectShell.js';
 import { ProjectDetailPage } from './components/ProjectDetailPage.js';
@@ -33,7 +30,7 @@ import { ThemePage } from './components/ThemePage.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
-import { useLegacyRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
+import { useLegacyRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
@@ -46,7 +43,7 @@ import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
-import { DEFAULT_STEERING_TYPE, isSteeringType } from './api/steering.js';
+import { isSteeringType } from './api/steering.js';
 import { isTestingSubPage } from './api/testing.js';
 import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
@@ -143,9 +140,13 @@ export function App(): React.ReactElement {
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
   useLegacyRedirect({ panel, runId, projectId, mode, showLaunch, chatMode }, navigate);
 
-  // The retired governance addresses (`/wiki`, `/rules`) and any type-less `/steering` address
-  // normalize onto the Architecture steering page (the STEERING program's one redirect).
-  useSteeringRedirect(panel, steeringType, navigate);
+  // The retired governance addresses (`/wiki`, `/rules`, `/policies`) and any invalid-type
+  // `/steering/*` address normalize onto the `/steering` landing (the bare landing never
+  // redirects — it IS the page now).
+  useSteeringRedirect(panel, steeringType, pathname, navigate);
+
+  // The retired `/coverage` and `/domain` settings panels normalize onto `/system`.
+  useRetiredSettingsRedirect(pathname, navigate);
 
   // The retired flat campaign addresses (`/campaigns`, `/campaigns/:id`) rewrite onto
   // `/testing/campaigns[...]`, and any page-less `/testing` address normalizes onto Harness.
@@ -440,13 +441,6 @@ export function App(): React.ReactElement {
     if (panel === 'home') {
       return <HomeBoard runs={runs} navigate={navigate} />;
     }
-    if (panel === 'coverage') {
-      return (
-        <div className="flex-1 overflow-y-auto p-6">
-          <CoverageView />
-        </div>
-      );
-    }
     if (panel === 'workflows') {
       return (
         <div className="flex-1 overflow-y-auto p-6">
@@ -454,27 +448,14 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    if (panel === 'domain') {
-      return (
-        <div className="flex-1 overflow-y-auto p-6">
-          <DomainModelBrowser />
-        </div>
-      );
-    }
-    if (panel === 'policies') {
-      return (
-        <div className="flex-1 overflow-y-auto p-6">
-          <PolicyManager />
-        </div>
-      );
-    }
-    // `/steering/:type` — the STEERING surface: ONE component, parameterized by type. A
-    // type-less address renders Architecture for the tick before useSteeringRedirect lands.
+    // `/steering[/:type]` — the STEERING surface: ONE shell, parameterized by type. A null
+    // type IS the landing (the seven type cards); the retired `/wiki`/`/rules`/`/policies`
+    // addresses render it for the tick before useSteeringRedirect lands.
     if (panel === 'steering') {
       return (
         <div className="flex-1 overflow-y-auto p-6">
           <SteeringPage
-            type={steeringType !== null && isSteeringType(steeringType) ? steeringType : DEFAULT_STEERING_TYPE}
+            type={steeringType !== null && isSteeringType(steeringType) ? steeringType : null}
             navigate={navigate}
           />
         </div>

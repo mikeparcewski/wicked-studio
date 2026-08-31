@@ -95,13 +95,16 @@ describe('the route→heading map (§3.2)', () => {
     expect(headingForPath('/repos')).toBe('repos');
     expect(headingForPath('/repos/new')).toBe('repos');
     expect(headingForPath('/repo-detail/r1')).toBe('repos');
-    for (const p of ['/system', '/theme', '/coverage', '/domain', '/workflows', '/policies']) {
+    // /coverage and /domain are RETIRED (they redirect to /system) but stay mapped so the
+    // rail never flashes headless on the pre-redirect tick.
+    for (const p of ['/system', '/theme', '/coverage', '/domain', '/workflows']) {
       expect(headingForPath(p)).toBe('settings');
     }
     // Steering owns its routes AND the retired /wiki + /rules addresses (they
-    // redirect to /steering/architecture — the rail must not flash Settings
+    // redirect to /steering — the rail must not flash Settings
     // open on the pre-redirect tick).
-    for (const p of ['/steering/architecture', '/steering/security', '/wiki', '/rules']) {
+    // /policies retired into Steering (policies merged into steering rules) — same contract.
+    for (const p of ['/steering', '/steering/architecture', '/steering/security', '/wiki', '/rules', '/policies']) {
       expect(headingForPath(p)).toBe('steering');
     }
     // Testing owns its routes AND the retired flat /campaigns addresses (they
@@ -369,7 +372,7 @@ describe('accordion contents (§3.3)', () => {
     expect(settings.getAttribute('aria-expanded')).toBe('true');
     // 6 rows: Theme, Coverage, Domain, Workflows, Policies, System — Rules and
     // Arch Wiki retired into the Steering heading (the STEERING program).
-    expect(within(settings).getAllByRole('menuitem')).toHaveLength(6);
+    expect(within(settings).getAllByRole('menuitem')).toHaveLength(3);
     expect(within(settings).getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument();
   });
 
@@ -407,7 +410,7 @@ describe('accordion contents (§3.3)', () => {
 });
 
 describe('the collapsed rail (§3.2)', () => {
-  it('shows exactly seven glyph links (Testing → its Harness page, Steering → its Architecture page, Settings → /system)', async () => {
+  it('shows exactly seven glyph links (Testing → its Harness page, Steering → its landing, Settings → /system)', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
@@ -415,7 +418,7 @@ describe('the collapsed rail (§3.2)', () => {
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
     expect(glyphs).toHaveLength(7);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/make', '/chats', '/repos', '/testing/harness', '/steering/architecture', '/system',
+      '/projects', '/make', '/chats', '/repos', '/testing/harness', '/steering', '/system',
     ]);
     // Accordions don't exist at this width.
     expect(screen.queryByTestId('rail-heading-projects')).toBeNull();

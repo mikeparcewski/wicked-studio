@@ -87,13 +87,15 @@ const P_TESTING: PathSpec  = { key: 'testing',  title: 'Testing',      noun: 'Ca
 // Steering (the STEERING program): the governance surface, a PRIMARY path placed immediately
 // BEFORE Settings. Like Settings it is title-only (no ▦/＋ — its management verbs live on the
 // pages); its accordion rows are the seven steering types, its collapsed glyph links the
-// Architecture page (the first sub-page — there is no separate steering dashboard).
-const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: steeringPath('architecture') };
+// `/steering` landing (the seven type cards — the steering-UX wave's calm entry).
+const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: '/steering' };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
 const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_TESTING, P_STEERING, P_SETTINGS];
 
-// `wiki` and `rules` retired into Steering (they redirect to /steering/architecture).
-const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows', 'policies']);
+// `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
+// retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
+// never flashes headless on the pre-redirect tick.
+const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows']);
 
 /**
  * The route→heading map (§3.2): which primary path owns a pathname. `/` and
@@ -110,9 +112,9 @@ export function headingForPath(pathname: string): PathKey | null {
   // The retired flat `/campaigns` addresses redirect into Testing — map them there too, so
   // the rail is already on the right heading on the pre-redirect tick.
   if (first === 'testing' || first === 'campaigns') return 'testing';
-  // The retired `/wiki` + `/rules` addresses redirect into Steering — map them there too, so
-  // the rail never flashes Settings open on the pre-redirect tick.
-  if (first === 'steering' || first === 'wiki' || first === 'rules') return 'steering';
+  // The retired `/wiki` + `/rules` + `/policies` addresses redirect into Steering — map them
+  // there too, so the rail never flashes Settings open on the pre-redirect tick.
+  if (first === 'steering' || first === 'wiki' || first === 'rules' || first === 'policies') return 'steering';
   if (SETTINGS_ROUTES.has(first)) return 'settings';
   return null;
 }

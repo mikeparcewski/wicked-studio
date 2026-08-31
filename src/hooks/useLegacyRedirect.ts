@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { api } from '../api/client.js';
-import { DEFAULT_STEERING_TYPE, steeringPath } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
 import { modePath, projectPath, type Mode, type Navigate } from './useRoute.js';
 
@@ -102,18 +101,40 @@ export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void 
 }
 
 /**
- * The Steering surface's address normalizer (the STEERING program): any parse that landed on
- * `panel: 'steering'` WITHOUT a valid type — bare `/steering`, a typo'd `/steering/foo`, and
- * the two RETIRED addresses `/wiki` (the old Architecture Wiki page) and `/rules` (the old
- * RuleManager) — is replaced with the Architecture page's real URL. REPLACE, like every
- * redirect in this module, so Back never re-enters the dead address; the page itself renders
- * Architecture on the pre-redirect tick, so nothing flashes.
+ * The Steering surface's address normalizer (the STEERING program, re-aimed by the steering-UX
+ * wave): bare `/steering` IS the landing now — the seven type cards — and never redirects. Any
+ * OTHER parse that landed on `panel: 'steering'` without a valid type — a typo'd
+ * `/steering/foo`, and the RETIRED addresses `/wiki` (the old Architecture Wiki page), `/rules`
+ * (the old RuleManager), and `/policies` (the old policies settings panel, merged into steering
+ * rules) — is replaced with the landing's real URL. REPLACE, like every redirect in this
+ * module, so Back never re-enters the dead address; the page itself renders the landing on the
+ * pre-redirect tick, so nothing flashes.
  */
-export function useSteeringRedirect(panel: string, steeringType: string | null, navigate: Navigate): void {
+export function useSteeringRedirect(
+  panel: string,
+  steeringType: string | null,
+  pathname: string,
+  navigate: Navigate,
+): void {
   useEffect(() => {
     if (panel !== 'steering' || steeringType !== null) return;
-    navigate(steeringPath(DEFAULT_STEERING_TYPE), { replace: true });
-  }, [panel, steeringType, navigate]);
+    if (pathname === '/steering' || pathname === '/steering/') return; // the landing IS the page
+    navigate('/steering', { replace: true });
+  }, [panel, steeringType, pathname, navigate]);
+}
+
+/**
+ * The retired settings panels' address normalizer (the steering-UX wave): `/coverage` and
+ * `/domain` — the orphaned, context-free settings panels — retired; both parse to the System
+ * page (so it renders instantly on the pre-redirect tick) and this hook REPLACES the address
+ * with `/system`, so Back never re-enters the dead address.
+ */
+export function useRetiredSettingsRedirect(pathname: string, navigate: Navigate): void {
+  useEffect(() => {
+    const [, first = ''] = pathname.split('/');
+    if (first !== 'coverage' && first !== 'domain') return;
+    navigate('/system', { replace: true });
+  }, [pathname, navigate]);
 }
 
 /**

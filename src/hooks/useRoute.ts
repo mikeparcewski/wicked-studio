@@ -5,16 +5,21 @@ import { isTestingSubPage } from '../api/testing.js';
 // `make` is the round-4 primary-path dashboard route (DES-FEEDBACK-003 §2.1) —
 // a CLIENT route (a new panel id in this union), not a wire. Slice M registers
 // it with a placeholder surface; the real dashboard is slice O (§4.2).
-// `steering` is the STEERING program's surface (`/steering/:type`) — the panels
-// it replaced (`wiki`, `rules`) are gone from this union; their old paths parse
-// to `steering` with a null type, which `useSteeringRedirect` normalizes.
+// `steering` is the STEERING program's surface (`/steering[/:type]`) — the panels
+// it replaced (`wiki`, `rules`, and the steering-UX wave's `policies`: the old
+// policies settings panel, merged into steering rules) are gone from this union;
+// their old paths parse to `steering` with a null type, which `useSteeringRedirect`
+// normalizes onto the `/steering` landing.
 // `testing` is the Testing surface (`/testing/:page` — harness/campaigns/evals);
 // the flat campaign panels it absorbed (`campaigns`, `campaign-detail`) are gone
 // from this union — their old paths parse to `testing` and `useTestingRedirect`
 // rewrites the address onto `/testing/campaigns[...]`.
-export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make';
+// The orphaned `coverage` and `domain` settings panels retired in the same wave:
+// their paths parse to `system` and `useRetiredSettingsRedirect` rewrites the
+// address onto `/system`.
+export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make';
 
-const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
+const PANELS: Panel[] = ['runs', 'workflows', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
@@ -189,17 +194,25 @@ function parse(pathname: string): Route {
       chatMode: mode === 'chat',
     });
   }
-  // `/steering/:type` — the STEERING surface: one page component, parameterized by type.
-  // An address that names no valid type (bare `/steering`, a typo'd type) parses with
-  // `steeringType: null`; `useSteeringRedirect` replaces it with the Architecture page.
+  // `/steering[/:type]` — the STEERING surface: one page component, parameterized by type.
+  // The bare `/steering` address IS the landing (the seven type cards); an address that names
+  // an invalid type (a typo'd `/steering/foo`) parses with `steeringType: null` too, and
+  // `useSteeringRedirect` replaces it with the landing's real URL.
   if (first === 'steering') {
     return route({ panel: 'steering', steeringType: isSteeringType(second) ? second : null });
   }
-  // The RETIRED governance addresses: `/wiki` (the old Architecture Wiki page) and `/rules`
-  // (the old RuleManager) both fold into Steering/Architecture — parsed here so the pages
-  // render instantly, redirected (replace) so bookmarks land on the surface's real URL.
-  if (first === 'wiki' || first === 'rules') {
+  // The RETIRED governance addresses: `/wiki` (the old Architecture Wiki page), `/rules` (the
+  // old RuleManager), and `/policies` (the old policies settings panel — merged into steering
+  // rules) all fold into Steering — parsed here so the landing renders instantly, redirected
+  // (replace) so bookmarks land on the surface's real URL.
+  if (first === 'wiki' || first === 'rules' || first === 'policies') {
     return route({ panel: 'steering', steeringType: null });
+  }
+  // The RETIRED `coverage`/`domain` settings panels (orphaned, context-free) fold into the
+  // System settings page — parsed here so it renders instantly, redirected (replace) by
+  // `useRetiredSettingsRedirect` so bookmarks land on `/system`.
+  if (first === 'coverage' || first === 'domain') {
+    return route({ panel: 'system' });
   }
   // `/testing/:page` — the Testing surface: one page component, parameterized by sub-page
   // (harness / campaigns / evals), with `/testing/campaigns/:id` addressing one campaign's

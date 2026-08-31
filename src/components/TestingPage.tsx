@@ -19,7 +19,8 @@ import {
 import { useGateStore } from '../store/gates.js';
 import { CampaignScoreboard } from './CampaignScoreboard.js';
 import { CampaignsPage } from './CampaignsPage.js';
-import { AuthorPanel, readFileText } from './SteeringPage.js';
+import { readFileText } from './fileText.js';
+import { AuthorPanel } from './SteeringAuthorPanel.js';
 import { SteeringGate } from './SteeringGate.js';
 
 /**
