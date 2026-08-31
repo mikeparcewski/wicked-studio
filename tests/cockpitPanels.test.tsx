@@ -10,6 +10,7 @@ import { DataUsed } from '../src/components/DataUsed.js';
 import { WhatWhere } from '../src/components/WhatWhere.js';
 import { AssumptionsPanel } from '../src/components/AssumptionsPanel.js';
 import { SteeringTimeline } from '../src/components/SteeringTimeline.js';
+import { useRunEventStore } from '../src/store/events.js';
 import { useRuntimeStore } from '../src/store/runtime.js';
 import { useSteeringStore } from '../src/store/steering.js';
 
@@ -159,6 +160,10 @@ describe('DataUsed (FR-8)', () => {
 });
 
 describe('WhatWhere (FR-8)', () => {
+  afterEach(() => {
+    useRunEventStore.setState({ byRun: {} });
+  });
+
   it('renders intent + roster; the DTO debug note is retired (DES-UX-001 §7.10)', () => {
     render(<WhatWhere model={modelWith()} />);
     const el = screen.getByTestId('what-where');
@@ -168,6 +173,38 @@ describe('WhatWhere (FR-8)', () => {
     // note, not user copy — it must NOT render (the diff lives in Files).
     expect(el.textContent).not.toContain('work_output');
     expect(el.textContent).not.toContain('DTO');
+  });
+
+  // DES-RUN-NARRATOR §8 (revised 2026-08-31): the started/ended/took strip
+  // moved off the run header INTO this panel — same run-times testid, same
+  // event-log derivation, same honesty grammar (absent halves are stated,
+  // durations are never fabricated).
+  it('carries the when block (started · ended · took) moved from the run header', () => {
+    useRunEventStore.setState({
+      byRun: {
+        'run-1': [
+          { type: 'sessionStarted', session: 'run-1', ts: Date.now() - 90_000, seq: 1 } as unknown as CoreEvent,
+        ],
+      },
+    });
+    render(<WhatWhere model={modelWith()} />);
+    const el = screen.getByTestId('what-where');
+    const when = screen.getByTestId('run-times');
+    expect(el.contains(when)).toBe(true);
+    expect(when).toHaveTextContent('started');
+    expect(when).toHaveTextContent('1m ago');
+    // The run is executing and the log records no end — the block says so.
+    expect(when).toHaveTextContent('still running');
+    // No fabricated duration without both clocks.
+    expect(when).toHaveTextContent('took');
+    expect(when).toHaveTextContent('—');
+  });
+
+  it('states the honest absence when the event log has no clocks at all', () => {
+    render(<WhatWhere model={modelWith()} />);
+    const when = screen.getByTestId('run-times');
+    expect(when).toHaveAttribute('data-started', 'none');
+    expect(when).toHaveTextContent('not in the event log yet');
   });
 });
 

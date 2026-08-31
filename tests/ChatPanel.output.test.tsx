@@ -12,10 +12,11 @@ beforeEach(() => {
   vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] });
 });
 
-// Slice BB (DES-UX-002 §2.3): a terminal run's DEFAULT lens is the evidence
-// timeline; the pre-BB output blocks live under the preserved Units tab —
-// these tests re-verify that view renders UNCHANGED there (§8.3's re-scope).
+// DES-RUN-NARRATOR §8 (revised 2026-08-31): the Units lens is no longer a
+// sibling tab — it lives behind the header's Inspect ▾ control. The output
+// blocks themselves render UNCHANGED there (§8.3's re-scope holds).
 async function openUnitsTab(): Promise<void> {
+  await userEvent.click(await screen.findByTestId('run-inspect'));
   await userEvent.click(await screen.findByTestId('tab-unit-list'));
 }
 

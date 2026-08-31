@@ -137,9 +137,13 @@ export function durationWord(ms: number): string {
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);
 
 /**
- * The run detail's times line (§7.5 DOM AC: `[data-testid="run-times"]`).
- * Reads the two stores the app already fills for the selected run — zero new
- * requests. Every absent half is stated in operator language.
+ * The run detail's when block (§7.5 DOM AC: `[data-testid="run-times"]`) —
+ * started · ended · duration. It began life as a full-width strip under the
+ * run header; the 2026-08-31 header condense (DES-RUN-NARRATOR §8, revised)
+ * moved it into the What/Where insights panel, where the run's other
+ * context rows already live. Same derivation, same testid, same honesty
+ * grammar — reads the two stores the app already fills for the selected run
+ * (zero new requests), and every absent half is stated in operator language.
  */
 export function RunTimes({ runId, status }: { runId: string; status: string }): React.ReactElement {
   const durable = useRunEventStore((s) => s.byRun[runId]);
@@ -148,37 +152,39 @@ export function RunTimes({ runId, status }: { runId: string; status: string }): 
   const now = Date.now();
   const terminal = TERMINAL.has(status);
 
-  const parts: string[] = [];
-  if (started !== null) {
-    parts.push(`started ${ageWord(now - started.ms)} ago${started.observed ? ' (observed)' : ''}`);
-  }
-  if (ended !== null) {
-    parts.push(`ended ${ageWord(now - ended.ms)} ago${ended.observed ? ' (observed)' : ''}`);
-  } else if (!terminal && started !== null) {
-    parts.push('running');
-  } else if (terminal && started !== null) {
-    parts.push('end not in the event log');
-  }
-  if (started !== null && ended !== null) {
-    parts.push(`took ${durationWord(ended.ms - started.ms)}`);
-  }
-  const line = parts.length > 0
-    ? parts.join(' · ')
+  const startedText = started !== null
+    ? `${ageWord(now - started.ms)} ago${started.observed ? ' (observed)' : ''}`
     : terminal
-      ? "no start or end times survive in this run's event log"
-      : "no start time in this run's event log yet";
+      ? 'not in the event log'
+      : 'not in the event log yet';
+  const endedText = ended !== null
+    ? `${ageWord(now - ended.ms)} ago${ended.observed ? ' (observed)' : ''}`
+    : terminal
+      ? 'not in the event log'
+      : 'still running';
+  // No fabricated durations: both clocks or a stated absence ("—").
+  const tookText = started !== null && ended !== null ? durationWord(ended.ms - started.ms) : '—';
 
   const iso = (c: DerivedClock | null): string => (c === null ? '—' : new Date(c.ms).toISOString());
+  const rows: readonly (readonly [string, string])[] = [
+    ['started', startedText],
+    ['ended', endedText],
+    ['took', tookText],
+  ];
   return (
-    <p
+    <div
       data-testid="run-times"
       data-started={started === null ? 'none' : started.observed ? 'observed' : 'log'}
       data-ended={ended === null ? (terminal ? 'none' : 'running') : ended.observed ? 'observed' : 'log'}
-      className="px-6 py-1 text-[11px] font-mono truncate shrink-0"
-      style={{ color: 'var(--ink-dim)', margin: 0, borderBottom: '1px solid var(--surface-raised)' }}
+      className="flex flex-col gap-1.5"
       title={`derived from the run's event log (the run record carries no timestamps) — started: ${iso(started)} · ended: ${iso(ended)}`}
     >
-      {line}
-    </p>
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex gap-2 text-[11px]">
+          <span className="w-20 shrink-0 font-mono" style={{ color: 'var(--ink-dim)' }}>{label}</span>
+          <span className="font-mono" style={{ color: 'var(--ink-muted)' }}>{value}</span>
+        </div>
+      ))}
+    </div>
   );
 }

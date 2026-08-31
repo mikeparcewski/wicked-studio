@@ -19,7 +19,7 @@ import { Markdown } from './Markdown.js';
 import { NarratorFeed, phaseName, unitKey } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
 import { deriveArtifacts, lastNarration, type NarratorContext } from './narrator.js';
-import { RunTimes } from './runIdentity.js';
+import { runTitle } from './runIdentity.js';
 import { RunTimeline } from './RunTimeline.js';
 import { UnitList } from './UnitList.js';
 import { VerdictDetail } from './VerdictDetail.js';
@@ -359,6 +359,110 @@ function ModePill({
   );
 }
 
+/** The three lenses on one run record (DES-RUN-NARRATOR §8, revised). */
+type RunLens = 'feed' | 'timeline' | 'units';
+
+/**
+ * The power-user lens switcher (DES-RUN-NARRATOR §8, revised 2026-08-31 on
+ * operator feedback: "I don't know what value timeline and units have. I feel
+ * like they will confuse most users."): the Feed IS the run view, so Timeline
+ * and Units no longer render as sibling tabs of it. They stay ONE unobtrusive
+ * header control away — demoted, never deleted (they carry the slice-BB
+ * evidence trail and the slice-R output spine, tests and all). Menu items keep
+ * the tab-* testids so the selector contract survives the demotion, and the
+ * `t`/`u` shortcuts keep landing on the same state.
+ */
+function InspectMenu({ lens, onSelect }: {
+  lens: RunLens;
+  onSelect: (lens: RunLens) => void;
+}): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    function onDown(e: MouseEvent): void {
+      if (rootRef.current !== null && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const lenses: readonly (readonly [RunLens, string, string])[] = [
+    ['feed', 'Feed — the narrated run', 'tab-feed'],
+    ['timeline', 'Timeline — the recorded event trail', 'tab-timeline'],
+    ['units', 'Units — per-phase output', 'tab-unit-list'],
+  ];
+  const active = lens === 'feed' ? null : lens === 'timeline' ? 'Timeline' : 'Units';
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        data-testid="run-inspect"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        title="Inspect this run through the evidence lenses — the recorded event timeline or the per-phase output spine"
+        className="rounded-lg px-2 py-1 text-[11px] font-mono transition-colors"
+        style={{
+          color: active === null ? 'var(--ink-dim)' : 'var(--ink-high)',
+          background: active === null ? 'transparent' : 'var(--surface-raised)',
+          border: '1px solid var(--surface-raised)',
+          cursor: 'pointer',
+        }}
+      >
+        {active ?? 'Inspect'} ▾
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Run lenses"
+          data-testid="run-inspect-menu"
+          className="absolute right-0 top-full mt-1 z-30 flex flex-col rounded-lg overflow-hidden py-1"
+          style={{
+            background: 'var(--surface-card)',
+            border: '1px solid var(--surface-raised)',
+            boxShadow: 'var(--shadow-overlay)',
+            minWidth: '15rem',
+          }}
+        >
+          {lenses.map(([id, label, testId]) => (
+            <button
+              key={id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={lens === id}
+              data-testid={testId}
+              onClick={() => { onSelect(id); setOpen(false); }}
+              className="flex items-center gap-2 px-3 py-1.5 text-left text-[11px] font-mono transition-colors"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: lens === id ? 'var(--ink-high)' : 'var(--ink-muted)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-raised)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span aria-hidden="true" className="shrink-0" style={{ color: lens === id ? 'var(--accent)' : 'var(--ink-dim)' }}>
+                {lens === id ? '●' : '○'}
+              </span>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Read-only view for legacy workflow_id='chat' runs (old council-routed single-unit sessions).
  * Renders as a simple conversation without governance chrome or a work-launcher input.
@@ -562,10 +666,12 @@ function RunChat({
   // the Units tab, with FailureBanner as the HEADLINE in every lens.
   const isPostMortem = session.status === 'failed' || session.status === 'cancelled';
 
-  // DES-RUN-NARRATOR §8: a TERMINAL run carries three lenses — the narrated
-  // Feed (default: the story), the evidence Timeline (slice BB, unchanged), and
-  // the Units spine (slice R, unchanged). Live runs are always the feed.
-  const [runTab, setRunTab] = useState<'feed' | 'timeline' | 'units'>('feed');
+  // DES-RUN-NARRATOR §8 (revised): a TERMINAL run still carries three lenses —
+  // the narrated Feed (default: the story), the evidence Timeline (slice BB,
+  // unchanged) and the Units spine (slice R, unchanged) — but the Feed IS the
+  // run view now; Timeline/Units live behind the header's Inspect ▾ control,
+  // not as sibling tabs. Live runs are always the feed.
+  const [runTab, setRunTab] = useState<RunLens>('feed');
 
   const style = STATUS_STYLE[session.status] ?? { label: session.status, className: '', color: 'var(--ink-muted)' };
   const isTerminal = ['completed', 'cancelled', 'failed'].includes(session.status);
@@ -622,16 +728,21 @@ function RunChat({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Run header */}
+      {/* Run header — ONE row (DES-RUN-NARRATOR §8, revised: "think you could
+          condense the header"): back · status dot · derived title · status chip
+          · Retry/actions. The started/ended/took strip moved into the What/Where
+          insights panel (RunTimes, same testid); the lens tabs became the
+          Inspect ▾ control at the row's end. */}
       <div
-        className="flex items-center gap-3 px-6 py-4 shrink-0"
+        data-testid="run-header"
+        className="flex items-center gap-3 px-6 py-2 shrink-0"
         style={{ borderBottom: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
       >
         <button
           type="button"
           onClick={onNavigateBack}
           aria-label="Back to run list"
-          className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors shrink-0"
+          className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors shrink-0"
           style={{ color: 'var(--ink-dim)' }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-raised)'; e.currentTarget.style.color = 'var(--ink-high)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-dim)'; }}
@@ -642,8 +753,10 @@ function RunChat({
           className={`w-2.5 h-2.5 rounded-full shrink-0 ${pulse ? 'animate-pulse' : ''}`}
           style={{ background: dotColor }}
         />
+        {/* The derived title (usability review #2's runTitle helper) — the raw
+            intent paragraph stays one hover away and opens the feed's story. */}
         <p className="flex-1 text-base font-semibold truncate" style={{ color: 'var(--ink-high)' }} title={session.problem}>
-          {session.problem}
+          {runTitle(session)}
         </p>
         <span className="text-xs font-medium shrink-0 font-mono" style={{ color: style.color }}>{style.label}</span>
         {/* Retry — failed/cancelled only (§4.5: the loop closes failures, not
@@ -660,6 +773,7 @@ function RunChat({
             Retry
           </button>
         )}
+        {isTerminal && <InspectMenu lens={runTab} onSelect={setRunTab} />}
         <ModePill mode={mode} onChange={onModeChange} readOnly={isTerminal} />
         <ExportEvidenceButton runId={session.id} disabled={!isTerminal} />
         {!isTerminal && onKill && (
@@ -678,11 +792,6 @@ function RunChat({
         )}
       </div>
 
-      {/* Run times (DES-UX-001 §7.5, slice Y2): started/ended/duration derived
-          from the event log App already backfills — the DTO carries no
-          timestamps; where the log lacks the events the line says so. */}
-      <RunTimes runId={session.id} status={session.status} />
-
       {/* Process stepper — the run's map: every phase, in order, with its state at a glance. */}
       <ProcessStepper runId={session.id} units={ordered} executingUnitOrd={executingUnitOrd} />
 
@@ -699,32 +808,6 @@ function RunChat({
         onJumpToLatest={jumpToLatest}
         onOpenFile={setEvidenceFile}
       />
-
-      {/* Terminal runs carry three lenses on the same record (§8): the narrated
-          feed (default), the evidence timeline (BB) and the Units spine (R). */}
-      {isTerminal && (
-        <div className="flex items-center gap-1 px-6 pt-2 shrink-0" role="tablist" aria-label="Run detail view">
-          {([['feed', 'Feed', 'tab-feed'], ['timeline', 'Timeline', 'tab-timeline'], ['units', 'Units', 'tab-unit-list']] as const).map(([id, label, testId]) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              data-testid={testId}
-              aria-selected={runTab === id}
-              onClick={() => setRunTab(id)}
-              className="rounded-t px-3 py-1 text-xs font-semibold font-mono transition-colors"
-              style={{
-                background: runTab === id ? 'var(--surface-raised)' : 'transparent',
-                color: runTab === id ? 'var(--ink-high)' : 'var(--ink-muted)',
-                borderBottom: `2px solid ${runTab === id ? 'var(--accent)' : 'transparent'}`,
-                cursor: 'pointer',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* The evidence timeline (§2, EC48) — FailureBanner stays the HEADLINE on a
           post-mortem run in EVERY lens (DES-UX-001 §1.3-1 is not undone). */}

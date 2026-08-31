@@ -207,12 +207,27 @@ No new wire calls: both sources are already on this page's data.
 
 ## 8. What is preserved (contracts other surfaces own)
 
-- `ProcessStepper`, `RunTimes`, header, Retry, ModePill (read-only when terminal),
-  evidence export — untouched.
-- Terminal runs keep the evidence lenses: tabs are now **Feed | Timeline | Units**, with
-  Feed the default lens (the story), Timeline the recorded-trail navigator (slice BB,
-  unchanged), Units the post-mortem/output spine (slice R, unchanged — FailureBanner
-  stays the headline in every lens).
+- `ProcessStepper`, Retry, ModePill (read-only when terminal), evidence export —
+  untouched. (`RunTimes` and the header: revised below, 2026-08-31.)
+- Terminal runs keep the evidence lenses — **revised 2026-08-31**. As shipped, the three
+  lenses rendered as sibling tabs (**Feed | Timeline | Units**). Operator feedback on the
+  shipped surface: *"I don't know what value timeline and units have. I feel like they
+  will confuse most users. Also think you could condense the header."* So: the Feed IS
+  the run view; Timeline (the recorded-trail navigator, slice BB, unchanged) and Units
+  (the post-mortem/output spine, slice R, unchanged — FailureBanner stays the headline
+  in every lens) DEMOTE from primary tabs to ONE unobtrusive header control, **Inspect ▾**
+  (`run-inspect` → a `run-inspect-menu` whose items keep the `tab-feed` / `tab-timeline` /
+  `tab-unit-list` testids, so the selector contract survives the demotion; the `t`/`u`
+  shortcuts land on the same state). Demoted, never deleted: both lenses carry evidence
+  flows and tests that stay pinned.
+- The header — **revised 2026-08-31, same feedback**: condensed to ONE row
+  (`run-header`): back · status dot · **derived title** (the `runTitle` helper — the raw
+  intent paragraph is the hover and the feed's opening bubble) · status chip ·
+  Retry/Inspect/mode/export/kill. The started/ended/took strip moved off the page chrome
+  into the What/Where insights panel as a compact when block (started · ended · took —
+  `RunTimes`, same `run-times` testid, same event-log derivation and honesty grammar).
+  The phase strip stays: it earns its height. At 1440×700 the fold shows ~75px more feed
+  than the tabbed layout did.
 - `live-narration-*`, `unit-output-*`, `steering-gate`, avatar inject-targeting, the
   `⌨` per-agent terminal button, FileViewer wiring — same testids, same behavior, now
   rendered by `NarratorFeed`.
