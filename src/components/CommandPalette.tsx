@@ -355,7 +355,8 @@ export function CommandPalette({
       });
       // Decisions — governance claims: substring on the subject (criteria),
       // fuzzy on the policy ids (identifiers); the hit navigates to the run
-      // when the claim names one the client holds, else to /policies.
+      // when the claim names one the client holds, else to /steering (the
+      // governance surface — the old /policies panel merged into it).
       claims.forEach((c, i) => {
         const subject = substringMatch(needle, c.criteria);
         const ident = subject === null ? fuzzyMatch(needle, c.policy_ids.join(' ')) : null;
@@ -369,7 +370,7 @@ export function CommandPalette({
             group: 'search-decisions',
             label: `${c.policy_ids[0] ?? c.claim_id} · ${c.decision}`,
             context: c.phase,
-            href: named !== undefined ? runPath(named.session.id) : '/policies',
+            href: named !== undefined ? runPath(named.session.id) : '/steering',
             rank: i,
             glyph: '§',
             snippet: c.criteria,

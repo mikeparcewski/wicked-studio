@@ -7,15 +7,19 @@ import type { SteeringRule, SteeringType } from '../src/api/steering.js';
 import { useGateStore } from '../src/store/gates.js';
 
 /**
- * The Steering surface's MANAGEMENT flows — all four, the type always inferred from the page:
+ * The Steering surface's MANAGEMENT flows — all four, behind the ONE "Add" menu now (the
+ * steering-UX wave: each opens on demand, none rendered open by default), the type always
+ * inferred from the page and every wire unchanged:
  *  - Import: a picked .md/.json POSTs `/governance/steering/import` with this page's type;
  *    per-entry results render honestly (created/updated/error rows), and a 501/route-absent
  *    daemon gets the honest unsupported copy, never a raw refusal;
- *  - Add rule: the form derives a fresh INV-C1 id, builds the unified rule (applies_to/excludes
- *    chips, weight, optional effect+trigger), stamps provenance source "ui", POSTs the SHIPPING
- *    upsert CRUD, and reloads for the server's state — including the honesty note when an older
- *    engine drops steering_type and files the rule under the serde default;
- *  - Edit: the same form pre-filled, id fixed, provenance carried through untouched;
+ *  - Add individual: the MODAL form derives a fresh INV-C1 id, builds the unified rule
+ *    (applies_to/excludes chips, weight, optional effect+trigger), stamps provenance source
+ *    "ui", POSTs the SHIPPING upsert CRUD, and reloads for the server's state — including the
+ *    honesty note when an older engine drops steering_type and files the rule under the serde
+ *    default;
+ *  - Edit: the same modal form pre-filled (opened from the DRAWER), id fixed, provenance
+ *    carried through untouched;
  *  - Add with chat: POST `/governance/steering/author` launches the authoring run; the PROPOSE
  *    gate arrives as a normal awaitingHuman frame and renders through the EXISTING SteeringGate
  *    card (reused, not re-implemented); approving it is what writes rules.
@@ -65,6 +69,16 @@ function page(type: SteeringType = 'security'): ReturnType<typeof render> {
   return render(<SteeringPage type={type} navigate={() => {}} />);
 }
 
+/** Open one of the three flows through the ONE Add menu — the menu items keep the retired
+ *  management bar's testids (the affordances survived, only their placement changed). */
+async function openFlow(
+  user: ReturnType<typeof userEvent.setup>,
+  item: 'steering-add-open' | 'steering-import-open' | 'steering-author-open',
+): Promise<void> {
+  await user.click(await screen.findByTestId('steering-add-menu'));
+  await user.click(await screen.findByTestId(item));
+}
+
 beforeEach(() => {
   listConformanceRules.mockReset();
   retireConformanceRule.mockReset();
@@ -73,6 +87,47 @@ beforeEach(() => {
   cancelRun.mockReset();
   apiFetch.mockReset();
   useGateStore.setState({ gates: {}, approaching: {} });
+});
+
+describe('SteeringPage — the ONE Add menu', () => {
+  it('lists the three flows and opens each on demand — none rendered open by default', async () => {
+    const user = userEvent.setup();
+    listConformanceRules.mockResolvedValue({ rules: [] });
+    wireManagement();
+    page('security');
+
+    // Closed by default: no flow panel, no form, no menu list.
+    await screen.findByTestId('steering-add-menu');
+    expect(screen.queryByTestId('steering-add-menu-list')).toBeNull();
+    expect(screen.queryByTestId('steering-rule-form')).toBeNull();
+    expect(screen.queryByTestId('steering-import-panel')).toBeNull();
+    expect(screen.queryByTestId('steering-author-panel')).toBeNull();
+
+    await user.click(screen.getByTestId('steering-add-menu'));
+    const menu = await screen.findByTestId('steering-add-menu-list');
+    expect(within(menu).getByTestId('steering-add-open')).toBeInTheDocument();
+    expect(within(menu).getByTestId('steering-import-open')).toBeInTheDocument();
+    expect(within(menu).getByTestId('steering-author-open')).toBeInTheDocument();
+
+    // Add individual → the modal form; picking an item closes the menu.
+    await user.click(within(menu).getByTestId('steering-add-open'));
+    expect(await screen.findByTestId('steering-rule-form')).toBeInTheDocument();
+    expect(screen.queryByTestId('steering-add-menu-list')).toBeNull();
+    await user.click(screen.getByTestId('steering-form-cancel'));
+    expect(screen.queryByTestId('steering-rule-form')).toBeNull();
+
+    // Import → the file-picker panel.
+    await openFlow(user, 'steering-import-open');
+    expect(await screen.findByTestId('steering-import-panel')).toBeInTheDocument();
+    await user.click(screen.getByTestId('steering-import-close'));
+    expect(screen.queryByTestId('steering-import-panel')).toBeNull();
+
+    // Add with chat → the governed authoring panel.
+    await openFlow(user, 'steering-author-open');
+    expect(await screen.findByTestId('steering-author-panel')).toBeInTheDocument();
+    await user.click(screen.getByTestId('steering-author-close'));
+    expect(screen.queryByTestId('steering-author-panel')).toBeNull();
+  });
 });
 
 describe('SteeringPage — import', () => {
@@ -94,7 +149,7 @@ describe('SteeringPage — import', () => {
     });
     page('security');
 
-    await user.click(await screen.findByTestId('steering-import-open'));
+    await openFlow(user, 'steering-import-open');
     const file = new File(['# doctrine\n'], 'security-rules.md', { type: 'text/markdown' });
     await user.upload(screen.getByTestId('steering-import-file'), file);
 
@@ -124,7 +179,7 @@ describe('SteeringPage — import', () => {
     });
     page('testing');
 
-    await user.click(await screen.findByTestId('steering-import-open'));
+    await openFlow(user, 'steering-import-open');
     await user.upload(
       screen.getByTestId('steering-import-file'),
       new File(['[{"id":"SEC-9"}]'], 'batch.JSON', { type: 'application/json' }),
@@ -140,7 +195,7 @@ describe('SteeringPage — import', () => {
     wireManagement(); // the steering routes do not exist on this daemon
     page('security');
 
-    await user.click(await screen.findByTestId('steering-import-open'));
+    await openFlow(user, 'steering-import-open');
     await user.upload(
       screen.getByTestId('steering-import-file'),
       new File(['x'], 'a.md', { type: 'text/markdown' }),
@@ -157,7 +212,7 @@ describe('SteeringPage — import', () => {
     });
     page('security');
 
-    await user.click(await screen.findByTestId('steering-import-open'));
+    await openFlow(user, 'steering-import-open');
     await user.upload(
       screen.getByTestId('steering-import-file'),
       new File(['x'], 'a.md', { type: 'text/markdown' }),
@@ -182,7 +237,7 @@ describe('SteeringPage — the Add-rule form', () => {
     page('security');
 
     await screen.findByTestId('steering-rule-row');
-    await user.click(screen.getByTestId('steering-add-open'));
+    await openFlow(user, 'steering-add-open');
     const form = await screen.findByTestId('steering-rule-form');
     // The suggested id follows the loaded corpus: max PAT ordinal + 1.
     expect(within(form).getByTestId('steering-form-id')).toHaveValue('PAT-105');
@@ -227,7 +282,7 @@ describe('SteeringPage — the Add-rule form', () => {
     wireManagement();
     page('operations');
 
-    await user.click(await screen.findByTestId('steering-add-open'));
+    await openFlow(user, 'steering-add-open');
     await user.type(screen.getByTestId('steering-form-statement'), 'Runbooks live in ops/');
     await user.click(screen.getByTestId('steering-form-save'));
 
@@ -244,7 +299,7 @@ describe('SteeringPage — the Add-rule form', () => {
     wireManagement();
     page('security');
 
-    await user.click(await screen.findByTestId('steering-add-open'));
+    await openFlow(user, 'steering-add-open');
     const save = screen.getByTestId('steering-form-save');
     expect(save).toBeDisabled(); // empty statement
 
@@ -269,7 +324,7 @@ describe('SteeringPage — the Add-rule form', () => {
     wireManagement();
     page('security');
 
-    await user.click(await screen.findByTestId('steering-add-open'));
+    await openFlow(user, 'steering-add-open');
     await user.type(screen.getByTestId('steering-form-statement'), 'dropped-type rule');
     await user.click(screen.getByTestId('steering-form-save'));
 
@@ -285,7 +340,7 @@ describe('SteeringPage — the Add-rule form', () => {
     wireManagement();
     page('security');
 
-    await user.click(await screen.findByTestId('steering-add-open'));
+    await openFlow(user, 'steering-add-open');
     await user.type(screen.getByTestId('steering-form-statement'), 'x');
     await user.click(screen.getByTestId('steering-form-save'));
 
@@ -312,6 +367,7 @@ describe('SteeringPage — edit', () => {
     page('security');
 
     await user.click(await screen.findByTestId('steering-rule-row'));
+    await screen.findByTestId('steering-rule-drawer');
     await user.click(await screen.findByTestId('steering-edit-open'));
     const form = await screen.findByTestId('steering-rule-form');
     expect(within(form).getByTestId('steering-form-id')).toHaveValue('POL-300');
@@ -350,7 +406,7 @@ describe('SteeringPage — add with chat (the authoring run + its propose gate)'
     });
     page('compliance');
 
-    await user.click(await screen.findByTestId('steering-author-open'));
+    await openFlow(user, 'steering-author-open');
     const panel = await screen.findByTestId('steering-author-panel');
     await user.type(
       within(panel).getByTestId('steering-author-instructions'),
@@ -397,7 +453,7 @@ describe('SteeringPage — add with chat (the authoring run + its propose gate)'
     wireManagement(); // no steering routes
     page('compliance');
 
-    await user.click(await screen.findByTestId('steering-author-open'));
+    await openFlow(user, 'steering-author-open');
     await user.type(screen.getByTestId('steering-author-instructions'), 'anything');
     await user.click(screen.getByTestId('steering-author-launch'));
 
@@ -411,7 +467,7 @@ describe('SteeringPage — add with chat (the authoring run + its propose gate)'
     wireManagement();
     page('compliance');
 
-    await user.click(await screen.findByTestId('steering-author-open'));
+    await openFlow(user, 'steering-author-open');
     expect(screen.getByTestId('steering-author-launch')).toBeDisabled();
   });
 });

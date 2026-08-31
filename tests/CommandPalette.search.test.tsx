@@ -224,7 +224,7 @@ describe('the corpus & matching (§5.1/§5.2)', () => {
     expect(navigate).toHaveBeenCalledWith('/runs/r-gate#gate');
   });
 
-  it('decisions: substring on the claim subject; the hit targets the run the claim names, else /policies', async () => {
+  it('decisions: substring on the claim subject; the hit targets the run the claim names, else /steering', async () => {
     renderPalette();
     type('?rate-limiting middleware');
     let hit: HTMLElement | undefined;
@@ -241,7 +241,7 @@ describe('the corpus & matching (§5.1/§5.2)', () => {
     await waitFor(() => {
       const h = rows().find((r) => r.dataset.group === 'search-decisions');
       // clm-2 names no run the client holds — the ledger surface answers.
-      expect(h?.getAttribute('href')).toBe('/policies');
+      expect(h?.getAttribute('href')).toBe('/steering');
     });
   });
 

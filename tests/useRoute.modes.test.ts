@@ -110,7 +110,7 @@ describe('useRoute — the existing panel routes keep working', () => {
     expect(r.current.mode).toBeNull();
     expect(r.current.panelPath('home')).toBe('/');
     expect(r.current.panelPath('runs')).toBe('/runs');
-    expect(r.current.panelPath('coverage')).toBe('/coverage');
+    expect(r.current.panelPath('work')).toBe('/work');
   });
 });
 
