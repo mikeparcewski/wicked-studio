@@ -10,11 +10,11 @@
   "version": 1,
   "studioVersion": "0.4.3",
   "counts": {
-    "files": 108,
-    "occurrences": 808,
-    "static": 693,
-    "dynamic": 39,
-    "computed": 6
+    "files": 112,
+    "occurrences": 809,
+    "static": 694,
+    "dynamic": 40,
+    "computed": 5
   },
   "static": [
     {
@@ -167,6 +167,24 @@
       "testId": "appearance-settings",
       "files": [
         "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "approval-dock",
+      "files": [
+        "src/components/ApprovalDock.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-card",
+      "files": [
+        "src/components/ArtifactCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-open",
+      "files": [
+        "src/components/ArtifactCard.tsx"
       ]
     },
     {
@@ -471,12 +489,6 @@
     },
     {
       "testId": "campaigns-empty",
-      "files": [
-        "src/components/CampaignsPage.tsx"
-      ]
-    },
-    {
-      "testId": "campaigns-empty-cta",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
@@ -1290,6 +1302,36 @@
       ]
     },
     {
+      "testId": "followup-bar",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
+      "testId": "followup-close",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
+      "testId": "followup-composer",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
+      "testId": "followup-label",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
+      "testId": "followup-open",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
       "testId": "gate-approaching",
       "files": [
         "src/components/ProjectCard.tsx"
@@ -1786,14 +1828,14 @@
     {
       "testId": "live-output",
       "files": [
-        "src/components/ChatPanel.tsx",
+        "src/components/LiveNarration.tsx",
         "src/components/LiveOutput.tsx"
       ]
     },
     {
       "testId": "live-output-label",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/LiveNarration.tsx"
       ]
     },
     {
@@ -1971,6 +2013,12 @@
       ]
     },
     {
+      "testId": "narration-line",
+      "files": [
+        "src/components/NarratorFeed.tsx"
+      ]
+    },
+    {
       "testId": "narrative-band",
       "files": [
         "src/components/NarrativeBand.tsx"
@@ -2037,24 +2085,6 @@
       ]
     },
     {
-      "testId": "not-found",
-      "files": [
-        "src/components/NotFoundPage.tsx"
-      ]
-    },
-    {
-      "testId": "not-found-link",
-      "files": [
-        "src/components/NotFoundPage.tsx"
-      ]
-    },
-    {
-      "testId": "not-found-path",
-      "files": [
-        "src/components/NotFoundPage.tsx"
-      ]
-    },
-    {
       "testId": "notif-chime",
       "files": [
         "src/components/NotificationSettings.tsx"
@@ -2082,6 +2112,48 @@
       "testId": "notif-settings",
       "files": [
         "src/components/NotificationSettings.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-artifacts",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-artifacts-pop",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-jump",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-narration",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-phase",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-status",
+      "files": [
+        "src/components/NowBar.tsx"
       ]
     },
     {
@@ -2484,6 +2556,12 @@
       ]
     },
     {
+      "testId": "raw-event",
+      "files": [
+        "src/components/NarratorFeed.tsx"
+      ]
+    },
+    {
       "testId": "repo-card",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -2818,12 +2896,6 @@
       ]
     },
     {
-      "testId": "skip-link",
-      "files": [
-        "src/components/SkipLink.tsx"
-      ]
-    },
-    {
       "testId": "source-attach",
       "files": [
         "src/components/ComposerContext.tsx"
@@ -2953,18 +3025,6 @@
       "testId": "steering-chip",
       "files": [
         "src/components/DocumentThread.tsx"
-      ]
-    },
-    {
-      "testId": "steering-diagnostics",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-diagnostics-toggle",
-      "files": [
-        "src/components/SteeringHealth.tsx"
       ]
     },
     {
@@ -3318,12 +3378,6 @@
       ]
     },
     {
-      "testId": "steering-store-health",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
       "testId": "steering-timeline",
       "files": [
         "src/components/SteeringTimeline.tsx"
@@ -3450,12 +3504,6 @@
       ]
     },
     {
-      "testId": "testing-evals-blocked",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
       "testId": "testing-evals-busy",
       "files": [
         "src/components/TestingPage.tsx"
@@ -3498,12 +3546,6 @@
       ]
     },
     {
-      "testId": "testing-evals-gaps",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
       "testId": "testing-evals-nearest",
       "files": [
         "src/components/TestingPage.tsx"
@@ -3516,25 +3558,7 @@
       ]
     },
     {
-      "testId": "testing-evals-nearest-link",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
       "testId": "testing-evals-nearest-rule",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-evals-passed",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-evals-provenance",
       "files": [
         "src/components/TestingPage.tsx"
       ]
@@ -3570,19 +3594,7 @@
       ]
     },
     {
-      "testId": "testing-evals-verdict-word",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
       "testId": "testing-harness",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-harness-explainer",
       "files": [
         "src/components/TestingPage.tsx"
       ]
@@ -3724,6 +3736,7 @@
       "files": [
         "src/components/ChatPanel.tsx",
         "src/components/DocumentThread.tsx",
+        "src/components/NarratorFeed.tsx",
         "src/components/threadAnchor.ts"
       ]
     },
@@ -4163,12 +4176,6 @@
       ]
     },
     {
-      "testId": "work-hidden-chip",
-      "files": [
-        "src/components/WorkPage.tsx"
-      ]
-    },
-    {
       "testId": "work-range-hidden-note",
       "files": [
         "src/components/WorkPage.tsx"
@@ -4279,6 +4286,12 @@
       ]
     },
     {
+      "pattern": "feed-view-*",
+      "files": [
+        "src/components/NarratorFeed.tsx"
+      ]
+    },
+    {
       "pattern": "feedback-mode-*",
       "files": [
         "src/components/FeedbackOverlay.tsx"
@@ -4359,19 +4372,19 @@
     {
       "pattern": "live-narration-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/LiveNarration.tsx"
       ]
     },
     {
       "pattern": "live-narration-text-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/LiveNarration.tsx"
       ]
     },
     {
       "pattern": "live-narration-toggle-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/LiveNarration.tsx"
       ]
     },
     {
@@ -4426,13 +4439,13 @@
     {
       "pattern": "unit-output-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/NarratorFeed.tsx"
       ]
     },
     {
       "pattern": "unit-output-toggle-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/NarratorFeed.tsx"
       ]
     }
   ],
@@ -4447,12 +4460,6 @@
       "expression": "a.testId",
       "files": [
         "src/components/ComposerContext.tsx"
-      ]
-    },
-    {
-      "expression": "s.testid",
-      "files": [
-        "src/components/WorkPage.tsx"
       ]
     },
     {
