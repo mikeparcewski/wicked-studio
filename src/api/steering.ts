@@ -152,12 +152,14 @@ export function isValidRuleId(id: string, ruleType: 'pattern' | 'policy'): boole
 
 // ── Import (`POST /governance/steering/import`) ───────────────────────────────────────────────
 
+export type SteeringImportEntryInput =
+  | { kind: 'doc'; name?: string; content: string }
+  | { kind: 'rule'; rule: Record<string, unknown> };
+
 export interface SteeringImportBody {
-  steering_type: SteeringType;
-  /** `.md` frontmattered doctrine or a `.json` rule batch — inferred from the picked file. */
-  format: 'markdown' | 'json';
-  filename: string;
-  content: string;
+  /** Default steering_type for entries that omit it — the page's type. */
+  type?: SteeringType;
+  entries: SteeringImportEntryInput[];
 }
 
 /** One entry's fate, reported per-rule so a half-good batch renders honestly. */
@@ -179,16 +181,19 @@ export function importSteeringRules(body: SteeringImportBody): Promise<{ results
 // ── Add with chat (`POST /governance/steering/author`) ────────────────────────────────────────
 
 export interface SteeringAuthorBody {
-  steering_type: SteeringType;
   instructions: string;
+  /** The page's type — a default the authoring run applies to proposals. */
+  type?: SteeringType;
+  /** Daemon-visible paths the run may read (dirs allowed). */
+  paths?: string[];
   /** File contents read client-side and carried inline — the authoring run's source material. */
-  attachments?: { name: string; content: string }[];
+  documents?: { name: string; content: string }[];
 }
 
 /** Launches the authoring run; its PROPOSE gate arrives as a normal `awaitingHuman` frame on
  *  the returned run — the existing gate components render and answer it. */
-export function authorSteeringRules(body: SteeringAuthorBody): Promise<{ run_id: string }> {
-  return apiFetch<{ run_id: string }>('/governance/steering/author', {
+export function authorSteeringRules(body: SteeringAuthorBody): Promise<{ runId: string }> {
+  return apiFetch<{ runId: string }>('/governance/steering/author', {
     method: 'POST',
     body: JSON.stringify(body),
   });
