@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isSteeringType } from '../api/steering.js';
+import { isTestingSubPage } from '../api/testing.js';
 
 // `make` is the round-4 primary-path dashboard route (DES-FEEDBACK-003 §2.1) —
 // a CLIENT route (a new panel id in this union), not a wire. Slice M registers
@@ -7,9 +8,13 @@ import { isSteeringType } from '../api/steering.js';
 // `steering` is the STEERING program's surface (`/steering/:type`) — the panels
 // it replaced (`wiki`, `rules`) are gone from this union; their old paths parse
 // to `steering` with a null type, which `useSteeringRedirect` normalizes.
-export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'steering' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'campaigns' | 'campaign-detail';
+// `testing` is the Testing surface (`/testing/:page` — harness/campaigns/evals);
+// the flat campaign panels it absorbed (`campaigns`, `campaign-detail`) are gone
+// from this union — their old paths parse to `testing` and `useTestingRedirect`
+// rewrites the address onto `/testing/campaigns[...]`.
+export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make';
 
-const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make', 'campaigns'];
+const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
@@ -48,12 +53,18 @@ interface Route {
    *  VIEW of the project's build work, §3's adopted additive position), so
    *  this flag — not a fifth Mode — is what selects the view. */
   chronicleView: boolean;
-  /** Non-null only on `/campaigns/:id` (DES-CAMPAIGN-001 §3.5 / TH-14) — the campaign label. */
+  /** Non-null only on `/testing/campaigns/:id` (DES-CAMPAIGN-001 §3.5 / TH-14) — the campaign
+   *  label. The legacy flat `/campaigns/:id` parses to the same route while `useTestingRedirect`
+   *  rewrites the address. */
   campaignId: string | null;
   /** The steering sub-page's type on `/steering/:type`. `null` while panel === 'steering' means
    *  an address that names no valid type (bare `/steering`, the legacy `/wiki` and `/rules`) —
    *  `useSteeringRedirect` replaces those with the Architecture page's real URL. */
   steeringType: string | null;
+  /** The testing sub-page on `/testing/:page` (`harness` | `campaigns` | `evals`). `null` while
+   *  panel === 'testing' means an address that names no valid page (bare `/testing`, a typo) —
+   *  `useTestingRedirect` replaces those with the Harness page's real URL. */
+  testingPage: string | null;
 }
 
 /** Route options a caller can override; everything else takes its inert default. */
@@ -70,6 +81,7 @@ const INERT: Route = {
   chronicleView: false,
   campaignId: null,
   steeringType: null,
+  testingPage: null,
 };
 
 function route(over: Partial<Route>): Route {
@@ -189,10 +201,26 @@ function parse(pathname: string): Route {
   if (first === 'wiki' || first === 'rules') {
     return route({ panel: 'steering', steeringType: null });
   }
-  // `/campaigns/:id` — one campaign's scoreboard (DES-CAMPAIGN-001 §3.5 / TH-14); the bare
-  // `/campaigns` list resolves through the PANELS catch-all below, same as `/repos`.
-  if (first === 'campaigns' && second) {
-    return route({ panel: 'campaign-detail', campaignId: safeDecode(second) });
+  // `/testing/:page` — the Testing surface: one page component, parameterized by sub-page
+  // (harness / campaigns / evals), with `/testing/campaigns/:id` addressing one campaign's
+  // scoreboard (DES-CAMPAIGN-001 §3.5 / TH-14, MOVED here from the flat `/campaigns/:id`).
+  // A bare or typo'd `/testing` parses with `testingPage: null`; `useTestingRedirect`
+  // replaces it with the Harness page's real URL.
+  if (first === 'testing') {
+    if (second === 'campaigns' && third) {
+      return route({ panel: 'testing', testingPage: 'campaigns', campaignId: safeDecode(third) });
+    }
+    return route({ panel: 'testing', testingPage: isTestingSubPage(second) ? second : null });
+  }
+  // The RETIRED flat campaign addresses: `/campaigns` and `/campaigns/:id` fold into the
+  // Testing surface — parsed here so the pages render instantly, redirected (replace) by
+  // `useTestingRedirect` so bookmarks land on the surface's real URL.
+  if (first === 'campaigns') {
+    return route({
+      panel: 'testing',
+      testingPage: 'campaigns',
+      campaignId: second ? safeDecode(second) : null,
+    });
   }
   if (first === 'repo-detail' && second) {
     return route({ panel: 'repo-detail', repoId: safeDecode(second) });

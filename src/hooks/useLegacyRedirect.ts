@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { api } from '../api/client.js';
 import { DEFAULT_STEERING_TYPE, steeringPath } from '../api/steering.js';
+import { testingPath } from '../api/testing.js';
 import { modePath, projectPath, type Mode, type Navigate } from './useRoute.js';
 
 /** The synthesized "unfiled" project — a run that appears only there has no project. */
@@ -113,4 +114,32 @@ export function useSteeringRedirect(panel: string, steeringType: string | null, 
     if (panel !== 'steering' || steeringType !== null) return;
     navigate(steeringPath(DEFAULT_STEERING_TYPE), { replace: true });
   }, [panel, steeringType, navigate]);
+}
+
+/**
+ * The Testing surface's address normalizer (same grammar as {@link useSteeringRedirect}):
+ *
+ *  - the RETIRED flat campaign addresses `/campaigns` and `/campaigns/:id` (the campaign
+ *    surface MOVED under Testing) rewrite onto `/testing/campaigns[...]` — the path tail rides
+ *    along verbatim, so a bookmarked scoreboard lands on the same campaign;
+ *  - a page-less `/testing` address (bare or typo'd) normalizes onto the Harness page.
+ *
+ * REPLACE, like every redirect in this module, so Back never re-enters the dead address; the
+ * parse already lands both on `panel: 'testing'`, so the page renders instantly on the
+ * pre-redirect tick and nothing flashes.
+ */
+export function useTestingRedirect(
+  panel: string,
+  testingPage: string | null,
+  pathname: string,
+  navigate: Navigate,
+): void {
+  useEffect(() => {
+    if (panel !== 'testing') return;
+    if (pathname === '/campaigns' || pathname.startsWith('/campaigns/')) {
+      navigate(`/testing${pathname}`, { replace: true });
+      return;
+    }
+    if (testingPage === null) navigate(testingPath('harness'), { replace: true });
+  }, [panel, testingPage, pathname, navigate]);
 }

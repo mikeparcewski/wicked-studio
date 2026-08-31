@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getCampaign, type CampaignDetail, type CampaignRun } from '../api/campaigns.js';
+import { testingPath } from '../api/testing.js';
 import { downloadRunEvidence } from '../api/client.js';
 import { apiStatus } from '../api/errors.js';
 import type { SessionView } from '../api/types.js';
@@ -165,7 +166,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
         </p>
         <button
           type="button"
-          onClick={() => navigate('/campaigns')}
+          onClick={() => navigate(testingPath('campaigns'))}
           style={{ color: 'var(--status-run)', textDecoration: 'underline' }}
         >
           All campaigns

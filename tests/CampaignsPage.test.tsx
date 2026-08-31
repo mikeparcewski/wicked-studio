@@ -73,6 +73,6 @@ describe('the list', () => {
     expect(rows[1]!.textContent).toContain('1 waiting on you');
 
     fireEvent.click(rows[0]!);
-    expect(navigate).toHaveBeenCalledWith('/campaigns/DES-MERGE-001');
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns/DES-MERGE-001');
   });
 });

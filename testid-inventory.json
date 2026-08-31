@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.2",
   "counts": {
-    "files": 96,
-    "occurrences": 744,
-    "static": 635,
+    "files": 97,
+    "occurrences": 782,
+    "static": 672,
     "dynamic": 39,
     "computed": 5
   },
@@ -2448,6 +2448,12 @@
       ]
     },
     {
+      "testId": "rail-testing-page",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
       "testId": "rail-view-all",
       "files": [
         "src/components/LeftSidebar.tsx"
@@ -3322,6 +3328,222 @@
       ]
     },
     {
+      "testId": "testing-author-open",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-corpus-busy",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-corpus-error",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-corpus-file",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-corpus-name",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-corpus-summary",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-busy",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-corpus",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-degraded",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-empty",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-error",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-gap-detail",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-gap-toggle",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-nearest",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-nearest-empty",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-nearest-rule",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-row",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-run",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-summary",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-table",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-type",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-harness",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-page",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-close",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-error",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-instructions",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-launch",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-open",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-panel",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-repo",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-resolved",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-to-campaigns",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-recon-waiting",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-tab",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-tabs",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
       "testId": "theme-page-link",
       "files": [
         "src/components/SystemSettings.tsx"
@@ -4115,7 +4337,8 @@
       "expression": "testid",
       "files": [
         "src/components/CampaignScoreboard.tsx",
-        "src/components/SteeringPage.tsx"
+        "src/components/SteeringPage.tsx",
+        "src/components/TestingPage.tsx"
       ]
     },
     {

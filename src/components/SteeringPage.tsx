@@ -137,8 +137,9 @@ function Stat({ testid, label, value, sub }: {
 const pct = (v: number | undefined): string => (v === undefined ? '—' : `${Math.round(v)}%`);
 
 /** Read a picked file as text. `File.text()` where the runtime has it (every shipping browser),
- *  the FileReader fallback where it does not (older DOM implementations — jsdom included). */
-function readFileText(file: File): Promise<string> {
+ *  the FileReader fallback where it does not (older DOM implementations — jsdom included).
+ *  Exported for the Testing surface's corpus upload — one reader, not a fork. */
+export function readFileText(file: File): Promise<string> {
   if (typeof file.text === 'function') return file.text();
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -1030,7 +1031,9 @@ function ImportPanel({ type, state, onPick, onClose }: {
 
 // ── Add with chat ─────────────────────────────────────────────────────────────────────────────
 
-function AuthorPanel({ type, onClose, onAuthored }: {
+/** Exported for the Testing surface's Harness page, which reuses this EXACT panel (type
+ *  `"testing"`) for its "add with chat" — one governed-run authoring UX, not a fork. */
+export function AuthorPanel({ type, onClose, onAuthored }: {
   type: SteeringType;
   onClose: () => void;
   /** Fires when the propose gate resolves — the page reloads rules for the server's state. */
