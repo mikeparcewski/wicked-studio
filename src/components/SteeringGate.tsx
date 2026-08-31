@@ -140,8 +140,18 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, onResolved
     return run(() => api.confirmGate(runId, decision), { kind: 'approve-with-steer', amend: text });
   };
 
-  const reject = (): Promise<void> =>
-    run(() => api.confirmGate(runId, { approve: false }), { kind: 'reject' });
+  // The steer text rides REJECT too (DES-RUN-NARRATOR §7 — the reject-note gap):
+  // `{approve:false, amend}` is the same wire GateRejectNote already speaks, and
+  // the daemon's gate audit durably records the note on the decision. An empty
+  // textarea still sends the bare reject.
+  const reject = (): Promise<void> => {
+    const text = amend.trim();
+    const decision: GateDecision = text === '' ? { approve: false } : { approve: false, amend: text };
+    return run(() => api.confirmGate(runId, decision), {
+      kind: 'reject',
+      ...(text !== '' ? { amend: text } : {}),
+    });
+  };
 
   const cancel = (): Promise<void> =>
     run(() => api.cancelRun(runId), { kind: 'cancel' });
@@ -275,7 +285,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, onResolved
         placeholder={
           isCoverageFail && coverage && coverage.unaccounted > 0
             ? `${coverage.unaccounted} nodes unaccounted — add guidance for the evaluator, e.g. "focus on services/ directory"`
-            : 'Optional steer — guide the next unit when approving with steer'
+            : 'Optional note — rides "Approve + steer" as guidance, or "Reject" as the recorded reason'
         }
         value={amend}
         onChange={(e) => applyAmend(e.target.value)}

@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.4.3",
   "counts": {
-    "files": 108,
-    "occurrences": 808,
-    "static": 693,
-    "dynamic": 39,
+    "files": 114,
+    "occurrences": 827,
+    "static": 710,
+    "dynamic": 40,
     "computed": 6
   },
   "static": [
@@ -167,6 +167,24 @@
       "testId": "appearance-settings",
       "files": [
         "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "approval-dock",
+      "files": [
+        "src/components/ApprovalDock.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-card",
+      "files": [
+        "src/components/ArtifactCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-open",
+      "files": [
+        "src/components/ArtifactCard.tsx"
       ]
     },
     {
@@ -1290,6 +1308,36 @@
       ]
     },
     {
+      "testId": "followup-bar",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
+      "testId": "followup-close",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
+      "testId": "followup-composer",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
+      "testId": "followup-label",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
+      "testId": "followup-open",
+      "files": [
+        "src/components/FollowUpComposer.tsx"
+      ]
+    },
+    {
       "testId": "gate-approaching",
       "files": [
         "src/components/ProjectCard.tsx"
@@ -1786,14 +1834,14 @@
     {
       "testId": "live-output",
       "files": [
-        "src/components/ChatPanel.tsx",
+        "src/components/LiveNarration.tsx",
         "src/components/LiveOutput.tsx"
       ]
     },
     {
       "testId": "live-output-label",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/LiveNarration.tsx"
       ]
     },
     {
@@ -1971,6 +2019,12 @@
       ]
     },
     {
+      "testId": "narration-line",
+      "files": [
+        "src/components/NarratorFeed.tsx"
+      ]
+    },
+    {
       "testId": "narrative-band",
       "files": [
         "src/components/NarrativeBand.tsx"
@@ -2082,6 +2136,48 @@
       "testId": "notif-settings",
       "files": [
         "src/components/NotificationSettings.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-artifacts",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-artifacts-pop",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-jump",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-narration",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-phase",
+      "files": [
+        "src/components/NowBar.tsx"
+      ]
+    },
+    {
+      "testId": "now-bar-status",
+      "files": [
+        "src/components/NowBar.tsx"
       ]
     },
     {
@@ -2481,6 +2577,12 @@
       "testId": "rail-view-all",
       "files": [
         "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "testId": "raw-event",
+      "files": [
+        "src/components/NarratorFeed.tsx"
       ]
     },
     {
@@ -3724,6 +3826,7 @@
       "files": [
         "src/components/ChatPanel.tsx",
         "src/components/DocumentThread.tsx",
+        "src/components/NarratorFeed.tsx",
         "src/components/threadAnchor.ts"
       ]
     },
@@ -4279,6 +4382,12 @@
       ]
     },
     {
+      "pattern": "feed-view-*",
+      "files": [
+        "src/components/NarratorFeed.tsx"
+      ]
+    },
+    {
       "pattern": "feedback-mode-*",
       "files": [
         "src/components/FeedbackOverlay.tsx"
@@ -4359,19 +4468,19 @@
     {
       "pattern": "live-narration-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/LiveNarration.tsx"
       ]
     },
     {
       "pattern": "live-narration-text-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/LiveNarration.tsx"
       ]
     },
     {
       "pattern": "live-narration-toggle-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/LiveNarration.tsx"
       ]
     },
     {
@@ -4426,13 +4535,13 @@
     {
       "pattern": "unit-output-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/NarratorFeed.tsx"
       ]
     },
     {
       "pattern": "unit-output-toggle-*",
       "files": [
-        "src/components/ChatPanel.tsx"
+        "src/components/NarratorFeed.tsx"
       ]
     }
   ],

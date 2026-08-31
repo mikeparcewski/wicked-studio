@@ -25,16 +25,37 @@ const CAP = 50000;
 
 const IGNORED: ReadonlySet<string> = new Set(['cliOutputDelta', 'unitOutputDelta', 'heartbeat']);
 
+/**
+ * Content identity of a frame, ignoring the two fields only the DURABLE copy
+ * carries (`ts`/`seq` are stamped by the event log at capture — the live `/ws`
+ * copy of the same emission lacks both). Key order is normalized so the same
+ * frame always fingerprints the same. Used by {@link RunEventStore.hydrate}'s
+ * merge to de-duplicate live frames that raced the backfill fetch.
+ */
+function fingerprint(event: CoreEvent): string {
+  const bag: Record<string, unknown> = {};
+  for (const key of Object.keys(event).sort()) {
+    if (key === 'ts' || key === 'seq') continue;
+    bag[key] = (event as Record<string, unknown>)[key];
+  }
+  return JSON.stringify(bag);
+}
+
 interface RunEventStore {
   /** Ordered, capped structured frames keyed by run id. */
   byRun: Record<string, CoreEvent[]>;
   /** Fold one CoreEvent (drops output deltas / heartbeats / run-less frames). */
   ingest: (event: CoreEvent) => void;
-  /** Seed a run's log from the durably-persisted event trail (`GET /runs/:id/events`), ONLY when the
-   * run has no frames yet. The studio's `/ws` stream has no late-join replay, so a page reloaded
-   * against a finished (or already-running) run showed an empty Burn panel ("usage not yet reported")
-   * even though the usage was persisted. This backfills it. Guarded on emptiness so it never
-   * double-counts a live `cliUsage` already ingested from the socket (FINDING-013). */
+  /** Seed a run's log from the durably-persisted event trail (`GET /runs/:id/events`).
+   * The studio's `/ws` stream has no late-join replay, so a page reloaded against a
+   * finished (or already-running) run showed an empty Burn panel even though the usage
+   * was persisted. FINDING-013's original guard was all-or-nothing — ONE live frame
+   * arriving before the fetch resolved dropped the ENTIRE backfill and the feed began
+   * mid-story (DES-RUN-NARRATOR §3 rule 1). Now the recorded trail (every frame
+   * carrying the run-wide `seq`) is merged as the authoritative PREFIX: live frames
+   * that duplicate it (the same emission seen on both wires) are removed by content
+   * fingerprint, the live remainder appends in arrival order. A live `cliUsage` is
+   * therefore still never double-counted — the guard is upgraded, not weakened. */
   hydrate: (runId: string, events: CoreEvent[]) => void;
   /** Drop a run's log. */
   clear: (runId: string) => void;
@@ -57,14 +78,35 @@ export const useRunEventStore = create<RunEventStore>((set) => ({
 
   hydrate: (runId, events) =>
     set((s) => {
-      // Never clobber live frames already streamed from /ws — hydration is a backfill for the
-      // reload-with-no-socket case only.
-      if ((s.byRun[runId] ?? []).length > 0) return s;
-      const frames = events.filter(
-        (e) => e.session === runId && !IGNORED.has(e.type),
-      );
-      if (frames.length === 0) return s;
-      return { byRun: { ...s.byRun, [runId]: frames } };
+      const recorded = events
+        .filter((e) => e.session === runId && !IGNORED.has(e.type))
+        .sort((a, b) => (typeof a.seq === 'number' && typeof b.seq === 'number' ? a.seq - b.seq : 0));
+      if (recorded.length === 0) return s;
+      const live = s.byRun[runId] ?? [];
+      if (live.length === 0) {
+        return { byRun: { ...s.byRun, [runId]: recorded } };
+      }
+      // Merge (§3 rule 1): the recorded trail is complete up to the fetch, so any
+      // live frame emitted before then exists in BOTH lists. Multiset-subtract the
+      // recorded fingerprints from the live list (never clobbering a live-only
+      // frame), then append what remains, in arrival order, behind the prefix.
+      const counts = new Map<string, number>();
+      for (const e of recorded) {
+        const f = fingerprint(e);
+        counts.set(f, (counts.get(f) ?? 0) + 1);
+      }
+      const tail = live.filter((e) => {
+        const f = fingerprint(e);
+        const n = counts.get(f) ?? 0;
+        if (n > 0) {
+          counts.set(f, n - 1);
+          return false; // the recorded copy (with ts/seq) stands in for it
+        }
+        return true; // live-only — never lost
+      });
+      const merged = [...recorded, ...tail];
+      if (merged.length > CAP) merged.splice(0, merged.length - CAP);
+      return { byRun: { ...s.byRun, [runId]: merged } };
     }),
 
   clear: (runId) =>
