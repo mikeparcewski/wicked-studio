@@ -12,6 +12,21 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-08-31
+
+### Fixed
+
+- **The narrator reaches the chat surface** (#164): GroupChat now renders the narrative by
+  default — user messages and short crew replies stay first-class turns, long per-seat worker
+  output collapses to seat-chip narration lines with the raw bytes behind expanders (the full
+  verbatim transcript stays behind the view toggle), streaming shows as honest progress lines,
+  artifacts render as cards, and the now-bar + pinned approval dock mount on chat too. Direct
+  follow-up to 0.4.4 user feedback: "what I see is still the outputs from the individual agents."
+- The approval dock no longer vanishes mid-decision on chat sessions: the run-refresh reconcile
+  pruned gate ids absent from `GET /runs` (a chat session id never appears there), unmounting the
+  gate card ~400ms after it appeared and eating any half-typed note — a counted pin registry
+  (`awaitingPins`) both reconciles respect keeps a mounted surface's gate alive (#164).
+
 ## [0.4.4] — 2026-08-31
 
 ### Added
