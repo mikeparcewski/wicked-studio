@@ -1053,15 +1053,15 @@ function AuthorPanel({ type, onClose, onAuthored }: {
     setBusy(true);
     setError(null);
     try {
-      const attachments = await Promise.all(
+      const documents = await Promise.all(
         files.map(async (f) => ({ name: f.name, content: await readFileText(f) })),
       );
-      const { run_id } = await authorSteeringRules({
-        steering_type: type,
+      const { runId } = await authorSteeringRules({
         instructions: instructions.trim(),
-        ...(attachments.length > 0 ? { attachments } : {}),
+        type,
+        ...(documents.length > 0 ? { documents } : {}),
       });
-      setRunId(run_id);
+      setRunId(runId);
     } catch (e) {
       if (isSteeringUnsupported(e)) setUnsupported(true);
       else setError(e instanceof Error ? e.message : String(e));
@@ -1288,12 +1288,20 @@ export function SteeringPage({ type, navigate }: {
   };
 
   const onImportPick = (file: File): void => {
-    const format: 'markdown' | 'json' = file.name.toLowerCase().endsWith('.json') ? 'json' : 'markdown';
+    const isJson = file.name.toLowerCase().endsWith('.json');
     setImportState({ kind: 'busy', filename: file.name });
     void readFileText(file)
-      .then((content) =>
-        importSteeringRules({ steering_type: type, format, filename: file.name, content }),
-      )
+      .then((content) => {
+        // .md = one doc entry through the MarkdownAdapter path; .json = a rule batch,
+        // each object its own entry so a half-good batch reports per rule.
+        const entries = isJson
+          ? (JSON.parse(content) as Record<string, unknown>[]).map((rule) => ({
+              kind: 'rule' as const,
+              rule,
+            }))
+          : [{ kind: 'doc' as const, name: file.name, content }];
+        return importSteeringRules({ type, entries });
+      })
       .then(({ results }) => {
         setImportState({ kind: 'done', filename: file.name, results });
         // Something may have landed even in a half-good batch — show the server's state.

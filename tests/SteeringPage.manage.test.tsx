@@ -102,10 +102,8 @@ describe('SteeringPage — import', () => {
       'security-rules.md: 1 created · 1 updated · 1 failed',
     );
     expect(importBody).toMatchObject({
-      steering_type: 'security',
-      format: 'markdown',
-      filename: 'security-rules.md',
-      content: '# doctrine\n',
+      type: 'security',
+      entries: [{ kind: 'doc', name: 'security-rules.md', content: '# doctrine\n' }],
     });
     const rows = screen.getAllByTestId('steering-import-result');
     expect(rows.map((r) => r.getAttribute('data-status'))).toEqual(['created', 'updated', 'error']);
@@ -114,13 +112,13 @@ describe('SteeringPage — import', () => {
     await waitFor(() => expect(listConformanceRules).toHaveBeenCalledTimes(2));
   });
 
-  it('infers the json format from the extension', async () => {
+  it('parses a .json file into per-rule entries', async () => {
     const user = userEvent.setup();
     listConformanceRules.mockResolvedValue({ rules: [] });
-    let importBody: { format?: string } | null = null;
+    let importBody: { entries?: unknown[] } | null = null;
     wireManagement({
       '/governance/steering/import': (body) => {
-        importBody = body as { format?: string };
+        importBody = body as { entries?: unknown[] };
         return Promise.resolve({ results: [] });
       },
     });
@@ -129,9 +127,11 @@ describe('SteeringPage — import', () => {
     await user.click(await screen.findByTestId('steering-import-open'));
     await user.upload(
       screen.getByTestId('steering-import-file'),
-      new File(['[]'], 'batch.JSON', { type: 'application/json' }),
+      new File(['[{"id":"SEC-9"}]'], 'batch.JSON', { type: 'application/json' }),
     );
-    await waitFor(() => expect(importBody).toMatchObject({ format: 'json', steering_type: 'testing' }));
+    await waitFor(() =>
+      expect(importBody).toMatchObject({ type: 'testing', entries: [{ kind: 'rule', rule: { id: 'SEC-9' } }] }),
+    );
   });
 
   it('a 501/route-absent daemon gets the honest unsupported copy, never a raw refusal', async () => {
@@ -337,7 +337,7 @@ describe('SteeringPage — edit', () => {
 });
 
 describe('SteeringPage — add with chat (the authoring run + its propose gate)', () => {
-  it('POSTs instructions + attachments with THIS page type, then renders the EXISTING gate card when the propose gate arrives', async () => {
+  it('POSTs instructions + documents with THIS page type, then renders the EXISTING gate card when the propose gate arrives', async () => {
     const user = userEvent.setup();
     listConformanceRules.mockResolvedValue({ rules: [] });
     confirmGate.mockResolvedValue({ status: 'ok' });
@@ -345,7 +345,7 @@ describe('SteeringPage — add with chat (the authoring run + its propose gate)'
     wireManagement({
       '/governance/steering/author': (body) => {
         authorBody = body;
-        return Promise.resolve({ run_id: 'run-author-1' });
+        return Promise.resolve({ runId: 'run-author-1' });
       },
     });
     page('compliance');
@@ -366,9 +366,9 @@ describe('SteeringPage — add with chat (the authoring run + its propose gate)'
     // Launched: the honest waiting state until the run actually asks.
     expect(await screen.findByTestId('steering-author-waiting')).toHaveTextContent(/run-auth/);
     expect(authorBody).toMatchObject({
-      steering_type: 'compliance',
+      type: 'compliance',
       instructions: 'Derive rules from the attached SOC2 doc',
-      attachments: [{ name: 'soc2.md', content: 'CC6.1 …' }],
+      documents: [{ name: 'soc2.md', content: 'CC6.1 …' }],
     });
 
     // The propose gate arrives as a normal awaitingHuman frame on the run — the app's one /ws
