@@ -12,6 +12,36 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-08-31
+
+### Added
+
+- **The run narrator** — the build-chat redesign (design doc `.product/DES-RUN-NARRATOR.md`).
+  One chronologically stable feed narrated by a deterministic template layer over the event
+  stream (raw output collapses behind expanders; ordering fixed at the source for backfill and
+  live-merge), a **sticky now-bar** always showing what is happening right now, a **pinned
+  approval dock** that never scrolls away (approve / amend / reject-with-note — the reject path
+  now carries the note), **artifact cards** inline as files and documents are produced, and a
+  labelled follow-up bar replacing the ambiguous composer on finished runs (#161).
+- A real **not-found view** — unknown routes keep the typed URL and offer links instead of
+  silently landing on a default page (#160).
+
+### Fixed
+
+- The usability review's dead ends (#160): the Escape/overlay contract with focus return + a
+  skip link; the Work window is an honest "last 30" with full-set search, a first-class
+  show-all chip, and a threshold-colored success rate; lists derive short human titles instead
+  of raw prompt text; Steering type pages show type-scoped stats (empty types lose store-wide
+  noise; diagnostics fold behind a toggle); single-seat council decisions read "allowed — no
+  policy applied" instead of vote theater; evals split blocked-vs-passed, link gap hints into
+  the rule drawer, and name their corpus; dead-end empty states gained CTAs plus ten
+  plain-language copy rewrites.
+- **Failed runs explain themselves** (#162): the failure banner translates engine denials into
+  plain words with advice ("Unit #2 tried to write outside its workspace and was stopped to
+  protect your files."), reading the structured denial from wicked-core-ts ≥ 0.7.6 with an
+  honest prose fallback on older daemons; the engine's verbatim reason stays as a detail line,
+  and rule denials link into the Steering drawer.
+
 ## [0.4.3] — 2026-08-31
 
 ### Added
