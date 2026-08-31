@@ -82,7 +82,7 @@ export function AuthorPanel({ type, onClose, onAuthored }: {
         <>
           <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
             Launches a governed authoring run: it reads what you attach, drafts{' '}
-            <span className="font-mono">{type}</span> steering rules, and STOPS at a propose gate —
+            <span className="font-mono">{type}</span> steering rules, and stops at a propose gate —
             nothing is written until you approve it here.
           </p>
           <textarea

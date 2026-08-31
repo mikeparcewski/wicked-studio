@@ -116,12 +116,12 @@ describe('/chats "Active now" counts what the screen shows (J4 finding 4a, EC39)
     const tile = screen.getByTestId('chats-active-tile');
     expect(tile).toHaveAttribute('data-count', '1');
     expect(tile).toHaveAttribute('data-live', '1');
-    expect(tile).toHaveTextContent('1 live session · 0 chat runs in 30d');
+    expect(tile).toHaveTextContent('1 live session · 0 chat runs in the last 30');
   });
 
   it('with no live sessions the range-scoped count is labeled with its window', async () => {
     render(<ChatsPage runs={[]} onSelect={() => {}} navigate={() => {}} />);
     await screen.findByTestId('chats-active-tile');
-    expect(screen.getByTestId('chats-active-tile')).toHaveTextContent('0 of 0 chat runs in 30d');
+    expect(screen.getByTestId('chats-active-tile')).toHaveTextContent('0 of 0 chat runs in the last 30');
   });
 });

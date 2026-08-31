@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { campaignPath } from '../api/testing.js';
+import { campaignPath, testingPath } from '../api/testing.js';
 import { useCampaignsStore } from '../store/campaigns.js';
 
 /**
@@ -50,10 +50,31 @@ export function CampaignsPage({ navigate }: Props): React.ReactElement {
         Campaigns
       </h1>
       {summaries.length === 0 ? (
-        <p data-testid="campaigns-empty" style={{ marginTop: '16px', color: 'var(--ink-muted)' }}>
-          No campaigns yet. A campaign is minted by its first filed run — launch a run with a
-          campaign label and it appears here.
-        </p>
+        // Quick win #3 + review #6: plain words, and a way OUT of the dead end —
+        // the Harness is where a campaign starts.
+        <div data-testid="campaigns-empty" style={{ marginTop: '16px', color: 'var(--ink-muted)' }}>
+          <p style={{ margin: 0 }}>
+            Campaigns appear when you launch a run with a campaign label — start one from Harness.
+          </p>
+          <button
+            type="button"
+            data-testid="campaigns-empty-cta"
+            onClick={() => navigate(testingPath('harness'))}
+            style={{
+              marginTop: '12px',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--accent)',
+              color: 'var(--accent-fg)',
+              fontSize: 'var(--text-sm)',
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            Go to Harness
+          </button>
+        </div>
       ) : (
         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {summaries.map((s) => {

@@ -154,7 +154,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       <div className="mb-6">
         <h1 className="text-lg font-semibold" style={{ color: 'var(--ink-high)' }}>System</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--ink-muted)' }}>
-          Runtime tunables persisted to{' '}
+          Settings are saved to{' '}
           <code
             className="font-mono text-xs rounded px-1 py-0.5"
             style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}

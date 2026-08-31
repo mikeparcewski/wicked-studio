@@ -45,11 +45,19 @@ describe('the §1.5 probe states', () => {
     expect(screen.getByTestId('campaigns-unsupported').textContent).toContain('predates campaign grouping');
   });
 
-  it('200 [] is the "no campaigns yet" answer, in words that name how one is minted', async () => {
+  it('200 [] is the "no campaigns yet" answer, in plain words, with a CTA to Harness (quick win #3)', async () => {
+    const navigate = vi.fn();
     listCampaigns.mockResolvedValue({ campaigns: [] });
-    render(<CampaignsPage navigate={() => {}} />);
+    render(<CampaignsPage navigate={navigate} />);
     await waitFor(() => expect(screen.getByTestId('campaigns-empty')).toBeInTheDocument());
-    expect(screen.getByTestId('campaigns-empty').textContent).toContain('minted by its first filed run');
+    // Plain words — "minted" is banned vocabulary on user surfaces (review #6).
+    expect(screen.getByTestId('campaigns-empty').textContent).toContain(
+      'launch a run with a campaign label — start one from Harness',
+    );
+    expect(screen.getByTestId('campaigns-empty').textContent).not.toContain('minted');
+    // The dead end gains its way out: the CTA navigates to the Harness page.
+    fireEvent.click(screen.getByTestId('campaigns-empty-cta'));
+    expect(navigate).toHaveBeenCalledWith('/testing/harness');
   });
 });
 

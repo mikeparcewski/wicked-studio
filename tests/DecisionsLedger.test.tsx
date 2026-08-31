@@ -142,12 +142,13 @@ describe('DecisionsLedger — an approval is only credited to a layer that ran (
 
   // This is the exact shape every unit of run 7620a086 emitted: all three layers inert, yet the
   // ledger credited the pass to "evaluator (2nd pass)". A default-allow is not a governed pass.
-  it('reports ungated when no layer ran, even though evaluatorPass is true', () => {
+  it('reports one honest line when no layer ran, even though evaluatorPass is true', () => {
     renderGate({});
     const row = screen.getByTestId('ledger-row');
-    // The decider itself must say "ungated"; the criterion placeholder renders "(ungated)" too, so
-    // the negative assertion is the one that actually binds.
-    expect(row).toHaveTextContent('ungated');
+    // Usability review #7: "ALLOW · ungated · (ungated)" said the same nothing
+    // twice — the ungated allow is ONE line now, and no layer gets the credit.
+    expect(row).toHaveTextContent('allowed — no policy applied');
+    expect(row).not.toHaveTextContent('ungated');
     expect(row).not.toHaveTextContent('evaluator (2nd pass)');
   });
 
@@ -221,8 +222,12 @@ describe('DecisionsLedger — the evaluator chip states whether a policy ran (FI
     return screen.getByTestId('ledger-row');
   };
 
-  it('says no policy applied when the pass was vacuous', () => {
-    expect(row({})).toHaveTextContent('evaluator: pass (no policy applied)');
+  it('renders NO evaluator chip for a vacuous pass — the headline already says no policy applied', () => {
+    const r = row({});
+    // Review #7 dedupe: "evaluator: pass (no policy applied)" under "allowed —
+    // no policy applied" was the same fact dressed as a second verdict.
+    expect(r).toHaveTextContent('allowed — no policy applied');
+    expect(r).not.toHaveTextContent('evaluator: pass');
   });
 
   it('names the policies when the pass was enforced', () => {

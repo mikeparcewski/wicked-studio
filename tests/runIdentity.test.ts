@@ -4,6 +4,7 @@ import type { LoggedEvent } from '../src/store/runtime.js';
 import {
   deriveRunClocks,
   durationWord,
+  humanTitle,
   runShortId,
   runTitle,
   runWhenWord,
@@ -25,10 +26,11 @@ describe('runTitle (EC40: identical prompts never render identical titles)', () 
       .toBe('fix the auth flow · 3eda21 · #2');
   });
 
-  it('truncates a paragraph intent, keeping the short-id visible past it', () => {
+  it('truncates a paragraph intent at a WORD boundary, keeping the short-id visible past it', () => {
     const long = 'refactor the ingestion pipeline so that every incoming webhook payload is validated';
     const t = runTitle(session('r-long-000', long));
-    expect(t).toBe(`${long.slice(0, 40)}… · r-long · #1`);
+    // 40-char budget, trimmed back to the last whole word — never a mid-word cut.
+    expect(t).toBe('refactor the ingestion pipeline so that… · r-long · #1');
   });
 
   it('two identical prompts differ by short-id alone', () => {
@@ -36,6 +38,52 @@ describe('runTitle (EC40: identical prompts never render identical titles)', () 
     const b = runTitle(session('r-retry-999', 'refactor the auth middleware'));
     expect(a).not.toBe(b);
     expect(runShortId('r-auth-1234')).toBe('r-auth');
+  });
+});
+
+describe('humanTitle (usability review #2 — the ONE title derivation, not four copies)', () => {
+  it('a short intent is its own title, untouched', () => {
+    expect(humanTitle('fix the auth flow')).toBe('fix the auth flow');
+  });
+
+  it('the FIRST clause is the title — the 300-char issue prompt stops at its colon', () => {
+    const prompt =
+      'Implement GitHub issue #167 in this repo (wicked-interactive): the doc-creation wizard project picker lists crew projects but offers no way to CREATE a project.';
+    expect(humanTitle(prompt)).toBe('Implement GitHub issue #167 in this repo (wicked-interactive)');
+  });
+
+  it('a sentence end cuts before a paragraph does', () => {
+    expect(humanTitle('Fix the flaky test. Then refactor the runner and every helper it drags in.'))
+      .toBe('Fix the flaky test');
+  });
+
+  it('a line break ends the clause', () => {
+    expect(humanTitle('Ship the header\nAnd a body of details that should never be a title'))
+      .toBe('Ship the header');
+  });
+
+  it('a long clause word-boundary-trims to ~64 chars with an ellipsis', () => {
+    const clause =
+      'refactor the ingestion pipeline so that every incoming webhook payload is validated before persistence';
+    const t = humanTitle(clause);
+    expect(t.endsWith('…')).toBe(true);
+    expect(t.length).toBeLessThanOrEqual(65);
+    // Never a mid-word cut: dropping the ellipsis leaves whole words only.
+    expect(clause.startsWith(t.slice(0, -1))).toBe(true);
+    expect(clause[t.length - 1]).toBe(' ');
+  });
+
+  it('the kept fragment is a literal PREFIX of the raw intent (palette highlight contract)', () => {
+    const prompt = 'Implement GitHub issue #167 in this repo (wicked-interactive): details follow';
+    const t = humanTitle(prompt, 40);
+    const frag = t.endsWith('…') ? t.slice(0, -1) : t;
+    expect(prompt.startsWith(frag)).toBe(true);
+  });
+
+  it('five identical raw prompts produce the SAME clause — identity comes from runTitle', () => {
+    const p = 'Implement GitHub issue #167 in this repo: long tail '.repeat(6);
+    expect(humanTitle(p)).toBe(humanTitle(p));
+    expect(runTitle(session('a-000001', p))).not.toBe(runTitle(session('b-000002', p)));
   });
 });
 

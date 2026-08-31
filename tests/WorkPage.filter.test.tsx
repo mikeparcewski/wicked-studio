@@ -89,18 +89,19 @@ describe('WorkPage — range-hidden rows are stated, never silent (EC39)', () =>
     makeView({ id: 'r-cxl', workflow_id: 'feature', problem: 'called off', status: 'cancelled' }),
   ];
 
-  it('states the hidden count on a filter whose rows the window excludes, and widens on demand', async () => {
+  it('states the hidden count on a filter whose rows the window excludes, and shows all on demand', async () => {
     render(
       <WorkPage runs={MANY} selectedRunId={null} onSelect={() => {}} navigate={() => {}} search="?filter=cancelled" />,
     );
-    // The 30d window (first 30 rows) holds no cancelled run — the note says so.
+    // The last-30 window (first 30 rows) holds no cancelled run — the note
+    // says so, in the window's HONEST name (review #9: never "30d").
     const note = screen.getByTestId('work-range-hidden-note');
     expect(note).toHaveAttribute('data-hidden', '1');
-    expect(note.textContent).toMatch(/1 more cancelled run sits outside this 30d view/);
+    expect(note.textContent).toMatch(/1 more cancelled run sits outside the last 30-runs window/);
     // The empty state tells the SAME truth — never "No cancelled runs yet."
     // one line under a note saying they exist.
     expect(screen.getByText(/No cancelled runs in this range view — 1 exists outside it\./)).toBeInTheDocument();
-    // Widen → the row appears and the note goes away (90d covers all 32).
+    // Show all → the row appears and the note goes away.
     await userEvent.click(screen.getByTestId('work-range-widen'));
     expect(screen.getByText(/called off/)).toBeInTheDocument();
     expect(screen.queryByTestId('work-range-hidden-note')).toBeNull();
@@ -111,5 +112,59 @@ describe('WorkPage — range-hidden rows are stated, never silent (EC39)', () =>
       <WorkPage runs={RUNS} selectedRunId={null} onSelect={() => {}} navigate={() => {}} search="?filter=failed" />,
     );
     expect(screen.queryByTestId('work-range-hidden-note')).toBeNull();
+  });
+
+  it('surfaces the held-back rows as a FIRST-CLASS chip beside the tabs; clicking shows all (review #9)', async () => {
+    render(<WorkPage runs={MANY} selectedRunId={null} onSelect={() => {}} navigate={() => {}} />);
+    const chip = screen.getByTestId('work-hidden-chip');
+    // 32 work runs, 30 in the window → 2 held back across all statuses.
+    expect(chip).toHaveAttribute('data-hidden', '2');
+    await userEvent.click(chip);
+    // Everything shows; the chip retires with nothing left to reveal.
+    expect(screen.queryByTestId('work-hidden-chip')).toBeNull();
+    expect(screen.getByText(/called off/)).toBeInTheDocument();
+  });
+
+  it('search looks at the FULL set — a match outside the window is found, and no hidden note contradicts it', async () => {
+    render(<WorkPage runs={MANY} selectedRunId={null} onSelect={() => {}} navigate={() => {}} />);
+    // "called off" is row 32 — outside the last-30 window.
+    await userEvent.type(screen.getByPlaceholderText('Search work…'), 'called off');
+    expect(screen.getByText(/called off/)).toBeInTheDocument();
+    expect(screen.queryByTestId('work-range-hidden-note')).toBeNull();
+    expect(screen.queryByTestId('work-hidden-chip')).toBeNull();
+  });
+});
+
+describe('WorkPage — the success-rate tile wears threshold colors (review #9)', () => {
+  const mixed = (completed: number, failed: number): ReturnType<typeof makeView>[] => [
+    ...Array.from({ length: completed }, (_, i) =>
+      makeView({ id: `r-ok${i}`, workflow_id: 'feature', problem: `ok ${i}`, status: 'completed' })),
+    ...Array.from({ length: failed }, (_, i) =>
+      makeView({ id: `r-no${i}`, workflow_id: 'feature', problem: `no ${i}`, status: 'failed' })),
+  ];
+
+  it('9 completed vs 21 failed (the live 30%) is BAD — never success-green', () => {
+    render(<WorkPage runs={mixed(9, 21)} selectedRunId={null} onSelect={() => {}} navigate={() => {}} />);
+    const tile = screen.getByTestId('work-success-rate');
+    expect(tile).toHaveAttribute('data-health', 'bad');
+    expect(tile).toHaveTextContent('30%');
+  });
+
+  it('a borderline rate is amber; a healthy one green; no terminal runs, no verdict', () => {
+    const { unmount } = render(
+      <WorkPage runs={mixed(6, 4)} selectedRunId={null} onSelect={() => {}} navigate={() => {}} />,
+    );
+    expect(screen.getByTestId('work-success-rate')).toHaveAttribute('data-health', 'warn');
+    unmount();
+
+    const second = render(
+      <WorkPage runs={mixed(9, 1)} selectedRunId={null} onSelect={() => {}} navigate={() => {}} />,
+    );
+    expect(screen.getByTestId('work-success-rate')).toHaveAttribute('data-health', 'good');
+    second.unmount();
+
+    render(<WorkPage runs={[]} selectedRunId={null} onSelect={() => {}} navigate={() => {}} />);
+    expect(screen.getByTestId('work-success-rate')).toHaveAttribute('data-health', 'none');
+    expect(screen.getByTestId('work-success-rate')).toHaveTextContent('—');
   });
 });

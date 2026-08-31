@@ -109,7 +109,7 @@ describe('RunOutcomeBar (§2.1 — "Is the system healthy right now?")', () => {
     expect(tile.textContent).toContain('1 cancelled');
   });
 
-  it('states its exclusions: undated runs are named beside the number (EC39)', () => {
+  it('states its exclusions as an ⓘ note whose tooltip names the count (EC39 + quick win #1)', () => {
     render(
       <RunOutcomeBar
         runs={[
@@ -120,8 +120,12 @@ describe('RunOutcomeBar (§2.1 — "Is the system healthy right now?")', () => {
         now={NOW}
       />,
     );
-    expect(screen.getByTestId('outcome-unplaced-note').textContent)
-      .toBe('excludes 1 run with no clock in this window');
+    const note = screen.getByTestId('outcome-unplaced-note');
+    // The exclusion is still STATED (machine-readable count + hover words),
+    // but no longer runs as headline copy under the tile.
+    expect(note).toHaveAttribute('data-unplaced', '1');
+    expect(note.textContent).toContain('1 not shown');
+    expect(note.getAttribute('title')).toContain('excludes 1 run with no clock in this window');
   });
 });
 

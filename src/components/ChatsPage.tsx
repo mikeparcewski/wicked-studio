@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
-import { useTimeRange, type TimeRange } from '../hooks/useTimeRange.js';
+import { rangeWord, useTimeRange, type TimeRange } from '../hooks/useTimeRange.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { GatesWaitingTile, TileBand } from './DashboardTiles.js';
 import { MetricTile } from './MetricTile.js';
+import { humanTitle } from './runIdentity.js';
 import { RunSparkline } from './RunSparkline.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 
@@ -29,7 +30,10 @@ export const isChatRun = (v: SessionView): boolean =>
 
 // ── The chats-over-time tile (DES-FEEDBACK-003 §4.3 row 1, slice P) ───────────
 
-const RANGE_DAYS: Record<TimeRange, number> = { '30d': 30, '60d': 60, '90d': 90 };
+const RANGE_DAYS: Record<TimeRange, number> = { '30d': 30, '60d': 60, '90d': 90, all: 365 };
+
+/** The honest window phrase: "in the last 30" (runs), or "overall" for `all`. */
+const windowWordOf = (r: TimeRange): string => (r === 'all' ? 'overall' : `in the ${rangeWord(r)}`);
 const BUCKETS = 12;
 const DAY_MS = 86_400_000;
 
@@ -69,8 +73,8 @@ function ChatsOverTimeTile({ chats, range, now }: {
     <MetricTile
       testId="chats-over-time-tile"
       question="Is conversation increasing or drying up?"
-      title={`Chats (${range})`}
-      value={placed === 0 ? `no placed chats in ${range}` : `${placed} in ${range}`}
+      title={`Chats (${rangeWord(range)})`}
+      value={placed === 0 ? `no placed chats ${windowWordOf(range)}` : `${placed} ${windowWordOf(range)}`}
       data={{ 'data-total': placed, 'data-unplaced': chats.length - placed }}
     >
       {placed === 0 ? (
@@ -243,8 +247,8 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
             // "0 of 0" can never sit beside a visible live row.
             value={
               liveCount > 0
-                ? `${liveCount} live session${liveCount === 1 ? '' : 's'} · ${active.length} chat run${active.length === 1 ? '' : 's'} in ${range}`
-                : `${active.length} of ${chats.length} chat runs in ${range}`
+                ? `${liveCount} live session${liveCount === 1 ? '' : 's'} · ${active.length} chat run${active.length === 1 ? '' : 's'} ${windowWordOf(range)}`
+                : `${active.length} of ${chats.length} chat runs ${windowWordOf(range)}`
             }
             data={{ 'data-count': active.length + liveCount, 'data-live': liveCount }}
           >
@@ -402,7 +406,9 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
               className="w-full text-left rounded-2xl px-5 py-4 transition-colors"
               style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
             >
-              <p className="text-sm font-mono truncate">{v.session.problem}</p>
+              <p className="text-sm font-mono truncate" title={v.session.problem}>
+                {humanTitle(v.session.problem)}
+              </p>
               <p className="text-xs mt-1 font-mono" style={{ color: 'var(--ink-dim)' }}>
                 {v.session.id.slice(0, 8)} · {v.session.status}
               </p>

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { SteeringRule, SteeringType } from '../api/steering.js';
+import { useDismissable } from '../hooks/useDismissable.js';
 import { AuthorPanel } from './SteeringAuthorPanel.js';
 import { SteeringImportPanel } from './SteeringImportPanel.js';
 import { SteeringRuleFormModal } from './SteeringRuleForm.js';
@@ -31,16 +32,13 @@ export function SteeringAddMenu({ type, rules, onSaved, onRulesChanged }: {
   const [menuOpen, setMenuOpen] = useState(false);
   const [flow, setFlow] = useState<Flow | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // The MakePicker grammar: a click outside the anchored menu closes it.
-  useEffect(() => {
-    if (!menuOpen) return;
-    function onOutside(e: MouseEvent): void {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    }
-    document.addEventListener('mousedown', onOutside);
-    return () => document.removeEventListener('mousedown', onOutside);
-  }, [menuOpen]);
+  // The overlay contract (usability review #10): Escape closes the menu and
+  // returns focus to the Add trigger; a click outside closes it too. This menu
+  // was the live-verified gap — it survived Escape while the drawer honored it.
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  useDismissable(menuOpen, closeMenu, menuRef, triggerRef);
 
   const pick = (f: Flow): void => {
     setMenuOpen(false);
@@ -65,6 +63,7 @@ export function SteeringAddMenu({ type, rules, onSaved, onRulesChanged }: {
     <div className="flex flex-col gap-2">
       <div ref={menuRef} className="relative self-start">
         <button
+          ref={triggerRef}
           data-testid="steering-add-menu"
           type="button"
           aria-haspopup="menu"
@@ -87,7 +86,7 @@ export function SteeringAddMenu({ type, rules, onSaved, onRulesChanged }: {
             }}
           >
             {item('steering-add-open', 'Add individual', 'One rule, the full form — saved on this page’s type', 'form')}
-            {item('steering-import-open', 'Import', 'A .md doctrine doc or a .json rule batch', 'import')}
+            {item('steering-import-open', 'Import', 'A Markdown rules doc or a .json rule batch', 'import')}
             {item('steering-author-open', 'Add with chat', 'A governed run drafts rules and stops at a propose gate', 'author')}
           </div>
         )}

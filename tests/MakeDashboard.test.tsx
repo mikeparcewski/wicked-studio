@@ -111,9 +111,20 @@ describe('the corpus label + fan-out gesture (§4.2.2, EC24)', () => {
     );
     expect(screen.queryByTestId('make-corpus-why-popover')).toBeNull();
     fireEvent.click(screen.getByTestId('make-corpus-why'));
+    // Quick win #5: plain words — no bridge internals in the popover.
     expect(screen.getByTestId('make-corpus-why-popover').textContent).toContain(
-      "Documents live behind each project's bridge; the studio lists what it",
+      'Documents load per project',
     );
+  });
+
+  it('Escape closes the why popover and returns focus to its trigger (review #10 overlay contract)', () => {
+    dash();
+    const trigger = screen.getByTestId('make-corpus-why');
+    fireEvent.click(trigger);
+    expect(screen.getByTestId('make-corpus-why-popover')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('make-corpus-why-popover')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('fires ZERO doc requests on render; the fan-out click fires exactly P (non-default projects)', async () => {

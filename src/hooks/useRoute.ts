@@ -17,7 +17,13 @@ import { isTestingSubPage } from '../api/testing.js';
 // The orphaned `coverage` and `domain` settings panels retired in the same wave:
 // their paths parse to `system` and `useRetiredSettingsRedirect` rewrites the
 // address onto `/system`.
-export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make';
+// `not-found` is the honest dead-address state (usability review #4): an address
+// that matches NO page renders a not-found view that PRESERVES the typed URL and
+// offers the way out — it never silently normalizes onto a nearby default. Only
+// the RETIRED addresses (wiki/rules/policies, coverage/domain, the flat
+// campaigns, the bare /runs listing) keep their redirects: those are moves with
+// a known destination, not typos.
+export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'not-found';
 
 const PANELS: Panel[] = ['runs', 'workflows', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
 
@@ -196,10 +202,13 @@ function parse(pathname: string): Route {
   }
   // `/steering[/:type]` — the STEERING surface: one page component, parameterized by type.
   // The bare `/steering` address IS the landing (the seven type cards); an address that names
-  // an invalid type (a typo'd `/steering/foo`) parses with `steeringType: null` too, and
-  // `useSteeringRedirect` replaces it with the landing's real URL.
+  // an INVALID type (a typo'd `/steering/foo`) is a dead address — the not-found view, never a
+  // silent swap onto the landing (usability review #4).
   if (first === 'steering') {
-    return route({ panel: 'steering', steeringType: isSteeringType(second) ? second : null });
+    if (!second) return route({ panel: 'steering', steeringType: null });
+    return isSteeringType(second)
+      ? route({ panel: 'steering', steeringType: second })
+      : route({ panel: 'not-found' });
   }
   // The RETIRED governance addresses: `/wiki` (the old Architecture Wiki page), `/rules` (the
   // old RuleManager), and `/policies` (the old policies settings panel — merged into steering
@@ -223,7 +232,12 @@ function parse(pathname: string): Route {
     if (second === 'campaigns' && third) {
       return route({ panel: 'testing', testingPage: 'campaigns', campaignId: safeDecode(third) });
     }
-    return route({ panel: 'testing', testingPage: isTestingSubPage(second) ? second : null });
+    // Bare `/testing` is a parent path with one honest home (Harness) — it keeps its redirect.
+    // A typo'd sub-page (`/testing/harnes`) is a dead address: not-found, never a silent swap.
+    if (!second) return route({ panel: 'testing', testingPage: null });
+    return isTestingSubPage(second)
+      ? route({ panel: 'testing', testingPage: second })
+      : route({ panel: 'not-found' });
   }
   // The RETIRED flat campaign addresses: `/campaigns` and `/campaigns/:id` fold into the
   // Testing surface — parsed here so the pages render instantly, redirected (replace) by
@@ -261,9 +275,15 @@ function parse(pathname: string): Route {
   if ((PANELS as string[]).includes(first) && first !== 'runs') {
     return route({ panel: first as Panel });
   }
-  if (second === 'new') return route({ panel: 'runs', showLaunch: true });
-  if (second) return route({ panel: 'runs', runId: safeDecode(second) });
-  return route({ panel: 'runs' });
+  // `/runs[...]` — the run detail / launch form (and the retired bare listing,
+  // which useLegacyRedirect replaces with /work). ONLY `/runs` reaches these
+  // arms: a garbage top-level address is a dead address, not a run list.
+  if (first === 'runs') {
+    if (second === 'new') return route({ panel: 'runs', showLaunch: true });
+    if (second) return route({ panel: 'runs', runId: safeDecode(second) });
+    return route({ panel: 'runs' });
+  }
+  return route({ panel: 'not-found' });
 }
 
 /** `replace` swaps the current history entry — used by redirects so Back never re-enters them. */

@@ -9,7 +9,9 @@ import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
 import { VideoStoryboard } from './components/VideoStoryboard.js';
+import { NotFoundPage } from './components/NotFoundPage.js';
 import { ProjectDashboard } from './components/ProjectDashboard.js';
+import { SkipLink } from './components/SkipLink.js';
 import { ProjectShell } from './components/ProjectShell.js';
 import { ProjectDetailPage } from './components/ProjectDetailPage.js';
 import { ProjectsPage } from './components/ProjectsPage.js';
@@ -415,6 +417,15 @@ export function App(): React.ReactElement {
 
   // Center panel content based on route
   function renderCenter(): React.ReactElement {
+    // A dead address (usability review #4): the honest not-found view. Checked
+    // FIRST — no redirect hook fires for this panel, so the typed URL stays.
+    if (panel === 'not-found') {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <NotFoundPage pathname={pathname} navigate={navigate} />
+        </div>
+      );
+    }
     // The project shell owns every `/p/*` route and is checked FIRST — the panel parse
     // below is untouched and still owns the flat cross-project lists and side panels.
     if (projectId !== null && mode !== null) {
@@ -457,6 +468,7 @@ export function App(): React.ReactElement {
           <SteeringPage
             type={steeringType !== null && isSteeringType(steeringType) ? steeringType : null}
             navigate={navigate}
+            search={search}
           />
         </div>
       );
@@ -584,6 +596,9 @@ export function App(): React.ReactElement {
     // with it the version strip's proximity-sensor band, which ends at the
     // canvas edge) ends ABOVE the bar. Nothing is ever covered while collapsed.
     <div className="flex h-screen overflow-hidden bg-surface-base" style={{ paddingBottom: RUNS_BAR_PX }}>
+      {/* The FIRST tabbable element (usability review #10): one Tab reaches a
+          jump to the main content instead of a page's top-right Refresh. */}
+      <SkipLink />
       <LeftSidebar
         runs={runs}
         navigate={navigate}
@@ -592,7 +607,7 @@ export function App(): React.ReactElement {
         immersive={immersive}
       />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div id="main" tabIndex={-1} className="flex flex-1 overflow-hidden" style={{ outline: 'none' }}>
         {renderCenter()}
       </div>
 

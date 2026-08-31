@@ -32,21 +32,49 @@ const SHORT_ID = 6;
  *  palette can clip match-highlight positions to the intent it displays. */
 export const INTENT_MAX = 40;
 
+/** The default title budget where a list has room for a real headline
+ *  (usability review #2: word-boundary trim at ~64 chars). */
+export const HUMAN_TITLE_MAX = 64;
+
 export function runShortId(id: string): string {
   return id.slice(0, SHORT_ID);
 }
 
 /**
- * §7.5's synthesized display title: `truncated intent · short-id · #ordinal`.
+ * The ONE human-title derivation (usability review #2: raw prompt text was the
+ * run title on Make, Work, Home's unfiled shelf and the run header — five
+ * identical 300-char rows were indistinguishable). Client-side, zero wires:
+ *
+ *  - the FIRST sentence/clause is the title (cut at `.`/`!`/`?`/`:`/`;`
+ *    followed by whitespace, or at the first line break);
+ *  - still too long → word-boundary trim to ~`max` chars plus an ellipsis;
+ *  - the full intent moves to the hover title / detail, never the row.
+ *
+ * The fragment before the ellipsis stays a literal PREFIX of the raw intent
+ * (only trailing whitespace/punctuation is dropped), so the palette's
+ * match-highlight positions — computed against the raw problem — keep landing
+ * on the characters they name.
+ */
+export function humanTitle(intent: string, max: number = HUMAN_TITLE_MAX): string {
+  const stop = intent.search(/[.!?:;](?=\s)|\n/);
+  let clause = (stop === -1 ? intent : intent.slice(0, stop)).trimEnd();
+  if (clause === '') clause = intent.trimEnd();
+  if (clause.length <= max) return clause;
+  const cut = clause.slice(0, max + 1);
+  const atWord = cut.lastIndexOf(' ');
+  const head = (atWord > 0 ? cut.slice(0, atWord) : cut.slice(0, max)).replace(/[\s,;:·—-]+$/, '');
+  return `${head}…`;
+}
+
+/**
+ * §7.5's synthesized display title: `intent clause · short-id · #ordinal`.
  * The attempt ordinal is 1-based off the DTO's 0-based `attempt`, so five
  * identical prompts stop being quintuplets — the short-id alone already
- * distinguishes them; the ordinal names reworks.
+ * distinguishes them; the ordinal names reworks. The intent half goes through
+ * {@link humanTitle} — one derivation, not four copies.
  */
 export function runTitle(session: AgentSession, intentMax: number = INTENT_MAX): string {
-  const intent = session.problem.length > intentMax
-    ? `${session.problem.slice(0, intentMax)}…`
-    : session.problem;
-  return `${intent} · ${runShortId(session.id)} · #${session.attempt + 1}`;
+  return `${humanTitle(session.problem, intentMax)} · ${runShortId(session.id)} · #${session.attempt + 1}`;
 }
 
 /**

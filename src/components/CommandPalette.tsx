@@ -16,7 +16,7 @@ import { decideGate, GATE_HASH } from '../board/gateActions.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { Modal } from './Modal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
-import { INTENT_MAX, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
+import { humanTitle, INTENT_MAX, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
 
 /**
@@ -320,8 +320,11 @@ export function CommandPalette({
         // match stays on the full problem (prose corpus, §5.2). Highlight
         // positions survive only when they land inside the displayed intent
         // fragment — a hit past the truncation is a real hit with no honest
-        // highlight, never a misplaced one.
-        const intentLen = Math.min(v.session.problem.length, INTENT_MAX);
+        // highlight, never a misplaced one. The fragment length comes from the
+        // ACTUAL clause humanTitle displays (a literal prefix of the problem),
+        // not the raw INTENT_MAX budget the clause may stop short of.
+        const shownIntent = humanTitle(v.session.problem, INTENT_MAX);
+        const intentLen = shownIntent.endsWith('…') ? shownIntent.length - 1 : shownIntent.length;
         hits.push({
           en: {
             id: `s-run-${id}`,

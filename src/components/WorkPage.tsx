@@ -3,7 +3,7 @@ import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { outcomeOf } from '../board/metrics.js';
 import { RunLink } from './RunLink.js';
-import { useTimeRange } from '../hooks/useTimeRange.js';
+import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 
 type StatusTab = 'all' | 'active' | 'completed' | 'failed' | 'cancelled';
@@ -93,15 +93,18 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
 
   const windowedRuns = useMemo(() => filterByRange(allWorkRuns), [allWorkRuns, filterByRange]);
 
+  // Search looks at the FULL set (usability review #9): typing a query lifts
+  // the recency window, so a match cannot hide behind "last 30". The window
+  // applies only to the unsearched browse view.
   const normalizedQuery = query.toLowerCase();
   const searched = useMemo(
     () => query
-      ? windowedRuns.filter(v => v.session.problem.toLowerCase().includes(normalizedQuery))
+      ? allWorkRuns.filter(v => v.session.problem.toLowerCase().includes(normalizedQuery))
       : windowedRuns,
-    [windowedRuns, query, normalizedQuery],
+    [allWorkRuns, windowedRuns, query, normalizedQuery],
   );
 
-  // ── Metrics (scoped to time window, before search filter) ────────────────
+  // ── Metrics (scoped to the recency window, before search filter) ─────────
   const metrics = useMemo(() => {
     const total = windowedRuns.length;
     const active = windowedRuns.filter(v => isActiveStatus(v.session.status)).length;
@@ -110,6 +113,12 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
     const successRate = terminal > 0
       ? `${Math.round((completed / terminal) * 100)}%`
       : '—';
+    // Threshold health (usability review #9: "SUCCESS RATE 30%" rendered in
+    // success-green): green only when actually healthy, amber borderline, red
+    // failing; no terminal runs = no verdict.
+    const ratio = terminal > 0 ? completed / terminal : null;
+    const successHealth: 'good' | 'warn' | 'bad' | 'none' =
+      ratio === null ? 'none' : ratio >= 0.8 ? 'good' : ratio >= 0.5 ? 'warn' : 'bad';
 
     // Top workflow by frequency (work sessions only)
     const freq = new Map<string, number>();
@@ -127,7 +136,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
       if (count > topCount) { topCount = count; topWorkflow = wf; }
     });
 
-    return { total, active, successRate, topWorkflow };
+    return { total, active, successRate, successHealth, topWorkflow };
   }, [windowedRuns]);
 
   const activeGroup = searched.filter(v => isActiveStatus(v.session.status));
@@ -162,8 +171,13 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
     : tab === 'completed' ? isCompletedStatus(v.session.status)
     : tab === 'failed' ? isFailedStatus(v.session.status)
     : isCancelledStatus(v.session.status);
+  // While a query is typed the search already covers the FULL set — nothing is
+  // window-hidden, so neither the note nor the chip may claim otherwise.
   const windowedTabCount = windowedRuns.filter(inTabGroup).length;
-  const hiddenByRange = allWorkRuns.filter(inTabGroup).length - windowedTabCount;
+  const hiddenByRange = query ? 0 : allWorkRuns.filter(inTabGroup).length - windowedTabCount;
+  // The first-class chip's count (review #9): everything the window holds back
+  // across ALL statuses — a peer of the status tabs, not a footnote.
+  const hiddenTotal = query ? 0 : allWorkRuns.length - windowedRuns.length;
 
   return (
     <div className="flex flex-col h-full" style={{ color: 'var(--ink-high)' }}>
@@ -195,16 +209,30 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
         </button>
       </div>
 
-      {/* Metrics row */}
+      {/* Metrics row — scoped to the honest recency window, and each label
+          SAYS so ("last 30 runs", never a fabricated "30d"). */}
       <div className="px-8 pb-4 grid gap-3" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         {([
-          { label: 'Total Runs',    value: String(metrics.total),       accent: undefined },
-          { label: 'Active',        value: String(metrics.active),       accent: 'var(--status-run)' },
-          { label: 'Success Rate',  value: metrics.successRate,          accent: 'var(--status-run)' },
-          { label: 'Top Workflow',  value: metrics.topWorkflow,          accent: undefined },
+          { label: `Runs (${rangeWord(range)})`,   value: String(metrics.total),  accent: undefined,      testid: 'work-metric-total',   health: undefined },
+          { label: 'Active',                       value: String(metrics.active), accent: 'var(--status-run)', testid: 'work-metric-active',  health: undefined },
+          // Threshold color (review #9): green ONLY when actually healthy.
+          {
+            label: `Success rate (${rangeWord(range)})`,
+            value: metrics.successRate,
+            accent:
+              metrics.successHealth === 'good' ? 'var(--status-done)'
+              : metrics.successHealth === 'warn' ? 'var(--status-gate)'
+              : metrics.successHealth === 'bad' ? 'var(--status-fail)'
+              : undefined,
+            testid: 'work-success-rate',
+            health: metrics.successHealth,
+          },
+          { label: 'Top Workflow', value: metrics.topWorkflow, accent: undefined, testid: 'work-metric-top', health: undefined },
         ] as const).map(s => (
           <div
             key={s.label}
+            data-testid={s.testid}
+            {...(s.health === undefined ? {} : { 'data-health': s.health })}
             className="rounded-xl px-4 py-3"
             style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
           >
@@ -268,6 +296,21 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
             {t.label} {counts[t.id]}
           </button>
         ))}
+        {/* The window's held-back rows as a FIRST-CLASS chip (review #9), a
+            peer of the status tabs — click reveals everything. */}
+        {hiddenTotal > 0 && (
+          <button
+            type="button"
+            data-testid="work-hidden-chip"
+            data-hidden={hiddenTotal}
+            onClick={() => setRange('all')}
+            className="rounded-full px-3 py-1 text-xs font-mono"
+            style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+            title={`the ${rangeWord(range)} window holds back ${hiddenTotal} older run${hiddenTotal === 1 ? '' : 's'} — click to show all`}
+          >
+            +{hiddenTotal} older · show all
+          </button>
+        )}
         <div className="flex-1" />
         {/* Archived is orthogonal to status: a write-off toggle, not a fifth status tab. */}
         <button
@@ -300,23 +343,17 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
             style={{ color: 'var(--ink-muted)', margin: 0 }}
           >
             {hiddenByRange} more{tab === 'all' ? '' : ` ${tab}`} run{hiddenByRange === 1 ? '' : 's'} sit
-            {hiddenByRange === 1 ? 's' : ''} outside this {range} view
-            {range !== '90d' ? (
-              <>
-                {' — '}
-                <button
-                  type="button"
-                  data-testid="work-range-widen"
-                  onClick={() => setRange('90d')}
-                  className="underline"
-                  style={{ color: 'var(--ink-muted)', background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer' }}
-                >
-                  widen to 90d
-                </button>
-              </>
-            ) : (
-              ' (the view is positional — newest first)'
-            )}
+            {hiddenByRange === 1 ? 's' : ''} outside the {rangeWord(range)}-runs window
+            {' — '}
+            <button
+              type="button"
+              data-testid="work-range-widen"
+              onClick={() => setRange('all')}
+              className="underline"
+              style={{ color: 'var(--ink-muted)', background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer' }}
+            >
+              show all
+            </button>
           </p>
         )}
         {tab === 'all' ? (

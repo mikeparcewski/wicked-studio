@@ -101,13 +101,24 @@ describe('Evals — the run', () => {
     expect(await screen.findByTestId('testing-evals-summary')).toHaveTextContent('3 samples');
     expect(runBody).toEqual({ type: 'security', corpus: 'evals:dev-behaviors' });
 
+    // The qe finding: "caught" split into its two honest halves (S-1 is a bad
+    // sample the rules BLOCKED; no good sample was caught here), and the gap
+    // count framed as uncovered behaviors — work to do, not red failure.
     const summary = screen.getByTestId('testing-evals-summary');
-    expect(summary).toHaveTextContent('1 caught');
-    expect(summary).toHaveTextContent('1 gaps');
+    expect(summary).toHaveTextContent('1 blocked');
+    expect(summary).toHaveTextContent('0 passed');
+    expect(summary).toHaveTextContent('1 uncovered behavior');
     expect(summary).toHaveTextContent('1 false positives');
+
+    // The report header names its corpus (provenance, qe finding).
+    expect(screen.getByTestId('testing-evals-provenance')).toHaveTextContent(
+      'corpus: evals:dev-behaviors · 3 samples',
+    );
 
     const rows = screen.getAllByTestId('testing-evals-row');
     expect(rows.map((r) => r.getAttribute('data-verdict'))).toEqual(['caught', 'gap', 'false_positive']);
+    // The verdict WORD distinguishes a blocked bad sample from a passed good one.
+    expect(rows[0]).toHaveTextContent('blocked');
     expect(rows[0]).toHaveTextContent('POL-101');
     // A sample that fired nothing says so — never a blank cell.
     expect(rows[1]).toHaveTextContent('—');
@@ -156,6 +167,23 @@ describe('Evals — the run', () => {
     // Toggling again collapses.
     await user.click(screen.getByTestId('testing-evals-gap-toggle'));
     expect(screen.queryByTestId('testing-evals-nearest')).toBeNull();
+  });
+
+  it('a nearest-rule hint is a LINK into Steering that deep-links the rule drawer (qe finding)', async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    wire({ '/testing/evals/run': () => Promise.resolve(REPORT) });
+    render(<TestingPage page="evals" campaignId={null} runs={[]} navigate={navigate} />);
+
+    await user.click(screen.getByTestId('testing-evals-run'));
+    await screen.findByTestId('testing-evals-table');
+    await user.click(screen.getByTestId('testing-evals-gap-toggle'));
+
+    const links = await screen.findAllByTestId('testing-evals-nearest-link');
+    expect(links[0]).toHaveAttribute('href', '/steering/security?rule=POL-104');
+    await user.click(links[0]!);
+    // The sample's type page, with ?rule opening that rule's drawer.
+    expect(navigate).toHaveBeenCalledWith('/steering/security?rule=POL-104');
   });
 
   it('a gap whose nearest_rules is EMPTY says "nothing nearby" in words — never a blank panel', async () => {
