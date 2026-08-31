@@ -15,11 +15,18 @@ import { version as pkgVersion } from '../package.json';
 afterEach(cleanup);
 
 describe('SettingsShortcutRows', () => {
-  it('carries EVERYTHING the retired AppChrome dropdown carried — Theme and System included', () => {
+  it('carries the retired AppChrome dropdown entries MINUS the two Steering absorbed', () => {
     // The §1.2 contract: the rows hold the dropdown's entries, so both the
     // /system Settings entry AND the /theme entry (PR #64) must be present.
     expect(SETTINGS_ITEMS).toContainEqual({ label: 'System', path: '/system' });
     expect(SETTINGS_ITEMS).toContainEqual({ label: 'Theme', path: '/theme' });
+    // The STEERING program: Rules (/rules) and Arch Wiki (/wiki) retired into
+    // the Steering primary path — their rows are GONE from Settings, and the
+    // old addresses redirect to /steering/architecture.
+    expect(SETTINGS_ITEMS.map((i) => i.label)).not.toContain('Rules');
+    expect(SETTINGS_ITEMS.map((i) => i.label)).not.toContain('Arch Wiki');
+    expect(SETTINGS_ITEMS.map((i) => i.path)).not.toContain('/rules');
+    expect(SETTINGS_ITEMS.map((i) => i.path)).not.toContain('/wiki');
 
     render(<SettingsShortcutRows navigate={() => {}} />);
     expect(screen.getByRole('menu')).toBeInTheDocument();

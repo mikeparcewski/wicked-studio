@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
+import { isSteeringType } from '../api/steering.js';
 
 // `make` is the round-4 primary-path dashboard route (DES-FEEDBACK-003 §2.1) —
 // a CLIENT route (a new panel id in this union), not a wire. Slice M registers
 // it with a placeholder surface; the real dashboard is slice O (§4.2).
-export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'rules' | 'wiki' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'campaigns' | 'campaign-detail';
+// `steering` is the STEERING program's surface (`/steering/:type`) — the panels
+// it replaced (`wiki`, `rules`) are gone from this union; their old paths parse
+// to `steering` with a null type, which `useSteeringRedirect` normalizes.
+export type Panel = 'home' | 'runs' | 'coverage' | 'workflows' | 'domain' | 'policies' | 'steering' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'campaigns' | 'campaign-detail';
 
-const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'rules', 'wiki', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make', 'campaigns'];
+const PANELS: Panel[] = ['runs', 'coverage', 'workflows', 'domain', 'policies', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make', 'campaigns'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
@@ -46,6 +50,10 @@ interface Route {
   chronicleView: boolean;
   /** Non-null only on `/campaigns/:id` (DES-CAMPAIGN-001 §3.5 / TH-14) — the campaign label. */
   campaignId: string | null;
+  /** The steering sub-page's type on `/steering/:type`. `null` while panel === 'steering' means
+   *  an address that names no valid type (bare `/steering`, the legacy `/wiki` and `/rules`) —
+   *  `useSteeringRedirect` replaces those with the Architecture page's real URL. */
+  steeringType: string | null;
 }
 
 /** Route options a caller can override; everything else takes its inert default. */
@@ -61,6 +69,7 @@ const INERT: Route = {
   artifactId: null,
   chronicleView: false,
   campaignId: null,
+  steeringType: null,
 };
 
 function route(over: Partial<Route>): Route {
@@ -167,6 +176,18 @@ function parse(pathname: string): Route {
       runId: mode === 'build' || mode === 'chat' ? artifactId : null,
       chatMode: mode === 'chat',
     });
+  }
+  // `/steering/:type` — the STEERING surface: one page component, parameterized by type.
+  // An address that names no valid type (bare `/steering`, a typo'd type) parses with
+  // `steeringType: null`; `useSteeringRedirect` replaces it with the Architecture page.
+  if (first === 'steering') {
+    return route({ panel: 'steering', steeringType: isSteeringType(second) ? second : null });
+  }
+  // The RETIRED governance addresses: `/wiki` (the old Architecture Wiki page) and `/rules`
+  // (the old RuleManager) both fold into Steering/Architecture — parsed here so the pages
+  // render instantly, redirected (replace) so bookmarks land on the surface's real URL.
+  if (first === 'wiki' || first === 'rules') {
+    return route({ panel: 'steering', steeringType: null });
   }
   // `/campaigns/:id` — one campaign's scoreboard (DES-CAMPAIGN-001 §3.5 / TH-14); the bare
   // `/campaigns` list resolves through the PANELS catch-all below, same as `/repos`.

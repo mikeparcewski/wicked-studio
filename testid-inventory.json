@@ -11,9 +11,9 @@
   "studioVersion": "0.4.2",
   "counts": {
     "files": 96,
-    "occurrences": 710,
-    "static": 602,
-    "dynamic": 38,
+    "occurrences": 744,
+    "static": 635,
+    "dynamic": 39,
     "computed": 5
   },
   "static": [
@@ -2442,6 +2442,12 @@
       ]
     },
     {
+      "testId": "rail-steering-type",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
       "testId": "rail-view-all",
       "files": [
         "src/components/LeftSidebar.tsx"
@@ -2812,6 +2818,12 @@
       ]
     },
     {
+      "testId": "steering-add-open",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
       "testId": "steering-amend",
       "files": [
         "src/components/SteeringGate.tsx"
@@ -2830,6 +2842,66 @@
       ]
     },
     {
+      "testId": "steering-author-close",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-author-error",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-author-file-chip",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-author-files",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-author-instructions",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-author-launch",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-author-open",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-author-panel",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-author-unsupported",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-author-waiting",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
       "testId": "steering-cancel",
       "files": [
         "src/components/SteeringGate.tsx"
@@ -2839,6 +2911,18 @@
       "testId": "steering-chip",
       "files": [
         "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "steering-edit-open",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-effect-badge",
+      "files": [
+        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -2854,9 +2938,147 @@
       ]
     },
     {
+      "testId": "steering-form-cancel",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-effect",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-error",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-id",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-rule-type",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-save",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-severity",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-statement",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-trigger",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-weight",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
       "testId": "steering-gate",
       "files": [
         "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "steering-health",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-health-error",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-health-loading",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-health-unsupported",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-import-busy",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-import-close",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-import-error",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-import-file",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-import-open",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-import-panel",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-import-result",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-import-summary",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-import-unsupported",
+      "files": [
+        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -2866,9 +3088,27 @@
       ]
     },
     {
+      "testId": "steering-page",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
       "testId": "steering-prompt",
       "files": [
         "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "steering-provenance-chat",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-provenance-ui",
+      "files": [
+        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -2878,9 +3118,123 @@
       ]
     },
     {
+      "testId": "steering-retire-cancel",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-retire-confirm",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-retire-confirm-input",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-retire-error",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-retire-modal",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-retire-open",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-retire-reason",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-retired-note",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-detail",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-form",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-retired-chip",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-retired-note",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-row",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-weight-chip",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rules-empty",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rules-error",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rules-loading",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-saved-note",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
       "testId": "steering-scope-note",
       "files": [
         "src/components/SteeringTimeline.tsx"
+      ]
+    },
+    {
+      "testId": "steering-seed-command",
+      "files": [
+        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -2890,9 +3244,33 @@
       ]
     },
     {
+      "testId": "steering-tab",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-tabs",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
       "testId": "steering-timeline",
       "files": [
         "src/components/SteeringTimeline.tsx"
+      ]
+    },
+    {
+      "testId": "steering-unseeded",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-verdict",
+      "files": [
+        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -3357,186 +3735,6 @@
       ]
     },
     {
-      "testId": "wiki-about",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-about-toggle",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-group-toggle",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-groups-unsupported",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-health",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-health-error",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-health-loading",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-health-unsupported",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-page",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-recall-unavailable",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-retire-cancel",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-retire-confirm",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-retire-confirm-input",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-retire-error",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-retire-modal",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-retire-open",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-retire-reason",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-retired-note",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-rule-detail",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-rule-retired-chip",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-rule-retired-note",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-rule-row",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-rules-empty",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-rules-error",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-rules-loading",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-ruleset-group",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-runbook-link",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-seed-command",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-unseeded",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
-      "testId": "wiki-verdict",
-      "files": [
-        "src/components/WikiPage.tsx"
-      ]
-    },
-    {
       "testId": "wizard-cancel",
       "files": [
         "src/components/DemoWizard.tsx"
@@ -3674,6 +3872,12 @@
       "pattern": "*-canvas-retry",
       "files": [
         "src/components/SurfaceState.tsx"
+      ]
+    },
+    {
+      "pattern": "*-chip",
+      "files": [
+        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -3911,7 +4115,7 @@
       "expression": "testid",
       "files": [
         "src/components/CampaignScoreboard.tsx",
-        "src/components/WikiPage.tsx"
+        "src/components/SteeringPage.tsx"
       ]
     },
     {

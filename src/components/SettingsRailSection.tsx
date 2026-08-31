@@ -13,15 +13,16 @@ import { version } from '../../package.json';
  * settings surface (§1.2: "does NOT duplicate the settings route").
  */
 
-/** The exact entries the AppChrome dropdown exposed (SettingsMenu, retired). */
+/** The AppChrome-dropdown entries (SettingsMenu, retired) MINUS the two the STEERING program
+ *  retired into the Steering primary path: `Rules` (/rules) and `Arch Wiki` (/wiki) — both
+ *  addresses now redirect to /steering/architecture, and their surface lives under the
+ *  Steering heading, not here. Policies stays until the crew-side policy shim retires. */
 export const SETTINGS_ITEMS: { label: string; path: string }[] = [
   { label: 'Theme', path: '/theme' },
   { label: 'Coverage', path: '/coverage' },
   { label: 'Domain', path: '/domain' },
   { label: 'Workflows', path: '/workflows' },
   { label: 'Policies', path: '/policies' },
-  { label: 'Rules', path: '/rules' },
-  { label: 'Arch Wiki', path: '/wiki' },
   { label: 'System', path: '/system' },
 ];
 
