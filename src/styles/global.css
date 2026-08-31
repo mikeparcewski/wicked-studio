@@ -211,3 +211,26 @@ code, pre, .font-mono {
   margin-left: 4px;
 }
 .wk-feed-link:hover::after { opacity: 1; }
+
+/* The skip link (usability review #10): the app's first tabbable element.
+   Off-canvas until keyboard focus lands on it, then a visible pill at the
+   top-left — one Tab from a fresh load reaches "Skip to main content". */
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 12px;
+  z-index: 100;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.1s ease-out;
+}
+.skip-link:focus {
+  top: 12px;
+  outline: 2px solid var(--accent-dim);
+  outline-offset: 2px;
+}

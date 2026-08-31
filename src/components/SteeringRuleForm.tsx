@@ -298,7 +298,7 @@ export function SteeringRuleFormModal({ type, rules, initial, onClose, onSaved }
         />
         <ChipsInput
           testid="steering-form-excludes"
-          label="Excludes (exclusion twin)"
+          label="Excludes (phases/tools this rule skips)"
           values={form.excludes}
           onChange={(v) => onChange({ ...form, excludes: v })}
           placeholder="add and press Enter"
@@ -322,7 +322,7 @@ export function SteeringRuleFormModal({ type, rules, initial, onClose, onSaved }
             </select>
           </label>
           <label className="flex flex-1 flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-            Trigger regex (optional; needs an effect)
+            Trigger text (optional; needs an effect)
             <input
               data-testid="steering-form-trigger"
               type="text"
@@ -330,7 +330,7 @@ export function SteeringRuleFormModal({ type, rules, initial, onClose, onSaved }
               disabled={form.effect === ''}
               spellCheck={false}
               onChange={(e) => onChange({ ...form, triggerContains: e.target.value })}
-              placeholder="contains — tested over the evaluated context"
+              placeholder='e.g. "rm -rf" — the effect fires when the evaluated context contains this'
               className="rounded px-2 py-1 font-mono text-[11px] focus:outline-none disabled:opacity-50"
               style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             />

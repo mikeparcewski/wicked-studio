@@ -131,8 +131,11 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                       {g.combined ? 'ALLOW' : 'DENY'}
                     </span>
                     <span style={{ color: 'var(--ink-muted)' }}>
-                      {' · '}{gateDecider(g)}
-                      {g.criterion ? ` · ${g.criterion}` : ' · (ungated)'}
+                      {/* Usability review #7: "ALLOW · ungated · (ungated)" said the same
+                          nothing twice. An ungated allow is ONE honest line. */}
+                      {g.combined && gateDecider(g) === 'ungated' && !g.criterion
+                        ? ' · allowed — no policy applied'
+                        : <>{' · '}{gateDecider(g)}{g.criterion ? ` · ${g.criterion}` : ' · no criterion recorded'}</>}
                     </span>
                   </p>
                   {g.hasDeterministicFloor && (
@@ -146,16 +149,16 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                       {g.agentReasoning ? ` — ${g.agentReasoning}` : ''}
                     </p>
                   )}
-                  {g.evaluatorPass !== null && (
+                  {/* A vacuous pass (true with zero policies) renders NO evaluator line:
+                      the headline above already says "allowed — no policy applied", and
+                      repeating it dressed as an evaluator verdict is the theater review
+                      #7 flagged. A fail, or a pass that names its policies, still shows. */}
+                  {g.evaluatorPass !== null && !(g.evaluatorPass && g.evaluatorPolicies.length === 0) && (
                     <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                       evaluator: {g.evaluatorPass ? 'pass' : 'fail'}
-                      {/* Name the policies that ran, or say plainly that none did — "pass" on its
-                          own reads as an enforced approval when it is a default-allow. */}
                       {g.evaluatorPolicies.length > 0
                         ? ` — ${g.evaluatorPolicies.join(', ')}`
-                        : g.evaluatorPass
-                          ? ' (no policy applied)'
-                          : ''}
+                        : ''}
                     </p>
                   )}
                   {g.denialReason && (

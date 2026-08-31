@@ -477,8 +477,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   BUILTIN_WORKFLOWS; the third `domain` phase was removed in FINDING-068 —
                   domain extraction is a separate downstream workflow). Don't re-add it here. */}
               {sourceMode === 'remote'
-                ? `Clones to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then runs the onboarding workflow as a governed run — writes the repo's code graph and annotates its clusters; typically minutes.`
-                : "Runs the onboarding workflow (index → annotate) as a governed run — writes the repo's code graph and annotates its clusters; typically minutes."}
+                ? `Clones to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then indexes the repository and annotates its code map so runs can navigate it — a tracked run you can watch; typically minutes.`
+                : 'Indexes the repository and annotates its code map so runs can navigate it — a tracked run you can watch; typically minutes.'}
             </p>
 
             {registerError && (

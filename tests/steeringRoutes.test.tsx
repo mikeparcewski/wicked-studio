@@ -41,9 +41,14 @@ describe('useRoute — /steering[/:type]', () => {
     }
   });
 
-  it('a bare or unknown-type /steering parses with steeringType null (the landing / its redirect)', () => {
+  it('a bare /steering parses with steeringType null — the landing IS the page', () => {
     expect(routeAt('/steering').current).toMatchObject({ panel: 'steering', steeringType: null });
-    expect(routeAt('/steering/bogus').current).toMatchObject({ panel: 'steering', steeringType: null });
+    expect(routeAt('/steering/').current).toMatchObject({ panel: 'steering', steeringType: null });
+  });
+
+  it('an unknown steering type is a DEAD address — not-found, never a silent swap (review #4)', () => {
+    expect(routeAt('/steering/bogus').current).toMatchObject({ panel: 'not-found' });
+    expect(routeAt('/steering/securty').current).toMatchObject({ panel: 'not-found' });
   });
 
   it('the retired /wiki, /rules and /policies addresses fold into the steering panel', () => {
@@ -72,12 +77,17 @@ describe('useSteeringRedirect', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('REPLACES the retired addresses and a typo’d type with the landing', () => {
-    for (const path of ['/wiki', '/rules', '/policies', '/steering/bogus']) {
+  it('REPLACES the retired addresses with the landing — a typo’d type is not-found instead, no redirect', () => {
+    for (const path of ['/wiki', '/rules', '/policies']) {
       const navigate = vi.fn();
       renderHook(() => useSteeringRedirect('steering', null, path, navigate));
       expect(navigate).toHaveBeenCalledWith('/steering', { replace: true });
     }
+    // `/steering/bogus` parses to the not-found panel (review #4), so this hook
+    // never sees `panel: 'steering'` for it and MUST leave the address alone.
+    const navigate = vi.fn();
+    renderHook(() => useSteeringRedirect('not-found', null, '/steering/bogus', navigate));
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('leaves a valid type alone, and every non-steering panel alone', () => {

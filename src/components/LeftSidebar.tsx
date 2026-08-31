@@ -15,6 +15,7 @@ import { HealthRailSection } from './HealthRailSection.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { NotificationBell } from './NotificationBell.js';
+import { humanTitle } from './runIdentity.js';
 import { ATTENTION_DOT } from './ProjectCard.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { phaseWord, RUN_DOT } from './RunsSection.js';
@@ -201,7 +202,7 @@ function RunRow({ view, onOpen }: { view: SessionView; onOpen: () => void }): Re
           className="truncate leading-tight"
           style={{ maxWidth: '24ch', fontSize: 'var(--text-xs)', color: S.ink, fontFamily: 'var(--font-sans)' }}
         >
-          {view.session.problem}
+          {humanTitle(view.session.problem)}
         </span>
         <span
           className="ml-auto shrink-0"

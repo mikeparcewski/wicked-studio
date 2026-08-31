@@ -16,7 +16,7 @@ import {
   type WikiMeta,
 } from '../api/wiki.js';
 import { SteeringAddMenu } from './SteeringAddMenu.js';
-import { SteeringHealth, type ScoreboardState } from './SteeringHealth.js';
+import { SteeringHealth, SteeringStoreHealth, type ScoreboardState } from './SteeringHealth.js';
 import { SteeringRuleDrawer } from './SteeringRuleDrawer.js';
 import { SteeringRuleFormModal } from './SteeringRuleForm.js';
 import { SteeringRuleList } from './SteeringRuleList.js';
@@ -44,10 +44,13 @@ import { SteeringTypeCards } from './SteeringTypeCards.js';
  * estate MCP stays read-only (AW-11).
  */
 
-export function SteeringPage({ type, navigate }: {
+export function SteeringPage({ type, navigate, search = '' }: {
   /** The routed steering type — null on the bare `/steering` landing. */
   type: SteeringType | null;
   navigate: (path: string) => void;
+  /** The URL search string — `?rule=<id>` deep-links a rule's drawer open
+   *  (the Evals gap rows link here, qe finding: hints became links). */
+  search?: string;
 }): React.ReactElement {
   const [scoreboard, setScoreboard] = useState<ScoreboardState>({ kind: 'loading' });
   const [meta, setMeta] = useState<WikiMeta | null>(null);
@@ -101,6 +104,14 @@ export function SteeringPage({ type, navigate }: {
     setRetiredNote(null);
   }, [type]);
 
+  // `?rule=<id>` deep-links a rule's drawer open (the Evals gap rows link
+  // here). Declared AFTER the type-reset effect so a cross-page navigation
+  // that carries both a new type and a rule id lands with the drawer open.
+  useEffect(() => {
+    const routed = new URLSearchParams(search).get('rule');
+    if (routed !== null && rules.some((r) => r.id === routed)) setSelectedId(routed);
+  }, [search, rules]);
+
   /** evidence_count join: the AW-23 per-rule evidence rows, when the scoreboard is served. */
   const evidenceOf = (id: string): { denial_claims: number; governs_evidence: number } | null => {
     if (scoreboard.kind !== 'loaded') return null;
@@ -143,6 +154,9 @@ export function SteeringPage({ type, navigate }: {
             browse and manage its rules.
           </p>
         </div>
+        {/* The store-wide verdict lives HERE, the one place it is actionable
+            (review #5) — its raw diagnostics fold behind a details toggle. */}
+        <SteeringStoreHealth state={scoreboard} />
         {rulesLoading ? (
           <p data-testid="steering-rules-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading rules…</p>
         ) : rulesError !== null ? (
@@ -158,9 +172,12 @@ export function SteeringPage({ type, navigate }: {
 
   // ── A type page (`/steering/:type`) ─────────────────────────────────────────────────────────
 
+  // The id alone selects (no type gate): the type-change effect above already
+  // resets a stale selection, and a `?rule=` deep link may name a rule filed
+  // under a neighbouring type — the drawer must still open for it.
   const selected = selectedId === null
     ? null
-    : rules.find((r) => r.id === selectedId && steeringTypeOf(r) === type) ?? null;
+    : rules.find((r) => r.id === selectedId) ?? null;
 
   // The EMPTY-STORE state keys on an EXPLICIT `seeded: false` from the meta route — a daemon
   // that cannot answer must not be accused of an unseeded store. It does NOT replace the Add
@@ -195,7 +212,14 @@ export function SteeringPage({ type, navigate }: {
         </button>
       </div>
 
-      <SteeringHealth state={scoreboard} type={type} />
+      {/* TYPE-scoped numbers only (review #5); an empty type page renders no
+          stats at all — the store-wide verdict + diagnostics live on the
+          landing, where they are actionable. */}
+      <SteeringHealth
+        state={scoreboard}
+        type={type}
+        typeRuleCount={rules.filter((r) => steeringTypeOf(r) === type).length}
+      />
 
       {unseeded && (
         <div

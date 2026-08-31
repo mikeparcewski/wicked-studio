@@ -210,10 +210,12 @@ export function parseProvenanceRef(ref: string): ParsedProvenanceRef {
 export type WikiVerdict = 'empty' | 'populated' | 'decaying' | 'unproven';
 
 export const VERDICT_COPY: Record<WikiVerdict, string> = {
-  empty: 'No active rules — the wiki is not populated.',
+  empty: 'No active rules yet.',
+  // Honest wording with the action a user can actually take (usability review
+  // #5: the old copy was alarming, unexplained, and pointed at nothing in-UI).
   decaying:
-    'Ingested once and drifting: unresolvable symbol refs or mostly-untyped doctrine. Re-run ingest/relink.',
-  populated: 'Typed, connected to code, and cited by enforcement — the wiki is alive.',
+    'Some rules point at code that no longer resolves, or most rules are missing a type. Re-import your rules docs (Import on any type page) to refresh the links.',
+  populated: 'Typed, connected to code, and cited by enforcement — the rules are alive.',
   unproven:
     'Rules exist but nothing proves they are wired: no live code links or enforcement evidence yet.',
 };

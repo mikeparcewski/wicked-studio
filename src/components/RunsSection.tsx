@@ -1,4 +1,5 @@
 import type { SessionStatus, SessionView } from '../api/types.js';
+import { humanTitle } from './runIdentity.js';
 
 /**
  * The rail's inline runs section (DES-FEEDBACK-001 §1.4, slice A): the five
@@ -91,7 +92,7 @@ export function RunsSection({ runs, runPath, navigate }: Props): React.ReactElem
                 fontFamily: 'var(--font-sans)',
               }}
             >
-              {view.session.problem}
+              {humanTitle(view.session.problem)}
             </span>
             <span
               data-testid="rail-run-phase"

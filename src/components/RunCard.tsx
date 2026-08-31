@@ -1,5 +1,6 @@
 import type { SessionStatus, SessionView } from '../api/types.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
+import { humanTitle } from './runIdentity.js';
 
 // Status metadata — colors speak the §2.6 status layer
 export const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
@@ -43,8 +44,13 @@ export function RunCard({ view, selected, onSelect }: Props): React.ReactElement
       {/* Same treatment as the board card, so a run reads identically on both surfaces. */}
       <LiveEdge state={edgeStateOf([session.status])} />
       <div className="flex justify-between items-start gap-2 mb-1">
-        <p className="font-semibold text-sm line-clamp-2 flex-1 font-mono" style={{ color: 'var(--ink-high)' }}>
-          {session.problem}
+        <p
+          className="font-semibold text-sm line-clamp-2 flex-1 font-mono"
+          style={{ color: 'var(--ink-high)' }}
+          title={session.problem}
+        >
+          {/* Review #2: the human title leads; the raw prompt is hover-only. */}
+          {humanTitle(session.problem)}
         </p>
         {awaiting && (
           <span

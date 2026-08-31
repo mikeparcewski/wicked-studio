@@ -130,7 +130,7 @@ function ReconPanel({ navigate, onClose }: {
         <>
           <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
             Launches a governed recon run: it surveys the target, drafts a test campaign — the
-            scenarios and their dependencies — and STOPS at its intake gate. Nothing runs until
+            scenarios and their dependencies — and stops at its intake gate. Nothing runs until
             you approve the gate here.
           </p>
           <textarea
@@ -150,7 +150,7 @@ function ReconPanel({ navigate, onClose }: {
               className="rounded px-1 py-0.5 text-[10px] font-mono"
               style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             >
-              <option value="">none — unscoped</option>
+              <option value="">all repositories</option>
               {repos.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
@@ -225,10 +225,13 @@ function HarnessPage({ navigate }: { navigate: (path: string) => void }): React.
 
   return (
     <div data-testid="testing-harness" className="flex flex-col gap-4">
-      <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-        The harness is where a testing effort starts: a campaign recon proposes the work and
-        stops at its intake gate; chat-authoring drafts testing steering rules the same governed
-        way. Both launch runs that gate before anything is written or executed.
+      {/* The plain-language explainer (usability review #6 + qe findings): what
+          this page is FOR, in words a first-time tester can act on. */}
+      <p data-testid="testing-harness-explainer" className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        Start a testing effort here. A recon run looks over your code and proposes a test
+        campaign — you see the proposal and approve or reject it before anything runs. You can
+        also draft testing rules in chat, with the same approval step. Approved campaigns and
+        their progress live on the Campaigns tab.
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -269,7 +272,10 @@ type EvalsRunState =
   | { kind: 'busy' }
   | { kind: 'unsupported' }
   | { kind: 'failed'; message: string }
-  | { kind: 'done'; report: EvalReport };
+  // `corpus` records what THIS report ran against (null = the built-in default
+  // set) — the report header's provenance line, pinned at run time so a later
+  // edit of the corpus field cannot relabel finished numbers.
+  | { kind: 'done'; report: EvalReport; corpus: string | null };
 
 type CorpusImportState =
   | { kind: 'idle' }
@@ -278,17 +284,26 @@ type CorpusImportState =
   | { kind: 'failed'; message: string }
   | { kind: 'done'; filename: string; result: CorpusImportResult };
 
+// Gap wears the attention amber, not failure red (qe finding: a gap is an
+// UNCOVERED BEHAVIOR — a place to write a rule — not a red failure).
 const EVAL_VERDICT_COLOR: Record<EvalResult['verdict'], string> = {
   caught: 'var(--status-done)',
-  gap: 'var(--status-fail)',
+  gap: 'var(--status-gate)',
   false_positive: 'var(--status-gate)',
 };
 
-const EVAL_VERDICT_WORD: Record<EvalResult['verdict'], string> = {
-  caught: 'caught',
-  gap: 'gap',
-  false_positive: 'false positive',
-};
+/**
+ * The verdict word, split by what "caught" actually meant (qe finding): a BAD
+ * sample the rules fired on was **blocked**; a GOOD sample the rules let
+ * through **passed**. One word for both hid which half the store is good at.
+ */
+export function evalVerdictWord(r: { verdict: EvalResult['verdict']; sample: { kind: string } }): string {
+  if (r.verdict === 'gap') return 'gap';
+  if (r.verdict === 'false_positive') return 'false positive';
+  // A sample kind the report echo doesn't name keeps the unsplit word — never
+  // a guessed half.
+  return r.sample.kind === 'bad' ? 'blocked' : r.sample.kind === 'good' ? 'passed' : 'caught';
+}
 
 /** The honest engine-gap callout — 501 / route-absent, shared by run + import. */
 function UnsupportedNote({ testid }: { testid: string }): React.ReactElement {
@@ -299,8 +314,15 @@ function UnsupportedNote({ testid }: { testid: string }): React.ReactElement {
   );
 }
 
-function GapNearestRules({ result }: { result: EvalResult }): React.ReactElement {
+function GapNearestRules({ result, navigate }: {
+  result: EvalResult;
+  navigate: (path: string) => void;
+}): React.ReactElement {
   const nearest = result.nearest_rules ?? [];
+  // Where a nearest-rule link lands (qe finding: hints become LINKS): the
+  // sample's own type page, with `?rule=<id>` opening that rule's drawer.
+  const rulePath = (id: string): string =>
+    `/steering/${encodeURIComponent(result.sample.steering_type)}?rule=${encodeURIComponent(id)}`;
   return (
     <div
       data-testid="testing-evals-nearest"
@@ -317,7 +339,19 @@ function GapNearestRules({ result }: { result: EvalResult }): React.ReactElement
       ) : (
         nearest.map((n) => (
           <span key={n.rule_id} data-testid="testing-evals-nearest-rule" className="flex items-baseline gap-2 text-[10px] font-mono">
-            <span style={{ color: 'var(--ink-high)' }}>{n.rule_id}</span>
+            <a
+              data-testid="testing-evals-nearest-link"
+              data-rule-id={n.rule_id}
+              href={rulePath(n.rule_id)}
+              onClick={(e) => {
+                e.preventDefault();
+                navigate(rulePath(n.rule_id));
+              }}
+              className="underline"
+              style={{ color: 'var(--accent)' }}
+            >
+              {n.rule_id}
+            </a>
             <span style={{ color: 'var(--ink-muted)' }}>similarity {n.similarity.toFixed(2)}</span>
           </span>
         ))
@@ -326,12 +360,26 @@ function GapNearestRules({ result }: { result: EvalResult }): React.ReactElement
   );
 }
 
-function EvalReportView({ report }: { report: EvalReport }): React.ReactElement {
+function EvalReportView({ report, corpus, navigate }: {
+  report: EvalReport;
+  /** The corpus the run targeted — null = the built-in default set. */
+  corpus: string | null;
+  navigate: (path: string) => void;
+}): React.ReactElement {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const s = report.summary;
+  // Split "caught" into its two honest halves (qe finding): bad samples the
+  // rules BLOCKED vs good samples the rules PASSED. Derived from the result
+  // rows; when the report carries none, the unsplit summary count stands.
+  const blocked = report.results.filter((r) => r.verdict === 'caught' && r.sample.kind === 'bad').length;
+  const passed = report.results.filter((r) => r.verdict === 'caught' && r.sample.kind === 'good').length;
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Corpus provenance (qe finding): which samples produced these numbers. */}
+      <p data-testid="testing-evals-provenance" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+        corpus: {corpus ?? 'built-in default'} · {s.total} sample{s.total === 1 ? '' : 's'}
+      </p>
       {report.degraded === 'facet-only' && (
         <p
           data-testid="testing-evals-degraded"
@@ -346,8 +394,18 @@ function EvalReportView({ report }: { report: EvalReport }): React.ReactElement 
 
       <p data-testid="testing-evals-summary" className="flex flex-wrap items-baseline gap-3 text-[11px]">
         <span style={{ color: 'var(--ink-high)', fontWeight: 600 }}>{s.total} samples</span>
-        <span style={{ color: EVAL_VERDICT_COLOR.caught }}>{s.caught} caught</span>
-        <span style={{ color: EVAL_VERDICT_COLOR.gap }}>{s.gaps} gaps</span>
+        {report.results.length > 0 ? (
+          <>
+            <span data-testid="testing-evals-blocked" style={{ color: EVAL_VERDICT_COLOR.caught }}>{blocked} blocked</span>
+            <span data-testid="testing-evals-passed" style={{ color: EVAL_VERDICT_COLOR.caught }}>{passed} passed</span>
+          </>
+        ) : (
+          <span style={{ color: EVAL_VERDICT_COLOR.caught }}>{s.caught} caught</span>
+        )}
+        {/* Gaps are UNCOVERED BEHAVIORS — work to do, not a red failure. */}
+        <span data-testid="testing-evals-gaps" style={{ color: EVAL_VERDICT_COLOR.gap }}>
+          {s.gaps} uncovered behavior{s.gaps === 1 ? '' : 's'}
+        </span>
         <span style={{ color: EVAL_VERDICT_COLOR.false_positive }}>{s.false_positives} false positives</span>
       </p>
 
@@ -393,10 +451,11 @@ function EvalReportView({ report }: { report: EvalReport }): React.ReactElement 
                       </td>
                       <td className="px-2 py-1.5 align-top">
                         <span
+                          data-testid="testing-evals-verdict-word"
                           className="rounded px-1.5 text-[10px] font-semibold"
                           style={{ color: EVAL_VERDICT_COLOR[r.verdict], border: `1px solid ${EVAL_VERDICT_COLOR[r.verdict]}` }}
                         >
-                          {EVAL_VERDICT_WORD[r.verdict]}
+                          {evalVerdictWord(r)}
                         </span>
                         {isGap && (
                           <button
@@ -415,7 +474,7 @@ function EvalReportView({ report }: { report: EvalReport }): React.ReactElement 
                     {isGap && expanded && (
                       <tr data-testid="testing-evals-gap-detail">
                         <td colSpan={5} className="px-2 pb-2">
-                          <GapNearestRules result={r} />
+                          <GapNearestRules result={r} navigate={navigate} />
                         </td>
                       </tr>
                     )}
@@ -430,7 +489,7 @@ function EvalReportView({ report }: { report: EvalReport }): React.ReactElement 
   );
 }
 
-function EvalsPage(): React.ReactElement {
+function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.ReactElement {
   /** `''` = all seven types (the body omits `type`). */
   const [type, setType] = useState('');
   /** `''` = the built-in default corpus (the body omits `corpus`). */
@@ -442,12 +501,13 @@ function EvalsPage(): React.ReactElement {
   const run = async (): Promise<void> => {
     if (state.kind === 'busy') return;
     setState({ kind: 'busy' });
+    const corpusUsed = corpus.trim() !== '' ? corpus.trim() : null;
     try {
       const report = await runEvals({
         ...(type !== '' ? { type } : {}),
-        ...(corpus.trim() !== '' ? { corpus: corpus.trim() } : {}),
+        ...(corpusUsed !== null ? { corpus: corpusUsed } : {}),
       });
-      setState({ kind: 'done', report });
+      setState({ kind: 'done', report, corpus: corpusUsed });
     } catch (e) {
       if (isTestingUnsupported(e)) setState({ kind: 'unsupported' });
       else setState({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
@@ -515,7 +575,7 @@ function EvalsPage(): React.ReactElement {
           </select>
         </label>
         <label className="flex flex-col gap-0.5 text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-          corpus (estate scope; blank = built-in default)
+          corpus (leave blank for the built-in sample set)
           <input
             data-testid="testing-evals-corpus"
             value={corpus}
@@ -548,7 +608,9 @@ function EvalsPage(): React.ReactElement {
           {state.message}
         </p>
       )}
-      {state.kind === 'done' && <EvalReportView report={state.report} />}
+      {state.kind === 'done' && (
+        <EvalReportView report={state.report} corpus={state.corpus} navigate={navigate} />
+      )}
 
       {/* Corpus import — a JSON file of samples lands in the estate as `evals:<name>`. */}
       <div
@@ -667,7 +729,7 @@ export function TestingPage({ page, campaignId, runs, navigate }: {
         )
       ) : (
         <div className="max-w-5xl px-6 py-4">
-          {page === 'harness' ? <HarnessPage navigate={navigate} /> : <EvalsPage />}
+          {page === 'harness' ? <HarnessPage navigate={navigate} /> : <EvalsPage navigate={navigate} />}
         </div>
       )}
     </div>

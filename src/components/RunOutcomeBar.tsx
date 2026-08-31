@@ -150,14 +150,19 @@ export function RunOutcomeBar({
         </svg>
       )}
       {unplaced > 0 && (
-        // EC39: the windowed count states its exclusions VISIBLY — runs with
-        // no clock in this window are not painted, and the label says so, so
-        // the number stays reproducible from the rows a user can see.
+        // EC39 + quick win #1: the exclusion stays STATED (the count is
+        // machine-readable and the ⓘ names it on hover/focus) but no longer
+        // runs as headline copy under the tile.
         <p
           data-testid="outcome-unplaced-note"
-          style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
+          data-unplaced={unplaced}
+          tabIndex={0}
+          role="note"
+          aria-label={`excludes ${unplaced} run${unplaced === 1 ? '' : 's'} with no clock in this window`}
+          title={`This tile excludes ${unplaced} run${unplaced === 1 ? '' : 's'} with no clock in this window — they cannot be placed on the 24h axis.`}
+          style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', cursor: 'help' }}
         >
-          excludes {unplaced} run{unplaced === 1 ? '' : 's'} with no clock in this window
+          ⓘ {unplaced} not shown
         </p>
       )}
     </MetricTile>

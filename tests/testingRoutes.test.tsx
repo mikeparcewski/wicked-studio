@@ -44,9 +44,13 @@ describe('useRoute — /testing/:page', () => {
     expect(r.campaignId).toBe('DES MERGE');
   });
 
-  it('a bare or unknown-page /testing parses with testingPage null (the redirect normalizes it)', () => {
+  it('a bare /testing parses with testingPage null (the redirect normalizes it onto Harness)', () => {
     expect(routeAt('/testing').current).toMatchObject({ panel: 'testing', testingPage: null });
-    expect(routeAt('/testing/bogus').current).toMatchObject({ panel: 'testing', testingPage: null });
+  });
+
+  it('an unknown testing sub-page is a DEAD address — not-found, never a silent Harness (review #4)', () => {
+    expect(routeAt('/testing/bogus').current).toMatchObject({ panel: 'not-found' });
+    expect(routeAt('/testing/harnes').current).toMatchObject({ panel: 'not-found' });
   });
 
   it('the retired flat /campaigns addresses fold into the testing panel, campaign id intact', () => {

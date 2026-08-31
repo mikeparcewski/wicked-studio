@@ -161,7 +161,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
       <div data-testid="campaign-notfound" style={{ padding: '32px', color: 'var(--ink-muted)' }}>
         <p style={{ marginBottom: '12px' }}>
           No campaign is filed under <b style={{ color: 'var(--ink-high)' }}>{campaignId}</b> on
-          this daemon — a campaign is minted by its first filed run, so this label either never
+          this daemon — a campaign appears with its first run, so this label either never
           launched one or lives on another daemon.
         </p>
         <button

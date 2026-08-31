@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../api/types.js';
 import { UNFILED_MOUNT, type DocSummary } from '../api/interactive.js';
+import { useDismissable } from '../hooks/useDismissable.js';
 import { versionPath, type Mode } from '../hooks/useRoute.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { isChatRun } from './ChatsPage.js';
 import { MetricTile } from './MetricTile.js';
+import { humanTitle } from './runIdentity.js';
 import { RunOutcomeBar } from './RunOutcomeBar.js';
 import { phaseWord, RUN_DOT } from './RunsSection.js';
 import { TokenBurnSparkline } from './TokenBurnSparkline.js';
@@ -151,6 +153,12 @@ export function MakeDashboard({ runs, navigate, runPath }: Props): React.ReactEl
   const fanoutDone = useDocsCache((s) => s.fanoutDone);
   const fanoutProgress = useDocsCache((s) => s.fanoutProgress);
   const [whyOpen, setWhyOpen] = useState(false);
+  // The overlay contract (usability review #10): the [why?] popover is a
+  // transient surface — Escape closes it and refocuses its trigger.
+  const whyRef = useRef<HTMLDivElement>(null);
+  const whyTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeWhy = useCallback(() => setWhyOpen(false), []);
+  useDismissable(whyOpen, closeWhy, whyRef, whyTriggerRef);
 
   // The spine (§4.2.2): non-chat runs — complete, all projects, active first.
   const made = useMemo(
@@ -214,7 +222,7 @@ export function MakeDashboard({ runs, navigate, runPath }: Props): React.ReactEl
       </div>
 
       {/* ── The corpus label (EC24 grammar, §4.2.2) heads the list ───────────── */}
-      <div className="relative px-8 pb-2 flex items-center gap-3 flex-wrap">
+      <div ref={whyRef} className="relative px-8 pb-2 flex items-center gap-3 flex-wrap">
         <p
           data-testid="make-corpus-label"
           style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
@@ -222,6 +230,7 @@ export function MakeDashboard({ runs, navigate, runPath }: Props): React.ReactEl
           Listing: build runs (all projects) · documents (projects opened this session)
           {' — '}
           <button
+            ref={whyTriggerRef}
             type="button"
             data-testid="make-corpus-why"
             aria-expanded={whyOpen}
@@ -242,8 +251,8 @@ export function MakeDashboard({ runs, navigate, runPath }: Props): React.ReactEl
               fontSize: 'var(--text-2xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-sans)',
             }}
           >
-            Documents live behind each project's bridge; the studio lists what it
-            has loaded rather than querying every project on page-open.
+            Documents load per project. Open a project — or use &lsquo;load docs for all
+            projects&rsquo; — to list them here.
           </p>
         )}
         {fanoutProgress !== null ? (
@@ -297,7 +306,9 @@ export function MakeDashboard({ runs, navigate, runPath }: Props): React.ReactEl
               style={{ background: RUN_DOT[view.session.status] ?? 'var(--ink-dim)' }}
             />
             <span className="truncate" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)', fontFamily: 'var(--font-sans)' }}>
-              {view.session.problem}
+              {/* The ONE human-title derivation (review #2) — the raw prompt
+                  moves to this row's hover title. */}
+              {humanTitle(view.session.problem)}
             </span>
             <span className="shrink-0" style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>
               {projectNameByRun[view.session.id] ?? 'Unfiled'}

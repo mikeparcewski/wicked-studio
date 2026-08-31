@@ -254,8 +254,8 @@ describe('filterSteeringRules — the page-scope + facet predicate, pinned', () 
   });
 });
 
-describe('SteeringPage — health header', () => {
-  it('renders per-type numbers when the wire serves by_steering_type', async () => {
+describe('SteeringPage — health header (TYPE-scoped, usability review #5)', () => {
+  it('renders per-type numbers when the wire serves by_steering_type — and NOTHING store-wide', async () => {
     listConformanceRules.mockResolvedValue({ rules: [rule({ steering_type: 'security' })] });
     const sb = scoreboard({
       by_steering_type: {
@@ -270,22 +270,54 @@ describe('SteeringPage — health header', () => {
     expect(stat).toHaveTextContent('Security rules');
     expect(stat).toHaveTextContent('4 active');
     expect(stat).toHaveTextContent('5 total · 1 retired');
+    // The store-wide stats, the verdict pill and the ingest diagnostics moved
+    // to the LANDING (the one place they are actionable) — never a type page.
     expect(screen.queryByTestId('steering-stat-rules')).toBeNull();
-    // The rest of the AW-23 raw signals still render beside the derived verdict chip.
-    expect(screen.getByTestId('steering-verdict')).toHaveAttribute('data-verdict', 'populated');
-    expect(screen.getByTestId('steering-stat-typed')).toHaveTextContent('90%');
+    expect(screen.queryByTestId('steering-verdict')).toBeNull();
+    expect(screen.queryByTestId('steering-stat-typed')).toBeNull();
+    expect(screen.queryByTestId('steering-diagnostics')).toBeNull();
   });
 
-  it('falls back to store-wide numbers, LABELED store-wide, when the wire has no per-type split', async () => {
-    listConformanceRules.mockResolvedValue({ rules: [rule()] });
+  it('falls back to a CLIENT-side count of this type’s loaded rules when the wire has no per-type split', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [rule()] }); // architecture via serde default
     wire({ scoreboard: () => Promise.resolve({ scoreboard: scoreboard() }) });
     page('architecture');
 
-    const stat = await screen.findByTestId('steering-stat-rules');
-    expect(stat).toHaveTextContent('Rules (store-wide)');
-    expect(stat).toHaveTextContent('2 active');
+    const stat = await screen.findByTestId('steering-stat-rules-type');
+    expect(stat).toHaveTextContent('Architecture rules');
+    expect(stat).toHaveTextContent('1 loaded');
     expect(stat).toHaveTextContent(/no per-type split/);
+    // Never the store-wide "2 active" wearing this type's label.
+    expect(screen.queryByTestId('steering-stat-rules')).toBeNull();
+  });
+
+  it('an EMPTY type page loses the stats entirely — no store-wide numbers over an empty list', async () => {
+    // The live-verified finding: Security with 0 rules of its own said "36
+    // active" + a red decaying pill. Now: no health block at all.
+    listConformanceRules.mockResolvedValue({ rules: [rule()] }); // architecture only
+    wire({ scoreboard: () => Promise.resolve({ scoreboard: scoreboard() }) });
+    page('security');
+
+    await screen.findByTestId('steering-page');
+    await waitFor(() => expect(listConformanceRules).toHaveBeenCalled());
+    expect(screen.queryByTestId('steering-health')).toBeNull();
+    expect(screen.queryByTestId('steering-verdict')).toBeNull();
+    expect(screen.queryByTestId('steering-stat-rules')).toBeNull();
     expect(screen.queryByTestId('steering-stat-rules-type')).toBeNull();
+  });
+
+  it('the LANDING carries the store-wide verdict, with diagnostics behind a details toggle', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [rule()] });
+    wire({ scoreboard: () => Promise.resolve({ scoreboard: scoreboard() }) });
+    page(null);
+
+    const health = await screen.findByTestId('steering-store-health');
+    expect(within(health).getByTestId('steering-verdict')).toHaveAttribute('data-verdict', 'populated');
+    // The raw signals are PRESENT but folded — a details element, closed by default.
+    const details = within(health).getByTestId('steering-diagnostics');
+    expect(details).not.toHaveAttribute('open');
+    expect(within(health).getByTestId('steering-stat-typed')).toHaveTextContent('90%');
+    expect(within(health).getByTestId('steering-stat-rules')).toHaveTextContent('Rules (store-wide)');
   });
 
   it('a 501 renders the honest "engine predates the scoreboard" state, never an error card', async () => {
@@ -533,5 +565,38 @@ describe('SteeringPage — the retire kill switch (opened from the drawer)', () 
     expect(screen.queryByTestId('steering-retire-open')).toBeNull();
     expect(screen.queryByTestId('steering-edit-open')).toBeNull();
     expect(screen.getByTestId('steering-rule-retired-note')).toHaveTextContent(/withdrawn from recall/);
+  });
+});
+
+describe('SteeringPage — ?rule deep link opens the drawer (qe finding: eval gap hints are links)', () => {
+  it('landing on /steering/security?rule=POL-100 opens POL-100’s drawer', async () => {
+    listConformanceRules.mockResolvedValue({
+      rules: [rule({ id: 'POL-100', rule_type: 'policy', statement: 'No secrets in logs', steering_type: 'security' })],
+    });
+    wire();
+    render(<SteeringPage type="security" navigate={() => {}} search="?rule=POL-100" />);
+
+    const drawer = await screen.findByTestId('steering-rule-drawer');
+    expect(drawer).toHaveTextContent('POL-100');
+    expect(drawer).toHaveTextContent('No secrets in logs');
+  });
+
+  it('a routed rule filed under a NEIGHBOURING type still opens (the link came from an eval sample)', async () => {
+    listConformanceRules.mockResolvedValue({
+      rules: [rule({ id: 'PAT-777', statement: 'Pin the fetch boundary', steering_type: 'development' })],
+    });
+    wire();
+    render(<SteeringPage type="security" navigate={() => {}} search="?rule=PAT-777" />);
+
+    expect(await screen.findByTestId('steering-rule-drawer')).toHaveTextContent('PAT-777');
+  });
+
+  it('an unknown ?rule id opens nothing — never a fabricated drawer', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [rule()] });
+    wire();
+    render(<SteeringPage type="architecture" navigate={() => {}} search="?rule=NOPE-1" />);
+
+    await screen.findByTestId('steering-rule-row');
+    expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
   });
 });

@@ -9,6 +9,17 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
   if (!routing) return null;
 
   if (routing.method === 'council') {
+    // A single-seat council held no election (usability review #7: "claude won
+    // · 100% agreement · 1 of 1 seats · 0 dissent" is governance theater — it
+    // won against nobody). Say what happened: one seat, no vote.
+    if (routing.seated === 1) {
+      return (
+        <p className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance" data-seats="1">
+          <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>Council:</span>{' '}
+          {routing.winner} — single seat, no vote held
+        </p>
+      );
+    }
     return (
       <p className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance">
         <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>Council:</span>{' '}

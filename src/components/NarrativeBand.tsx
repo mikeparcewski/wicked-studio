@@ -165,14 +165,19 @@ export function NarrativeBand({ items, runs, attachedAt, failedAt, navigate, now
         </span>
         {counts.undatable > 0 && (
           // EC39 (J5): the windowed fold EXCLUDES runs that carry no observed
-          // clock, and says so in the same breath — never a number a user
-          // cannot rebuild from the rows a list can show them.
+          // clock. Quick win #1 (usability review): the caveat moves into an
+          // ⓘ tooltip — still discoverable, no longer headline copy. The count
+          // stays machine-readable on data-undatable.
           <span
             data-testid="lede-undatable"
             data-undatable={counts.undatable}
-            style={{ ...WINDOW_LABEL_STYLE, flexShrink: 0 }}
+            tabIndex={0}
+            role="note"
+            aria-label={`excludes ${counts.undatable} undated run${counts.undatable === 1 ? '' : 's'}`}
+            title={`This count excludes ${counts.undatable} run${counts.undatable === 1 ? '' : 's'} with no observed clock — they cannot be placed in the 24h window.`}
+            style={{ ...WINDOW_LABEL_STYLE, flexShrink: 0, cursor: 'help' }}
           >
-            · excludes {counts.undatable} undated run{counts.undatable === 1 ? '' : 's'}
+            ⓘ
           </span>
         )}
         {spend !== null && (

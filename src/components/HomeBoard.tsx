@@ -12,6 +12,7 @@ import { BatchGateBar } from './BatchGateBar.js';
 import { LiveFeed } from './LiveFeed.js';
 import { NarrativeBand } from './NarrativeBand.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
+import { humanTitle } from './runIdentity.js';
 import { ProjectSparkline } from './ProjectSparkline.js';
 
 /**
@@ -458,7 +459,7 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
           >
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
               <p style={{ ...CSS.bandLabel, color: 'var(--ink-dim)', margin: 0 }}>
-                Not in a project ({unfiled.length})
+                Unfiled runs ({unfiled.length})
               </p>
               <button
                 type="button"
@@ -477,9 +478,12 @@ export function HomeBoard({ runs, navigate }: Props): React.ReactElement {
                     {...link(`/runs/${v.session.id}`)}
                     data-testid="unfiled-run"
                     data-run-id={v.session.id}
+                    title={v.session.problem}
                     style={{ ...CSS.chip, alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
                   >
-                    {v.session.problem}
+                    {/* Review #2: the human title, never the raw prompt — the
+                        full intent moves to this chip's hover title. */}
+                    {humanTitle(v.session.problem)}
                     <span style={{ color: 'var(--ink-dim)' }}>· {v.session.status}</span>
                   </a>
                 ))}

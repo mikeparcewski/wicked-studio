@@ -106,7 +106,7 @@ describe('the register below (§4.3: "the list below is the existing ChatsPage l
     page(onSelect);
     expect(screen.getByPlaceholderText('Search chats…')).toBeInTheDocument();
     expect(screen.getByText('New Chat')).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Time range' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Show newest runs' })).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('Search chats…'), { target: { value: 'auth' } });
     const rows = screen.getAllByTestId('chat-row');
     expect(rows).toHaveLength(1);

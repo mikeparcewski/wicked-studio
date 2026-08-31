@@ -86,7 +86,7 @@ export function SteeringImportPanel({ type, onClose, onImported }: {
         </button>
       </div>
       <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-        A frontmattered <span className="font-mono">.md</span> doctrine doc or a{' '}
+        A <span className="font-mono">.md</span> rules doc (with frontmatter) or a{' '}
         <span className="font-mono">.json</span> rule batch — every imported rule lands typed{' '}
         <span className="font-mono">{type}</span> (this page).
       </p>
