@@ -81,6 +81,15 @@ export interface WikiRecallVolume {
   reason: string;
 }
 
+/** Per-steering-type rule counts — the steering-model lane's scoreboard growth. Optional on
+ *  every wire shipping today; the Steering pages render per-type numbers only when served. */
+export interface SteeringTypeCounts {
+  rules_total: number;
+  rules_active: number;
+  rules_retired: number;
+  [k: string]: unknown;
+}
+
 /** The AW-23 population/connection scoreboard, verbatim as the engine serializes it. */
 export interface WikiScoreboard {
   rules_total: number;
@@ -90,6 +99,9 @@ export interface WikiScoreboard {
   connection: WikiConnectionCoverage;
   evidence: WikiEnforcementEvidence;
   recall_volume: WikiRecallVolume;
+  /** Keyed by steering type (`architecture` … `design-ux`). Absent pre-0.7.5 — the pages then
+   *  show the store-wide numbers, labeled as store-wide, never a fabricated per-type zero. */
+  by_steering_type?: Record<string, SteeringTypeCounts>;
   [k: string]: unknown;
 }
 

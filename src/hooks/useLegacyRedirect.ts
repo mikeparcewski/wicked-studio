@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { api } from '../api/client.js';
+import { DEFAULT_STEERING_TYPE, steeringPath } from '../api/steering.js';
 import { modePath, projectPath, type Mode, type Navigate } from './useRoute.js';
 
 /** The synthesized "unfiled" project — a run that appears only there has no project. */
@@ -97,4 +98,19 @@ export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void 
       });
     return () => { cancelled = true; };
   }, [panel, runId, projectId, mode, showLaunch, chatMode, navigate]);
+}
+
+/**
+ * The Steering surface's address normalizer (the STEERING program): any parse that landed on
+ * `panel: 'steering'` WITHOUT a valid type — bare `/steering`, a typo'd `/steering/foo`, and
+ * the two RETIRED addresses `/wiki` (the old Architecture Wiki page) and `/rules` (the old
+ * RuleManager) — is replaced with the Architecture page's real URL. REPLACE, like every
+ * redirect in this module, so Back never re-enters the dead address; the page itself renders
+ * Architecture on the pre-redirect tick, so nothing flashes.
+ */
+export function useSteeringRedirect(panel: string, steeringType: string | null, navigate: Navigate): void {
+  useEffect(() => {
+    if (panel !== 'steering' || steeringType !== null) return;
+    navigate(steeringPath(DEFAULT_STEERING_TYPE), { replace: true });
+  }, [panel, steeringType, navigate]);
 }

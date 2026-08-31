@@ -7,6 +7,7 @@ import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
+import { steeringPath, STEERING_TYPE_LABELS, STEERING_TYPES } from '../api/steering.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
 import { HealthRailSection } from './HealthRailSection.js';
@@ -66,7 +67,7 @@ const S = {
 
 // ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'settings';
+export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'steering' | 'settings';
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
  *  links `/system` in the collapsed column — it has no dashboard). `noun` is
@@ -77,10 +78,16 @@ const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     noun: 'Pr
 const P_MAKE: PathSpec     = { key: 'make',     title: 'Make',         noun: 'Document',   glyph: '⚒', dash: '/make',     collapsedHref: '/make' };
 const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         noun: 'Chat',       glyph: '💬', dash: '/chats',    collapsedHref: '/chats' };
 const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Repository', glyph: '⬡', dash: '/repos',    collapsedHref: '/repos' };
+// Steering (the STEERING program): the governance surface, a PRIMARY path placed immediately
+// BEFORE Settings. Like Settings it is title-only (no ▦/＋ — its management verbs live on the
+// pages); its accordion rows are the seven steering types, its collapsed glyph links the
+// Architecture page (the first sub-page — there is no separate steering dashboard).
+const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: steeringPath('architecture') };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
-const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_SETTINGS];
+const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_STEERING, P_SETTINGS];
 
-const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows', 'policies', 'rules', 'wiki']);
+// `wiki` and `rules` retired into Steering (they redirect to /steering/architecture).
+const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows', 'policies']);
 
 /**
  * The route→heading map (§3.2): which primary path owns a pathname. `/` and
@@ -94,6 +101,9 @@ export function headingForPath(pathname: string): PathKey | null {
   // `/chat/new` AND `/chat/:id` (J4/C6: a live session's real URL) are Chat's.
   if (first === 'chats' || (first === 'chat' && second !== '')) return 'chat';
   if (first === 'repos' || first === 'repo-detail') return 'repos';
+  // The retired `/wiki` + `/rules` addresses redirect into Steering — map them there too, so
+  // the rail never flashes Settings open on the pre-redirect tick.
+  if (first === 'steering' || first === 'wiki' || first === 'rules') return 'steering';
   if (SETTINGS_ROUTES.has(first)) return 'settings';
   return null;
 }
@@ -462,6 +472,29 @@ function MakePicker({ navigate, onClose, ambient }: {
   );
 }
 
+/** The Steering accordion's rows: one per steering type, each a navigate() shortcut to its
+ *  sub-page — the SettingsShortcutRows grammar, never a parallel steering surface. */
+function SteeringTypeRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+  return (
+    <div role="menu" className="flex flex-col pt-0.5">
+      {STEERING_TYPES.map((t) => (
+        <button
+          key={t}
+          type="button"
+          role="menuitem"
+          data-testid="rail-steering-type"
+          data-type={t}
+          onClick={() => navigate(steeringPath(t))}
+          className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
+          style={{ color: 'var(--ink-muted)' }}
+        >
+          {STEERING_TYPE_LABELS[t]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 const flatRunPath = (id: string): string => `/runs/${encodeURIComponent(id)}`;
@@ -724,6 +757,16 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
                   </button>
                 ))}
             <ViewAll href="/repos" navigate={navigate} />
+          </RailHeading>
+
+          {/* ── Steering — the governance surface, BEFORE Settings (STEERING). ─ */}
+          <RailHeading
+            path={P_STEERING}
+            open={openHeading === 'steering'}
+            onToggle={() => toggle('steering')}
+            navigate={navigate}
+          >
+            <SteeringTypeRows navigate={navigate} />
           </RailHeading>
 
           {/* ── Settings — title only, no ▦/＋ (the operator's word, §3.1) ───── */}

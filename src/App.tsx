@@ -22,8 +22,7 @@ import { RepositoriesPanel } from './components/RepositoriesPanel.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
-import { RuleManager } from './components/RuleManager.js';
-import { WikiPage } from './components/WikiPage.js';
+import { SteeringPage } from './components/SteeringPage.js';
 import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { GroupChat } from './components/GroupChat.js';
@@ -35,7 +34,7 @@ import { ThemePage } from './components/ThemePage.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
-import { useLegacyRedirect } from './hooks/useLegacyRedirect.js';
+import { useLegacyRedirect, useSteeringRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
@@ -48,6 +47,7 @@ import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
+import { DEFAULT_STEERING_TYPE, isSteeringType } from './api/steering.js';
 import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
 import { useNotifPrefsStore } from './store/notifPrefs.js';
@@ -74,7 +74,7 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
 const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignId, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignId, steeringType, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
@@ -142,6 +142,10 @@ export function App(): React.ReactElement {
 
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
   useLegacyRedirect({ panel, runId, projectId, mode, showLaunch, chatMode }, navigate);
+
+  // The retired governance addresses (`/wiki`, `/rules`) and any type-less `/steering` address
+  // normalize onto the Architecture steering page (the STEERING program's one redirect).
+  useSteeringRedirect(panel, steeringType, navigate);
 
   // FINDING-013: /ws has no late-join replay, so a page reloaded against a run shows an empty Burn
   // panel even though usage was durably recorded. When the selected run has no frames yet (a reload
@@ -460,17 +464,15 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    if (panel === 'rules') {
+    // `/steering/:type` — the STEERING surface: ONE component, parameterized by type. A
+    // type-less address renders Architecture for the tick before useSteeringRedirect lands.
+    if (panel === 'steering') {
       return (
         <div className="flex-1 overflow-y-auto p-6">
-          <RuleManager />
-        </div>
-      );
-    }
-    if (panel === 'wiki') {
-      return (
-        <div className="flex-1 overflow-y-auto p-6">
-          <WikiPage />
+          <SteeringPage
+            type={steeringType !== null && isSteeringType(steeringType) ? steeringType : DEFAULT_STEERING_TYPE}
+            navigate={navigate}
+          />
         </div>
       );
     }
