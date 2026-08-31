@@ -10,6 +10,8 @@ import {
   buildFeed,
   narrate,
   sortFeedEvents,
+  TONE_COLOR,
+  TONE_GLYPH,
   type FeedItem,
   type NarrationTone,
   type NarratorContext,
@@ -77,22 +79,6 @@ export function phaseName(runId: string, unit: WorkUnit): string {
   const key = unitKey(runId, unit.id, unit.ord);
   return /^u\d+$/.test(key) ? unit.stage : key;
 }
-
-const TONE_COLOR: Record<NarrationTone, string> = {
-  info: 'var(--ink-muted)',
-  work: 'var(--status-run)',
-  gate: 'var(--status-gate)',
-  fail: 'var(--status-fail)',
-  human: 'var(--accent)',
-};
-
-const TONE_GLYPH: Record<NarrationTone, string> = {
-  info: '·',
-  work: '●',
-  gate: '◆',
-  fail: '✗',
-  human: '➤',
-};
 
 interface Props {
   view: SessionView;

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { CoreEvent } from '../api/types.js';
+import { isAwaitingPinned } from './awaitingPins.js';
 
 /**
  * A browser-side open-elicitation record, keyed by run id (DES-002).
@@ -145,14 +146,19 @@ export const useElicitationStore = create<ElicitationStore>((set, get) => ({
   reconcile: (liveRunIds) => {
     const live = new Set(liveRunIds);
     set((s) => {
-      const dropped = Object.keys(s.elicitations).filter((runId) => !live.has(runId));
+      // Pinned ids live outside the run universe (§11.5 — a chat-keyed
+      // elicitation is never in GET /runs); the prune must not eat them.
+      const dropped = Object.keys(s.elicitations).filter(
+        (runId) => !live.has(runId) && !isAwaitingPinned(runId),
+      );
       // Identity-stable when nothing is dropped: reconcile runs on EVERY run-list refresh, so
       // returning fresh objects each time rerenders every subscriber for no change.
       if (dropped.length === 0) return s;
 
+      const droppedSet = new Set(dropped);
       const next: Record<string, OpenElicitation> = {};
       for (const [runId, e] of Object.entries(s.elicitations)) {
-        if (live.has(runId)) next[runId] = e;
+        if (!droppedSet.has(runId)) next[runId] = e;
       }
       // Each dropped run must still bump, so a GET in flight for it cannot write back afterwards
       // (DES-002 v0.25 — the zombie-prompt case).

@@ -1,12 +1,18 @@
 # DES-RUN-NARRATOR — one narrated feed for following a run
 
-**Status:** implemented (feat/run-narrator)
+**Status:** implemented (feat/run-narrator); extended to the chat surface (§11,
+feat/narrator-chat)
 **Scope:** the run-follow surface (`ChatPanel.tsx` → `RunChat`), the run-detail feed
-composition, and the composer-on-terminal-runs ambiguity (usability review 2026-08-31,
-finding #8; run-operator persona findings).
-**Out of scope:** WorkPage list, SteeringPage, TestingPage, the decisions rail (lane L1),
-and GroupChat's multi-seat chat (its transcript is already turn-stamped and per-seat FIFO;
-nothing here touches it — the mandate is that it must not GROW, and it does not change).
+composition, the composer-on-terminal-runs ambiguity (usability review 2026-08-31,
+finding #8; run-operator persona findings), and — since §11 — GroupChat's multi-seat
+chat surface.
+**Out of scope:** WorkPage list, SteeringPage, TestingPage, the decisions rail (lane L1).
+GroupChat was originally scoped out ("its transcript is already turn-stamped and per-seat
+FIFO"); the operator overruled that after watching the shipped wave from the chat surface —
+"what I see is still the outputs from the individual agents and not the narrative piece" —
+so §11 brings the narrator THERE, reusing the shipped modules (one narrator.ts, one NowBar,
+one ApprovalDock, one ArtifactCard). The hold-at-1570 mandate on GroupChat.tsx still stands
+(it SHRANK: the transcript rendering moved to ChatThread.tsx).
 
 ## 1. The problem (verbatim intent)
 
@@ -241,3 +247,98 @@ No new wire calls: both sources are already on this page's data.
   follow-up bar with the exact label; expanding shows the launch form; live executing →
   inject composer; awaiting_human → steer composer.
 - `NowBar.test.tsx` — phase + active unit + last narration; artifact count; jump button.
+- `narrator.chat.test.ts` (§11) — classification (stream/failed/dump → narration; short ok
+  reply → turn); arrival-order feed; artifact extraction + dedupe; now-phrase derivations.
+- `GroupChat.narrated.test.tsx` (§11) — the classification IN THE DOM; out-of-order
+  arrival renders chronologically; the dock is a structural sibling of the scroll region
+  and reject-carries-note works from the chat surface; artifact cards + chip; the full
+  transcript stays reachable behind the view toggle.
+
+## 11. The chat surface (GroupChat) — the narrator applied to a CONVERSATION
+
+The user's overrule, verbatim: *"what I see is still the outputs from the individual
+agents and not the narrative piece."* They watch `/p/:pid/chat` and `/chat/:id` —
+GroupChat — where each seat streamed its whole output as raw chat turns. The narrator
+comes to this surface WITHOUT forking it: the same `narrator.ts`, `NowBar`,
+`ApprovalDock` and `ArtifactCard`; a new `ChatThread.tsx` holds the transcript pixels
+GroupChat used to render inline (GroupChat shrank).
+
+### 11.1 Narration vs conversation
+
+This surface is still a conversation, so the classification is different from a run's —
+but it lives in the ONE narrator (`narrateChatSeat`, `buildChatFeed`):
+
+| Message | Rendering |
+|---|---|
+| the user's message | first-class turn (`user-bubble`, unchanged) |
+| a seat's finalized ok reply that reads as conversation (≤1400 chars AND ≤16 lines — `isConversationalReply`, deterministic) | first-class turn (avatar + `seat-bubble`, unchanged) |
+| a seat's STILL-STREAMING output (pending) | narration: `[seat chip] is thinking… / is working — <size> streamed` (work tone), raw stream MOUNTED behind an expander (`chat-narration-toggle-*` / `chat-narration-raw-*`; display-toggled, never unmounted, so streaming keeps flowing into it) |
+| a finalized ok reply over the conversational bar | narration: `[seat chip] replied (<size>) — <first line>`, raw behind the same expander |
+| a failed reply | narration, fail tone: `[seat chip] failed — <headline>`, raw behind the expander |
+| seat lifecycle (open response / `chatSessionReady` / `chatSessionFailed`) | narration sys lines: `joined the chat` / `couldn’t join — <reason>`, deduped per seat by last announced state |
+
+### 11.2 Ordering
+
+The chat wire carries no `seq`/`ts` on live frames — **arrival is the order** (§3's rule
+applied to this wire). The one append-only message log is the clock: per-seat FIFO chunk
+routing (§7.9-3, unchanged) pins a late turn-1 reply to its turn-1 position, so
+out-of-order arrival renders chronologically by construction. `buildChatFeed` maps the
+log in place; it never re-sorts live frames.
+
+### 11.3 Artifacts
+
+No `dataUsed` frames reach a chat; the honest best-effort is what a finalized reply
+NAMES: backticked file paths and http(s) links (`extractChatArtifacts` — conservative,
+deterministic). They render as inline `ArtifactCard`s behind the reply (capped at the
+run feed's `INLINE_ARTIFACT_CAP`, deduped across the transcript) and collect into the
+now-bar chip. File cards carry no View action here (no run id to open a FileViewer
+against) — a card is a reference, never a dead click.
+
+### 11.4 The chat now-bar
+
+The shared `NowBar`, pinned between the header and the thread (outside the one scrolling
+region, `chat-thread`). `view: SessionView` generalized to `status: string` plus an
+optional `contextLabel` (the run page passes `session.status` + its unit derivations,
+unchanged). Chat vocabulary added to the status phrase map: `connecting` (seats warming)
+and `your_turn` (crew idle — honest amber "waiting on you"); replying = `executing`
+("working"). The narration slot speaks the newest story beat (`newestChatNow`): the last
+narration line seat-prefixed, or the latest turn as a phrase ("You: … / <seat> replied…").
+"Latest ↓" scrolls the thread to its tail. At 1440×700 the now-bar, the dock and the
+latest narration are visible with zero scrolling.
+
+### 11.5 The chat approval dock
+
+The shared `ApprovalDock`, pinned between the thread and the composer. It gains a second
+entry point: `chatId` (the run page keeps `view`). Gates/elicitations the daemon keys by
+the CHAT session id render here — a structural sibling of the scroll region, never
+inside it — and answer over the same wire (`SteeringGate` verbatim: approve /
+approve+steer / reject-with-note, `{approve:false, amend}`). With no cached record there
+is no status field to fall back on, so only a held gate/elicitation shows.
+
+**The prune seam** (found live against crew 0.7.4): the gate/elicitation stores
+self-heal against `GET /runs` on every refresh tick, and the `awaitingHuman` frame
+itself bumps that tick — so a chat-keyed gate mounted the dock and was swept ~400 ms
+later, because a chat session id is never in the run list. `src/store/awaitingPins.ts`
+fixes the universe mismatch: GroupChat pins its `chatId` for its mounted lifetime and
+both reconciles skip pinned ids. Real resolutions (`gateDecided`, an answered gate's
+`clearGate`, `sessionCompleted`) still clear as before; unpinned (run) ids still prune
+exactly as they always did.
+
+### 11.6 The full transcript stays reachable
+
+A `narrated | full` view toggle (header, `chat-view-*`) — narrated is the default; full
+is the OLD transcript verbatim, in the §6 list/columns arrangement (slice K unchanged,
+now rendered by `ChatThread`). Picking a layout arrangement implies full. Both choices
+persist per-session (`wicked.chat.view` beside `wicked.chat.layout`; a stored layout
+with no stored view reads as full, for continuity). The §6.2 layout-toggle visibility
+rule (≥2 replying seats) is untouched; the view toggle appears once any seat has spoken.
+
+### 11.7 New/changed modules
+
+| File | Change |
+|---|---|
+| `src/components/narrator.ts` | +§11 section: `narrateChatSeat`, `isConversationalReply`, `buildChatFeed`, `extractChatArtifacts`, `deriveChatArtifacts`, `newestChatNow`, `chatSizeLabel`; `TONE_COLOR`/`TONE_GLYPH` hoisted here (NarratorFeed/NowBar now import them) |
+| `src/components/ChatThread.tsx` | NEW — the transcript pixels (narrated + full/list/columns), `Msg`/`UserMsg`/`SeatMsg`/`SysMsg`, `groupRounds`, `seatColumnOrder`, view/layout storage (moved OUT of GroupChat; GroupChat re-exports) |
+| `src/components/GroupChat.tsx` | SHRANK (1571 → under the 1570 hold): machinery + header + chips + composer + NowBar/ApprovalDock wiring; thread rendering delegated |
+| `src/components/NowBar.tsx` | `view` → `status` (+ optional `contextLabel`, optional unit props) — one bar, two surfaces |
+| `src/components/ApprovalDock.tsx` | + `chatId` entry point — one dock, two surfaces |

@@ -1,23 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import type { SessionView, WorkUnit } from '../api/types.js';
-import type { NarrationLine, NarrationTone, RunArtifact } from './narrator.js';
+import type { WorkUnit } from '../api/types.js';
+import { TONE_COLOR, type NarrationLine, type RunArtifact } from './narrator.js';
 import { ArtifactCard } from './ArtifactCard.js';
 
 /**
- * The sticky now-bar (DES-RUN-NARRATOR §2): a pinned strip that always answers
- * "what is happening RIGHT NOW" — run state, the active phase (unit K of N),
- * the latest narration line, and the collected-artifacts chip — visible
- * regardless of where the feed is scrolled, because it lives OUTSIDE the
- * scroll region. "Latest ↓" scrolls the feed to its live tail.
+ * The sticky now-bar (DES-RUN-NARRATOR §2, §11.4): a pinned strip that always
+ * answers "what is happening RIGHT NOW" — run/chat state, the active phase
+ * (unit K of N; the chat surface passes its own `contextLabel` instead), the
+ * latest narration line, and the collected-artifacts chip — visible regardless
+ * of where the feed is scrolled, because it lives OUTSIDE the scroll region.
+ * "Latest ↓" scrolls the feed to its live tail.
  */
-
-const TONE_COLOR: Record<NarrationTone, string> = {
-  info: 'var(--ink-muted)',
-  work: 'var(--status-run)',
-  gate: 'var(--status-gate)',
-  fail: 'var(--status-fail)',
-  human: 'var(--accent)',
-};
 
 function statusPhrase(status: string): { text: string; color: string } {
   switch (status) {
@@ -27,54 +20,62 @@ function statusPhrase(status: string): { text: string; color: string } {
     case 'awaiting_human': return { text: 'waiting on you', color: 'var(--status-gate)' };
     case 'planning':       return { text: 'planning', color: 'var(--status-run)' };
     case 'distributing':   return { text: 'routing', color: 'var(--status-run)' };
+    // §11.4 chat vocabulary: seats warming, and the idle "it's your move".
+    case 'connecting':     return { text: 'connecting', color: 'var(--status-run)' };
+    case 'your_turn':      return { text: 'your turn', color: 'var(--status-gate)' };
     default:               return { text: 'working', color: 'var(--status-run)' };
   }
 }
 
 export function NowBar({
-  view,
-  orderedUnits,
-  executingUnitOrd,
-  phaseOf,
+  status,
+  orderedUnits = [],
+  executingUnitOrd = null,
+  phaseOf = () => '?',
+  contextLabel,
   lastLine,
   artifacts,
   onJumpToLatest,
   onOpenFile,
 }: {
-  view: SessionView;
-  /** ord-sorted units (the caller's memo). */
-  orderedUnits: WorkUnit[];
-  executingUnitOrd: number | null;
-  phaseOf: (ord: number | null | undefined) => string;
+  /** The run's `session.status`, or the chat surface's derived state (§11.4). */
+  status: string;
+  /** ord-sorted units (the caller's memo) — the run surface only. */
+  orderedUnits?: WorkUnit[];
+  executingUnitOrd?: number | null;
+  phaseOf?: (ord: number | null | undefined) => string;
+  /** A caller-owned phrase for the phase slot (the chat surface's seat census). */
+  contextLabel?: string | null;
   /** The newest spoken narration line, or null when the trail is silent. */
   lastLine: NarrationLine | null;
   artifacts: RunArtifact[];
   onJumpToLatest: () => void;
   onOpenFile?: ((path: string) => void) | undefined;
 }): React.ReactElement {
-  const { session } = view;
-  const { text: statusText, color: statusColor } = statusPhrase(session.status);
-  const live = !['completed', 'cancelled', 'failed'].includes(session.status);
+  const { text: statusText, color: statusColor } = statusPhrase(status);
+  const live = !['completed', 'cancelled', 'failed'].includes(status);
 
   const cursorIx = executingUnitOrd === null ? -1 : orderedUnits.findIndex((u) => u.ord === executingUnitOrd);
   const activeUnit = cursorIx === -1 ? null : orderedUnits[cursorIx] ?? null;
 
-  // The "now" phrase: the active phase while one runs, otherwise the run state.
+  // The "now" phrase: the caller's own label when it has one, else the active
+  // phase while one runs, otherwise the run state.
   const phaseLabel =
-    activeUnit !== null
+    contextLabel ??
+    (activeUnit !== null
       ? `${phaseOf(activeUnit.ord)} — unit ${cursorIx + 1} of ${orderedUnits.length}`
-      : session.status === 'awaiting_human'
+      : status === 'awaiting_human'
         ? 'paused at a gate'
         : orderedUnits.length > 0
           ? `${orderedUnits.filter((u) => u.status === 'done').length} of ${orderedUnits.length} phases done`
-          : null;
+          : null);
 
   // Fallback narration when the trail is silent (pruned log / no events yet).
   const nowText =
     lastLine?.text ??
     (activeUnit !== null
       ? `Working on ${phaseOf(activeUnit.ord)}${activeUnit.description ? ` — ${activeUnit.description}` : ''}`
-      : session.status === 'awaiting_human'
+      : status === 'awaiting_human'
         ? 'Waiting on your decision below'
         : `Run ${statusText}`);
   const nowColor = lastLine !== null ? TONE_COLOR[lastLine.tone] : 'var(--ink-muted)';

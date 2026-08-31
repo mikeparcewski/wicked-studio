@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.4.4",
   "counts": {
-    "files": 114,
-    "occurrences": 830,
-    "static": 713,
-    "dynamic": 40,
+    "files": 115,
+    "occurrences": 836,
+    "static": 717,
+    "dynamic": 41,
     "computed": 6
   },
   "static": [
@@ -532,13 +532,13 @@
     {
       "testId": "chat-cell",
       "files": [
-        "src/components/GroupChat.tsx"
+        "src/components/ChatThread.tsx"
       ]
     },
     {
       "testId": "chat-cell-empty",
       "files": [
-        "src/components/GroupChat.tsx"
+        "src/components/ChatThread.tsx"
       ]
     },
     {
@@ -572,6 +572,18 @@
       ]
     },
     {
+      "testId": "chat-narration-line",
+      "files": [
+        "src/components/ChatThread.tsx"
+      ]
+    },
+    {
+      "testId": "chat-narration-seat",
+      "files": [
+        "src/components/ChatThread.tsx"
+      ]
+    },
+    {
       "testId": "chat-project-row",
       "files": [
         "src/components/GroupChat.tsx"
@@ -592,13 +604,13 @@
     {
       "testId": "chat-round",
       "files": [
-        "src/components/GroupChat.tsx"
+        "src/components/ChatThread.tsx"
       ]
     },
     {
       "testId": "chat-round-grid",
       "files": [
-        "src/components/GroupChat.tsx"
+        "src/components/ChatThread.tsx"
       ]
     },
     {
@@ -621,6 +633,18 @@
     },
     {
       "testId": "chat-session-ended",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-thread",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-view-toggle",
       "files": [
         "src/components/GroupChat.tsx"
       ]
@@ -2910,7 +2934,7 @@
     {
       "testId": "seat-bubble",
       "files": [
-        "src/components/GroupChat.tsx"
+        "src/components/ChatThread.tsx"
       ]
     },
     {
@@ -3995,7 +4019,7 @@
     {
       "testId": "user-bubble",
       "files": [
-        "src/components/GroupChat.tsx"
+        "src/components/ChatThread.tsx"
       ]
     },
     {
@@ -4382,9 +4406,15 @@
       ]
     },
     {
-      "pattern": "chat-layout-*",
+      "pattern": "chat-narration-raw-*",
       "files": [
-        "src/components/GroupChat.tsx"
+        "src/components/ChatThread.tsx"
+      ]
+    },
+    {
+      "pattern": "chat-narration-toggle-*",
+      "files": [
+        "src/components/ChatThread.tsx"
       ]
     },
     {
@@ -4598,6 +4628,7 @@
       "expression": "testid",
       "files": [
         "src/components/CampaignScoreboard.tsx",
+        "src/components/GroupChat.tsx",
         "src/components/SteeringAddMenu.tsx",
         "src/components/SteeringHealth.tsx",
         "src/components/SteeringRuleDrawer.tsx",
