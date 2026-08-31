@@ -1,13 +1,41 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { Project, RosterSeat } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
-import { Markdown } from './Markdown.js';
+import { ApprovalDock } from './ApprovalDock.js';
+import {
+  ChatThread,
+  SEAT_CHIP,
+  readStoredLayout,
+  readStoredView,
+  seatColumnOrder,
+  writeStoredLayout,
+  writeStoredView,
+  type ChatLayout,
+  type ChatView,
+  type Msg,
+  type SeatMsg,
+  type SysMsg,
+} from './ChatThread.js';
 import { NewProjectModal } from './NewProjectModal.js';
+import { NowBar } from './NowBar.js';
+import {
+  buildChatFeed,
+  deriveChatArtifacts,
+  newestChatNow,
+  type NarrationLine,
+  type NarrationTone,
+} from './narrator.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
+
+// The transcript types and the §6 layout machinery moved to ChatThread.tsx
+// (DES-RUN-NARRATOR §11 — this file holds the machinery, that one the pixels);
+// re-exported so existing importers keep working.
+export { groupRounds, seatColumnOrder } from './ChatThread.js';
+export type { ChatLayout, ChatRound, Msg, SeatMsg, SysMsg, UserMsg } from './ChatThread.js';
 
 /**
  * CHAT (crew#165 / core#134): warm persistent CLI sessions + fan-out.
@@ -87,14 +115,9 @@ export function defaultSelection(roster: RosterSeat[]): string[] {
   return roster.filter((s) => chatCapable(s, speaks)).map((s) => s.key);
 }
 
-/**
- * Seat identity under the token contract (DES-VISION-001 §2.11): every chip and
- * avatar wears the SAME surface/ink pair, and identity rides the monogram +
- * name, not a per-CLI hue. Color is reserved for signal (§1.5 rule 2): the
- * chip's dot speaks the §2.6 status layer — warming = amber, ready = emerald,
- * failed = red — and nothing else on the seat is colored.
- */
-const SEAT_CHIP = { bg: 'var(--surface-raised)', fg: 'var(--ink-body)' } as const;
+// Seat identity tokens (DES-VISION-001 §2.11) live in ChatThread.tsx now
+// (SEAT_CHIP): the chip's dot speaks the §2.6 status layer — warming = amber,
+// ready = emerald, failed = red — and nothing else on the seat is colored.
 
 /**
  * The explicit seat lifecycle (DES-UX-001 §7.9-4, EC44): connecting (an open
@@ -152,91 +175,6 @@ function clearStoredChatId(repoId?: string | null): void {
     sessionStorage.removeItem(CHAT_ID_KEY(repoId));
   } catch {
     /* non-fatal — see above */
-  }
-}
-
-export interface UserMsg {
-  kind: 'user';
-  text: string;
-  /** The send ordinal this message opened (1-based) — §7.9-3 turn identity. */
-  turn?: number;
-}
-export interface SeatMsg {
-  kind: 'seat';
-  cliKey: string;
-  text: string;
-  pending: boolean;
-  ok: boolean;
-  /** The send ordinal this reply answers — chunk routing keys on seat+turn. */
-  turn?: number;
-}
-export type Msg = UserMsg | SeatMsg;
-
-// ── Chat layout: list vs columns (DES-FEEDBACK-002 §6, slice K) ──────────────
-//
-// A round = a user message plus every seat message before the next user message
-// (§6.1: the flat `messages` array already groups naturally — a send appends one
-// UserMsg then N pending SeatMsgs that fill in place). Columns mode re-renders
-// each round as a grid; the grouping below is PURE derivation over transcript
-// state — it can never fire a request (§6.3: the toggle reads and re-arranges
-// `messages` only).
-
-export type ChatLayout = 'list' | 'columns';
-
-export interface ChatRound {
-  user: UserMsg | null;
-  seats: SeatMsg[];
-}
-
-/** §6.1's grouping rule: a new round starts at each user message; replies to
- *  DIFFERENT prompts (non-siblings) land in different rounds and stay linear —
- *  only same-round (same-prompt) replies ever sit side by side. */
-export function groupRounds(messages: Msg[]): ChatRound[] {
-  const rounds: ChatRound[] = [];
-  for (const m of messages) {
-    if (m.kind === 'user') {
-      rounds.push({ user: m, seats: [] });
-    } else {
-      let last = rounds[rounds.length - 1];
-      if (last === undefined) {
-        // Defensive: a seat message with no user message before it (cannot
-        // happen via `send`, but the grouping must not throw on it).
-        last = { user: null, seats: [] };
-        rounds.push(last);
-      }
-      last.seats.push(m);
-    }
-  }
-  return rounds;
-}
-
-/** §6.2: column order is stable across rounds — first-seen seat order — so the
- *  same agent is always in the same column. */
-export function seatColumnOrder(messages: Msg[]): string[] {
-  const order: string[] = [];
-  for (const m of messages) {
-    if (m.kind === 'seat' && !order.includes(m.cliKey)) order.push(m.cliKey);
-  }
-  return order;
-}
-
-/** §6.2: the choice persists per-session — a reading posture, not configuration,
- *  so it is deliberately NOT a crew setting (a settings write would violate the
- *  surface's request frugality). sessionStorage, wrapped like the chat id above:
- *  private-mode browsers degrade to per-mount state, never to a broken surface. */
-const CHAT_LAYOUT_KEY = 'wicked.chat.layout';
-function readStoredLayout(): ChatLayout {
-  try {
-    return sessionStorage.getItem(CHAT_LAYOUT_KEY) === 'columns' ? 'columns' : 'list';
-  } catch {
-    return 'list';
-  }
-}
-function writeStoredLayout(layout: ChatLayout): void {
-  try {
-    sessionStorage.setItem(CHAT_LAYOUT_KEY, layout);
-  } catch {
-    /* non-fatal — see readStoredChatId */
   }
 }
 
@@ -308,17 +246,41 @@ export function GroupChat({
    */
   const [routedGone, setRoutedGone] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  /** The one scrolling region — the now-bar's "Latest ↓" scrolls it (§11.4). */
+  const threadScrollRef = useRef<HTMLDivElement>(null);
   const chatIdRef = useRef<string | null>(null);
   chatIdRef.current = chatId;
 
-  // ── Transcript layout (DES-FEEDBACK-002 §6, slice K) ────────────────────────
-  // List is the default; columns re-arranges rounds side by side. Initialized
-  // synchronously from sessionStorage — reading it can never fire a request, and
-  // switching it touches nothing but how `messages` is rendered (§6.3).
+  // ── §11.1 seat-lifecycle narration ──────────────────────────────────────────
+  // Seat mechanics (joined / could not join) are narration, recorded into the
+  // one message log at their ARRIVAL position — the chat wire's only clock
+  // (§11.2). Deduped per seat by last announced state, so an open response and
+  // its trailing chatSessionReady frame speak once.
+  const announcedRef = useRef<Map<string, 'ready' | 'failed'>>(new Map());
+  function announceSeat(cliKey: string, state: 'ready' | 'failed', text: string, tone: NarrationTone): void {
+    if (announcedRef.current.get(cliKey) === state) return;
+    announcedRef.current.set(cliKey, state);
+    const sys: SysMsg = { kind: 'sys', text, tone, seat: cliKey };
+    setMessages((prev) => [...prev, sys]);
+  }
+
+  // ── Transcript views (DES-RUN-NARRATOR §11.6 / DES-FEEDBACK-002 §6) ─────────
+  // `view` picks the RENDERING of the one message log: `narrated` (the default
+  // — conversation stays turns, worker output collapses to narration) or `full`
+  // (the old transcript, in the §6 list/columns arrangement). Both initialized
+  // synchronously from sessionStorage — reading them can never fire a request,
+  // and switching touches nothing but how `messages` is rendered (§6.3).
+  const [view, setView] = useState<ChatView>(readStoredView);
   const [layout, setLayout] = useState<ChatLayout>(readStoredLayout);
+  function chooseView(next: ChatView): void {
+    setView(next);
+    writeStoredView(next);
+  }
   function chooseLayout(next: ChatLayout): void {
     setLayout(next);
     writeStoredLayout(next);
+    // Picking an arrangement IS asking for the full transcript (§11.6).
+    chooseView('full');
   }
 
   // ── Default agent chips (DES-FEEDBACK-001 §6 / EC44 — chips are truth) ─────
@@ -485,6 +447,7 @@ export function GroupChat({
     chipsTouchedRef.current = false;
     setSendFailed(null);
     turnRef.current = 0;
+    announcedRef.current = new Map();
     setPickerOpen(false);
     // The id goes too, and it is the one reset that is not cosmetic. Resolving the new repo's chat
     // is ASYNC — a stored id costs a probe round-trip — and until it lands, a `chatId` still holding
@@ -543,6 +506,9 @@ export function GroupChat({
         // J4/C6: that boundary is STATED in the thread (`rejoined`), never a
         // silent blank pretending the conversation never happened.
         setSeats(Object.fromEntries(probe.seats.map((k) => [k, 'ready' as SeatState])));
+        // The rejoined boundary note already covers these seats — mark them
+        // announced so a trailing ready frame does not re-speak "joined".
+        for (const k of probe.seats) announcedRef.current.set(k, 'ready');
         // A rejoined session is live — make it findable on the rail (J4).
         useLiveChatsStore.getState().upsert(stored, probe.seats);
         setRejoined(true);
@@ -601,12 +567,14 @@ export function GroupChat({
         // first fan-out already put a reply in flight.
         if (frame.cliKey) {
           setSeats((s) => (s[frame.cliKey!] === 'working' ? s : { ...s, [frame.cliKey!]: 'ready' }));
+          announceSeat(frame.cliKey, 'ready', 'joined the chat', 'info');
         }
         break;
       case 'chatSessionFailed':
         if (frame.cliKey) {
           setSeats((s) => ({ ...s, [frame.cliKey!]: 'failed' }));
           setSeatErrors((e) => ({ ...e, [frame.cliKey!]: frame.reason ?? 'session failed' }));
+          announceSeat(frame.cliKey, 'failed', `couldn’t join — ${frame.reason ?? 'session failed'}`, 'fail');
         }
         break;
       case 'chatDelta':
@@ -745,6 +713,12 @@ export function GroupChat({
           }
           return { ...next, ...errs };
         });
+        // §11.1: the open response is a lifecycle moment too — narrate it at
+        // its arrival position (deduped against the trailing ready frames).
+        for (const s of opened) {
+          if (s.ok) announceSeat(s.cliKey, 'ready', 'joined the chat', 'info');
+          else announceSeat(s.cliKey, 'failed', `couldn’t join — ${s.error ?? 'no reason given'}`, 'fail');
+        }
         // §6.2 recoverable error: a chip may name an agent the daemon no
         // longer has (a stale cache, or an operator-typed name with no seat
         // behind it). When NOTHING came up, say WHICH names were rejected —
@@ -811,7 +785,7 @@ export function GroupChat({
       // §7.9-2: a failed send retracts its optimistic bubbles (nothing went out),
       // keeps the draft in the composer, and renders the failure inline with retry.
       const failSend = (reason: string): void => {
-        setMessages((prev) => prev.filter((m) => m.turn !== turn));
+        setMessages((prev) => prev.filter((m) => m.kind === 'sys' || m.turn !== turn));
         setSendFailed({ text, reason });
       };
       if (warm.length === 0) {
@@ -875,8 +849,8 @@ export function GroupChat({
   function promoteToBuild(): void {
     if (navigate === undefined) return;
     const transcript = messages
-      .filter((m) => m.kind === 'user' || !m.pending)
-      .map((m) => (m.kind === 'user' ? `operator: ${m.text}` : `${m.cliKey}: ${m.text}`))
+      .filter((m) => m.kind === 'user' || (m.kind === 'seat' && !m.pending))
+      .map((m) => (m.kind === 'user' ? `operator: ${m.text}` : `${(m as { cliKey: string }).cliKey}: ${m.text}`))
       .join('\n');
     const MAX = 6000; // keep the prefill a context, not a payload
     const clipped = transcript.length > MAX ? `…${transcript.slice(-MAX)}` : transcript;
@@ -944,33 +918,43 @@ export function GroupChat({
     </span>
   );
 
-  // §6.2: the toggle is visible only when the chat has ≥2 distinct REPLYING
-  // seats — a single-agent transcript has nothing to compare, and the toggle
-  // would be dead chrome. Derived from the transcript, zero requests.
+  // §6.2: the layout toggle is visible only when the chat has ≥2 distinct
+  // REPLYING seats — a single-agent transcript has nothing to compare, and the
+  // toggle would be dead chrome. Derived from the transcript, zero requests.
   const seatOrder = seatColumnOrder(messages);
   const showLayoutToggle = seatOrder.length >= 2;
-  const rounds = layout === 'columns' ? groupRounds(messages) : [];
+  // §11.6: the narrated|full view toggle appears once any seat has spoken —
+  // before that the two views render identically.
+  const showViewToggle = seatOrder.length >= 1;
 
-  // §6.4: the segmented pair in the mode-switcher grammar — active segment
+  // ── The §11 narrated feed + now-bar derivations (pure, zero requests) ──────
+  const feedItems = useMemo(() => buildChatFeed(messages), [messages]);
+  const chatArtifacts = useMemo(() => deriveChatArtifacts(messages), [messages]);
+  const replyingSeats = useMemo(
+    () => new Set(messages.filter((m) => m.kind === 'seat' && m.pending).map((m) => (m as { cliKey: string }).cliKey)).size,
+    [messages],
+  );
+
+  // §6.4: segmented controls in the mode-switcher grammar — active segment
   // --surface-raised + --ink-high, inactive --ink-muted.
-  const layoutSegment = (value: ChatLayout, glyph: string, label: string): React.ReactElement => (
+  const segment = (
+    testid: string, active: boolean, onPick: () => void, glyph: string, label: string, title: string,
+  ): React.ReactElement => (
     <button
-      key={value}
+      key={testid}
       type="button"
-      data-testid={`chat-layout-${value}`}
-      aria-pressed={layout === value}
-      title={value === 'columns'
-        ? 'Arrange each prompt’s agent replies side by side'
-        : 'Show the transcript as one linear column'}
-      // The composer must keep focus and its draft across a layout switch
-      // (§6.5): preventDefault on mousedown stops the click from stealing focus.
+      data-testid={testid}
+      aria-pressed={active}
+      title={title}
+      // The composer must keep focus and its draft across a switch (§6.5):
+      // preventDefault on mousedown stops the click from stealing focus.
       onMouseDown={(e) => e.preventDefault()}
-      onClick={() => chooseLayout(value)}
+      onClick={onPick}
       style={{
-        background: layout === value ? 'var(--surface-raised)' : 'transparent',
+        background: active ? 'var(--surface-raised)' : 'transparent',
         border: 'none',
         borderRadius: 'var(--radius-md)',
-        color: layout === value ? 'var(--ink-high)' : 'var(--ink-muted)',
+        color: active ? 'var(--ink-high)' : 'var(--ink-muted)',
         cursor: 'pointer',
         fontFamily: 'var(--font-sans)',
         fontSize: 'var(--text-2xs)',
@@ -981,60 +965,13 @@ export function GroupChat({
       {glyph} {label}
     </button>
   );
-
-  /** The list-mode bubbles, verbatim (§6.3: list mode is untouched); columns
-   *  mode reuses the same bubble tokens with the avatar promoted to a header. */
-  const userBubble = (m: UserMsg, key: React.Key): React.ReactElement => (
-    // §5.3 token usage: user messages are transparent — the hairline
-    // keeps the bubble shape without claiming a surface of its own.
-    <div
-      key={key}
-      data-testid="user-bubble"
-      data-turn={m.turn}
-      className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[13px]"
-      style={{ background: 'transparent', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-    >
-      {m.text}
-    </div>
-  );
-
-  const bubbleBody = (m: SeatMsg): React.ReactElement => (
-    <div
-      // §5.3 token usage: agent bubbles sit on --surface-card; the
-      // border speaks status while a reply is pending or failed.
-      // §7.9-3: the bubble WEARS its seat+turn identity, so chunk routing
-      // is assertable in the DOM (data-turn matches the causing send).
-      data-testid="seat-bubble"
-      data-agent={m.cliKey}
-      data-turn={m.turn}
-      data-pending={m.pending}
-      className="rounded-xl px-4 py-2 text-[13px] min-w-[60px]"
-      style={{
-        background: 'var(--surface-card)',
-        border: `1px solid ${m.pending ? 'var(--status-run-dim)' : m.ok ? 'var(--surface-raised)' : 'var(--status-fail-dim)'}`,
-      }}
-    >
-      {m.pending && m.text === '' ? (
-        <span className="opacity-50 font-mono text-[11px] animate-pulse">thinking…</span>
-      ) : (
-        <Markdown>{m.text}</Markdown>
-      )}
-    </div>
-  );
-
-  /** §6.2 column header: the seat chip in the existing chip dress — monogram
-   *  avatar + cliKey, SEAT_CHIP tokens verbatim. */
-  const columnHeader = (cliKey: string): React.ReactElement => (
-    <span className="inline-flex items-center gap-1.5 min-w-0">
-      <span
-        className="shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-mono font-bold"
-        style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg }}
-      >
-        {cliKey.slice(0, 2).toUpperCase()}
-      </span>
-      <span className="truncate text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>{cliKey}</span>
-    </span>
-  );
+  const layoutSegment = (value: ChatLayout, glyph: string, label: string): React.ReactElement =>
+    segment(
+      `chat-layout-${value}`, view === 'full' && layout === value, () => chooseLayout(value), glyph, label,
+      value === 'columns'
+        ? 'Arrange each prompt’s agent replies side by side (full transcript)'
+        : 'Show the full transcript as one linear column',
+    );
 
   const anyReady = Object.values(seats).some((st) => WARM_STATES.has(st));
   // V8: a teardown control exists only once there is something armed to tear down —
@@ -1056,6 +993,47 @@ export function GroupChat({
   // in the shell the context IS the project (§4.3) and rides `projectId` silently.
   const showProjectField = projectId == null && chatId === null && !resolving && !ended;
   const currentProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+
+  // ── The §11.4 now-bar: what is happening RIGHT NOW, pinned above the thread.
+  const warmCount = Object.values(seats).filter((st) => WARM_STATES.has(st)).length;
+  const connecting = arming || resolving || Object.values(seats).some((st) => st === 'connecting');
+  const chatStatus = ended
+    ? 'completed'
+    : replyingSeats > 0
+      ? 'executing'
+      : connecting
+        ? 'connecting'
+        : openError !== null && warmCount === 0
+          ? 'failed'
+          : 'your_turn';
+  const contextLabel =
+    warmCount === 0
+      ? null
+      : replyingSeats > 0
+        ? `${replyingSeats} of ${warmCount} agent${warmCount === 1 ? '' : 's'} replying`
+        : `${warmCount} agent${warmCount === 1 ? '' : 's'} ready`;
+  const CHAT_STATUS_FALLBACK: Record<string, { text: string; tone: NarrationTone }> = {
+    executing: { text: 'The crew is replying…', tone: 'work' },
+    connecting: { text: 'Connecting agents…', tone: 'work' },
+    your_turn: { text: 'Waiting on you — say something below', tone: 'human' },
+    // The full reason renders in the thread (openError) — the bar points, never duplicates.
+    failed: { text: 'Attention needed — see the error in the thread', tone: 'fail' },
+    completed: { text: 'Chat ended', tone: 'info' },
+  };
+  const nowLine: NarrationLine = useMemo(() => {
+    const newest = newestChatNow(feedItems, messages);
+    const fallback = CHAT_STATUS_FALLBACK[chatStatus] ?? CHAT_STATUS_FALLBACK['your_turn']!;
+    const chosen = newest ?? fallback;
+    return { text: chosen.text, tone: chosen.tone, ord: null, event: { type: 'chatStatus' } };
+    // CHAT_STATUS_FALLBACK is rebuilt per render from openError — covered by chatStatus deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedItems, messages, chatStatus, openError]);
+  const showNowBar = (chatId !== null || messages.length > 0) && !ended;
+  const jumpToLatest = (): void => {
+    const el = threadScrollRef.current;
+    // feature-guarded: jsdom has no Element.scrollTo
+    if (el && typeof el.scrollTo === 'function') el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  };
 
   return (
     // The surface's own ink (§2.4); labels read in the sans by inheritance —
@@ -1087,6 +1065,26 @@ export function GroupChat({
             {layoutSegment('columns', '⫼', 'columns')}
           </div>
         )}
+        {/* §11.6: narrated (the story) | full (the old transcript, verbatim). */}
+        {showViewToggle && (
+          <div
+            data-testid="chat-view-toggle"
+            data-view={view}
+            role="group"
+            aria-label="Transcript view"
+            className="inline-flex items-center gap-0.5 shrink-0"
+            style={{
+              border: '1px solid var(--surface-raised)',
+              borderRadius: 'var(--radius-md)',
+              padding: '1px',
+            }}
+          >
+            {segment('chat-view-narrated', view === 'narrated', () => chooseView('narrated'), '◈', 'narrated',
+              'The story: conversation stays turns, worker output collapses to narration')}
+            {segment('chat-view-full', view === 'full', () => chooseView('full'), '☰', 'full',
+              'The full transcript — every agent bubble, unabridged')}
+          </div>
+        )}
         <div className="flex-1" />
         {/* §7.9 conversation→action: visible once there is a transcript to carry. */}
         {messages.length > 0 && navigate !== undefined && !ended && (
@@ -1115,8 +1113,25 @@ export function GroupChat({
         )}
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-3">
+      {/* The pinned now-bar (§11.4): what is happening RIGHT NOW — outside the
+          scroll region, so it is visible by construction; "Latest ↓" jumps the
+          thread to its live tail; the chip collects the artifacts replies name. */}
+      {showNowBar && (
+        <NowBar
+          status={chatStatus}
+          contextLabel={contextLabel}
+          lastLine={nowLine}
+          artifacts={chatArtifacts}
+          onJumpToLatest={jumpToLatest}
+        />
+      )}
+
+      {/* Messages — the ONE scrolling region (§11.4). */}
+      <div
+        ref={threadScrollRef}
+        data-testid="chat-thread"
+        className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-3"
+      >
         {openError !== null && (
           <p className="text-[12px] font-mono" style={{ color: 'var(--status-fail)' }}>Could not open chat: {openError}</p>
         )}
@@ -1168,74 +1183,16 @@ export function GroupChat({
             </p>
           </div>
         )}
-        {layout === 'columns' && showLayoutToggle
-          ? // §6.2 columns mode: each round renders its user bubble (unchanged)
-            // then a grid of the round's replies — one column per seat, order
-            // stable across rounds (first-seen), an empty dimmed cell where a
-            // seat did not answer this round (absence is information). The grid
-            // scrolls horizontally INSIDE its round container past 3 columns —
-            // the page never scrolls horizontally. No motion is added here, so
-            // the arrangement is reduced-motion safe by construction.
-            rounds.map((round, ri) => (
-              <div key={ri} data-testid="chat-round" className="flex flex-col gap-3">
-                {round.user !== null && userBubble(round.user, 'u')}
-                <div
-                  data-testid="chat-round-grid"
-                  data-columns={seatOrder.length}
-                  style={{
-                    display: 'grid',
-                    gap: '8px',
-                    gridTemplateColumns: `repeat(${seatOrder.length}, minmax(260px, 1fr))`,
-                    overflowX: 'auto',
-                  }}
-                >
-                  {seatOrder.map((cliKey) => {
-                    const reply = round.seats.find((s) => s.cliKey === cliKey);
-                    return reply === undefined ? (
-                      <div
-                        key={cliKey}
-                        data-testid="chat-cell-empty"
-                        data-agent={cliKey}
-                        className="flex flex-col gap-1.5 min-w-0"
-                      >
-                        {columnHeader(cliKey)}
-                        <div
-                          className="rounded-xl px-4 py-2 text-[13px] font-mono"
-                          style={{ border: '1px dashed var(--surface-raised)', color: 'var(--ink-dim)' }}
-                        >
-                          —
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        key={cliKey}
-                        data-testid="chat-cell"
-                        data-agent={cliKey}
-                        className="flex flex-col gap-1.5 min-w-0"
-                      >
-                        {columnHeader(cliKey)}
-                        {bubbleBody(reply)}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))
-          : messages.map((m, i) =>
-              m.kind === 'user' ? (
-                userBubble(m, i)
-              ) : (
-                <div key={i} className="self-start max-w-[80%] flex gap-2">
-                  <span
-                    className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-mono font-bold mt-0.5"
-                    style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg }}
-                  >
-                    {m.cliKey.slice(0, 2).toUpperCase()}
-                  </span>
-                  {bubbleBody(m)}
-                </div>
-              ),
-            )}
+        {/* The transcript (§11): the narrated feed by default — conversation
+            stays turns, worker output collapses to narration with the raw
+            stream one click below — or the full §6 list/columns transcript. */}
+        <ChatThread
+          messages={messages}
+          view={view}
+          layout={layout}
+          seatOrder={seatOrder}
+          items={feedItems}
+        />
         {/* §7.9-2: a failed send is a visible, retryable fact — the draft is
             still in the composer, nothing was fanned out, and Retry re-sends
             exactly what failed. Never a cleared composer, never silence. */}
@@ -1261,6 +1218,15 @@ export function GroupChat({
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* The pinned approval dock (§11.5): anything the daemon parks on THIS
+          chat session awaiting the human — a gate, an MCP elicitation — renders
+          here, a structural sibling of the scroll region, so it can never
+          scroll away. Approve / approve+steer / reject-with-note work from this
+          surface (SteeringGate, verbatim). Renders nothing when nothing awaits. */}
+      {chatId !== null && !ended && (
+        <ApprovalDock chatId={chatId} onResolved={() => undefined} />
+      )}
 
       {/* Input — §5.3 token usage: the composer sits on --surface-raised at
           --radius-xl; its focus ring is --accent-dim (wk-composer in

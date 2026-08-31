@@ -690,7 +690,7 @@ function RunChat({
           always visible, outside the scroll region, with the artifacts chip and
           the jump-to-latest affordance. */}
       <NowBar
-        view={view}
+        status={session.status}
         orderedUnits={ordered}
         executingUnitOrd={executingUnitOrd}
         phaseOf={phaseOf}
