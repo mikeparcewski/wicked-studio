@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { CoreEvent } from '../api/types.js';
+import { isAwaitingPinned } from './awaitingPins.js';
 
 /**
  * A browser-side open-gate record, keyed by run id. Mirrors the daemon's
@@ -175,7 +176,10 @@ export const useGateStore = create<GateStore>((set) => ({
       const next: Record<string, OpenGate> = {};
       let changed = false;
       for (const [id, gate] of Object.entries(s.gates)) {
-        if (keep.has(id)) next[id] = gate;
+        // Pinned ids live OUTSIDE the run universe this prune reconciles
+        // against (§11.5 — a chat-keyed gate is never in GET /runs); only a
+        // real resolution (ingest/clearGate) may retire them.
+        if (keep.has(id) || isAwaitingPinned(id)) next[id] = gate;
         else changed = true;
       }
       return changed ? { gates: next } : s;

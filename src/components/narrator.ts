@@ -482,6 +482,21 @@ export function narrateChatSeat(m: ChatSeatView): { text: string; tone: Narratio
   return { text: `replied (${chatSizeLabel(m.text)})${firstLine ? ` — ${firstLine}` : ''}`, tone: 'work' };
 }
 
+/**
+ * §11.1 seat lifecycle: joined / could not join. The TEMPLATE lives here —
+ * narrator.ts is the one narration template source — while the caller owns the
+ * per-seat dedup (last announced state) and records the line into its message
+ * log at arrival position (§11.2: arrival is the chat wire's only clock).
+ */
+export function narrateSeatLifecycle(
+  state: 'ready' | 'failed',
+  reason?: string | null,
+): { text: string; tone: NarrationTone } {
+  return state === 'ready'
+    ? { text: 'joined the chat', tone: 'info' }
+    : { text: `couldn’t join — ${reason ?? 'no reason given'}`, tone: 'fail' };
+}
+
 /** File extensions a bare (slash-less) backticked mention still counts as a file. */
 const FILE_EXT =
   /\.(md|ts|tsx|js|jsx|mjs|cjs|json|rs|py|go|java|rb|css|html|yml|yaml|toml|sql|sh|txt|csv|pdf|png|jpg|svg|pptx|docx|xlsx)$/i;

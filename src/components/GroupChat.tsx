@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { Project, RosterSeat } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
+import { pinAwaiting } from '../store/awaitingPins.js';
 import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
@@ -25,6 +26,7 @@ import { NowBar } from './NowBar.js';
 import {
   buildChatFeed,
   deriveChatArtifacts,
+  narrateSeatLifecycle,
   newestChatNow,
   type NarrationLine,
   type NarrationTone,
@@ -251,15 +253,28 @@ export function GroupChat({
   const chatIdRef = useRef<string | null>(null);
   chatIdRef.current = chatId;
 
+  // §11.5: gates/elicitations the daemon keys by THIS chat session id must
+  // survive the run-list reconcile — a chat id is never in GET /runs, so the
+  // stores' self-healing prune would sweep the dock ~400ms after it mounted
+  // (the awaitingHuman frame itself bumps the run refresh). Pin the id for the
+  // surface's mounted lifetime; real resolutions (gateDecided, an answered
+  // gate's clearGate, sessionCompleted) still clear as before.
+  useEffect(() => {
+    if (chatId === null) return;
+    return pinAwaiting(chatId);
+  }, [chatId]);
+
   // ── §11.1 seat-lifecycle narration ──────────────────────────────────────────
   // Seat mechanics (joined / could not join) are narration, recorded into the
   // one message log at their ARRIVAL position — the chat wire's only clock
-  // (§11.2). Deduped per seat by last announced state, so an open response and
-  // its trailing chatSessionReady frame speak once.
+  // (§11.2). The template lives in narrator.ts (`narrateSeatLifecycle` — the one
+  // narration template source); this owns the dedup: per seat by last announced
+  // state, so an open response and its trailing chatSessionReady frame speak once.
   const announcedRef = useRef<Map<string, 'ready' | 'failed'>>(new Map());
-  function announceSeat(cliKey: string, state: 'ready' | 'failed', text: string, tone: NarrationTone): void {
+  function announceSeat(cliKey: string, state: 'ready' | 'failed', reason?: string | null): void {
     if (announcedRef.current.get(cliKey) === state) return;
     announcedRef.current.set(cliKey, state);
+    const { text, tone } = narrateSeatLifecycle(state, reason);
     const sys: SysMsg = { kind: 'sys', text, tone, seat: cliKey };
     setMessages((prev) => [...prev, sys]);
   }
@@ -567,14 +582,14 @@ export function GroupChat({
         // first fan-out already put a reply in flight.
         if (frame.cliKey) {
           setSeats((s) => (s[frame.cliKey!] === 'working' ? s : { ...s, [frame.cliKey!]: 'ready' }));
-          announceSeat(frame.cliKey, 'ready', 'joined the chat', 'info');
+          announceSeat(frame.cliKey, 'ready');
         }
         break;
       case 'chatSessionFailed':
         if (frame.cliKey) {
           setSeats((s) => ({ ...s, [frame.cliKey!]: 'failed' }));
           setSeatErrors((e) => ({ ...e, [frame.cliKey!]: frame.reason ?? 'session failed' }));
-          announceSeat(frame.cliKey, 'failed', `couldn’t join — ${frame.reason ?? 'session failed'}`, 'fail');
+          announceSeat(frame.cliKey, 'failed', frame.reason ?? 'session failed');
         }
         break;
       case 'chatDelta':
@@ -716,8 +731,8 @@ export function GroupChat({
         // §11.1: the open response is a lifecycle moment too — narrate it at
         // its arrival position (deduped against the trailing ready frames).
         for (const s of opened) {
-          if (s.ok) announceSeat(s.cliKey, 'ready', 'joined the chat', 'info');
-          else announceSeat(s.cliKey, 'failed', `couldn’t join — ${s.error ?? 'no reason given'}`, 'fail');
+          if (s.ok) announceSeat(s.cliKey, 'ready');
+          else announceSeat(s.cliKey, 'failed', s.error);
         }
         // §6.2 recoverable error: a chip may name an agent the daemon no
         // longer has (a stale cache, or an operator-typed name with no seat

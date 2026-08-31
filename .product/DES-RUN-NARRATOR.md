@@ -315,6 +315,15 @@ inside it — and answer over the same wire (`SteeringGate` verbatim: approve /
 approve+steer / reject-with-note, `{approve:false, amend}`). With no cached record there
 is no status field to fall back on, so only a held gate/elicitation shows.
 
+**The prune seam** (found live against crew 0.7.4): the gate/elicitation stores
+self-heal against `GET /runs` on every refresh tick, and the `awaitingHuman` frame
+itself bumps that tick — so a chat-keyed gate mounted the dock and was swept ~400 ms
+later, because a chat session id is never in the run list. `src/store/awaitingPins.ts`
+fixes the universe mismatch: GroupChat pins its `chatId` for its mounted lifetime and
+both reconciles skip pinned ids. Real resolutions (`gateDecided`, an answered gate's
+`clearGate`, `sessionCompleted`) still clear as before; unpinned (run) ids still prune
+exactly as they always did.
+
 ### 11.6 The full transcript stays reachable
 
 A `narrated | full` view toggle (header, `chat-view-*`) — narrated is the default; full

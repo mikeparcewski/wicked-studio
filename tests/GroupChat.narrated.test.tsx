@@ -280,6 +280,56 @@ describe('§11.5 — the pinned approval dock, answerable from the chat surface'
     expect(screen.getByTestId('chat-thread').contains(dock)).toBe(false);
   });
 
+  it('the chat-keyed gate and elicitation SURVIVE the run-list reconcile (a chat id is never in GET /runs)', async () => {
+    // The live-daemon defect this pins: `awaitingHuman` mounts the dock, the
+    // frame bumps the run refresh, and ~400ms later `reconcile()` — fed only
+    // run ids — swept gates[chatId], unmounting the dock mid-decision.
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    await sendText(user, 'go');
+
+    act(() => {
+      useGateStore.setState({
+        gates: { [chatId()]: { runId: chatId(), ord: 1, prompt: 'Approve?', lifecycle: 'open', receivedAt: 0 } },
+        approaching: {},
+      });
+      useElicitationStore.getState().setElicitation({
+        runId: chatId(),
+        elicitationId: 'e9',
+        message: 'Which database?',
+        options: null,
+        receivedAt: new Date().toISOString(),
+      });
+    });
+    expect(screen.getByTestId('approval-dock')).toBeInTheDocument();
+
+    // The run-universe prune, exactly as useRuns fires it — no run is awaiting,
+    // and the chat id is not a run.
+    act(() => {
+      useGateStore.getState().reconcile([]);
+      useElicitationStore.getState().reconcile(['some-other-run']);
+    });
+    expect(useGateStore.getState().gates[chatId()]).toBeDefined();
+    expect(useElicitationStore.getState().elicitations[chatId()]).toBeDefined();
+    expect(screen.getByTestId('approval-dock')).toBeInTheDocument();
+    expect(screen.getByTestId('steering-gate')).toBeInTheDocument();
+
+    // An UNPINNED id (a genuinely stale run gate) is still swept — the
+    // self-healing prune is intact for the run universe.
+    act(() => {
+      useGateStore.setState({
+        gates: {
+          ...useGateStore.getState().gates,
+          'stale-run': { runId: 'stale-run', ord: 0, prompt: 'x', lifecycle: 'open', receivedAt: 0 },
+        },
+        approaching: {},
+      });
+      useGateStore.getState().reconcile([]);
+    });
+    expect(useGateStore.getState().gates['stale-run']).toBeUndefined();
+    expect(useGateStore.getState().gates[chatId()]).toBeDefined();
+  });
+
   it('renders no dock when nothing awaits the human', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
