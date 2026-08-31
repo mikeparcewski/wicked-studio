@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CenterDashboard } from './components/CenterDashboard.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
-import { CampaignScoreboard } from './components/CampaignScoreboard.js';
-import { CampaignsPage } from './components/CampaignsPage.js';
 import { ChatsPage } from './components/ChatsPage.js';
 import { CoverageView } from './components/CoverageView.js';
 import { DomainModelBrowser } from './components/DomainModelBrowser.js';
@@ -23,6 +21,7 @@ import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { SteeringPage } from './components/SteeringPage.js';
+import { TestingPage } from './components/TestingPage.js';
 import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { GroupChat } from './components/GroupChat.js';
@@ -34,7 +33,7 @@ import { ThemePage } from './components/ThemePage.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
-import { useLegacyRedirect, useSteeringRedirect } from './hooks/useLegacyRedirect.js';
+import { useLegacyRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
@@ -48,6 +47,7 @@ import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { DEFAULT_STEERING_TYPE, isSteeringType } from './api/steering.js';
+import { isTestingSubPage } from './api/testing.js';
 import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
 import { useNotifPrefsStore } from './store/notifPrefs.js';
@@ -74,7 +74,7 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
 const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignId, steeringType, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignId, steeringType, testingPage, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
@@ -146,6 +146,10 @@ export function App(): React.ReactElement {
   // The retired governance addresses (`/wiki`, `/rules`) and any type-less `/steering` address
   // normalize onto the Architecture steering page (the STEERING program's one redirect).
   useSteeringRedirect(panel, steeringType, navigate);
+
+  // The retired flat campaign addresses (`/campaigns`, `/campaigns/:id`) rewrite onto
+  // `/testing/campaigns[...]`, and any page-less `/testing` address normalizes onto Harness.
+  useTestingRedirect(panel, testingPage, pathname, navigate);
 
   // FINDING-013: /ws has no late-join replay, so a page reloaded against a run shows an empty Burn
   // panel even though usage was durably recorded. When the selected run has no frames yet (a reload
@@ -535,19 +539,18 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/campaigns` + `/campaigns/:id` — the read-only campaign surface (TH-14, extends
-    // studio#27): the escape-hatch list and the sibling-run scoreboard.
-    if (panel === 'campaigns') {
+    // `/testing/:page` — the Testing surface: ONE component, parameterized by sub-page
+    // (Harness / Campaigns / Evals). The campaign list + scoreboard (TH-14) live under it now;
+    // a page-less address renders Harness for the tick before useTestingRedirect lands.
+    if (panel === 'testing') {
       return (
         <div className="flex-1 overflow-y-auto">
-          <CampaignsPage navigate={navigate} />
-        </div>
-      );
-    }
-    if (panel === 'campaign-detail' && campaignId) {
-      return (
-        <div className="flex-1 overflow-y-auto">
-          <CampaignScoreboard campaignId={campaignId} runs={runs} navigate={navigate} />
+          <TestingPage
+            page={testingPage !== null && isTestingSubPage(testingPage) ? testingPage : 'harness'}
+            campaignId={campaignId}
+            runs={runs}
+            navigate={navigate}
+          />
         </div>
       );
     }

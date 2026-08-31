@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
+import { campaignPath } from '../api/testing.js';
 import { useCampaignsStore } from '../store/campaigns.js';
 
 /**
- * `/campaigns` — every campaign, active and finished, newest-updated first (DES-CAMPAIGN-001
+ * `/testing/campaigns` (MOVED from the flat `/campaigns`, which redirects here) — every
+ * campaign, active and finished, newest-updated first (DES-CAMPAIGN-001
  * §3.5's escape hatch, exactly as `/runs` is for the board). Read-only (TH-14): each row is
  * the campaign's progress readout and a link into its scoreboard; zero requests beyond the
  * store's one `GET /campaigns`.
@@ -71,7 +73,7 @@ export function CampaignsPage({ navigate }: Props): React.ReactElement {
                 type="button"
                 data-testid="campaign-row"
                 data-campaign-id={s.campaign.id}
-                onClick={() => navigate(`/campaigns/${encodeURIComponent(s.campaign.id)}`)}
+                onClick={() => navigate(campaignPath(s.campaign.id))}
                 style={{
                   display: 'flex',
                   alignItems: 'baseline',

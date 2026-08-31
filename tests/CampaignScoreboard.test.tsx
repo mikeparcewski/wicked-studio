@@ -246,7 +246,7 @@ describe('honest degradation', () => {
     board([], navigate);
     await waitFor(() => expect(screen.getByTestId('campaign-notfound')).toBeInTheDocument());
     fireEvent.click(screen.getByText('All campaigns'));
-    expect(navigate).toHaveBeenCalledWith('/campaigns');
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns');
   });
 
   it('the cost column renders an honest "—" until TH-20 wires per-node cost', async () => {

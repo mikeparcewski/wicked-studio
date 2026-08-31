@@ -8,6 +8,7 @@ import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
 import { steeringPath, STEERING_TYPE_LABELS, STEERING_TYPES } from '../api/steering.js';
+import { testingPath, TESTING_PAGE_LABELS, TESTING_PAGES } from '../api/testing.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
 import { HealthRailSection } from './HealthRailSection.js';
@@ -67,7 +68,7 @@ const S = {
 
 // ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'steering' | 'settings';
+export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'testing' | 'steering' | 'settings';
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
  *  links `/system` in the collapsed column — it has no dashboard). `noun` is
@@ -78,13 +79,18 @@ const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     noun: 'Pr
 const P_MAKE: PathSpec     = { key: 'make',     title: 'Make',         noun: 'Document',   glyph: '⚒', dash: '/make',     collapsedHref: '/make' };
 const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         noun: 'Chat',       glyph: '💬', dash: '/chats',    collapsedHref: '/chats' };
 const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Repository', glyph: '⬡', dash: '/repos',    collapsedHref: '/repos' };
+// Testing (the testing wave): the quality surface, a PRIMARY path placed immediately BEFORE
+// Steering (order: … Testing, Steering, Settings). Like Steering it is title-only (no ▦/＋ —
+// its verbs live on the pages); its accordion rows are the three sub-pages, its collapsed
+// glyph links the Harness page (the first sub-page — there is no separate testing dashboard).
+const P_TESTING: PathSpec  = { key: 'testing',  title: 'Testing',      noun: 'Campaign',   glyph: '✓', dash: null,        collapsedHref: testingPath('harness') };
 // Steering (the STEERING program): the governance surface, a PRIMARY path placed immediately
 // BEFORE Settings. Like Settings it is title-only (no ▦/＋ — its management verbs live on the
 // pages); its accordion rows are the seven steering types, its collapsed glyph links the
 // Architecture page (the first sub-page — there is no separate steering dashboard).
 const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: steeringPath('architecture') };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
-const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_STEERING, P_SETTINGS];
+const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_TESTING, P_STEERING, P_SETTINGS];
 
 // `wiki` and `rules` retired into Steering (they redirect to /steering/architecture).
 const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows', 'policies']);
@@ -101,6 +107,9 @@ export function headingForPath(pathname: string): PathKey | null {
   // `/chat/new` AND `/chat/:id` (J4/C6: a live session's real URL) are Chat's.
   if (first === 'chats' || (first === 'chat' && second !== '')) return 'chat';
   if (first === 'repos' || first === 'repo-detail') return 'repos';
+  // The retired flat `/campaigns` addresses redirect into Testing — map them there too, so
+  // the rail is already on the right heading on the pre-redirect tick.
+  if (first === 'testing' || first === 'campaigns') return 'testing';
   // The retired `/wiki` + `/rules` addresses redirect into Steering — map them there too, so
   // the rail never flashes Settings open on the pre-redirect tick.
   if (first === 'steering' || first === 'wiki' || first === 'rules') return 'steering';
@@ -472,6 +481,29 @@ function MakePicker({ navigate, onClose, ambient }: {
   );
 }
 
+/** The Testing accordion's rows: one per sub-page (Harness / Campaigns / Evals), each a
+ *  navigate() shortcut — the SettingsShortcutRows grammar, never a parallel testing surface. */
+function TestingPageRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+  return (
+    <div role="menu" className="flex flex-col pt-0.5">
+      {TESTING_PAGES.map((p) => (
+        <button
+          key={p}
+          type="button"
+          role="menuitem"
+          data-testid="rail-testing-page"
+          data-page={p}
+          onClick={() => navigate(testingPath(p))}
+          className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
+          style={{ color: 'var(--ink-muted)' }}
+        >
+          {TESTING_PAGE_LABELS[p]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The Steering accordion's rows: one per steering type, each a navigate() shortcut to its
  *  sub-page — the SettingsShortcutRows grammar, never a parallel steering surface. */
 function SteeringTypeRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
@@ -757,6 +789,16 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
                   </button>
                 ))}
             <ViewAll href="/repos" navigate={navigate} />
+          </RailHeading>
+
+          {/* ── Testing — the quality surface, BEFORE Steering (testing wave). ─ */}
+          <RailHeading
+            path={P_TESTING}
+            open={openHeading === 'testing'}
+            onToggle={() => toggle('testing')}
+            navigate={navigate}
+          >
+            <TestingPageRows navigate={navigate} />
           </RailHeading>
 
           {/* ── Steering — the governance surface, BEFORE Settings (STEERING). ─ */}
