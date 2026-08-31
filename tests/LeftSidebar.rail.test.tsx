@@ -370,8 +370,9 @@ describe('accordion contents (§3.3)', () => {
 
     const settings = screen.getByTestId('rail-heading-settings');
     expect(settings.getAttribute('aria-expanded')).toBe('true');
-    // 6 rows: Theme, Coverage, Domain, Workflows, Policies, System — Rules and
-    // Arch Wiki retired into the Steering heading (the STEERING program).
+    // 3 rows: Theme, Workflows, System — Rules and Arch Wiki retired into the
+    // Steering heading (the STEERING program), and the steering-UX wave retired
+    // Policies (→ /steering) plus the orphaned Coverage/Domain panels (→ /system).
     expect(within(settings).getAllByRole('menuitem')).toHaveLength(3);
     expect(within(settings).getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument();
   });
