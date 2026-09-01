@@ -11,8 +11,8 @@
   "studioVersion": "0.4.5",
   "counts": {
     "files": 115,
-    "occurrences": 836,
-    "static": 717,
+    "occurrences": 839,
+    "static": 720,
     "dynamic": 41,
     "computed": 6
   },
@@ -2781,6 +2781,24 @@
       "testId": "run-delivery-reason",
       "files": [
         "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-header",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-inspect",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-inspect-menu",
+      "files": [
+        "src/components/ChatPanel.tsx"
       ]
     },
     {

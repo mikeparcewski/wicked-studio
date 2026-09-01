@@ -37,10 +37,11 @@ const FAILED_VIEW = makeView({ status: 'failed' }, [
   }),
 ]);
 
-// Slice BB (DES-UX-002 §2.3): a terminal run's DEFAULT lens is the evidence
-// timeline; the slice-R post-mortem spine is the preserved Units tab. These
-// tests re-verify every spine AC holds UNCHANGED there (§8.3's re-scope) —
-// the panel opens on the Units tab before each assertion.
+// DES-RUN-NARRATOR §8 (revised 2026-08-31): the slice-R post-mortem spine is
+// the preserved Units lens, now reached through the header's Inspect ▾ control
+// rather than a sibling tab. These tests re-verify every spine AC holds
+// UNCHANGED there (§8.3's re-scope) — the panel opens the Units lens via the
+// menu before each assertion.
 async function renderPanel(view = FAILED_VIEW): Promise<void> {
   render(
     <ChatPanel
@@ -50,6 +51,7 @@ async function renderPanel(view = FAILED_VIEW): Promise<void> {
       onRefresh={vi.fn()}
     />,
   );
+  await userEvent.click(await screen.findByTestId('run-inspect'));
   await userEvent.click(await screen.findByTestId('tab-unit-list'));
 }
 
