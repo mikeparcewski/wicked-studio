@@ -12,6 +12,33 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.7] — 2026-09-01
+
+### Added
+
+- **Chat and Repositories become command surfaces** (#169) — the dashboard kit applied to the
+  last two list sections: conversation cards with seat chips and a live/needs-you-first order,
+  and the repo fleet view with derived graph state, windowed pass/fail splits, and
+  re-index-as-prefill.
+- **Testing lands on Campaigns** (#170) — the Testing section opens on a campaigns dashboard
+  (Harness folds into the landing's creation verbs), and launches gain **project selection and
+  multi-codebase attachment**: the pinned `{projectId, repoRefs}` wire against crew's new
+  `POST /testing/recon`, honest `runIds` fan-out rendering, and a presence-gated single-repo
+  fallback for older daemons.
+- **Steering becomes a spreadsheet** (#171) — inline cell editing with Enter/Esc/Tab semantics,
+  add-row with reserved-namespace validation, retire-with-reason; advanced fields stay in the
+  drawer. And the **assist dock**: the reusable right-panel chat (design:
+  `.product/DES-ASSIST-DOCK.md`) where chatting launches the governed authoring run, the propose
+  gate renders as a pinned approval card inside the panel, and attachments fork
+  import-directly vs analyze-with-chat.
+- **Ask** (#172) — an app-wide assistant entry in the rail (below Notifications, its own accent
+  idiom, ⌘⇧A) opening the assist dock with an app-context pack that cites the daemon's new
+  diagnostics (component versions, stores, per-CLI ACP health) when served, with honest
+  degraded copy on older crews; quick-prompt chips prefill common questions.
+- **Steering reports on itself** (#172) — a usage band on the Steering landing: gate
+  evaluations, denials, % of runs governed, allow/deny split, top-fired vs unused rules
+  (clicking through to the filtered grid), and the latest eval's caught/gap rate.
+
 ## [0.4.6] — 2026-09-01
 
 ### Added
