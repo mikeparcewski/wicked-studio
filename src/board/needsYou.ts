@@ -65,6 +65,10 @@ export interface NeedRow {
 /** The failed-run recency window — the sections' "last 30" positional idiom. */
 export const FAILED_WINDOW = 30;
 
+/** The failed-run row's dedupe key — shared with {@link newestFailedRun} so the
+ *  row→run mapping can never drift from the fold's own spelling. */
+const FAILED_KEY = (id: string): string => `fail:${id}`;
+
 const SEVERITY: Record<NeedKind, number> = {
   gate: 100,
   'failed-run': 70,
@@ -199,7 +203,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
     } else if (s.status === 'failed' && windowIds.has(s.id) && !suppressed.has(s.id)) {
       shownRunIds.add(s.id);
       rows.push({
-        key: `fail:${s.id}`,
+        key: FAILED_KEY(s.id),
         kind: 'failed-run',
         severity: SEVERITY['failed-run'],
         subject: s.problem,
@@ -287,6 +291,23 @@ export function calmCopy(runs: SessionView[]): string {
  *  (verbs + Ask prominent, no fabricated zeros anywhere). */
 export function isFreshInstall(projects: number, runs: SessionView[], repos: readonly RepoEntry[]): boolean {
   return projects === 0 && runs.length === 0 && repos.length === 0;
+}
+
+/**
+ * The queue's NEWEST failed run — the FIRST failed-run row of
+ * {@link needsYouRows} (severity-ordered, newest-clock first), mapped back to
+ * its SessionView. THE derivation the Ask quick-prompt seeds from (E1: the
+ * campaign caught the chip seeding a 17-day-old failure): the home queue's own
+ * ordering — durable failure tail, else attach clock — with its window and its
+ * repo-onboard suppression included, never a second recency derivation.
+ */
+export function newestFailedRun(
+  rows: readonly NeedRow[],
+  runs: readonly SessionView[],
+): SessionView | undefined {
+  const row = rows.find((r) => r.kind === 'failed-run');
+  if (row === undefined) return undefined;
+  return runs.find((v) => FAILED_KEY(v.session.id) === row.key);
 }
 
 /** The queue's oldest waiting clock — the KPI tile's context line. */

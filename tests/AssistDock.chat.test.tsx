@@ -112,4 +112,56 @@ describe('AssistDock — the chat block', () => {
     await waitFor(() => expect(screen.getAllByTestId('assist-user-msg')).toHaveLength(2));
     expect(screen.getAllByTestId('assist-chat')).toHaveLength(1); // one session, one block
   });
+
+  it('seat replies render as MARKDOWN — the shared component, never ##-visible raw text (E3)', async () => {
+    const user = userEvent.setup();
+    const v: AssistVerbs = { send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) };
+    dock(v);
+
+    await user.type(screen.getByTestId('assist-input'), 'diagnose');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+
+    act(() => {
+      emit?.(frame({
+        type: 'chatReply', chat: 'chat-1', cliKey: 'claude',
+        text: '## Root cause\n\nThe daemon dropped `/ws` — check `core.db`.\n\n<img src=x onerror="window.pwned=1">',
+        ok: true,
+      }));
+    });
+
+    const msg = screen.getByTestId('assist-chat-msg');
+    // Markdown structure, not raw syntax:
+    expect(msg.querySelector('h2')).toHaveTextContent('Root cause');
+    const codes = Array.from(msg.querySelectorAll('code')).map((c) => c.textContent);
+    expect(codes).toContain('/ws');
+    expect(codes).toContain('core.db');
+    expect(msg.textContent).not.toContain('##');
+    expect(msg.textContent).not.toContain('`');
+    // …and SANITIZED: raw HTML in a reply never becomes live DOM (react-markdown
+    // parses no raw HTML — there is no rehype-raw anywhere in this app).
+    expect(msg.querySelector('img')).toBeNull();
+    expect((window as { pwned?: number }).pwned).toBeUndefined();
+  });
+
+  it('a terminal reply SHORTER than the accumulated deltas never clobbers them (the wire has no history)', async () => {
+    const user = userEvent.setup();
+    const v: AssistVerbs = { send: vi.fn().mockResolvedValue({ chatId: 'chat-1' }) };
+    dock(v);
+
+    await user.type(screen.getByTestId('assist-input'), 'plan it');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+
+    const streamed = `the whole plan ${'x'.repeat(2000)} plan tail`;
+    act(() => {
+      emit?.(frame({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', text: streamed.slice(0, 900) }));
+      emit?.(frame({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', text: streamed.slice(900) }));
+      emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'plan tail', ok: true }));
+    });
+
+    const msg = screen.getByTestId('assist-chat-msg');
+    expect(msg).toHaveAttribute('data-pending', 'false');
+    expect(msg.textContent).toContain(streamed); // every streamed byte retained
+  });
 });

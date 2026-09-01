@@ -12,6 +12,7 @@ import {
   SEAT_CHIP,
   readStoredLayout,
   readStoredView,
+  retainOnFinalize,
   seatColumnOrder,
   writeStoredLayout,
   writeStoredView,
@@ -28,6 +29,7 @@ import {
   deriveChatArtifacts,
   narrateSeatLifecycle,
   newestChatNow,
+  seatLogPosture,
   type NarrationLine,
   type NarrationTone,
 } from './narrator.js';
@@ -631,15 +633,18 @@ export function GroupChat({
     });
   }
 
-  /** The terminal reply text is authoritative — it replaces the accumulated
-   *  deltas of the seat's OLDEST pending turn (the same FIFO as the chunks). */
+  /** The terminal reply finalizes the seat's OLDEST pending turn (the same
+   *  FIFO as the chunks) — through {@link retainOnFinalize}: the wire keeps no
+   *  history, so a terminal text SHORTER than the accumulated deltas must not
+   *  clobber what already streamed (E4 — the lost plan); the longer text
+   *  stands, ties to the terminal reply (the §7.9-3 healing, intact). */
   function finalizePending(cliKey: string, text: string, ok: boolean): void {
     setMessages((prev) => {
       const next = [...prev];
       for (let i = 0; i < next.length; i++) {
         const m = next[i];
         if (m && m.kind === 'seat' && m.cliKey === cliKey && m.pending) {
-          next[i] = { ...m, text, pending: false, ok };
+          next[i] = { ...m, text: retainOnFinalize(m.text, text), pending: false, ok };
           return next;
         }
       }
@@ -904,9 +909,10 @@ export function GroupChat({
 
   // §7.9-4 / EC44: every seat chip SAYS its state — connecting / ready /
   // working / replied / failed — and a failed seat carries its reason inline
-  // (the daemon's open-time answer or the chatSessionFailed frame), truncated
-  // in CSS with the full text on the title. No unlabeled "working" anywhere.
-  const seatChip = (cliKey: string, st: SeatState): React.ReactElement => (
+  // (the daemon's open-time answer, the chatSessionFailed frame, or the failed
+  // turn's own head), truncated in CSS with the full text on the title. No
+  // unlabeled "working" anywhere.
+  const seatChip = (cliKey: string, st: SeatState, reason?: string): React.ReactElement => (
     // wk-disclose: the roster disclosure animates in at --dur-base ease-out
     // (§5.3 motion) — once per chip mount, never a loop (§1.6).
     <span
@@ -914,7 +920,7 @@ export function GroupChat({
       data-testid="seat-chip"
       data-agent={cliKey}
       data-state={st}
-      title={st === 'failed' ? seatErrors[cliKey] : st}
+      title={st === 'failed' ? reason : st}
       className="wk-disclose inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-mono"
       style={{ background: SEAT_CHIP.bg, color: SEAT_CHIP.fg, opacity: st === 'failed' ? 0.5 : 1 }}
     >
@@ -928,10 +934,28 @@ export function GroupChat({
         className="truncate"
         style={{ color: st === 'failed' ? 'var(--status-fail)' : 'var(--ink-dim)', maxWidth: '180px' }}
       >
-        {st === 'failed' && seatErrors[cliKey] ? `failed — ${seatErrors[cliKey]}` : st}
+        {st === 'failed' && reason !== undefined && reason !== '' ? `failed — ${reason}` : st}
       </span>
     </span>
   );
+
+  // ── E4 one-source seat truth ────────────────────────────────────────────────
+  // The TURN axis of the header chips (working / replied / failed-turn) reads
+  // THE message log — `seatLogPosture`, the same source the narrated feed
+  // classifies from — so a chip can never again say "replied" while the feed
+  // says "failed" for the same turn (the campaign's E4 catch: the chip was a
+  // second, frame-driven derivation that ignored the reply's `ok`). The
+  // CONNECTION axis (connecting; the session itself failed) stays with the
+  // frame-driven `seats` record — the log carries no bubbles for it yet.
+  const posture = useMemo(() => seatLogPosture(messages), [messages]);
+  const displaySeat = (cliKey: string, st: SeatState): { st: SeatState; reason?: string } => {
+    if (st === 'connecting' || st === 'failed') {
+      return { st, ...(seatErrors[cliKey] !== undefined ? { reason: seatErrors[cliKey] } : {}) };
+    }
+    const p = posture[cliKey];
+    if (p === undefined) return { st };
+    return { st: p.state, ...(p.reason !== null ? { reason: p.reason } : {}) };
+  };
 
   // §6.2: the layout toggle is visible only when the chat has ≥2 distinct
   // REPLYING seats — a single-agent transcript has nothing to compare, and the
@@ -1010,7 +1034,12 @@ export function GroupChat({
   const currentProject = projects.find((p) => p.id === selectedProjectId) ?? null;
 
   // ── The §11.4 now-bar: what is happening RIGHT NOW, pinned above the thread.
-  const warmCount = Object.values(seats).filter((st) => WARM_STATES.has(st)).length;
+  // The census wears the SAME display overlay as the chips (E4): a seat whose
+  // newest turn FAILED is not "ready" — the bar may not contradict the feed
+  // either. (The send audience below still reads the frame-driven `seats`
+  // record — warmth on the daemon is a different question from turn truth.)
+  const warmCount = Object.entries(seats)
+    .filter(([k, st]) => WARM_STATES.has(displaySeat(k, st).st)).length;
   const connecting = arming || resolving || Object.values(seats).some((st) => st === 'connecting');
   const chatStatus = ended
     ? 'completed'
@@ -1059,7 +1088,10 @@ export function GroupChat({
         <button type="button" onClick={onBack} className="text-sm font-mono opacity-60 hover:opacity-100">←</button>
         <span className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Chat</span>
         <div className="flex items-center gap-1.5 flex-wrap">
-          {Object.entries(seats).map(([k, st]) => seatChip(k, st))}
+          {Object.entries(seats).map(([k, st]) => {
+            const d = displaySeat(k, st);
+            return seatChip(k, d.st, d.reason);
+          })}
         </div>
         {/* §6.2: the layout toggle sits right of the seat chips — a two-state
             segmented pair, present only with ≥2 distinct replying seats. */}
