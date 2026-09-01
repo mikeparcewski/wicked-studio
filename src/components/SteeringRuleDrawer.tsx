@@ -154,7 +154,8 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired 
             <span className="font-mono">{rule.symbol_ref}</span>
           </DetailRow>
         )}
-        <DetailRow label="Confidence" testid="steering-rule-confidence">{rule.confidence}</DetailRow>
+        {/* Same f32 honesty as weight: 0.95 must never render as 0.949999988079071. */}
+        <DetailRow label="Confidence" testid="steering-rule-confidence">{fmtWeight(rule.confidence)}</DetailRow>
         {rule.compliance !== undefined && (
           <DetailRow label="Compliance" testid="steering-rule-compliance">
             <span className="font-mono">{rule.compliance.framework} / {rule.compliance.control_id}</span>

@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.4.6",
   "counts": {
-    "files": 117,
-    "occurrences": 904,
-    "static": 775,
-    "dynamic": 42,
+    "files": 118,
+    "occurrences": 931,
+    "static": 796,
+    "dynamic": 44,
     "computed": 6
   },
   "static": [
@@ -185,6 +185,102 @@
       "testId": "artifact-open",
       "files": [
         "src/components/ArtifactCard.tsx"
+      ]
+    },
+    {
+      "testId": "assist-analyze",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-attach",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-attachment-chip",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-context",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-dock",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-dock-rail",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-dock-toggle",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-empty",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-import-now",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-input",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-note",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-run",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-run-waiting",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-send",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-thread",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-user-msg",
+      "files": [
+        "src/components/AssistDock.tsx"
       ]
     },
     {
@@ -3376,6 +3472,12 @@
       ]
     },
     {
+      "testId": "steering-commit-error",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
       "testId": "steering-diagnostics",
       "files": [
         "src/components/SteeringHealth.tsx"
@@ -3385,6 +3487,48 @@
       "testId": "steering-diagnostics-toggle",
       "files": [
         "src/components/SteeringHealth.tsx"
+      ]
+    },
+    {
+      "testId": "steering-draft-discard",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-draft-error",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-draft-id",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-draft-issue",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-draft-save",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-draft-statement",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-draft-weight",
+      "files": [
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
@@ -3415,6 +3559,12 @@
       "testId": "steering-error",
       "files": [
         "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "steering-filter-retired",
+      "files": [
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
@@ -3484,6 +3634,42 @@
       ]
     },
     {
+      "testId": "steering-grid",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-grid-add",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-grid-draft",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-grid-id",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-grid-retire",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "testId": "steering-grid-row",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
       "testId": "steering-health",
       "files": [
         "src/components/SteeringHealth.tsx"
@@ -3505,54 +3691,6 @@
       "testId": "steering-health-unsupported",
       "files": [
         "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-import-busy",
-      "files": [
-        "src/components/SteeringImportPanel.tsx"
-      ]
-    },
-    {
-      "testId": "steering-import-close",
-      "files": [
-        "src/components/SteeringImportPanel.tsx"
-      ]
-    },
-    {
-      "testId": "steering-import-error",
-      "files": [
-        "src/components/SteeringImportPanel.tsx"
-      ]
-    },
-    {
-      "testId": "steering-import-file",
-      "files": [
-        "src/components/SteeringImportPanel.tsx"
-      ]
-    },
-    {
-      "testId": "steering-import-panel",
-      "files": [
-        "src/components/SteeringImportPanel.tsx"
-      ]
-    },
-    {
-      "testId": "steering-import-result",
-      "files": [
-        "src/components/SteeringImportPanel.tsx"
-      ]
-    },
-    {
-      "testId": "steering-import-summary",
-      "files": [
-        "src/components/SteeringImportPanel.tsx"
-      ]
-    },
-    {
-      "testId": "steering-import-unsupported",
-      "files": [
-        "src/components/SteeringImportPanel.tsx"
       ]
     },
     {
@@ -3600,31 +3738,31 @@
     {
       "testId": "steering-retire-cancel",
       "files": [
-        "src/components/SteeringRuleDrawer.tsx"
+        "src/components/SteeringRetireModal.tsx"
       ]
     },
     {
       "testId": "steering-retire-confirm",
       "files": [
-        "src/components/SteeringRuleDrawer.tsx"
+        "src/components/SteeringRetireModal.tsx"
       ]
     },
     {
       "testId": "steering-retire-confirm-input",
       "files": [
-        "src/components/SteeringRuleDrawer.tsx"
+        "src/components/SteeringRetireModal.tsx"
       ]
     },
     {
       "testId": "steering-retire-error",
       "files": [
-        "src/components/SteeringRuleDrawer.tsx"
+        "src/components/SteeringRetireModal.tsx"
       ]
     },
     {
       "testId": "steering-retire-modal",
       "files": [
-        "src/components/SteeringRuleDrawer.tsx"
+        "src/components/SteeringRetireModal.tsx"
       ]
     },
     {
@@ -3636,7 +3774,7 @@
     {
       "testId": "steering-retire-reason",
       "files": [
-        "src/components/SteeringRuleDrawer.tsx"
+        "src/components/SteeringRetireModal.tsx"
       ]
     },
     {
@@ -3664,15 +3802,15 @@
       ]
     },
     {
-      "testId": "steering-rule-list",
+      "testId": "steering-rule-grid",
       "files": [
-        "src/components/SteeringRuleList.tsx"
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
       "testId": "steering-rule-retired-chip",
       "files": [
-        "src/components/SteeringRuleList.tsx"
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
@@ -3682,35 +3820,23 @@
       ]
     },
     {
-      "testId": "steering-rule-row",
-      "files": [
-        "src/components/SteeringRuleList.tsx"
-      ]
-    },
-    {
-      "testId": "steering-rule-weight-chip",
-      "files": [
-        "src/components/SteeringRuleList.tsx"
-      ]
-    },
-    {
       "testId": "steering-rules-empty",
       "files": [
-        "src/components/SteeringRuleList.tsx"
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
       "testId": "steering-rules-error",
       "files": [
-        "src/components/SteeringPage.tsx",
-        "src/components/SteeringRuleList.tsx"
+        "src/components/SteeringGrid.tsx",
+        "src/components/SteeringPage.tsx"
       ]
     },
     {
       "testId": "steering-rules-loading",
       "files": [
-        "src/components/SteeringPage.tsx",
-        "src/components/SteeringRuleList.tsx"
+        "src/components/SteeringGrid.tsx",
+        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -4725,9 +4851,21 @@
       ]
     },
     {
+      "pattern": "*-editor",
+      "files": [
+        "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
       "pattern": "*-error-detail",
       "files": [
         "src/components/SurfaceState.tsx"
+      ]
+    },
+    {
+      "pattern": "*-input",
+      "files": [
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
@@ -4986,10 +5124,10 @@
         "src/components/CampaignScoreboard.tsx",
         "src/components/GroupChat.tsx",
         "src/components/SteeringAddMenu.tsx",
+        "src/components/SteeringGrid.tsx",
         "src/components/SteeringHealth.tsx",
         "src/components/SteeringRuleDrawer.tsx",
         "src/components/SteeringRuleForm.tsx",
-        "src/components/SteeringRuleList.tsx",
         "src/components/TestingPage.tsx"
       ]
     },
