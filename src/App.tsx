@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CenterDashboard } from './components/CenterDashboard.js';
+import { AskDock } from './components/AskDock.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
 import { ChatsPage } from './components/ChatsPage.js';
 import { GateNotifications } from './components/GateNotifications.js';
@@ -246,9 +247,13 @@ export function App(): React.ReactElement {
     setShortcutsPaletteOpen(paletteOpen);
   }, [paletteOpen]);
 
+  // ASK — the app-wide assist dock (AskDock): opened from the rail's Ask button
+  // or Ctrl/⌘+Shift+A; collapsing the dock closes it entirely.
+  const [askOpen, setAskOpen] = useState(false);
+
   const shortcutEntries = useMemo(
-    () =>
-      paletteShortcutEntries({
+    () => [
+      ...paletteShortcutEntries({
         isOpen: () => paletteOpenRef.current,
         setOpen: (next: boolean) => {
           setPaletteSeed('');
@@ -267,6 +272,18 @@ export function App(): React.ReactElement {
           if (runId) void onKill(runId);
         },
       }),
+      // Ctrl/⌘+Shift+A — the ASK toggle, documented in the '?' overlay via the registry.
+      {
+        id: 'ask-dock',
+        chord: { key: 'a', ctrlOrMeta: true, shift: true },
+        group: 'panels' as const,
+        description: 'Ask — governed answers about your projects, repos, and this studio',
+        handler: (e: KeyboardEvent) => {
+          e.preventDefault();
+          setAskOpen((v) => !v);
+        },
+      },
+    ],
     [runId, runs, onKill],
   );
   useGlobalShortcuts(shortcutEntries);
@@ -472,6 +489,7 @@ export function App(): React.ReactElement {
             type={steeringType !== null && isSteeringType(steeringType) ? steeringType : null}
             navigate={navigate}
             search={search}
+            runs={runs}
           />
         </div>
       );
@@ -609,6 +627,7 @@ export function App(): React.ReactElement {
         pathname={pathname}
         runPath={runPath}
         immersive={immersive}
+        onOpenAsk={() => setAskOpen(true)}
       />
 
       <div id="main" tabIndex={-1} className="flex flex-1 overflow-hidden" style={{ outline: 'none' }}>
@@ -618,6 +637,12 @@ export function App(): React.ReactElement {
       {/* Right panel only when a run is selected */}
       {selected !== null && (
         <RightPanel view={selected} runs={runs} onSelectRun={selectRun} />
+      )}
+
+      {/* ASK — the app-wide assist dock, a right-edge sibling column on every route.
+          Renders only while open; NOTHING launches until the user sends. */}
+      {askOpen && (
+        <AskDock runs={runs} pathname={pathname} onClose={() => setAskOpen(false)} />
       )}
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus

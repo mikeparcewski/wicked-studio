@@ -53,6 +53,9 @@ interface Props {
    *  auto-collapses the rail to its icon state; leaving restores what the user had.
    *  Hover-peek still works, and the expand control stays live — auto, not locked. */
   immersive?: boolean;
+  /** Opens the app-wide ASK dock (the AskDock binding of the assist panel). The Ask
+   *  entry renders only when the app wires this — the rail never paints a dead door. */
+  onOpenAsk?: () => void;
 }
 
 // The rail is chrome (`--surface-rail`); the token dress is §3.1/§3.5's.
@@ -534,7 +537,7 @@ function SteeringTypeRows({ navigate }: { navigate: (p: string) => void }): Reac
 
 const flatRunPath = (id: string): string => `/runs/${encodeURIComponent(id)}`;
 
-export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, immersive = false }: Props): React.ReactElement {
+export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, immersive = false, onOpenAsk }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -652,6 +655,44 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
       <div className={isExpanded ? 'px-4 pb-2' : 'flex justify-center pb-2'}>
         <NotificationBell navigate={navigate} collapsed={!isExpanded} />
       </div>
+
+      {/* ASK — below Notifications, above Projects, and deliberately its OWN idiom:
+          an accent-dressed action button, not a nav heading and not a bell sibling.
+          It opens the app-wide assist dock in the ask context (AskDock); the chord
+          Ctrl/⌘+Shift+A does the same and is documented in the '?' overlay. */}
+      {onOpenAsk !== undefined && (
+        <div className={isExpanded ? 'px-3 pb-2' : 'flex justify-center pb-2'}>
+          <button
+            type="button"
+            data-testid="rail-ask"
+            data-idiom="ask"
+            aria-label="Ask — governed answers about your projects, repos, and this studio (Ctrl/⌘+Shift+A)"
+            aria-keyshortcuts="Control+Shift+A Meta+Shift+A"
+            title="Ask — governed answers about your projects, repos, and this studio (Ctrl/⌘+Shift+A)"
+            onClick={onOpenAsk}
+            className={
+              isExpanded
+                ? 'w-full flex items-center gap-2 rounded-lg px-3 py-2 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-1'
+                : 'w-9 h-9 flex items-center justify-center rounded-lg transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-1'
+            }
+            style={{
+              background: 'var(--accent-subtle)',
+              border: '1px solid var(--accent)',
+              color: 'var(--accent)',
+            }}
+          >
+            <span aria-hidden style={{ fontSize: 'var(--text-sm)', lineHeight: 1 }}>✦</span>
+            {isExpanded && (
+              <>
+                <span className="flex-1 text-left text-xs" style={{ fontWeight: 'var(--weight-semi)', fontFamily: 'var(--font-sans)' }}>
+                  Ask
+                </span>
+                <kbd className="font-mono text-[9px]" style={{ opacity: 0.75 }}>⌘⇧A</kbd>
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {isExpanded ? (
         <div className="flex-1 overflow-y-auto flex flex-col min-h-0 px-2 pt-1" style={{ borderTop: `1px solid ${S.border}` }}>
