@@ -81,6 +81,9 @@ export function DocDeleteConfirm({
       // Every cache reader agrees with the wire immediately; the owner's own
       // refresh (a re-list, a navigation off the dead doc) rides on onDeleted.
       useDocsCache.getState().remove(projectId, docId);
+      // Self-consistent even if a caller keeps the dialog mounted (or onDeleted throws):
+      // the controls re-arm before the success callback runs.
+      setBusy(false);
       onDeleted(result);
     } catch (e: unknown) {
       setFailure(asDeleteFailure(e));

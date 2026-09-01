@@ -367,7 +367,14 @@ export async function deleteDoc(projectId: string, docId: string): Promise<DocDe
     const parsed: unknown = JSON.parse(text);
     if (typeof parsed === 'object' && parsed !== null) body = parsed as Record<string, unknown>;
   } catch { /* not JSON — fall through to the generic error path */ }
-  if (res.ok) return body as unknown as InteractiveDocDeleteResponse;
+  if (res.ok) {
+    // A 200 whose body is not a JSON object cannot be the wire's delete response — fail at
+    // the fetch boundary, not as an undefined-read crash far downstream.
+    if (body === undefined) {
+      throw new ApiError(res.status, `the delete answered 200 with an unreadable body: ${text.slice(0, 200)}`);
+    }
+    return body as unknown as InteractiveDocDeleteResponse;
+  }
   if (res.status === 503 && body?.['code'] === 'bridge_unavailable') {
     throw new BridgeUnavailableError(typeof body['hint'] === 'string' ? body['hint'] : '');
   }
