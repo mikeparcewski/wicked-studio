@@ -150,6 +150,34 @@ export function isValidRuleId(id: string, ruleType: 'pattern' | 'policy'): boole
   return new RegExp(`^${prefix}-[0-9]{3,6}$`).test(id);
 }
 
+/**
+ * The STEERING-scoped INV-C1, spelled for a manually-typed id (the grid's draft row):
+ * `PAT-`/`POL-` is the RESERVED doc-ingest namespace — an id inside it must match
+ * `^(PAT|POL)-[0-9]{3,6}$` AND its prefix must agree with rule_type (PAT-⇔pattern,
+ * POL-⇔policy). Ids OUTSIDE the reserved namespace (migrated policies, custom UI/chat mints)
+ * need only be non-blank — the engine's `ConformanceRule::validate` verbatim
+ * (wicked-governance/conformance.rs, engine ≥ 0.7.5). Returns `null` when the id passes, or
+ * the issue to surface. {@link isValidRuleId} above stays the STRICTER derived-id echo the
+ * modal form uses for the ids it mints itself.
+ */
+export function ruleIdIssue(id: string, ruleType: 'pattern' | 'policy'): string | null {
+  const t = id.trim();
+  if (t === '') return 'id must not be blank';
+  if (t.startsWith('PAT-') || t.startsWith('POL-')) {
+    const prefix = ruleType === 'pattern' ? 'PAT-' : 'POL-';
+    if (!new RegExp(`^${prefix}[0-9]{3,6}$`).test(t)) {
+      return `PAT-/POL- is the reserved doc-ingest namespace — inside it the id must be ${prefix}<3–6 digits> and agree with rule_type "${ruleType}" (INV-C1); any id outside the namespace is fine`;
+    }
+  }
+  return null;
+}
+
+/** The rule_type a manual id IMPLIES: `POL-` mints a policy, everything else a pattern
+ *  (the reserved-namespace prefix binds it; custom ids default to pattern). */
+export function ruleTypeOfId(id: string): 'pattern' | 'policy' {
+  return id.trim().startsWith('POL-') ? 'policy' : 'pattern';
+}
+
 // ── Import (`POST /governance/steering/import`) ───────────────────────────────────────────────
 
 export type SteeringImportEntryInput =
@@ -162,13 +190,42 @@ export interface SteeringImportBody {
   entries: SteeringImportEntryInput[];
 }
 
-/** One entry's fate, reported per-rule so a half-good batch renders honestly. */
+/**
+ * One entry's fate, reported per-entry so a half-good batch renders honestly. The ENGINE's row
+ * shape (wicked-core-ts `SteeringEntryResult`, verified against the 0.7.6 addon) is
+ * `{index, name?, status: 'imported' | 'rejected', ids?, error?}` — a doc entry can mint
+ * SEVERAL rules, so success carries `ids[]`. The legacy per-RULE spelling this module first
+ * assumed (`{id?, statement?, status: 'created'|'updated'|'error'}`) stays readable so a
+ * daemon that ever spoke it still renders; {@link importEntryOutcome} folds both.
+ */
 export interface SteeringImportEntry {
+  index?: number;
+  name?: string;
+  status: string;
+  ids?: string[];
+  error?: string;
   id?: string;
   statement?: string;
-  status: 'created' | 'updated' | 'error';
-  error?: string;
   [k: string]: unknown;
+}
+
+/** The one fold over both import-result vocabularies — pinned by test. */
+export function importEntryOutcome(entry: SteeringImportEntry): {
+  ok: boolean;
+  /** e.g. `imported PAT-101, PAT-102` / `rejected soc2.md — <reason>` */
+  text: string;
+} {
+  const ok = entry.status === 'imported' || entry.status === 'created' || entry.status === 'updated';
+  const ids = entry.ids ?? (entry.id !== undefined ? [entry.id] : []);
+  const name = entry.name ?? (typeof entry.index === 'number' ? `entry ${entry.index}` : null);
+  if (ok) {
+    const what = ids.length > 0 ? ids.join(', ') : name ?? 'entry';
+    const suffix = entry.statement !== undefined && entry.statement !== '' ? ` — ${entry.statement}` : '';
+    return { ok, text: `${entry.status} ${what}${suffix}` };
+  }
+  const reason = entry.error ?? 'unspecified error';
+  const what = name ?? (ids.length > 0 ? ids.join(', ') : 'entry');
+  return { ok, text: `${entry.status} ${what} — ${reason}` };
 }
 
 export function importSteeringRules(body: SteeringImportBody): Promise<{ results: SteeringImportEntry[] }> {

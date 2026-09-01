@@ -20,9 +20,7 @@ vi.mock('../src/api/client.js', () => ({
 afterEach(cleanup);
 
 function menu(): void {
-  render(
-    <SteeringAddMenu type="security" rules={[]} onSaved={() => {}} onRulesChanged={() => {}} />,
-  );
+  render(<SteeringAddMenu onAddRow={() => {}} onOpenAssistant={() => {}} />);
 }
 
 describe('SteeringAddMenu — the Escape gap, closed', () => {

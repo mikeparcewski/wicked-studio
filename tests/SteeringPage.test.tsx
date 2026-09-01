@@ -2,18 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SteeringPage } from '../src/components/SteeringPage.js';
-import { filterSteeringRules } from '../src/components/SteeringRuleList.js';
+import { filterSteeringRules, GRID_FACETS_DEFAULT, type GridFacets } from '../src/components/SteeringGrid.js';
 import { countByType } from '../src/components/SteeringTypeCards.js';
 import { ApiError } from '../src/api/errors.js';
 import type { SteeringRule, SteeringType } from '../src/api/steering.js';
 import type { WikiMeta, WikiScoreboard } from '../src/api/wiki.js';
 
 /**
- * The Steering surface after the steering-UX wave ("it's a lot to look at") — the read side,
- * demo-able entirely off mocked wire payloads. Pinned here:
+ * The Steering surface after the SPREADSHEET wave — the read side, demo-able entirely off
+ * mocked wire payloads. Pinned here:
  *  - the `/steering` LANDING (type null): a calm grid of seven type cards, each counting that
  *    type's rules from the ONE rules fetch, client-side; a card click is a real navigation;
- *  - `/steering/:type`: ONE shell parameterized by type — the same render scopes to the page's
+ *  - `/steering/:type`: ONE shell parameterized by type — the GRID scopes to the page's
  *    steering_type, with absent `steering_type` folding to architecture (the engine's serde
  *    default); the breadcrumb walks back to the landing;
  *  - the health header renders the AW-23 raw signals; PER-TYPE numbers when the wire serves
@@ -21,13 +21,14 @@ import type { WikiMeta, WikiScoreboard } from '../src/api/wiki.js';
  *    store-wide when it does not; a 501 is the honest adoption state, never an error card;
  *  - `meta.seeded === false` + an empty store is the unseeded state (seed command shown), and a
  *    daemon that cannot answer meta is never accused of an unseeded store; an empty TYPE on a
- *    populated store names the management flows instead;
- *  - the rule LIST is calm — severity chip, id, one-line statement, weight only when
- *    non-default; everything richer lives in the DRAWER a row click opens (provenance,
- *    applies_to/excludes, effect, evidence — each honest when its producer is not served);
- *  - retire takes a TYPED confirmation + required reason over the shipping DELETE wire (opened
- *    from the drawer now), reloads for the server's state, and surfaces failure instead of
- *    pretending.
+ *    populated store names the ways in (a draft row, the assistant) instead;
+ *  - the GRID carries the common columns (id · type · severity · statement · weight ·
+ *    applies_to · excludes · status); everything richer lives in the DRAWER the ID CELL opens
+ *    (provenance, effect+trigger, obligations, criteria, evidence — each honest when its
+ *    producer is not served); cell-editing mechanics are pinned in SteeringGrid.test.tsx;
+ *  - retire takes a TYPED confirmation + required reason over the shipping DELETE wire (the
+ *    SHARED modal, opened from the drawer or a grid row), reloads for the server's state, and
+ *    surfaces failure instead of pretending.
  */
 
 const listConformanceRules = vi.fn();
@@ -131,10 +132,11 @@ describe('SteeringPage — the /steering landing (type null)', () => {
     expect(counts).toEqual(['2', '0', '1', '0', '0', '0', '0']);
     // The retired architecture rule counts as retired, never silently dropped.
     expect(cards[0]).toHaveTextContent('1 retired');
-    // The landing is CALM: no list, no forms, no health tiles.
-    expect(screen.queryByTestId('steering-rule-row')).toBeNull();
+    // The landing is CALM: no grid, no forms, no dock, no health tiles.
+    expect(screen.queryByTestId('steering-grid-row')).toBeNull();
     expect(screen.queryByTestId('steering-add-menu')).toBeNull();
     expect(screen.queryByTestId('steering-rule-form')).toBeNull();
+    expect(screen.queryByTestId('assist-dock')).toBeNull();
     expect(screen.queryByTestId('steering-health')).toBeNull();
     expect(listConformanceRules).toHaveBeenCalledTimes(1);
   });
@@ -182,28 +184,28 @@ describe('SteeringPage — one shell, parameterized by type', () => {
     rule({ id: 'POL-100', rule_type: 'policy', statement: 'No secrets in logs', steering_type: 'security', severity: 'critical' }),
   ];
 
-  it('scopes the list to the page type; absent steering_type folds to architecture', async () => {
+  it('scopes the grid to the page type; absent steering_type folds to architecture', async () => {
     listConformanceRules.mockResolvedValue({ rules: corpus });
     wire();
     const { unmount } = page('architecture');
 
-    const rows = await screen.findAllByTestId('steering-rule-row');
+    const rows = await screen.findAllByTestId('steering-grid-row');
     expect(rows.map((r) => r.getAttribute('data-rule-id'))).toEqual(['PAT-001', 'PAT-002']);
     expect(screen.getByTestId('steering-page')).toHaveAttribute('data-steering-type', 'architecture');
     unmount();
 
     page('security');
-    const secRows = await screen.findAllByTestId('steering-rule-row');
+    const secRows = await screen.findAllByTestId('steering-grid-row');
     expect(secRows.map((r) => r.getAttribute('data-rule-id'))).toEqual(['POL-100']);
   });
 
-  it('an empty TYPE on a populated store names the management flows, never "unseeded"', async () => {
+  it('an empty TYPE on a populated store names the ways in, never "unseeded"', async () => {
     listConformanceRules.mockResolvedValue({ rules: corpus });
     wire({ meta: () => Promise.resolve({ meta: { seeded: true } }) });
     page('testing');
 
     expect(await screen.findByTestId('steering-rules-empty')).toHaveTextContent(
-      /No Testing steering rules yet — import a doc, add one, or author with chat/,
+      /No Testing steering rules yet — add a row, or open the assistant/,
     );
     expect(screen.queryByTestId('steering-unseeded')).toBeNull();
   });
@@ -225,8 +227,7 @@ describe('SteeringPage — one shell, parameterized by type', () => {
 });
 
 describe('filterSteeringRules — the page-scope + facet predicate, pinned', () => {
-  const f = (over: Partial<{ severity: string; layer: string; rule_type: string; status: 'all' | 'active' | 'retired' }> = {}) =>
-    ({ severity: 'all', layer: 'all', rule_type: 'all', status: 'all' as const, ...over });
+  const f = (over: Partial<GridFacets> = {}): GridFacets => ({ ...GRID_FACETS_DEFAULT, ...over });
 
   it('a rule belongs to exactly one page: its steering_type, absent = architecture', () => {
     const rules = [rule(), rule({ id: 'POL-100', steering_type: 'security' })];
@@ -240,17 +241,19 @@ describe('filterSteeringRules — the page-scope + facet predicate, pinned', () 
     expect(filterSteeringRules([odd], 'architecture', f()).map((r) => r.id)).toEqual(['PAT-009']);
   });
 
-  it('status active excludes retired and vice versa; severity/layer/type facets compose', () => {
+  it('include_retired keeps retired rows listed (default) and hides them when off; severity + query compose', () => {
     const rules = [
       rule(),
       rule({ id: 'PAT-002', severity: 'warn', retired: true }),
-      rule({ id: 'POL-100', rule_type: 'policy', severity: 'critical', targets: { layer: 'surface' } }),
+      rule({ id: 'POL-100', rule_type: 'policy', statement: 'No secrets in logs', severity: 'critical' }),
     ];
-    expect(filterSteeringRules(rules, 'architecture', f({ status: 'active' })).map((r) => r.id)).toEqual(['PAT-001', 'POL-100']);
-    expect(filterSteeringRules(rules, 'architecture', f({ status: 'retired' })).map((r) => r.id)).toEqual(['PAT-002']);
+    // include_retired defaults TRUE — retire never silently hides a row it just dimmed.
+    expect(filterSteeringRules(rules, 'architecture', f()).map((r) => r.id)).toEqual(['PAT-001', 'PAT-002', 'POL-100']);
+    expect(filterSteeringRules(rules, 'architecture', f({ includeRetired: false })).map((r) => r.id)).toEqual(['PAT-001', 'POL-100']);
     expect(filterSteeringRules(rules, 'architecture', f({ severity: 'critical' })).map((r) => r.id)).toEqual(['POL-100']);
-    expect(filterSteeringRules(rules, 'architecture', f({ layer: 'surface' })).map((r) => r.id)).toEqual(['POL-100']);
-    expect(filterSteeringRules(rules, 'architecture', f({ rule_type: 'pattern' }))).toHaveLength(2);
+    // The search facet matches id OR statement, case-insensitively.
+    expect(filterSteeringRules(rules, 'architecture', f({ query: 'secrets' })).map((r) => r.id)).toEqual(['POL-100']);
+    expect(filterSteeringRules(rules, 'architecture', f({ query: 'pat-002' })).map((r) => r.id)).toEqual(['PAT-002']);
   });
 });
 
@@ -343,7 +346,7 @@ describe('SteeringPage — health header (TYPE-scoped, usability review #5)', ()
     expect(await screen.findByTestId('steering-health-unsupported')).toHaveTextContent(/predates the governance scoreboard/);
     expect(screen.queryByTestId('steering-health-error')).toBeNull();
     // The rules browser still works off the shipping wire.
-    expect(await screen.findByTestId('steering-rule-row')).toBeInTheDocument();
+    expect(await screen.findByTestId('steering-grid-row')).toBeInTheDocument();
   });
 
   it('a real scoreboard failure surfaces as one', async () => {
@@ -363,11 +366,11 @@ describe('SteeringPage — seededness', () => {
 
     expect(await screen.findByTestId('steering-unseeded')).toHaveTextContent(/No steering rules seeded yet/);
     expect(screen.getByTestId('steering-seed-command')).toHaveTextContent('seed_wiki.py');
-    // The unseeded state does NOT hide the way in: the Add menu (import/add/author)
+    // The unseeded state does NOT hide the way in: the Add menu (draft row / assistant)
     // is exactly how a store gets seeded from here.
     expect(screen.getByTestId('steering-add-menu')).toBeInTheDocument();
-    // No facets to fiddle with an empty store.
-    expect(screen.queryByTestId('steering-filter-severity')).toBeNull();
+    // No grid (and no facets) to fiddle with an empty store.
+    expect(screen.queryByTestId('steering-grid-filter-search')).toBeNull();
   });
 
   it('a daemon that cannot answer meta is never accused of an unseeded store', async () => {
@@ -389,8 +392,8 @@ describe('SteeringPage — seededness', () => {
   });
 });
 
-describe('SteeringPage — the calm rule list + the drawer', () => {
-  it('rows carry severity, id, one-line statement, and weight ONLY when non-default; effect lives in the drawer', async () => {
+describe('SteeringPage — the grid + the drawer', () => {
+  it('rows carry the common columns; the ADVANCED fields (effect) live in the drawer only', async () => {
     listConformanceRules.mockResolvedValue({
       rules: [
         rule({ id: 'PAT-001', weight: 1.5, effect: 'deny', trigger: { contains: 'DROP TABLE' } }),
@@ -401,21 +404,21 @@ describe('SteeringPage — the calm rule list + the drawer', () => {
     wire();
     page();
 
-    const rows = await screen.findAllByTestId('steering-rule-row');
-    expect(within(rows[0]!).getByTestId('steering-rule-weight-chip')).toHaveTextContent('w=1.5');
-    // The row is CALM: no effect badge inline — it renders in the drawer.
+    const rows = await screen.findAllByTestId('steering-grid-row');
+    // Weight is a COLUMN now: the stored value renders, and a wire that predates weights
+    // shows the engine default (1) rather than pretending the field is empty.
+    expect(within(rows[0]!).getByTestId('steering-cell-weight')).toHaveTextContent('1.5');
+    expect(within(rows[1]!).getByTestId('steering-cell-weight')).toHaveTextContent('1');
+    expect(within(rows[2]!).getByTestId('steering-cell-weight')).toHaveTextContent('1');
+    // The grid carries the COMMON columns only: no effect badge inline — it renders in the drawer.
     expect(within(rows[0]!).queryByTestId('steering-effect-badge')).toBeNull();
-    expect(within(rows[1]!).queryByTestId('steering-rule-weight-chip')).toBeNull();
-    // The engine-default weight (1.0) is noise, not signal — no chip.
-    expect(within(rows[2]!).queryByTestId('steering-rule-weight-chip')).toBeNull();
-    // Nothing renders open by default: no drawer, no forms, no panels.
+    // Nothing renders open by default: no drawer, no forms, no draft row.
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
     expect(screen.queryByTestId('steering-rule-form')).toBeNull();
-    expect(screen.queryByTestId('steering-import-panel')).toBeNull();
-    expect(screen.queryByTestId('steering-author-panel')).toBeNull();
+    expect(screen.queryByTestId('steering-grid-draft')).toBeNull();
   });
 
-  it('a row click opens the drawer joining applies_to/excludes, weight, effect+trigger, provenance path@sha, and evidence', async () => {
+  it('the ID CELL opens the drawer joining applies_to/excludes, weight, effect+trigger, provenance path@sha, and evidence', async () => {
     const user = userEvent.setup();
     listConformanceRules.mockResolvedValue({
       rules: [rule({
@@ -431,7 +434,7 @@ describe('SteeringPage — the calm rule list + the drawer', () => {
     wire({ scoreboard: () => Promise.resolve({ scoreboard: scoreboard() }) });
     page();
 
-    await user.click(await screen.findByTestId('steering-rule-row'));
+    await user.click(await screen.findByTestId('steering-grid-id'));
     const drawer = await screen.findByTestId('steering-rule-drawer');
     expect(within(drawer).getByTestId('steering-rule-detail')).toBeInTheDocument();
     expect(within(drawer).getByTestId('steering-rule-statement')).toHaveTextContent('Never use printf without %s');
@@ -459,7 +462,7 @@ describe('SteeringPage — the calm rule list + the drawer', () => {
     wire(); // no scoreboard either — the evidence join has no producer
     page();
 
-    await user.click(await screen.findByTestId('steering-rule-row'));
+    await user.click(await screen.findByTestId('steering-grid-id'));
     const drawer = await screen.findByTestId('steering-rule-drawer');
     expect(within(drawer).getByTestId('steering-rule-applies')).toHaveTextContent('—');
     expect(within(drawer).getByTestId('steering-rule-excludes')).toHaveTextContent('—');
@@ -479,12 +482,12 @@ describe('SteeringPage — the calm rule list + the drawer', () => {
     wire();
     page();
 
-    const rows = await screen.findAllByTestId('steering-rule-row');
-    await user.click(rows[0]!);
+    const cells = await screen.findAllByTestId('steering-grid-id');
+    await user.click(cells[0]!);
     expect(within(await screen.findByTestId('steering-rule-drawer')).getByTestId('steering-provenance-ui'))
       .toHaveTextContent('authored in studio (ui)');
     // Selecting the second row swaps the drawer to it.
-    await user.click(rows[1]!);
+    await user.click(cells[1]!);
     await waitFor(() =>
       expect(within(screen.getByTestId('steering-rule-drawer')).getByTestId('steering-provenance-chat'))
         .toHaveTextContent('authored by the chat run (chat)'),
@@ -499,14 +502,14 @@ describe('SteeringPage — the calm rule list + the drawer', () => {
     wire();
     page();
 
-    await user.click(await screen.findByTestId('steering-rule-row'));
+    await user.click(await screen.findByTestId('steering-grid-id'));
     expect(await screen.findByTestId('steering-rule-provenance')).toHaveTextContent(/no digest — re-ingest/);
   });
 });
 
 describe('SteeringPage — the retire kill switch (opened from the drawer)', () => {
   async function openModal(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-    await user.click(await screen.findByTestId('steering-rule-row'));
+    await user.click(await screen.findByTestId('steering-grid-id'));
     await user.click(await screen.findByTestId('steering-retire-open'));
     await screen.findByTestId('steering-retire-modal');
   }
@@ -575,7 +578,7 @@ describe('SteeringPage — the retire kill switch (opened from the drawer)', () 
     wire();
     page();
 
-    await user.click(await screen.findByTestId('steering-rule-row'));
+    await user.click(await screen.findByTestId('steering-grid-id'));
     await screen.findByTestId('steering-rule-drawer');
     expect(screen.queryByTestId('steering-retire-open')).toBeNull();
     expect(screen.queryByTestId('steering-edit-open')).toBeNull();
@@ -611,7 +614,7 @@ describe('SteeringPage — ?rule deep link opens the drawer (qe finding: eval ga
     wire();
     render(<SteeringPage type="architecture" navigate={() => {}} search="?rule=NOPE-1" />);
 
-    await screen.findByTestId('steering-rule-row');
+    await screen.findByTestId('steering-grid-row');
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
   });
 
