@@ -234,7 +234,7 @@ export function ChipsCell({ testid, label, values, disabled, onCommit }: {
   const close = (commit: boolean): void => {
     setEditing(false);
     setDraft('');
-    if (commit && draftValues.join(' ') !== values.join(' ')) onCommit(draftValues);
+    if (commit && draftValues.join('\u0000') !== values.join('\u0000')) onCommit(draftValues);
   };
 
   const add = (): string[] => {
@@ -272,7 +272,7 @@ export function ChipsCell({ testid, label, values, disabled, onCommit }: {
           const withDraft = draft.trim() !== '' ? [...draftValues, draft.trim()].filter((v, i, a) => a.indexOf(v) === i) : draftValues;
           setEditing(false);
           setDraft('');
-          if (withDraft.join(' ') !== values.join(' ')) onCommit(withDraft);
+          if (withDraft.join('\u0000') !== values.join('\u0000')) onCommit(withDraft);
         }
       }}
     >
