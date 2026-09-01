@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { executingOrd } from '../api/run-state.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
+import { useEventStream } from '../hooks/useEventStream.js';
+import { pinAwaiting } from '../store/awaitingPins.js';
 import { useRunEventStore } from '../store/events.js';
 import { ApprovalDock } from './ApprovalDock.js';
 import { readFileText } from './fileText.js';
@@ -43,6 +45,15 @@ export interface AssistContext {
   placeholder: string;
   /** One-liner under the header — what a message DOES here. */
   hint?: string;
+  /** Quick-prompt chips for the EMPTY thread: clicking one PREFILLS the composer
+   *  (never sends — nothing launches without the user's own send). */
+  prompts?: readonly AssistPrompt[];
+}
+
+export interface AssistPrompt {
+  label: string;
+  /** What the chip puts into the composer. */
+  text: string;
 }
 
 export interface AssistDocument {
@@ -55,9 +66,14 @@ export interface AssistNote {
   text: string;
 }
 
+/** What a send launched: a governed RUN (narrated by the run block) or a governed CHAT
+ *  session (streamed by the chat block — the GroupChat seat machinery's wire, §11-adjacent). */
+export type AssistLaunch = { runId: string } | { chatId: string };
+
 export interface AssistVerbs {
-  /** A typed message: launch a governed run, return its id — the dock narrates it inline. */
-  send: (text: string, documents: AssistDocument[]) => Promise<{ runId: string }>;
+  /** A typed message: launch a governed run OR chat session, return its id —
+   *  the dock narrates/streams it inline. */
+  send: (text: string, documents: AssistDocument[]) => Promise<AssistLaunch>;
   /** The direct-import fork for rule-shaped attachments; returns notes to echo. Absent ⇒ no fork. */
   importDirect?: (doc: AssistDocument) => Promise<AssistNote[]>;
   /** Fired when a pinned gate/elicitation resolves — the surface reloads its data. */
@@ -67,7 +83,8 @@ export interface AssistVerbs {
 type ThreadItem =
   | { kind: 'user'; text: string; files: string[] }
   | { kind: 'note'; tone: NarrationTone; text: string }
-  | { kind: 'run'; runId: string };
+  | { kind: 'run'; runId: string }
+  | { kind: 'chat'; chatId: string };
 
 interface PendingAttachment {
   name: string;
@@ -207,6 +224,171 @@ function DockRun({ runId }: { runId: string }): React.ReactElement {
   );
 }
 
+// ── The inline chat block — a governed chat session streaming into the thread ────────────────
+
+type DockSeatState = 'ready' | 'failed';
+
+interface DockChatMsg {
+  cliKey: string;
+  text: string;
+  pending: boolean;
+  ok: boolean;
+}
+
+/**
+ * One launched CHAT session (the GroupChat seat machinery's wire — `POST /chats` +
+ * `POST /chats/:id/messages`, replies streaming back as `chatDelta`/`chatReply` frames).
+ * The block folds ONLY frames whose `chat` matches, per-seat FIFO (the GroupChat §7.9-3
+ * correlation: a seat's frames belong to its oldest unfinished turn; the terminal
+ * `chatReply` text is authoritative and replaces the accumulated deltas). Seats come from
+ * the one `GET /chats/:id` snapshot — frames that streamed before this block mounted are
+ * healed by the authoritative reply, never re-invented.
+ */
+function DockChat({ chatId }: { chatId: string }): React.ReactElement {
+  const [seats, setSeats] = useState<Record<string, DockSeatState>>({});
+  const [msgs, setMsgs] = useState<DockChatMsg[]>([]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // §11.5: gates/elicitations the daemon keys by THIS chat id must survive the
+  // run-list reconcile (a chat id is never in GET /runs) — pin for the block's lifetime.
+  useEffect(() => pinAwaiting(chatId), [chatId]);
+
+  // The seats snapshot — one GET; an empty answer means the daemon no longer holds it.
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .getChat(chatId)
+      .then(({ seats: warm }) => {
+        if (cancelled) return;
+        setSeats((prev) => ({
+          ...Object.fromEntries(warm.map((k) => [k, 'ready' as DockSeatState])),
+          ...prev,
+        }));
+      })
+      .catch(() => {
+        /* snapshot unavailable — the frames below still speak for themselves */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId]);
+
+  /** A seat's streaming chunk belongs to its OLDEST pending bubble (FIFO — the wire
+   *  carries no turn field); a chunk with no pending bubble opens its own. */
+  const append = (cliKey: string, text: string): void => {
+    setMsgs((prev) => {
+      const next = [...prev];
+      for (let i = 0; i < next.length; i += 1) {
+        const m = next[i];
+        if (m !== undefined && m.cliKey === cliKey && m.pending) {
+          next[i] = { ...m, text: m.text + text };
+          return next;
+        }
+      }
+      next.push({ cliKey, text, pending: true, ok: false });
+      return next;
+    });
+  };
+
+  /** The terminal reply is authoritative — it REPLACES the oldest pending bubble's deltas. */
+  const finalize = (cliKey: string, text: string, ok: boolean): void => {
+    setMsgs((prev) => {
+      const next = [...prev];
+      for (let i = 0; i < next.length; i += 1) {
+        const m = next[i];
+        if (m !== undefined && m.cliKey === cliKey && m.pending) {
+          next[i] = { ...m, text, pending: false, ok };
+          return next;
+        }
+      }
+      next.push({ cliKey, text, pending: false, ok });
+      return next;
+    });
+  };
+
+  useEventStream((ev: CoreEvent) => {
+    const frame = ev as { type: string; chat?: string; cliKey?: string; text?: string; ok?: boolean; reason?: string };
+    if (frame.chat !== chatId) return;
+    switch (frame.type) {
+      case 'chatSessionReady':
+        if (frame.cliKey !== undefined) setSeats((s) => ({ ...s, [frame.cliKey!]: 'ready' }));
+        break;
+      case 'chatSessionFailed':
+        if (frame.cliKey !== undefined) setSeats((s) => ({ ...s, [frame.cliKey!]: 'failed' }));
+        break;
+      case 'chatDelta':
+        if (frame.cliKey !== undefined && frame.text !== undefined && frame.text !== '') append(frame.cliKey, frame.text);
+        break;
+      case 'chatReply':
+        if (frame.cliKey !== undefined) finalize(frame.cliKey, frame.text ?? '', frame.ok ?? false);
+        break;
+      default:
+        break;
+    }
+  });
+
+  // Tail-pinned inside the block — replies stream long; the dock thread stays one column.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [msgs]);
+
+  return (
+    <div
+      data-testid="assist-chat"
+      data-chat-id={chatId}
+      className="flex flex-col gap-1.5 overflow-hidden rounded-lg px-3 py-2"
+      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
+    >
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: 'var(--ink-dim)' }}>
+          chat session
+        </span>
+        {Object.entries(seats).map(([k, st]) => (
+          <span
+            key={k}
+            data-testid="assist-chat-seat"
+            data-agent={k}
+            data-state={st}
+            title={st === 'failed' ? `${k} could not hold a session` : `${k} — connected`}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px]"
+            style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', opacity: st === 'failed' ? 0.5 : 1 }}
+          >
+            <span
+              aria-hidden
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: st === 'failed' ? 'var(--status-fail)' : 'var(--status-run)' }}
+            />
+            {k}
+          </span>
+        ))}
+      </div>
+      <div ref={scrollRef} className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+        {msgs.length === 0 ? (
+          <p data-testid="assist-chat-waiting" className="font-mono text-[11px]" style={{ color: 'var(--ink-dim)' }}>
+            Sent — the agents answer here as their replies stream in.
+          </p>
+        ) : (
+          msgs.map((m, i) => (
+            <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending}>
+              <span className="font-mono text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
+                {m.cliKey}
+              </span>
+              <p
+                className="whitespace-pre-wrap text-[11px] leading-relaxed"
+                style={{ color: m.pending || m.ok ? 'var(--ink-body)' : 'var(--status-fail)' }}
+              >
+                {m.text}
+                {m.pending && <span aria-hidden className="animate-pulse"> …</span>}
+              </p>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── The dock ──────────────────────────────────────────────────────────────────────────────────
 
 export function AssistDock({ context, verbs, importable, open, onOpenChange, onError }: {
@@ -228,11 +410,13 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   const threadRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // The ACTIVE run: the newest run item — its gates/elicitations pin below the thread.
-  const activeRunId = useMemo(() => {
+  // The ACTIVE launch: the newest run/chat item — its gates/elicitations pin below the
+  // thread (the daemon keys chat-session gates by the chat id, §11.5).
+  const activeId = useMemo(() => {
     for (let i = items.length - 1; i >= 0; i -= 1) {
       const item = items[i];
       if (item !== undefined && item.kind === 'run') return item.runId;
+      if (item !== undefined && item.kind === 'chat') return item.chatId;
     }
     return null;
   }, [items]);
@@ -290,9 +474,19 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     // they attached it and asked; silently dropping it would run a different request.
     const documents = attachments.map((a) => ({ name: a.name, content: a.content }));
     try {
-      const { runId } = await verbs.send(body, documents);
+      const launched = await verbs.send(body, documents);
       push({ kind: 'user', text: body, files: documents.map((d) => d.name) });
-      push({ kind: 'run', runId });
+      if ('chatId' in launched) {
+        // One chat block per SESSION: a later send into the same warm session streams
+        // into the block that already exists — never a duplicate block per message.
+        setItems((cur) =>
+          cur.some((it) => it.kind === 'chat' && it.chatId === launched.chatId)
+            ? cur
+            : [...cur, { kind: 'chat', chatId: launched.chatId }],
+        );
+      } else {
+        push({ kind: 'run', runId: launched.runId });
+      }
       setText('');
       setAttachments([]);
     } catch (e) {
@@ -381,9 +575,32 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       {/* Thread — the ONE scrolling region (run blocks scroll inside themselves). */}
       <div ref={threadRef} data-testid="assist-thread" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
         {items.length === 0 && (
-          <p data-testid="assist-empty" className="text-[11px] leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
-            {context.hint ?? 'Type below, or drop documents here.'}
-          </p>
+          <>
+            <p data-testid="assist-empty" className="text-[11px] leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
+              {context.hint ?? 'Type below, or drop documents here.'}
+            </p>
+            {context.prompts !== undefined && context.prompts.length > 0 && (
+              <div data-testid="assist-prompts" className="flex flex-wrap gap-1.5">
+                {context.prompts.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    data-testid="assist-prompt"
+                    data-prompt={p.label}
+                    title="Prefills the composer — nothing sends until you do"
+                    onClick={() => {
+                      setText(p.text);
+                      textareaRef.current?.focus();
+                    }}
+                    className="rounded-full px-2.5 py-1 text-left text-[10px] focus:outline-none focus-visible:ring-1"
+                    style={{ border: '1px solid var(--surface-overlay)', color: 'var(--accent)', background: 'transparent' }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         )}
         {items.map((item, i) => {
           if (item.kind === 'user') {
@@ -405,6 +622,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
               </p>
             );
           }
+          if (item.kind === 'chat') {
+            return <DockChat key={item.chatId} chatId={item.chatId} />;
+          }
           return <DockRun key={item.runId} runId={item.runId} />;
         })}
       </div>
@@ -413,9 +633,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           a structural sibling of the thread scroll (it can never scroll away). Capped at 60%
           of the panel with its OWN scroll: a long propose prompt must never push the composer
           below the fold (caught on the gated evidence pass). */}
-      {activeRunId !== null && (
+      {activeId !== null && (
         <div className="max-h-[60%] shrink-0 overflow-y-auto" style={{ borderTop: '1px solid var(--surface-raised)' }}>
-          <ApprovalDock chatId={activeRunId} onResolved={onGateResolved} />
+          <ApprovalDock chatId={activeId} onResolved={onGateResolved} />
         </div>
       )}
 

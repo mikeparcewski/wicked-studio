@@ -20,8 +20,11 @@ import {
   SEED_RUNBOOK_URL,
   type WikiMeta,
 } from '../api/wiki.js';
+import type { SessionView } from '../api/types.js';
+import { ruleUsage } from '../board/steeringUsage.js';
 import { AssistDock, useAssistDockOpen, type AssistNote, type AssistVerbs } from './AssistDock.js';
 import { SteeringAddMenu } from './SteeringAddMenu.js';
+import { SteeringUsageBand } from './SteeringUsageBand.js';
 import { SteeringGrid } from './SteeringGrid.js';
 import { SteeringHealth, SteeringStoreHealth, type ScoreboardState } from './SteeringHealth.js';
 import { SteeringRuleDrawer } from './SteeringRuleDrawer.js';
@@ -48,13 +51,17 @@ import { SteeringTypeCards } from './SteeringTypeCards.js';
  * MCP stays read-only (AW-11).
  */
 
-export function SteeringPage({ type, navigate, search = '' }: {
+export function SteeringPage({ type, navigate, search = '', runs = [] }: {
   /** The routed steering type — null on the bare `/steering` landing. */
   type: SteeringType | null;
   navigate: (path: string) => void;
   /** The URL search string — `?rule=<id>` deep-links a rule's drawer open
-   *  (the Evals gap rows link here, qe finding: hints became links). */
+   *  (the Evals gap rows link here, qe finding: hints became links);
+   *  `?usage=unused` filters a type page's grid to the rules the enforcement
+   *  record never cites (the usage band's click-through). */
   search?: string;
+  /** The app's one runs list — the usage band's governed-runs join. */
+  runs?: SessionView[];
 }): React.ReactElement {
   const [scoreboard, setScoreboard] = useState<ScoreboardState>({ kind: 'loading' });
   const [meta, setMeta] = useState<WikiMeta | null>(null);
@@ -258,6 +265,9 @@ export function SteeringPage({ type, navigate, search = '' }: {
           {/* The store-wide verdict lives HERE, the one place it is actionable
               (review #5) — its raw diagnostics fold behind a details toggle. */}
           <SteeringStoreHealth state={scoreboard} />
+          {/* When/how steering was used and its success rate — the usage band
+              (claims + per_rule evidence + the session's latest eval). */}
+          <SteeringUsageBand runs={runs} rules={rules} scoreboard={scoreboard} navigate={navigate} />
           {rulesLoading ? (
             <p data-testid="steering-rules-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading rules…</p>
           ) : rulesError !== null ? (
@@ -286,6 +296,16 @@ export function SteeringPage({ type, navigate, search = '' }: {
   // menu: the draft row and the assistant are exactly how a store gets seeded from here, so
   // the banner names both ways in.
   const unseeded = meta !== null && meta.seeded === false && rules.length === 0 && !rulesLoading;
+
+  // `?usage=unused` (the usage band's click-through): filter the grid to the ACTIVE rules the
+  // enforcement record never cites (per_rule: denial_claims + governs_evidence == 0). Computable
+  // only when the scoreboard is served — otherwise the page SAYS so and the grid stays
+  // unfiltered, never a silently empty sheet.
+  const usageFilterAsked = new URLSearchParams(search).get('usage') === 'unused';
+  const unusedIds =
+    usageFilterAsked && scoreboard.kind === 'loaded'
+      ? ruleUsage(rules, scoreboard.scoreboard.evidence.per_rule).unusedIds
+      : null;
 
   return (
     <div
@@ -365,6 +385,35 @@ export function SteeringPage({ type, navigate, search = '' }: {
           onOpenAssistant={() => setDockOpen(true)}
         />
 
+        {usageFilterAsked && (
+          <p
+            data-testid="steering-usage-filter-note"
+            className="rounded px-3 py-2 text-[11px]"
+            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+          >
+            {unusedIds !== null ? (
+              <>
+                Showing the {unusedIds.length} rule{unusedIds.length === 1 ? '' : 's'} the enforcement
+                record never cites (no denial claims, no governs evidence).{' '}
+              </>
+            ) : (
+              <>
+                This daemon does not serve the governance scoreboard, so &ldquo;unused&rdquo; cannot be
+                computed — showing all rules.{' '}
+              </>
+            )}
+            <a
+              data-testid="steering-usage-filter-clear"
+              href={`/steering/${type}`}
+              onClick={(e) => { e.preventDefault(); navigate(`/steering/${type}`); }}
+              className="underline"
+              style={{ color: 'var(--accent)' }}
+            >
+              Show all
+            </a>
+          </p>
+        )}
+
         {savedNote !== null && (
           <p
             data-testid="steering-saved-note"
@@ -410,6 +459,7 @@ export function SteeringPage({ type, navigate, search = '' }: {
             onCreate={createRule}
             onRetired={onRetired}
             addRequestTick={addTick}
+            idFilter={unusedIds}
           />
         )}
       </div>

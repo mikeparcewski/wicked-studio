@@ -11,8 +11,8 @@
   "studioVersion": "0.4.6",
   "counts": {
     "files": 118,
-    "occurrences": 931,
-    "static": 796,
+    "occurrences": 940,
+    "static": 805,
     "dynamic": 44,
     "computed": 6
   },
@@ -206,6 +206,30 @@
       ]
     },
     {
+      "testId": "assist-chat",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-chat-msg",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-chat-seat",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-chat-waiting",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
       "testId": "assist-context",
       "files": [
         "src/components/AssistDock.tsx"
@@ -249,6 +273,18 @@
     },
     {
       "testId": "assist-note",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-prompt",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-prompts",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -2795,6 +2831,12 @@
       ]
     },
     {
+      "testId": "rail-ask",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
       "testId": "rail-chevron",
       "files": [
         "src/components/LeftSidebar.tsx"
@@ -3895,6 +3937,18 @@
     },
     {
       "testId": "steering-unseeded",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-usage-filter-clear",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-usage-filter-note",
       "files": [
         "src/components/SteeringPage.tsx"
       ]
