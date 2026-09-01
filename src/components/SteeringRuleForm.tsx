@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api/client.js';
 import {
-  isValidRuleId,
-  nextRuleId,
-  STEERING_RULE_TEMPLATE,
+  ruleIdIssue,
   STEERING_TYPE_LABELS,
   type SteeringEffect,
   type SteeringRule,
@@ -12,12 +10,12 @@ import {
 import { useModalEscape } from './Modal.js';
 
 /**
- * The individual Add/Edit rule form — a MODAL now (opened on demand from the Add menu or the
- * drawer's Edit, never rendered open by default), over the same SHIPPING upsert CRUD
- * (`POST /governance/rules`) as before: statement, severity, rule_type, applies_to/excludes
- * chips, weight, optional effect+trigger. Adding derives a fresh INV-C1 id and stamps
- * provenance source "ui"; editing keeps the id/rule_type fixed and carries provenance through
- * untouched — an edit never rewrites where a rule came from.
+ * The rule EDIT form — a MODAL opened from the drawer's Edit (the spreadsheet wave made this
+ * EDIT-ONLY: adding is the GRID's draft row now), over the same SHIPPING upsert CRUD
+ * (`POST /governance/rules`) as before: statement, severity, applies_to/excludes chips,
+ * weight, and the ADVANCED optional effect+trigger the grid deliberately does not carry.
+ * The id/rule_type stay fixed and provenance rides through untouched — an edit never
+ * rewrites where a rule came from.
  */
 
 /** A chips editor: type, Enter (or comma) adds; each chip removable. */
@@ -72,8 +70,6 @@ function ChipsInput({ testid, label, values, onChange, placeholder }: {
 }
 
 interface FormState {
-  /** Editing keeps the id/rule_type fixed (INV-C1 binds them); adding derives a fresh id. */
-  editing: boolean;
   id: string;
   rule_type: 'pattern' | 'policy';
   statement: string;
@@ -89,7 +85,6 @@ interface FormState {
 
 function formFromRule(rule: SteeringRule): FormState {
   return {
-    editing: true,
     id: rule.id,
     rule_type: rule.rule_type,
     statement: rule.statement,
@@ -103,44 +98,25 @@ function formFromRule(rule: SteeringRule): FormState {
   };
 }
 
-function freshForm(rules: SteeringRule[], type: SteeringType): FormState {
-  const base: SteeringRule = { ...STEERING_RULE_TEMPLATE, steering_type: type };
-  return {
-    editing: false,
-    id: nextRuleId(rules, 'pattern'),
-    rule_type: 'pattern',
-    statement: '',
-    severity: 'warn',
-    applies_to: [],
-    excludes: [],
-    weight: '1.0',
-    effect: '',
-    triggerContains: '',
-    base,
-  };
-}
-
 /**
- * The modal wrapper + the form. `initial` null = add (fresh INV-C1 id from the loaded corpus);
- * a rule = edit (id fixed, provenance carried through untouched).
+ * The modal wrapper + the form: EDIT of one existing rule (id fixed, provenance carried
+ * through untouched).
  */
-export function SteeringRuleFormModal({ type, rules, initial, onClose, onSaved }: {
+export function SteeringRuleFormModal({ type, initial, onClose, onSaved }: {
   type: SteeringType;
-  /** The loaded corpus — the fresh-id suggestion derives from it (the store stays authoritative). */
-  rules: SteeringRule[];
-  initial: SteeringRule | null;
+  initial: SteeringRule;
   onClose: () => void;
   onSaved: (id: string) => void;
 }): React.ReactElement {
-  const [form, setForm] = useState<FormState>(() =>
-    initial !== null ? formFromRule(initial) : freshForm(rules, type),
-  );
+  const [form, setForm] = useState<FormState>(() => formFromRule(initial));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useModalEscape(onClose);
 
   const weightNum = Number(form.weight);
-  const idOk = isValidRuleId(form.id, form.rule_type);
+  // The STEERING-scoped INV-C1 (the id is read-only here, but a migrated policy's custom id
+  // must never block its own edit — the strict PAT/POL echo would).
+  const idOk = ruleIdIssue(form.id, form.rule_type) === null;
   const valid =
     idOk && form.statement.trim() !== '' && Number.isFinite(weightNum) && weightNum >= 0;
 
@@ -149,8 +125,8 @@ export function SteeringRuleFormModal({ type, rules, initial, onClose, onSaved }
     setBusy(true);
     setError(null);
     // Everything the form does not manage (confidence, targets, provenance, compliance,
-    // obligations, criteria) rides through from `base` untouched; UI authorship stamps
-    // provenance source "ui" on NEW rules only — an edit never rewrites where a rule came from.
+    // obligations, criteria) rides through from `base` untouched — an edit never rewrites
+    // where a rule came from.
     const rule: SteeringRule = {
       ...form.base,
       id: form.id.trim(),
@@ -187,13 +163,13 @@ export function SteeringRuleFormModal({ type, rules, initial, onClose, onSaved }
         data-testid="steering-rule-form"
         role="dialog"
         aria-modal="true"
-        aria-label={form.editing ? `Edit ${form.base.id}` : 'Add rule'}
+        aria-label={`Edit ${form.base.id}`}
         className="flex max-h-[86vh] w-[34rem] max-w-[92vw] flex-col gap-2 overflow-y-auto rounded-xl p-4 shadow-2xl"
         style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
       >
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>
-            {form.editing ? `Edit ${form.base.id}` : 'Add rule'}
+            {`Edit ${form.base.id}`}
           </span>
           <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
             type: {STEERING_TYPE_LABELS[type]} (this page)
@@ -216,12 +192,8 @@ export function SteeringRuleFormModal({ type, rules, initial, onClose, onSaved }
               data-testid="steering-form-rule-type"
               aria-label="Rule type"
               value={form.rule_type}
-              disabled={form.editing}
-              onChange={(e) => {
-                const rt = e.target.value as 'pattern' | 'policy';
-                // A fresh id follows the prefix (INV-C1 binds PAT⇔pattern, POL⇔policy).
-                onChange({ ...form, rule_type: rt, id: nextRuleId(rules, rt) });
-              }}
+              disabled
+              onChange={() => undefined}
               className="rounded px-1.5 py-1 text-[11px] focus:outline-none disabled:opacity-50"
               style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             >
@@ -235,7 +207,7 @@ export function SteeringRuleFormModal({ type, rules, initial, onClose, onSaved }
               data-testid="steering-form-id"
               type="text"
               value={form.id}
-              readOnly={form.editing}
+              readOnly
               spellCheck={false}
               onChange={(e) => onChange({ ...form, id: e.target.value })}
               className="w-28 rounded px-2 py-1 font-mono text-[11px] focus:outline-none"
@@ -351,7 +323,7 @@ export function SteeringRuleFormModal({ type, rules, initial, onClose, onSaved }
             className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
-            {busy ? 'Saving…' : form.editing ? 'Save changes' : 'Add rule'}
+            {busy ? 'Saving…' : 'Save changes'}
           </button>
           {!idOk && (
             <span className="text-[10px]" style={{ color: 'var(--status-fail)' }}>

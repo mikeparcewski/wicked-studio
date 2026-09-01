@@ -463,8 +463,11 @@ export function App(): React.ReactElement {
     // type IS the landing (the seven type cards); the retired `/wiki`/`/rules`/`/policies`
     // addresses render it for the tick before useSteeringRedirect lands.
     if (panel === 'steering') {
+      // No page-level scroll wrapper here: the SteeringPage owns its layout — the landing
+      // scrolls itself, and a TYPE page is a two-column flex (grid column scrolls, the assist
+      // dock is a full-height sibling — DES-ASSIST-DOCK §2).
       return (
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex flex-1 overflow-hidden">
           <SteeringPage
             type={steeringType !== null && isSteeringType(steeringType) ? steeringType : null}
             navigate={navigate}
