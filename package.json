@@ -1,6 +1,6 @@
 {
   "name": "wicked-studio",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "The coder-facing skin of the wicked experience plane \u2014 a pure HTTP/WS client of the wicked-crew daemon's /api/v1",
   "type": "module",
   "repository": {

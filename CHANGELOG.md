@@ -12,6 +12,25 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.6] — 2026-09-01
+
+### Added
+
+- **Section dashboards** (#167) — Projects, the project homepage, and Make become full-width
+  command surfaces on the executive-dashboard model: a ≤6-tile KPI band per section
+  (performance / pipeline / risk) with honest deltas (a delta renders only against a full
+  same-size prior window — never a fabricated surge) and inline sparklines, a first-class
+  FilterStrip (search + status chips + window picker), and card grids where every card is a
+  door. The action layer rides on top: creation verbs on every header, "needs you" floats
+  first with gate cards deep-linking straight to the approval dock, and failed items carry
+  Retry-as-prefill. One shared kit (StatTile / FilterStrip / DashboardGrid / sparklines).
+
+### Changed
+
+- **The run header condensed** (#166): one row + the phase strip; started/ended/took moved
+  into the What/Where insights panel; Timeline and Units left the primary tabs for an
+  Inspect ▾ menu — the Feed is the run view. +79px (+19%) more feed above the 1440×700 fold.
+
 ## [0.4.5] — 2026-08-31
 
 ### Fixed
