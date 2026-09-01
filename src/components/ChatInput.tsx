@@ -504,8 +504,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           err.status === 400 &&
           err.message.includes('deliver')
         ) {
-          const { deliver: _deliver, ...withoutDeliver } = body;
-          launched = await api.launchRun(withoutDeliver as typeof body);
+          const withoutDeliver = { ...body };
+          delete withoutDeliver.deliver;
+          launched = await api.launchRun(withoutDeliver);
         } else {
           throw err;
         }
