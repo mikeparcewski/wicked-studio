@@ -8,11 +8,14 @@ import { useGateStore } from '../src/store/gates.js';
  * The testing LAUNCH flow (the testing-UX wave) — the Harness folded into the Campaigns
  * landing's creation verbs, grown the PINNED multi-codebase scope:
  *
- *  - the launch bodies gain EXACTLY `{projectId?: string, repoRefs?: string[]}` (camelCase,
- *    optional) — repoRefs = explicit attachments, projectId = crew resolves the project's
- *    member repos server-side, BOTH = the union, NEITHER = today's behavior unchanged;
- *  - the presence-gate: one explicit repo and no project keeps today's `repoRef` spelling
- *    (the flow every daemon serves); an old crew's strict-zod refusal of the pinned fields
+ *  - the launch rides `POST /testing/recon` (crew's pinned recon trigger), whose body gains
+ *    EXACTLY `{projectId?: string, repoRefs?: string[]}` (camelCase, optional) — repoRefs =
+ *    explicit attachments, projectId = crew resolves the project's member repos server-side,
+ *    BOTH = the union, NEITHER = today's behavior unchanged;
+ *  - the presence-gate: a daemon that predates the recon route answers the bare unknown-route
+ *    404 (BOTH spellings — Fastify's headless `Not Found` and the bundled daemon's
+ *    `not found`), and the client falls back to the shipping `POST /runs` with the legacy
+ *    single-`repoRef` spelling when the scope fits it; a scope that needs the pinned fields
  *    renders the honest named gap, never a crash;
  *  - fan-out honesty: `runIds` (length ≥ 1) is the source of truth — a multi-repo launch
  *    renders "N runs launched" with a real link per run; a lone id keeps the intake-gate flow.
@@ -46,26 +49,47 @@ const { RECON_PROBLEM_PREFIX, CAMPAIGN_PROBLEM_PREFIX } = await import('../src/c
 const { MULTI_SCOPE_UNSUPPORTED_COPY, launchedRunIds, isMultiScopeUnsupported } = await import('../src/api/testing.js');
 const { useCampaignsStore } = await import('../src/store/campaigns.js');
 
-/** The one launch POST, parsed — the pinned-body assertions read this. */
-function launchBody(): unknown {
-  const call = apiFetch.mock.calls.find(([path]) => path === '/runs');
+/** The POST body sent to `path`, parsed — the pinned-body assertions read this. */
+function bodySentTo(path: string): unknown {
+  const call = apiFetch.mock.calls.find(([p]) => p === path);
   expect(call).toBeDefined();
   const init = call![1] as { body?: string };
   return JSON.parse(init.body ?? 'null');
+}
+
+/** The one launch POST — the PINNED wire is `POST /testing/recon`, never `POST /runs`. */
+function launchBody(): unknown {
+  expect(apiFetch.mock.calls.some(([p]) => p === '/runs')).toBe(false);
+  return bodySentTo('/testing/recon');
 }
 
 function landing(navigate: (p: string) => void = () => {}): ReturnType<typeof render> {
   return render(<CampaignsPage runs={[]} navigate={navigate} />);
 }
 
-/** Route table for apiFetch: `/campaigns` (store refresh) + `POST /runs` (the launch). */
+/** Route table for apiFetch: `/campaigns` (store refresh) + `POST /testing/recon` (the launch). */
 function wireUp(launchAnswer: unknown | Error): void {
   apiFetch.mockImplementation((path: unknown) => {
     if (String(path) === '/campaigns') return Promise.resolve({ campaigns: [] });
-    if (String(path) === '/runs') {
+    if (String(path) === '/testing/recon') {
       return launchAnswer instanceof Error ? Promise.reject(launchAnswer) : Promise.resolve(launchAnswer);
     }
     return Promise.reject(new ApiError(404, 'Not Found'));
+  });
+}
+
+/**
+ * An OLD-CREW wire shape: `POST /testing/recon` does not exist (the bare unknown-route 404 —
+ * `notFoundWire` picks the daemon flavor) and the shipping `POST /runs` answers `{runId}`.
+ */
+function wireUpOldCrew(runsAnswer: unknown | Error, notFoundWire = 'Not Found'): void {
+  apiFetch.mockImplementation((path: unknown) => {
+    if (String(path) === '/campaigns') return Promise.resolve({ campaigns: [] });
+    if (String(path) === '/testing/recon') return Promise.reject(new ApiError(404, notFoundWire));
+    if (String(path) === '/runs') {
+      return runsAnswer instanceof Error ? Promise.reject(runsAnswer) : Promise.resolve(runsAnswer);
+    }
+    return Promise.reject(new ApiError(404, notFoundWire));
   });
 }
 
@@ -102,10 +126,10 @@ async function openPanel(user: ReturnType<typeof userEvent.setup>, verb: string)
   return await screen.findByTestId('testing-launch-panel');
 }
 
-describe('the launch wire — the pinned body, exactly', () => {
-  it('recon + ONE explicit repo and no project keeps today’s repoRef spelling (the presence-gated legacy flow)', async () => {
+describe('the launch wire — the pinned body on POST /testing/recon, exactly', () => {
+  it('recon + ONE explicit repo sends the PINNED repoRefs (the strict recon zod knows no bare repoRef)', async () => {
     const user = userEvent.setup();
-    wireUp({ runId: 'run-recon-1' });
+    wireUp({ runId: 'run-recon-1', runIds: ['run-recon-1'], campaign: 'recon-abc' });
     landing();
 
     const panel = await openPanel(user, 'testing-recon-open');
@@ -118,7 +142,7 @@ describe('the launch wire — the pinned body, exactly', () => {
     await screen.findByTestId('testing-launch-waiting');
     expect(launchBody()).toEqual({
       problem: `${RECON_PROBLEM_PREFIX}\n\nCover the checkout flow end to end`,
-      repoRef: 'r-1',
+      repoRefs: ['r-1'],
     });
   });
 
@@ -257,10 +281,13 @@ describe('fan-out honesty — runIds is the source of truth', () => {
   });
 });
 
-describe('the presence-gate — an older crew keeps today’s flow working', () => {
-  it('an old-crew answer with ONLY runId lands in the single-run intake-gate flow, no crash', async () => {
+describe('the presence-gate — an older crew (no POST /testing/recon) keeps today’s flow working', () => {
+  it('a ONE-repo launch falls back to the shipping POST /runs with the legacy repoRef spelling, and the {runId}-only old-crew answer lands in the intake-gate flow, no crash', async () => {
     const user = userEvent.setup();
-    wireUp({ runId: 'run-old-1' });
+    // The BUNDLED daemon's unknown-route shape: crew's SPA-serving notFoundHandler answers
+    // `{error: 'not found'}` (lowercase) — the production old-crew wire, pinned here so the
+    // gate never regresses onto Fastify's headless-only 'Not Found' spelling.
+    wireUpOldCrew({ runId: 'run-old-1' }, 'not found');
     confirmGate.mockResolvedValue({ status: 'ok' });
     landing();
 
@@ -271,6 +298,13 @@ describe('the presence-gate — an older crew keeps today’s flow working', () 
     await user.click(within(panel).getByTestId('testing-launch-submit'));
 
     expect(await screen.findByTestId('testing-launch-waiting')).toHaveTextContent(/run-old/);
+    // The pinned wire was TRIED (adoption-seam idiom), then the legacy spelling rode /runs —
+    // repoRef, never the pinned keys an old strict zod would refuse.
+    expect(apiFetch.mock.calls.some(([p]) => p === '/testing/recon')).toBe(true);
+    expect(bodySentTo('/runs')).toEqual({
+      problem: `${RECON_PROBLEM_PREFIX}\n\nOld daemon`,
+      repoRef: 'r-1',
+    });
 
     // The intake gate arrives as a normal awaitingHuman frame — the EXISTING gate card renders.
     act(() => {
@@ -288,9 +322,23 @@ describe('the presence-gate — an older crew keeps today’s flow working', () 
     expect(await screen.findByTestId('testing-launch-resolved')).toHaveTextContent(/Campaigns/);
   });
 
-  it('an old crew’s strict-zod refusal of the pinned fields renders the honest named gap', async () => {
+  it('an UNSCOPED launch falls back too — the legacy body carries no repoRef at all', async () => {
     const user = userEvent.setup();
-    wireUp(new ApiError(400, "Unrecognized key(s) in object: 'repoRefs'"));
+    wireUpOldCrew({ runId: 'run-old-2' });
+    landing();
+
+    const panel = await openPanel(user, 'testing-recon-open');
+    await user.type(within(panel).getByTestId('testing-launch-instructions'), 'Survey it all');
+    await user.click(within(panel).getByTestId('testing-launch-unscoped'));
+    await user.click(within(panel).getByTestId('testing-launch-submit'));
+
+    await screen.findByTestId('testing-launch-waiting');
+    expect(bodySentTo('/runs')).toEqual({ problem: `${RECON_PROBLEM_PREFIX}\n\nSurvey it all` });
+  });
+
+  it('a MULTI-CODEBASE scope on the old daemon renders the honest named gap — and never launches half a scope over /runs', async () => {
+    const user = userEvent.setup();
+    wireUpOldCrew({ runId: 'never-launched' });
     landing();
 
     const panel = await openPanel(user, 'testing-campaign-open');
@@ -302,13 +350,34 @@ describe('the presence-gate — an older crew keeps today’s flow working', () 
     await user.click(within(panel).getByTestId('testing-launch-submit'));
 
     expect(await screen.findByTestId('testing-launch-error')).toHaveTextContent(/predates multi-codebase launches/);
+    // Fail-closed: a silently narrowed one-repo launch is exactly what the pin forbids.
+    expect(apiFetch.mock.calls.some(([p]) => p === '/runs')).toBe(false);
     // The form stays live — retrying with a single repo is the way through.
     expect(within(panel).getByTestId('testing-launch-submit')).toBeEnabled();
   });
 
-  it('a NAMED 400 from a daemon WITH the fields (a bad ref) surfaces verbatim — a real answer, not a gap', async () => {
+  it('a PROJECT scope on the old daemon is the same named gap (POST /runs projectId means filing, not repo resolution)', async () => {
     const user = userEvent.setup();
-    wireUp(new ApiError(400, 'unknown repoRef: r-2 is not a registered repository'));
+    wireUpOldCrew({ runId: 'never-launched' });
+    listProjectMembers.mockResolvedValue({
+      members: [{ id: 1, project_id: 'proj-a', member_kind: 'crew.repo', member_ref: 'r-1' }],
+    });
+    landing();
+
+    const panel = await openPanel(user, 'testing-recon-open');
+    const select = within(panel).getByTestId('testing-launch-project');
+    await within(select).findByRole('option', { name: 'alpha' });
+    await user.selectOptions(select, 'proj-a');
+    await user.type(within(panel).getByTestId('testing-launch-instructions'), 'Project on old crew');
+    await user.click(within(panel).getByTestId('testing-launch-submit'));
+
+    expect(await screen.findByTestId('testing-launch-error')).toHaveTextContent(/predates multi-codebase launches/);
+    expect(apiFetch.mock.calls.some(([p]) => p === '/runs')).toBe(false);
+  });
+
+  it('a NAMED 400 from a daemon WITH the route (a bad ref) surfaces verbatim — a real answer, not a gap', async () => {
+    const user = userEvent.setup();
+    wireUp(new ApiError(400, "repoRefs: 'r-2' does not name a registered repo — register it first"));
     landing();
 
     const panel = await openPanel(user, 'testing-campaign-open');
@@ -319,10 +388,29 @@ describe('the presence-gate — an older crew keeps today’s flow working', () 
     }
     await user.click(within(panel).getByTestId('testing-launch-submit'));
 
-    expect(await screen.findByTestId('testing-launch-error')).toHaveTextContent(/unknown repoRef: r-2/);
-    expect(isMultiScopeUnsupported(new ApiError(400, 'unknown repoRef: r-2'))).toBe(false);
+    expect(await screen.findByTestId('testing-launch-error')).toHaveTextContent(/does not name a registered repo/);
+    expect(isMultiScopeUnsupported(new ApiError(400, "repoRefs: 'r-2' does not name a registered repo"))).toBe(false);
     expect(isMultiScopeUnsupported(new ApiError(400, "Unrecognized key(s) in object: 'repoRefs'"))).toBe(true);
     expect(MULTI_SCOPE_UNSUPPORTED_COPY).toMatch(/one repository per launch/);
+  });
+
+  it('a NAMED 404 from the recon route ("unknown project") is a real answer — never mistaken for route absence, never retried over /runs', async () => {
+    const user = userEvent.setup();
+    wireUp(new ApiError(404, 'unknown project: proj-a'));
+    listProjectMembers.mockResolvedValue({
+      members: [{ id: 1, project_id: 'proj-a', member_kind: 'crew.repo', member_ref: 'r-1' }],
+    });
+    landing();
+
+    const panel = await openPanel(user, 'testing-recon-open');
+    const select = within(panel).getByTestId('testing-launch-project');
+    await within(select).findByRole('option', { name: 'alpha' });
+    await user.selectOptions(select, 'proj-a');
+    await user.type(within(panel).getByTestId('testing-launch-instructions'), 'Stale project');
+    await user.click(within(panel).getByTestId('testing-launch-submit'));
+
+    expect(await screen.findByTestId('testing-launch-error')).toHaveTextContent(/unknown project: proj-a/);
+    expect(apiFetch.mock.calls.some(([p]) => p === '/runs')).toBe(false);
   });
 });
 

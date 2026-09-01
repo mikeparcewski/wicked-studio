@@ -25,6 +25,8 @@ describe('the EC33 translation layer', () => {
     expect(apiStatus(e)).toBe(404);
     expect(apiWire(e)).toBe('Not Found');
     expect(isRouteAbsent(e)).toBe(true);
+    // Crew's SPA-serving notFoundHandler (every bundled daemon) spells it lowercase.
+    expect(isRouteAbsent(new ApiError(404, 'not found'))).toBe(true);
     expect(isRouteAbsent(new ApiError(404, 'unknown run: r-9'))).toBe(false);
     expect(apiStatus(new Error('API 409: legacy'))).toBeNull();
     expect(apiWire('boom')).toBeNull();

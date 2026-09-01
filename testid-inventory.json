@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.6",
   "counts": {
-    "files": 116,
-    "occurrences": 887,
-    "static": 759,
+    "files": 117,
+    "occurrences": 904,
+    "static": 775,
     "dynamic": 42,
     "computed": 6
   },
@@ -392,6 +392,30 @@
       ]
     },
     {
+      "testId": "campaign-card",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-card-bar",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-card-progress",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-card-split",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
       "testId": "campaign-cost-cell",
       "files": [
         "src/components/CampaignScoreboard.tsx"
@@ -440,6 +464,12 @@
       ]
     },
     {
+      "testId": "campaign-needs-you",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
       "testId": "campaign-notfound",
       "files": [
         "src/components/CampaignScoreboard.tsx"
@@ -461,12 +491,6 @@
       "testId": "campaign-progress",
       "files": [
         "src/components/CampaignScoreboard.tsx"
-      ]
-    },
-    {
-      "testId": "campaign-row",
-      "files": [
-        "src/components/CampaignsPage.tsx"
       ]
     },
     {
@@ -500,6 +524,12 @@
       ]
     },
     {
+      "testId": "campaigns-empty-filter",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
       "testId": "campaigns-page",
       "files": [
         "src/components/CampaignsPage.tsx"
@@ -507,6 +537,12 @@
     },
     {
       "testId": "campaigns-probing",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-show-older",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
@@ -3794,7 +3830,13 @@
     {
       "testId": "testing-author-open",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-campaign-open",
+      "files": [
+        "src/components/CampaignsPage.tsx"
       ]
     },
     {
@@ -3960,15 +4002,123 @@
       ]
     },
     {
-      "testId": "testing-harness",
+      "testId": "testing-launch-chip",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/TestingLaunchPanel.tsx"
       ]
     },
     {
-      "testId": "testing-harness-explainer",
+      "testId": "testing-launch-chip-remove",
       "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-chips",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-close",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-error",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-fanout",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-fanout-label",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-fanout-run",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-instructions",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-panel",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-project",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-project-empty",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-repo-matches",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-repo-option",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-repo-search",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-resolved",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-submit",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-to-campaigns",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-unscoped",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-waiting",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
       ]
     },
     {
@@ -3978,63 +4128,9 @@
       ]
     },
     {
-      "testId": "testing-recon-close",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-recon-error",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-recon-instructions",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-recon-launch",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
       "testId": "testing-recon-open",
       "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-recon-panel",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-recon-repo",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-recon-resolved",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-recon-to-campaigns",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-recon-waiting",
-      "files": [
-        "src/components/TestingPage.tsx"
+        "src/components/CampaignsPage.tsx"
       ]
     },
     {

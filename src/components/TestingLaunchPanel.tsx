@@ -26,10 +26,10 @@ import { SteeringGate } from './SteeringGate.js';
  *    removable chips → `repoRefs`;
  *  - scope honesty: a launch needs a project OR ≥ 1 repo, unless the operator explicitly
  *    chooses the unscoped run today's wire already supports (never a silent default);
- *  - the presence-gate: ONE explicit repo and no project sends today's `repoRef` spelling —
- *    the flow an older crew keeps serving; the pinned fields go on the wire only when the
- *    scope actually needs them, and an old daemon's strict-zod refusal renders the honest
- *    named gap, never a crash;
+ *  - the presence-gate lives in {@link launchTestingRun}: the launch rides the pinned
+ *    `POST /testing/recon`; on a daemon that predates the route, a ≤ 1-repo no-project scope
+ *    falls back to the shipping `POST /runs` (the legacy `repoRef` spelling) and a scope that
+ *    needs the pinned fields renders the honest named gap, never a crash;
  *  - fan-out honesty: `runIds` (length ≥ 1) is the source of truth — a multi-repo launch
  *    renders "N runs launched" with a real link per run; a single run keeps the intake-gate
  *    flow (the run's awaitingHuman frame arrives on the app's one /ws fold and renders the
@@ -213,17 +213,17 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched }: {
   const canLaunch = instructions.trim() !== '' && (scoped || unscoped) && !busy;
 
   /**
-   * The wire body — the pinned composition:
-   *  - one explicit repo, no project ⇒ today's `repoRef` (the presence-gated legacy flow);
-   *  - a project and/or several repos ⇒ the PINNED `{projectId?, repoRefs?}` (both = union);
-   *  - neither (explicit unscoped) ⇒ today's body unchanged.
+   * The wire body — EXACTLY the pinned `TestingReconBody`: the framed problem plus
+   * `projectId` and/or `repoRefs` when the scope carries them (both = union, the daemon
+   * dedupes), neither for an explicit unscoped run. The legacy single-`repoRef` spelling is
+   * NOT composed here — it exists only inside {@link launchTestingRun}'s fallback for a
+   * daemon that predates `POST /testing/recon` (whose strict zod is what `repoRef` fits).
    */
   const composeBody = (): TestingLaunchBody => {
     const body: TestingLaunchBody = { problem: `${copy.prefix}\n\n${instructions.trim()}` };
     const explicit = [...new Set(attached)];
     if (projectId !== '') body.projectId = projectId;
-    if (explicit.length === 1 && projectId === '') body.repoRef = explicit[0]!;
-    else if (explicit.length >= 1) body.repoRefs = explicit;
+    if (explicit.length >= 1) body.repoRefs = explicit;
     return body;
   };
 

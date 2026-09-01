@@ -32,8 +32,9 @@ import { TestingLaunchPanel } from './TestingLaunchPanel.js';
  * campaigns tile's delta/spark are time-based (14d); run-derived tiles keep the positional
  * window idiom, honestly labeled ("last 30", never "30d"). The §1.5 probe keeps its three
  * honest states — probing / supported / unsupported, never a boolean — and the creation verbs
- * stay usable on an unsupported daemon (launching rides the shipping `POST /runs` wire; only
- * the LISTING needs the campaigns route).
+ * stay usable on an unsupported daemon (launching rides `POST /testing/recon` with
+ * `launchTestingRun`'s presence-gated `POST /runs` fallback; only the LISTING needs the
+ * campaigns route).
  */
 
 const S = {
@@ -337,8 +338,9 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
     );
   }
   if (support === 'unsupported') {
-    // The listing needs `GET /campaigns`; the creation verbs ride the shipping `POST /runs`
-    // wire and stay usable — the folded-in Harness must not regress on an older daemon.
+    // The listing needs `GET /campaigns`; the creation verbs stay usable — a daemon this old
+    // also predates `POST /testing/recon`, so `launchTestingRun` falls back to the shipping
+    // `POST /runs` wire for ≤ 1-repo scopes. The folded-in Harness must not regress here.
     return (
       <div data-testid="campaigns-page" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         {header}

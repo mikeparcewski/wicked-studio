@@ -73,7 +73,8 @@ describe('the §1.5 probe states', () => {
     page();
     await waitFor(() => expect(screen.getByTestId('campaigns-unsupported')).toBeInTheDocument());
     expect(screen.getByTestId('campaigns-unsupported').textContent).toContain('predates campaign grouping');
-    // Launching rides the shipping POST /runs wire — the folded-in Harness must not regress.
+    // Launching rides POST /testing/recon with launchTestingRun's presence-gated POST /runs
+    // fallback — the folded-in Harness must not regress on a daemon this old.
     expect(screen.getByTestId('testing-recon-open')).toBeInTheDocument();
     expect(screen.getByTestId('testing-campaign-open')).toBeInTheDocument();
     expect(screen.getByTestId('testing-author-open')).toBeInTheDocument();
