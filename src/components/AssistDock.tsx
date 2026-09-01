@@ -410,9 +410,11 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       </div>
 
       {/* The pinned approval dock — anything the ACTIVE run asks of the human answers HERE,
-          a structural sibling of the thread scroll (it can never scroll away). */}
+          a structural sibling of the thread scroll (it can never scroll away). Capped at 60%
+          of the panel with its OWN scroll: a long propose prompt must never push the composer
+          below the fold (caught on the gated evidence pass). */}
       {activeRunId !== null && (
-        <div className="shrink-0" style={{ borderTop: '1px solid var(--surface-raised)' }}>
+        <div className="max-h-[60%] shrink-0 overflow-y-auto" style={{ borderTop: '1px solid var(--surface-raised)' }}>
           <ApprovalDock chatId={activeRunId} onResolved={onGateResolved} />
         </div>
       )}

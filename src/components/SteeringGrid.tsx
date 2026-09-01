@@ -63,6 +63,12 @@ export function filterSteeringRules(rules: SteeringRule[], type: SteeringType, f
 
 const SEVERITIES = ['info', 'warn', 'error', 'critical'] as const;
 
+/** The engine stores weight as an f32 — 1.2 comes back 1.2000000476837158. Display (and
+ *  re-edit) the honest 6-significant-digit value, never the float noise. */
+export function fmtWeight(w: number): string {
+  return String(Number(w.toPrecision(6)));
+}
+
 const CELL_TEXT: React.CSSProperties = { color: 'var(--ink-muted)', fontSize: '11px' };
 const CELL_INPUT: React.CSSProperties = {
   background: 'var(--surface-base)',
@@ -450,7 +456,21 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
     }
     return (
       <div className="overflow-x-auto rounded" style={{ border: '1px solid var(--surface-raised)' }}>
-        <table data-testid="steering-grid" className="w-full border-collapse" style={{ minWidth: '58rem' }}>
+        {/* table-fixed + explicit column widths: auto layout would hand a LONG statement the
+            whole table and squeeze every select to min-content (measured live). The statement
+            column takes the slack and truncates; minWidth keeps every column legible — the
+            wrapping container scrolls horizontally instead (the page never does). */}
+        <table data-testid="steering-grid" className="w-full table-fixed border-collapse" style={{ minWidth: '64rem' }}>
+          <colgroup>
+            <col style={{ width: '6.5rem' }} />
+            <col style={{ width: '8rem' }} />
+            <col style={{ width: '6rem' }} />
+            <col />
+            <col style={{ width: '4rem' }} />
+            <col style={{ width: '10rem' }} />
+            <col style={{ width: '10rem' }} />
+            <col style={{ width: '7.5rem' }} />
+          </colgroup>
           <thead>
             <tr style={{ background: 'var(--surface-rail)' }}>
               {['id', 'type', 'severity', 'statement', 'weight', 'applies to', 'excludes', 'status'].map((h) => (
@@ -482,7 +502,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     outlineOffset: '-1px',
                   }}
                 >
-                  <td className="w-28 px-0.5 py-0.5">
+                  <td className="px-0.5 py-0.5">
                     {/* The id cell OPENS THE DRAWER — advanced fields (effect/trigger/obligations/
                         criteria/provenance/evidence) stay there; the grid carries the common columns. */}
                     <button
@@ -497,7 +517,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       {r.id}
                     </button>
                   </td>
-                  <td className="w-28 px-0.5 py-0.5">
+                  <td className="px-0.5 py-0.5">
                     <SelectCell
                       testid="steering-cell-type"
                       label={`${r.id} steering type`}
@@ -507,7 +527,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       onCommit={(v) => commitField(r, { steering_type: v })}
                     />
                   </td>
-                  <td className="w-24 px-0.5 py-0.5">
+                  <td className="px-0.5 py-0.5">
                     <SelectCell
                       testid="steering-cell-severity"
                       label={`${r.id} severity`}
@@ -517,7 +537,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       onCommit={(v) => commitField(r, { severity: v as SteeringRule['severity'] })}
                     />
                   </td>
-                  <td className="min-w-[16rem] px-0.5 py-0.5" style={{ textDecoration: retired ? 'line-through' : undefined }}>
+                  <td className="px-0.5 py-0.5" style={{ textDecoration: retired ? 'line-through' : undefined }}>
                     <TextCell
                       testid="steering-cell-statement"
                       label={`${r.id} statement`}
@@ -526,12 +546,12 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       onCommit={(v) => { if (v.trim() !== '') commitField(r, { statement: v.trim() }); }}
                     />
                   </td>
-                  <td className="w-16 px-0.5 py-0.5">
+                  <td className="px-0.5 py-0.5">
                     <TextCell
                       testid="steering-cell-weight"
                       label={`${r.id} weight`}
-                      value={String(r.weight ?? 1)}
-                      display={r.weight === undefined ? <span title="this wire predates weights — the engine defaults to 1.0">1</span> : String(r.weight)}
+                      value={fmtWeight(r.weight ?? 1)}
+                      display={r.weight === undefined ? <span title="this wire predates weights — the engine defaults to 1.0">1</span> : fmtWeight(r.weight)}
                       number
                       mono
                       disabled={retired}
@@ -541,7 +561,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       }}
                     />
                   </td>
-                  <td className="w-40 px-0.5 py-0.5">
+                  <td className="px-0.5 py-0.5">
                     <ChipsCell
                       testid="steering-cell-applies"
                       label={`${r.id} applies to`}
@@ -550,7 +570,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       onCommit={(v) => commitField(r, { applies_to: v })}
                     />
                   </td>
-                  <td className="w-40 px-0.5 py-0.5">
+                  <td className="px-0.5 py-0.5">
                     <ChipsCell
                       testid="steering-cell-excludes"
                       label={`${r.id} excludes`}
@@ -559,7 +579,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       onCommit={(v) => commitField(r, { excludes: v })}
                     />
                   </td>
-                  <td className="w-28 px-1.5 py-1.5">
+                  <td className="px-1.5 py-1.5">
                     {retired ? (
                       <span
                         data-testid="steering-rule-retired-chip"
@@ -592,7 +612,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
 
             {draft !== null && (
               <tr data-testid="steering-grid-draft" className="align-top" style={{ background: 'var(--surface-rail)' }}>
-                <td className="w-28 px-0.5 py-0.5">
+                <td className="px-0.5 py-0.5">
                   <input
                     data-testid="steering-draft-id"
                     aria-label="New rule id"
@@ -611,7 +631,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     }}
                   />
                 </td>
-                <td className="w-28 px-0.5 py-0.5">
+                <td className="px-0.5 py-0.5">
                   <SelectCell
                     testid="steering-draft-type"
                     label="New rule steering type"
@@ -621,7 +641,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     onCommit={(v) => setDraft({ ...draft, steering_type: v as SteeringType })}
                   />
                 </td>
-                <td className="w-24 px-0.5 py-0.5">
+                <td className="px-0.5 py-0.5">
                   <SelectCell
                     testid="steering-draft-severity"
                     label="New rule severity"
@@ -631,7 +651,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     onCommit={(v) => setDraft({ ...draft, severity: v })}
                   />
                 </td>
-                <td className="min-w-[16rem] px-0.5 py-0.5">
+                <td className="px-0.5 py-0.5">
                   <input
                     data-testid="steering-draft-statement"
                     aria-label="New rule statement"
@@ -647,7 +667,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
                   />
                 </td>
-                <td className="w-16 px-0.5 py-0.5">
+                <td className="px-0.5 py-0.5">
                   <input
                     data-testid="steering-draft-weight"
                     aria-label="New rule weight"
@@ -661,7 +681,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
                   />
                 </td>
-                <td className="w-40 px-0.5 py-0.5">
+                <td className="px-0.5 py-0.5">
                   <ChipsCell
                     testid="steering-draft-applies"
                     label="New rule applies to"
@@ -670,7 +690,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     onCommit={(v) => setDraft((cur) => (cur === null ? null : { ...cur, applies_to: v }))}
                   />
                 </td>
-                <td className="w-40 px-0.5 py-0.5">
+                <td className="px-0.5 py-0.5">
                   <ChipsCell
                     testid="steering-draft-excludes"
                     label="New rule excludes"
@@ -679,7 +699,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                     onCommit={(v) => setDraft((cur) => (cur === null ? null : { ...cur, excludes: v }))}
                   />
                 </td>
-                <td className="w-28 px-1.5 py-1">
+                <td className="px-1.5 py-1">
                   <span className="inline-flex items-center gap-1.5">
                     <button
                       type="button"

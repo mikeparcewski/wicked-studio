@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { steeringTypeOf, type SteeringRule } from '../api/steering.js';
+import { fmtWeight } from './SteeringGrid.js';
 import { parseProvenanceRef } from '../api/wiki.js';
 import { useModalEscape } from './Modal.js';
 import { EffectBadge, SeverityChip } from './SteeringChips.js';
@@ -109,7 +110,7 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired 
           {(rule.excludes?.length ?? 0) > 0 ? <ChipList values={rule.excludes ?? []} /> : '—'}
         </DetailRow>
         <DetailRow label="Weight" testid="steering-rule-weight">
-          {rule.weight !== undefined ? <span className="font-mono">{rule.weight}</span> : (
+          {rule.weight !== undefined ? <span className="font-mono">{fmtWeight(rule.weight)}</span> : (
             <span title="this wire predates weights — the engine defaults to 1.0">— (engine default 1.0)</span>
           )}
         </DetailRow>

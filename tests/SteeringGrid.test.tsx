@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { SteeringGrid, draftRule } from '../src/components/SteeringGrid.js';
+import { SteeringGrid, draftRule, fmtWeight } from '../src/components/SteeringGrid.js';
 import { SteeringPage } from '../src/components/SteeringPage.js';
 import { ApiError } from '../src/api/errors.js';
 import { ruleIdIssue, ruleTypeOfId, type SteeringRule } from '../src/api/steering.js';
@@ -300,6 +300,12 @@ describe('draftRule / ruleIdIssue — the draft body + the steering-scoped INV-C
       excludes: ['chat'],
       weight: 2.5,
     });
+  });
+
+  it('fmtWeight strips the engine f32 noise (1.2 stored comes back 1.2000000476…)', () => {
+    expect(fmtWeight(1.2000000476837158)).toBe('1.2');
+    expect(fmtWeight(1)).toBe('1');
+    expect(fmtWeight(2.5)).toBe('2.5');
   });
 
   it('PAT-/POL- is the reserved namespace: shape + prefix agreement enforced INSIDE it, non-blank outside', () => {
