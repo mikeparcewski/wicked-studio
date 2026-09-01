@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  attachSeries, deltaWord, healthColor, healthOf, statusCounts, windowBuckets, windowDelta,
+  attachSeries, deltaWord, healthColor, healthOf, orderByAttention, statusCounts, windowBuckets, windowDelta,
 } from '../src/board/windowStats.js';
 import { makeView } from './factories.js';
 import type { SessionStatus } from '../src/api/types.js';
@@ -102,6 +102,22 @@ describe('healthOf — threshold color only where it means something', () => {
     expect(healthOf(0, 0)).toBe('none');
     expect(healthColor('none')).toBeUndefined();
     expect(healthColor('bad')).toBe('var(--status-fail)');
+  });
+});
+
+describe('orderByAttention — the one shared list order (needs-you FIRST)', () => {
+  it('gated → active → terminal, incoming order preserved within each group', () => {
+    const runs = [
+      run('r-done', 'completed'),
+      run('r-exec-1', 'executing'),
+      run('r-gate-1', 'awaiting_human'),
+      run('r-fail', 'failed'),
+      run('r-exec-2', 'planning'),
+      run('r-gate-2', 'awaiting_human'),
+    ];
+    expect(orderByAttention(runs).map((v) => v.session.id)).toEqual([
+      'r-gate-1', 'r-gate-2', 'r-exec-1', 'r-exec-2', 'r-done', 'r-fail',
+    ]);
   });
 });
 

@@ -1,10 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { Project, RepoEntry, SessionView } from '../api/types.js';
+import { gateOpenPath } from '../board/gateActions.js';
+import {
+  matchesRepoChip, repoFleetModels, type RepoChip, type RepoFleetModel,
+} from '../board/repoStats.js';
+import {
+  attachSeries, deltaWord, healthColor, healthOf, statusCounts, windowBuckets, windowDelta,
+} from '../board/windowStats.js';
+import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { useMembershipStore } from '../store/membership.js';
-import { TileBand } from './DashboardTiles.js';
-import { MetricTile } from './MetricTile.js';
+import { setRetryPrefill } from '../store/retryPrefill.js';
+import {
+  DashboardGrid, FilterStrip, KpiBand, KpiGroup, Sparkline, StatTile, type FilterChip,
+} from './dashboardKit.js';
 import { NewProjectModal } from './NewProjectModal.js';
+import { ago } from './ProjectCard.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 
 type SourceMode = 'local' | 'remote';
@@ -23,7 +34,25 @@ interface Props {
   ambientProject?: string | null;
 }
 
-const TERMINAL = new Set(['completed', 'cancelled', 'failed']);
+/**
+ * The /repos landing as a COMMAND SURFACE (lane B, the 0.4.6 treatment): the
+ * fleet view of what the agents work ON. A KPI band organized around the
+ * command-center questions (performance / pipeline / risk), then one card per
+ * registered repo behind a first-class FilterStrip — needs-you floats first
+ * and jumps STRAIGHT to the waiting run's gate; Re-index is a PREFILL into
+ * the governed-run composer (the Retry-as-prefill idiom — never a hidden
+ * relaunch); the header keeps the section's creation verb (+ Add Repository,
+ * the existing register + onboard flow, untouched).
+ *
+ * Wire honesty: `GET /repos` serves the register only (name, path, branch,
+ * `registered_at` — NO index-freshness field), so the per-repo graph story is
+ * derived from the runs wire instead: the repo's newest onboarding run
+ * (completed = ready, failed = build failed, in flight = building, none on
+ * record = never onboarded). Windowed counts ride the shared positional
+ * window folds ("last 30", never a fabricated "30d"; "—" when no full prior
+ * bucket exists). Attach clocks read the membership mirror — never a new
+ * request; the old per-repo graph fan-out stays retired.
+ */
 
 function relativeTime(tsSeconds: number): string {
   const tsMs = tsSeconds * 1000;
@@ -46,146 +75,28 @@ const inputCss: React.CSSProperties = {
   width: '100%',
 };
 
-// ── The §4.4 reporting tiles (DES-FEEDBACK-003, slice P) ──────────────────────
-//
-// Every number derives from data this page ALREADY fetches (its own
-// `GET /repos` + `GET /runs`) or the membership mirror the board model keeps
-// warm — the tiles never cost a request. Runs are placed in time on the
-// membership attach clock (the one honest per-run clock; `AgentSession`
-// carries no timestamps), exactly as every other dashboard buckets; runs the
-// mirror cannot place inside the window are excluded, never painted at an
-// invented time. Per-repo language bars stay on the detail page (§4.4: a
-// cross-repo language wall answers no asked question — rejected per EC19).
+const CARD_STAT: React.CSSProperties = {
+  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
+  whiteSpace: 'nowrap',
+};
 
-const DAY_MS = 86_400_000;
-const TILE_W = 168;
-const TILE_H = 26;
-const TOP_REPOS = 6;
-
-/** Group in-window runs by `repo_ref`, joined to display names via the page's
- *  repo list; count desc. Runs without a repo_ref or an in-window attach
- *  clock are excluded (and reported by the callers' data attributes). */
-function groupByRepo(
-  runs: SessionView[],
-  repos: RepoEntry[],
-  attachedAt: Record<string, number>,
-  windowMs: number,
-  at: number,
-): Array<{ id: string; name: string; count: number }> {
-  const names = new Map(repos.map((r) => [r.id, r.name]));
-  const counts = new Map<string, number>();
-  for (const v of runs) {
-    const ref = v.session.repo_ref;
-    if (ref === null) continue;
-    const clock = attachedAt[v.session.id];
-    if (clock === undefined || clock < at - windowMs || clock > at) continue;
-    counts.set(ref, (counts.get(ref) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([id, count]) => ({ id, name: names.get(id) ?? id, count }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+/** The graph-state line's words — one honest sentence per state. */
+function graphStateWord(m: RepoFleetModel, attachedAt: Record<string, number>, now: number): string {
+  const { state, run } = m.onboard;
+  const clock = run === null ? undefined : attachedAt[run.session.id];
+  const when = clock === undefined ? '' : ` · ${ago(clock, now)} ago`;
+  if (state === 'ready') return `graph ready — onboard completed${when}`;
+  if (state === 'onboarding') return 'onboarding now — index + annotate in flight';
+  if (state === 'failed') return `onboard FAILED${when} — the graph may be stale or absent`;
+  return 'never onboarded — no onboard run on record';
 }
 
-/** §4.4 row 1 — "Where is the work concentrating?": 7d runs per repo, top 6,
- *  horizontal bars. */
-function RunsPerRepoTile({ runs, repos, attachedAt, now }: {
-  runs: SessionView[];
-  repos: RepoEntry[];
-  attachedAt: Record<string, number>;
-  now?: number;
-}): React.ReactElement {
-  const at = now ?? Date.now();
-  const grouped = useMemo(
-    () => groupByRepo(runs, repos, attachedAt, 7 * DAY_MS, at),
-    [runs, repos, attachedAt, at],
-  );
-  const top = grouped.slice(0, TOP_REPOS);
-  const placed = grouped.reduce((a, g) => a + g.count, 0);
-  const max = top[0]?.count ?? 0;
-  const rowH = TILE_H / Math.max(1, top.length);
-  return (
-    <MetricTile
-      testId="runs-per-repo-tile"
-      question="Where is the work concentrating?"
-      title="Runs per repo (7d)"
-      value={top.length === 0 ? 'no repo-linked runs in 7d' : `${top[0]!.name} leads (${top[0]!.count})`}
-      data={{ 'data-total': placed, 'data-repos': grouped.length }}
-    >
-      {top.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
-          No runs carried a repo in the last 7 days.
-        </p>
-      ) : (
-        <svg
-          width="100%"
-          height={TILE_H}
-          viewBox={`0 0 ${TILE_W} ${TILE_H}`}
-          preserveAspectRatio="none"
-          role="img"
-          aria-label={`runs per repo, 7d: ${top.map((g) => `${g.name} ${g.count}`).join(', ')}`}
-          style={{ display: 'block' }}
-        >
-          {top.map((g, i) => (
-            <rect
-              key={g.id}
-              x={0}
-              y={i * rowH + 1}
-              width={(g.count / max) * TILE_W}
-              height={Math.max(2, rowH - 2)}
-              rx={1}
-              fill="var(--accent)"
-            >
-              <title>{`${g.name}: ${g.count}`}</title>
-            </rect>
-          ))}
-        </svg>
-      )}
-    </MetricTile>
-  );
-}
-
-/** §4.4 row 3 — "Is any repo a failure hotspot?": 24h failed runs by repo. */
-function FailingReposTile({ runs, repos, attachedAt, now }: {
-  runs: SessionView[];
-  repos: RepoEntry[];
-  attachedAt: Record<string, number>;
-  now?: number;
-}): React.ReactElement {
-  const at = now ?? Date.now();
-  const failing = useMemo(
-    () => groupByRepo(
-      runs.filter((v) => v.session.status === 'failed'),
-      repos, attachedAt, DAY_MS, at,
-    ),
-    [runs, repos, attachedAt, at],
-  );
-  const failures = failing.reduce((a, g) => a + g.count, 0);
-  return (
-    <MetricTile
-      testId="failing-repos-tile"
-      question="Is any repo a failure hotspot?"
-      title="Failing repos (24h)"
-      value={failing.length === 0 ? 'none' : `${failures} failed in ${failing.length} repo${failing.length === 1 ? '' : 's'}`}
-      data={{ 'data-count': failing.length, 'data-failures': failures }}
-    >
-      {failing.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
-          No repo-linked failures in the last 24h.
-        </p>
-      ) : (
-        <p
-          style={{
-            margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--status-fail)',
-            fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {failing.map((g) => `${g.name} (${g.count})`).join(' · ')}
-        </p>
-      )}
-    </MetricTile>
-  );
-}
+const GRAPH_STATE_COLOR: Record<string, string> = {
+  ready: 'var(--ink-dim)',
+  onboarding: 'var(--status-run)',
+  failed: 'var(--status-fail)',
+  never: 'var(--status-gate)',
+};
 
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
   const [repos, setRepos] = useState<RepoEntry[]>([]);
@@ -193,9 +104,12 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [chip, setChip] = useState<RepoChip>('all');
+  const { range, setRange } = useTimeRange('30d');
   // Attach clocks off the membership mirror (the board model keeps it warm) —
   // a store read, never a request (§4.4: tiles derive from data already held).
   const attachedAt = useMembershipStore((s) => s.attachedAtByRun);
+  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
 
   const [rerunning, setRerunning] = useState<Record<string, boolean>>({});
   const [rerunError, setRerunError] = useState<Record<string, string>>({});
@@ -259,6 +173,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     if (segment) setNewName(segment);
   }
 
+  /** The never-onboarded card's launch verb — the EXISTING onboard wire. */
   async function rerunOnboarding(repoId: string): Promise<void> {
     setRerunning((prev) => ({ ...prev, [repoId]: true }));
     setRerunError((prev) => ({ ...prev, [repoId]: '' }));
@@ -273,6 +188,29 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     } finally {
       setRerunning((prev) => ({ ...prev, [repoId]: false }));
     }
+  }
+
+  /**
+   * Re-index as PREFILL (the Retry-as-prefill idiom, DES-UX-001 §4.3): the
+   * repo's recorded onboard run's setup is deposited for the composer and the
+   * operator lands on `/runs/new` to tweak-before-send — nothing auto-launches,
+   * no POST fires here.
+   */
+  function reindexAsPrefill(m: RepoFleetModel): void {
+    const run = m.onboard.run;
+    if (run === null) return; // never-onboarded repos keep the launch verb instead
+    const s = run.session;
+    setRetryPrefill({
+      retryOf: s.id,
+      problem: s.problem,
+      clis: s.clis,
+      workflowId: s.workflow_id || null,
+      repoRef: m.repo.id,
+      entityMode: s.entity_mode,
+      humanConfirm: s.human_confirm,
+      projectId: typeof s.project_id === 'string' ? s.project_id : null,
+    });
+    navigate('/runs/new');
   }
 
   async function registerRepo(): Promise<void> {
@@ -322,61 +260,180 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     newName.trim() && (sourceMode === 'remote' ? newGitUrl.trim() : newPath.trim()),
   );
 
-  const activeRuns = runs.filter((r) => !TERMINAL.has(r.session.status));
+  // ── The window + KPI folds (the shared positional idiom) ────────────────────
+  const now = Date.now();
+  const repoRuns = useMemo(
+    () => runs.filter((v) => v.session.archived_at == null && v.session.repo_ref !== null),
+    [runs],
+  );
+  const buckets = useMemo(() => windowBuckets(repoRuns, range), [repoRuns, range]);
+  const windowIds = useMemo(() => new Set(buckets.current.map((v) => v.session.id)), [buckets]);
+  const liveCounts = useMemo(() => statusCounts(repoRuns), [repoRuns]);
+  const runsDelta = useMemo(() => windowDelta(buckets, (rs) => rs.length), [buckets]);
+  const failedDelta = useMemo(
+    () => windowDelta(buckets, (rs) => rs.filter((v) => v.session.status === 'failed').length),
+    [buckets],
+  );
+  const runSpark = useMemo(
+    () => attachSeries(buckets.current.map((v) => v.session.id), attachedAt, 14, now),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` re-derives with the data, not a timer
+    [buckets, attachedAt],
+  );
 
-  const filteredRepos =
-    search.trim() === ''
-      ? repos
-      : repos.filter((r) => r.name.toLowerCase().includes(search.trim().toLowerCase()));
+  // ── The fleet models — one fold per card, shared by grid, chips and tiles ──
+  const fleet = useMemo(
+    () => repoFleetModels(repos, repoRuns, attachedAt, windowIds),
+    [repos, repoRuns, attachedAt, windowIds],
+  );
+  const activeRepoN = fleet.filter((m) => m.activeNow).length;
+  const readyN = fleet.filter((m) => m.onboard.state === 'ready').length;
+  const gapFailedN = fleet.filter((m) => m.onboard.state === 'failed').length;
+  const gapNeverN = fleet.filter((m) => m.onboard.state === 'never').length;
 
-  function repoActiveRunCount(repoId: string): number {
-    return activeRuns.filter((r) => r.session.repo_ref === repoId).length;
-  }
+  /** The gate jump: the run's thread AT the gate when its project is known;
+   *  the flat run detail (where the approval dock lives) when unfiled. */
+  const gateJump = (id: string): string => {
+    const pid = projectIdByRun[id];
+    return pid !== undefined ? gateOpenPath(pid, id) : `/runs/${encodeURIComponent(id)}`;
+  };
+
+  // ── Filtering ────────────────────────────────────────────────────────────────
+  const q = search.trim().toLowerCase();
+  const searched = fleet.filter((m) =>
+    q === ''
+    || m.repo.name.toLowerCase().includes(q)
+    || m.repo.root_path.toLowerCase().includes(q));
+  const visible = searched.filter((m) => matchesRepoChip(m, chip));
+
+  const chipCounts = useMemo(() => {
+    const counts: Record<RepoChip, number> = { all: 0, 'needs-you': 0, active: 0, failing: 0, ready: 0, never: 0 };
+    for (const m of searched) {
+      counts.all += 1;
+      for (const c of ['needs-you', 'active', 'failing', 'ready', 'never'] as const) {
+        if (matchesRepoChip(m, c)) counts[c] += 1;
+      }
+    }
+    return counts;
+  }, [searched]);
+
+  const chips: FilterChip[] = [
+    { id: 'all', label: 'All', count: chipCounts.all },
+    { id: 'needs-you', label: 'Needs you', count: chipCounts['needs-you'] },
+    { id: 'active', label: 'Active', count: chipCounts.active },
+    { id: 'failing', label: 'Failing', count: chipCounts.failing },
+    { id: 'ready', label: 'Ready', count: chipCounts.ready },
+    { id: 'never', label: 'Never onboarded', count: chipCounts.never },
+  ];
 
   return (
     <div className="h-full overflow-y-auto">
-      {/* ── Header ── */}
-      <div className="px-8 pt-8 pb-4">
-        <div className="flex items-center gap-3 mb-5">
-          <h1
-            className="text-base font-bold font-mono flex-1"
-            style={{ color: 'var(--ink-high)', letterSpacing: '-0.01em' }}
-          >
-            Repositories
-          </h1>
-          <input
-            style={{
-              background: 'var(--surface-card)',
-              border: '1px solid var(--surface-raised)',
-              color: 'var(--ink-high)',
-              borderRadius: '6px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontFamily: 'var(--wk-font-mono, monospace)',
-              outline: 'none',
-              width: '200px',
-            }}
-            placeholder="Search repos…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {/* FULL WIDTH — the fleet flows with the viewport; no max-width column. */}
+      <div
+        data-testid="repos-page"
+        className="flex flex-col"
+        style={{ color: 'var(--ink-high)', padding: '0 var(--space-8) var(--space-8)', gap: 'var(--space-4)' }}
+      >
+        {/* ── Header: the section name + its creation verb ── */}
+        <div className="pt-8 flex items-center justify-between gap-4">
+          <div className="flex items-baseline gap-4 min-w-0">
+            <h1 className="text-2xl font-semibold font-mono" style={{ margin: 0 }}>Repositories</h1>
+            <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-sans)' }}>
+              the fleet the agents work on — graphs · runs · gates
+            </p>
+          </div>
           <button
             type="button"
+            data-testid="repos-add"
             onClick={() => {
               if (showRegister) { setShowRegister(false); navigate('/repos'); }
               else { setShowRegister(true); navigate('/repos/new'); }
             }}
-            className="shrink-0 rounded-lg px-4 py-1.5 text-xs font-semibold font-mono"
-            style={{ background: showRegister ? 'var(--surface-raised)' : 'var(--accent)', color: showRegister ? 'var(--ink-high)' : 'var(--accent-fg)' }}
+            className="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold font-mono"
+            style={{
+              background: showRegister ? 'var(--surface-raised)' : 'var(--accent)',
+              color: showRegister ? 'var(--ink-high)' : 'var(--accent-fg)',
+              border: 'none', cursor: 'pointer',
+            }}
           >
             {showRegister ? 'Cancel' : '+ Add Repository'}
           </button>
         </div>
 
-        {/* ── Registration form ── */}
+        {/* ── The KPI band — the command-center model: three questions ── */}
+        {!loading && !error && (
+          <KpiBand testId="repos-kpis">
+            <KpiGroup label="Performance" grow={2}>
+              <StatTile
+                testId="stat-repos"
+                label="Repositories"
+                value={repos.length}
+                context={repos.length === 0 ? 'none registered' : `newest ${relativeTime(Math.max(...repos.map((r) => r.registered_at)))}`}
+                title="Every registered repo — click to clear filters"
+                onOpen={() => { setChip('all'); setSearch(''); }}
+              />
+              <StatTile
+                testId="stat-repo-runs"
+                label="Repo runs"
+                value={buckets.current.length}
+                delta={runsDelta}
+                context={deltaWord(range, runsDelta)}
+                spark={runSpark}
+                title="Runs touching a repo in the window — open the Work list"
+                href="/work"
+                onOpen={() => navigate('/work')}
+              />
+            </KpiGroup>
+            <KpiGroup label="Pipeline" grow={2}>
+              <StatTile
+                testId="stat-active"
+                label="Active now"
+                value={liveCounts.active}
+                context={activeRepoN > 0 ? `across ${activeRepoN} repo${activeRepoN === 1 ? '' : 's'}` : 'right now'}
+                title="Runs moving on a repo — filter the fleet to them"
+                onOpen={() => setChip('active')}
+              />
+              <StatTile
+                testId="stat-ready"
+                label="Graphs ready"
+                value={readyN}
+                context={`of ${repos.length} repo${repos.length === 1 ? '' : 's'} onboarded`}
+                title="Repos whose newest onboard run completed — filter to them"
+                onOpen={() => setChip('ready')}
+              />
+            </KpiGroup>
+            <KpiGroup label="Risk" grow={2}>
+              <StatTile
+                testId="stat-failed"
+                label="Failed"
+                value={failedDelta.current}
+                valueColor={failedDelta.current > 0 ? 'var(--status-fail)' : undefined}
+                delta={failedDelta}
+                deltaSense="bad-up"
+                context={deltaWord(range, failedDelta)}
+                title="Failed repo-linked runs in the window — filter the fleet"
+                onOpen={() => setChip('failing')}
+              />
+              <StatTile
+                testId="stat-gaps"
+                label="Index gaps"
+                value={gapFailedN + gapNeverN}
+                valueColor={gapFailedN > 0 ? 'var(--status-fail)' : undefined}
+                context={
+                  gapFailedN + gapNeverN === 0
+                    ? 'every graph ready'
+                    : `${gapFailedN} onboard failed · ${gapNeverN} never onboarded`
+                }
+                title="Repos without a completed onboard — the graph story is derived from the run history (the repos wire carries no index-freshness field)"
+                onOpen={() => setChip(gapFailedN > 0 ? 'failing' : 'never')}
+              />
+            </KpiGroup>
+          </KpiBand>
+        )}
+
+        {/* ── Registration form (the slice-B flow, untouched) ── */}
         {showRegister && (
           <div
-            className="flex flex-col gap-3 rounded-2xl p-5 mb-5"
+            className="flex flex-col gap-3 rounded-2xl p-5"
             style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
           >
             {/* §5.2: the project field is the FIRST field — Unfiled by default;
@@ -508,36 +565,20 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
         {showNewProject && (
           <NewProjectModal navigate={navigate} onClose={() => setShowNewProject(false)} />
         )}
-      </div>
 
-      <div className="px-8 pb-10">
-        {/* ── The reporting band (§4.4, EC19/EC28): three tiles ABOVE the
-               register, from data this page already fetched + the membership
-               mirror — never a new request. The old stat cards (numbers
-               without named questions) are superseded by this band; their
-               Total Repos count lives on in the repo-count tile, and the
-               Tracked card's per-repo graph fan-out on mount is retired with
-               it (a mount cost the fetch budget bans). ── */}
-        {!loading && !error && (
-          <div className="mb-6">
-            <TileBand testId="repos-dashboard-tiles">
-              <RunsPerRepoTile runs={runs} repos={repos} attachedAt={attachedAt} />
-              <MetricTile
-                testId="repo-count-tile"
-                question="Is the estate growing?"
-                title="Repositories"
-                value={repos.length === 0 ? 'none registered' : `${repos.length} registered`}
-                data={{ 'data-count': repos.length }}
-              >
-                <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
-                  {repos.length === 0
-                    ? 'Register the first repository to grow the estate.'
-                    : `newest: ${relativeTime(Math.max(...repos.map((r) => r.registered_at)))}`}
-                </p>
-              </MetricTile>
-              <FailingReposTile runs={runs} repos={repos} attachedAt={attachedAt} />
-            </TileBand>
-          </div>
+        {/* ── Filters — first-class at the top of the fleet ── */}
+        {!loading && !error && repos.length > 0 && (
+          <FilterStrip
+            testId="repos-filter"
+            query={search}
+            onQuery={setSearch}
+            placeholder="Search repos…"
+            chips={chips}
+            active={chip}
+            onChip={(id) => setChip(id as RepoChip)}
+            range={range}
+            onRange={setRange}
+          />
         )}
 
         {/* ── Content area ── */}
@@ -548,8 +589,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
         ) : error ? (
           <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>{error}</p>
         ) : repos.length === 0 ? (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center py-24 text-center">
+          /* Empty state — carries the section's creation verb */
+          <div data-testid="repos-empty" className="flex flex-col items-center justify-center py-24 text-center">
             <div
               className="rounded-2xl p-10 flex flex-col items-center gap-4"
               style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)', maxWidth: 420 }}
@@ -571,76 +612,141 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
               </button>
             </div>
           </div>
-        ) : filteredRepos.length === 0 ? (
-          <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
-            No repos match &ldquo;{search}&rdquo;.
+        ) : visible.length === 0 ? (
+          <p data-testid="repos-empty-filter" className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
+            No repos match —{' '}
+            <button
+              type="button"
+              data-testid="repos-clear-filters"
+              onClick={() => { setChip('all'); setSearch(''); }}
+              style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--ink-muted)', textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              clear filters
+            </button>
           </p>
         ) : (
-          /* Repo cards grid */
-          <div className="grid grid-cols-2 gap-4" data-testid="repos-list">
-            {filteredRepos.map((repo) => {
-              const activeCount = repoActiveRunCount(repo.id);
+          /* ── The fleet grid — one mini-dashboard card per repo ── */
+          <DashboardGrid testId="repos-list" min={360}>
+            {visible.map((m) => {
+              const { repo, counts, waiting } = m;
+              const health = healthOf(counts.done, counts.terminal);
               const isRerunning = rerunning[repo.id] ?? false;
               const runErr = rerunError[repo.id];
+              const firstGate = waiting[0]?.session.id;
+              const spark = attachSeries(m.windowed.map((v) => v.session.id), attachedAt, 14, now);
+              const activeCount = m.windowed.filter((v) => !['completed', 'cancelled', 'failed', 'awaiting_human'].includes(v.session.status)).length;
               return (
                 <div
                   key={repo.id}
                   data-testid="repo-card"
                   data-repo-id={repo.id}
-                  className="rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-colors"
-                  style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
-                  onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
-                  role="button"
+                  data-state={m.onboard.state}
+                  data-gates={waiting.length}
+                  data-runs={counts.total}
+                  role="link"
                   tabIndex={0}
+                  onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       navigate('/repo-detail/' + encodeURIComponent(repo.id));
                     }
                   }}
+                  className="transition-colors hover:bg-surface-raised"
+                  style={{
+                    display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0,
+                    background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
+                    borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', cursor: 'pointer',
+                  }}
                 >
-                  {/* Card header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className="text-sm font-bold font-mono truncate"
-                        style={{ color: 'var(--ink-high)' }}
+                  {/* Card header — name, then the attention badges */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <span
+                      className="text-sm font-bold font-mono truncate"
+                      style={{ color: 'var(--ink-high)', minWidth: 0 }}
+                    >
+                      {repo.name}
+                    </span>
+                    <span style={{ flex: 1 }} />
+                    {/* Attention routing beats navigation: the gate jump,
+                        STRAIGHT to the waiting run's approval dock. */}
+                    {waiting.length > 0 && firstGate !== undefined && (
+                      <button
+                        type="button"
+                        data-testid="repo-needs-you"
+                        data-run-id={firstGate}
+                        title="A run on this repo is waiting on you — jump to its gate"
+                        onClick={(e) => { e.stopPropagation(); navigate(gateJump(firstGate)); }}
+                        style={{
+                          flexShrink: 0, cursor: 'pointer',
+                          background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)',
+                          borderRadius: 'var(--radius-full)', padding: '2px 10px',
+                          fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+                          fontWeight: 'var(--weight-bold)', color: 'var(--status-gate)',
+                        }}
                       >
-                        {repo.name}
-                      </p>
-                      <p
-                        className="text-[11px] font-mono mt-0.5 truncate"
-                        style={{ color: 'var(--ink-dim)' }}
-                        title={repo.root_path}
-                      >
-                        {repo.root_path}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {activeCount > 0 && (
-                        <span
-                          className="rounded-full px-2 py-0.5 text-[10px] font-mono font-semibold"
-                          style={{ background: 'var(--status-run-dim)', color: 'var(--status-run)' }}
-                        >
-                          {activeCount} active
-                        </span>
-                      )}
+                        needs you · {waiting.length} →
+                      </button>
+                    )}
+                    {activeCount > 0 && (
                       <span
-                        className="rounded-full px-2 py-0.5 text-[10px] font-mono"
-                        style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
+                        className="rounded-full px-2 py-0.5 text-[10px] font-mono font-semibold shrink-0"
+                        style={{ background: 'var(--status-run-dim)', color: 'var(--status-run)' }}
                       >
-                        {repo.default_branch}
+                        {activeCount} active
                       </span>
-                    </div>
+                    )}
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-mono shrink-0"
+                      style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
+                    >
+                      {repo.default_branch}
+                    </span>
                   </div>
 
-                  {/* Timestamp */}
-                  <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-                    {relativeTime(repo.registered_at)}
+                  <p
+                    className="text-[11px] font-mono truncate"
+                    style={{ color: 'var(--ink-dim)', margin: 0 }}
+                    title={repo.root_path}
+                  >
+                    {repo.root_path}
                   </p>
 
-                  {/* Error (if onboard failed) */}
+                  {/* The graph state — derived from the run history, honestly */}
+                  <p
+                    data-testid="repo-graph-state"
+                    data-state={m.onboard.state}
+                    className="text-[11px] font-mono truncate"
+                    style={{ color: GRAPH_STATE_COLOR[m.onboard.state] ?? 'var(--ink-dim)', margin: 0 }}
+                    title="Derived from the repo's newest onboarding run — the repos wire carries no index-freshness field"
+                  >
+                    {graphStateWord(m, attachedAt, now)}
+                  </p>
+
+                  {/* Stats row — the window's counts, the honest clocks */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <span style={CARD_STAT} data-testid="repo-card-runs">
+                      {counts.total} run{counts.total === 1 ? '' : 's'} · {rangeWord(range)}
+                    </span>
+                    {counts.terminal > 0 && (
+                      <span
+                        style={{ ...CARD_STAT, color: healthColor(health) ?? CARD_STAT.color }}
+                        data-testid="repo-card-split"
+                        data-health={health}
+                        title={`${counts.done} succeeded, ${counts.failed} failed of ${counts.terminal} finished in this window`}
+                      >
+                        ✓{counts.done} · ✕{counts.failed}
+                      </span>
+                    )}
+                    <span style={{ ...CARD_STAT, marginLeft: 'auto' }} title="last activity (run attach clocks; falls back to the registration date)">
+                      {m.lastAt !== null ? `${ago(m.lastAt, now)} ago` : relativeTime(repo.registered_at)}
+                    </span>
+                  </div>
+
+                  <Sparkline counts={spark} height={18} />
+
+                  {/* Error (if a launch failed) */}
                   {runErr && (
-                    <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
+                    <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)', margin: 0 }}>
                       {runErr}
                     </p>
                   )}
@@ -656,28 +762,48 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                       type="button"
                       onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
                       className="text-xs font-mono hover:underline"
-                      style={{ color: 'var(--accent)' }}
+                      style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                     >
                       View →
                     </button>
-                    <button
-                      type="button"
-                      disabled={isRerunning}
-                      onClick={() => void rerunOnboarding(repo.id)}
-                      className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
-                      style={{
-                        background: 'var(--surface-raised)',
-                        color: 'var(--ink-muted)',
-                        border: '1px solid var(--surface-raised)',
-                      }}
-                    >
-                      {isRerunning ? 'Starting…' : 'Onboard'}
-                    </button>
+                    {m.onboard.run !== null ? (
+                      <button
+                        type="button"
+                        data-testid="repo-reindex"
+                        data-repo-id={repo.id}
+                        title="Reopen the composer prefilled with this repo's onboard setup — nothing auto-launches"
+                        onClick={() => reindexAsPrefill(m)}
+                        className="rounded-md px-3 py-1 text-[11px] font-mono"
+                        style={{
+                          background: 'transparent',
+                          color: 'var(--ink-muted)',
+                          border: '1px solid var(--surface-raised)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Re-index
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        data-testid="repo-onboard"
+                        disabled={isRerunning}
+                        onClick={() => void rerunOnboarding(repo.id)}
+                        className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
+                        style={{
+                          background: 'var(--surface-raised)',
+                          color: 'var(--ink-muted)',
+                          border: '1px solid var(--surface-raised)',
+                        }}
+                      >
+                        {isRerunning ? 'Starting…' : 'Onboard'}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
             })}
-          </div>
+          </DashboardGrid>
         )}
       </div>
     </div>

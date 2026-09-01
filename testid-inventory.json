@@ -11,8 +11,8 @@
   "studioVersion": "0.4.6",
   "counts": {
     "files": 116,
-    "occurrences": 871,
-    "static": 743,
+    "occurrences": 887,
+    "static": 759,
     "dynamic": 42,
     "computed": 6
   },
@@ -596,6 +596,12 @@
       ]
     },
     {
+      "testId": "chat-needs-you",
+      "files": [
+        "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
       "testId": "chat-project-row",
       "files": [
         "src/components/GroupChat.tsx"
@@ -632,6 +638,18 @@
       ]
     },
     {
+      "testId": "chat-run-title",
+      "files": [
+        "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
+      "testId": "chat-seat",
+      "files": [
+        "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
       "testId": "chat-send-failed",
       "files": [
         "src/components/GroupChat.tsx"
@@ -662,7 +680,19 @@
       ]
     },
     {
+      "testId": "chats-clear-filters",
+      "files": [
+        "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
       "testId": "chats-empty",
+      "files": [
+        "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
+      "testId": "chats-empty-filter",
       "files": [
         "src/components/ChatsPage.tsx"
       ]
@@ -674,7 +704,19 @@
       ]
     },
     {
-      "testId": "chats-list",
+      "testId": "chats-hidden-chip",
+      "files": [
+        "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
+      "testId": "chats-new",
+      "files": [
+        "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
+      "testId": "chats-page",
       "files": [
         "src/components/ChatsPage.tsx"
       ]
@@ -1910,12 +1952,6 @@
       ]
     },
     {
-      "testId": "live-chats",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
       "testId": "live-edge",
       "files": [
         "src/components/LiveEdge.tsx"
@@ -2748,9 +2784,39 @@
       ]
     },
     {
+      "testId": "repo-card-runs",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-card-split",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-chip",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "repo-graph-state",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-needs-you",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-onboard",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
       ]
     },
     {
@@ -2760,7 +2826,37 @@
       ]
     },
     {
-      "testId": "repos-list",
+      "testId": "repo-reindex",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-add",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-clear-filters",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-empty",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-empty-filter",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-page",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]
