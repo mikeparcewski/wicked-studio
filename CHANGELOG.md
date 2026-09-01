@@ -12,6 +12,20 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.8] — 2026-09-01
+
+### Added
+
+- **The home command center** (#174) — the homepage answers three questions in priority order:
+  *what needs me* (one deduped queue of waiting gates, failed runs, blind repos, stalled chats,
+  and campaign gaps — every row actionable in place: dock deep-links, retry/re-index prefill),
+  *is the portfolio healthy* (six KPIs from the shared folds — the needs-you tile counts the
+  queue's own fold so they can never disagree — plus the narrated activity pulse and the project
+  wall), and *where do I go* (creation verbs, a board-level Ask invite, and the per-section
+  essence strip). Calm copy is owned solely by the queue's zero-row branch, so "All quiet"
+  beside visible failures is structurally impossible. NarrativeBand, ActivityRiver, LiveFeed,
+  and RunOutcomeBar are deleted — their questions are now answered once, not twice.
+
 ## [0.4.7] — 2026-09-01
 
 ### Added
