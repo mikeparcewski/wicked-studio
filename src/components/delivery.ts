@@ -48,14 +48,21 @@ import { deliverKindOf, type IsSystemWorkflow } from './runMode.js';
  * the phase, never the artifact — see {@link DeliveryClaim} for what a surface
  * is allowed to say out loud.
  *
- *  - `delivered` — the deliver phase was APPROVED (`done`). It is not "a PR",
- *    it is not "shipped" and it is not "merged".
+ *  - `delivered` — the deliver phase was APPROVED (`done`), or the 0.18.0 wire
+ *    says `delivery: 'delivered'` (a PR was recorded — in-run or post-hoc). It
+ *    is not "shipped" and it is not "merged".
+ *  - `stranded` — the 0.18.0 wire's own verdict (crew#393): a COMPLETED
+ *    repo-scoped run with no recorded PR whose worktree still exists on disk —
+ *    reviewable work nobody lifted. WIRE-ONLY: studio never infers it (the
+ *    "worktree still exists" half lives on the daemon's disk, not in the DTO),
+ *    so a pre-0.18 daemon simply never produces this state.
  *  - `nothing-to-deliver` — denied because the run committed nothing (crew#318).
  *  - `failed` — denied for any other reason; the reason is rendered verbatim.
  *  - `in-flight` — the deliver phase has not resolved (`pending`/`distributed`).
  *  - `none` — this run has no deliver phase at all.
  */
-export type DeliveryState = 'none' | 'in-flight' | 'delivered' | 'nothing-to-deliver' | 'failed';
+export type DeliveryState =
+  | 'none' | 'in-flight' | 'delivered' | 'stranded' | 'nothing-to-deliver' | 'failed';
 
 /**
  * What a surface may SAY — {@link DeliveryState} with `delivered` split by the
@@ -207,26 +214,47 @@ export function deliverUnit(view: SessionView): WorkUnit | null {
 
 /** The whole derivation, from the DTO the caller already holds. Never fetches. */
 export function deliveryOf(view: SessionView): Delivery {
+  // `session.delivery`/`deliverUrl` are declared in ../api/types.js, not in the
+  // installed api-types — the cast is the honest spelling until studio bumps.
+  const s = view.session as SessionWithDelivery;
+  // The 0.18.0 tri-state (crew#393). `typeof === 'string'` doubles as the
+  // legacy guard: a 0.11–0.17 daemon sends the OBJECT form here, which must
+  // never be mistaken for a state word.
+  const wire = typeof s.delivery === 'string' ? s.delivery : null;
+  // The url, best-first: 0.18.0's `deliverUrl`, else the legacy object's `url`.
+  // Same shape gate as the transcript path — a wire-carried url is not more
+  // trustworthy for being wire-carried (Copilot on #125). Non-conforming ⇒ no
+  // url ⇒ no PR claim.
+  const legacyUrl =
+    typeof s.delivery === 'object' && s.delivery !== null && typeof s.delivery.url === 'string'
+      ? s.delivery.url
+      : null;
+  const declared = typeof s.deliverUrl === 'string' ? s.deliverUrl : legacyUrl;
+  const url = declared !== null && isPrUrl(declared) ? declared : null;
+
   const unit = deliverUnit(view);
-  if (unit === null) return { state: 'none', unitId: null, reason: null, url: null };
 
   // Absent and empty are the same "crew recorded nothing" — see `Delivery.reason`.
-  const reason = unit.denial_reason === '' ? null : unit.denial_reason;
-  const state: DeliveryState =
-    unit.status === 'done' ? 'delivered'
+  const reason = unit === null || unit.denial_reason === '' ? null : unit.denial_reason;
+  const unitState: DeliveryState =
+    unit === null ? 'none'
+    : unit.status === 'done' ? 'delivered'
     : unit.status === 'rejected'
       ? (reason !== null && NOTHING_TO_DELIVER.test(reason) ? 'nothing-to-deliver' : 'failed')
       : 'in-flight';
 
-  // `session.delivery` is declared in ../api/types.js, not in the installed
-  // api-types — the cast is the honest spelling until studio bumps (see there).
-  const declared = (view.session as SessionWithDelivery).delivery;
-  // Same gate as the transcript path — a wire-carried url is not more trustworthy
-  // for being wire-carried (Copilot on #125). Non-conforming ⇒ no url ⇒ no PR claim.
-  const url =
-    typeof declared?.url === 'string' && isPrUrl(declared.url) ? declared.url : null;
+  // The wire's positive verdicts are AUTHORITATIVE where they say more than the
+  // units can: `'delivered'` covers the post-hoc path (no deliver unit ever ran)
+  // and `'stranded'` needs the daemon's own worktree-still-exists check. The
+  // wire's `'none'` deliberately defers to the unit facts — a failed/cancelled
+  // run with a rejected deliver unit reads `'none'` on the 0.18.0 wire while the
+  // unit's `denial_reason` still tells the richer, equally-true story.
+  const state: DeliveryState =
+    wire === 'delivered' ? 'delivered'
+    : wire === 'stranded' ? 'stranded'
+    : unitState;
 
-  return { state, unitId: unit.id, reason, url };
+  return { state, unitId: unit?.id ?? null, reason, url };
 }
 
 /** A {@link Delivery} plus the claim it licenses and the url that licensed it. */
@@ -245,10 +273,22 @@ export interface ResolvedDelivery extends Delivery {
  *
  * @param d        the phase fact, from {@link deliveryOf}.
  * @param readUrl  a url recovered by the ONE sanctioned per-run transcript read
- *                 (`store/delivery.ts`). Omit it — as every zero-fetch list
- *                 surface does — and the delivered arm stays phase-only.
+ *                 (`store/delivery.ts`) — or, for a `'stranded'` run, the
+ *                 `prUrl` the post-hoc deliver POST answered with
+ *                 (`store/postHocDeliver.ts`). Omit it — as every zero-fetch
+ *                 list surface does — and the delivered arm stays phase-only.
  */
 export function resolveDelivery(d: Delivery, readUrl: string | null = null): ResolvedDelivery {
+  // A stranded run that just POST-delivered (crew#393): the answered `prUrl`
+  // upgrades it to a full pr-open IN PLACE, so the card, the badge and the
+  // header flip together without waiting for the next DTO refresh. Same shape
+  // gate as every other PR claim — this is the one choke point.
+  if (d.state === 'stranded') {
+    const href = readUrl !== null && isPrUrl(readUrl) ? readUrl : null;
+    return href === null
+      ? { ...d, claim: 'stranded', href: null }
+      : { ...d, state: 'delivered', url: href, claim: 'pr-open', href };
+  }
   if (d.state !== 'delivered') return { ...d, claim: d.state, href: null };
   // Empty is absent — the third member of the same class already normalized at
   // `Delivery.reason` and in `store/delivery.ts`. `deliveryOf` maps an empty
@@ -284,6 +324,9 @@ export const DELIVERY_LABEL: Record<DeliveryClaim, string> = {
   // (10 cancelled, 2 failed) — not one of them is going to move again.
   'in-flight':          'pending',
   'delivered':          'deliver ran',
+  // The daemon's own word (crew#393): completed, repo-scoped, no PR, worktree
+  // still on disk. Not a failure — work waiting on a person.
+  'stranded':           'stranded',
   'pr-open':            'PR open',
   'nothing-to-deliver': 'nothing delivered',
   'failed':             'deliver failed',
@@ -299,6 +342,11 @@ export const DELIVERY_COLOR: Record<DeliveryClaim, string> = {
   'none':               'var(--ink-dim)',
   'in-flight':          'var(--ink-muted)',
   'delivered':          'var(--ink-muted)',
+  // Amber, deliberately: not `--status-fail` (nothing failed — the work is
+  // sitting there, finished) and never the accent (no PR exists to claim). The
+  // gate token is studio's "waiting on a person" color, which is exactly what
+  // stranded is.
+  'stranded':           'var(--status-gate)',
   'pr-open':            'var(--accent)',
   'nothing-to-deliver': 'var(--status-fail)',
   'failed':             'var(--status-fail)',
@@ -461,7 +509,8 @@ export function deliverySummary(
   isSystemWorkflow?: IsSystemWorkflow,
 ): string {
   const counts: Record<DeliveryClaim, number> = {
-    'none': 0, 'in-flight': 0, 'delivered': 0, 'pr-open': 0, 'nothing-to-deliver': 0, 'failed': 0,
+    'none': 0, 'in-flight': 0, 'delivered': 0, 'stranded': 0, 'pr-open': 0,
+    'nothing-to-deliver': 0, 'failed': 0,
   };
   for (const v of views) {
     if (!canDeliver(v, isSystemWorkflow)) continue;
@@ -473,6 +522,9 @@ export function deliverySummary(
   const parts: string[] = [];
   if (counts['pr-open'] > 0) parts.push(`${counts['pr-open']} PR open`);
   if (counts['delivered'] > 0) parts.push(`${counts['delivered']} ran deliver`);
+  // Right after the delivered buckets — stranded is the actionable one, and its
+  // wording tracks DELIVERY_LABEL exactly (crew#393: work waiting on a person).
+  if (counts['stranded'] > 0) parts.push(`${counts['stranded']} stranded`);
   if (counts['nothing-to-deliver'] > 0) parts.push(`${counts['nothing-to-deliver']} delivered nothing`);
   if (counts['failed'] > 0) parts.push(`${counts['failed']} failed to deliver`);
   if (counts['in-flight'] > 0) parts.push(`${counts['in-flight']} deliver pending`);

@@ -3,19 +3,23 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
-import type { LaunchRunBody } from '../src/api/types.js';
+import type { LaunchBodyWithDeliver } from '../src/api/types.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { clearRetryPrefill, setRetryPrefill } from '../src/store/retryPrefill.js';
 
 /**
- * studio#123 — the composer reaches for `deliver: 'pr'` (crew#293,
- * api-types index.d.ts:950), from the persisted `studio.composer` preference
- * rather than a hardcoded composer default:
- *   - a BUILD-kind run with a workflow AND a repo bound carries the key;
+ * studio#123, wire reworked by crew#393 (api-types 0.18.0) — the composer's
+ * "Open a PR when done" toggle:
+ *   - a BUILD-kind run with a workflow AND a repo bound ALWAYS carries the key:
+ *     `'pr'` with the toggle on, `'none'` with it off. Explicit-off matters —
+ *     the 0.18.0 daemon defaults an OMITTED `deliver` to `'pr'` for exactly
+ *     these launches, so omission would deliver against the operator's OFF;
  *   - either guard unmet ⇒ the run still LAUNCHES, without the key — crew 400s
- *     on `deliver` without `workflow` (index.d.ts:955-956), and the deliver
- *     phase pushes to a remote it would not have;
- *   - the preference off ⇒ never sent;
+ *     on `deliver` without `workflow` (and older daemons 400 on `'none'`), and
+ *     the deliver phase pushes to a remote it would not have;
+ *   - the toggle is VISIBLE exactly where the key can go (repo-scoped build
+ *     work), hidden for repo-less/freeform/system launches, defaulted from the
+ *     persisted `studio.composer` preference (ships ON), per-launch override;
  *   - and in every case the verdict is VISIBLE text above the composer before
  *     the operator sends, never a tooltip.
  */
@@ -64,7 +68,7 @@ async function send(user: ReturnType<typeof userEvent.setup>, text: string): Pro
   await user.click(screen.getByTestId('launch-submit'));
 }
 
-function sentBody(): LaunchRunBody {
+function sentBody(): LaunchBodyWithDeliver {
   return vi.mocked(client.api.launchRun).mock.calls[0]![0];
 }
 
@@ -125,17 +129,68 @@ describe('ChatInput delivery (#123)', () => {
     expect(body.workflow).toBe('feature');
   });
 
-  it('the preference OFF sends no deliver key and renders no notice', async () => {
+  it('the preference OFF sends an EXPLICIT deliver: none — omission would deliver (crew#393)', async () => {
+    // The 0.18.0 wire reshape: the daemon now defaults an omitted `deliver` to
+    // `'pr'` for repo-scoped code work, so "off" must be said on the wire. The
+    // consequence is visible text, not silence: the run's work will strand.
     useComposerPrefsStore.setState({ prefs: { deliverPr: false } });
     const user = userEvent.setup();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     await bind(user, { workflow: 'feature', repo: 'studio-api' });
 
-    expect(screen.queryByTestId('deliver-notice')).toBeNull();
+    const notice = screen.getByTestId('deliver-notice');
+    expect(notice.dataset.deliverState).toBe('off');
+    expect(notice.textContent).toMatch(/stay in the run.s worktree/i);
+    // The toggle reflects the preference-seeded default.
+    expect(screen.getByTestId('deliver-toggle')).not.toBeChecked();
 
     await send(user, 'add the delivery toggle');
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
-    expect('deliver' in sentBody(), 'preference off = no deliver key at all').toBe(false);
+    expect(sentBody().deliver, 'off = explicit none, never omission').toBe('none');
+  });
+
+  it('the toggle defaults ON for a repo-scoped build launch, and unchecking it sends none', async () => {
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    // Hidden until the launch is repo-scoped build work — nowhere for the key to go.
+    expect(screen.queryByTestId('deliver-toggle')).toBeNull();
+    await bind(user, { workflow: 'feature', repo: 'studio-api' });
+
+    const toggle = screen.getByTestId('deliver-toggle');
+    expect(toggle).toBeChecked(); // the shipped default: ON
+
+    await user.click(toggle);
+    expect(screen.getByTestId('deliver-toggle')).not.toBeChecked();
+    expect(screen.getByTestId('deliver-notice').dataset.deliverState).toBe('off');
+
+    await send(user, 'add the delivery toggle');
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    expect(sentBody().deliver).toBe('none');
+  });
+
+  it('the per-launch override flips back ON over an OFF preference', async () => {
+    useComposerPrefsStore.setState({ prefs: { deliverPr: false } });
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await bind(user, { workflow: 'feature', repo: 'studio-api' });
+
+    await user.click(screen.getByTestId('deliver-toggle'));
+    expect(screen.getByTestId('deliver-toggle')).toBeChecked();
+    expect(screen.getByTestId('deliver-notice').dataset.deliverState).toBe('on');
+
+    await send(user, 'add the delivery toggle');
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    expect(sentBody().deliver).toBe('pr');
+  });
+
+  it('the toggle stays hidden for a repo-less launch — nothing to push to', async () => {
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await bind(user, { workflow: 'feature' });
+    // Repo-less: the guard notice explains; the toggle would promise a choice
+    // the body cannot honor, so it does not render at all.
+    expect(screen.queryByTestId('deliver-toggle')).toBeNull();
+    expect(screen.getByTestId('deliver-notice').dataset.deliverState).toBe('no-repo');
   });
 
   it('a retry prefill of an is_system workflow NOT on the denylist never delivers', async () => {

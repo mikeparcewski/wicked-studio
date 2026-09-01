@@ -12,34 +12,82 @@
  * (DES-STUDIO-001 §5.1); no `any` at the boundary.
  */
 
-import type { AgentSession } from 'wicked-crew-api-types';
+import type { AgentSession, LaunchRunBody } from 'wicked-crew-api-types';
 
 export type * from 'wicked-crew-api-types';
 
 
+// ── Delivery wire (crew#393 — api-types 0.18.0) ──────────────────────────────
+//
+// TODO(api-types 0.18.0): studio's installed `wicked-crew-api-types` is STALE at
+// 0.8.0 and every declaration in this section ships in 0.18.0. Delete this whole
+// section — `RunDeliveryState`, `SessionDelivery`, `SessionWithDelivery`,
+// `DeliverRunResult`, `LaunchBodyWithDeliver` — and read the fields straight off
+// `AgentSession` / `LaunchRunBody` the moment studio bumps to it.
+
 /**
- * `AgentSession.delivery` — the server-carried PR reference (CREW-UX-8,
- * wicked-crew#321), declared HERE and nowhere else because studio's installed
- * `wicked-crew-api-types` is STALE at 0.8.0 and the field ships in a later
- * version. This is the ONE hand-written shape in this module, and it is a
- * temporary one: **delete both declarations below and read `delivery` straight
- * off `AgentSession`** the moment studio bumps to the api-types version that
- * carries it.
+ * `AgentSession.delivery` (crew#393; api-types 0.18.0) — the run's delivery
+ * state, derived at DTO assembly on BOTH `GET /runs` and `GET /runs/:id`:
  *
- * Read it as `session.delivery?.url` (see `src/components/delivery.ts`): the
- * field is absent on every daemon shipping today, so the surface falls back to
- * the single per-run transcript fetch and lights up — link on the project rows,
- * zero fetches in the right panel — the day the server starts sending it, with
- * no adoption work here. `kind` is the whole concession to a future second kind
- * of deliverable, and it is free.
+ *  - `'delivered'` — a PR was opened for this run (by the deliver phase, or
+ *    post-hoc via `POST /runs/:id/deliver`); `deliverUrl` carries the PR URL.
+ *  - `'stranded'`  — a COMPLETED repo-scoped run with no recorded PR whose
+ *    worktree still exists on disk: reviewable work nobody lifted.
+ *  - `'none'`      — everything else: repo-less runs, non-terminal runs,
+ *    failed/cancelled runs, and completed runs whose worktree is gone.
+ *
+ * Always present on runs served by a 0.18.0+ daemon; absent from older servers.
+ *
+ * ⚠ WIRE RESHAPE (0.17.0 → 0.18.0, NOT additive): 0.11.0–0.17.0 spelled the
+ * field as `delivery?: { kind: 'pull_request'; url: string }`. The object form
+ * is GONE — the state moved into this string and the URL into `deliverUrl`. A
+ * client reading `delivery?.url` must move to `deliverUrl`. Studio's derivation
+ * (`src/components/delivery.ts`) still TOLERATES the legacy object from a
+ * 0.11–0.17 daemon, which is why {@link SessionDelivery} survives below.
  */
+export type RunDeliveryState = 'delivered' | 'stranded' | 'none';
+
+/** The LEGACY 0.11.0–0.17.0 object spelling of `session.delivery` (crew#321).
+ *  Gone from the 0.18.0 wire; kept only so the derivation can read the url off
+ *  an older daemon instead of crashing on it. */
 export interface SessionDelivery {
   kind: 'pull_request';
   url: string;
 }
 
-/** `AgentSession` as the post-#321 daemon sends it. See {@link SessionDelivery}. */
-export type SessionWithDelivery = AgentSession & { delivery?: SessionDelivery | null };
+/** `AgentSession` as the daemon sends it: 0.18.0's string + `deliverUrl`, or the
+ *  legacy 0.11–0.17 object, or neither (≤0.10). See {@link RunDeliveryState}. */
+export type SessionWithDelivery = AgentSession & {
+  delivery?: RunDeliveryState | SessionDelivery | null;
+  /** The delivered PR's URL — present exactly when `delivery === 'delivered'`. */
+  deliverUrl?: string;
+};
+
+/**
+ * Response of `POST /runs/:id/deliver` (crew#393) — post-hoc delivery: lift a
+ * COMPLETED repo-scoped run's stranded worktree into a PR with the SAME hardened
+ * script the deliver phase runs. Idempotent — a delivered run answers 200 with
+ * the same recorded `prUrl`. Failure is loud, never silent: 404 unknown run,
+ * 409 not-completed / repo-less / worktree-gone / delivery-in-flight / the
+ * script's own refusal (the error carries the script's own words), 500 when no
+ * verifiable PR URL came back or the script could not be spawned.
+ */
+export interface DeliverRunResult {
+  prUrl: string;
+}
+
+/**
+ * `LaunchRunBody` with 0.18.0's widened `deliver`. `'pr'` appends the hardened
+ * deliver phase; `'none'` explicitly declines (the completed run reads
+ * `delivery: 'stranded'` on the wire, recoverable via `POST /runs/:id/deliver`);
+ * OMITTED lets the daemon decide — a repo-scoped code-work launch defaults to
+ * `'pr'` (flippable by the daemon's `deliverDefault` setting), everything else
+ * to `'none'`. `'none'` is additive at 0.18.0: older daemons 400 on it, so the
+ * composer only sends the key where it would have been licensed to send `'pr'`.
+ */
+export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
+  deliver?: 'pr' | 'none';
+};
 
 // ── GET /runs/:id/acceptance (AW-14 / AW-18 — arch-R13a + R16) ────────────────
 //

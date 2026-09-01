@@ -358,10 +358,19 @@ describe('HEADLINE — the rail body says what the badge says', () => {
     // which the wire cannot evidence either: the deliver script creates the PR partway through
     // the phase, so a still-running unit may already have one. Same rule, both directions.
     const EXISTENCE = /\b(no PR|PR exists|PR was (?:not )?(?:created|opened)|there is no PR|without a PR)\b/i;
+    // `stranded` is the ONE exemption besides `pr-open`, and for the same
+    // reason pointed the other way: its negative IS wire-evidenced. The
+    // 0.18.0 daemon derives `delivery: 'stranded'` from its own delivery
+    // record (crew#393) — "No PR is on record" is the daemon's verdict, not a
+    // studio guess off a unit status. The wording is pinned below to the
+    // RECORD claim, never bare existence (an ungoverned worker may have opened
+    // a PR crew never saw — crew#391).
     const offenders = Object.entries(HEADLINE)
-      .filter(([k, sentence]) => k !== 'pr-open' && EXISTENCE.test(sentence))
+      .filter(([k, sentence]) => k !== 'pr-open' && k !== 'stranded' && EXISTENCE.test(sentence))
       .map(([k]) => k);
     expect(offenders).toStrictEqual([]);
+    expect(HEADLINE['stranded']).toMatch(/No PR is on record/);
+    expect(HEADLINE['stranded']).not.toMatch(/PR (?:was opened|exists)/i);
   });
 
   it('NO headline asserts a phase is EXECUTING — `pending` means unresolved, not running', () => {

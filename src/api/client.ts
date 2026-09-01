@@ -4,9 +4,10 @@ import type {
   AuditPage,
   CoreEvent,
   CreateProjectBody,
+  DeliverRunResult,
   GateDecision,
   GateInfo,
-  LaunchRunBody,
+  LaunchBodyWithDeliver,
   OnboardRef,
   OpenTerminalBody,
   Project,
@@ -178,9 +179,21 @@ export const api = {
   getRunAcceptance: (id: string) =>
     apiFetch<import('./types.js').RunAcceptanceView>(`/runs/${encodeURIComponent(id)}/acceptance`),
 
-  /** Launch a run → the new run id. */
-  launchRun: (body: LaunchRunBody) =>
+  /** Launch a run → the new run id. (`LaunchBodyWithDeliver` = `LaunchRunBody`
+   *  with 0.18.0's widened `deliver: 'pr' | 'none'` — see api/types.ts.) */
+  launchRun: (body: LaunchBodyWithDeliver) =>
     apiFetch<{ runId: string }>('/runs', { method: 'POST', body: JSON.stringify(body) }),
+
+  /**
+   * Post-hoc delivery (crew#393): lift a COMPLETED run's stranded worktree into
+   * a PR — the same hardened script the deliver phase runs, idempotent (a
+   * delivered run answers the same `prUrl` without re-running it). Takes no
+   * body. Failure is LOUD: 404 unknown run; 409 not-completed / repo-less /
+   * worktree-gone / in-flight / the script's own refusal (the message carries
+   * the script's own words); 500 no verifiable PR URL or spawn failure.
+   */
+  deliverRun: (id: string) =>
+    apiFetch<DeliverRunResult>(`/runs/${encodeURIComponent(id)}/deliver`, { method: 'POST' }),
 
   /**
    * The steering gate (§11.1). `{approve:true}` = approve; `{approve:true, amend}`

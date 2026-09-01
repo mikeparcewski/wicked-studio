@@ -1,6 +1,7 @@
 import type { CampaignSummary } from '../api/campaigns.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
-import { narrate, type NarrationTone } from '../components/narrator.js';
+import { deliveryOf } from '../components/delivery.js';
+import { narrate, narrateStranded, type NarrationTone } from '../components/narrator.js';
 import type { RetryPrefill } from '../store/retryPrefill.js';
 import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './chatStats.js';
 import { gateOpenPath } from './gateActions.js';
@@ -25,6 +26,10 @@ import { repoOnboard } from './repoStats.js';
  *                   rides — the run wire carries no timestamps, so recency is
  *                   positional and the label says so); clock = the durable-log
  *                   tail (`failedAt`), else attach, else unknown.
+ *  - stranded runs — completed runs the 0.18.0 wire marks `delivery: 'stranded'`
+ *                   (crew#393): reviewable work sitting uncommitted in a live
+ *                   worktree. Unwindowed like gates — the wire clears the state
+ *                   itself once delivered or reaped; clock = attach, else unknown.
  *  - campaigns    — subtraction-dedupe (§3): a campaign row fires only for the
  *                   waiting/failed members the live run list CANNOT already show
  *                   as rows (server counts cover archived/rolled-off members).
@@ -36,7 +41,8 @@ import { repoOnboard } from './repoStats.js';
  *                   (`stalledLiveChats`, reused verbatim).
  */
 
-export type NeedKind = 'gate' | 'failed-run' | 'campaign' | 'repo-graph' | 'stalled-chat';
+export type NeedKind =
+  | 'gate' | 'failed-run' | 'stranded-run' | 'campaign' | 'repo-graph' | 'stalled-chat';
 
 /** The act-in-place affordance a row carries — the component wires the verbs. */
 export type NeedAction =
@@ -72,6 +78,9 @@ const FAILED_KEY = (id: string): string => `fail:${id}`;
 const SEVERITY: Record<NeedKind, number> = {
   gate: 100,
   'failed-run': 70,
+  // Below a failure (nothing broke) but above the ambient rows: finished,
+  // reviewable work sitting invisible in a worktree IS a person's job (crew#393).
+  'stranded-run': 65,
   campaign: 60,
   'repo-graph': 50, // 'never' drops to 30 below
   'stalled-chat': 25,
@@ -212,6 +221,29 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         at: failedAt[s.id] ?? attachedAt[s.id] ?? null,
         subjectPath: `/runs/${encodeURIComponent(s.id)}`,
         action: { kind: 'retry-prefill', prefill: retryPrefillOf(v), label: 'Retry ›' },
+      });
+    } else if (s.status === 'completed' && deliveryOf(v).state === 'stranded') {
+      // Stranded completed runs (crew#393): the daemon's OWN wire verdict — a
+      // completed repo-scoped run with no recorded PR whose worktree still
+      // exists. Reviewable work nobody lifted is a person's job, so it queues.
+      // Deliberately UNWINDOWED, like gates and unlike failures: the state
+      // clears itself the moment the run is delivered (or its worktree is
+      // reaped, when the wire flips to 'none') — the row lives exactly as long
+      // as the work sits there. Text via the narrator's one template source.
+      const line = narrateStranded();
+      shownRunIds.add(s.id);
+      rows.push({
+        key: `stranded:${s.id}`,
+        kind: 'stranded-run',
+        severity: SEVERITY['stranded-run'],
+        subject: s.problem,
+        text: line.text,
+        tone: line.tone,
+        at: attachedAt[s.id] ?? null,
+        subjectPath: `/runs/${encodeURIComponent(s.id)}`,
+        // Open-in-place, never a POST from the queue (the fold's standing rule):
+        // the run's Delivery card carries the one-click Deliver.
+        action: { kind: 'open', path: `/runs/${encodeURIComponent(s.id)}`, label: 'Open run ›' },
       });
     }
   }

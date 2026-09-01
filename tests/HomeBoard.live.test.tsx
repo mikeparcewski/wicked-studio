@@ -128,9 +128,13 @@ describe('HomeBoard — live activity (slice 6)', () => {
     push({ type: 'unitOutputDelta', session: 'run-b', ord: 0, text: 'Reading src/App.tsx\n' } as CoreEvent);
     push({ type: 'unitOutputDelta', session: 'run-b', ord: 0, text: 'Rewriting slide 3\n' } as CoreEvent);
 
-    const line = within(card('p-b')).getByTestId('live-line');
-    expect(line).toHaveTextContent('build — Rewriting slide 3');
-    expect(line.textContent).not.toContain('Reading src/App.tsx');
+    // waitFor: the live line renders off a store subscription — under CI load the
+    // subscribed re-render can land a tick after the push (seen twice on CI runners).
+    await vi.waitFor(() => {
+      const line = within(card('p-b')).getByTestId('live-line');
+      expect(line).toHaveTextContent('build — Rewriting slide 3');
+      expect(line.textContent).not.toContain('Reading src/App.tsx');
+    });
   });
 
   it('a terminal run has no live line — the card is the QUIET one-liner, not "Nothing running"', async () => {

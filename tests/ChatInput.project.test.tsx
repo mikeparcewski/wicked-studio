@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
-import type { LaunchRunBody, Project } from '../src/api/types.js';
+import type { LaunchBodyWithDeliver, Project } from '../src/api/types.js';
 
 /**
  * DES-FEEDBACK-001 slice B (§5.1/§5.2/§4.3) — the Build launch form's project
@@ -43,7 +43,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-async function typeAndLaunch(user: ReturnType<typeof userEvent.setup>): Promise<LaunchRunBody> {
+async function typeAndLaunch(user: ReturnType<typeof userEvent.setup>): Promise<LaunchBodyWithDeliver> {
   await user.type(screen.getByTestId('launch-problem'), 'build the thing');
   // The Send button enables once the roster load has landed a selected CLI.
   await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());

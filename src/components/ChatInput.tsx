@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../api/client.js';
-import type { EntityMode, LaunchRunBody, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
+import { api, ApiError } from '../api/client.js';
+import type { EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
 import { useComposerPrefsStore } from '../store/composerPrefs.js';
@@ -196,10 +196,15 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   );
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
-  // Delivery (studio#123): the composer carries no default of its own — the
-  // persisted `studio.composer` preference decides, and it ships ON. The two
-  // guards below are what keeps an ON default from producing a body crew 400s.
+  // Delivery (studio#123, reworked by crew#393): the persisted `studio.composer`
+  // preference SEEDS the default (it ships ON), and the per-launch "Open a PR
+  // when done" toggle overrides it for THIS launch only — the override never
+  // persists. The two guards below are what keeps an ON default from producing
+  // a body crew 400s.
   const deliverPr = useComposerPrefsStore((s) => s.prefs.deliverPr);
+  /** Per-launch override; `null` = follow the preference. */
+  const [deliverOverride, setDeliverOverride] = useState<boolean | null>(null);
+  const deliverOn = deliverOverride ?? deliverPr;
 
   // ── Preflight (DES-UX-001 §7.8, EC43, slice AC) ────────────────────────────
   // A code-shaped intent with no repo attached warns-and-blocks: zero POST
@@ -447,7 +452,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // paragraph (see the steer field's own caption) — LaunchRunBody carries
     // no guidance key until CREW-UX-4 lands (DES-UX-002 §7.2).
     const guidance = launchSteer.trim();
-    const body: LaunchRunBody = {
+    const body: LaunchBodyWithDeliver = {
       problem: guidance.length > 0 ? `${problem.trim()}\n\nOperator guidance: ${guidance}` : problem.trim(),
     };
     const seats = roster.filter((s) => selectedClis.has(s.key));
@@ -464,14 +469,17 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (firstRepo) body.repoRef = firstRepo;
     const wf = workflowOverride?.trim() || workflow;
     if (wf) body.workflow = wf;
-    // Delivery (crew#293, studio#123): `deliver: 'pr'` appends the daemon's
-    // hardened deliver phase — push the branch, open the PR; merge stays human.
-    // BUILD-kind runs only, and only with both guards met: `deliver` without
-    // `workflow` is a 400 (api-types index.d.ts:955-956), and the deliver
-    // script pushes to a remote, which is the attached repo. Either one missing
-    // and the run launches WITHOUT the key — never a body crew rejects. The
-    // same verdict is on screen before the operator sends (`deliverNotice`).
-    if (deliverPr && deliverKind(wf) === 'build' && firstRepo) body.deliver = 'pr';
+    // Delivery (crew#293/studio#123, wire reworked by crew#393): a repo-scoped
+    // BUILD launch ALWAYS carries the key — `'pr'` when the toggle is on,
+    // `'none'` when it is off. Explicit-off matters on the 0.18.0 wire: the
+    // daemon now DEFAULTS an omitted `deliver` to `'pr'` for exactly these
+    // launches, so an OFF toggle that merely omitted the key would deliver
+    // anyway. Both guards stay: `deliver` without `workflow` is a 400 and the
+    // deliver script pushes to the attached repo — either one missing and the
+    // run launches WITHOUT the key (the daemon defaults those to `'none'`;
+    // older daemons also 400 on `'none'`, so unlicensed bodies never carry it).
+    // The same verdict is on screen before the operator sends (`deliverNotice`).
+    if (deliverKind(wf) === 'build' && firstRepo) body.deliver = deliverOn ? 'pr' : 'none';
     // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
@@ -482,7 +490,28 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (retryOf) body.retryOf = retryOf;
 
     try {
-      const { runId: newRunId } = await api.launchRun(body);
+      let launched;
+      try {
+        launched = await api.launchRun(body);
+      } catch (err) {
+        // A pre-0.18 daemon 400s on the `deliver` key itself. Such a daemon HAS no deliver
+        // phase — omitting the key reproduces the only behavior it is capable of (no
+        // delivery), for either toggle state — so retry once without it rather than failing
+        // a launch over a field the daemon cannot honor.
+        if (
+          body.deliver !== undefined &&
+          err instanceof ApiError &&
+          err.status === 400 &&
+          err.message.includes('deliver')
+        ) {
+          const withoutDeliver = { ...body };
+          delete withoutDeliver.deliver;
+          launched = await api.launchRun(withoutDeliver);
+        } else {
+          throw err;
+        }
+      }
+      const { runId: newRunId } = launched;
       // The studio witnessed this launch — the provenance line's honest
       // 'via studio' channel derives from exactly this record (§3.3).
       useProvenanceStore.getState().markLaunchedHere(newRunId);
@@ -725,30 +754,49 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // when the preference is off (the setting is the answer) and on the chat
   // surface (a system workflow has nothing to deliver).
   const deliverWorkflow = workflowOverride?.trim() || workflow;
+  // The toggle renders exactly where the wire key can go (crew#393): a
+  // repo-scoped BUILD launch. Hidden — not merely disabled — everywhere else:
+  // repo-less, freeform and system launches never carry the key, so a control
+  // there would promise a choice the body cannot honor.
+  const deliverToggleVisible = deliverKind(deliverWorkflow) === 'build' && Boolean(repoRefs[0]);
   const deliverNotice: { state: string; text: string } | null = ((): { state: string; text: string } | null => {
-    if (!deliverPr) return null;
     switch (deliverKind(deliverWorkflow)) {
       case 'system':
         return null;
       case 'freeform':
-        return {
-          state: 'no-workflow',
-          text: 'No PR when this finishes — a run needs a workflow to deliver one. Pick one in launch options.',
-        };
+        // With delivery off there was nothing to warn about — the guard notices
+        // only matter to an operator who expected a PR.
+        return deliverOn
+          ? {
+              state: 'no-workflow',
+              text: 'No PR when this finishes — a run needs a workflow to deliver one. Pick one in launch options.',
+            }
+          : null;
       case 'build':
         // The SAME truthiness the submit site guards on (`const firstRepo =
         // repoRefs[0]`), not `repoRefs.length > 0` — otherwise a falsy first
         // entry renders "a PR is coming" over a body that carries no
         // `deliver`, and the notice's whole contract is that it cannot
         // disagree with the wire.
-        return repoRefs[0]
+        if (!repoRefs[0]) {
+          return deliverOn
+            ? {
+                state: 'no-repo',
+                text: 'No PR when this finishes — delivery pushes to a repository, and none is attached.',
+              }
+            : null;
+        }
+        return deliverOn
           ? {
               state: 'on',
               text: 'When this finishes it pushes its branch and opens a PR. Merging stays yours.',
             }
           : {
-              state: 'no-repo',
-              text: 'No PR when this finishes — delivery pushes to a repository, and none is attached.',
+              // The consequence of OFF, said before the send (crew#393): the
+              // wire carries an explicit `deliver: 'none'` and the completed
+              // run will read `stranded` — recoverable from its run page.
+              state: 'off',
+              text: 'No PR when this finishes — the work will stay in the run’s worktree. You can still deliver it later from the run page.',
             };
     }
   })();
@@ -991,17 +1039,44 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         </div>
       )}
 
+      {/* ── "Open a PR when done" (crew#393) — the per-launch delivery toggle.
+          Rendered exactly where the wire key can go (repo-scoped build work);
+          hidden for repo-less/freeform/system launches. Defaults to the
+          persisted preference (ships ON); the override lasts one composer. ── */}
+      {deliverToggleVisible && (
+        <label
+          data-testid="deliver-toggle-row"
+          className="flex items-center gap-2 text-xs px-1 font-mono cursor-pointer select-none"
+          style={{ color: 'var(--ink-muted)' }}
+        >
+          <input
+            type="checkbox"
+            data-testid="deliver-toggle"
+            checked={deliverOn}
+            onChange={(e) => setDeliverOverride(e.target.checked)}
+            style={{ accentColor: 'var(--accent)' }}
+          />
+          Open a PR when done
+        </label>
+      )}
+
       {/* ── Delivery verdict (studio#123) — visible text, never a tooltip: the
           operator reads whether a PR is coming, or which guard stopped it,
-          before sending. `--ink-muted` when delivery is on (a statement of
-          fact), `--status-gate` when a guard withheld it (something to act
-          on) — the composer's own warn dress, one notch below the fail red. ── */}
+          before sending. `--ink-muted` when the state was CHOSEN (on/off — a
+          statement of fact), `--status-gate` when a guard withheld it
+          (something to act on) — the composer's own warn dress, one notch
+          below the fail red. ── */}
       {deliverNotice !== null && (
         <p
           data-testid="deliver-notice"
           data-deliver-state={deliverNotice.state}
           className="text-xs px-1 font-mono"
-          style={{ color: deliverNotice.state === 'on' ? 'var(--ink-muted)' : 'var(--status-gate)' }}
+          style={{
+            color:
+              deliverNotice.state === 'on' || deliverNotice.state === 'off'
+                ? 'var(--ink-muted)'
+                : 'var(--status-gate)',
+          }}
         >
           {deliverNotice.text}
         </p>
