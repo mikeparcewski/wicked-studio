@@ -64,6 +64,10 @@ export interface BoardProject {
   project: Project;
   /** Display name of the bound repo (`crew.repo` member), or `null` when unbound. */
   repo: string | null;
+  /** How many `crew.repo` members the project holds (lane B: the /projects
+   *  card's repo count) — off the SAME members read, zero new requests.
+   *  Optional so hand-built fixtures predating it stay valid; absent = 0. */
+  repoCount?: number;
   runs: SessionView[];
   docs: DocSummary[];
   /**
@@ -165,12 +169,14 @@ function signalsOf(
 interface Bindings {
   runIds: ReadonlySet<string>;
   repo: string | null;
+  /** Count of `crew.repo` members — the /projects card's repo count. */
+  repoCount: number;
   docs: DocSummary[];
   /** Run id → `attached_at` (epoch ms) off the same members read. */
   attachedAt: Record<string, number>;
 }
 
-const EMPTY: Bindings = { runIds: new Set(), repo: null, docs: [], attachedAt: {} };
+const EMPTY: Bindings = { runIds: new Set(), repo: null, repoCount: 0, docs: [], attachedAt: {} };
 
 /**
  * DTO-truth placement (DES-UX-001 §2.3 rule 3): the run's own `project_id`
@@ -222,13 +228,15 @@ async function loadBindings(p: Project, repoNames: Map<string, string>): Promise
           .catch((): DocSummary[] => [])
       : Promise.resolve([]),
   ]);
-  const repoRef = members.find((m) => m.member_kind === 'crew.repo')?.member_ref ?? null;
+  const repoMembers = members.filter((m) => m.member_kind === 'crew.repo');
+  const repoRef = repoMembers[0]?.member_ref ?? null;
   const runMembers = members.filter((m) => RUN_KINDS.has(m.member_kind));
   const attachedAt: Record<string, number> = {};
   for (const m of runMembers) attachedAt[m.member_ref] = m.attached_at;
   return {
     runIds: new Set(runMembers.map((m) => m.member_ref)),
     repo: repoRef === null ? null : repoNames.get(repoRef) ?? repoRef,
+    repoCount: repoMembers.length,
     docs,
     attachedAt,
   };
@@ -401,7 +409,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
           // matter how stale the clocks are. Decay orders; status bands.
           const hasActiveRun = mine.some((v) => ACTIVE.has(v.session.status));
           return {
-            project, repo: b.repo, runs: mine, docs: b.docs, attachedAt: b.attachedAt,
+            project, repo: b.repo, repoCount: b.repoCount, runs: mine, docs: b.docs, attachedAt: b.attachedAt,
             attention: deriveAttention(mine, b.docs),
             score, band: bandFor(signals, hasActiveRun, now), signal,
           };

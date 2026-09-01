@@ -4,13 +4,16 @@ import { ProjectDashboard } from '../src/components/ProjectDashboard.js';
 import { clearRepoCache, fetchReposCached } from '../src/store/repoCache.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useProjectsStore } from '../src/store/projects.js';
+import { clearRetryPrefill, peekRetryPrefill } from '../src/store/retryPrefill.js';
 import type { Project, ProjectMember, SessionStatus } from '../src/api/types.js';
 import type { DocSummary } from '../src/api/interactive.js';
 import { makeUnit, makeView } from './factories.js';
 
 /**
- * The project dashboard (DES-FEEDBACK-001 §4.1, slice D): the `/p/:projectId`
- * no-mode landing — four tiles, all derived from data the app already holds.
+ * The project HOMEPAGE — `/p/:projectId` (lane B): full-width command surface.
+ * A project-scoped KPI band with honest window deltas, the gate inbox FIRST,
+ * then runs/docs as filterable cards with derived titles, a needs-you jump
+ * straight to the gate, and an inline Retry (prefill, never a relaunch).
  */
 
 const listProjectMembers = vi.fn();
@@ -69,32 +72,40 @@ beforeEach(() => {
   listDocs.mockResolvedValue([]);
   useGateStore.setState({ gates: {} });
   useProjectsStore.setState({ projects: [project('proj-1')], loading: false, error: null });
+  clearRetryPrefill(); // drop any deposit a prior test left
 });
 afterEach(cleanup);
 
-describe('ProjectDashboard (DES-FEEDBACK-001 §4.1, slice D)', () => {
-  it('renders the dashboard with all four tiles, the mode verbs, and the meta line', async () => {
+describe('ProjectDashboard — the full-width project command surface', () => {
+  it('renders FULL WIDTH with the KPI band, the mode verbs, Do Work, and the meta line', async () => {
     render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
 
-    expect(screen.getByTestId('project-dashboard')).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-runs')).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-docs')).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-gates')).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-activity')).toBeInTheDocument();
+    const root = screen.getByTestId('project-dashboard') as HTMLElement;
+    expect(root.style.maxWidth).toBe('');
 
-    // NOT a fifth mode: no switcher on this surface — the four verbs are header links.
+    // The command-center band, project-scoped.
+    const band = screen.getByTestId('project-kpis');
+    for (const tid of ['stat-runs', 'stat-active', 'stat-gates', 'stat-failed']) {
+      expect(within(band as HTMLElement).getByTestId(tid)).toBeInTheDocument();
+    }
+
+    // NOT a fifth mode: the four verbs are header links, plus the creation verb.
     expect(screen.queryByTestId('mode-switcher')).toBeNull();
     for (const m of ['chat', 'build', 'document', 'video']) {
       expect(screen.getByTestId(`dashboard-mode-${m}`)).toHaveAttribute('href', `/p/proj-1/${m}`);
     }
+    expect(screen.getByTestId('dashboard-do-work')).toHaveAttribute('href', '/p/proj-1/build/new');
 
     // The meta line: last activity + open runs. NO cost — the wire carries none.
     expect(screen.getByTestId('dashboard-meta')).toHaveTextContent(/last activity .* · 0 open runs/);
     expect(screen.getByTestId('dashboard-meta').textContent).not.toMatch(/\$/);
+    // The gate inbox earns its space only when something waits.
+    expect(screen.queryByTestId('dashboard-gates')).toBeNull();
+    expect(screen.getByTestId('dashboard-runs')).toHaveTextContent('No runs yet — Build starts one.');
     await waitFor(() => expect(listProjectMembers).toHaveBeenCalledWith('proj-1'));
   });
 
-  it('runs tile: scoped to the project and attention-ordered — gate first, then failing, then working, then done', async () => {
+  it('run cards: scoped to the project and attention-ordered — gate first, then failing, then working, then done', async () => {
     listProjectMembers.mockResolvedValue({
       members: [member('r-done'), member('r-work'), member('r-gate'), member('r-fail')],
     });
@@ -116,9 +127,12 @@ describe('ProjectDashboard (DES-FEEDBACK-001 §4.1, slice D)', () => {
     expect(ids).not.toContain('r-other');
     // Open count excludes terminal states.
     expect(screen.getByTestId('dashboard-meta')).toHaveTextContent('2 open runs');
+    // EC34: the section head counts exactly the rendered cards.
+    expect(screen.getByTestId('dashboard-runs')).toHaveAttribute('data-count', '4');
   });
 
-  it('a run row links into the run’s mode view — Build for a run, Chat for a chat thread', async () => {
+  it('a run card carries a DERIVED title (raw prompt hover-only) and doors into its mode view', async () => {
+    const longIntent = 'Implement the auth flow refactor across every consumer of the session token; then re-run the full suite and file the follow-ups.';
     listProjectMembers.mockResolvedValue({
       members: [member('r-1', 'crew.run'), member('t-1', 'crew.chat')],
     });
@@ -126,21 +140,88 @@ describe('ProjectDashboard (DES-FEEDBACK-001 §4.1, slice D)', () => {
     render(
       <ProjectDashboard
         projectId="proj-1"
-        runs={[run('r-1', 'executing'), run('t-1', 'executing')]}
+        runs={[run('r-1', 'executing', longIntent), run('t-1', 'executing')]}
         navigate={navigate}
       />,
     );
     await waitFor(() => expect(screen.getAllByTestId('dashboard-run')).toHaveLength(2));
 
     const rows = screen.getAllByTestId('dashboard-run');
-    const byId = (id: string) => rows.find((r) => r.getAttribute('data-run-id') === id)!;
-    expect(byId('r-1')).toHaveAttribute('href', '/p/proj-1/build/r-1');
-    expect(byId('t-1')).toHaveAttribute('href', '/p/proj-1/chat/t-1');
+    const byId = (id: string) => rows.find((r) => r.getAttribute('data-run-id') === id)! as HTMLElement;
+    // The title link is a real href — Build for a run, Chat for a chat thread.
+    const title = within(byId('r-1')).getByTestId('dashboard-run-title');
+    expect(title).toHaveAttribute('href', '/p/proj-1/build/r-1');
+    expect(within(byId('t-1')).getByTestId('dashboard-run-title')).toHaveAttribute('href', '/p/proj-1/chat/t-1');
+    // Derived, word-trimmed, ellipsized — never the raw 140-char prompt.
+    expect(title.textContent!.length).toBeLessThan(70);
+    expect(title.textContent).toMatch(/…$/);
+    expect(title).toHaveAttribute('title', longIntent);
     fireEvent.click(byId('r-1'));
     expect(navigate).toHaveBeenCalledWith('/p/proj-1/build/r-1');
   });
 
-  it('docs tile: lists listDocs(projectId) results (root present) and navigates into Document mode', async () => {
+  it('a waiting run’s card shows the needs-you jump STRAIGHT to its gate', async () => {
+    listProjectMembers.mockResolvedValue({ members: [member('r-gate')] });
+    useGateStore.setState({
+      gates: { 'r-gate': { runId: 'r-gate', ord: 0, prompt: 'ok?', lifecycle: 'open', receivedAt: NOW - HOUR } },
+    });
+    const navigate = vi.fn();
+    render(<ProjectDashboard projectId="proj-1" runs={[run('r-gate', 'awaiting_human')]} navigate={navigate} />);
+
+    await waitFor(() => expect(screen.getByTestId('dashboard-run-needs-you')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('dashboard-run-needs-you'));
+    expect(navigate).toHaveBeenCalledWith('/p/proj-1/build/r-gate#gate');
+    // The KPI gate tile is the same door.
+    expect(screen.getByTestId('stat-gates')).toHaveAttribute('href', '/p/proj-1/build/r-gate#gate');
+  });
+
+  it('a FAILED run’s card offers inline Retry — a prefill deposit + composer, never a relaunch', async () => {
+    listProjectMembers.mockResolvedValue({ members: [member('r-fail')] });
+    const navigate = vi.fn();
+    render(<ProjectDashboard projectId="proj-1" runs={[run('r-fail', 'failed', 'ship the uploader')]} navigate={navigate} />);
+
+    await waitFor(() => expect(screen.getByTestId('dashboard-run-retry')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('dashboard-run-retry'));
+    const prefill = peekRetryPrefill();
+    expect(prefill).not.toBeNull();
+    expect(prefill!.retryOf).toBe('r-fail');
+    expect(prefill!.problem).toBe('ship the uploader');
+    expect(prefill!.projectId).toBe('proj-1');
+    expect(navigate).toHaveBeenCalledWith('/runs/new');
+  });
+
+  it('the FilterStrip drives the card grid; search lifts the recency window', async () => {
+    listProjectMembers.mockResolvedValue({
+      members: [member('r-done'), member('r-work'), member('r-fail')],
+    });
+    render(
+      <ProjectDashboard
+        projectId="proj-1"
+        runs={[run('r-done', 'completed'), run('r-work', 'executing'), run('r-fail', 'failed')]}
+        navigate={() => {}}
+      />,
+    );
+    await waitFor(() => expect(screen.getAllByTestId('dashboard-run')).toHaveLength(3));
+
+    const chip = (id: string) => screen.getAllByTestId('dashboard-filter-chip')
+      .find((c) => c.getAttribute('data-chip') === id)!;
+    fireEvent.click(chip('failed'));
+    expect(screen.getAllByTestId('dashboard-run').map((r) => r.getAttribute('data-run-id'))).toEqual(['r-fail']);
+    fireEvent.click(chip('active'));
+    expect(screen.getAllByTestId('dashboard-run').map((r) => r.getAttribute('data-run-id'))).toEqual(['r-work']);
+    fireEvent.click(chip('all'));
+    fireEvent.change(screen.getByTestId('dashboard-filter-search'), { target: { value: 'r-done' } });
+    expect(screen.getAllByTestId('dashboard-run').map((r) => r.getAttribute('data-run-id'))).toEqual(['r-done']);
+  });
+
+  it('the runs KPI tile shows an honest "—" delta when no prior window exists', async () => {
+    listProjectMembers.mockResolvedValue({ members: [member('r-a')] });
+    render(<ProjectDashboard projectId="proj-1" runs={[run('r-a', 'executing')]} navigate={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('stat-runs').getAttribute('data-value')).toBe('1'));
+    expect(screen.getByTestId('stat-runs').getAttribute('data-delta')).toBe('none');
+  });
+
+  it('docs cards: lists listDocs(projectId) results (root present) and doors into Document mode', async () => {
     useProjectsStore.setState({
       projects: [project('proj-1', { interactiveRoot: '/tmp/wi-proj-1' })],
       loading: false, error: null,
@@ -154,21 +235,21 @@ describe('ProjectDashboard (DES-FEEDBACK-001 §4.1, slice D)', () => {
     expect(screen.getByTestId('dashboard-docs')).toHaveAttribute('data-count', '3');
 
     const rows = screen.getAllByTestId('dashboard-doc');
-    expect(rows[0]).toHaveAttribute('href', '/p/proj-1/document/spec');
-    // A demo doc opens in Video mode — a demo is a doc whose manifest says so (§7.4).
-    expect(rows[2]).toHaveAttribute('href', '/p/proj-1/video/walkthrough');
+    expect(rows[0]!.querySelector('a')).toHaveAttribute('href', '/p/proj-1/document/spec');
+    // A demo doc opens in Video mode — a demo is a doc whose manifest says so.
+    expect(rows[2]!.querySelector('a')).toHaveAttribute('href', '/p/proj-1/video/walkthrough');
     fireEvent.click(rows[0]!);
     expect(navigate).toHaveBeenCalledWith('/p/proj-1/document/spec');
   });
 
-  it('docs tile: no interactive root ⇒ no listDocs call, and the tile states its empty case', async () => {
+  it('docs cards: no interactive root ⇒ no listDocs call, and the section states its empty case', async () => {
     render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
     await waitFor(() => expect(listProjectMembers).toHaveBeenCalled());
     expect(listDocs).not.toHaveBeenCalled();
     expect(screen.getByTestId('dashboard-docs')).toHaveTextContent('No documents yet');
   });
 
-  it('gate tile: approve fires the SAME action as the board chip — POST confirmGate {approve:true}', async () => {
+  it('gate inbox: approve fires the SAME action as the board chip — POST confirmGate {approve:true}', async () => {
     listProjectMembers.mockResolvedValue({ members: [member('r-gate')] });
     useGateStore.setState({
       gates: { 'r-gate': { runId: 'r-gate', ord: 0, prompt: 'Approve the outline?', lifecycle: 'open', receivedAt: NOW - HOUR } },
@@ -188,27 +269,23 @@ describe('ProjectDashboard (DES-FEEDBACK-001 §4.1, slice D)', () => {
     expect(useGateStore.getState().gates['r-gate']).toBeUndefined();
   });
 
-  it('activity tile: 7-day sparkline reads the membership attach clock, one bucket per day', async () => {
+  it('the runs KPI sparkline reads the membership attach clock', async () => {
     listProjectMembers.mockResolvedValue({
       members: [
         member('r-a', 'crew.run', NOW - 1 * HOUR),      // today
         member('r-b', 'crew.run', NOW - 1 * HOUR - 1),  // today
         member('r-c', 'crew.run', NOW - 3 * DAY),       // 3 days back
-        member('r-old', 'crew.run', NOW - 20 * DAY),    // outside the window
+        member('r-old', 'crew.run', NOW - 20 * DAY),    // outside the span
       ],
     });
     render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId('dashboard-activity')).toHaveAttribute('data-total', '3'));
-    const svg = screen.getByTestId('activity-sparkline');
-    // Two buckets with counts ⇒ two bars; the max bucket (2) renders full height.
-    expect(svg.querySelectorAll('rect')).toHaveLength(2);
-    expect(screen.getByTestId('dashboard-activity')).toHaveTextContent('3 runs this week');
+    await waitFor(() => expect(listProjectMembers).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId('stat-runs').querySelector('svg')).not.toBeNull());
   });
 });
 
-describe('bound repos row (DES-FEEDBACK-002 §10.2, slice J)', () => {
+describe('bound repos row (unchanged contract)', () => {
   beforeEach(() => {
     clearRepoCache();
     listRepos.mockReset();
@@ -217,7 +294,7 @@ describe('bound repos row (DES-FEEDBACK-002 §10.2, slice J)', () => {
     });
   });
 
-  it('a crew.repo member renders one chip linking to the repo page — name resolved from the warm §1.4 cache, ZERO new requests', async () => {
+  it('a crew.repo member renders one chip linking to the repo page — warm cache, ZERO new requests', async () => {
     await fetchReposCached(); // the palette/rail gesture already warmed it
     const fetchesBefore = listRepos.mock.calls.length;
     listProjectMembers.mockResolvedValue({
@@ -232,7 +309,7 @@ describe('bound repos row (DES-FEEDBACK-002 §10.2, slice J)', () => {
     expect(chips[0]).toHaveTextContent('studio-api');
     // Zero new requests: the SAME membership read, the SAME repo cache.
     expect(listRepos.mock.calls.length).toBe(fetchesBefore);
-    // And the repo member never leaks into the runs tile.
+    // And the repo member never leaks into the runs section.
     expect(screen.getByTestId('dashboard-runs')).toHaveAttribute('data-count', '1');
   });
 

@@ -118,7 +118,7 @@ describe('the project page (EC57, EC58)', () => {
     render(<ProjectDashboard projectId="proj-1" runs={corpus()} navigate={() => {}} />);
 
     const rows = await screen.findAllByTestId('dashboard-run');
-    expect(rows).toHaveLength(6); // MAX_ROWS
+    expect(rows).toHaveLength(19); // the full last-30 window — no row cap on the card grid
 
     const chipped = rows.filter((r) => within(r).queryByTestId('run-delivery-chip') !== null);
     for (const row of chipped) {
@@ -159,7 +159,7 @@ describe('the project page (EC57, EC58)', () => {
     render(<ProjectDashboard projectId="proj-1" runs={corpus()} navigate={() => {}} />);
 
     const summary = await screen.findByTestId('dashboard-delivery-summary');
-    // 19 runs; 6 rows rendered. The census sees all nineteen — and says "ran
+    // 19 runs, all in the last-30 window. The census sees all nineteen — and says "ran
     // deliver", never "delivered": zero fetches means zero urls in hand.
     // The fourteen land in "no deliver phase" only because the defs prove
     // `feature` is an ordinary workflow — the bucket is a claim about a
@@ -170,7 +170,7 @@ describe('the project page (EC57, EC58)', () => {
         .toStrictEqual('3 ran deliver · 2 delivered nothing · 14 no deliver phase'),
     );
     expect(summary.textContent).not.toMatch(/\bPR\b/);
-    expect(screen.getAllByTestId('dashboard-run')).toHaveLength(6);
+    expect(screen.getAllByTestId('dashboard-run')).toHaveLength(19);
   });
 
   it('D5: chat threads are OUT of the census — the rail hides Delivery from them', async () => {

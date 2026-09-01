@@ -4,36 +4,47 @@ import { listDocs, type DocSummary } from '../api/interactive.js';
 import { useDocsCache } from '../store/docsCache.js';
 import type { SessionView } from '../api/types.js';
 import { compareScored, scoreOf, type Signal, type SignalKind } from '../board/boardAttention.js';
-import { WINDOW_LABEL_STYLE } from '../board/metrics.js';
-import { sessionProjectId } from '../hooks/ambientProject.js';
+import { gateOpenPath } from '../board/gateActions.js';
+import { outcomeOf, WINDOW_LABEL_STYLE } from '../board/metrics.js';
+import {
+  attachSeries, deltaWord, statusCounts, windowBuckets, windowDelta,
+} from '../board/windowStats.js';
+import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { interactiveRootOf } from '../hooks/useBoardModel.js';
 import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
+import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { useTriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useGateStore } from '../store/gates.js';
 import { useProjectsStore } from '../store/projects.js';
 import { getCachedRepos } from '../store/repoCache.js';
+import { setRetryPrefill } from '../store/retryPrefill.js';
 import { BatchGateBar, BatchSelectBox } from './BatchGateBar.js';
+import {
+  DashboardGrid, FilterStrip, KpiBand, KpiGroup, StatTile, type FilterChip,
+} from './dashboardKit.js';
 import { GateChip } from './GateChip.js';
 import { GateRejectNote } from './GateRejectNote.js';
 import { MODE_LABEL } from './ProjectShell.js';
 import { ago, ATTENTION_DOT } from './ProjectCard.js';
+import { ageWord } from './DashboardTiles.js';
 import { deliverySummary } from './delivery.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { DeliveryChip } from './RunDelivery.js';
-import { RunSparkline } from './RunSparkline.js';
+import { humanTitle, runShortId, runWhenWord } from './runIdentity.js';
 import { STATUS_STYLE } from './RunCard.js';
 
 /**
- * The project dashboard (DES-FEEDBACK-001 §4.1, slice D): what `/p/:projectId`
- * with NO mode segment renders — context before actions. It is NOT a fifth
- * mode (no Dashboard tab in the switcher); it is what you see before you
- * choose one, and where the context header's project name leads back to.
+ * The project HOMEPAGE — `/p/:projectId` with no mode segment (lane B): the
+ * same command-surface kit as /projects, scoped to one project. A KPI band
+ * (its runs/active/gates/failed with honest window deltas + a sparkline of its
+ * run history on the attach clock), the gate inbox FIRST (attention routing
+ * beats navigation), then its runs/chats/docs as filterable full-width cards.
+ * The creation verbs live in the header (Do Work + the four mode verbs);
+ * failed runs carry an inline Retry (a prefill, never a hidden relaunch).
  *
- * Everything here derives from data the app already fetches: the shared `runs`
- * list (passed down from App's one `useRuns()`), one membership read (the same
- * call the board makes per project), one `listDocs(projectId)` (the same call
- * Document mode makes — only when the project has an interactive root), and
- * the gate store `useRuns` already reconciles. No polling loops.
+ * Everything derives from data the app already fetches: the shared `runs`
+ * list, one membership read, one `listDocs` (only when the project has an
+ * interactive root), and the gate store. No polling loops, no new wires.
  */
 
 /** Statuses that mean the run is moving under its own power (board's set). */
@@ -42,15 +53,14 @@ const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'execut
 /** Membership kinds that make a run/thread a member of a project. */
 const RUN_KINDS: ReadonlySet<string> = new Set(['crew.run', 'crew.chat']);
 
-const DAY = 24 * 3_600_000;
-/** The activity tile's window (§4.1 tile 4): 7 daily run-count buckets. */
-const SPARK_DAYS = 7;
+/** Gate-inbox rows before the list reports a count instead of growing. */
+const MAX_GATE_ROWS = 6;
 
-/** Rows a tile shows before it reports a count instead of growing. */
-const MAX_ROWS = 6;
+const TERMINAL: ReadonlySet<string> = new Set(['completed', 'cancelled', 'failed']);
 
 const CSS = {
-  page: { padding: 'var(--space-5) var(--space-6)', maxWidth: '1080px' },
+  // FULL WIDTH (lane B): the dashboard flows with the viewport.
+  page: { padding: 'var(--space-5) var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' },
   name: {
     fontSize: 'var(--text-lg)', fontWeight: 'var(--weight-bold)',
     fontFamily: 'var(--font-sans)', color: 'var(--ink-high)', margin: 0,
@@ -67,41 +77,36 @@ const CSS = {
     fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
     color: 'var(--ink-muted)', margin: '6px 0 0',
   },
-  grid: {
-    display: 'grid', gap: 'var(--space-3)', marginTop: 'var(--space-4)',
-    // §4.1's 2x2: two columns at the page's 1080px max (auto-fit's only job is
-    // the 1-column fallback below ~430px tiles — never a 3+1 row).
-    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
-  },
-  tile: {
-    background: 'var(--surface-card)', boxShadow: 'var(--shadow-card)',
-    borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', minWidth: 0,
-  },
-  tileHead: {
+  sectionHead: {
     fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)',
     letterSpacing: '0.08em', textTransform: 'uppercase',
-    color: 'var(--ink-muted)', margin: '0 0 10px',
+    color: 'var(--ink-muted)', margin: '0 0 8px',
   },
-  row: {
-    display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0,
-    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
-    border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)',
-    padding: '5px 8px', textDecoration: 'none',
+  card: {
+    display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0,
+    background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
+    borderRadius: 'var(--radius-lg)', padding: 'var(--space-3) var(--space-4)',
+    cursor: 'pointer',
   },
-  rowText: {
-    flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  cardMeta: {
+    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)',
+    whiteSpace: 'nowrap',
   },
   empty: { fontSize: 'var(--text-xs)', color: 'var(--ink-dim)', margin: 0 },
-  overflow: { fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', margin: '6px 0 0' },
-  // studio#122: the delivery census, directly under the RUNS head. Data, so mono
-  // and dim — the tile's own count stays the headline.
+  // The empty state's CTA — the named verb IS the door (never dead prose).
+  emptyCta: { color: 'var(--ink-muted)', textDecoration: 'underline', cursor: 'pointer' },
+  emptyCtaBtn: {
+    background: 'none', border: 'none', padding: 0, font: 'inherit',
+    color: 'var(--ink-muted)', textDecoration: 'underline', cursor: 'pointer',
+  },
+  // studio#122: the delivery census under the RUNS head. Data, so mono + dim.
   deliverySummary: {
     fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
-    color: 'var(--ink-dim)', margin: '-6px 0 10px',
+    color: 'var(--ink-dim)', margin: '-4px 0 8px',
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
-/** The per-run attention signal — the home board's model (§2.1.3) scoped to one run. */
+/** The per-run attention signal — the home board's model scoped to one run. */
 function runSignal(v: SessionView, gateAt: number | undefined, fallback: number): Signal | null {
   const status = v.session.status;
   const kind: SignalKind | null =
@@ -110,6 +115,17 @@ function runSignal(v: SessionView, gateAt: number | undefined, fallback: number)
     : ACTIVE.has(status) ? 'running'
     : null;
   return kind === null ? null : { kind, at: gateAt ?? fallback, runId: v.session.id };
+}
+
+type StatusChip = 'all' | 'needs-you' | 'active' | 'failed' | 'done';
+
+function matchesChip(status: string, chip: StatusChip): boolean {
+  if (chip === 'all') return true;
+  const o = outcomeOf(status);
+  if (chip === 'needs-you') return o === 'gate';
+  if (chip === 'active') return o === 'run';
+  if (chip === 'failed') return o === 'fail';
+  return o === 'done' || o === 'cancelled';
 }
 
 interface Props {
@@ -124,6 +140,10 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   const loadProjects = useProjectsStore((s) => s.load);
   const gates = useGateStore((s) => s.gates);
 
+  const [query, setQuery] = useState('');
+  const [chip, setChip] = useState<StatusChip>('all');
+  const { range, setRange } = useTimeRange('30d');
+
   useEffect(() => {
     if (projects.length === 0) void loadProjects();
   }, [projects.length, loadProjects]);
@@ -132,13 +152,8 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   const name = project?.name ?? projectId;
 
   // One membership read on mount — the same call the board makes per project.
-  // ref → kind (a `crew.chat` member opens in Chat), ref → attached_at (the
-  // honest per-run clock this wire carries; `AgentSession` has no timestamps).
   const [memberKinds, setMemberKinds] = useState<Record<string, string>>({});
   const [attachedAt, setAttachedAt] = useState<Record<string, number>>({});
-  // Slice J (DES-FEEDBACK-002 §10.2): the same read already returns the
-  // project's `crew.repo` members — the wire grammar names the kind — and the
-  // RUN_KINDS filter used to drop them on the floor. Zero new requests.
   const [repoRefs, setRepoRefs] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -165,31 +180,25 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
     return () => { cancelled = true; };
   }, [projectId]);
 
-  // One listDocs on mount — the same call Document mode makes — and only when
-  // the project HAS an interactive root (the board's §7.12 guard: no root, no
-  // bridge to cold-start).
+  // One listDocs on mount — only when the project HAS an interactive root.
   const [docs, setDocs] = useState<DocSummary[]>([]);
   useEffect(() => {
     if (project === null || interactiveRootOf(project) === null) return;
     let cancelled = false;
     listDocs(projectId)
       .then((d) => {
-        useDocsCache.getState().deposit(projectId, d); // slice O §4.2.2: the session doc cache
+        useDocsCache.getState().deposit(projectId, d); // the session doc cache
         if (!cancelled) setDocs(d);
       })
-      .catch(() => { /* bridge cold/unreachable — no doc tiles, never an error wall */ });
+      .catch(() => { /* bridge cold/unreachable — no doc cards, never an error wall */ });
     return () => { cancelled = true; };
   }, [projectId, project]);
 
-  // ── The project's runs, attention-ordered (the board's model, §4.1 tile 1) ──
+  // ── The project's runs, attention-ordered (needs-you floats FIRST) ─────────
   const fallbackAt = project?.updated_at ?? 0;
   const myRuns = useMemo(() => {
     const now = Date.now();
     return runs
-      // Slice S (DES-UX-001 §2.3 rule 3): the run DTO's own `project_id` claim
-      // (CREW-UX-2) places a run here the instant `GET /runs` reconciles — no
-      // waiting on the mount-time members snapshot. The membership join stays
-      // as the pre-0.8.0 fallback (field absent) and as the kind/clock source.
       .filter((v) => {
         if (v.session.archived_at != null) return false;
         const claimed = sessionProjectId(v.session);
@@ -210,48 +219,39 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
       ));
   }, [runs, memberKinds, attachedAt, gates, fallbackAt, projectId]);
 
-  // studio#122: the delivery census, over every run in the project (not the
-  // MAX_ROWS window) and over deliverable runs only (not the chats). `''` when
-  // there is nothing to census — see the render guard below.
-  //
-  // The `is_system` lookup is the app's ONE `GET /workflows`, shared and cached
-  // (D-1): the denylist alone knows five of the daemon's eleven system
-  // workflows, so an interactive doc or video thread was counted under "no
-  // deliver phase" — a number about chats dressed as a delivery finding, which
-  // is the exact D5 complaint. The "no deliver phase" bucket now counts only
-  // runs a def in hand says could have delivered: a materialised `wf-<runId>`
-  // workflow — 86 of the 129 live runs — is unclassifiable forever, and this
-  // project's line read "8 no deliver phase" over eight document threads.
-  // O(1) per app, never O(runs): the cache is module state, so the row chips
-  // share this same one request rather than adding any of their own.
+  // studio#122: the delivery census, over EVERY run in the project.
   const isSystemWorkflow = useIsSystemWorkflow();
   const deliveryCensus = useMemo(
     () => deliverySummary(myRuns.map(({ view }) => view), isSystemWorkflow),
     [myRuns, isSystemWorkflow],
   );
 
-  const openRuns = myRuns.filter(({ view }) => !['completed', 'cancelled', 'failed'].includes(view.session.status));
+  const openRuns = myRuns.filter(({ view }) => !TERMINAL.has(view.session.status));
   const waiting = myRuns.filter(({ view }) => view.session.status === 'awaiting_human');
 
-  // ── The 7-day run-count sparkline (§4.1 tile 4): one bucket per day, oldest
-  // first, counted off the membership attach clock — when each run entered the
-  // project, the one per-run timestamp this wire carries. ──
+  // ── The window (positional recency, honestly labeled) + KPI folds ──────────
+  const orderedViews = useMemo(() => myRuns.map(({ view }) => view), [myRuns]);
+  const buckets = useMemo(() => windowBuckets(orderedViews, range), [orderedViews, range]);
+  const windowIds = useMemo(() => new Set(buckets.current.map((v) => v.session.id)), [buckets]);
   const now = Date.now();
-  const sparkCounts = useMemo(() => {
-    const counts = new Array<number>(SPARK_DAYS).fill(0);
-    for (const id of Object.keys(attachedAt)) {
-      const age = now - (attachedAt[id] ?? 0);
-      if (age < 0 || age >= SPARK_DAYS * DAY) continue;
-      const bucket = SPARK_DAYS - 1 - Math.floor(age / DAY);
-      counts[bucket] = (counts[bucket] ?? 0) + 1;
-    }
-    return counts;
-    // `now` deliberately not a dep: the tile re-derives when the data moves, not on a timer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attachedAt]);
-  const sparkTotal = sparkCounts.reduce((a, c) => a + c, 0);
 
-  // Meta line (§4.1): last activity + open runs. Cost is NOT here on purpose —
+  const liveCounts = useMemo(() => statusCounts(orderedViews), [orderedViews]);
+  const runsDelta = useMemo(() => windowDelta(buckets, (rs) => rs.length), [buckets]);
+  const failedDelta = useMemo(
+    () => windowDelta(buckets, (rs) => rs.filter((v) => outcomeOf(v.session.status) === 'fail').length),
+    [buckets],
+  );
+  const runSpark = useMemo(
+    () => attachSeries(Object.keys(attachedAt), attachedAt, 14, now),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` re-derives with the data, not a timer
+    [attachedAt],
+  );
+  const oldestGate = waiting.reduce<number | null>((acc, { view }) => {
+    const at = gates[view.session.id]?.receivedAt;
+    return at === undefined ? acc : acc === null || at < acc ? at : acc;
+  }, null);
+
+  // Meta line: last activity + open runs. Cost is NOT here on purpose —
   // the `/runs` wire carries no cost field, and the dashboard never invents one.
   const lastActivity = Math.max(
     fallbackAt,
@@ -262,16 +262,32 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   /** Every affordance is a real link — deep-linkable, middle-clickable. */
   const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
     href: path,
-    onClick: (e) => { e.preventDefault(); navigate(path); },
+    onClick: (e) => { e.preventDefault(); e.stopPropagation(); navigate(path); },
   });
 
   /** Where a run row opens: its OWN mode view — Chat for a chat thread, Build otherwise. */
   const runModeOf = (id: string): Mode => (memberKinds[id] === 'crew.chat' ? 'chat' : 'build');
 
-  // ── Slice H (DES-FEEDBACK-002 §2.2): the triage cursor walks the gate-inbox
-  // rows — the tile the surface already renders, in its order. `resetKey`
-  // clears the cursor when the dashboard pivots projects without unmounting.
-  const inboxRows = waiting.slice(0, MAX_ROWS);
+  /** Retry-as-prefill (DES-UX-001 §4.3) — the ChatPanel contract, verbatim:
+   *  deposit the failed run's launch config, open the composer, nothing
+   *  auto-launches. The launch then carries `retryOf` (CREW-UX-3). */
+  function startRetry(v: SessionView): void {
+    const s = v.session;
+    setRetryPrefill({
+      retryOf: s.id,
+      problem: s.problem,
+      clis: s.clis,
+      workflowId: s.workflow_id && s.workflow_id !== 'chat' ? s.workflow_id : null,
+      repoRef: s.repo_ref,
+      entityMode: s.entity_mode,
+      humanConfirm: s.human_confirm,
+      projectId: typeof s.project_id === 'string' ? s.project_id : projectId,
+    });
+    navigate('/runs/new');
+  }
+
+  // ── The triage cursor walks the gate-inbox rows, in their order ─────────────
+  const inboxRows = waiting.slice(0, MAX_GATE_ROWS);
   const triageItems = useMemo<TriageItem[]>(
     () =>
       inboxRows.map(({ view }) => {
@@ -289,9 +305,40 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   );
   const cursor = useTriageCursor(triageItems, navigate, projectId);
 
+  // ── The filtered run cards (search lifts the window — Work page idiom) ─────
+  const q = query.trim().toLowerCase();
+  const searched = q === ''
+    ? myRuns.filter(({ view }) => windowIds.has(view.session.id))
+    : myRuns.filter(({ view }) =>
+        view.session.problem.toLowerCase().includes(q)
+        || runShortId(view.session.id).includes(q));
+  const visibleRuns = searched.filter(({ view }) => matchesChip(view.session.status, chip));
+  const hiddenByWindow = q === '' ? orderedViews.length - buckets.current.length : 0;
+
+  const chipCounts: Record<StatusChip, number> = useMemo(() => {
+    const counts: Record<StatusChip, number> = { all: 0, 'needs-you': 0, active: 0, failed: 0, done: 0 };
+    for (const { view } of searched) {
+      counts.all += 1;
+      for (const c of ['needs-you', 'active', 'failed', 'done'] as const) {
+        if (matchesChip(view.session.status, c)) counts[c] += 1;
+      }
+    }
+    return counts;
+  }, [searched]);
+
+  const chips: FilterChip[] = [
+    { id: 'all', label: 'All', count: chipCounts.all },
+    { id: 'needs-you', label: 'Needs you', count: chipCounts['needs-you'] },
+    { id: 'active', label: 'Active', count: chipCounts.active },
+    { id: 'failed', label: 'Failed', count: chipCounts.failed },
+    { id: 'done', label: 'Done', count: chipCounts.done },
+  ];
+
+  const visibleDocs = q === '' ? docs : docs.filter((d) => d.name.toLowerCase().includes(q));
+
   return (
     <div data-testid="project-dashboard" data-project-id={projectId} style={CSS.page}>
-      {/* ── Project header: name, the four mode verbs, the meta line (§4.1) ── */}
+      {/* ── Project header: name, the creation verbs, the meta line ── */}
       <header>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <h1 style={CSS.name}>{name}</h1>
@@ -307,16 +354,27 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
               </a>
             ))}
           </div>
+          <span style={{ flex: 1 }} />
+          {/* The section's creation verb — one click from wherever the need appears. */}
+          <a
+            {...link(launchPath(projectId, 'build'))}
+            data-testid="dashboard-do-work"
+            style={{
+              display: 'inline-flex', alignItems: 'center', textDecoration: 'none',
+              background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
+              borderRadius: 'var(--radius-md)', padding: '6px 14px',
+              fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-bold)',
+              whiteSpace: 'nowrap', flexShrink: 0, cursor: 'pointer',
+            }}
+          >
+            Do Work
+          </a>
         </div>
         <p style={CSS.meta} data-testid="dashboard-meta">
           last activity {ago(lastActivity)} ago · {openRuns.length} open {openRuns.length === 1 ? 'run' : 'runs'}
         </p>
-        {/* ── Slice J (§10.2): bound repos in the header's meta-line region —
-            not a fifth tile (the 2×2 grid is a load-bearing §4.1 shape). Names
-            resolve from the SAME session repo cache the palette holds (§1.4) —
-            never a fetch; an unresolvable ref renders the raw ref in --ink-dim
-            (membership is the truth even when the repo listing lags). Zero
-            repos = the row is absent (empty-state budget). ── */}
+        {/* Bound repos in the header's meta-line region — names resolve from the
+            SAME session repo cache the palette holds; never a fetch. */}
         {repoRefs.length > 0 && (
           <p data-testid="dashboard-repos" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', margin: '6px 0 0' }}>
             {repoRefs.map((ref) => {
@@ -343,186 +401,334 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         )}
       </header>
 
-      {/* Slice L (§9.2): the batch bar docks above the tiles while ≥1 simple
-          gate is selected — the same bar (and fan-out) as the home board. */}
+      {/* The batch bar docks above the band while ≥1 simple gate is selected. */}
       <BatchGateBar navigate={navigate} />
 
-      <div style={CSS.grid}>
-        {/* ── Tile 1: runs, attention-ordered, each a link into its mode view ── */}
-        {/* Slice W (§5.3, EC34): the header counts the SAME collection its rows
-            render — the old "Active runs (open-count)" over an all-runs list was
-            the "ACTIVE RUNS (0) over two rows" contradiction class. `data-count`
-            is the RENDERED row count (set-equal on the same paint); the cap
-            declares itself in the head, and the window is named (EC39). */}
-        <section
-          data-testid="dashboard-runs"
-          data-count={Math.min(myRuns.length, MAX_ROWS)}
-          data-window="all"
-          style={CSS.tile}
-        >
-          <p style={CSS.tileHead}>
-            Runs ({myRuns.length > MAX_ROWS ? `${MAX_ROWS} of ${myRuns.length}` : myRuns.length}){' '}
-            <span data-testid="dashboard-runs-window" style={WINDOW_LABEL_STYLE}>all</span>
-          </p>
-          {/* ── studio#122: what these runs PRODUCED, counted over ALL of them,
-              never the MAX_ROWS window — 665a9aeb (the run that read as the most
-              productive in the project and delivered nothing) is not in the
-              visible six, and a census that could not see it would be exactly
-              the lie this slice exists to remove. Pure DTO: zero requests.
+      {/* ── The KPI band — this project's command center ── */}
+      <KpiBand testId="project-kpis">
+        <KpiGroup label="Performance" grow={1}>
+          <StatTile
+            testId="stat-runs"
+            label="Runs"
+            value={buckets.current.length}
+            delta={runsDelta}
+            context={deltaWord(range, runsDelta)}
+            spark={runSpark}
+            title="Runs in the window — clear the grid filters"
+            onOpen={() => { setChip('all'); setQuery(''); }}
+          />
+        </KpiGroup>
+        <KpiGroup label="Pipeline" grow={2}>
+          <StatTile
+            testId="stat-active"
+            label="Active now"
+            value={liveCounts.active}
+            context="right now"
+            title="Runs moving under their own power — filter the grid"
+            onOpen={() => setChip('active')}
+          />
+          <StatTile
+            testId="stat-gates"
+            label="Needs you"
+            value={waiting.length}
+            valueColor={waiting.length > 0 ? 'var(--status-gate)' : undefined}
+            context={oldestGate !== null ? `oldest waiting ${ageWord(now - oldestGate)}` : 'nothing waiting'}
+            title={waiting.length > 0 ? 'Jump straight to the waiting gate' : 'Nothing is waiting on you'}
+            {...(waiting.length > 0 && waiting[0] !== undefined
+              ? {
+                  href: gateOpenPath(projectId, waiting[0].view.session.id),
+                  onOpen: () => navigate(gateOpenPath(projectId, waiting[0]!.view.session.id)),
+                }
+              : {})}
+          />
+        </KpiGroup>
+        <KpiGroup label="Risk" grow={1}>
+          <StatTile
+            testId="stat-failed"
+            label="Failed"
+            value={failedDelta.current}
+            valueColor={failedDelta.current > 0 ? 'var(--status-fail)' : undefined}
+            delta={failedDelta}
+            deltaSense="bad-up"
+            context={deltaWord(range, failedDelta)}
+            title="Failed runs in the window — filter the grid to them"
+            onOpen={() => setChip('failed')}
+          />
+        </KpiGroup>
+      </KpiBand>
 
-              `deliverySummary` counts DELIVERABLE runs only, so a project whose
-              runs are all chats has nothing to census and gets no line rather
-              than an empty paragraph — the `!== ''` guard, not `length > 0`. ── */}
-          {deliveryCensus !== '' && (
-            <p data-testid="dashboard-delivery-summary" style={CSS.deliverySummary}>
-              {deliveryCensus}
-            </p>
-          )}
-          {myRuns.length === 0 ? (
-            <p style={CSS.empty}>No runs yet — Build starts one.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {myRuns.slice(0, MAX_ROWS).map(({ view, signal }) => {
-                const { session } = view;
-                const style = STATUS_STYLE[session.status];
-                return (
-                  <a
-                    key={session.id}
-                    {...link(modePath(projectId, runModeOf(session.id), session.id))}
-                    data-testid="dashboard-run"
-                    data-run-id={session.id}
-                    data-status={session.status}
-                    style={CSS.row}
-                  >
+      {/* ── The gate inbox — FIRST: attention routing beats navigation ── */}
+      {waiting.length > 0 && (
+        <section
+          data-testid="dashboard-gates"
+          data-count={Math.min(waiting.length, MAX_GATE_ROWS)}
+          style={{
+            background: 'var(--surface-card)', border: '1px solid var(--status-gate-dim)',
+            borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)',
+          }}
+        >
+          <p style={{ ...CSS.sectionHead, color: 'var(--status-gate)' }}>
+            Needs you ({waiting.length > MAX_GATE_ROWS ? `${MAX_GATE_ROWS} of ${waiting.length}` : waiting.length})
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {inboxRows.map(({ view }) => {
+              const id = view.session.id;
+              const gate = gates[id];
+              const selected = cursor.selectedKey === id;
+              return (
+                <div
+                  key={id}
+                  data-testid="dashboard-gate"
+                  data-run-id={id}
+                  tabIndex={-1}
+                  data-kbd-item={id}
+                  {...(selected ? { 'data-kbd-selected': 'true' } : {})}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0,
+                    outline: selected ? '2px solid var(--accent)' : 'none',
+                    outlineOffset: '2px',
+                  }}
+                >
+                  {cursor.noteFor === id ? (
+                    <GateRejectNote runId={id} onClose={cursor.closeNote} />
+                  ) : (
+                    <>
+                      <BatchSelectBox runId={id} gate={gate} />
+                      <span
+                        title={gate?.prompt}
+                        style={{
+                          flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', fontSize: 'var(--text-xs)',
+                          fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
+                        }}
+                      >
+                        {gate?.prompt ?? view.session.problem}
+                      </span>
+                      <GateChip runId={id} projectId={projectId} gate={gate} navigate={navigate} />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Filters — first-class at the top of the list ── */}
+      <FilterStrip
+        testId="dashboard-filter"
+        query={query}
+        onQuery={setQuery}
+        placeholder="Search runs & docs…"
+        chips={chips}
+        active={chip}
+        onChip={(id) => setChip(id as StatusChip)}
+        range={range}
+        onRange={setRange}
+      >
+        {hiddenByWindow > 0 && (
+          <button
+            type="button"
+            data-testid="dashboard-hidden-chip"
+            data-hidden={hiddenByWindow}
+            onClick={() => setRange('all')}
+            title={`the ${rangeWord(range)} window holds back ${hiddenByWindow} older run${hiddenByWindow === 1 ? '' : 's'} — click to show all`}
+            style={{
+              borderRadius: 'var(--radius-full)', padding: '3px 10px',
+              fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', cursor: 'pointer',
+              border: '1px solid var(--surface-raised)', background: 'transparent',
+              color: 'var(--ink-muted)',
+            }}
+          >
+            +{hiddenByWindow} older · show all
+          </button>
+        )}
+      </FilterStrip>
+
+      {/* ── Runs as full-width cards ── */}
+      <section
+        data-testid="dashboard-runs"
+        data-count={visibleRuns.length}
+        data-window={range}
+      >
+        <p style={CSS.sectionHead}>
+          Runs ({visibleRuns.length}){' '}
+          <span data-testid="dashboard-runs-window" style={WINDOW_LABEL_STYLE}>{rangeWord(range)}</span>
+        </p>
+        {/* studio#122: what these runs PRODUCED, counted over ALL of them. */}
+        {deliveryCensus !== '' && (
+          <p data-testid="dashboard-delivery-summary" style={CSS.deliverySummary}>
+            {deliveryCensus}
+          </p>
+        )}
+        {myRuns.length === 0 ? (
+          <p style={CSS.empty}>
+            No runs yet —{' '}
+            <a {...link(launchPath(projectId, 'build'))} data-testid="dashboard-empty-build" style={CSS.emptyCta}>
+              Build
+            </a>{' '}
+            starts one.
+          </p>
+        ) : visibleRuns.length === 0 ? (
+          <p style={CSS.empty} data-testid="dashboard-runs-empty">
+            No runs match this filter{hiddenByWindow > 0 ? ` — ${hiddenByWindow} sit outside the ${rangeWord(range)} window` : ''}.{' '}
+            <button
+              type="button"
+              data-testid="dashboard-clear-filters"
+              onClick={() => { setChip('all'); setQuery(''); }}
+              style={CSS.emptyCtaBtn}
+            >
+              clear filters
+            </button>
+          </p>
+        ) : (
+          <DashboardGrid testId="dashboard-runs-grid" min={340}>
+            {visibleRuns.map(({ view, signal }) => {
+              const { session } = view;
+              const style = STATUS_STYLE[session.status];
+              const path = modePath(projectId, runModeOf(session.id), session.id);
+              const failedish = session.status === 'failed' || session.status === 'cancelled';
+              return (
+                <div
+                  key={session.id}
+                  data-testid="dashboard-run"
+                  data-run-id={session.id}
+                  data-status={session.status}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => navigate(path)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') navigate(path); }}
+                  className="transition-colors hover:bg-surface-raised"
+                  style={CSS.card}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                     <span
                       aria-hidden
                       style={{
                         width: '6px', height: '6px', borderRadius: 'var(--radius-full)', flexShrink: 0,
-                        // SignalKind is a subset of Attention, so the board's dot map reads directly.
                         background: signal !== null ? ATTENTION_DOT[signal.kind] : 'var(--ink-dim)',
                       }}
                     />
-                    <span style={CSS.rowText}>{session.problem}</span>
-                    {/* studio#122: what the run produced, beside what it is
-                        doing — DTO-derived, so the row costs no request. */}
-                    <DeliveryChip view={view} />
-                    <span style={{ flexShrink: 0, color: style?.color ?? 'var(--ink-dim)' }}>
+                    {/* Derived title (runTitle grammar) — the raw prompt is hover-only. */}
+                    <a
+                      {...link(path)}
+                      data-testid="dashboard-run-title"
+                      title={session.problem}
+                      style={{
+                        flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap', fontSize: 'var(--text-xs)',
+                        fontFamily: 'var(--font-sans)', color: 'var(--ink-body)',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      {humanTitle(session.problem)}
+                    </a>
+                    <span style={{ flexShrink: 0, fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: style?.color ?? 'var(--ink-dim)' }}>
                       {style?.label ?? session.status}
                     </span>
-                  </a>
-                );
-              })}
-              {myRuns.length > MAX_ROWS && (
-                <p style={CSS.overflow}>{myRuns.length - MAX_ROWS} more</p>
-              )}
-            </div>
-          )}
-        </section>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <span style={CSS.cardMeta}>
+                      {runShortId(session.id)} · #{session.attempt + 1} · {runWhenWord(attachedAt[session.id], now)}
+                    </span>
+                    <DeliveryChip view={view} />
+                    <span style={{ flex: 1 }} />
+                    {session.status === 'awaiting_human' && (
+                      <button
+                        type="button"
+                        data-testid="dashboard-run-needs-you"
+                        data-run-id={session.id}
+                        title="Jump straight to this run's gate"
+                        onClick={(e) => { e.stopPropagation(); navigate(gateOpenPath(projectId, session.id)); }}
+                        style={{
+                          flexShrink: 0, cursor: 'pointer',
+                          background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)',
+                          borderRadius: 'var(--radius-full)', padding: '2px 10px',
+                          fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+                          fontWeight: 'var(--weight-bold)', color: 'var(--status-gate)',
+                        }}
+                      >
+                        needs you →
+                      </button>
+                    )}
+                    {failedish && (
+                      <button
+                        type="button"
+                        data-testid="dashboard-run-retry"
+                        data-run-id={session.id}
+                        title="Reopen the composer prefilled with this run's setup — nothing auto-launches"
+                        onClick={(e) => { e.stopPropagation(); startRetry(view); }}
+                        style={{
+                          flexShrink: 0, cursor: 'pointer',
+                          background: 'transparent', border: '1px solid var(--surface-raised)',
+                          borderRadius: 'var(--radius-md)', padding: '2px 10px',
+                          fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+                          color: 'var(--ink-muted)',
+                        }}
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </DashboardGrid>
+        )}
+      </section>
 
-        {/* ── Tile 2: documents, from the one listDocs the Document mode makes ── */}
-        <section data-testid="dashboard-docs" data-count={Math.min(docs.length, MAX_ROWS)} style={CSS.tile}>
-          {/* EC34 (slice W): head + data-count name the RENDERED rows; the cap
-              declares itself in the same breath ("N of M", plus "more" below). */}
-          <p style={CSS.tileHead}>
-            Documents ({docs.length > MAX_ROWS ? `${MAX_ROWS} of ${docs.length}` : docs.length})
+      {/* ── Documents as cards, from the one listDocs Document mode makes ── */}
+      <section data-testid="dashboard-docs" data-count={visibleDocs.length}>
+        <p style={CSS.sectionHead}>
+          Documents ({visibleDocs.length})
+        </p>
+        {docs.length === 0 ? (
+          <p style={CSS.empty}>
+            No documents yet —{' '}
+            <a {...link(modePath(projectId, 'document'))} data-testid="dashboard-empty-doc" style={CSS.emptyCta}>
+              Document
+            </a>{' '}
+            drafts one.
           </p>
-          {docs.length === 0 ? (
-            <p style={CSS.empty}>No documents yet — Document drafts one.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {docs.slice(0, MAX_ROWS).map((d) => (
-                <a
+        ) : visibleDocs.length === 0 ? (
+          <p style={CSS.empty}>No documents match this search.</p>
+        ) : (
+          <DashboardGrid testId="dashboard-docs-grid" min={280}>
+            {visibleDocs.map((d) => {
+              const path = modePath(projectId, d.kind === 'demo' ? 'video' : 'document', d.name);
+              return (
+                <div
                   key={d.name}
-                  {...link(modePath(projectId, d.kind === 'demo' ? 'video' : 'document', d.name))}
                   data-testid="dashboard-doc"
                   data-doc-id={d.name}
-                  style={CSS.row}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => navigate(path)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') navigate(path); }}
+                  className="transition-colors hover:bg-surface-raised"
+                  style={{ ...CSS.card, flexDirection: 'row', alignItems: 'center', gap: '8px' }}
                 >
                   <span aria-hidden style={{ flexShrink: 0, color: 'var(--ink-dim)' }}>
                     {d.kind === 'demo' ? '▶' : '▤'}
                   </span>
-                  <span style={CSS.rowText}>{d.name}</span>
-                  <span style={{ flexShrink: 0, color: 'var(--ink-dim)' }}>v{d.head}</span>
-                </a>
-              ))}
-              {docs.length > MAX_ROWS && (
-                <p style={CSS.overflow}>{docs.length - MAX_ROWS} more</p>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* ── Tile 3: the gate inbox — the SAME answerable chip as the board (§4.1) ── */}
-        <section data-testid="dashboard-gates" data-count={Math.min(waiting.length, MAX_ROWS)} style={CSS.tile}>
-          <p style={CSS.tileHead}>
-            Gate inbox ({waiting.length > MAX_ROWS ? `${MAX_ROWS} of ${waiting.length}` : waiting.length})
-          </p>
-          {waiting.length === 0 ? (
-            <p style={CSS.empty}>Nothing is waiting on you.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {inboxRows.map(({ view }) => {
-                const id = view.session.id;
-                const gate = gates[id];
-                const selected = cursor.selectedKey === id;
-                return (
-                  <div
-                    key={id}
-                    data-testid="dashboard-gate"
-                    data-run-id={id}
-                    // Slice H (§2.2, EC22): the cursor is real focus — the row
-                    // takes programmatic focus and the 2px `--accent` ring.
-                    tabIndex={-1}
-                    data-kbd-item={id}
-                    {...(selected ? { 'data-kbd-selected': 'true' } : {})}
+                  <a
+                    {...link(path)}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0,
-                      outline: selected ? '2px solid var(--accent)' : 'none',
-                      outlineOffset: '2px',
+                      flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap', fontSize: 'var(--text-xs)',
+                      fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
+                      textDecoration: 'none',
                     }}
                   >
-                    {cursor.noteFor === id ? (
-                      // §2.3: the open reject note replaces the chip row.
-                      <GateRejectNote runId={id} onClose={cursor.closeNote} />
-                    ) : (
-                      <>
-                        {/* Slice L (§9.2): checkbox / ↗ marker, once ≥1 selected. */}
-                        <BatchSelectBox runId={id} gate={gate} />
-                        <span
-                          title={gate?.prompt}
-                          style={{
-                            flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap', fontSize: 'var(--text-xs)',
-                            fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
-                          }}
-                        >
-                          {gate?.prompt ?? view.session.problem}
-                        </span>
-                        <GateChip runId={id} projectId={projectId} gate={gate} navigate={navigate} />
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* ── Tile 4: 7-day activity sparkline (§2.3's SVG approach, own component) ── */}
-        <section data-testid="dashboard-activity" data-total={sparkTotal} style={CSS.tile}>
-          <p style={CSS.tileHead}>Activity (7d)</p>
-          {sparkTotal === 0 ? (
-            <p style={CSS.empty}>No runs in the last 7 days.</p>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
-              <RunSparkline counts={sparkCounts} width={168} height={40} color="var(--accent)" testId="activity-sparkline" />
-              <span style={{ fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)' }}>
-                {sparkTotal} {sparkTotal === 1 ? 'run' : 'runs'} this week
-              </span>
-            </div>
-          )}
-        </section>
-      </div>
+                    {d.name}
+                  </a>
+                  <span style={{ ...CSS.cardMeta, flexShrink: 0 }}>v{d.head}</span>
+                </div>
+              );
+            })}
+          </DashboardGrid>
+        )}
+      </section>
     </div>
   );
 }
