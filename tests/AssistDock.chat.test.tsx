@@ -125,7 +125,7 @@ describe('AssistDock — the chat block', () => {
     act(() => {
       emit?.(frame({
         type: 'chatReply', chat: 'chat-1', cliKey: 'claude',
-        text: '## Root cause\n\nThe daemon dropped `/ws` — check `core.db`.\n\n<img src=x onerror="window.pwned=1">',
+        text: '## Root cause\n\nThe daemon dropped `/ws` — check `core.db`.\n\n<script>window.pwnedByScript=1</script>\n\n<img src=x onerror="window.pwned=1">',
         ok: true,
       }));
     });
@@ -139,7 +139,11 @@ describe('AssistDock — the chat block', () => {
     expect(msg.textContent).not.toContain('##');
     expect(msg.textContent).not.toContain('`');
     // …and SANITIZED: raw HTML in a reply never becomes live DOM (react-markdown
-    // parses no raw HTML — there is no rehype-raw anywhere in this app).
+    // parses no raw HTML — there is no rehype-raw anywhere in this app). A
+    // <script> payload neither mounts nor runs, and the onerror vector is inert.
+    expect(msg.querySelector('script')).toBeNull();
+    expect(document.querySelector('script[data-testid], [data-testid="assist-chat-msg"] script')).toBeNull();
+    expect((window as { pwnedByScript?: number }).pwnedByScript).toBeUndefined();
     expect(msg.querySelector('img')).toBeNull();
     expect((window as { pwned?: number }).pwned).toBeUndefined();
   });
