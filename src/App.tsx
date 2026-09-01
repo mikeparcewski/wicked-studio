@@ -533,13 +533,14 @@ export function App(): React.ReactElement {
       );
     }
     // `/testing/:page` — the Testing surface: ONE component, parameterized by sub-page
-    // (Harness / Campaigns / Evals). The campaign list + scoreboard (TH-14) live under it now;
-    // a page-less address renders Harness for the tick before useTestingRedirect lands.
+    // (Campaigns / Evals; the retired Harness folded into the Campaigns landing's verbs).
+    // The campaign list + scoreboard (TH-14) live under it; a page-less address renders the
+    // Campaigns landing for the tick before useTestingRedirect lands.
     if (panel === 'testing') {
       return (
         <div className="flex-1 overflow-y-auto">
           <TestingPage
-            page={testingPage !== null && isTestingSubPage(testingPage) ? testingPage : 'harness'}
+            page={testingPage !== null && isTestingSubPage(testingPage) ? testingPage : 'campaigns'}
             campaignId={campaignId}
             runs={runs}
             navigate={navigate}

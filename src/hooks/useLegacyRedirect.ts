@@ -143,7 +143,9 @@ export function useRetiredSettingsRedirect(pathname: string, navigate: Navigate)
  *  - the RETIRED flat campaign addresses `/campaigns` and `/campaigns/:id` (the campaign
  *    surface MOVED under Testing) rewrite onto `/testing/campaigns[...]` — the path tail rides
  *    along verbatim, so a bookmarked scoreboard lands on the same campaign;
- *  - a page-less `/testing` address (bare or typo'd) normalizes onto the Harness page.
+ *  - a page-less `/testing` address — the bare parent AND the RETIRED `/testing/harness`
+ *    (the Harness folded into the Campaigns landing's creation verbs, testing-UX wave) —
+ *    normalizes onto the Campaigns landing: campaigns IS `/testing`'s home now.
  *
  * REPLACE, like every redirect in this module, so Back never re-enters the dead address; the
  * parse already lands both on `panel: 'testing'`, so the page renders instantly on the
@@ -161,6 +163,6 @@ export function useTestingRedirect(
       navigate(`/testing${pathname}`, { replace: true });
       return;
     }
-    if (testingPage === null) navigate(testingPath('harness'), { replace: true });
+    if (testingPage === null) navigate(testingPath('campaigns'), { replace: true });
   }, [panel, testingPage, pathname, navigate]);
 }

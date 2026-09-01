@@ -91,7 +91,7 @@ describe('NotFoundPage — the honest dead-address view', () => {
     render(<NotFoundPage pathname="/zzz" navigate={navigate} />);
     const links = screen.getAllByTestId('not-found-link');
     expect(links.map((l) => l.getAttribute('data-path'))).toEqual([
-      '/', '/work', '/steering', '/testing/harness',
+      '/', '/work', '/steering', '/testing/campaigns',
     ]);
     // Real hrefs (middle-click / copy-link work) AND SPA navigation on click.
     expect(links[1]).toHaveAttribute('href', '/work');

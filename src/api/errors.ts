@@ -60,11 +60,17 @@ export function apiWire(e: unknown): string | null {
 }
 
 /**
- * Fastify's default unknown-route 404 carries no named error — the daemon
- * predates the route the caller asked for. Named 404s ("unknown run: …",
- * "no such file: …") are real answers from a daemon WITH the route and must
- * surface. Shared by every forward-compat fallback (FileViewer, openPath).
+ * An unknown-route 404 carries no named error — the daemon predates the route
+ * the caller asked for. Two exact spellings exist: Fastify's default body
+ * (`error: 'Not Found'` — a headless daemon serving API+WS only) and crew's
+ * SPA-serving notFoundHandler (`error: 'not found'` — every daemon with the
+ * bundled studio, i.e. production). Named 404s ("unknown run: …", "no such
+ * file: …") are real answers from a daemon WITH the route and must surface.
+ * Shared by every forward-compat fallback (FileViewer, openPath, the
+ * steering/testing adoption seams, the testing launch's recon fallback).
  */
 export function isRouteAbsent(e: unknown): boolean {
-  return e instanceof ApiError && e.status === 404 && e.wire === 'Not Found';
+  return (
+    e instanceof ApiError && e.status === 404 && (e.wire === 'Not Found' || e.wire === 'not found')
+  );
 }

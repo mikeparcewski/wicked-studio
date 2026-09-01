@@ -5,14 +5,16 @@ import { useTestingRedirect } from '../src/hooks/useLegacyRedirect.js';
 import { TESTING_PAGES } from '../src/api/testing.js';
 
 /**
- * The Testing routes (the testing wave):
- *  - `/testing/:page` parses to the testing panel for each of the three sub-pages
- *    (harness / campaigns / evals), with `/testing/campaigns/:id` carrying the campaign label;
+ * The Testing routes (the testing wave; landing re-aimed by the testing-UX wave):
+ *  - `/testing/:page` parses to the testing panel for each sub-page (campaigns / evals),
+ *    with `/testing/campaigns/:id` carrying the campaign label;
  *  - the RETIRED flat campaign addresses `/campaigns` and `/campaigns/:id` (the campaign
  *    surface MOVED under Testing) parse to the SAME testing panel — kept routable, then
  *    REPLACED by `useTestingRedirect` with the `/testing/campaigns[...]` spelling, the id
  *    riding along so a bookmarked scoreboard lands on the same campaign;
- *  - a bare or typo'd `/testing` address normalizes onto the Harness page;
+ *  - a page-less `/testing` — the bare parent AND the RETIRED `/testing/harness` (the
+ *    Harness folded into the Campaigns landing's creation verbs) — normalizes onto the
+ *    Campaigns landing: campaigns IS /testing's home;
  *  - a valid new-spelling address never redirects.
  */
 
@@ -44,11 +46,15 @@ describe('useRoute — /testing/:page', () => {
     expect(r.campaignId).toBe('DES MERGE');
   });
 
-  it('a bare /testing parses with testingPage null (the redirect normalizes it onto Harness)', () => {
+  it('a bare /testing parses with testingPage null (the redirect normalizes it onto the Campaigns landing)', () => {
     expect(routeAt('/testing').current).toMatchObject({ panel: 'testing', testingPage: null });
   });
 
-  it('an unknown testing sub-page is a DEAD address — not-found, never a silent Harness (review #4)', () => {
+  it('the RETIRED /testing/harness parses to the testing panel (a move, not a typo) — page null, redirect lands it', () => {
+    expect(routeAt('/testing/harness').current).toMatchObject({ panel: 'testing', testingPage: null });
+  });
+
+  it('an unknown testing sub-page is a DEAD address — not-found, never a silent landing (review #4)', () => {
     expect(routeAt('/testing/bogus').current).toMatchObject({ panel: 'not-found' });
     expect(routeAt('/testing/harnes').current).toMatchObject({ panel: 'not-found' });
   });
@@ -74,10 +80,16 @@ describe('useRoute — /testing/:page', () => {
 });
 
 describe('useTestingRedirect', () => {
-  it('REPLACES a page-less testing address with the Harness page', () => {
+  it('REPLACES a page-less testing address with the Campaigns landing', () => {
     const navigate = vi.fn();
     renderHook(() => useTestingRedirect('testing', null, '/testing', navigate));
-    expect(navigate).toHaveBeenCalledWith('/testing/harness', { replace: true });
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns', { replace: true });
+  });
+
+  it('REPLACES the retired /testing/harness with the Campaigns landing (the folded-in Harness)', () => {
+    const navigate = vi.fn();
+    renderHook(() => useTestingRedirect('testing', null, '/testing/harness', navigate));
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns', { replace: true });
   });
 
   it('REWRITES the retired flat campaign addresses onto /testing/campaigns, tail intact', () => {

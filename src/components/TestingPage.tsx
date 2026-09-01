@@ -1,6 +1,5 @@
-import { Fragment, useEffect, useState } from 'react';
-import { api } from '../api/client.js';
-import type { RepoEntry, SessionView } from '../api/types.js';
+import { Fragment, useState } from 'react';
+import type { SessionView } from '../api/types.js';
 import { STEERING_TYPE_LABELS, STEERING_TYPES } from '../api/steering.js';
 import {
   importEvalCorpus,
@@ -16,26 +15,19 @@ import {
   type EvalSample,
   type TestingSubPage,
 } from '../api/testing.js';
-import { useGateStore } from '../store/gates.js';
 import { CampaignScoreboard } from './CampaignScoreboard.js';
 import { CampaignsPage } from './CampaignsPage.js';
 import { readFileText } from './fileText.js';
-import { AuthorPanel } from './SteeringAuthorPanel.js';
-import { SteeringGate } from './SteeringGate.js';
 
 /**
  * The Testing surface (`/testing/:page`) — ONE page component parameterized by sub-page,
- * three sub-pages:
+ * two sub-pages (the testing-UX wave folded the Harness into the landing):
  *
- *  - **Harness** — where a testing effort starts: trigger a CAMPAIGN RECON (a governed run,
- *    launched over the SHIPPING `POST /runs` wire, that surveys the target and proposes a test
- *    campaign), render its INTAKE gate through the EXISTING SteeringGate card (the run's
- *    `awaitingHuman` frame arrives on the app's one /ws fold — no second gate UI, no polling),
- *    and approve to launch. Plus "add with chat": the steering AuthorPanel REUSED VERBATIM
- *    with type `testing` — the same governed authoring run + propose gate as SteeringPage.
- *  - **Campaigns** — the campaign list + scoreboard, MOVED here from the flat `/campaigns`
- *    addresses (which now redirect). The components are the EXISTING CampaignsPage /
- *    CampaignScoreboard, rendered — never forked.
+ *  - **Campaigns** — THE LANDING: the campaign command surface (`CampaignsPage` — KPI band,
+ *    creation verbs, filterable card grid; the retired Harness's recon / new-campaign /
+ *    add-with-chat verbs live in its header), with `/testing/campaigns/:id` rendering one
+ *    campaign's scoreboard. The retired `/testing/harness` and the flat `/campaigns`
+ *    addresses redirect here (`useTestingRedirect`).
  *  - **Evals** — the steering-rule eval runner over the PINNED testing wire
  *    (`POST /testing/evals/run`, `POST /testing/corpora/import` — see `../api/testing.ts`):
  *    run per steering type or all, caught/gap/false-positive summary + results table, gap rows
@@ -44,226 +36,6 @@ import { SteeringGate } from './SteeringGate.js';
  *    no-embedder notice, an empty corpus is an empty state in words — never a spinner that
  *    cannot settle, never fabricated numbers.
  */
-
-// ── Harness: the campaign recon ───────────────────────────────────────────────────────────────
-
-/**
- * The recon framing the Harness prepends to the operator's brief — exported so the composition
- * is contract-visible (and pinned by test): what the launch button sends is this prefix, a
- * blank line, then the operator's own words, verbatim.
- */
-export const RECON_PROBLEM_PREFIX =
-  'Campaign recon: survey the target and propose a test campaign — the scenarios, their ' +
-  'dependencies, and which are deterministic tool checks vs governed agent runs. Present the ' +
-  'proposed campaign at the intake gate and launch nothing until it is approved.';
-
-function ReconPanel({ navigate, onClose }: {
-  navigate: (path: string) => void;
-  onClose: () => void;
-}): React.ReactElement {
-  const [instructions, setInstructions] = useState('');
-  const [repoRef, setRepoRef] = useState('');
-  const [repos, setRepos] = useState<RepoEntry[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [runId, setRunId] = useState<string | null>(null);
-  const [resolved, setResolved] = useState(false);
-  // The intake gate arrives as a normal awaitingHuman frame on the launched run — the app's
-  // one /ws subscription already folds it into the gate store; this panel just watches for it
-  // and renders the EXISTING gate card (the AuthorPanel grammar). No second gate UI, no polling.
-  const gate = useGateStore((s) => (runId !== null ? s.gates[runId] : undefined));
-
-  useEffect(() => {
-    let disposed = false;
-    api
-      .listRepos()
-      .then(({ repos: rs }) => {
-        if (!disposed) setRepos(rs);
-      })
-      .catch(() => {
-        /* repo picker stays empty — the recon can still launch unscoped */
-      });
-    return () => {
-      disposed = true;
-    };
-  }, []);
-
-  const launch = async (): Promise<void> => {
-    if (busy || instructions.trim() === '') return;
-    setBusy(true);
-    setError(null);
-    try {
-      const { runId: id } = await api.launchRun({
-        problem: `${RECON_PROBLEM_PREFIX}\n\n${instructions.trim()}`,
-        ...(repoRef !== '' ? { repoRef } : {}),
-      });
-      setRunId(id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div
-      data-testid="testing-recon-panel"
-      className="flex flex-col gap-2 rounded p-3"
-      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
-    >
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>
-          Run a campaign recon
-        </span>
-        <button
-          data-testid="testing-recon-close"
-          type="button"
-          onClick={onClose}
-          className="ml-auto text-[10px] hover:underline"
-          style={{ color: 'var(--ink-dim)' }}
-        >
-          Close
-        </button>
-      </div>
-
-      {runId === null ? (
-        <>
-          <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-            Launches a governed recon run: it surveys the target, drafts a test campaign — the
-            scenarios and their dependencies — and stops at its intake gate. Nothing runs until
-            you approve the gate here.
-          </p>
-          <textarea
-            data-testid="testing-recon-instructions"
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            placeholder="What should this campaign cover? Name the surfaces, risks, or behaviors to test."
-            className="min-h-[4rem] resize-y rounded px-2 py-1 text-[11px] focus:outline-none"
-            style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-          />
-          <label className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
-            repository
-            <select
-              data-testid="testing-recon-repo"
-              value={repoRef}
-              onChange={(e) => setRepoRef(e.target.value)}
-              className="rounded px-1 py-0.5 text-[10px] font-mono"
-              style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-            >
-              <option value="">all repositories</option>
-              {repos.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {error !== null && (
-            <p data-testid="testing-recon-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-              {error}
-            </p>
-          )}
-          <div>
-            <button
-              data-testid="testing-recon-launch"
-              type="button"
-              disabled={busy || instructions.trim() === ''}
-              onClick={() => void launch()}
-              className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-            >
-              {busy ? 'Launching…' : 'Launch recon'}
-            </button>
-          </div>
-        </>
-      ) : resolved ? (
-        <p data-testid="testing-recon-resolved" className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-          Intake gate answered — the campaign&rsquo;s progress lands on{' '}
-          <button
-            type="button"
-            data-testid="testing-recon-to-campaigns"
-            onClick={() => navigate(testingPath('campaigns'))}
-            className="underline"
-            style={{ color: 'var(--accent)' }}
-          >
-            Campaigns
-          </button>
-          , and the recon run itself is at{' '}
-          <button
-            type="button"
-            onClick={() => navigate(`/runs/${encodeURIComponent(runId)}`)}
-            className="font-mono underline"
-            style={{ color: 'var(--accent)' }}
-          >
-            {runId.slice(0, 8)}
-          </button>
-          .
-        </p>
-      ) : gate === undefined ? (
-        <p data-testid="testing-recon-waiting" className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-          Recon run <span className="font-mono">{runId.slice(0, 8)}</span> launched — its intake
-          gate will appear here the moment the run asks. It also shows up everywhere gates do.
-        </p>
-      ) : (
-        // The intake gate — the EXISTING gate card, reused verbatim. Approving (optionally
-        // with steer text) is what launches the proposed campaign; rejecting launches nothing.
-        <SteeringGate
-          runId={runId}
-          ord={gate.ord}
-          prompt={gate.prompt}
-          onResolved={() => setResolved(true)}
-        />
-      )}
-    </div>
-  );
-}
-
-function HarnessPage({ navigate }: { navigate: (path: string) => void }): React.ReactElement {
-  /** Which harness panel is open — one at a time, the SteeringPage management-bar grammar. */
-  const [panel, setPanel] = useState<'recon' | 'author' | null>(null);
-  const openPanel = (p: 'recon' | 'author'): void => setPanel((cur) => (cur === p ? null : p));
-
-  return (
-    <div data-testid="testing-harness" className="flex flex-col gap-4">
-      {/* The plain-language explainer (usability review #6 + qe findings): what
-          this page is FOR, in words a first-time tester can act on. */}
-      <p data-testid="testing-harness-explainer" className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-        Start a testing effort here. A recon run looks over your code and proposes a test
-        campaign — you see the proposal and approve or reject it before anything runs. You can
-        also draft testing rules in chat, with the same approval step. Approved campaigns and
-        their progress live on the Campaigns tab.
-      </p>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          data-testid="testing-recon-open"
-          type="button"
-          aria-expanded={panel === 'recon'}
-          onClick={() => openPanel('recon')}
-          className="rounded px-2 py-1 text-[11px] font-semibold"
-          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-        >
-          Run campaign recon
-        </button>
-        <button
-          data-testid="testing-author-open"
-          type="button"
-          aria-expanded={panel === 'author'}
-          onClick={() => openPanel('author')}
-          className="rounded px-2 py-1 text-[11px] font-semibold"
-          style={{ color: 'var(--ink-high)', border: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
-        >
-          Add with chat
-        </button>
-      </div>
-
-      {panel === 'recon' && <ReconPanel navigate={navigate} onClose={() => setPanel(null)} />}
-      {/* The steering AuthorPanel, REUSED VERBATIM with this surface's type: the authoring run
-          drafts `testing` steering rules and stops at its propose gate — one component set. */}
-      {panel === 'author' && <AuthorPanel type="testing" onClose={() => setPanel(null)} onAuthored={() => {}} />}
-    </div>
-  );
-}
 
 // ── Evals ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -681,18 +453,19 @@ export function TestingPage({ page, campaignId, runs, navigate }: {
   page: TestingSubPage;
   /** Non-null only on `/testing/campaigns/:id` — renders that campaign's scoreboard. */
   campaignId: string | null;
-  /** The board's live run list — the campaign scoreboard reads sibling status from it. */
+  /** The board's live run list — the campaign landing + scoreboard read live status from it. */
   runs: SessionView[];
   navigate: (path: string) => void;
 }): React.ReactElement {
   return (
     <div data-testid="testing-page" data-testing-page={page} className="flex flex-col">
-      <div className="flex max-w-5xl flex-col gap-4 px-6 pt-6">
+      <div className="flex flex-col gap-4 px-6 pt-6">
         <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>
           Testing · {TESTING_PAGE_LABELS[page]}
         </h2>
 
-        {/* The sub-page strip: three real navigations — the SteeringPage tab grammar. */}
+        {/* The sub-page strip: real navigations — the SteeringPage tab grammar. Campaigns is
+            the landing; Evals stays the sibling page. */}
         <nav data-testid="testing-tabs" aria-label="Testing pages" className="flex flex-wrap gap-1">
           {TESTING_PAGES.map((p) => (
             <a
@@ -719,17 +492,17 @@ export function TestingPage({ page, campaignId, runs, navigate }: {
         </nav>
       </div>
 
-      {/* Campaigns keep their own internal padding (the moved pages, unforked); Harness and
+      {/* Campaigns (the landing + scoreboard) keep their own internal padding and full width;
           Evals content shares this shell's gutter. */}
       {page === 'campaigns' ? (
         campaignId !== null ? (
           <CampaignScoreboard campaignId={campaignId} runs={runs} navigate={navigate} />
         ) : (
-          <CampaignsPage navigate={navigate} />
+          <CampaignsPage runs={runs} navigate={navigate} />
         )
       ) : (
         <div className="max-w-5xl px-6 py-4">
-          {page === 'harness' ? <HarnessPage navigate={navigate} /> : <EvalsPage navigate={navigate} />}
+          <EvalsPage navigate={navigate} />
         </div>
       )}
     </div>

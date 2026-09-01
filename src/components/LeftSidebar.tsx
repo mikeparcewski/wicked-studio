@@ -80,11 +80,11 @@ const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     noun: 'Pr
 const P_MAKE: PathSpec     = { key: 'make',     title: 'Make',         noun: 'Document',   glyph: '⚒', dash: '/make',     collapsedHref: '/make' };
 const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         noun: 'Chat',       glyph: '💬', dash: '/chats',    collapsedHref: '/chats' };
 const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Repository', glyph: '⬡', dash: '/repos',    collapsedHref: '/repos' };
-// Testing (the testing wave): the quality surface, a PRIMARY path placed immediately BEFORE
+// Testing (the testing wave; landing re-aimed by the testing-UX wave): the quality surface, a PRIMARY path placed immediately BEFORE
 // Steering (order: … Testing, Steering, Settings). Like Steering it is title-only (no ▦/＋ —
-// its verbs live on the pages); its accordion rows are the three sub-pages, its collapsed
-// glyph links the Harness page (the first sub-page — there is no separate testing dashboard).
-const P_TESTING: PathSpec  = { key: 'testing',  title: 'Testing',      noun: 'Campaign',   glyph: '✓', dash: null,        collapsedHref: testingPath('harness') };
+// its verbs live on the pages); its accordion rows are the two sub-pages, its collapsed
+// glyph links the Campaigns landing (THE testing dashboard — the retired Harness folded in).
+const P_TESTING: PathSpec  = { key: 'testing',  title: 'Testing',      noun: 'Campaign',   glyph: '✓', dash: null,        collapsedHref: testingPath('campaigns') };
 // Steering (the STEERING program): the governance surface, a PRIMARY path placed immediately
 // BEFORE Settings. Like Settings it is title-only (no ▦/＋ — its management verbs live on the
 // pages); its accordion rows are the seven steering types, its collapsed glyph links the
@@ -484,7 +484,7 @@ export function MakePicker({ navigate, onClose, ambient }: {
   );
 }
 
-/** The Testing accordion's rows: one per sub-page (Harness / Campaigns / Evals), each a
+/** The Testing accordion's rows: one per sub-page (Campaigns / Evals), each a
  *  navigate() shortcut — the SettingsShortcutRows grammar, never a parallel testing surface. */
 function TestingPageRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
   return (
