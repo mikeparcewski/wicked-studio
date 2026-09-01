@@ -1,13 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { Project, SessionView } from '../api/types.js';
+import { gateOpenPath } from '../board/gateActions.js';
+import { outcomeOf } from '../board/metrics.js';
+import {
+  attachSeries, deltaWord, healthColor, healthOf, statusCounts, windowBuckets, windowDelta,
+  type StatusCounts,
+} from '../board/windowStats.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
+import { projectPath } from '../hooks/useRoute.js';
+import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { useGateStore } from '../store/gates.js';
 import { useProjectsStore } from '../store/projects.js';
-import { GatesWaitingTile, TileBand } from './DashboardTiles.js';
-import { MetricTile } from './MetricTile.js';
-import { ProjectSparkline } from './ProjectSparkline.js';
-import { RunOutcomeBar } from './RunOutcomeBar.js';
+import { ago, ATTENTION_DOT } from './ProjectCard.js';
+import { ageWord } from './DashboardTiles.js';
+import {
+  DashboardGrid, FilterStrip, KpiBand, KpiGroup, Sparkline, StatTile, type FilterChip,
+} from './dashboardKit.js';
+
+/**
+ * The /projects landing as a COMMAND SURFACE (lane B): a full-width reporting
+ * dashboard over the estate — a KPI band organized around the command-center
+ * questions (performance / pipeline / risk), then a filterable grid of project
+ * cards, each a mini-dashboard row. Cards are doors; "needs you" floats first
+ * and jumps STRAIGHT to the waiting run's gate; the creation verbs (New
+ * project, Do Work) live in the header — one click from wherever the need
+ * appears.
+ *
+ * Every number derives from state the app already holds (`GET /runs` + the
+ * board model's one members read); the recency window is the Work page's
+ * honest positional idiom ("last 30 runs", never a fabricated "30d"), and a
+ * window with no prior bucket shows "—", never 0%.
+ */
 
 const S = {
   bg:     'var(--surface-base)',
@@ -80,6 +104,7 @@ function CreateProjectForm({ onCreated, onCancel }: { onCreated: (p: Project) =>
         borderRadius: '10px',
         padding: '20px',
         marginBottom: '16px',
+        maxWidth: '560px',
       }}
     >
       <p style={{ fontSize: '13px', fontWeight: 600, color: S.ink, marginBottom: '14px' }}>New project</p>
@@ -138,145 +163,210 @@ function CreateProjectForm({ onCreated, onCancel }: { onCreated: (p: Project) =>
   );
 }
 
-// ── The attention-split tile (DES-FEEDBACK-003 §4.1 row 1, slice P) ───────────
+// ── The project card model — one fold per card, shared by grid and chips ──────
 
-const SPLIT_W = 168;
-const SPLIT_H = 26;
-const BAR_H = 10;
-
-/**
- * "How much of my estate needs me?" — the board model's OWN bands, counted,
- * as a proportional bar (needs-you vs quiet). The bands are read, never
- * re-derived (C3): `/projects` reports the split; the wall itself stays on `/`
- * (§4.1's landing-vs-register line — this dashboard never re-implements bands).
- */
-function AttentionSplitTile({ items }: { items: BoardProject[] }): React.ReactElement {
-  const needsYou = items.filter((i) => i.band === 'needs-you').length;
-  const quiet = items.length - needsYou;
-  const total = items.length;
-  return (
-    <MetricTile
-      testId="attention-split-tile"
-      question="How much of my estate needs me?"
-      title="Attention split"
-      value={total === 0 ? 'no projects yet' : `${needsYou} need you · ${quiet} quiet · ${total} total`}
-      data={{ 'data-needs-you': needsYou, 'data-quiet': quiet, 'data-total': total }}
-    >
-      {total === 0 ? (
-        <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
-          Nothing on the board yet.
-        </p>
-      ) : (
-        <svg
-          width="100%"
-          height={SPLIT_H}
-          viewBox={`0 0 ${SPLIT_W} ${SPLIT_H}`}
-          preserveAspectRatio="none"
-          role="img"
-          aria-label={`attention split: ${needsYou} need you, ${quiet} quiet, of ${total}`}
-          style={{ display: 'block' }}
-        >
-          {needsYou > 0 && (
-            <rect
-              x={0} y={(SPLIT_H - BAR_H) / 2}
-              width={(needsYou / total) * SPLIT_W} height={BAR_H} rx={2}
-              fill="var(--status-gate)"
-            />
-          )}
-          {quiet > 0 && (
-            <rect
-              x={(needsYou / total) * SPLIT_W} y={(SPLIT_H - BAR_H) / 2}
-              width={(quiet / total) * SPLIT_W} height={BAR_H} rx={2}
-              fill="var(--ink-dim)"
-            />
-          )}
-        </svg>
-      )}
-    </MetricTile>
-  );
+interface CardModel {
+  project: Project;
+  item: BoardProject | null;
+  /** The project's runs inside the current recency window (unarchived). */
+  windowed: SessionView[];
+  counts: StatusCounts;
+  /** Runs waiting on a human RIGHT NOW — unwindowed (a gate is a gate). */
+  waiting: SessionView[];
+  failing: boolean;
+  activeNow: boolean;
+  lastAt: number;
+  repoCount: number;
+  /** Board score-order index; register-only projects sort after the board. */
+  boardIx: number;
 }
 
-function ProjectCard({ project, onClick, sparkline }: {
-  project: Project;
-  onClick: () => void;
-  sparkline?: React.ReactNode;
+type StatusChip = 'all' | 'needs-you' | 'active' | 'failing' | 'quiet';
+
+function matchesChip(m: CardModel, chip: StatusChip): boolean {
+  if (chip === 'all') return true;
+  if (chip === 'needs-you') return m.waiting.length > 0;
+  if (chip === 'active') return m.activeNow;
+  if (chip === 'failing') return m.failing;
+  return m.waiting.length === 0 && !m.activeNow && !m.failing; // quiet
+}
+
+const CARD_STAT: React.CSSProperties = {
+  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
+  whiteSpace: 'nowrap',
+};
+
+/** One project as a mini-dashboard row — the card IS a door to `/p/:id`. */
+function ProjectStatCard({ m, range, navigate, now }: {
+  m: CardModel;
+  range: ReturnType<typeof useTimeRange>['range'];
+  navigate: (path: string) => void;
+  now: number;
 }): React.ReactElement {
-  const [hovered, setHovered] = useState(false);
-  const isArchived = project.status === 'archived';
-  const isDefault = project.id === 'default';
+  const { project, counts, waiting } = m;
+  const health = healthOf(counts.done, counts.terminal);
+  const spark = m.item === null ? [] : attachSeries(Object.keys(m.item.attachedAt), m.item.attachedAt, 14, now);
+  const firstGate = waiting[0]?.session.id;
+  const dot = m.item !== null ? ATTENTION_DOT[m.item.attention] : 'var(--ink-dim)';
 
   return (
-    <button
-      type="button"
+    <div
       data-testid="project-card"
       data-project-id={project.id}
       data-status={project.status}
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      data-gates={waiting.length}
+      data-runs={counts.total}
+      role="link"
+      tabIndex={0}
+      onClick={() => navigate(projectPath(project.id))}
+      onKeyDown={(e) => { if (e.key === 'Enter') navigate(projectPath(project.id)); }}
+      className="transition-colors hover:bg-surface-raised"
       style={{
-        display: 'block', width: '100%', textAlign: 'left',
-        background: hovered ? 'var(--surface-raised)' : S.card,
-        border: `1px solid ${S.border}`,
-        borderRadius: '10px', padding: '16px', cursor: 'pointer',
-        transition: 'background 0.1s',
+        display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0,
+        background: S.card, border: `1px solid ${S.border}`,
+        borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', cursor: 'pointer',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-        <span style={{ color: isArchived ? S.faint : S.accent, marginTop: '1px', flexShrink: 0 }}>
-          <IconFolder />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+        <span aria-hidden style={{ width: '7px', height: '7px', borderRadius: 'var(--radius-full)', background: dot, flexShrink: 0 }} />
+        <span style={{
+          fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semi)', color: S.ink,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+        }}>
+          {project.name}
         </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-            <span style={{
-              fontSize: '14px', fontWeight: 600, color: isArchived ? S.muted : S.ink,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {project.name}
-            </span>
-            {isArchived && (
-              <span style={{
-                fontSize: '10px', fontFamily: 'monospace', color: S.faint,
-                border: `1px solid ${S.faint}`, borderRadius: '4px', padding: '1px 5px',
-                flexShrink: 0,
-              }}>
-                archived
-              </span>
-            )}
-            {isDefault && (
-              <span style={{
-                fontSize: '10px', fontFamily: 'monospace', color: S.faint,
-                border: `1px solid ${S.faint}`, borderRadius: '4px', padding: '1px 5px',
-                flexShrink: 0,
-              }}>
-                default
-              </span>
-            )}
-            {/* The 7-day activity sparkline (§4.1) — the list half of
-                "combined list and reporting". Absent when the board holds no
-                in-window runs for this project (absence stays absent). */}
-            {sparkline != null && (
-              <span style={{ marginLeft: 'auto', flexShrink: 0, display: 'inline-flex' }}>
-                {sparkline}
-              </span>
-            )}
-          </div>
-          {project.description && (
-            <p style={{
-              fontSize: '12px', color: S.muted, margin: 0,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {project.description}
-            </p>
-          )}
-          {project.created_at > 0 && (
-            <p style={{ fontSize: '11px', color: S.faint, margin: 0, marginTop: '6px', fontFamily: 'monospace' }}>
-              Created {new Date(project.created_at).toLocaleDateString()}
-            </p>
-          )}
-        </div>
+        {project.id === 'default' && (
+          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: S.faint, border: `1px solid ${S.faint}`, borderRadius: '4px', padding: '0 5px', flexShrink: 0 }}>
+            default
+          </span>
+        )}
+        {/* Attention routing beats navigation: the gate jump, STRAIGHT to the
+            waiting run's approval dock — never a hunt. */}
+        {waiting.length > 0 && firstGate !== undefined && (
+          <button
+            type="button"
+            data-testid="project-needs-you"
+            data-run-id={firstGate}
+            title="A run is waiting on you — jump to its gate"
+            onClick={(e) => { e.stopPropagation(); navigate(gateOpenPath(project.id, firstGate)); }}
+            style={{
+              marginLeft: 'auto', flexShrink: 0, cursor: 'pointer',
+              background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)',
+              borderRadius: 'var(--radius-full)', padding: '2px 10px',
+              fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+              fontWeight: 'var(--weight-bold)', color: 'var(--status-gate)',
+            }}
+          >
+            needs you · {waiting.length} →
+          </button>
+        )}
       </div>
-    </button>
+      {project.description && (
+        <p style={{
+          fontSize: 'var(--text-xs)', color: S.muted, margin: 0,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {project.description}
+        </p>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <span style={CARD_STAT} data-testid="card-runs">
+          {counts.total} run{counts.total === 1 ? '' : 's'} · {rangeWord(range)}
+        </span>
+        {counts.terminal > 0 && (
+          <span
+            style={{ ...CARD_STAT, color: healthColor(health) ?? CARD_STAT.color }}
+            data-testid="card-split"
+            data-health={health}
+            title={`${counts.done} succeeded, ${counts.failed} failed of ${counts.terminal} finished in this window`}
+          >
+            ✓{counts.done} · ✕{counts.failed}
+          </span>
+        )}
+        <span style={CARD_STAT}>
+          {m.repoCount} repo{m.repoCount === 1 ? '' : 's'}
+        </span>
+        <span style={{ ...CARD_STAT, marginLeft: 'auto' }} title="last activity (attach clocks + gates)">
+          {ago(m.lastAt, now)} ago
+        </span>
+      </div>
+      <Sparkline counts={spark} height={18} />
+    </div>
+  );
+}
+
+/** Unfiled runs get a card too — honest, not hidden. */
+function UnfiledCard({ windowed, all, range, navigate, now, gateAt }: {
+  /** Unfiled runs inside the recency window — the counted set. */
+  windowed: SessionView[];
+  /** Every live unfiled run — a gate is a gate, windowed or not. */
+  all: SessionView[];
+  range: ReturnType<typeof useTimeRange>['range'];
+  navigate: (path: string) => void;
+  now: number;
+  gateAt: (id: string) => number | undefined;
+}): React.ReactElement {
+  const counts = statusCounts(windowed);
+  const waiting = all.filter((v) => v.session.status === 'awaiting_human');
+  const health = healthOf(counts.done, counts.terminal);
+  const firstGate = waiting[0]?.session.id;
+  const lastGate = waiting.reduce<number>((acc, v) => Math.max(acc, gateAt(v.session.id) ?? 0), 0);
+
+  return (
+    <div
+      data-testid="unfiled-card"
+      data-gates={waiting.length}
+      data-runs={counts.total}
+      role="link"
+      tabIndex={0}
+      onClick={() => navigate('/work')}
+      onKeyDown={(e) => { if (e.key === 'Enter') navigate('/work'); }}
+      className="transition-colors hover:bg-surface-raised"
+      style={{
+        display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0,
+        background: S.card, border: `1px dashed ${S.border}`,
+        borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', cursor: 'pointer',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+        <span aria-hidden style={{ width: '7px', height: '7px', borderRadius: 'var(--radius-full)', background: 'var(--ink-dim)', flexShrink: 0 }} />
+        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semi)', color: S.muted }}>
+          Unfiled runs
+        </span>
+        {waiting.length > 0 && firstGate !== undefined && (
+          <button
+            type="button"
+            data-testid="unfiled-needs-you"
+            data-run-id={firstGate}
+            title="An unfiled run is waiting on you — open it"
+            onClick={(e) => { e.stopPropagation(); navigate(`/runs/${encodeURIComponent(firstGate)}`); }}
+            style={{
+              marginLeft: 'auto', flexShrink: 0, cursor: 'pointer',
+              background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)',
+              borderRadius: 'var(--radius-full)', padding: '2px 10px',
+              fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+              fontWeight: 'var(--weight-bold)', color: 'var(--status-gate)',
+            }}
+          >
+            needs you · {waiting.length} →
+          </button>
+        )}
+      </div>
+      <p style={{ fontSize: 'var(--text-xs)', color: S.faint, margin: 0 }}>
+        Runs filed into no project — they live on the Work list.
+      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <span style={CARD_STAT}>{counts.total} run{counts.total === 1 ? '' : 's'} · {rangeWord(range)}</span>
+        {counts.terminal > 0 && (
+          <span style={{ ...CARD_STAT, color: healthColor(health) ?? CARD_STAT.color }} data-health={health}>
+            ✓{counts.done} · ✕{counts.failed}
+          </span>
+        )}
+        {lastGate > 0 && (
+          <span style={{ ...CARD_STAT, marginLeft: 'auto' }}>oldest gate {ageWord(now - lastGate)}</span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -286,16 +376,18 @@ interface Props {
 }
 
 export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
-  // The COMPLETE register (DES-FEEDBACK-003 §4.1: "/projects is the REGISTER —
-  // every project, complete") is held locally: the shared projects store is
-  // also the board model's mirror target (active, non-default only), so a
-  // store read here could lose the archived rows to a mirror write mid-race.
-  // One GET, page-owned; creates land in both the register and the store.
+  // The COMPLETE register (every project, archived included) stays page-owned:
+  // the shared projects store is the board mirror's target (active, non-default
+  // only), so a store read could lose archived rows to a mirror write mid-race.
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+
+  const [query, setQuery] = useState('');
+  const [chip, setChip] = useState<StatusChip>('all');
+  const { range, setRange } = useTimeRange('30d');
 
   useEffect(() => {
     let cancelled = false;
@@ -310,12 +402,12 @@ export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
     return () => { cancelled = true; };
   }, []);
 
-  // The reporting half (§4.1): the board's own model — bands read, never
-  // re-derived (C3); its per-project attach clocks feed the row sparklines
-  // and, merged, the 24h outcome bar (the honest clock, reused).
   const board = useBoardModel(runs);
+  const gates = useGateStore((s) => s.gates);
+  const now = Date.now();
+
   const byProjectId = useMemo(
-    () => new Map(board.items.map((i) => [i.project.id, i])),
+    () => new Map(board.items.map((i, ix) => [i.project.id, { item: i, ix }])),
     [board.items],
   );
   const attachedAt = useMemo(() => {
@@ -323,11 +415,98 @@ export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
     for (const item of board.items) Object.assign(merged, item.attachedAt);
     return merged;
   }, [board.items]);
-  const gates = useGateStore((s) => s.gates);
-  const openGates = useMemo(() => Object.values(gates), [gates]);
 
-  const active = projects.filter((p) => p.status === 'active');
+  // ── The window (Work page idiom: positional, honestly labeled) ─────────────
+  const live = useMemo(() => runs.filter((v) => v.session.archived_at == null), [runs]);
+  const buckets = useMemo(() => windowBuckets(live, range), [live, range]);
+  const windowIds = useMemo(() => new Set(buckets.current.map((v) => v.session.id)), [buckets]);
+
+  // ── KPI folds ───────────────────────────────────────────────────────────────
+  const liveCounts = useMemo(() => statusCounts(live), [live]);
+  const runsDelta = useMemo(() => windowDelta(buckets, (rs) => rs.length), [buckets]);
+  const failedDelta = useMemo(
+    () => windowDelta(buckets, (rs) => rs.filter((v) => outcomeOf(v.session.status) === 'fail').length),
+    [buckets],
+  );
+  const runSpark = useMemo(
+    () => attachSeries(buckets.current.map((v) => v.session.id), attachedAt, 14, now),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` re-derives with the data, not a timer
+    [buckets, attachedAt],
+  );
+  const openGates = useMemo(() => Object.values(gates), [gates]);
+  const oldestGate = openGates.reduce<number | null>(
+    (acc, g) => (acc === null || g.receivedAt < acc ? g.receivedAt : acc), null);
+  const unfiled = useMemo(
+    () => board.unfiled.filter((v) => v.session.archived_at == null && windowIds.has(v.session.id)),
+    [board.unfiled, windowIds],
+  );
+  const unfiledAll = useMemo(
+    () => board.unfiled.filter((v) => v.session.archived_at == null),
+    [board.unfiled],
+  );
+
+  // ── The card models ─────────────────────────────────────────────────────────
+  const active = projects.filter((p) => p.status === 'active' && p.id !== 'default');
   const archived = projects.filter((p) => p.status === 'archived');
+
+  const cards = useMemo<CardModel[]>(() => {
+    return active.map((p) => {
+      const hit = byProjectId.get(p.id);
+      const item = hit?.item ?? null;
+      const mine = item === null ? [] : item.runs.filter((v) => v.session.archived_at == null);
+      const windowed = mine.filter((v) => windowIds.has(v.session.id));
+      const waiting = mine.filter((v) => v.session.status === 'awaiting_human');
+      const lastAt = Math.max(
+        p.updated_at,
+        ...Object.values(item?.attachedAt ?? {}),
+        ...waiting.map((v) => gates[v.session.id]?.receivedAt ?? 0),
+      );
+      return {
+        project: p,
+        item,
+        windowed,
+        counts: statusCounts(windowed),
+        waiting,
+        failing: mine.some((v) => v.session.status === 'failed'),
+        activeNow: mine.some((v) => outcomeOf(v.session.status) === 'run'),
+        lastAt,
+        repoCount: item?.repoCount ?? 0,
+        boardIx: hit?.ix ?? Number.MAX_SAFE_INTEGER,
+      };
+    }).sort((a, b) =>
+      // Attention routing: needs-you floats FIRST, then failing, then board score order.
+      (b.waiting.length > 0 ? 1 : 0) - (a.waiting.length > 0 ? 1 : 0)
+      || (b.failing ? 1 : 0) - (a.failing ? 1 : 0)
+      || a.boardIx - b.boardIx
+      || b.project.updated_at - a.project.updated_at,
+    );
+  }, [active, byProjectId, windowIds, gates]);
+
+  const chipCounts: Record<StatusChip, number> = useMemo(() => ({
+    all: cards.length,
+    'needs-you': cards.filter((m) => matchesChip(m, 'needs-you')).length,
+    active: cards.filter((m) => matchesChip(m, 'active')).length,
+    failing: cards.filter((m) => matchesChip(m, 'failing')).length,
+    quiet: cards.filter((m) => matchesChip(m, 'quiet')).length,
+  }), [cards]);
+
+  const q = query.trim().toLowerCase();
+  const visible = cards.filter((m) =>
+    matchesChip(m, chip)
+    && (q === ''
+      || m.project.name.toLowerCase().includes(q)
+      || (m.project.description ?? '').toLowerCase().includes(q)));
+  // The unfiled card obeys the same filters (it is a real row, not furniture).
+  const unfiledWaiting = unfiledAll.some((v) => v.session.status === 'awaiting_human');
+  const unfiledFailing = unfiledAll.some((v) => v.session.status === 'failed');
+  const unfiledActive = unfiledAll.some((v) => outcomeOf(v.session.status) === 'run');
+  const showUnfiled = unfiledAll.length > 0
+    && (q === '' || 'unfiled runs'.includes(q))
+    && (chip === 'all'
+      || (chip === 'needs-you' && unfiledWaiting)
+      || (chip === 'failing' && unfiledFailing)
+      || (chip === 'active' && unfiledActive)
+      || (chip === 'quiet' && !unfiledWaiting && !unfiledFailing && !unfiledActive));
 
   function handleCreated(p: Project): void {
     setProjects((prev) => [p, ...prev.filter((x) => x.id !== p.id)]);
@@ -335,24 +514,37 @@ export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
     setShowCreate(false);
   }
 
-  /** The row's 7-day sparkline off the board item — null when the board holds
-   *  no entry (archived / default / still loading): absence stays absent. */
-  function sparklineFor(p: Project): React.ReactNode {
-    const item = byProjectId.get(p.id);
-    if (item === undefined) return null;
-    return <ProjectSparkline runs={item.runs} attachedAt={item.attachedAt} />;
-  }
+  const chips: FilterChip[] = [
+    { id: 'all', label: 'All', count: chipCounts.all },
+    { id: 'needs-you', label: 'Needs you', count: chipCounts['needs-you'] },
+    { id: 'active', label: 'Active', count: chipCounts.active },
+    { id: 'failing', label: 'Failing', count: chipCounts.failing },
+    { id: 'quiet', label: 'Quiet', count: chipCounts.quiet },
+  ];
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: '760px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <div>
+    // FULL WIDTH — the register flows with the viewport; no max-width constraint.
+    <div data-testid="projects-page" style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      {/* ── Header: name + the creation verbs (one click from here) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ fontSize: '20px', fontWeight: 700, color: S.ink, margin: 0, marginBottom: '4px' }}>Projects</h1>
           <p style={{ fontSize: '13px', color: S.muted, margin: 0 }}>
             Group runs, chats, and repos into named containers.
           </p>
         </div>
+        <button
+          type="button"
+          data-testid="projects-do-work"
+          onClick={() => navigate('/runs/new')}
+          style={{
+            background: 'transparent', color: S.muted, border: `1px solid ${S.border}`,
+            borderRadius: '7px', padding: '8px 14px', fontSize: '12px', fontWeight: 600,
+            cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          Do Work
+        </button>
         <button
           type="button"
           onClick={() => setShowCreate(true)}
@@ -367,20 +559,73 @@ export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
         </button>
       </div>
 
-      {/* ── The reporting band (§4.1, EC28): three tiles ABOVE the register,
-             every number derived from state the app already holds. ── */}
-      <div style={{ marginBottom: '16px' }}>
-        <TileBand testId="projects-dashboard-tiles">
-          <AttentionSplitTile items={board.items} />
-          <RunOutcomeBar runs={runs} attachedAt={attachedAt} title="Run outcomes (24h)" />
-          <GatesWaitingTile
-            gates={openGates}
-            question="Am I the blocker anywhere?"
-            title="Gates waiting"
-            testId="gates-waiting-tile"
+      {/* ── The KPI band — the command-center model: three questions ── */}
+      <KpiBand testId="projects-kpis">
+        <KpiGroup label="Performance" grow={2}>
+          <StatTile
+            testId="stat-projects"
+            label="Projects"
+            value={active.length}
+            context={archived.length > 0 ? `${archived.length} archived` : 'active register'}
+            title="Every active project — click to clear filters"
+            onOpen={() => { setChip('all'); setQuery(''); }}
           />
-        </TileBand>
-      </div>
+          <StatTile
+            testId="stat-runs"
+            label="Runs"
+            value={buckets.current.length}
+            delta={runsDelta}
+            context={deltaWord(range, runsDelta)}
+            spark={runSpark}
+            title="Runs in the window — open the Work list"
+            href="/work"
+            onOpen={() => navigate('/work')}
+          />
+        </KpiGroup>
+        <KpiGroup label="Pipeline" grow={2}>
+          <StatTile
+            testId="stat-active"
+            label="Active now"
+            value={liveCounts.active}
+            context="right now"
+            title="Runs moving under their own power — open the Work list"
+            href="/work?filter=active"
+            onOpen={() => navigate('/work?filter=active')}
+          />
+          <StatTile
+            testId="stat-gates"
+            label="Needs you"
+            value={liveCounts.gates}
+            valueColor={liveCounts.gates > 0 ? 'var(--status-gate)' : undefined}
+            context={oldestGate !== null ? `oldest waiting ${ageWord(now - oldestGate)}` : 'nothing waiting'}
+            title="Runs waiting on a human — filter the grid to them"
+            onOpen={() => setChip('needs-you')}
+          />
+        </KpiGroup>
+        <KpiGroup label="Risk" grow={2}>
+          <StatTile
+            testId="stat-failed"
+            label="Failed"
+            value={failedDelta.current}
+            valueColor={failedDelta.current > 0 ? 'var(--status-fail)' : undefined}
+            delta={failedDelta}
+            deltaSense="bad-up"
+            context={deltaWord(range, failedDelta)}
+            title="Failed runs in the window — open them on the Work list"
+            href="/work?filter=failed"
+            onOpen={() => navigate('/work?filter=failed')}
+          />
+          <StatTile
+            testId="stat-unfiled"
+            label="Unfiled"
+            value={unfiledAll.length}
+            context="runs in no project"
+            title="Runs not filed anywhere — they live on the Work list"
+            href="/work"
+            onOpen={() => navigate('/work')}
+          />
+        </KpiGroup>
+      </KpiBand>
 
       {showCreate && (
         <CreateProjectForm
@@ -388,6 +633,19 @@ export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
           onCancel={() => setShowCreate(false)}
         />
       )}
+
+      {/* ── Filters — first-class, never hidden ── */}
+      <FilterStrip
+        testId="projects-filter"
+        query={query}
+        onQuery={setQuery}
+        placeholder="Search projects…"
+        chips={chips}
+        active={chip}
+        onChip={(id) => setChip(id as StatusChip)}
+        range={range}
+        onRange={setRange}
+      />
 
       {loading && (
         <p style={{ fontSize: '13px', color: S.faint, fontFamily: 'monospace' }}>Loading…</p>
@@ -412,21 +670,39 @@ export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
         </div>
       )}
 
-      {active.length > 0 && (
-        <div data-testid="projects-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-          {active.map((p) => (
-            <ProjectCard
-              key={p.id}
-              project={p}
-              sparkline={sparklineFor(p)}
-              onClick={() => navigate(`/projects/${encodeURIComponent(p.id)}`)}
-            />
+      {!loading && !error && active.length > 0 && visible.length === 0 && !showUnfiled && (
+        <p data-testid="projects-empty-filter" style={{ fontSize: '13px', color: S.faint, margin: 0 }}>
+          No projects match —{' '}
+          <button
+            type="button"
+            onClick={() => { setChip('all'); setQuery(''); }}
+            style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: S.muted, textDecoration: 'underline', cursor: 'pointer' }}
+          >
+            clear filters
+          </button>
+        </p>
+      )}
+
+      {(visible.length > 0 || showUnfiled) && (
+        <DashboardGrid testId="projects-list" min={340}>
+          {visible.map((m) => (
+            <ProjectStatCard key={m.project.id} m={m} range={range} navigate={navigate} now={now} />
           ))}
-        </div>
+          {showUnfiled && (
+            <UnfiledCard
+              windowed={unfiled}
+              all={unfiledAll}
+              range={range}
+              navigate={navigate}
+              now={now}
+              gateAt={(id) => gates[id]?.receivedAt}
+            />
+          )}
+        </DashboardGrid>
       )}
 
       {archived.length > 0 && (
-        <div style={{ marginTop: '16px' }}>
+        <div>
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
@@ -440,16 +716,35 @@ export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
             {showArchived ? 'Hide' : 'Show'} {archived.length} archived project{archived.length !== 1 ? 's' : ''}
           </button>
           {showArchived && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <DashboardGrid testId="projects-archived" min={340}>
               {archived.map((p) => (
-                <ProjectCard
+                <div
                   key={p.id}
-                  project={p}
-                  sparkline={sparklineFor(p)}
-                  onClick={() => navigate(`/projects/${encodeURIComponent(p.id)}`)}
-                />
+                  data-testid="project-card"
+                  data-project-id={p.id}
+                  data-status={p.status}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => navigate(projectPath(p.id))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') navigate(projectPath(p.id)); }}
+                  className="transition-colors hover:bg-surface-raised"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0,
+                    background: S.card, border: `1px solid ${S.border}`,
+                    borderRadius: 'var(--radius-lg)', padding: 'var(--space-3) var(--space-4)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ color: S.faint, flexShrink: 0 }}><IconFolder /></span>
+                  <span style={{ fontSize: 'var(--text-sm)', color: S.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.name}
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontSize: '10px', fontFamily: 'var(--font-mono)', color: S.faint, border: `1px solid ${S.faint}`, borderRadius: '4px', padding: '0 5px', flexShrink: 0 }}>
+                    archived
+                  </span>
+                </div>
               ))}
-            </div>
+            </DashboardGrid>
           )}
         </div>
       )}

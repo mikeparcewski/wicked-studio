@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.4.5",
   "counts": {
-    "files": 115,
-    "occurrences": 839,
-    "static": 720,
-    "dynamic": 41,
+    "files": 116,
+    "occurrences": 871,
+    "static": 743,
+    "dynamic": 42,
     "computed": 6
   },
   "static": [
@@ -518,6 +518,18 @@
       ]
     },
     {
+      "testId": "card-runs",
+      "files": [
+        "src/components/ProjectsPage.tsx"
+      ]
+    },
+    {
+      "testId": "card-split",
+      "files": [
+        "src/components/ProjectsPage.tsx"
+      ]
+    },
+    {
       "testId": "chain-header",
       "files": [
         "src/components/WorkChronicle.tsx"
@@ -810,13 +822,19 @@
       ]
     },
     {
-      "testId": "dashboard-activity",
+      "testId": "dashboard-clear-filters",
       "files": [
         "src/components/ProjectDashboard.tsx"
       ]
     },
     {
       "testId": "dashboard-delivery-summary",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-do-work",
       "files": [
         "src/components/ProjectDashboard.tsx"
       ]
@@ -834,6 +852,18 @@
       ]
     },
     {
+      "testId": "dashboard-empty-build",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-empty-doc",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
       "testId": "dashboard-gate",
       "files": [
         "src/components/ProjectDashboard.tsx"
@@ -841,6 +871,12 @@
     },
     {
       "testId": "dashboard-gates",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-hidden-chip",
       "files": [
         "src/components/ProjectDashboard.tsx"
       ]
@@ -870,7 +906,31 @@
       ]
     },
     {
+      "testId": "dashboard-run-needs-you",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-run-retry",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-run-title",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
       "testId": "dashboard-runs",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-runs-empty",
       "files": [
         "src/components/ProjectDashboard.tsx"
       ]
@@ -1953,6 +2013,12 @@
       ]
     },
     {
+      "testId": "make-clear-filters",
+      "files": [
+        "src/components/MakeDashboard.tsx"
+      ]
+    },
+    {
       "testId": "make-corpus-label",
       "files": [
         "src/components/MakeDashboard.tsx"
@@ -1977,12 +2043,6 @@
       ]
     },
     {
-      "testId": "make-dashboard-tiles",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
       "testId": "make-doc-row",
       "files": [
         "src/components/MakeDashboard.tsx"
@@ -1995,6 +2055,12 @@
       ]
     },
     {
+      "testId": "make-hidden-chip",
+      "files": [
+        "src/components/MakeDashboard.tsx"
+      ]
+    },
+    {
       "testId": "make-list",
       "files": [
         "src/components/MakeDashboard.tsx"
@@ -2002,6 +2068,18 @@
     },
     {
       "testId": "make-load-all-docs",
+      "files": [
+        "src/components/MakeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "make-needs-you",
+      "files": [
+        "src/components/MakeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "make-new",
       "files": [
         "src/components/MakeDashboard.tsx"
       ]
@@ -2025,7 +2103,25 @@
       ]
     },
     {
+      "testId": "make-retry",
+      "files": [
+        "src/components/MakeDashboard.tsx"
+      ]
+    },
+    {
       "testId": "make-run-row",
+      "files": [
+        "src/components/MakeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "make-run-title",
+      "files": [
+        "src/components/MakeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "make-runs-empty",
       "files": [
         "src/components/MakeDashboard.tsx"
       ]
@@ -2399,6 +2495,12 @@
       ]
     },
     {
+      "testId": "project-needs-you",
+      "files": [
+        "src/components/ProjectsPage.tsx"
+      ]
+    },
+    {
       "testId": "project-repo",
       "files": [
         "src/components/ProjectCard.tsx"
@@ -2465,7 +2567,19 @@
       ]
     },
     {
-      "testId": "projects-list",
+      "testId": "projects-do-work",
+      "files": [
+        "src/components/ProjectsPage.tsx"
+      ]
+    },
+    {
+      "testId": "projects-empty-filter",
+      "files": [
+        "src/components/ProjectsPage.tsx"
+      ]
+    },
+    {
+      "testId": "projects-page",
       "files": [
         "src/components/ProjectsPage.tsx"
       ]
@@ -3007,6 +3121,18 @@
       "testId": "sources-panel",
       "files": [
         "src/components/ComposerContext.tsx"
+      ]
+    },
+    {
+      "testId": "stat-delta",
+      "files": [
+        "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
+      "testId": "stat-value",
+      "files": [
+        "src/components/dashboardKit.tsx"
       ]
     },
     {
@@ -3999,6 +4125,18 @@
       ]
     },
     {
+      "testId": "unfiled-card",
+      "files": [
+        "src/components/ProjectsPage.tsx"
+      ]
+    },
+    {
+      "testId": "unfiled-needs-you",
+      "files": [
+        "src/components/ProjectsPage.tsx"
+      ]
+    },
+    {
       "testId": "unfiled-run",
       "files": [
         "src/components/HomeBoard.tsx"
@@ -4390,13 +4528,20 @@
     {
       "pattern": "*-chip",
       "files": [
-        "src/components/SteeringRuleForm.tsx"
+        "src/components/SteeringRuleForm.tsx",
+        "src/components/dashboardKit.tsx"
       ]
     },
     {
       "pattern": "*-error-detail",
       "files": [
         "src/components/SurfaceState.tsx"
+      ]
+    },
+    {
+      "pattern": "*-search",
+      "files": [
+        "src/components/dashboardKit.tsx"
       ]
     },
     {
@@ -4639,7 +4784,8 @@
         "src/components/MetricTile.tsx",
         "src/components/ProvenanceLine.tsx",
         "src/components/RunSparkline.tsx",
-        "src/components/RunsBottomPanel.tsx"
+        "src/components/RunsBottomPanel.tsx",
+        "src/components/dashboardKit.tsx"
       ]
     },
     {

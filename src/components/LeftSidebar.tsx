@@ -388,7 +388,7 @@ function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }:
 
 const MAKE_MODES: Mode[] = ['build', 'document', 'video'];
 
-function MakePicker({ navigate, onClose, ambient }: {
+export function MakePicker({ navigate, onClose, ambient }: {
   navigate: (p: string) => void;
   onClose: () => void;
   /** The ambient project (shared derivation, DES-UX-001 §2.3 rule 1) — Build
