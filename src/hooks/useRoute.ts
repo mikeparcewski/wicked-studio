@@ -10,7 +10,8 @@ import { isTestingSubPage } from '../api/testing.js';
 // policies settings panel, merged into steering rules) are gone from this union;
 // their old paths parse to `steering` with a null type, which `useSteeringRedirect`
 // normalizes onto the `/steering` landing.
-// `testing` is the Testing surface (`/testing/:page` — harness/campaigns/evals);
+// `testing` is the Testing surface (`/testing/:page` — campaigns/evals; campaigns is
+// the landing, and the retired `/testing/harness` redirects onto it);
 // the flat campaign panels it absorbed (`campaigns`, `campaign-detail`) are gone
 // from this union — their old paths parse to `testing` and `useTestingRedirect`
 // rewrites the address onto `/testing/campaigns[...]`.
@@ -72,9 +73,9 @@ interface Route {
    *  an address that names no valid type (bare `/steering`, the legacy `/wiki` and `/rules`) —
    *  `useSteeringRedirect` replaces those with the Architecture page's real URL. */
   steeringType: string | null;
-  /** The testing sub-page on `/testing/:page` (`harness` | `campaigns` | `evals`). `null` while
-   *  panel === 'testing' means an address that names no valid page (bare `/testing`, a typo) —
-   *  `useTestingRedirect` replaces those with the Harness page's real URL. */
+  /** The testing sub-page on `/testing/:page` (`campaigns` | `evals`). `null` while
+   *  panel === 'testing' means an address that names no page (bare `/testing`, the retired
+   *  `/testing/harness`) — `useTestingRedirect` replaces those with the Campaigns landing. */
   testingPage: string | null;
 }
 
@@ -224,17 +225,17 @@ function parse(pathname: string): Route {
     return route({ panel: 'system' });
   }
   // `/testing/:page` — the Testing surface: one page component, parameterized by sub-page
-  // (harness / campaigns / evals), with `/testing/campaigns/:id` addressing one campaign's
+  // (campaigns / evals), with `/testing/campaigns/:id` addressing one campaign's
   // scoreboard (DES-CAMPAIGN-001 §3.5 / TH-14, MOVED here from the flat `/campaigns/:id`).
-  // A bare or typo'd `/testing` parses with `testingPage: null`; `useTestingRedirect`
-  // replaces it with the Harness page's real URL.
+  // A bare `/testing` — and the RETIRED `/testing/harness` (its creation verbs folded into
+  // the Campaigns landing's header) — parse with `testingPage: null`; `useTestingRedirect`
+  // replaces both with the Campaigns landing's real URL (a move, not a typo).
   if (first === 'testing') {
     if (second === 'campaigns' && third) {
       return route({ panel: 'testing', testingPage: 'campaigns', campaignId: safeDecode(third) });
     }
-    // Bare `/testing` is a parent path with one honest home (Harness) — it keeps its redirect.
     // A typo'd sub-page (`/testing/harnes`) is a dead address: not-found, never a silent swap.
-    if (!second) return route({ panel: 'testing', testingPage: null });
+    if (!second || second === 'harness') return route({ panel: 'testing', testingPage: null });
     return isTestingSubPage(second)
       ? route({ panel: 'testing', testingPage: second })
       : route({ panel: 'not-found' });

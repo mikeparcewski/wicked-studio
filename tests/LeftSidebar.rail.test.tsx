@@ -394,7 +394,7 @@ describe('accordion contents (§3.3)', () => {
     expect(navigate).toHaveBeenCalledWith('/steering/testing');
   });
 
-  it('Testing expands to the three page rows, each navigating to its sub-page; the route expands it', async () => {
+  it('Testing expands to the two page rows, each navigating to its sub-page; the route expands it', async () => {
     const navigate = vi.fn();
     rail({ pathname: '/testing/evals', navigate });
     await screen.findByRole('button', { name: 'wicked-studio' });
@@ -402,16 +402,16 @@ describe('accordion contents (§3.3)', () => {
     const testing = screen.getByTestId('rail-heading-testing');
     expect(testing.getAttribute('aria-expanded')).toBe('true');
     const rows = within(testing).getAllByTestId('rail-testing-page');
-    expect(rows.map((r) => r.dataset.page)).toEqual(['harness', 'campaigns', 'evals']);
-    expect(rows[0]).toHaveTextContent('Harness');
+    expect(rows.map((r) => r.dataset.page)).toEqual(['campaigns', 'evals']);
+    expect(rows[0]).toHaveTextContent('Campaigns');
 
-    fireEvent.click(rows[1]!);
+    fireEvent.click(rows[0]!);
     expect(navigate).toHaveBeenCalledWith('/testing/campaigns');
   });
 });
 
 describe('the collapsed rail (§3.2)', () => {
-  it('shows exactly seven glyph links (Testing → its Harness page, Steering → its landing, Settings → /system)', async () => {
+  it('shows exactly seven glyph links (Testing → its Campaigns landing, Steering → its landing, Settings → /system)', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
@@ -419,7 +419,7 @@ describe('the collapsed rail (§3.2)', () => {
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
     expect(glyphs).toHaveLength(7);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/make', '/chats', '/repos', '/testing/harness', '/steering', '/system',
+      '/projects', '/make', '/chats', '/repos', '/testing/campaigns', '/steering', '/system',
     ]);
     // Accordions don't exist at this width.
     expect(screen.queryByTestId('rail-heading-projects')).toBeNull();
