@@ -8,7 +8,7 @@
     "Entry kinds: `static` values appear verbatim in the DOM; `dynamic` are template-literal testids with each ${expr} normalised to '*'; `computed` carry the raw JSX expression — dynamic/computed resolve only against a live DOM."
   ],
   "version": 1,
-  "studioVersion": "0.4.6",
+  "studioVersion": "0.4.7",
   "counts": {
     "files": 118,
     "occurrences": 940,
