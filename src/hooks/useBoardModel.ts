@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { listDocs, type DocSummary } from '../api/interactive.js';
-import type { Project, ProjectMember, SessionView } from '../api/types.js';
+import type { Project, ProjectMember, RepoEntry, SessionView } from '../api/types.js';
 import {
   bandFor,
   compareScored,
@@ -253,12 +253,19 @@ export interface BoardModel {
    * §7.3) can place its ✗ marks on the clock this hook already fetched.
    */
   failedAt: Record<string, number>;
+  /**
+   * The repo register the board already fetched for its name join (zero new
+   * requests) — exposed for the home command center's needs-you fold (graph
+   * states) and essence strip (DES-HOME-COMMAND-CENTER §3/§5).
+   */
+  repos: RepoEntry[];
   loading: boolean;
   error: string | null;
 }
 
 export function useBoardModel(runs: SessionView[]): BoardModel {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [repoList, setRepoList] = useState<RepoEntry[]>([]);
   const [bindings, setBindings] = useState<Record<string, Bindings>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -304,6 +311,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
         // `unfiled` below, as the last, collapsed shelf.
         active = all.filter((p) => p.status === 'active' && p.id !== 'default');
         repoNames.current = new Map(repos.map((r) => [r.id, r.name]));
+        if (!cancelled) setRepoList(repos);
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e));
@@ -440,5 +448,5 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     });
   }, [runs, projects, bindings, loading]);
 
-  return { items, unfiled, failedAt, loading, error };
+  return { items, unfiled, failedAt, repos: repoList, loading, error };
 }

@@ -55,7 +55,7 @@ function member(project_id: string, member_kind: string, member_ref: string): Pr
 
 /** Wait for the async project + member + doc loads to settle into the board. */
 async function boardWith(runs = [] as ReturnType<typeof makeView>[]): Promise<void> {
-  render(<HomeBoard runs={runs} navigate={() => {}} />);
+  render(<HomeBoard runs={runs} navigate={() => {}} onOpenAsk={() => {}} />);
   await screen.findByTestId('project-board');
   // The bindings (members/docs) land one microtask-chain after the projects do.
   await vi.waitFor(() => {
@@ -148,7 +148,7 @@ describe('HomeBoard — the orchestrator board', () => {
     const user = userEvent.setup();
     const navigate = vi.fn();
     projects = [project({ id: 'p-1', name: 'One' })];
-    render(<HomeBoard runs={[]} navigate={navigate} />);
+    render(<HomeBoard runs={[]} navigate={navigate} onOpenAsk={() => {}} />);
     await expandQuiet();
 
     const card = await screen.findByTestId('project-card');

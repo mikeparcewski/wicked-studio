@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.4.7",
   "counts": {
-    "files": 118,
-    "occurrences": 940,
-    "static": 805,
-    "dynamic": 44,
+    "files": 116,
+    "occurrences": 930,
+    "static": 795,
+    "dynamic": 43,
     "computed": 6
   },
   "static": [
@@ -50,9 +50,9 @@
       ]
     },
     {
-      "testId": "activity-river",
+      "testId": "activity-line",
       "files": [
-        "src/components/ActivityRiver.tsx"
+        "src/components/HomeCommand.tsx"
       ]
     },
     {
@@ -431,12 +431,6 @@
       "testId": "bell-window",
       "files": [
         "src/components/NotificationBell.tsx"
-      ]
-    },
-    {
-      "testId": "board-all-quiet",
-      "files": [
-        "src/components/HomeBoard.tsx"
       ]
     },
     {
@@ -899,6 +893,12 @@
       "testId": "chronicle-state-evidence",
       "files": [
         "src/components/WorkChronicle.tsx"
+      ]
+    },
+    {
+      "testId": "command-center",
+      "files": [
+        "src/components/HomeBoard.tsx"
       ]
     },
     {
@@ -1404,6 +1404,12 @@
       ]
     },
     {
+      "testId": "essence-entry",
+      "files": [
+        "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
       "testId": "event-log",
       "files": [
         "src/components/LiveOutput.tsx"
@@ -1479,36 +1485,6 @@
       "testId": "failure-rule-link",
       "files": [
         "src/components/FailureBanner.tsx"
-      ]
-    },
-    {
-      "testId": "feed-gate-approaching",
-      "files": [
-        "src/components/LiveFeed.tsx"
-      ]
-    },
-    {
-      "testId": "feed-line",
-      "files": [
-        "src/components/LiveFeed.tsx"
-      ]
-    },
-    {
-      "testId": "feed-open-run",
-      "files": [
-        "src/components/LiveFeed.tsx"
-      ]
-    },
-    {
-      "testId": "feed-phase-line",
-      "files": [
-        "src/components/LiveFeed.tsx"
-      ]
-    },
-    {
-      "testId": "feed-unit-description",
-      "files": [
-        "src/components/LiveFeed.tsx"
       ]
     },
     {
@@ -1800,6 +1776,48 @@
       ]
     },
     {
+      "testId": "home-activity",
+      "files": [
+        "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "home-ask",
+      "files": [
+        "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "home-calm",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "home-essence",
+      "files": [
+        "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "home-verb-project",
+      "files": [
+        "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "home-verbs",
+      "files": [
+        "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "home-welcome",
+      "files": [
+        "src/components/HomeBoard.tsx"
+      ]
+    },
+    {
       "testId": "hotspots-excerpt",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -1869,12 +1887,6 @@
       "testId": "ladder-unit",
       "files": [
         "src/components/PhaseLadder.tsx"
-      ]
-    },
-    {
-      "testId": "landing-lede",
-      "files": [
-        "src/components/NarrativeBand.tsx"
       ]
     },
     {
@@ -2036,36 +2048,6 @@
       ]
     },
     {
-      "testId": "lede-segment",
-      "files": [
-        "src/components/NarrativeBand.tsx"
-      ]
-    },
-    {
-      "testId": "lede-spend",
-      "files": [
-        "src/components/NarrativeBand.tsx"
-      ]
-    },
-    {
-      "testId": "lede-spend-window",
-      "files": [
-        "src/components/NarrativeBand.tsx"
-      ]
-    },
-    {
-      "testId": "lede-undatable",
-      "files": [
-        "src/components/NarrativeBand.tsx"
-      ]
-    },
-    {
-      "testId": "lede-window",
-      "files": [
-        "src/components/NarrativeBand.tsx"
-      ]
-    },
-    {
       "testId": "ledger-denial",
       "files": [
         "src/components/DecisionsLedger.tsx"
@@ -2123,12 +2105,6 @@
       "testId": "live-edge",
       "files": [
         "src/components/LiveEdge.tsx"
-      ]
-    },
-    {
-      "testId": "live-feed",
-      "files": [
-        "src/components/LiveFeed.tsx"
       ]
     },
     {
@@ -2367,15 +2343,39 @@
       ]
     },
     {
-      "testId": "narrative-band",
+      "testId": "need-act",
       "files": [
-        "src/components/NarrativeBand.tsx"
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-age",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-line",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-row",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
       ]
     },
     {
       "testId": "needs-review-badge",
       "files": [
         "src/components/AssumptionsPanel.tsx"
+      ]
+    },
+    {
+      "testId": "needs-you-queue",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
       ]
     },
     {
@@ -2520,12 +2520,6 @@
       "testId": "now-bar-status",
       "files": [
         "src/components/NowBar.tsx"
-      ]
-    },
-    {
-      "testId": "outcome-unplaced-note",
-      "files": [
-        "src/components/RunOutcomeBar.tsx"
       ]
     },
     {
@@ -3045,60 +3039,6 @@
       "testId": "rework-badge",
       "files": [
         "src/components/DecisionsLedger.tsx"
-      ]
-    },
-    {
-      "testId": "river-fail-mark",
-      "files": [
-        "src/components/ActivityRiver.tsx"
-      ]
-    },
-    {
-      "testId": "river-gate-mark",
-      "files": [
-        "src/components/ActivityRiver.tsx"
-      ]
-    },
-    {
-      "testId": "river-lane",
-      "files": [
-        "src/components/ActivityRiver.tsx"
-      ]
-    },
-    {
-      "testId": "river-lane-label",
-      "files": [
-        "src/components/ActivityRiver.tsx"
-      ]
-    },
-    {
-      "testId": "river-margin",
-      "files": [
-        "src/components/NarrativeBand.tsx"
-      ]
-    },
-    {
-      "testId": "river-now-arrow",
-      "files": [
-        "src/components/ActivityRiver.tsx"
-      ]
-    },
-    {
-      "testId": "river-quiet",
-      "files": [
-        "src/components/ActivityRiver.tsx"
-      ]
-    },
-    {
-      "testId": "river-span",
-      "files": [
-        "src/components/ActivityRiver.tsx"
-      ]
-    },
-    {
-      "testId": "river-version-mark",
-      "files": [
-        "src/components/ActivityRiver.tsx"
       ]
     },
     {
@@ -5055,12 +4995,6 @@
       ]
     },
     {
-      "pattern": "live-feed-block-*",
-      "files": [
-        "src/components/LiveFeed.tsx"
-      ]
-    },
-    {
       "pattern": "live-narration-*",
       "files": [
         "src/components/LiveNarration.tsx"
@@ -5165,6 +5099,7 @@
         "src/components/AppearanceSettings.tsx",
         "src/components/ChatPanel.tsx",
         "src/components/DashboardTiles.tsx",
+        "src/components/HomeCommand.tsx",
         "src/components/MetricTile.tsx",
         "src/components/ProvenanceLine.tsx",
         "src/components/RunSparkline.tsx",

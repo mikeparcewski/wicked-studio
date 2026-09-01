@@ -71,7 +71,7 @@ async function expandQuiet(): Promise<void> {
 }
 
 async function board(runs: SessionView[]): Promise<void> {
-  render(<HomeBoard runs={runs} navigate={() => {}} />);
+  render(<HomeBoard runs={runs} navigate={() => {}} onOpenAsk={() => {}} />);
   await vi.waitFor(() => {
     expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', String(projects.length));
   });
@@ -150,7 +150,7 @@ describe('HomeBoard — live activity (slice 6)', () => {
     projects = [project('p-a', 'Ay', { updated_at: 200 }), project('p-b', 'Bee', { updated_at: 100 })];
     members = { 'p-a': [member('p-a', 'run-a')], 'p-b': [member('p-b', 'run-b')] };
     const { rerender } = render(
-      <HomeBoard runs={[running('run-a', 'completed'), running('run-b', 'completed')]} navigate={() => {}} />,
+      <HomeBoard runs={[running('run-a', 'completed'), running('run-b', 'completed')]} navigate={() => {}} onOpenAsk={() => {}} />,
     );
     await vi.waitFor(() => expect(screen.queryByTestId('band-quiet-toggle')).not.toBeNull());
     await expandQuiet();
@@ -159,7 +159,7 @@ describe('HomeBoard — live activity (slice 6)', () => {
 
     // The gate lands: `useRuns` reconciles the run list, and attention re-sorts B first.
     rerender(
-      <HomeBoard runs={[running('run-a', 'completed'), running('run-b', 'awaiting_human')]} navigate={() => {}} />,
+      <HomeBoard runs={[running('run-a', 'completed'), running('run-b', 'awaiting_human')]} navigate={() => {}} onOpenAsk={() => {}} />,
     );
 
     await vi.waitFor(() => expect(cardIds()).toEqual(['p-b', 'p-a']));
@@ -219,7 +219,7 @@ describe('HomeBoard — live activity (slice 6)', () => {
 
   it('picks up a run attached after first paint — no reload to see a launched run', async () => {
     projects = [project('p-a', 'Ay', { updated_at: Date.now() })];
-    const { rerender } = render(<HomeBoard runs={[]} navigate={() => {}} />);
+    const { rerender } = render(<HomeBoard runs={[]} navigate={() => {}} onOpenAsk={() => {}} />);
     // A run-less project is quiet by construction (slice 1) — expand to its card,
     // which is the one-line QUIET variant (slice 2), never "No runs yet".
     await vi.waitFor(() => expect(screen.queryByTestId('band-quiet-toggle')).not.toBeNull());
@@ -229,7 +229,7 @@ describe('HomeBoard — live activity (slice 6)', () => {
 
     // The run is launched and filed while the user sits on the board.
     members = { 'p-a': [member('p-a', 'run-new')] };
-    rerender(<HomeBoard runs={[running('run-new')]} navigate={() => {}} />);
+    rerender(<HomeBoard runs={[running('run-new')]} navigate={() => {}} onOpenAsk={() => {}} />);
 
     await vi.waitFor(() => expect(within(card('p-a')).getByTestId('run-chip')).toHaveAttribute('data-run-id', 'run-new'));
     // Slice BA: the launched run's subject is the plan region's description
