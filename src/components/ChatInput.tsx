@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../api/client.js';
+import { api, ApiError } from '../api/client.js';
 import type { EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
@@ -490,7 +490,27 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (retryOf) body.retryOf = retryOf;
 
     try {
-      const { runId: newRunId } = await api.launchRun(body);
+      let launched;
+      try {
+        launched = await api.launchRun(body);
+      } catch (err) {
+        // A pre-0.18 daemon 400s on the `deliver` key itself. Such a daemon HAS no deliver
+        // phase — omitting the key reproduces the only behavior it is capable of (no
+        // delivery), for either toggle state — so retry once without it rather than failing
+        // a launch over a field the daemon cannot honor.
+        if (
+          body.deliver !== undefined &&
+          err instanceof ApiError &&
+          err.status === 400 &&
+          err.message.includes('deliver')
+        ) {
+          const { deliver: _deliver, ...withoutDeliver } = body;
+          launched = await api.launchRun(withoutDeliver as typeof body);
+        } else {
+          throw err;
+        }
+      }
+      const { runId: newRunId } = launched;
       // The studio witnessed this launch — the provenance line's honest
       // 'via studio' channel derives from exactly this record (§3.3).
       useProvenanceStore.getState().markLaunchedHere(newRunId);

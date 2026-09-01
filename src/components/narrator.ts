@@ -1,4 +1,5 @@
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
+import { isPrUrl } from './delivery.js';
 
 /**
  * The run narrator (DES-RUN-NARRATOR §4-§6): a DETERMINISTIC template layer —
@@ -315,12 +316,15 @@ export function deriveArtifacts(
   const s = view?.session as
     | { delivery?: string | { kind: string; url: string } | null; deliverUrl?: string }
     | undefined;
-  const prUrl =
+  const rawPrUrl =
     typeof s?.deliverUrl === 'string' && s.deliverUrl !== ''
       ? s.deliverUrl
       : typeof s?.delivery === 'object' && s?.delivery !== null && typeof s.delivery.url === 'string' && s.delivery.url !== ''
         ? s.delivery.url
         : null;
+  // The same shape gate every PR link passes (delivery.ts): the ref becomes a clickable
+  // <a href>, so a wire value that is not an https…/pull/<n> URL never becomes an artifact.
+  const prUrl = rawPrUrl !== null && isPrUrl(rawPrUrl) ? rawPrUrl : null;
   if (prUrl !== null && !seen.has(prUrl)) {
     out.push({ kind: 'pr', ref: prUrl, name: 'Pull request', phase: null });
   }
