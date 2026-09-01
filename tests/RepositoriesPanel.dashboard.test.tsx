@@ -212,4 +212,18 @@ describe('the FilterStrip drives the fleet; the register flow is untouched', () 
     expect(grid.style.maxWidth).toBe('');
     expect(grid.style.gridTemplateColumns).toContain('auto-fill');
   });
+
+  it('with no repos at all, the empty state carries the creation CTA — clicking opens the form, posts nothing', async () => {
+    listRepos.mockImplementationOnce(() => Promise.resolve({ repos: [] }));
+    listRuns.mockImplementationOnce(() => Promise.resolve({ runs: [] }));
+    render(<RepositoriesPanel navigate={() => {}} />);
+    const empty = await screen.findByTestId('repos-empty');
+    expect(empty.textContent).toContain('No repositories');
+    // The CTA is the section's creation verb, INSIDE the empty state.
+    const cta = within(empty).getByRole('button', { name: '+ Add Repository' });
+    fireEvent.click(cta);
+    // The register form opens (the slice-B flow) — nothing was posted.
+    expect(screen.getByTestId('repo-project-row')).toBeInTheDocument();
+    expect(rerunOnboarding).not.toHaveBeenCalled();
+  });
 });

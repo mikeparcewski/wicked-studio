@@ -11,8 +11,8 @@
   "studioVersion": "0.4.6",
   "counts": {
     "files": 116,
-    "occurrences": 886,
-    "static": 758,
+    "occurrences": 887,
+    "static": 759,
     "dynamic": 42,
     "computed": 6
   },
@@ -2839,6 +2839,12 @@
     },
     {
       "testId": "repos-clear-filters",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-empty",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]

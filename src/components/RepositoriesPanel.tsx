@@ -590,7 +590,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
           <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>{error}</p>
         ) : repos.length === 0 ? (
           /* Empty state — carries the section's creation verb */
-          <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div data-testid="repos-empty" className="flex flex-col items-center justify-center py-24 text-center">
             <div
               className="rounded-2xl p-10 flex flex-col items-center gap-4"
               style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)', maxWidth: 420 }}
