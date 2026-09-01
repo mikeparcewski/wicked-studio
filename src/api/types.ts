@@ -161,3 +161,51 @@ export interface RunAcceptanceView {
   /** Absent on daemons older than the conformance section (crew < 0.8). */
   conformance?: AcceptanceConformance;
 }
+
+// ── DELETE /projects/:id/interactive/docs/:doc (crew#338 / studio#119) ────────
+//
+// Hand-declared, same contract as SessionDelivery above: the installed
+// `wicked-crew-api-types` is STALE at 0.8.x and these ship in a later version
+// (the daemon's route layer compiles against the same names). **Delete both
+// declarations and re-export the package's** the moment studio bumps to the
+// api-types version that carries `InteractiveDocDeleteResponse`.
+
+/** Crew's handoff-ledger half of a doc delete — what fell, or why nothing did. */
+export interface InteractiveDocDeleteLedgerReport {
+  /** True iff every ledger was swept without error. False with `skipped: true`
+   *  on the refusal paths — the sweep deliberately did not run. */
+  ok: boolean;
+  /** Every replay-dedup row key actually dropped (`<doc>`, `<doc>:v<n>`, …).
+   *  Empty ⇒ nothing was there — a never-drafted doc is a clean no-op here. */
+  removed_keys: string[];
+  /** The ledgers that could NOT be swept (`draft`|`edit`|`chat`|`demo`) and why.
+   *  Present only when `ok` is false and the sweep actually ran. */
+  errors?: { ledger: string; error: string }[];
+  /** True ⇒ deliberately skipped (interactive refused/failed the retire, so
+   *  crew's rows are still doing their job — nothing diverged). */
+  skipped?: boolean;
+}
+
+/**
+ * The governed delete's 200: interactive's own retire answer (relayed verbatim)
+ * plus crew's ledger report — BOTH halves named, per the route's loud-on-partial
+ * contract (its non-200s carry `error` + the same `ledger` report).
+ */
+export interface InteractiveDocDeleteResponse {
+  /** The doc name (slug). */
+  name: string;
+  kind: 'doc' | 'html' | 'source' | 'demo';
+  retired: true;
+  /** True on a repeat delete — idempotent, with the ORIGINAL `retired_at` and no `event_id`. */
+  already_retired: boolean;
+  /** ISO-8601 retirement timestamp. */
+  retired_at: string;
+  /** Head version at retirement. */
+  head: number;
+  /** Lineage size at retirement. */
+  versions: number;
+  /** The `wicked.interactive.doc.retired` bus event id — first retire only. */
+  event_id?: number;
+  /** What crew dropped from its handoff ledgers. */
+  ledger: InteractiveDocDeleteLedgerReport;
+}

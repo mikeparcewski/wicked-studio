@@ -8,12 +8,13 @@
 //   3. Happy path: each wrapper hits the right method/path/body and returns the
 //      declared shape, pinned against the bridge's real responses.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   BridgeUnavailableError,
+  DocDeletePartialError,
   ServiceHintError,
   createDoc,
+  deleteDoc,
+  docDeleteUrl,
   getLearnedTheme,
   getSources,
   listDemos,
@@ -92,6 +93,11 @@ describe('interactive URL resolver', () => {
     // The theme surface (corrected wire, issue #65) — same mount, same rules.
     ['requestThemeLearn', { ok: true, event_id: 'e1', correlation_id: 'c1' },
        () => requestThemeLearn(PROJECT, DOC, { kind: 'url', url: 'https://acme.example' })],
+    // The governed delete (studio#119) — crew-owned, but same resolver, same rules.
+    ['deleteDoc', { name: DOC, kind: 'doc', retired: true, already_retired: false,
+                    retired_at: '2026-09-01T10:00:00.000Z', head: 1, versions: 1,
+                    ledger: { ok: true, removed_keys: [] } },
+                                                       () => deleteDoc(PROJECT, DOC)],
   ];
 
   describe('prod (same-origin)', () => {
@@ -427,54 +433,115 @@ describe('happy-path shapes', () => {
   });
 });
 
-// ── The registry is CREATE + READ only (studio#119) ──────────────────────────
+// ── deleteDoc — the governed delete, ADOPTED (studio#119) ─────────────────────
 //
-// A delete affordance is missing from studio because the wire is missing from the
-// bridge, verified against a REAL one: every DELETE spelling is Express's
-// route-missing 404 ("Cannot DELETE /api/docs/<doc>"), and — unlike the record and
-// theme wires, which answered "no HTTP route" with a UI-emittable bus COMMAND —
-// there is no unmake verb in the bridge's `docs` subdomain either, so the bus
-// refuses with `400 unknown event type`.
-//
-// This is the CI-visible half of the guard: it fails on the PR that grows a wrapper
-// for a route nobody serves, which is the slice-13 (`getDemoSpec`,
-// `getLatestRecording`) and slice-16 (`learnTheme`, `listThemes`) break both times.
-// Its sibling — section 8 of e2e/interactive_wire_contract_test.py — fails from the
-// other side, the moment the bridge DOES grow the wire. Adopt the real route here
-// and move both guards in the same change; never one without the other.
-describe('no invented unmake wire (studio#119)', () => {
-  // Scoped to the doc/demo nouns on purpose: `wicked.interactive.source.removed` IS
-  // UI-emittable, so a future `removeSource` is legitimate and must not trip this.
-  // `retire` and `unmake` belong here: the event guard below already covers
-  // `wicked.interactive.doc.retired`, so leaving them out of the EXPORT guard let the two
-  // disagree — a `retireDoc()` wrapper would have passed this while the event it emits was
-  // banned three lines down.
-  const UNMAKE =
-    /^(delete|remove|destroy|purge|discard|archive|retire|unmake)(Doc|Docs|Demo|Demos|Document)/i;
+// For two releases this block was the absence guard ("no invented unmake wire"),
+// and its own instructions said what to do the day the wire landed: adopt the
+// route, and move this guard and section 8 of e2e/interactive_wire_contract_test.py
+// together. Both moved in the same change: the bridge serves the retire route
+// (interactive#189) and crew serves the GOVERNED delete on top of it (crew#338),
+// which is the one studio speaks — retire + crew's handoff-ledger sweep in one
+// call, loud on divergence.
+describe('deleteDoc — the governed delete route (studio#119 / crew#338)', () => {
+  beforeEach(prodOrigin);
 
-  it('the client module exports no doc/demo unmake wrapper', async () => {
-    const mod = (await import('../src/api/interactive.js')) as Record<string, unknown>;
-    const offenders = Object.keys(mod).filter((k) => UNMAKE.test(k));
-    expect(offenders, `src/api/interactive.ts exports ${offenders.join(', ')} — but the `
-      + 'wicked-interactive bridge serves no delete route and no delete bus command '
-      + '(studio#119). Land the wire upstream first, then move this guard and section 8 '
-      + 'of e2e/interactive_wire_contract_test.py together.').toEqual([]);
+  const RETIRED = {
+    name: DOC,
+    kind: 'doc',
+    retired: true,
+    already_retired: false,
+    retired_at: '2026-09-01T10:00:00.000Z',
+    head: 3,
+    versions: 3,
+    event_id: 41,
+    ledger: { ok: true, removed_keys: [DOC, `${DOC}:v3`] },
+  };
+
+  it('speaks DELETE against the CREW route — /interactive/docs/:doc, NOT the proxy registry path', async () => {
+    const calls = stubFetch(RETIRED);
+    await deleteDoc(PROJECT, DOC);
+    expect(calls[0]!.init?.method).toBe('DELETE');
+    // The governed route is crew-owned: one static segment more specific than the
+    // proxy's wildcard. A raw DELETE through the proxy path (`/interactive/api/docs/…`)
+    // would retire the doc WITHOUT crew's ledger sweep — the exact ghost studio#119
+    // exists to kill — so the URL is pinned exactly, not by substring.
+    expect(calls[0]!.url).toBe(`${apiBase()}/projects/${PROJECT}/interactive/docs/${DOC}`);
+    expect(calls[0]!.url).not.toContain('/interactive/api/');
+    // No request body on the wire (and so no Content-Type invented for one).
+    expect(calls[0]!.init?.body).toBeUndefined();
   });
 
-  it('no wrapper in the module builds a DELETE against the doc registry', () => {
-    // The export name is the easy half to rename around; the request itself is not.
-    // Comments are stripped first so this file's own prose (and interactive.ts's
-    // NOTE block, which quotes the 404s verbatim) cannot satisfy or trip the check.
-    const src = readFileSync(join(process.cwd(), 'src/api/interactive.ts'), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/^[ \t]*\/\/.*$/gm, '');
-    // Match how a DELETE is actually BUILT, not every occurrence of the word. Banning the bare
-    // string meant this module could not legitimately mention DELETE for any other reason —
-    // including an allow-list, or another resource that does support it. The test name says
-    // "builds a DELETE against the doc registry", so assert on the construction.
-    expect(src, 'a fetch with method DELETE').not.toMatch(/method\s*:\s*['"]DELETE['"]/i);
-    expect(src, 'an http-client .delete( call').not.toMatch(/\.\s*delete\s*\(/);
-    // …and no bus command invented to stand in for it.
-    expect(src).not.toMatch(/wicked\.interactive\.doc\.(deleted|removed|retired|archived)/);
+  it('percent-encodes both path segments', async () => {
+    stubFetch({ error: 'unknown doc', name: 'a/b', ledger: { ok: true, removed_keys: [] } }, 404);
+    await deleteDoc('p one', 'a/b');
+    expect(docDeleteUrl('p one', 'a/b')).toContain('/projects/p%20one/interactive/docs/a%2Fb');
+  });
+
+  it('200: resolves with the retire body VERBATIM — both halves named', async () => {
+    stubFetch(RETIRED);
+    await expect(deleteDoc(PROJECT, DOC)).resolves.toEqual(RETIRED);
+  });
+
+  it('200 repeat: the idempotent already_retired answer resolves the same way', async () => {
+    const repeat = { ...RETIRED, already_retired: true, ledger: { ok: true, removed_keys: [] } };
+    delete (repeat as Record<string, unknown>)['event_id'];
+    stubFetch(repeat);
+    const result = await deleteDoc(PROJECT, DOC);
+    expect(result).toEqual(repeat);
+    expect((result as typeof RETIRED).already_retired).toBe(true);
+  });
+
+  it("404 with the retire wire's own body is the GHOST cleanup — a resolution, not an error", async () => {
+    // A hand-rm'd workspace: unknown to interactive, but crew still swept its
+    // ledgers (the removed_keys say what fell). The doc is equally gone.
+    stubFetch({ error: 'unknown doc', name: DOC, ledger: { ok: true, removed_keys: [DOC] } }, 404);
+    await expect(deleteDoc(PROJECT, DOC)).resolves.toEqual({
+      ghost: true, name: DOC, ledger: { ok: true, removed_keys: [DOC] },
+    });
+  });
+
+  it('404 unknown PROJECT (no ledger in the body) stays a thrown refusal', async () => {
+    stubFetch({ error: `Project ${PROJECT} not found` }, 404);
+    await expect(deleteDoc(PROJECT, DOC)).rejects.toMatchObject({
+      name: 'ApiError', status: 404, wire: `Project ${PROJECT} not found`,
+    });
+  });
+
+  it('409 build-in-flight: ApiError carrying the bridge refusal verbatim in .wire', async () => {
+    stubFetch({ error: 'doc has a build in flight — wait for it to settle', document_id: DOC, active: true }, 409);
+    await expect(deleteDoc(PROJECT, DOC)).rejects.toMatchObject({
+      name: 'ApiError', status: 409, wire: 'doc has a build in flight — wait for it to settle',
+    });
+  });
+
+  it('500 PARTIAL throws the TYPED DocDeletePartialError — verbatim wire + the ledger report', async () => {
+    // The one state needing operator attention: interactive retired, a ledger
+    // sweep failed. The surface must render the wire's sentence VERBATIM and
+    // keep the retry armed, so the error carries both typed.
+    const wire = `partial delete: wicked-interactive retired '${DOC}' but crew could not drop `
+      + 'every handoff-ledger row. Re-issue this DELETE to retry the sweep.';
+    const ledger = { ok: false, removed_keys: [DOC], errors: [{ ledger: 'draft', error: 'EACCES' }] };
+    stubFetch({ error: wire, name: DOC, interactive: RETIRED, ledger }, 500);
+    const err = await deleteDoc(PROJECT, DOC).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DocDeletePartialError);
+    expect((err as DocDeletePartialError).wire).toBe(wire);
+    expect((err as DocDeletePartialError).ledger).toEqual(ledger);
+  });
+
+  it('502 not-retired (nothing diverged) throws ApiError with the wire sentence', async () => {
+    stubFetch({
+      error: `wicked-interactive did not retire '${DOC}' (HTTP 500)`,
+      name: DOC,
+      upstream_status: 500,
+      ledger: { ok: false, removed_keys: [], skipped: true },
+    }, 502);
+    await expect(deleteDoc(PROJECT, DOC)).rejects.toMatchObject({ name: 'ApiError', status: 502 });
+  });
+
+  it('503 bridge_unavailable stays the typed error with its runnable hint', async () => {
+    stubFetch({ code: 'bridge_unavailable', hint: 'npm i -g wicked-interactive' }, 503);
+    const err = await deleteDoc(PROJECT, DOC).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BridgeUnavailableError);
+    expect((err as BridgeUnavailableError).hint).toBe('npm i -g wicked-interactive');
   });
 });

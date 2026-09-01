@@ -13,6 +13,13 @@
 // under a `/d/<docId>` prefix.
 import { apiBase } from './client.js';
 import { ApiError } from './errors.js';
+import type {
+  InteractiveDocDeleteLedgerReport,
+  InteractiveDocDeleteResponse,
+} from './types.js';
+
+// Re-exported so delete consumers import every doc-registry shape from one place.
+export type { InteractiveDocDeleteLedgerReport, InteractiveDocDeleteResponse };
 
 // ── Wire shapes ─────────────────────────────────────────────────────────────
 // Narrow by intent: only the fields the UI consumes. The bridge is a Node
@@ -278,42 +285,106 @@ export function createDoc(projectId: string, body: CreateDocBody): Promise<Creat
   return iFetch<CreateDocResult>(`${interactiveBase(projectId)}/api/docs`, jsonPost(body));
 }
 
-// ── The registry is CREATE + READ only (studio#119) ──────────────────────────
+// ── Doc delete — the GOVERNED route, adopted (studio#119) ─────────────────────
 //
-// There is deliberately no unmake wrapper below `createDoc`, and adding one would be
-// the slice-13/slice-16 mistake a third time: a wrapper for a route the bridge does
-// not serve, whose break only shows up in production. Verified against a REAL bridge
-// (`bin/wicked-interactive.js serve`, wicked-interactive @ 0.8.x) — every plausible
-// spelling is Express's route-missing 404, HTML, not a service answer:
+// For two releases this module carried a loud "the registry is CREATE + READ only"
+// block here, with a vitest guard and an e2e pin holding the absence honest. The
+// wire has now landed on BOTH sides, and both guards moved in this same change,
+// exactly as they instructed:
 //
-//   DELETE /api/docs/:doc        → 404 "Cannot DELETE /api/docs/<doc>"
-//   DELETE /d/:doc               → 404 "Cannot DELETE /d/<doc>"
-//   DELETE /d/:doc/api/doc       → 404 "Cannot DELETE /d/<doc>/api/doc"
-//   POST   /api/docs/:doc/delete → 404 "Cannot POST /api/docs/<doc>/delete"
+//   - wicked-interactive (interactive#189): `DELETE /api/docs/:doc` retires the
+//     lineage — a soft, idempotent tombstone (versions kept, name reserved,
+//     `wicked.interactive.doc.retired` emitted once; 409 while a build is in flight).
+//   - wicked-crew (crew#338): `DELETE /api/v1/projects/:id/interactive/docs/:doc`
+//     — the retire above PLUS the sweep of crew's own handoff-ledger rows
+//     (`~/.wicked-crew/interactive-*-ledger.json`). The draft leg keys by document
+//     id ("one first draft per document lifetime"), so a row that outlives its doc
+//     claims the name's first draft forever — the ghost this route exists to kill.
 //
-// …and the bus escape hatch is shut too. `requestRecord` and `requestThemeLearn` both
-// answer "no HTTP route" by speaking a UI-emittable COMMAND over `POST /api/events`;
-// there is no such command here. The bridge's ownership table (`src/service/events.js`)
-// has no unmake verb in the `docs` subdomain at all — only `wicked.interactive.doc.created`
-// — so the bus refuses both candidate spellings with `400 {"error":"unknown event type: …"}`.
-// `wicked.interactive.source.removed` is UI-emittable but detaches ONE source file from a
-// doc; it cannot retire the doc.
-//
-// Crew's proxy is NOT the blocker: `registerInteractiveProxy` mounts `scope.all(…)`, so it
-// already forwards any method verbatim. The moment the bridge serves the route, the wrapper
-// here is a two-line addition.
-//
-// Nor is the doc dir the whole of it: crew keeps a durable replay-dedup row per document in
-// `~/.wicked-crew/interactive-draft-ledger.json`, keyed by document id for the draft leg.
-// Removing a doc without dropping that row means a doc later re-created under the same name
-// never gets its first draft — which is exactly why today's cleanup is hand-editing that JSON
-// plus an `rm -rf` of the bridge's doc dir.
-//
-// So the UI has no affordance BECAUSE the wire has none, not because it was forgotten.
-// The guards that keep it honest: `tests/interactive.client.test.ts` fails in CI if this
-// module grows an unmake wrapper, and section 8 of `e2e/interactive_wire_contract_test.py`
-// pins the absence against the real bridge — it fails the moment the bridge grows the wire,
-// which is the signal to adopt it here and move the pin in the same change.
+// Studio speaks the CREW route, never a raw `DELETE …/interactive/api/docs/:doc`
+// through the pure-transport proxy: only the governed route drops crew's ledger
+// rows synchronously and reports both halves, loud on divergence. That makes this
+// the ONE wrapper in this module whose URL is NOT under the proxy mount — it is a
+// crew-owned route one static segment more specific than the proxy's wildcard.
+
+/**
+ * The crew-owned governed delete route for one doc:
+ * `<apiBase>/projects/:projectId/interactive/docs/:doc` — deliberately NOT
+ * `interactiveBase()` + a bridge path (see the block comment above).
+ */
+export function docDeleteUrl(projectId: string, docId: string): string {
+  return `${apiBase()}/projects/${encodeURIComponent(projectId)}/interactive/docs/${encodeURIComponent(docId)}`;
+}
+
+/**
+ * The 500 PARTIAL — the one state needing operator attention: interactive
+ * retired (or the doc was already gone) but crew's ledger sweep failed, so the
+ * two stores DIVERGED. Typed so the surface can render it LOUD and verbatim
+ * (the wire's own sentence says the retry instruction), never as a generic
+ * failure. Retry-safe: the same DELETE again — retire answers already_retired,
+ * the sweep is idempotent.
+ */
+export class DocDeletePartialError extends ApiError {
+  /** Crew's ledger report — `ok: false`, with the per-ledger errors named. */
+  readonly ledger: InteractiveDocDeleteLedgerReport;
+  constructor(wire: string, ledger: InteractiveDocDeleteLedgerReport) {
+    super(500, wire);
+    this.name = 'DocDeletePartialError';
+    this.ledger = ledger;
+  }
+}
+
+/**
+ * What `deleteDoc` resolves with — both settled shapes:
+ *  - the retire answer (`retired: true`, possibly `already_retired`) with crew's
+ *    ledger report riding along, or
+ *  - the GHOST cleanup: interactive answered "unknown doc" (a hand-deleted
+ *    workspace) and crew still swept its ledgers — from the UI's seat the doc is
+ *    equally gone, so this is a resolution, not an error.
+ */
+export type DocDeleteResult =
+  | (InteractiveDocDeleteResponse & { ghost?: undefined })
+  | { ghost: true; name: string; ledger: InteractiveDocDeleteLedgerReport };
+
+/**
+ * `DELETE /projects/:projectId/interactive/docs/:doc` — retire the doc on the
+ * bridge AND drop crew's handoff-ledger rows, in one governed call (crew#338).
+ *
+ * Failure shapes, each kept typed for the surface:
+ *  - 500 partial   → {@link DocDeletePartialError} (LOUD; carries the ledger report);
+ *  - 503 bridge    → {@link BridgeUnavailableError} with the runnable hint;
+ *  - 409 in-flight / 502 not-retired / 404 unknown project → `ApiError` with the
+ *    wire's own sentence (match on `status`).
+ *
+ * Own transport rather than `iFetch`: the non-200 answers here carry structured
+ * bodies (`ledger`, the ghost 404) that the shared path would flatten to a string.
+ */
+export async function deleteDoc(projectId: string, docId: string): Promise<DocDeleteResult> {
+  const res = await fetch(docDeleteUrl(projectId, docId), { method: 'DELETE' });
+  const text = await res.text();
+  let body: Record<string, unknown> | undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed === 'object' && parsed !== null) body = parsed as Record<string, unknown>;
+  } catch { /* not JSON — fall through to the generic error path */ }
+  if (res.ok) return body as unknown as InteractiveDocDeleteResponse;
+  if (res.status === 503 && body?.['code'] === 'bridge_unavailable') {
+    throw new BridgeUnavailableError(typeof body['hint'] === 'string' ? body['hint'] : '');
+  }
+  const ledger = body?.['ledger'] as InteractiveDocDeleteLedgerReport | undefined;
+  // The ghost path: unknown to interactive, ledgers swept anyway (`ledger` present
+  // distinguishes it from the unknown-PROJECT 404, which carries none).
+  if (res.status === 404 && body?.['error'] === 'unknown doc' && ledger !== undefined) {
+    return { ghost: true, name: String(body['name'] ?? docId), ledger };
+  }
+  const raw = body?.['error'] ?? body?.['message'] ?? text;
+  const wire = (typeof raw === 'string' ? raw : JSON.stringify(raw)) || res.statusText;
+  // The PARTIAL: crew says so with a 500 whose body names both halves.
+  if (res.status === 500 && ledger !== undefined) {
+    throw new DocDeletePartialError(wire, ledger);
+  }
+  throw new ApiError(res.status, wire);
+}
 
 /**
  * `POST /d/:docId/api/fork` — branch a new version off `version`. `sourceMessageId`
