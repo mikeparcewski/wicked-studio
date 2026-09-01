@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { postFork } from '../api/interactive.js';
 import type { ForkResult, VersionEntry, VersionManifest } from '../api/interactive.js';
-import { versionPath, type Navigate } from '../hooks/useRoute.js';
+import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../store/docThread.js';
+import { DeleteDocButton } from './DocDelete.js';
 import { ExportMenu } from './ExportMenu.js';
 import { ThemesMenu } from './ThemesMenu.js';
 import { scrollThreadToMessage } from './threadAnchor.js';
@@ -420,6 +421,22 @@ function VersionsTab({ doc, subject, onShowChat }: {
           </div>
         );
       })}
+      {/* The whole-artifact delete lives with the lineage it retires (studio#119):
+          confirm-gated (the dialog names the doc and what a retire is), and a
+          settled delete leaves the dead artifact — back to the mode's picker,
+          which re-lists without the retired name. */}
+      <div
+        style={{ borderTop: `1px solid ${S.border}`, marginTop: '6px', paddingTop: '10px' }}
+      >
+        <DeleteDocButton
+          projectId={projectId}
+          docId={docId}
+          subject={subject}
+          variant="action"
+          onDeleted={() =>
+            navigate(modePath(projectId, subject === 'demo' ? 'video' : 'document'))}
+        />
+      </div>
     </div>
   );
 }

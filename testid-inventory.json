@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.8",
   "counts": {
-    "files": 116,
-    "occurrences": 934,
-    "static": 799,
+    "files": 117,
+    "occurrences": 942,
+    "static": 806,
     "dynamic": 43,
     "computed": 6
   },
@@ -1323,6 +1323,48 @@
       "testId": "doc-composer-submit",
       "files": [
         "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-delete-bridge-hint",
+      "files": [
+        "src/components/DocDelete.tsx"
+      ]
+    },
+    {
+      "testId": "doc-delete-cancel",
+      "files": [
+        "src/components/DocDelete.tsx"
+      ]
+    },
+    {
+      "testId": "doc-delete-confirm",
+      "files": [
+        "src/components/DocDelete.tsx"
+      ]
+    },
+    {
+      "testId": "doc-delete-error",
+      "files": [
+        "src/components/DocDelete.tsx"
+      ]
+    },
+    {
+      "testId": "doc-delete-go",
+      "files": [
+        "src/components/DocDelete.tsx"
+      ]
+    },
+    {
+      "testId": "doc-delete-partial",
+      "files": [
+        "src/components/DocDelete.tsx"
+      ]
+    },
+    {
+      "testId": "doc-delete-trigger",
+      "files": [
+        "src/components/DocDelete.tsx"
       ]
     },
     {

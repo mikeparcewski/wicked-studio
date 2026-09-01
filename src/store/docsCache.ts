@@ -28,6 +28,10 @@ interface DocsCacheStore {
   fanoutProgress: { done: number; total: number } | null;
   /** Deposit an already-fetched doc list (a store write, never a request). */
   deposit: (projectId: string, docs: DocSummary[]) => void;
+  /** Drop one doc from a project's deposit after a confirmed delete (studio#119) —
+   *  a store write, so every cache reader agrees with the wire without a refetch.
+   *  A project with no deposit stays UNKNOWN (no empty list is invented for it). */
+  remove: (projectId: string, name: string) => void;
   /** The explicit fan-out gesture: one GET per given project id. */
   loadAll: (projectIds: string[]) => Promise<void>;
 }
@@ -39,6 +43,13 @@ export const useDocsCache = create<DocsCacheStore>((set, get) => ({
 
   deposit: (projectId, docs) =>
     set((s) => ({ byProject: { ...s.byProject, [projectId]: docs } })),
+
+  remove: (projectId, name) =>
+    set((s) => {
+      const docs = s.byProject[projectId];
+      if (docs === undefined) return s;
+      return { byProject: { ...s.byProject, [projectId]: docs.filter((d) => d.name !== name) } };
+    }),
 
   loadAll: async (projectIds) => {
     if (get().fanoutProgress !== null) return; // one fan-out at a time

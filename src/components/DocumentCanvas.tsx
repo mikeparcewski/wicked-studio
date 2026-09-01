@@ -8,6 +8,7 @@ import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortc
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
 import { hasInstrumentBridge, instrumentDocHtml } from '../interactive/instrumented.js';
+import { DeleteDocButton } from './DocDelete.js';
 import { DocPanel, type DocPanelTab } from './DocPanel.js';
 import { FeedbackOverlay } from './FeedbackOverlay.js';
 import { StripSensor, useStripAutoHide } from './ThreadDrawer.js';
@@ -82,25 +83,43 @@ function DocPicker({ projectId, navigate }: { projectId: string; navigate: Navig
       </p>
       <div data-testid="doc-picker" style={{ ...PANEL, padding: 0, overflow: 'hidden' }}>
         {[...docs].sort(byRecency).map((doc, i, sorted) => (
-          <button
+          // The row is a WRAPPER so the delete trigger is a sibling of the nav
+          // button, never a button-in-button (studio#119): the navigation keeps
+          // its testid and whole-row reach; the trigger sits at the row's end.
+          <div
             key={doc.name}
-            type="button"
-            data-testid="doc-picker-row"
-            data-doc-id={doc.name}
-            onClick={() => navigate(modePath(projectId, 'document', doc.name))}
             style={{
-              display: 'flex', alignItems: 'center', gap: '12px', width: '100%', textAlign: 'left',
-              background: 'transparent', border: 'none',
+              alignItems: 'center', display: 'flex',
               borderBottom: i < sorted.length - 1 ? `1px solid ${S.border}` : 'none',
-              color: S.ink, cursor: 'pointer', fontSize: 'var(--text-sm)',
-              fontFamily: 'var(--font-sans)', padding: '12px 16px',
             }}
           >
-            <span style={{ flex: 1, fontWeight: 500 }}>{doc.name}</span>
-            <span style={{ color: S.muted, flexShrink: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>
-              {doc.kind} · v{doc.head}
-            </span>
-          </button>
+            <button
+              type="button"
+              data-testid="doc-picker-row"
+              data-doc-id={doc.name}
+              onClick={() => navigate(modePath(projectId, 'document', doc.name))}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0,
+                textAlign: 'left', background: 'transparent', border: 'none',
+                color: S.ink, cursor: 'pointer', fontSize: 'var(--text-sm)',
+                fontFamily: 'var(--font-sans)', padding: '12px 16px',
+              }}
+            >
+              <span style={{ flex: 1, fontWeight: 500 }}>{doc.name}</span>
+              <span style={{ color: S.muted, flexShrink: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>
+                {doc.kind} · v{doc.head}
+              </span>
+            </button>
+            {/* Delete where the docs live (studio#119): confirm-gated, and the
+                settled delete re-runs the same one list load the picker owns. */}
+            <DeleteDocButton
+              projectId={projectId}
+              docId={doc.name}
+              subject={doc.kind === 'demo' ? 'demo' : 'document'}
+              variant="row"
+              onDeleted={retry}
+            />
+          </div>
         ))}
       </div>
     </div>

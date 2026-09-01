@@ -6,6 +6,7 @@ import { instrumentDemoHtml, subjectsFromBrief } from '../interactive/demoHtml.j
 import { readAnchors, readExports, readSendStates } from '../interactive/threadStopgap.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../store/docThread.js';
+import { DeleteDocButton } from './DocDelete.js';
 import { defaultComparand } from './DocumentCanvas.js';
 import { DocPanel, type DocPanelTab } from './DocPanel.js';
 import { StripSensor, useStripAutoHide } from './ThreadDrawer.js';
@@ -76,25 +77,40 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
       </p>
       <div data-testid="demo-picker" style={{ ...PANEL, padding: 0, overflow: 'hidden' }}>
         {[...demos].sort(byRecency).map((demo, i, sorted) => (
-          <button
+          // Wrapper row, same shape as the doc picker (studio#119): the nav
+          // button keeps its testid; the confirm-gated delete sits at the end.
+          <div
             key={demo.name}
-            type="button"
-            data-testid="demo-picker-row"
-            data-demo-id={demo.name}
-            onClick={() => navigate(modePath(projectId, 'video', demo.name))}
             style={{
-              display: 'flex', alignItems: 'center', gap: '12px', width: '100%', textAlign: 'left',
-              background: 'transparent', border: 'none',
+              alignItems: 'center', display: 'flex',
               borderBottom: i < sorted.length - 1 ? `1px solid ${S.border}` : 'none',
-              color: S.ink, cursor: 'pointer', fontSize: 'var(--text-sm)',
-              fontFamily: 'var(--font-sans)', padding: '12px 16px',
             }}
           >
-            <span style={{ flex: 1, fontWeight: 500 }}>{demo.name}</span>
-            <span style={{ color: S.muted, flexShrink: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>
-              v{demo.head}
-            </span>
-          </button>
+            <button
+              type="button"
+              data-testid="demo-picker-row"
+              data-demo-id={demo.name}
+              onClick={() => navigate(modePath(projectId, 'video', demo.name))}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0,
+                textAlign: 'left', background: 'transparent', border: 'none',
+                color: S.ink, cursor: 'pointer', fontSize: 'var(--text-sm)',
+                fontFamily: 'var(--font-sans)', padding: '12px 16px',
+              }}
+            >
+              <span style={{ flex: 1, fontWeight: 500 }}>{demo.name}</span>
+              <span style={{ color: S.muted, flexShrink: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>
+                v{demo.head}
+              </span>
+            </button>
+            <DeleteDocButton
+              projectId={projectId}
+              docId={demo.name}
+              subject="demo"
+              variant="row"
+              onDeleted={retry}
+            />
+          </div>
         ))}
       </div>
     </div>
