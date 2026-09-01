@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
+import { needsYouRows } from '../board/needsYou.js';
+import { useFailureClocks } from '../store/failureClocks.js';
+import { useGateStore } from '../store/gates.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
+import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
@@ -43,6 +47,13 @@ export function AskDock({ runs, pathname, onClose }: {
   const [repos, setRepos] = useState<RepoEntry[]>(() => getCachedRepos() ?? []);
   const projects = useProjectsStore((s) => s.projects);
   const liveChats = useLiveChatsStore((s) => s.sessions);
+  // The needs-you fold's inputs, from the stores the app already holds (all
+  // written elsewhere — the gate stream, the board model's mirrors): zero
+  // requests ride on reading them here.
+  const gates = useGateStore((s) => s.gates);
+  const failedAt = useFailureClocks((s) => s.failedAtByRun);
+  const attachedAt = useMembershipStore((s) => s.attachedAtByRun);
+  const projectIds = useMembershipStore((s) => s.projectIdByRun);
 
   // The diagnostics read — presence-gated: absence is an ANSWER (older crew), never an error.
   useEffect(() => {
@@ -131,10 +142,27 @@ export function AskDock({ runs, pathname, onClose }: {
     () =>
       askPrompts({
         runs,
+        // THE home-queue fold (needsYouRows — DES-HOME-COMMAND-CENTER §3), so
+        // the failed-run chip seeds the SAME newest failed run the queue shows
+        // (E1) — never a second recency derivation. Chats/campaigns ride empty
+        // here: absence adds no rows, and the failed-run pick reads none of
+        // them. `now` feeds only the (absent) stalled-chat rows — the fold
+        // stays effectively pure in this memo's deps.
+        needRows: needsYouRows({
+          runs,
+          gates,
+          failedAt,
+          attachedAt,
+          projectIds,
+          chats: [],
+          repos,
+          campaigns: [],
+          now: Date.now(),
+        }),
         projects: [...projects].sort((a, b) => b.updated_at - a.updated_at),
         repos,
       }),
-    [runs, projects, repos],
+    [runs, gates, failedAt, attachedAt, projectIds, projects, repos],
   );
 
   return (

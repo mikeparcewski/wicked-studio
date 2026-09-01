@@ -1,5 +1,6 @@
 import type { Project, RepoEntry, SessionView } from '../api/types.js';
 import type { Diagnostics } from '../api/diagnostics.js';
+import { newestFailedRun, type NeedRow } from '../board/needsYou.js';
 import { statusCounts } from '../board/windowStats.js';
 import { headingForPath } from './LeftSidebar.js';
 import { humanTitle } from './runIdentity.js';
@@ -177,15 +178,20 @@ export function buildContextPack(args: {
 
 export interface AskPromptSeed {
   runs: SessionView[];
+  /** THE home-queue fold's rows (`needsYouRows` — the caller computes it from
+   *  the stores the app already holds). The failed-run chip seeds from its
+   *  first failed-run row via {@link newestFailedRun} — the queue's own
+   *  newest-first ordering, never a second recency derivation (E1). */
+  needRows: readonly NeedRow[];
   projects: Project[];
   repos: RepoEntry[];
 }
 
 /** The quick-prompt chips. Chips whose referent the app does not hold are OMITTED, never
  *  fabricated (no failed run ⇒ no "why did it fail" chip). */
-export function askPrompts({ runs, projects, repos }: AskPromptSeed): { label: string; text: string }[] {
+export function askPrompts({ runs, needRows, projects, repos }: AskPromptSeed): { label: string; text: string }[] {
   const prompts: { label: string; text: string }[] = [];
-  const failed = runs.find((v) => v.session.status === 'failed' && v.session.archived_at == null);
+  const failed = newestFailedRun(needRows, runs);
   if (failed !== undefined) {
     const title = humanTitle(failed.session.problem);
     prompts.push({

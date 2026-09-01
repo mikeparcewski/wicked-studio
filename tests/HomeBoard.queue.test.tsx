@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Project } from '../src/api/types.js';
+import { useFailureClocks } from '../src/store/failureClocks.js';
 import { useGateStore } from '../src/store/gates.js';
 import { takeRetryPrefill } from '../src/store/retryPrefill.js';
 import { makeView } from './factories.js';
@@ -51,6 +52,7 @@ describe('HomeBoard — the needs-you queue', () => {
     projects = [];
     repos = [];
     chats = [];
+    useFailureClocks.setState({ failedAtByRun: {} });
     useGateStore.setState({ gates: {}, approaching: {} });
     takeRetryPrefill(); // drain any deposit a prior test left
   });

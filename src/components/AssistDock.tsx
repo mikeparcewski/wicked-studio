@@ -6,7 +6,9 @@ import { useEventStream } from '../hooks/useEventStream.js';
 import { pinAwaiting } from '../store/awaitingPins.js';
 import { useRunEventStore } from '../store/events.js';
 import { ApprovalDock } from './ApprovalDock.js';
+import { retainOnFinalize } from './ChatThread.js';
 import { readFileText } from './fileText.js';
+import { Markdown } from './Markdown.js';
 import { NarratorFeed, phaseName } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
 import {
@@ -290,14 +292,18 @@ function DockChat({ chatId }: { chatId: string }): React.ReactElement {
     });
   };
 
-  /** The terminal reply is authoritative — it REPLACES the oldest pending bubble's deltas. */
+  /** The terminal reply finalizes the oldest pending bubble — through
+   *  {@link retainOnFinalize}: the wire keeps no history, so a terminal text
+   *  SHORTER than the accumulated deltas never clobbers what streamed (E4);
+   *  the longer text stands, ties to the terminal reply (the healing path for
+   *  a block that mounted mid-stream, intact). */
   const finalize = (cliKey: string, text: string, ok: boolean): void => {
     setMsgs((prev) => {
       const next = [...prev];
       for (let i = 0; i < next.length; i += 1) {
         const m = next[i];
         if (m !== undefined && m.cliKey === cliKey && m.pending) {
-          next[i] = { ...m, text, pending: false, ok };
+          next[i] = { ...m, text: retainOnFinalize(m.text, text), pending: false, ok };
           return next;
         }
       }
@@ -374,13 +380,22 @@ function DockChat({ chatId }: { chatId: string }): React.ReactElement {
               <span className="font-mono text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
                 {m.cliKey}
               </span>
-              <p
-                className="whitespace-pre-wrap text-[11px] leading-relaxed"
-                style={{ color: m.pending || m.ok ? 'var(--ink-body)' : 'var(--status-fail)' }}
-              >
-                {m.text}
-                {m.pending && <span aria-hidden className="animate-pulse"> …</span>}
-              </p>
+              {!m.pending && !m.ok ? (
+                // A failed turn's text is the daemon's error prose — it stays
+                // verbatim in the fail ink, never dressed as markdown.
+                <p className="whitespace-pre-wrap text-[11px] leading-relaxed" style={{ color: 'var(--status-fail)' }}>
+                  {m.text}
+                </p>
+              ) : (
+                // E3 (campaign): seat replies ARE markdown — rendered with the
+                // SAME component the chat thread already uses (react-markdown +
+                // GFM; raw HTML is never parsed, so nothing injects), not
+                // dumped as ##-visible raw text.
+                <div className="text-[11px] leading-relaxed">
+                  <Markdown>{m.text}</Markdown>
+                  {m.pending && <span aria-hidden className="animate-pulse"> …</span>}
+                </div>
+              )}
             </div>
           ))
         )}

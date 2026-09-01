@@ -6,6 +6,7 @@ import {
   FAILED_WINDOW,
   isFreshInstall,
   needsYouRows,
+  newestFailedRun,
   oldestNeedAt,
   retryPrefillOf,
   type NeedsYouInputs,
@@ -179,6 +180,40 @@ describe('needsYouRows — dedupe', () => {
     expect(rows[0]!.text).toContain('Idle 12m');
     expect(rows[0]!.text).toContain('2 warm seats');
     expect(rows[0]!.action).toEqual({ kind: 'open', path: '/chat/stalled', label: 'Open chat ›' });
+  });
+});
+
+describe('newestFailedRun — the Ask quick-prompt seed (E1)', () => {
+  it('answers the fold’s FIRST failed-run row — the queue’s newest clock, never list order', () => {
+    // List order puts the STALE failure first (the E1 defect: the chip seeded a
+    // 17-day-old run because it read list order instead of the queue's clocks).
+    const stale = makeView({ id: 'r-fail-stale', status: 'failed', problem: 'old breakage' });
+    const fresh = makeView({ id: 'r-fail-fresh', status: 'failed', problem: 'new breakage' });
+    const runs = [stale, fresh];
+    const rows = needsYouRows(inputs({
+      runs,
+      failedAt: { 'r-fail-stale': NOW - 17 * 24 * HOUR, 'r-fail-fresh': NOW - 10 * MIN },
+    }));
+    expect(newestFailedRun(rows, runs)).toBe(fresh);
+  });
+
+  it('answers undefined when the fold has no failed-run row — nothing is fabricated', () => {
+    const runs = [makeView({ id: 'r-live', status: 'executing' })];
+    expect(newestFailedRun(needsYouRows(inputs({ runs })), runs)).toBeUndefined();
+  });
+
+  it('respects the fold’s own dedupe: a suppressed onboard failure yields the NEXT failed run', () => {
+    // The onboard failure is newest, but the queue shows it as a repo row —
+    // the seed follows the queue, so the plain failure is the answer.
+    const onboard = makeView({ id: 'r-onboard', status: 'failed', workflow_id: 'onboarding', repo_ref: 'repo-1' });
+    const plain = makeView({ id: 'r-plain-fail', status: 'failed' });
+    const runs = [onboard, plain];
+    const rows = needsYouRows(inputs({
+      runs,
+      failedAt: { 'r-onboard': NOW - MIN, 'r-plain-fail': NOW - HOUR },
+      repos: [repo('repo-1')],
+    }));
+    expect(newestFailedRun(rows, runs)).toBe(plain);
   });
 });
 

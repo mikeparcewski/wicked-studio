@@ -52,6 +52,20 @@ export interface SysMsg {
 export type Msg = UserMsg | SeatMsg | SysMsg;
 
 /**
+ * Finalize-time retention (E4: "claude's complete plan was lost to the
+ * collapse"). The chat wire keeps NO history — what the client streamed is the
+ * ONLY copy — so a terminal `chatReply` that arrives SHORTER than the
+ * accumulated deltas (an upstream output cap trimming older text, a failure
+ * reframed as its reason line) must never clobber them. The LONGER text
+ * stands; at equal length the terminal reply is authoritative — which also
+ * keeps the §7.9-3 healing intact: a block mounted mid-stream holds partial
+ * deltas, and the (longer) terminal reply still replaces them whole.
+ */
+export function retainOnFinalize(streamed: string, terminal: string): string {
+  return terminal.length >= streamed.length ? terminal : streamed;
+}
+
+/**
  * Seat identity under the token contract (DES-VISION-001 §2.11): every chip and
  * avatar wears the SAME surface/ink pair, and identity rides the monogram +
  * name, not a per-CLI hue. Color is reserved for signal (§1.5 rule 2).

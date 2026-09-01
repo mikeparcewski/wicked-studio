@@ -11,6 +11,7 @@ import {
 } from '../board/boardAttention.js';
 import { sessionProjectId } from './ambientProject.js';
 import { useDocsCache } from '../store/docsCache.js';
+import { useFailureClocks } from '../store/failureClocks.js';
 import { useGateStore, type OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
@@ -272,8 +273,10 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
   /** The decay clock (D7): scores are recomputed on this coarse tick. */
   const [now, setNow] = useState(() => Date.now());
   /** Backfilled durable-log tail per FAILED run id — the one age the client
-   *  cannot otherwise know, and the one F3 is about (D3 step 2). */
-  const [failedAt, setFailedAt] = useState<Record<string, number>>({});
+   *  cannot otherwise know, and the one F3 is about (D3 step 2). Held in the
+   *  app-wide mirror store (the membership idiom): this hook is the only
+   *  WRITER; the Ask dock's needs-you fold reads the same clocks (E1). */
+  const failedAt = useFailureClocks((s) => s.failedAtByRun);
   const gates = useGateStore((s) => s.gates);
   // Relayed doc statuses (slice 6) — REACTIVE, unlike `logs`: a `status.posted`
   // is rare (one per doc edit, not one per streamed frame) and it must be able
@@ -284,13 +287,6 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
   const placed = useRef<Set<string>>(new Set());
   /** Run ids whose event tail has been asked for — once per run id, ever (R2). */
   const backfilled = useRef<Set<string>>(new Set());
-  const mounted = useRef(true);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; };
-  }, []);
-
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), TICK_MS);
     return () => clearInterval(t);
@@ -379,19 +375,23 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     if (loading) return;
     for (const v of runs) {
       if (v.session.status !== 'failed' || backfilled.current.has(v.session.id)) continue;
+      // Another instance's backfill already mirrored this clock — no re-fetch.
+      if (failedAt[v.session.id] !== undefined) continue;
       if (backfilled.current.size >= MAX_BACKFILL) break;
       const id = v.session.id;
       backfilled.current.add(id);
       void api.getRunEvents(id)
         .then(({ events }) => {
           const ts = events[events.length - 1]?.ts;
-          if (mounted.current && typeof ts === 'number') {
-            setFailedAt((m) => ({ ...m, [id]: ts }));
+          if (typeof ts === 'number') {
+            // The mirror write (store, not local state): merge-only, so parallel
+            // board-model instances never erase each other's clocks.
+            useFailureClocks.getState().merge({ [id]: ts });
           }
         })
         .catch(() => { /* no durable log — the fallback clock stands */ });
     }
-  }, [runs, loading]);
+  }, [runs, loading, failedAt]);
 
   const items = useMemo(
     () => {

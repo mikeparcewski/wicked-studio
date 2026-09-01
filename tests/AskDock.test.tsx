@@ -46,6 +46,7 @@ vi.mock('../src/hooks/useEventStream.js', () => ({
 const { AskDock } = await import('../src/components/AskDock.js');
 const { clearCachedRoster, setCachedRoster } = await import('../src/store/rosterCache.js');
 const { clearRepoCache } = await import('../src/store/repoCache.js');
+const { useFailureClocks } = await import('../src/store/failureClocks.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { useLiveChatsStore } = await import('../src/store/liveChats.js');
 
@@ -110,6 +111,7 @@ beforeEach(() => {
   sendChatMessage.mockResolvedValue({ seats: ['claude', 'pi'] });
   useProjectsStore.setState({ projects: [], loading: false, error: null });
   useLiveChatsStore.setState({ sessions: {} });
+  useFailureClocks.setState({ failedAtByRun: {} });
   try { localStorage.clear(); } catch { /* stubbed in setup */ }
 });
 
@@ -182,6 +184,27 @@ describe('nothing launches without the user sending', () => {
     // NOTHING was sent by any of that.
     expect(openChat).not.toHaveBeenCalled();
     expect(sendChatMessage).not.toHaveBeenCalled();
+  });
+
+  it('the failed-run chip seeds the NEWEST failure by the home queue’s own fold — never list order (E1)', async () => {
+    wireDiagnostics('present');
+    // List order leads with the STALE failure (the E1 campaign defect: a
+    // 17-day-old run was seeded); the durable failure clocks — the same mirror
+    // the home queue reads — say the other one is newest.
+    useFailureClocks.setState({
+      failedAtByRun: { 'stale-run-fail': Date.now() - 17 * 24 * 3_600_000, 'fresh-run-fail': Date.now() - 600_000 },
+    });
+    dock([
+      makeView({ id: 'stale-run-fail', status: 'failed', problem: 'ancient breakage' }),
+      makeView({ id: 'fresh-run-fail', status: 'failed', problem: 'fresh breakage' }),
+    ]);
+
+    await waitFor(() => expect(screen.getByTestId('assist-prompts')).toBeInTheDocument());
+    const chips = screen.getAllByTestId('assist-prompt');
+    const failChips = chips.filter((c) => c.getAttribute('data-prompt')?.startsWith('Why did run'));
+    // ONE failed-run chip, and it names the queue's newest failure.
+    expect(failChips).toHaveLength(1);
+    expect(failChips[0]).toHaveAttribute('data-prompt', 'Why did run fresh-ru fail?');
   });
 });
 

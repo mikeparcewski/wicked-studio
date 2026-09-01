@@ -482,6 +482,41 @@ export function narrateChatSeat(m: ChatSeatView): { text: string; tone: Narratio
   return { text: `replied (${chatSizeLabel(m.text)})${firstLine ? ` — ${firstLine}` : ''}`, tone: 'work' };
 }
 
+/** A seat's turn posture, derived from the message log (see {@link seatLogPosture}). */
+export interface SeatTurnPosture {
+  state: 'working' | 'replied' | 'failed';
+  /** The failed turn's head — the SAME clip the feed's fail narration shows. */
+  reason: string | null;
+}
+
+/**
+ * Per-seat TURN posture from the one message log — the SOURCE the narrated
+ * feed classifies from (§11.1), exported so the chat header's seat chips read
+ * the same fold and can never contradict the feed (the E4 campaign catch: the
+ * chip said "replied" while the feed said "failed" for the same turn, because
+ * the chip was a second, frame-driven derivation that ignored the reply's
+ * `ok`). Any pending bubble means the seat is still WORKING (per-seat FIFO —
+ * its oldest unfinished turn); otherwise its newest finalized reply decides:
+ * ok = replied, not-ok = failed, the reason being the feed's own clipped head.
+ */
+export function seatLogPosture(messages: readonly ChatMsgView[]): Record<string, SeatTurnPosture> {
+  const out: Record<string, SeatTurnPosture> = {};
+  for (const m of messages) {
+    if (m.kind !== 'seat') continue;
+    if (m.pending) {
+      out[m.cliKey] = { state: 'working', reason: null };
+      continue;
+    }
+    // A still-streaming turn outranks any finalized one, wherever it sits in
+    // the log — a seat with bytes in flight is working, full stop.
+    if (out[m.cliKey]?.state === 'working') continue;
+    out[m.cliKey] = m.ok
+      ? { state: 'replied', reason: null }
+      : { state: 'failed', reason: clip(m.text.trim(), 120) || null };
+  }
+  return out;
+}
+
 /**
  * §11.1 seat lifecycle: joined / could not join. The TEMPLATE lives here —
  * narrator.ts is the one narration template source — while the caller owns the

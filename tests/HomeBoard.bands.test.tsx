@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { DocSummary } from '../src/api/interactive.js';
 import type { CoreEvent, Project, ProjectMember, SessionView } from '../src/api/types.js';
+import { useFailureClocks } from '../src/store/failureClocks.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useRuntimeStore } from '../src/store/runtime.js';
 import { makeView } from './factories.js';
@@ -124,6 +125,9 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
     members = {};
     docs = {};
     runEvents = {};
+    // The failure-clock mirror is app-wide state now — reset it per test, as
+    // the pre-mirror per-mount state effectively was.
+    useFailureClocks.setState({ failedAtByRun: {} });
     useGateStore.setState({ gates: {} });
     useRuntimeStore.setState({ outputs: {}, logs: {}, deltaSeq: {}, docActivity: {}, seq: 0 });
   });
