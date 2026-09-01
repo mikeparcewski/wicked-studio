@@ -4,7 +4,7 @@ import { UNFILED_MOUNT } from '../api/interactive.js';
 import { gateOpenPath } from '../board/gateActions.js';
 import { outcomeOf } from '../board/metrics.js';
 import {
-  attachSeries, deltaWord, statusCounts, windowBuckets, windowDelta,
+  attachSeries, deltaWord, orderByAttention, statusCounts, windowBuckets, windowDelta,
 } from '../board/windowStats.js';
 import { useDismissable } from '../hooks/useDismissable.js';
 import { versionPath, type Mode } from '../hooks/useRoute.js';
@@ -43,16 +43,6 @@ interface Props {
   navigate: (path: string) => void;
   /** Where a run row lands — the caller's routing (flat `/runs/:id` here). */
   runPath: (id: string) => string;
-}
-
-const RUN_TERMINAL = new Set(['completed', 'cancelled', 'failed']);
-
-/** Needs-you FIRST, then active, then terminal — incoming order within groups. */
-function orderRuns(runs: SessionView[]): SessionView[] {
-  const gated = runs.filter((v) => v.session.status === 'awaiting_human');
-  const active = runs.filter((v) => v.session.status !== 'awaiting_human' && !RUN_TERMINAL.has(v.session.status));
-  const terminal = runs.filter((v) => RUN_TERMINAL.has(v.session.status));
-  return [...gated, ...active, ...terminal];
 }
 
 type StatusChip = 'all' | 'needs-you' | 'active' | 'failed' | 'done' | 'docs';
@@ -104,7 +94,7 @@ export function MakeDashboard({ runs, navigate, runPath }: Props): React.ReactEl
 
   // The spine (§4.2.2): non-chat runs — complete, all projects, needs-you first.
   const made = useMemo(
-    () => orderRuns(runs.filter((v) => !isChatRun(v) && v.session.archived_at == null)),
+    () => orderByAttention(runs.filter((v) => !isChatRun(v) && v.session.archived_at == null)),
     [runs],
   );
 

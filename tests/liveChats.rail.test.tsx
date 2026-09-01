@@ -103,25 +103,28 @@ describe('the rail beside a live conversation (J4 finding 3)', () => {
   });
 });
 
-describe('/chats "Active now" counts what the screen shows (J4 finding 4a, EC39)', () => {
-  it('a live pool session is IN the headline — never "0 of 0" beside a live row', async () => {
+describe('/chats "Conversations now" counts what the screen shows (J4 finding 4a, EC39)', () => {
+  it('a live pool session is IN the tile — never a zero beside a live card', async () => {
     listChats.mockResolvedValueOnce({
       chats: [{ chatId: 'live-9', seats: ['claude'], idleSecs: 4 }],
     });
     render(<ChatsPage runs={[]} onSelect={() => {}} navigate={() => {}} />);
 
-    // The live band lists the session the daemon holds…
+    // The grid lists the live session the daemon holds…
     await screen.findByTestId('live-chat-row');
-    // …and the headline counts it, labeled by part and window.
-    const tile = screen.getByTestId('chats-active-tile');
-    expect(tile).toHaveAttribute('data-count', '1');
-    expect(tile).toHaveAttribute('data-live', '1');
-    expect(tile).toHaveTextContent('1 live session · 0 chat runs in the last 30');
+    // …and the pipeline tile counts it, labeled by part.
+    const tile = screen.getByTestId('stat-active');
+    expect(tile).toHaveAttribute('data-value', '1');
+    expect(tile).toHaveTextContent('1 live · 0 runs moving');
+    // The live-seats tile agrees with the pool it counts.
+    expect(screen.getByTestId('stat-live-seats')).toHaveAttribute('data-value', '1');
   });
 
-  it('with no live sessions the range-scoped count is labeled with its window', async () => {
+  it('with no live sessions the windowed chats tile is labeled with its window', async () => {
     render(<ChatsPage runs={[]} onSelect={() => {}} navigate={() => {}} />);
-    await screen.findByTestId('chats-active-tile');
-    expect(screen.getByTestId('chats-active-tile')).toHaveTextContent('0 of 0 chat runs in the last 30');
+    await screen.findByTestId('stat-active');
+    expect(screen.getByTestId('stat-active')).toHaveAttribute('data-value', '0');
+    expect(screen.getByTestId('stat-chats')).toHaveTextContent('last 30');
+    expect(screen.getByTestId('stat-live-seats')).toHaveTextContent('no live sessions');
   });
 });

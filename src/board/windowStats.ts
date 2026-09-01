@@ -104,6 +104,24 @@ export function statusCounts(runs: SessionView[]): StatusCounts {
   return c;
 }
 
+// ── Attention ordering (needs-you floats FIRST — the north-star routing) ─────
+
+const ORDER_TERMINAL = new Set(['completed', 'cancelled', 'failed']);
+
+/**
+ * The one list order every section grid shares: runs waiting on a human
+ * FIRST, then runs moving under their own power, then terminal history —
+ * incoming (daemon/salience) order preserved within each group. Extracted
+ * from MakeDashboard so /make, /chats and /repos cannot drift on what
+ * "needs you floats first" means.
+ */
+export function orderByAttention(runs: SessionView[]): SessionView[] {
+  const gated = runs.filter((v) => v.session.status === 'awaiting_human');
+  const active = runs.filter((v) => v.session.status !== 'awaiting_human' && !ORDER_TERMINAL.has(v.session.status));
+  const terminal = runs.filter((v) => ORDER_TERMINAL.has(v.session.status));
+  return [...gated, ...active, ...terminal];
+}
+
 // ── Threshold health (usability review #9: no success-green on a 30% rate) ───
 
 export type Health = 'good' | 'warn' | 'bad' | 'none';

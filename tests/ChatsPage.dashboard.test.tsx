@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { makeView } from './factories.js';
 
 /**
- * The /chats dashboard (DES-FEEDBACK-003 §4.3, slice P): the page's derived
- * numbers promoted into the tile band, above the untouched list. Pinned here:
- * the three §4.3 tiles with their named questions (EC19/EC28), the partition
- * invariant (the list is exactly the isChatRun set), the attach-clock honesty
- * of the chats-over-time tile, gate scoping to the chat partition, the
- * preserved search/time-range/list affordances, and the zero-requests-on-
- * mount discipline (the page reads props + loaded stores only).
+ * The /chats landing as a COMMAND SURFACE (lane B, the 0.4.6 treatment).
+ * Pinned here: the KPI band under the three operator questions with honest
+ * window deltas ("—" when no full prior bucket exists), the partition
+ * invariant (the grid is exactly the isChatRun set), needs-you-first
+ * ordering + the gate jump, derived titles + seat chips off the wire's own
+ * fields, the first-class FilterStrip, and the fetch budget — exactly ONE
+ * declared GET /chats on mount, nothing else.
  */
 
 const { ChatsPage, isChatRun } = await import('../src/components/ChatsPage.js');
@@ -18,11 +18,13 @@ const { useMembershipStore } = await import('../src/store/membership.js');
 
 const NOW = Date.now();
 
-/** 3 chat runs (one active, one legacy-unstamped, one done) + 2 build runs. */
+/** 3 chat runs (one gated, one active, one legacy-unstamped done, one failed)
+ *  + 2 build runs the partition must exclude. */
 const RUNS = [
-  makeView({ id: 'c-live', workflow_id: 'chat', status: 'executing', problem: 'talk through the uploader' }),
-  makeView({ id: 'c-gated', workflow_id: 'chat', status: 'awaiting_human', problem: 'which auth flow?' }),
+  makeView({ id: 'c-live', workflow_id: 'chat', status: 'executing', problem: 'talk through the uploader', clis: ['claude', 'codex'] }),
+  makeView({ id: 'c-gated', workflow_id: 'chat', status: 'awaiting_human', problem: 'which auth flow?', clis: ['claude'] }),
   makeView({ id: 'c-legacy', workflow_id: undefined as unknown as string, status: 'completed', problem: 'old thread' }),
+  makeView({ id: 'c-broken', workflow_id: 'chat', status: 'failed', problem: 'the flaky session' }),
   makeView({ id: 'b-build', workflow_id: 'wf-w2', status: 'executing', problem: 'build the thing' }),
   makeView({ id: 'b-gated', workflow_id: 'wf-w2', status: 'awaiting_human', problem: 'approve the plan?' }),
 ];
@@ -31,68 +33,71 @@ function gate(runId: string, prompt: string, receivedAt: number): void {
   useGateStore.getState().setGate({ runId, ord: 0, prompt, lifecycle: 'open', receivedAt });
 }
 
-function page(onSelect: (id: string) => void = () => {}): ReturnType<typeof render> {
-  return render(<ChatsPage runs={RUNS} onSelect={onSelect} navigate={() => {}} />);
+function page(
+  onSelect: (id: string) => void = () => {},
+  navigate: (path: string) => void = () => {},
+): ReturnType<typeof render> {
+  return render(<ChatsPage runs={RUNS} onSelect={onSelect} navigate={navigate} />);
 }
 
 beforeEach(() => {
   useGateStore.setState({ gates: {} });
   useMembershipStore.setState({
     projectNameByRun: {},
-    // c-live placed 2h ago, c-gated 3 days ago; c-legacy has NO attach clock
-    // (unfiled) — the tile must exclude it honestly, never invent a time.
+    projectIdByRun: { 'c-gated': 'p-auth' },
+    // c-live placed 2h ago, c-gated 3 days ago; the rest have NO attach clock
+    // (unfiled) — the sparkline excludes them honestly, never invents a time.
     attachedAtByRun: { 'c-live': NOW - 2 * 3_600_000, 'c-gated': NOW - 3 * 86_400_000 },
   });
 });
 afterEach(() => cleanup());
 
-describe('the tile band (§4.3, EC19/EC28)', () => {
-  it('renders the three tiles with their named questions, above the untouched list', () => {
+describe('the KPI band — performance / pipeline / risk', () => {
+  it('renders the six tiles above the grid with live values', () => {
     page();
-    const band = screen.getByTestId('chats-dashboard-tiles');
-    const q = (tid: string): string | null =>
-      band.querySelector(`[data-testid="${tid}"]`)?.getAttribute('data-question') ?? null;
-    expect(q('chats-over-time-tile')).toBe('Is conversation increasing or drying up?');
-    expect(q('chats-active-tile')).toBe('How many threads are warm?');
-    expect(q('chats-gates-tile')).toBe('Did a conversation stall on me?');
+    const band = screen.getByTestId('chats-kpis');
+    const value = (tid: string): string | null =>
+      band.querySelector(`[data-testid="${tid}"]`)?.getAttribute('data-value') ?? null;
+    expect(value('stat-chats')).toBe('4');       // the windowed chat partition
+    expect(value('stat-live-seats')).toBe('0');  // GET /chats unmocked → no live pool
+    expect(value('stat-active')).toBe('1');      // c-live moving
+    expect(value('stat-gates')).toBe('1');       // c-gated waiting
+    expect(value('stat-failed')).toBe('1');      // c-broken
+    expect(value('stat-stalled')).toBe('0');
+    // The band precedes the grid in DOM order.
     const list = screen.getByTestId('chats-list');
     expect(band.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('buckets chats on the attach clock and reports the clockless honestly', () => {
+  it('4 chats against a 30-run window has NO prior bucket — the delta reads "—", never 0%', () => {
     page();
-    const tile = screen.getByTestId('chats-over-time-tile');
-    // c-live + c-gated placed; c-legacy has no clock → unplaced, not painted.
-    expect(tile.getAttribute('data-total')).toBe('2');
-    expect(tile.getAttribute('data-unplaced')).toBe('1');
+    expect(screen.getByTestId('stat-chats').getAttribute('data-delta')).toBe('none');
+    expect(within(screen.getByTestId('stat-chats')).getByTestId('stat-delta')).toHaveTextContent('—');
+    expect(screen.getByTestId('stat-chats').textContent).toContain('no prior window');
   });
 
-  it('counts warm threads off the existing active derivation', () => {
-    page();
-    const tile = screen.getByTestId('chats-active-tile');
-    expect(tile.getAttribute('data-count')).toBe('2'); // c-live + c-gated
-  });
-
-  it('scopes the gates tile to the chat partition — a build gate never counts', () => {
+  it('the gates tile scopes to the CHAT partition and doors into the needs-you filter', () => {
     gate('c-gated', 'which auth flow?', NOW - 5 * 60_000);
-    gate('b-gated', 'approve the plan?', NOW - 60 * 60_000);
+    gate('b-gated', 'approve the plan?', NOW - 60 * 60_000); // a build gate never counts
     page();
-    const tile = screen.getByTestId('chats-gates-tile');
-    expect(tile.getAttribute('data-count')).toBe('1');
-    expect(tile.textContent).toContain('1 waiting');
-    expect(tile.textContent).toContain('oldest 5m');
-    expect(tile.textContent).toContain('which auth flow?');
-    expect(tile.textContent).not.toContain('approve the plan?');
+    const tile = screen.getByTestId('stat-gates');
+    expect(tile.getAttribute('data-value')).toBe('1');
+    expect(tile.textContent).toContain('oldest waiting 5m'); // c-gated's clock, not b-gated's
+    fireEvent.click(tile);
+    expect(screen.getByTestId('chats-filter').getAttribute('data-filter')).toBe('needs-you');
+    expect(screen.getAllByTestId('chat-row').map((r) => r.getAttribute('data-run-id'))).toEqual(['c-gated']);
   });
 
-  it('says "none waiting" honestly when no chat gate is open', () => {
-    gate('b-gated', 'approve the plan?', NOW - 60_000);
+  it('the failed tile wears the fail token and doors into the failed filter', () => {
     page();
-    expect(screen.getByTestId('chats-gates-tile').textContent).toContain('none waiting');
+    const failed = screen.getByTestId('stat-failed');
+    expect((within(failed).getByTestId('stat-value') as HTMLElement).style.color).toBe('var(--status-fail)');
+    fireEvent.click(failed);
+    expect(screen.getAllByTestId('chat-row').map((r) => r.getAttribute('data-run-id'))).toEqual(['c-broken']);
   });
 });
 
-describe('the register below (§4.3: "the list below is the existing ChatsPage list, untouched")', () => {
+describe('the grid — the partition invariant, needs-you first, cards are doors', () => {
   it('lists exactly the chat partition — the verbatim isChatRun set', () => {
     page();
     const ids = screen.getAllByTestId('chat-row').map((r) => r.getAttribute('data-run-id'));
@@ -101,33 +106,97 @@ describe('the register below (§4.3: "the list below is the existing ChatsPage l
     for (const v of RUNS) expect(ids.includes(v.session.id)).toBe(isChatRun(v));
   });
 
-  it('preserves search, the time-range selector, New Chat, and row navigation', () => {
-    const onSelect = vi.fn();
-    page(onSelect);
-    expect(screen.getByPlaceholderText('Search chats…')).toBeInTheDocument();
-    expect(screen.getByText('New Chat')).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Show newest runs' })).toBeInTheDocument();
-    fireEvent.change(screen.getByPlaceholderText('Search chats…'), { target: { value: 'auth' } });
+  it('needs-you FIRST, then active, then terminal; titles derived, seats chipped off the wire', () => {
+    page();
     const rows = screen.getAllByTestId('chat-row');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.getAttribute('data-run-id')).toBe('c-gated');
-    fireEvent.click(rows[0]!);
-    expect(onSelect).toHaveBeenCalledWith('c-gated');
+    expect(rows.map((r) => r.getAttribute('data-run-id'))).toEqual(
+      ['c-gated', 'c-live', 'c-legacy', 'c-broken'], // gated → active → terminal
+    );
+    // Derived title on the row; the raw prompt only on the hover title.
+    const title = within(rows[0]!).getByTestId('chat-run-title');
+    expect(title.textContent).toBe('which auth flow?');
+    expect(title.getAttribute('title')).toBe('which auth flow?');
+    // Seat chips are the DTO's own clis.
+    const seats = within(rows[1]!).getAllByTestId('chat-seat').map((c) => c.getAttribute('data-seat'));
+    expect(seats).toEqual(['claude', 'codex']);
   });
 
-  it('fires exactly ONE declared request on mount — GET /chats, the §7.9-5 live-session listing (re-scoped by DES-UX-001 slice AB)', async () => {
-    // Pre-slice-AB this page read props + loaded stores only. Slice AB adds the
-    // ONE named exception (the §3.3-style declared fetch): the live-session
-    // listing rides the /chats navigation so warm seats are findable (the
-    // zombie-cleanup wire, FINDING-027's GET /chats). Nothing else may fire.
+  it('a card is a door: clicking it opens the run', () => {
+    const onSelect = vi.fn();
+    page(onSelect);
+    const row = screen.getAllByTestId('chat-row').find((r) => r.getAttribute('data-run-id') === 'c-live')!;
+    fireEvent.click(row);
+    expect(onSelect).toHaveBeenCalledWith('c-live');
+  });
+
+  it('the needs-you badge jumps STRAIGHT to the gate (project known ⇒ the thread AT the gate)', () => {
+    const onSelect = vi.fn();
+    const navigate = vi.fn();
+    page(onSelect, navigate);
+    const jump = screen.getByTestId('chat-needs-you');
+    expect(jump.getAttribute('data-run-id')).toBe('c-gated');
+    fireEvent.click(jump);
+    expect(navigate).toHaveBeenCalledWith('/p/p-auth/build/c-gated#gate');
+    expect(onSelect).not.toHaveBeenCalled(); // no card navigation leaked
+  });
+});
+
+describe('the FilterStrip drives the grid', () => {
+  it('status chips narrow the cards; clear-filters restores everything', () => {
+    page();
+    const chip = (id: string) => screen.getAllByTestId('chats-filter-chip')
+      .find((c) => c.getAttribute('data-chip') === id)!;
+    fireEvent.click(chip('done'));
+    expect(screen.getAllByTestId('chat-row').map((r) => r.getAttribute('data-run-id'))).toEqual(['c-legacy']);
+    fireEvent.click(chip('live'));
+    expect(screen.queryAllByTestId('chat-row')).toHaveLength(0); // no live pool here
+    expect(screen.getByTestId('chats-empty-filter')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('chats-clear-filters'));
+    expect(screen.getAllByTestId('chat-row')).toHaveLength(4);
+  });
+
+  it('search narrows by derived title and seat name', () => {
+    page();
+    fireEvent.change(screen.getByTestId('chats-filter-search'), { target: { value: 'uploader' } });
+    expect(screen.getAllByTestId('chat-row').map((r) => r.getAttribute('data-run-id'))).toEqual(['c-live']);
+    fireEvent.change(screen.getByTestId('chats-filter-search'), { target: { value: 'codex' } });
+    expect(screen.getAllByTestId('chat-row').map((r) => r.getAttribute('data-run-id'))).toEqual(['c-live']);
+  });
+});
+
+describe('full width, the creation verb, the empty state', () => {
+  it('the grid is a real CSS grid with no maxWidth; New Chat lives on the header', () => {
+    const navigate = vi.fn();
+    page(() => {}, navigate);
+    const grid = screen.getByTestId('chats-list') as HTMLElement;
+    expect(grid.style.maxWidth).toBe('');
+    expect(grid.style.gridTemplateColumns).toContain('auto-fill');
+    fireEvent.click(screen.getByTestId('chats-new'));
+    expect(navigate).toHaveBeenCalledWith('/chat/new');
+  });
+
+  it('with nothing at all, the empty state carries the New Chat CTA', () => {
+    cleanup();
+    const navigate = vi.fn();
+    render(<ChatsPage runs={[]} onSelect={() => {}} navigate={navigate} />);
+    const empty = screen.getByTestId('chats-empty');
+    expect(empty).toHaveTextContent('No chat sessions yet');
+    fireEvent.click(within(empty).getByText('Click New Chat to start'));
+    expect(navigate).toHaveBeenCalledWith('/chat/new');
+  });
+
+  it('fires exactly ONE declared request on mount — GET /chats, the §7.9-5 live-session listing', async () => {
+    // The band and grid read props + loaded stores; the one named exception is
+    // the live-session listing riding the /chats navigation (FINDING-027's
+    // zombie-cleanup wire). Nothing else may fire.
     const spy = vi.fn().mockRejectedValue(new Error('offline'));
     vi.stubGlobal('fetch', spy);
     page();
     await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
     const url = String(spy.mock.calls[0]?.[0] ?? '');
     expect(url.endsWith('/api/v1/chats')).toBe(true);
-    // An unreachable daemon keeps the band absent — the page still renders.
-    expect(screen.queryByTestId('live-chats')).toBeNull();
+    // An unreachable daemon keeps the live cards absent — the page still renders.
+    expect(screen.queryAllByTestId('live-chat-row')).toHaveLength(0);
     vi.unstubAllGlobals();
   });
 });

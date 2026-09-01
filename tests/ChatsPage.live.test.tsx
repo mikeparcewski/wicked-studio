@@ -51,10 +51,13 @@ describe('the live-session band (§7.9-5)', () => {
     page();
     const row = await screen.findByTestId('live-chat-row');
     expect(row.dataset['chatId']).toBe('warm-chat-1');
-    expect(row).toHaveTextContent('claude · codex');
+    // The seats are chips off the wire's own list (claude / codex …).
+    const seats = Array.from(row.querySelectorAll('[data-testid="chat-seat"]'))
+      .map((c) => c.getAttribute('data-seat'));
+    expect(seats).toEqual(['claude', 'codex']);
     expect(row).toHaveTextContent('idle 42s');
     expect(row.dataset['streaming']).toBe('false');
-    expect(screen.getByTestId('live-chats').dataset['count']).toBe('1');
+    expect(screen.getAllByTestId('live-chat-row')).toHaveLength(1);
   });
 
   it('a session is listed from its FIRST frame — visible while it streams, even when the fetch predates it', async () => {

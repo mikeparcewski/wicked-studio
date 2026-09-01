@@ -1,16 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { RepoEntry } from '../src/api/types.js';
 import { makeView } from './factories.js';
 
 /**
- * The /repos dashboard (DES-FEEDBACK-003 §4.4, slice P): the repo register +
- * the three-tile reporting band. Pinned here: the §4.4 tiles with their named
- * questions (EC19/EC28), the repo_ref×attach-clock grouping honesty (clockless
- * or windowless runs excluded, never painted), the preserved register /
- * search / navigation affordances, and the fetch budget — exactly the page's
- * existing GET /repos + GET /runs, with the old Tracked card's per-repo graph
- * fan-out RETIRED.
+ * The /repos landing as a COMMAND SURFACE (lane B, the 0.4.6 treatment): the
+ * fleet view of what the agents work ON. Pinned here: the KPI band under the
+ * three operator questions with honest window deltas ("—" when no full prior
+ * bucket exists), the graph story derived from the run history (the repos
+ * wire carries NO index-freshness field — never invented), needs-you-first
+ * ordering + the gate jump, Re-index as PREFILL (posts NOTHING), the
+ * first-class FilterStrip, and the fetch budget — exactly the page's
+ * GET /repos + GET /runs, the per-repo graph fan-out still retired.
  */
 
 const NOW = Date.now();
@@ -22,36 +23,41 @@ const repo = (id: string, name: string, registered_at: number): RepoEntry => ({
 const REPOS = [
   repo('studio-api', 'studio-api', 1_700_000_000),
   repo('billing', 'billing', 1_760_000_000),
+  repo('fresh', 'fresh', 1_760_100_000),
 ];
 
 const RUNS = [
-  makeView({ id: 'r-a1', repo_ref: 'studio-api', status: 'executing', problem: 'wire uploads' }),
-  makeView({ id: 'r-a2', repo_ref: 'studio-api', status: 'failed', problem: 'refactor auth' }),
-  makeView({ id: 'r-b1', repo_ref: 'billing', status: 'completed', problem: 'invoice math' }),
-  makeView({ id: 'r-old', repo_ref: 'billing', status: 'failed', problem: 'stale failure' }),
-  makeView({ id: 'r-none', repo_ref: null, status: 'executing', problem: 'no repo' }),
-  makeView({ id: 'r-unclocked', repo_ref: 'billing', status: 'executing', problem: 'no clock' }),
+  makeView({ id: 'r-gate', repo_ref: 'billing', workflow_id: 'feature', status: 'awaiting_human', problem: 'invoice gate' }),
+  makeView({ id: 'r-a1', repo_ref: 'studio-api', workflow_id: 'feature', status: 'executing', problem: 'wire uploads' }),
+  makeView({ id: 'r-a2', repo_ref: 'studio-api', workflow_id: 'feature', status: 'failed', problem: 'refactor auth' }),
+  makeView({ id: 'r-b1', repo_ref: 'billing', workflow_id: 'feature', status: 'completed', problem: 'invoice math' }),
+  makeView({ id: 'o-api', repo_ref: 'studio-api', workflow_id: 'onboarding', status: 'completed', problem: 'Onboard studio-api', clis: ['claude'] }),
+  makeView({ id: 'o-billing', repo_ref: 'billing', workflow_id: 'onboarding', status: 'failed', problem: 'Onboard billing' }),
+  // 'fresh' has NO onboard run on record — the honest "never onboarded" state.
 ];
 
 const listRepos = vi.fn(() => Promise.resolve({ repos: REPOS }));
 const listRuns = vi.fn(() => Promise.resolve({ runs: RUNS }));
 const getRepoGraph = vi.fn();
+const rerunOnboarding = vi.fn(() => Promise.resolve({ runId: 'r-new' }));
 
 vi.mock('../src/api/client.js', () => ({
   api: {
     listRepos: () => listRepos(),
     listRuns: () => listRuns(),
     getRepoGraph: (...a: unknown[]) => getRepoGraph(...a),
+    rerunOnboarding: () => rerunOnboarding(),
     listProjects: () => Promise.resolve({ projects: [] }),
   },
 }));
 
 const { RepositoriesPanel } = await import('../src/components/RepositoriesPanel.js');
 const { useMembershipStore } = await import('../src/store/membership.js');
+const { clearRetryPrefill, peekRetryPrefill } = await import('../src/store/retryPrefill.js');
 
 async function panel(navigate: (p: string) => void = () => {}): Promise<void> {
   render(<RepositoriesPanel navigate={navigate} />);
-  await screen.findByTestId('repos-dashboard-tiles');
+  await screen.findByTestId('repos-kpis');
   await screen.findByTestId('repos-list');
 }
 
@@ -59,78 +65,151 @@ beforeEach(() => {
   listRepos.mockClear();
   listRuns.mockClear();
   getRepoGraph.mockClear();
+  rerunOnboarding.mockClear();
+  clearRetryPrefill();
   useMembershipStore.setState({
     projectNameByRun: {},
+    projectIdByRun: { 'r-gate': 'p-billing' },
     attachedAtByRun: {
-      'r-a1': NOW - 3_600_000,            // studio-api, in 7d + 24h
-      'r-a2': NOW - 2 * 3_600_000,        // studio-api failed, in 24h
-      'r-b1': NOW - 3 * 86_400_000,       // billing, in 7d, outside 24h
-      'r-old': NOW - 8 * 86_400_000,      // billing failed, OUTSIDE 7d and 24h
-      // r-unclocked: no attach clock — excluded everywhere, never invented.
+      'r-a1': NOW - 3_600_000,
+      'r-a2': NOW - 2 * 3_600_000,
+      'r-b1': NOW - 3 * 86_400_000,
+      'o-api': NOW - 5 * 86_400_000,
+      // o-billing / r-gate: no attach clock — excluded from clocks, never invented.
     },
   });
 });
 afterEach(() => cleanup());
 
-describe('the tile band (§4.4, EC19/EC28)', () => {
-  it('renders the three tiles with their named questions, above the register', async () => {
+describe('the KPI band — performance / pipeline / risk', () => {
+  it('renders the six tiles above the fleet with live values', async () => {
     await panel();
-    const band = screen.getByTestId('repos-dashboard-tiles');
-    const q = (tid: string): string | null =>
-      band.querySelector(`[data-testid="${tid}"]`)?.getAttribute('data-question') ?? null;
-    expect(q('runs-per-repo-tile')).toBe('Where is the work concentrating?');
-    expect(q('repo-count-tile')).toBe('Is the estate growing?');
-    expect(q('failing-repos-tile')).toBe('Is any repo a failure hotspot?');
+    const band = screen.getByTestId('repos-kpis');
+    const value = (tid: string): string | null =>
+      band.querySelector(`[data-testid="${tid}"]`)?.getAttribute('data-value') ?? null;
+    expect(value('stat-repos')).toBe('3');
+    expect(value('stat-repo-runs')).toBe('6');   // every repo-linked run sits in the last-30 window
+    expect(value('stat-active')).toBe('1');      // r-a1 moving
+    expect(value('stat-ready')).toBe('1');       // studio-api's onboard completed
+    expect(value('stat-failed')).toBe('2');      // r-a2 + o-billing failed in the window
+    expect(value('stat-gaps')).toBe('2');        // billing (onboard failed) + fresh (never)
     const list = screen.getByTestId('repos-list');
     expect(band.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('groups 7d runs by repo_ref on the attach clock, names joined via the repo list', async () => {
+  it('6 runs against a 30-run window has NO prior bucket — the delta reads "—", never 0%', async () => {
     await panel();
-    const tile = screen.getByTestId('runs-per-repo-tile');
-    // r-a1 + r-a2 + r-b1 placed; r-old (outside 7d), r-none (no ref) and
-    // r-unclocked (no clock) excluded.
-    expect(tile.getAttribute('data-total')).toBe('3');
-    expect(tile.getAttribute('data-repos')).toBe('2');
-    expect(tile.textContent).toContain('studio-api leads (2)');
+    expect(screen.getByTestId('stat-repo-runs').getAttribute('data-delta')).toBe('none');
+    expect(within(screen.getByTestId('stat-repo-runs')).getByTestId('stat-delta')).toHaveTextContent('—');
+    expect(screen.getByTestId('stat-repo-runs').textContent).toContain('no prior window');
   });
 
-  it('counts the register and names the newest registration', async () => {
+  it('the index-gaps tile names both gap kinds and doors into the fleet filter', async () => {
     await panel();
-    const tile = screen.getByTestId('repo-count-tile');
-    expect(tile.getAttribute('data-count')).toBe('2');
-    expect(tile.textContent).toContain('2 registered');
-    expect(tile.textContent).toContain('newest:');
-  });
-
-  it('flags only 24h repo-linked failures as hotspots', async () => {
-    await panel();
-    const tile = screen.getByTestId('failing-repos-tile');
-    // r-a2 (failed, 2h ago) counts; r-old (failed, 3d ago) does not.
-    expect(tile.getAttribute('data-count')).toBe('1');
-    expect(tile.getAttribute('data-failures')).toBe('1');
-    expect(tile.textContent).toContain('studio-api (1)');
-    expect(tile.textContent).not.toContain('billing (');
+    const gaps = screen.getByTestId('stat-gaps');
+    expect(gaps.textContent).toContain('1 onboard failed · 1 never onboarded');
+    fireEvent.click(gaps);
+    // An onboard failure outranks "never" — the door lands on Failing.
+    expect(screen.getByTestId('repos-filter').getAttribute('data-filter')).toBe('failing');
+    expect(screen.getAllByTestId('repo-card').map((c) => c.getAttribute('data-repo-id'))).toEqual(['billing', 'studio-api']);
   });
 });
 
-describe('the register below — affordances preserved, budget held (§4.4)', () => {
-  it('keeps the register/search/add affordances and row navigation', async () => {
-    const navigate = vi.fn();
-    await panel(navigate);
-    expect(screen.getByText('+ Add Repository')).toBeInTheDocument();
-    fireEvent.change(screen.getByPlaceholderText('Search repos…'), { target: { value: 'bill' } });
+describe('the fleet grid — graph honesty, needs-you first, cards are doors', () => {
+  it('orders needs-you FIRST and derives each graph state from the run history', async () => {
+    await panel();
     const cards = screen.getAllByTestId('repo-card');
-    expect(cards).toHaveLength(1);
-    expect(cards[0]!.getAttribute('data-repo-id')).toBe('billing');
-    fireEvent.click(cards[0]!);
-    expect(navigate).toHaveBeenCalledWith('/repo-detail/billing');
+    // billing gated → first; studio-api failing (r-a2) → next; fresh quiet last.
+    expect(cards.map((c) => c.getAttribute('data-repo-id'))).toEqual(['billing', 'studio-api', 'fresh']);
+    const state = (card: HTMLElement) => within(card).getByTestId('repo-graph-state');
+    expect(state(cards[0]!).getAttribute('data-state')).toBe('failed');
+    expect(state(cards[0]!).textContent).toContain('onboard FAILED');
+    expect(state(cards[1]!).getAttribute('data-state')).toBe('ready');
+    expect(state(cards[1]!).textContent).toContain('graph ready — onboard completed');
+    // The honest never state SAYS it is a no-record claim, not a fact about disk.
+    expect(state(cards[2]!).getAttribute('data-state')).toBe('never');
+    expect(state(cards[2]!).textContent).toContain('never onboarded — no onboard run on record');
   });
 
-  it('fires exactly the existing GET /repos + GET /runs — the graph fan-out is retired', async () => {
+  it('a card is a door: clicking it opens the repo detail', async () => {
+    const navigate = vi.fn();
+    await panel(navigate);
+    const card = screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === 'studio-api')!;
+    fireEvent.click(card);
+    expect(navigate).toHaveBeenCalledWith('/repo-detail/studio-api');
+  });
+
+  it('the needs-you badge jumps STRAIGHT to the gate (project known ⇒ the thread AT the gate)', async () => {
+    const navigate = vi.fn();
+    await panel(navigate);
+    const jump = screen.getByTestId('repo-needs-you');
+    expect(jump.getAttribute('data-run-id')).toBe('r-gate');
+    fireEvent.click(jump);
+    expect(navigate).toHaveBeenCalledWith('/p/p-billing/build/r-gate#gate');
+    expect(navigate).not.toHaveBeenCalledWith('/repo-detail/billing'); // no card navigation leaked
+  });
+
+  it('shows the windowed run counts with the ✓/✕ split', async () => {
     await panel();
+    const api = screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === 'studio-api')!;
+    expect(within(api).getByTestId('repo-card-runs').textContent).toContain('3 runs · last 30');
+    expect(within(api).getByTestId('repo-card-split').textContent).toBe('✓1 · ✕1');
+  });
+});
+
+describe('Re-index is a PREFILL — never a hidden relaunch', () => {
+  it('deposits the recorded onboard run\'s setup and opens the composer; NOTHING posts', async () => {
+    const navigate = vi.fn();
+    await panel(navigate);
+    const reindex = screen.getAllByTestId('repo-reindex').find((b) => b.getAttribute('data-repo-id') === 'studio-api')!;
+    fireEvent.click(reindex);
+    const prefill = peekRetryPrefill();
+    expect(prefill).not.toBeNull();
+    expect(prefill!.retryOf).toBe('o-api');
+    expect(prefill!.workflowId).toBe('onboarding');
+    expect(prefill!.repoRef).toBe('studio-api');
+    expect(prefill!.problem).toBe('Onboard studio-api');
+    expect(prefill!.clis).toEqual(['claude']);
+    expect(navigate).toHaveBeenCalledWith('/runs/new');
+    expect(navigate).not.toHaveBeenCalledWith('/repo-detail/studio-api'); // Re-index is not Open
+    expect(rerunOnboarding).not.toHaveBeenCalled(); // the prefill posts nothing
+  });
+
+  it('a never-onboarded repo keeps the existing Onboard launch verb instead', async () => {
+    await panel();
+    const fresh = screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === 'fresh')!;
+    expect(within(fresh).queryByTestId('repo-reindex')).toBeNull();
+    expect(within(fresh).getByTestId('repo-onboard')).toBeInTheDocument();
+  });
+});
+
+describe('the FilterStrip drives the fleet; the register flow is untouched', () => {
+  it('chips narrow the cards; search matches name and path; clear-filters restores', async () => {
+    await panel();
+    const chip = (id: string) => screen.getAllByTestId('repos-filter-chip')
+      .find((c) => c.getAttribute('data-chip') === id)!;
+    fireEvent.click(chip('never'));
+    expect(screen.getAllByTestId('repo-card').map((c) => c.getAttribute('data-repo-id'))).toEqual(['fresh']);
+    fireEvent.click(chip('needs-you'));
+    expect(screen.getAllByTestId('repo-card').map((c) => c.getAttribute('data-repo-id'))).toEqual(['billing']);
+    fireEvent.change(screen.getByTestId('repos-filter-search'), { target: { value: 'studio' } });
+    expect(screen.getByTestId('repos-empty-filter')).toBeInTheDocument(); // studio-api holds no gate
+    fireEvent.click(screen.getByTestId('repos-clear-filters'));
+    expect(screen.getAllByTestId('repo-card')).toHaveLength(3);
+  });
+
+  it('keeps the add affordance and fires exactly GET /repos + GET /runs — the graph fan-out stays retired', async () => {
+    await panel();
+    expect(screen.getByText('+ Add Repository')).toBeInTheDocument();
     expect(listRepos).toHaveBeenCalledTimes(1);
     expect(listRuns).toHaveBeenCalledTimes(1);
     expect(getRepoGraph).not.toHaveBeenCalled();
+  });
+
+  it('the fleet is a real CSS grid with no maxWidth anywhere on the surface', async () => {
+    await panel();
+    const grid = screen.getByTestId('repos-list') as HTMLElement;
+    expect(grid.style.maxWidth).toBe('');
+    expect(grid.style.gridTemplateColumns).toContain('auto-fill');
   });
 });
