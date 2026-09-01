@@ -368,7 +368,7 @@ export function draftRule(d: Pick<DraftState, 'id' | 'steering_type' | 'severity
 const TYPE_OPTIONS = STEERING_TYPES.map((t) => ({ value: t, label: STEERING_TYPE_LABELS[t] }));
 const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ value: s, label: s }));
 
-export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0 }: {
+export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0, idFilter = null }: {
   /** The FULL store — this grid applies the page scope itself, one predicate everywhere. */
   rules: SteeringRule[];
   type: SteeringType;
@@ -386,12 +386,20 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
   onRetired: (rule: SteeringRule, reason: string) => void;
   /** Increment to open a draft row from outside (the Add ▾ menu's "Add row"). */
   addRequestTick?: number;
+  /** Restrict the sheet to these rule ids (the `?usage=unused` click-through from the
+   *  usage band). `null` = no restriction; the facets still apply on top. */
+  idFilter?: readonly string[] | null;
 }): React.ReactElement {
   const [facets, setFacets] = useState<GridFacets>(GRID_FACETS_DEFAULT);
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [retiring, setRetiring] = useState<SteeringRule | null>(null);
 
-  const visible = useMemo(() => filterSteeringRules(rules, type, facets), [rules, type, facets]);
+  const visible = useMemo(() => {
+    const faceted = filterSteeringRules(rules, type, facets);
+    if (idFilter === null) return faceted;
+    const allowed = new Set(idFilter);
+    return faceted.filter((r) => allowed.has(r.id));
+  }, [rules, type, facets, idFilter]);
   const typeRules = useMemo(() => rules.filter((r) => steeringTypeOf(r) === type), [rules, type]);
   const severityCounts = useMemo(() => {
     const counts: Record<string, number> = { all: typeRules.length };

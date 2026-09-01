@@ -34,6 +34,7 @@ import type { WikiMeta, WikiScoreboard } from '../src/api/wiki.js';
 const listConformanceRules = vi.fn();
 const retireConformanceRule = vi.fn();
 const upsertConformanceRule = vi.fn();
+const listClaims = vi.fn();
 const apiFetch = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
@@ -41,6 +42,7 @@ vi.mock('../src/api/client.js', () => ({
     listConformanceRules: (...a: unknown[]) => listConformanceRules(...a),
     retireConformanceRule: (...a: unknown[]) => retireConformanceRule(...a),
     upsertConformanceRule: (...a: unknown[]) => upsertConformanceRule(...a),
+    listClaims: (...a: unknown[]) => listClaims(...a),
   },
   apiFetch: (...a: unknown[]) => apiFetch(...a),
 }));
@@ -109,6 +111,11 @@ beforeEach(() => {
   retireConformanceRule.mockReset();
   upsertConformanceRule.mockReset();
   apiFetch.mockReset();
+  // The landing's usage band reads the claims wire; default it to the honest
+  // unsupported answer so the band renders its "not served" tiles — its own
+  // loaded-path assertions live in SteeringUsageBand.test.tsx.
+  listClaims.mockReset();
+  listClaims.mockRejectedValue(new ApiError(404, 'not found'));
 });
 
 describe('SteeringPage — the /steering landing (type null)', () => {

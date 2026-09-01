@@ -15,6 +15,7 @@ import {
   type EvalSample,
   type TestingSubPage,
 } from '../api/testing.js';
+import { useEvalReportStore } from '../store/evalReport.js';
 import { CampaignScoreboard } from './CampaignScoreboard.js';
 import { CampaignsPage } from './CampaignsPage.js';
 import { readFileText } from './fileText.js';
@@ -280,6 +281,9 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
         ...(corpusUsed !== null ? { corpus: corpusUsed } : {}),
       });
       setState({ kind: 'done', report, corpus: corpusUsed });
+      // Deposit for the Steering landing's success-lens tile (session-local — the
+      // daemon keeps no queryable eval history, so THIS is the latest-eval record).
+      useEvalReportStore.getState().deposit(report, corpusUsed);
     } catch (e) {
       if (isTestingUnsupported(e)) setState({ kind: 'unsupported' });
       else setState({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
