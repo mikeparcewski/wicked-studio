@@ -309,11 +309,34 @@ export function deriveArtifacts(
       out.push({ kind: 'file', ref: f, name: basename(f), phase });
     }
   }
-  const delivery = (view?.session as { delivery?: { kind: string; url: string } } | undefined)?.delivery;
-  if (delivery && typeof delivery.url === 'string' && delivery.url !== '' && !seen.has(delivery.url)) {
-    out.push({ kind: 'pr', ref: delivery.url, name: 'Pull request', phase: null });
+  // The delivered PR off the 0.18.0 wire (crew#393 reshape: the state is the
+  // `delivery` STRING and the url moved to `deliverUrl`); the legacy 0.11–0.17
+  // object form is still read so an older daemon keeps its PR card.
+  const s = view?.session as
+    | { delivery?: string | { kind: string; url: string } | null; deliverUrl?: string }
+    | undefined;
+  const prUrl =
+    typeof s?.deliverUrl === 'string' && s.deliverUrl !== ''
+      ? s.deliverUrl
+      : typeof s?.delivery === 'object' && s?.delivery !== null && typeof s.delivery.url === 'string' && s.delivery.url !== ''
+        ? s.delivery.url
+        : null;
+  if (prUrl !== null && !seen.has(prUrl)) {
+    out.push({ kind: 'pr', ref: prUrl, name: 'Pull request', phase: null });
   }
   return out;
+}
+
+/**
+ * The STRANDED one-liner (crew#393) — the template every surface that narrates
+ * a stranded run reads (the home needs-you queue today; any future now-bar or
+ * feed line joins it HERE). narrator.ts is the one narration template source
+ * (§11's rule, held for run vocabulary too), so the wording cannot fork between
+ * the queue and a card. Tone `gate`: finished work waiting on a person — not a
+ * failure, not motion.
+ */
+export function narrateStranded(): { text: string; tone: NarrationTone } {
+  return { text: 'Finished, but the work is stranded in its worktree — no PR', tone: 'gate' };
 }
 
 /** The old timeline filter, verbatim (FINDING-052): units that have run or are running. */

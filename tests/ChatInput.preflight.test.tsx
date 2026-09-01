@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { ChatInput } from '../src/components/ChatInput.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../src/components/composerDefaults.js';
 import * as client from '../src/api/client.js';
-import type { LaunchRunBody } from '../src/api/types.js';
+import type { LaunchBodyWithDeliver } from '../src/api/types.js';
 
 /**
  * DES-UX-001 §7.8 (slice AC, EC43) — composer preflight intelligence:
@@ -78,7 +78,7 @@ describe('ChatInput preflight (§7.8, EC43)', () => {
     // The attached repo satisfies preflight: the code intent launches directly.
     await typeAndSend(user, 'fix the login bug');
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
-    const body: LaunchRunBody = vi.mocked(client.api.launchRun).mock.calls[0]![0];
+    const body: LaunchBodyWithDeliver = vi.mocked(client.api.launchRun).mock.calls[0]![0];
     expect(body.repoRef).toBe('studio-api');
   });
 
@@ -108,7 +108,7 @@ describe('ChatInput gate posture (§7.8 + §13)', () => {
 
     await typeAndSend(user, 'summarize the release notes');
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
-    const body: LaunchRunBody = vi.mocked(client.api.launchRun).mock.calls[0]![0];
+    const body: LaunchBodyWithDeliver = vi.mocked(client.api.launchRun).mock.calls[0]![0];
     expect(body.humanConfirm).toBe(`before:${COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd}`);
   });
 
@@ -124,7 +124,7 @@ describe('ChatInput gate posture (§7.8 + §13)', () => {
     await user.selectOptions(screen.getByTestId('gate-posture'), 'none');
     await typeAndSend(user, 'summarize the release notes');
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
-    const body: LaunchRunBody = vi.mocked(client.api.launchRun).mock.calls[0]![0];
+    const body: LaunchBodyWithDeliver = vi.mocked(client.api.launchRun).mock.calls[0]![0];
     expect('humanConfirm' in body).toBe(false);
   });
 });

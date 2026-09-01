@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
-import type { LaunchRunBody } from '../src/api/types.js';
+import type { LaunchBodyWithDeliver } from '../src/api/types.js';
 import { confirmModeOf, setRetryPrefill, takeRetryPrefill } from '../src/store/retryPrefill.js';
 import { useProvenanceStore } from '../src/store/provenance.js';
 
@@ -65,7 +65,7 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     await user.click(screen.getByTestId('launch-submit'));
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
-    const body: LaunchRunBody = vi.mocked(client.api.launchRun).mock.calls[0]![0];
+    const body: LaunchBodyWithDeliver = vi.mocked(client.api.launchRun).mock.calls[0]![0];
     expect(body.retryOf).toBe('r-original');
     expect(body.problem).toBe('refactor the auth middleware');
     expect(body.workflow).toBe('feature');
@@ -86,7 +86,7 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     await user.click(screen.getByTestId('launch-submit'));
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
-    const body: LaunchRunBody = vi.mocked(client.api.launchRun).mock.calls[0]![0];
+    const body: LaunchBodyWithDeliver = vi.mocked(client.api.launchRun).mock.calls[0]![0];
     expect('retryOf' in body, 'cleared pill = no lineage key at all').toBe(false);
   });
 

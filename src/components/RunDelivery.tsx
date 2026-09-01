@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { SessionView } from '../api/types.js';
 import { useDeliveryStore } from '../store/delivery.js';
+import { usePostHocDeliverStore } from '../store/postHocDeliver.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import {
   DELIVERY_COLOR,
@@ -48,7 +49,12 @@ interface Props {
  */
 export function DeliveryBadge({ view }: Props): React.ReactElement | null {
   const fetched = useDeliveryStore((s) => s.byRun[view.session.id]);
-  const { claim } = resolveDelivery(deliveryOf(view), fetched?.url ?? null);
+  // The post-hoc deliver result (crew#393) feeds the SAME resolution the body
+  // reads, so clicking Deliver in the body flips this badge in the same paint —
+  // a header that lags its own body is the D1 bug again.
+  const postHoc = usePostHocDeliverStore((s) => s.byRun[view.session.id]);
+  const readUrl = postHoc?.phase === 'delivered' ? postHoc.prUrl : (fetched?.url ?? null);
+  const { claim } = resolveDelivery(deliveryOf(view), readUrl);
   if (claim === 'none') return null;
   return (
     <span
@@ -138,6 +144,13 @@ export const HEADLINE: Record<DeliveryClaim, string> = {
   // The 665a9aeb wording. Approved is not the same as produced, and this line
   // is the whole difference said out loud.
   'delivered':          'The deliver phase ran and crew approved it. That alone is not a PR.',
+  // The daemon's own verdict (crew#393): completed + repo-scoped + no RECORDED
+  // PR + the worktree still on disk. Loud by design — this is the run 83052f0b
+  // failure mode, reviewable work that was invisible. "No PR is on record" is
+  // the exact wire-evidenced claim (the daemon checked its own delivery index),
+  // deliberately not "no PR exists" — an ungoverned worker may have opened one
+  // crew never saw (crew#391), and this module never claims past its evidence.
+  'stranded':           'Stranded — this run finished, but its work is sitting uncommitted in its worktree. No PR is on record.',
   'pr-open':            'PR open — merge stays human.',
   'nothing-to-deliver': 'Delivered nothing. Crew refused the push:',
   'failed':             'Delivery failed. Crew recorded:',
@@ -214,9 +227,14 @@ export const HEADLINE: Record<DeliveryClaim, string> = {
 export function RunDelivery({ view }: Props): React.ReactElement {
   const runId = view.session.id;
   const fetched = useDeliveryStore((s) => s.byRun[runId]);
+  // Post-hoc delivery (crew#393): the one write this card can make. Its answered
+  // `prUrl` rides the SAME `readUrl` seam as the transcript read, so a stranded
+  // run that just delivered resolves to the ordinary pr-open arm — one claim
+  // path, never a parallel "just delivered" rendering that could drift from it.
+  const postHoc = usePostHocDeliverStore((s) => s.byRun[runId]);
   const { state, claim, unitId, reason, href } = resolveDelivery(
     deliveryOf(view),
-    fetched?.url ?? null,
+    postHoc?.phase === 'delivered' ? postHoc.prUrl : (fetched?.url ?? null),
   );
 
   // The ONE per-run fetch, and only when there may be something to point at: an
@@ -273,12 +291,15 @@ export function RunDelivery({ view }: Props): React.ReactElement {
           {href} <span aria-hidden>↗</span>
         </a>
       )}
-      {claim === 'delivered' && fetched === undefined && (
+      {claim === 'delivered' && fetched === undefined && unitId !== null && (
         <p className="font-mono" style={{ color: 'var(--ink-dim)' }}>
           reading the deliver phase transcript for the PR link…
         </p>
       )}
-      {claim === 'delivered' && fetched !== undefined && (
+      {/* `unitId === null` = wire-delivered with NO deliver unit to read (the
+        * post-hoc path on a run whose in-run phase never existed) — there is no
+        * transcript to wait on, so the absence itself is the finding. */}
+      {claim === 'delivered' && (fetched !== undefined || unitId === null) && (
         // The 665a9aeb case, said out loud: crew approved the phase and the
         // transcript carries no PR url (its overlay pushed an empty branch and
         // reported success — crew#317). `unavailable` is the daemon's OWN words
@@ -286,8 +307,57 @@ export function RunDelivery({ view }: Props): React.ReactElement {
         // not `--status-fail`: an approved phase that produced no PR is a gap in
         // the EVIDENCE, not a run that failed.
         <p data-testid="run-delivery-nolink" className="font-mono" style={{ color: 'var(--ink-muted)' }}>
-          {fetched.unavailable ?? 'the deliver phase recorded no PR link — nothing can be pointed at'}
+          {fetched?.unavailable ?? 'the deliver phase recorded no PR link — nothing can be pointed at'}
         </p>
+      )}
+
+      {/* The stranded arm (crew#393, issue #393's run 83052f0b): the loudest
+        * state this card has. The wire itself said the reviewable work is
+        * sitting uncommitted in the run's worktree, so the card names the
+        * worktree AND carries the one-click remedy — POST /runs/:id/deliver,
+        * the same hardened script the deliver phase runs (idempotent; merge
+        * stays human). Success feeds `resolveDelivery` above and this whole arm
+        * is REPLACED by the ordinary pr-open link; failure renders below,
+        * denialCopy-style: studio's plain headline, then the daemon's own words
+        * VERBATIM — never re-worded, never silent. */}
+      {claim === 'stranded' && (
+        <>
+          {workdir !== undefined && workdir !== null && (
+            <p className="font-mono" style={{ color: 'var(--ink-dim)' }} title={workdir}>
+              the work is in {compactPath(workdir)}
+            </p>
+          )}
+          <div>
+            <button
+              type="button"
+              data-testid="run-deliver-button"
+              onClick={() => usePostHocDeliverStore.getState().deliver(runId)}
+              disabled={postHoc?.phase === 'delivering'}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+            >
+              {postHoc?.phase === 'delivering' ? 'Delivering…' : 'Deliver — open a PR'}
+            </button>
+          </div>
+          {postHoc?.phase === 'error' && (
+            <div data-testid="run-deliver-error" className="flex flex-col gap-1">
+              <p style={{ color: 'var(--status-fail)' }}>
+                Delivery failed — the run is still stranded.
+              </p>
+              {/* ApiError.message is ALREADY the translated operator sentence
+                * (EC33: "the daemon refused this — {the script's own words}"),
+                * the detail carried WHOLE and verbatim — rendered as-is, per
+                * the denialCopy convention: studio's headline, the engine's
+                * words. */}
+              <p
+                className="font-mono break-words whitespace-pre-wrap"
+                style={{ color: 'var(--status-fail)' }}
+              >
+                {postHoc.error}
+              </p>
+            </div>
+          )}
+        </>
       )}
 
       {(claim === 'nothing-to-deliver' || claim === 'failed') && (
