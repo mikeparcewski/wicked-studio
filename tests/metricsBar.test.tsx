@@ -1,17 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { GateLatencyChart } from '../src/components/GateLatencyChart.js';
-import { RunOutcomeBar, outcomeOf } from '../src/components/RunOutcomeBar.js';
-import { TokenBurnSparkline } from '../src/components/TokenBurnSparkline.js';
+import { outcomeOf } from '../src/board/metrics.js';
 import { ProjectSparkline } from '../src/components/ProjectSparkline.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useRuntimeStore, type LoggedEvent } from '../src/store/runtime.js';
 import { makeView } from './factories.js';
 
 /**
- * The home metrics bar (DES-FEEDBACK-001 §2, slice E): three SVG-first tiles,
- * each answering a §2.1 named operator question off data the page ALREADY
- * holds — no chart library, no new polling, no invented wire fields.
+ * The slice-E SVG-first tiles that SURVIVE the command-center rework
+ * (DES-HOME-COMMAND-CENTER §1): each answers a §2.1 named operator question
+ * off data the page ALREADY holds — no chart library, no new polling, no
+ * invented wire fields. (RunOutcomeBar and TokenBurnSparkline retired with the
+ * narrative band; the KPI band's windowed tiles carry their questions now.)
  */
 
 const NOW = 1_700_000_000_000;
@@ -40,92 +41,13 @@ function log(runId: string, entries: Array<Partial<LoggedEvent> & { type: string
   useRuntimeStore.setState({ logs });
 }
 
-describe('RunOutcomeBar (§2.1 — "Is the system healthy right now?")', () => {
-  const runs = [
-    makeView({ id: 'r-a', status: 'executing' }),
-    makeView({ id: 'r-b', status: 'awaiting_human' }),
-    makeView({ id: 'r-c', status: 'failed' }),
-    makeView({ id: 'r-d', status: 'completed' }),
-    makeView({ id: 'r-old', status: 'completed' }), // outside the 24h window
-    makeView({ id: 'r-orphan', status: 'executing' }), // no attach clock at all
-  ];
-  const attachedAt = {
-    'r-a': NOW - 30 * MIN,
-    'r-b': NOW - 3 * HOUR,
-    'r-c': NOW - 5 * HOUR,
-    'r-d': NOW - 23 * HOUR,
-    'r-old': NOW - 3 * DAY,
-  };
-
-  it('buckets by the attach clock into token-filled stacked rects — zero fetches', () => {
-    render(<RunOutcomeBar runs={runs} attachedAt={attachedAt} now={NOW} />);
-    const tile = screen.getByTestId('run-outcome-bar');
-    expect(tile.getAttribute('data-question')).toBe('Is the system healthy right now?');
-    // 4 in-window (one per outcome class); r-old and the clockless orphan excluded.
-    expect(tile.getAttribute('data-total')).toBe('4');
-    expect(tile.getAttribute('data-unplaced')).toBe('2');
-    const fills = [...tile.querySelectorAll('rect')].map((r) => r.getAttribute('fill'));
-    expect(fills).toHaveLength(4);
-    expect(new Set(fills)).toEqual(new Set([
-      'var(--status-run)', 'var(--status-gate)', 'var(--status-fail)', 'var(--status-done)',
-    ]));
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('renders the honest empty line — never zero-height rects — when nothing is in-window', () => {
-    render(<RunOutcomeBar runs={[makeView({ id: 'r-x', status: 'executing' })]} attachedAt={{}} now={NOW} />);
-    const tile = screen.getByTestId('run-outcome-bar');
-    expect(tile.getAttribute('data-total')).toBe('0');
-    expect(tile.querySelectorAll('rect')).toHaveLength(0);
-    expect(tile.textContent).toContain('No runs attached in the last 24h');
-  });
-
+describe('outcomeOf — the one status → outcome partition', () => {
   it('maps statuses to outcome classes (cancelled is its OWN class — J5/A5)', () => {
     expect(outcomeOf('executing')).toBe('run');
     expect(outcomeOf('awaiting_human')).toBe('gate');
     expect(outcomeOf('failed')).toBe('fail');
     expect(outcomeOf('cancelled')).toBe('cancelled');
     expect(outcomeOf('completed')).toBe('done');
-  });
-
-  it('a cancelled run wears its own neutral segment, never the fail token', () => {
-    const withCancelled = [
-      makeView({ id: 'r-x', status: 'failed' }),
-      makeView({ id: 'r-y', status: 'cancelled' }),
-    ];
-    render(
-      <RunOutcomeBar
-        runs={withCancelled}
-        attachedAt={{ 'r-x': NOW - HOUR, 'r-y': NOW - 2 * HOUR }}
-        now={NOW}
-      />,
-    );
-    const tile = screen.getByTestId('run-outcome-bar');
-    expect(tile.getAttribute('data-total')).toBe('2');
-    const fills = [...tile.querySelectorAll('rect')].map((r) => r.getAttribute('fill'));
-    expect(fills).toContain('var(--status-fail)');
-    expect(fills).toContain('var(--ink-dim)');
-    expect(tile.textContent).toContain('1 failed');
-    expect(tile.textContent).toContain('1 cancelled');
-  });
-
-  it('states its exclusions as an ⓘ note whose tooltip names the count (EC39 + quick win #1)', () => {
-    render(
-      <RunOutcomeBar
-        runs={[
-          makeView({ id: 'r-in', status: 'failed' }),
-          makeView({ id: 'r-noclock', status: 'failed' }),
-        ]}
-        attachedAt={{ 'r-in': NOW - HOUR }}
-        now={NOW}
-      />,
-    );
-    const note = screen.getByTestId('outcome-unplaced-note');
-    // The exclusion is still STATED (machine-readable count + hover words),
-    // but no longer runs as headline copy under the tile.
-    expect(note).toHaveAttribute('data-unplaced', '1');
-    expect(note.textContent).toContain('1 not shown');
-    expect(note.getAttribute('title')).toContain('excludes 1 run with no clock in this window');
   });
 });
 
@@ -169,39 +91,6 @@ describe('GateLatencyChart (§2.1 — "Am I answering gates quickly or letting t
     const tile = screen.getByTestId('gate-latency-chart');
     expect(tile.querySelectorAll('circle')).toHaveLength(0);
     expect(tile.textContent).toContain('No gates in the last 24h');
-  });
-});
-
-describe('TokenBurnSparkline (§2.1 — "What am I spending, is it accelerating?")', () => {
-  it('folds cliUsage costs into a cumulative accent area; null costs never become $0', () => {
-    log('r-1', [
-      { type: 'cliUsage', ts: NOW - 50 * MIN, costUsd: 0.1 },
-      { type: 'cliUsage', ts: NOW - 20 * MIN }, // costUsd null on the wire → NOT preserved, NOT counted
-      { type: 'cliUsage', ts: NOW - 5 * MIN, costUsd: 0.32 },
-    ]);
-    render(<TokenBurnSparkline now={NOW} />);
-    const tile = screen.getByTestId('token-burn-sparkline');
-    expect(tile.getAttribute('data-question')).toBe('What am I spending, is it accelerating?');
-    expect(tile.getAttribute('data-points')).toBe('2');
-    expect(tile.textContent).toContain('$0.42');
-    const line = tile.querySelector('polyline');
-    expect(line?.getAttribute('stroke')).toBe('var(--accent)');
-    const area = tile.querySelector('polygon');
-    expect(area?.getAttribute('fill')).toMatch(/^url\(#/);
-    const stops = [...tile.querySelectorAll('stop')].map((s) => s.getAttribute('stop-color'));
-    expect(stops).toEqual(['var(--accent)', 'var(--accent)']);
-    // No NaN anywhere in the geometry.
-    expect(line?.getAttribute('points')).not.toContain('NaN');
-    expect(area?.getAttribute('points')).not.toContain('NaN');
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('renders the honest empty line — never a fabricated $0.00 curve — with no usage', () => {
-    render(<TokenBurnSparkline now={NOW} />);
-    const tile = screen.getByTestId('token-burn-sparkline');
-    expect(tile.querySelectorAll('polyline')).toHaveLength(0);
-    expect(tile.textContent).toContain('No usage reported yet');
-    expect(tile.textContent).not.toContain('$0.00');
   });
 });
 

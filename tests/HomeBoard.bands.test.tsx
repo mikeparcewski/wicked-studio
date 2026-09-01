@@ -100,8 +100,10 @@ function seedW2(now: number): SessionView[] {
   ];
 }
 
+/** The wall's NEEDS-YOU band is absent from the DOM entirely when it holds
+ *  nothing — calm copy has ONE owner now, the queue (DES-HOME-COMMAND-CENTER §3). */
 const needsYouIds = (): (string | null)[] =>
-  [...screen.getByTestId('band-needs-you').querySelectorAll('[data-testid="project-card"]')]
+  [...(screen.queryByTestId('band-needs-you')?.querySelectorAll('[data-testid="project-card"]') ?? [])]
     .map((c) => c.getAttribute('data-project-id'));
 
 /** C6: the WORKING band — absent from the DOM entirely when nothing is moving. */
@@ -110,7 +112,7 @@ const workingIds = (): (string | null)[] =>
     .map((c) => c.getAttribute('data-project-id'));
 
 async function board(runs: SessionView[], expectedTotal = projects.length): Promise<void> {
-  render(<HomeBoard runs={runs} navigate={() => {}} />);
+  render(<HomeBoard runs={runs} navigate={() => {}} onOpenAsk={() => {}} />);
   await vi.waitFor(() => {
     expect(screen.getByTestId('project-board')).toHaveAttribute('data-total', String(expectedTotal));
   });
@@ -247,8 +249,10 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
     projects = [project('sleepy', now - 3 * DAY), project('dormant', now - 5 * DAY)];
     await board([]);
 
-    expect(screen.getByTestId('board-all-quiet')).toHaveTextContent('Nothing needs you right now.');
-    expect(screen.getByTestId('band-needs-you').querySelectorAll('[data-testid="project-card"]')).toHaveLength(0);
+    // Calm has ONE owner now: the queue's zero-row branch — the wall's
+    // needs-you band leaves the DOM instead of rendering a second calm line.
+    expect(screen.getByTestId('home-calm')).toHaveTextContent('Nothing needs you — nothing running right now.');
+    expect(screen.queryByTestId('band-needs-you')).toBeNull();
     expect(screen.getAllByTestId('quiet-chip')).toHaveLength(2);
   });
 
@@ -302,7 +306,7 @@ describe('HomeBoard — NEEDS YOU / QUIET bands (slice 1)', () => {
       projects = [project('silent', t0)];
       members = { silent: [member('silent', 'r-silent')] };
       render(
-        <HomeBoard runs={[makeView({ id: 'r-silent', status: 'executing' })]} navigate={() => {}} />,
+        <HomeBoard runs={[makeView({ id: 'r-silent', status: 'executing' })]} navigate={() => {}} onOpenAsk={() => {}} />,
       );
       // Flush the project + binding loads (microtask chains, no timers involved).
       for (let i = 0; i < 6; i++) await act(async () => { await Promise.resolve(); });

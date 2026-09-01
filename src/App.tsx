@@ -467,7 +467,8 @@ export function App(): React.ReactElement {
     // `/` is the orchestrator board (§1.4, slice 5); the flat run list it replaced is
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
     if (panel === 'home') {
-      return <HomeBoard runs={runs} navigate={navigate} />;
+      // The board-level Ask invite opens the SAME dock the rail button opens.
+      return <HomeBoard runs={runs} navigate={navigate} onOpenAsk={() => setAskOpen(true)} />;
     }
     if (panel === 'workflows') {
       return (
