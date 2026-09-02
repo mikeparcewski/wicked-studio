@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.10] — 2026-09-02
+
+### Added
+- **Campaign cards tell the whole story** (#27, #181, on the 0.19.0 wire). Delivery rollup —
+  "n of N landed" with per-sibling PR links (`isPrUrl`-gated) and stranded siblings surfaced as
+  needs-you; a live one-line narration per card from the freshest member-run CoreEvent (rendered
+  through `narrator.ts`, the one template source); ad-hoc grouping — the launch composer attaches
+  a run to an existing campaign or a create-on-first-use label group, and grouped runs co-render
+  on the campaigns dashboard.
+
 ## [0.4.9] — 2026-09-01
 
 ### Added
@@ -316,7 +326,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.9...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.10...HEAD
+[0.4.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.9...v0.4.10
 [0.4.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.6...v0.4.7
