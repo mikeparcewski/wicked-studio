@@ -12,6 +12,25 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.9] — 2026-09-01
+
+### Added
+- **The delivery surface** (crew#393's studio half, #178). The launch composer's "Open a PR when
+  done" toggle (default ON for repo-scoped code-work launches, posted explicitly); the run
+  detail's Delivery card renders the 0.18.0 tri-state — delivered (PR link), **stranded** (amber,
+  one-click Deliver with the daemon's own error shown verbatim on failure), none; home needs-you
+  counts stranded completed runs. Pre-0.18 daemons that 400 on the key get one retry without it.
+- **Docs and demos can be deleted from the UI** (#119, #179). Confirm names the doc; success
+  drops the row and re-lists; a two-store divergence (crew's partial 500) renders the wire
+  sentence verbatim with a retry armed; ghost 404 / build-in-flight 409 / bridge-unavailable 503
+  each render honestly.
+
+### Fixed
+- **Ask & chat nits from the live campaign** (#176, #177). The Ask quick-prompt seeds the NEWEST
+  failed run; dock replies render sanitized markdown; collapsing a long seat reply keeps its bytes
+  (expand restores byte-equal text); the chat header's seat chips and feed read one attribution
+  source.
+
 ## [0.4.8] — 2026-09-01
 
 ### Added
