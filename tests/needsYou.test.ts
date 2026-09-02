@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CampaignSummary } from '../src/api/campaigns.js';
+import type { Campaign, CampaignNodeStatus } from '../src/api/campaigns.js';
 import type { RepoEntry } from '../src/api/types.js';
 import {
   calmCopy,
@@ -29,17 +29,30 @@ function repo(id: string, name = id): RepoEntry {
   return { id, name, root_path: `/repos/${id}`, default_branch: 'main', registered_at: NOW - 10 * HOUR };
 }
 
-function campaign(id: string, over: Partial<CampaignSummary['counts']>, runIds: string[] = []): CampaignSummary {
+/** An engine campaign (the REAL `GET /campaigns` shape) with one node per status entry;
+ *  `runIds` pair up with the entries in order (a node without one is undispatched). */
+function campaign(
+  id: string,
+  over: Partial<Record<'awaitingHuman' | 'failed', number>>,
+  runIds: string[] = [],
+): Campaign {
+  const statuses: CampaignNodeStatus[] = [
+    ...Array<CampaignNodeStatus>(over.awaitingHuman ?? 0).fill('awaiting_human'),
+    ...Array<CampaignNodeStatus>(over.failed ?? 0).fill('failed'),
+  ];
+  while (statuses.length < runIds.length) statuses.push('completed');
+  const node_status: Record<string, CampaignNodeStatus> = {};
+  const node_run_id: Record<string, string> = {};
+  const nodes = statuses.map((status, i) => {
+    const nid = `n${i}`;
+    node_status[nid] = status;
+    const runId = runIds[i];
+    if (runId !== undefined) node_run_id[nid] = runId;
+    return { node_id: nid, run_spec: { problem: `${id} ${nid}` } };
+  });
   return {
-    campaign: { id, title: null, expected: null, created_at: NOW - HOUR, updated_at: NOW - MIN },
-    runIds,
-    projectIds: [],
-    counts: {
-      filed: runIds.length, landed: 0, failed: 0, cancelled: 0,
-      running: 0, awaitingHuman: 0, other: 0, archived: 0, ...over,
-    },
-    prs: [],
-    prsTruncated: false,
+    id, def_id: id, status: 'running',
+    def: { id, name: id, nodes }, node_status, node_run_id,
   };
 }
 

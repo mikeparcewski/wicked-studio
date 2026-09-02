@@ -118,7 +118,7 @@ beforeEach(() => {
   });
   listProjectMembers.mockResolvedValue({ members: [] });
   useGateStore.setState({ gates: {}, approaching: {} });
-  useCampaignsStore.setState({ support: 'supported', summaries: [], live: {} });
+  useCampaignsStore.setState({ support: 'supported', campaigns: [], groups: [], live: {} });
 });
 
 async function openPanel(user: ReturnType<typeof userEvent.setup>, verb: string): Promise<HTMLElement> {

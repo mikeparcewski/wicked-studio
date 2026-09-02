@@ -1,8 +1,9 @@
-import type { CampaignSummary } from '../api/campaigns.js';
+import type { Campaign } from '../api/campaigns.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { deliveryOf } from '../components/delivery.js';
 import { narrate, narrateStranded, type NarrationTone } from '../components/narrator.js';
 import type { RetryPrefill } from '../store/retryPrefill.js';
+import { campaignCounts, campaignMemberRunIds } from './campaignStats.js';
 import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './chatStats.js';
 import { gateOpenPath } from './gateActions.js';
 import { outcomeOf, runStats } from './metrics.js';
@@ -107,7 +108,7 @@ export interface NeedsYouInputs {
   chats: readonly LiveChatSnapshot[];
   repos: readonly RepoEntry[];
   /** `GET /campaigns` snapshot; empty when unsupported. */
-  campaigns: readonly CampaignSummary[];
+  campaigns: readonly Campaign[];
   now: number;
 }
 
@@ -251,11 +252,14 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
   // ── Campaign rows — subtraction-dedupe against the member rows above ───────
   const liveById = new Map(live.map((v) => [v.session.id, v]));
   for (const c of campaigns) {
-    const troubled = c.counts.awaitingHuman + c.counts.failed;
+    // Engine-persisted per-node statuses (campaignStats' fold — the same one the
+    // Campaigns landing folds with, so the two surfaces cannot disagree).
+    const n = campaignCounts(c);
+    const troubled = n.awaitingHuman + n.failed;
     if (troubled === 0) continue;
     // Members the queue ALREADY shows (as gate or failed rows) subtract out.
     let covered = 0;
-    for (const id of c.runIds) {
+    for (const id of campaignMemberRunIds(c)) {
       if (!shownRunIds.has(id)) continue;
       const st = liveById.get(id)?.session.status;
       if (st === 'awaiting_human' || st === 'failed') covered += 1;
@@ -263,20 +267,21 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
     const surplus = troubled - covered;
     if (surplus <= 0) continue;
     const bits: string[] = [];
-    if (c.counts.awaitingHuman > 0) bits.push(`${c.counts.awaitingHuman} waiting`);
-    if (c.counts.failed > 0) bits.push(`${plural(c.counts.failed, 'run')} failed`);
+    if (n.awaitingHuman > 0) bits.push(`${n.awaitingHuman} waiting`);
+    if (n.failed > 0) bits.push(`${plural(n.failed, 'run')} failed`);
     rows.push({
-      key: `campaign:${c.campaign.id}`,
+      key: `campaign:${c.id}`,
       kind: 'campaign',
       severity: SEVERITY.campaign,
-      subject: c.campaign.title ?? c.campaign.id,
+      subject: c.def.name !== '' ? c.def.name : c.id,
       text: `Campaign gaps — ${bits.join(' · ')} (${surplus} beyond the list below)`,
-      tone: c.counts.awaitingHuman > 0 ? 'gate' : 'fail',
-      at: c.campaign.updated_at,
-      subjectPath: `/testing/campaigns/${encodeURIComponent(c.campaign.id)}`,
+      tone: n.awaitingHuman > 0 ? 'gate' : 'fail',
+      // The engine campaign carries no clocks — age unknown, said honestly.
+      at: null,
+      subjectPath: `/testing/campaigns/${encodeURIComponent(c.id)}`,
       action: {
         kind: 'open',
-        path: `/testing/campaigns/${encodeURIComponent(c.campaign.id)}`,
+        path: `/testing/campaigns/${encodeURIComponent(c.id)}`,
         label: 'Open campaign ›',
       },
     });

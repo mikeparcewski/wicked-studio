@@ -87,6 +87,20 @@ export interface DeliverRunResult {
  */
 export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
   deliver?: 'pr' | 'none';
+  /**
+   * Ad-hoc campaign attach (wicked-studio#27; api-types 0.19.0): file this run onto an
+   * EXISTING campaign's surface. Provenance only — the run executes byte-identically, never
+   * becomes a DAG node. Validated at launch, loudly: unknown campaign = 404 (nothing
+   * launched); a pre-0.19 daemon 400s naming the field. Mutually exclusive with `groupLabel`
+   * (both ⇒ 400). Hand-declared here like `deliver` — delete on the ≥0.19 api-types bump.
+   */
+  campaignId?: string;
+  /**
+   * Ad-hoc label grouping (wicked-studio#27; api-types 0.19.0): runs launched with the same
+   * label form one `RunGroup` on `GET /campaigns` — created on first use, 1–200 chars.
+   * Mutually exclusive with `campaignId`. Echoed as `AgentSession.group_label`.
+   */
+  groupLabel?: string;
 };
 
 // ── GET /runs/:id/acceptance (AW-14 / AW-18 — arch-R13a + R16) ────────────────

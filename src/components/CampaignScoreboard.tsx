@@ -1,49 +1,69 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getCampaign, type CampaignDetail, type CampaignRun } from '../api/campaigns.js';
+import { getCampaign, type Campaign, type CampaignNodeStatus } from '../api/campaigns.js';
 import { testingPath } from '../api/testing.js';
 import { downloadRunEvidence } from '../api/client.js';
 import { apiStatus } from '../api/errors.js';
 import type { SessionView } from '../api/types.js';
+import {
+  campaignCounts, campaignDeliveryRollup, deliveryRollupWord,
+} from '../board/campaignStats.js';
 import { useAcceptanceStore } from '../store/acceptance.js';
-import { useCampaignsStore, type CampaignNodeLive } from '../store/campaigns.js';
+import { useCampaignsStore } from '../store/campaigns.js';
 import { deliveryOf, isPrUrl, resolveDelivery, DELIVERY_LABEL } from './delivery.js';
 import { STATUS_STYLE } from './RunCard.js';
 import { runShortId } from './runIdentity.js';
 
 /**
  * The campaign scoreboard (TH-14, extends wicked-studio#27) — READ-ONLY: one surface that
- * groups a campaign's sibling runs. The ladder is one row per filed run (DES-CAMPAIGN-001
- * §4.4's table, deliberately not a graph — there is no edge data in this model to draw);
- * node status goes live off core's Campaign* `/ws` frames the moment the daemon relays them
- * (TH-9 — see `store/campaigns.ts` for the fold and the frame shapes), and falls back to the
- * live run list, then to the detail snapshot, in that order.
+ * groups a campaign's sibling runs. The ladder is one row per DAG NODE of the engine's
+ * embedded `def` (the wire crew#342 actually serves — deliberately not a graph: the edges
+ * exist but a table names the work; a DAG view is a later, additive lane), followed by the
+ * ad-hoc runs attached at launch (api-types 0.19.0 — provenance rows, marked as such). Node
+ * status goes live off core's Campaign* `/ws` frames (see `store/campaigns.ts` for the fold),
+ * falling back to the live run list, then to the engine's persisted `node_status`, in that
+ * order.
  *
  * ── THE WIRE RULES THIS SURFACE HOLDS ────────────────────────────────────────────────────────
- *  - The delivery rollup ("K of N siblings delivered") reads `session.delivery` off the run
- *    LIST wire (CREW-UX-8, crew#321) plus the server-resolved `prUrl` snapshot the detail
- *    payload carries (§4.3) — NEVER a per-run transcript fetch. Zero requests beyond the one
- *    `GET /campaigns/:id`.
+ *  - The delivery rollup ("K of N siblings delivered") reads the DAEMON-JOINED
+ *    `node_delivery` / `attached_runs` facts off the ONE `GET /campaigns/:id`, upgraded live
+ *    by `session.delivery` where the run list still holds the sibling — NEVER a per-run
+ *    transcript fetch. Zero requests beyond that one GET.
+ *  - Every PR href passes the `isPrUrl` shape gate (delivery.ts's one invariant), whichever
+ *    wire carried it.
  *  - Verdict chips are a per-run acceptance read (`GET /runs/:id/acceptance`) behind ONE
  *    explicit gesture (the MakeDashboard fan-out precedent): zero requests on render,
  *    exactly N on click, cached per run id forever after (`store/acceptance.ts`).
  *  - Evidence links download through the existing `GET /runs/:id/evidence` — on click only.
- *  - The cost column is an honest "—" until TH-20 folds per-node cost into the wire (the
- *    integration point is typed on `CampaignRun.cost`); flake/coverage trends need the
- *    TH-6 per-scenario flake history, which has no studio-reachable wire yet — named here so
- *    it is a known gap, not an invisible one.
  */
 
-const terminal = (s: string | null): boolean =>
-  s !== null && ['completed', 'failed', 'cancelled'].includes(s);
+const TERMINAL_NODE: ReadonlySet<CampaignNodeStatus> = new Set([
+  'completed', 'failed', 'blocked', 'cancelled',
+]);
 
-/** The node-frame status words, rendered with the closest run-status token. */
+const terminalRun = (s: string | null | undefined): boolean =>
+  s != null && ['completed', 'failed', 'cancelled'].includes(s);
+
+/** The engine node statuses + the frame vocabulary, in the closest run-status tokens. */
 const NODE_STATUS_STYLE: Record<string, { label: string; color: string }> = {
-  ready:          { label: 'Ready',          color: 'var(--ink-muted)' },
-  started:        { label: 'Executing',      color: 'var(--status-run)' },
-  awaiting_human: { label: 'Awaiting human', color: 'var(--status-gate)' },
-  completed:      { label: 'Completed',      color: 'var(--status-done)' },
-  failed:         { label: 'Failed',         color: 'var(--status-fail)' },
-  blocked:        { label: 'Blocked',        color: 'var(--status-fail)' },
+  pending:         { label: 'Pending',        color: 'var(--ink-dim)' },
+  ready:           { label: 'Ready',          color: 'var(--ink-muted)' },
+  running:         { label: 'Executing',      color: 'var(--status-run)' },
+  started:         { label: 'Executing',      color: 'var(--status-run)' },
+  ready_to_resume: { label: 'Resuming',       color: 'var(--status-run)' },
+  awaiting_human:  { label: 'Awaiting human', color: 'var(--status-gate)' },
+  completed:       { label: 'Completed',      color: 'var(--status-done)' },
+  failed:          { label: 'Failed',         color: 'var(--status-fail)' },
+  blocked:         { label: 'Blocked',        color: 'var(--status-fail)' },
+  cancelled:       { label: 'Cancelled',      color: 'var(--ink-dim)' },
+};
+
+const CAMPAIGN_STATUS_COLOR: Record<string, string> = {
+  running: 'var(--status-run)',
+  paused: 'var(--status-gate)',
+  completed: 'var(--status-done)',
+  partially_completed: 'var(--status-gate)',
+  failed: 'var(--status-fail)',
+  cancelled: 'var(--ink-dim)',
 };
 
 const CELL: React.CSSProperties = { padding: '8px 10px', verticalAlign: 'top' };
@@ -84,23 +104,44 @@ function Chip({ label, color, testid, title, extra }: {
   );
 }
 
+/** One ladder row, whatever wire it came off — node or attached run, joined zero-fetch. */
+interface LadderRow {
+  kind: 'node' | 'attached';
+  /** node_id, or the attached run's id. */
+  label: string;
+  runId: string | null;
+  problem: string;
+  /** Engine snapshot status (node_status for nodes; the DTO's status for attached). */
+  snapshotStatus: string | null;
+  /** Wire-carried delivery (node_delivery / the attached view) — the snapshot arm. */
+  delivery: { delivery: string; deliverUrl?: string } | null;
+}
+
 /**
- * One sibling's row-level facts, joined zero-fetch: live view (run list) over snapshot
- * (detail), Campaign* node fold over both for the status chip.
+ * The row's status chip, joined zero-fetch: Campaign* frame fold over the live run list over
+ * the engine snapshot, in that order — each arm labels its source honestly.
  */
 function rowStatus(
-  row: CampaignRun,
+  row: LadderRow,
   view: SessionView | undefined,
-  node: CampaignNodeLive | undefined,
+  frameStatus: string | undefined,
 ): { label: string; color: string; source: 'frame' | 'live' | 'snapshot' | 'gone' } {
-  if (node !== undefined) {
-    const s = NODE_STATUS_STYLE[node.status] ?? { label: node.status, color: 'var(--ink-dim)' };
+  if (frameStatus !== undefined) {
+    const s = NODE_STATUS_STYLE[frameStatus] ?? { label: frameStatus, color: 'var(--ink-dim)' };
     return { ...s, source: 'frame' };
   }
-  const status = view?.session.status ?? row.status;
-  if (status === null) return { label: 'No longer held', color: 'var(--ink-dim)', source: 'gone' };
-  const s = STATUS_STYLE[status] ?? { label: status, color: 'var(--ink-dim)' };
-  return { ...s, source: view !== undefined ? 'live' : 'snapshot' };
+  if (view !== undefined) {
+    const st = view.session.status;
+    const s = STATUS_STYLE[st] ?? { label: st, color: 'var(--ink-dim)' };
+    return { ...s, source: 'live' };
+  }
+  if (row.snapshotStatus === null) {
+    return { label: 'No longer held', color: 'var(--ink-dim)', source: 'gone' };
+  }
+  const s = NODE_STATUS_STYLE[row.snapshotStatus]
+    ?? (STATUS_STYLE as Record<string, { label: string; color: string }>)[row.snapshotStatus]
+    ?? { label: row.snapshotStatus, color: 'var(--ink-dim)' };
+  return { ...s, source: 'snapshot' };
 }
 
 interface Props {
@@ -111,7 +152,7 @@ interface Props {
 }
 
 export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React.ReactElement {
-  const [detail, setDetail] = useState<CampaignDetail | null>(null);
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const live = useCampaignsStore((s) => s.live[campaignId]);
@@ -119,16 +160,16 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
   const loadVerdict = useAcceptanceStore((s) => s.load);
   const [verdictsRequested, setVerdictsRequested] = useState(false);
 
-  // The one fetch this surface makes on its own: the campaign's per-run roll-up. Re-read when
-  // a Campaign* frame for THIS campaign lands (`live` identity changes) — new nodes mean new
-  // filed runs the snapshot does not hold yet. The run list itself arrives via props.
+  // The one fetch this surface makes on its own: the campaign with its daemon-joined rollup.
+  // Re-read when a Campaign* frame for THIS campaign lands (`live` identity changes) — new
+  // node statuses mean the snapshot moved. The run list itself arrives via props.
   useEffect(() => {
     let cancelled = false;
     setNotFound(false);
     setFailed(null);
     getCampaign(campaignId)
-      .then((d) => {
-        if (!cancelled) setDetail(d);
+      .then((c) => {
+        if (!cancelled) setCampaign(c);
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -145,16 +186,6 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
     for (const v of runs) m.set(v.session.id, v);
     return m;
   }, [runs]);
-
-  /** Campaign* node fold joined by the runId the started/awaitingHuman frames carry. */
-  const nodeByRun = useMemo(() => {
-    const m = new Map<string, CampaignNodeLive>();
-    for (const id of live?.nodeOrder ?? []) {
-      const n = live?.nodes[id];
-      if (n?.runId != null) m.set(n.runId, n);
-    }
-    return m;
-  }, [live]);
 
   if (notFound) {
     return (
@@ -181,7 +212,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
       </div>
     );
   }
-  if (detail === null) {
+  if (campaign === null) {
     return (
       <div data-testid="campaign-loading" style={{ padding: '32px', color: 'var(--ink-muted)' }}>
         Loading campaign {campaignId}…
@@ -189,70 +220,91 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
     );
   }
 
-  const { campaign, counts } = detail;
-  // §3.3 denominator honesty: `expected` set ⇒ a real denominator; unset ⇒ "so far" — two
-  // DIFFERENT strings, never rendered identically, because one of them can grow.
-  const progress =
-    campaign.expected !== null
-      ? `${counts.landed} of ${campaign.expected} landed`
-      : `${counts.landed} of ${counts.filed} landed so far`;
+  const counts = campaignCounts(campaign);
+  // The campaign's DAG is a DECLARED denominator (§3.3) — no "so far" here; the ad-hoc
+  // attached runs are provenance and counted beside it, never folded into the DAG number.
+  const progress = `${counts.landed} of ${counts.nodes} landed`;
 
-  // The delivery rollup, strictly off wire-carried facts (never a transcript fetch): a
-  // sibling counts as delivered when its live DTO's deliver phase is approved (state
-  // 'delivered' — `session.delivery` is what upgrades the CLAIM to a linkable pr-open), or —
-  // for a run the list no longer shows (archived/gone) — when the detail snapshot carries the
-  // server-resolved prUrl (§4.3).
-  const deliveredCount = detail.runs.filter((row) => {
-    const view = runsById.get(row.runId);
-    if (view !== undefined) return deliveryOf(view).state === 'delivered';
-    return typeof row.prUrl === 'string' && isPrUrl(row.prUrl);
-  }).length;
+  // The delivery rollup, strictly off wire-carried facts (never a transcript fetch) — the
+  // campaignStats fold over `node_delivery` + `attached_runs` (api-types 0.19.0).
+  const rollup = campaignDeliveryRollup(campaign);
+  const rollupWord = deliveryRollupWord(rollup);
 
   const seg = [
     { n: counts.landed, color: 'var(--status-done)' },
     { n: counts.failed, color: 'var(--status-fail)' },
     { n: counts.awaitingHuman, color: 'var(--status-gate)' },
     { n: counts.running, color: 'var(--status-run)' },
-    { n: counts.cancelled + counts.other, color: 'var(--ink-dim)' },
+    { n: counts.cancelled + counts.queued, color: 'var(--ink-dim)' },
   ];
-  const segTotal = Math.max(
-    1,
-    campaign.expected ?? counts.filed,
-    seg.reduce((a, s) => a + s.n, 0),
-  );
+  const segTotal = Math.max(1, counts.nodes, seg.reduce((a, s) => a + s.n, 0));
+
+  // ── The ladder: one row per DAG node, then the attached provenance rows ──────
+  const rows: LadderRow[] = [
+    ...campaign.def.nodes.map((node): LadderRow => ({
+      kind: 'node',
+      label: node.node_id,
+      runId: campaign.node_run_id[node.node_id] ?? null,
+      problem: node.run_spec.problem,
+      snapshotStatus: campaign.node_status[node.node_id] ?? null,
+      delivery: campaign.node_delivery?.[node.node_id] ?? null,
+    })),
+    ...(campaign.attached_runs ?? []).map((a): LadderRow => ({
+      kind: 'attached',
+      label: a.runId,
+      runId: a.runId,
+      problem: runsById.get(a.runId)?.session.problem ?? a.runId,
+      snapshotStatus: a.status,
+      delivery: { delivery: a.delivery, ...(a.deliverUrl !== undefined ? { deliverUrl: a.deliverUrl } : {}) },
+    })),
+  ];
+
+  const rowTerminal = (row: LadderRow, view: SessionView | undefined): boolean => {
+    if (view !== undefined) return terminalRun(view.session.status);
+    if (row.kind === 'node') {
+      return row.snapshotStatus !== null && TERMINAL_NODE.has(row.snapshotStatus as CampaignNodeStatus);
+    }
+    return terminalRun(row.snapshotStatus);
+  };
+
+  const liveStatus = live?.status ?? null;
+  const statusWord = liveStatus ?? campaign.status;
 
   return (
     <div data-testid="campaign-scoreboard" style={{ padding: '24px', maxWidth: '1100px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 'var(--text-xl)', color: 'var(--ink-high)', fontWeight: 600 }}>
-          {campaign.title ?? campaign.id}
+          {campaign.def.name !== '' ? campaign.def.name : campaign.id}
         </h1>
-        {campaign.title !== null && (
-          <span style={{ color: 'var(--ink-dim)', fontSize: 'var(--text-sm)' }}>{campaign.id}</span>
-        )}
-        {live?.status != null && (
-          <Chip
-            testid="campaign-live-status"
-            label={live.status}
-            color={
-              live.status === 'completed' ? 'var(--status-done)'
-              : live.status === 'paused' ? 'var(--status-gate)'
-              : 'var(--status-fail)'
-            }
-          />
-        )}
+        <span style={{ color: 'var(--ink-dim)', fontSize: 'var(--text-sm)' }}>{campaign.id}</span>
+        <Chip
+          testid="campaign-live-status"
+          label={statusWord}
+          color={CAMPAIGN_STATUS_COLOR[statusWord] ?? 'var(--ink-dim)'}
+          extra={{ 'data-status-source': liveStatus !== null ? 'frame' : 'snapshot' }}
+        />
       </div>
 
       <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         <span data-testid="campaign-progress" style={{ color: 'var(--ink-high)', fontSize: 'var(--text-sm)' }}>
           {progress}
-          {counts.archived > 0 && (
-            <span style={{ color: 'var(--ink-dim)' }}> ({counts.archived} archived)</span>
+          {counts.attached > 0 && (
+            <span style={{ color: 'var(--ink-dim)' }}> (+{counts.attached} attached)</span>
           )}
         </span>
-        <span data-testid="campaign-delivery-rollup" style={{ color: 'var(--ink-muted)', fontSize: 'var(--text-sm)' }}>
-          {deliveredCount} of {detail.runs.length} siblings delivered
-        </span>
+        {rollupWord !== null && (
+          <span data-testid="campaign-delivery-rollup" style={{ color: 'var(--ink-muted)', fontSize: 'var(--text-sm)' }}>
+            {rollup.delivered} of {rollup.total} siblings delivered
+          </span>
+        )}
+        {rollup.stranded.length > 0 && (
+          <Chip
+            testid="campaign-stranded-chip"
+            label={`stranded · ${rollup.stranded.length}`}
+            color="var(--status-gate)"
+            title={`Finished, but the work is stranded in its worktree — no PR: ${rollup.stranded.map((s) => s.label).join(', ')}`}
+          />
+        )}
       </div>
 
       <div
@@ -276,7 +328,11 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
             data-testid="campaign-load-verdicts"
             onClick={() => {
               setVerdictsRequested(true);
-              for (const row of detail.runs) if (terminal(runsById.get(row.runId)?.session.status ?? row.status)) loadVerdict(row.runId);
+              for (const row of rows) {
+                if (row.runId !== null && rowTerminal(row, runsById.get(row.runId))) {
+                  loadVerdict(row.runId);
+                }
+              }
             }}
             style={{ color: 'var(--status-run)', fontSize: 'var(--text-xs)', textDecoration: 'underline' }}
           >
@@ -294,53 +350,68 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
               <th style={HEAD}>Verdict</th>
               <th style={HEAD}>Delivery</th>
               <th style={HEAD}>Evidence</th>
-              <th style={HEAD} title="Per-node cost lands with campaign budget governance (TH-20); no daemon serves it yet">
-                Cost
-              </th>
             </tr>
           </thead>
           <tbody>
-            {detail.runs.map((row) => {
-              const view = runsById.get(row.runId);
-              const node = nodeByRun.get(row.runId);
-              const status = rowStatus(row, view, node);
-              // Delivery, zero-fetch: the DTO derivation (which reads the wire-carried
-              // `session.delivery`) with the detail's server-resolved prUrl as the read-back
+            {rows.map((row) => {
+              const view = row.runId !== null ? runsById.get(row.runId) : undefined;
+              const frameNode = row.kind === 'node' ? live?.nodes[row.label] : undefined;
+              const status = rowStatus(row, view, frameNode?.status);
+              // Delivery, zero-fetch: the live DTO derivation (which reads the wire-carried
+              // `session.delivery`) with the campaign's own daemon-joined url as the read-back
               // source — `resolveDelivery` re-validates the shape of both.
               const d = view !== undefined
-                ? resolveDelivery(deliveryOf(view), row.prUrl ?? null)
+                ? resolveDelivery(deliveryOf(view), row.delivery?.deliverUrl ?? null)
                 : null;
               const href = d?.href ?? null;
               // The snapshot-only arm (archived / no longer listed) goes through the SAME
               // shape gate as every other PR claim (delivery.ts's one invariant).
               const snapshotHref =
-                view === undefined && typeof row.prUrl === 'string' && isPrUrl(row.prUrl)
-                  ? row.prUrl
+                view === undefined
+                  && row.delivery !== null
+                  && typeof row.delivery.deliverUrl === 'string'
+                  && isPrUrl(row.delivery.deliverUrl)
+                  ? row.delivery.deliverUrl
                   : null;
-              const verdict = verdicts[row.runId];
+              const snapshotStranded = view === undefined && row.delivery?.delivery === 'stranded';
+              const verdict = row.runId !== null ? verdicts[row.runId] : undefined;
               return (
                 <tr
-                  key={row.runId}
+                  key={`${row.kind}:${row.label}`}
                   data-testid="campaign-ladder-row"
-                  data-run-id={row.runId}
+                  data-kind={row.kind}
+                  data-node-id={row.kind === 'node' ? row.label : undefined}
+                  {...(row.runId !== null ? { 'data-run-id': row.runId } : {})}
                   style={{ borderBottom: '1px solid var(--surface-raised)' }}
                 >
                   <td style={CELL}>
-                    <button
-                      type="button"
-                      data-testid="campaign-run-link"
-                      onClick={() => navigate(`/runs/${encodeURIComponent(row.runId)}`)}
-                      style={{ color: 'var(--ink-high)', textAlign: 'left' }}
-                      title={row.runId}
-                    >
-                      <span style={{ color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', marginRight: '8px' }}>
-                        {runShortId(row.runId)}
+                    {row.runId !== null ? (
+                      <button
+                        type="button"
+                        data-testid="campaign-run-link"
+                        onClick={() => navigate(`/runs/${encodeURIComponent(row.runId!)}`)}
+                        style={{ color: 'var(--ink-high)', textAlign: 'left' }}
+                        title={row.runId}
+                      >
+                        <span style={{ color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', marginRight: '8px' }}>
+                          {row.kind === 'node' ? row.label : runShortId(row.runId)}
+                        </span>
+                        {row.problem}
+                      </button>
+                    ) : (
+                      <span style={{ color: 'var(--ink-muted)' }}>
+                        <span style={{ color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', marginRight: '8px' }}>
+                          {row.label}
+                        </span>
+                        {row.problem}
                       </span>
-                      {row.problem}
-                    </button>
-                    {row.archived && (
-                      <span style={{ marginLeft: '8px', color: 'var(--ink-dim)', fontSize: 'var(--text-xs)' }}>
-                        archived
+                    )}
+                    {row.kind === 'attached' && (
+                      <span
+                        style={{ marginLeft: '8px', color: 'var(--ink-dim)', fontSize: 'var(--text-xs)' }}
+                        title="Filed onto this campaign at launch — not a DAG node; the campaign never schedules, gates or cancels it."
+                      >
+                        attached
                       </span>
                     )}
                   </td>
@@ -351,7 +422,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                       color={status.color}
                       extra={{ 'data-status-source': status.source }}
                       title={
-                        node?.prompt != null ? node.prompt
+                        frameNode?.prompt != null ? frameNode.prompt
                         : status.source === 'snapshot' ? 'status at last read — the run is not in the live list'
                         : undefined
                       }
@@ -390,6 +461,8 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                       >
                         {DELIVERY_LABEL['pr-open']}
                       </a>
+                    ) : snapshotStranded ? (
+                      <span style={{ color: 'var(--status-gate)' }}>{DELIVERY_LABEL['stranded']}</span>
                     ) : (
                       <span style={{ color: d !== null && d.claim === 'failed' ? 'var(--status-fail)' : 'var(--ink-dim)' }} title={d?.reason ?? undefined}>
                         {d !== null && DELIVERY_LABEL[d.claim] !== '' ? DELIVERY_LABEL[d.claim] : '—'}
@@ -397,18 +470,15 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                     )}
                   </td>
                   <td style={CELL}>
-                    <button
-                      type="button"
-                      data-testid="campaign-evidence-link"
-                      onClick={() => void downloadRunEvidence(row.runId)}
-                      style={{ color: 'var(--status-run)', fontSize: 'var(--text-xs)', textDecoration: 'underline' }}
-                    >
-                      download
-                    </button>
-                  </td>
-                  <td style={CELL} data-testid="campaign-cost-cell">
-                    {typeof row.cost === 'number' ? (
-                      <span style={{ color: 'var(--ink-high)' }}>${row.cost.toFixed(2)}</span>
+                    {row.runId !== null ? (
+                      <button
+                        type="button"
+                        data-testid="campaign-evidence-link"
+                        onClick={() => void downloadRunEvidence(row.runId!)}
+                        style={{ color: 'var(--status-run)', fontSize: 'var(--text-xs)', textDecoration: 'underline' }}
+                      >
+                        download
+                      </button>
                     ) : (
                       <span style={{ color: 'var(--ink-dim)' }}>—</span>
                     )}
@@ -419,31 +489,6 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
           </tbody>
         </table>
       </div>
-
-      {/* Ladder rungs the frames announced but no filed run answers yet (a node whose run has
-          not been dispatched, or whose filing the snapshot has not caught up with). */}
-      {(live?.nodeOrder ?? []).filter((id) => {
-        const n = live?.nodes[id];
-        return n !== undefined && (n.runId === null || !detail.runs.some((r) => r.runId === n.runId));
-      }).length > 0 && (
-        <div style={{ marginTop: '12px' }} data-testid="campaign-pending-nodes">
-          {(live?.nodeOrder ?? [])
-            .filter((id) => {
-              const n = live?.nodes[id];
-              return n !== undefined && (n.runId === null || !detail.runs.some((r) => r.runId === n.runId));
-            })
-            .map((id) => {
-              const n = live!.nodes[id]!;
-              const s = NODE_STATUS_STYLE[n.status] ?? { label: n.status, color: 'var(--ink-dim)' };
-              return (
-                <div key={id} data-testid="campaign-pending-node" style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '4px 0' }}>
-                  <Chip testid="campaign-node-status" label={s.label} color={s.color} extra={{ 'data-status-source': 'frame' }} title={n.prompt ?? undefined} />
-                  <span style={{ color: 'var(--ink-muted)', fontSize: 'var(--text-sm)' }}>{id}</span>
-                </div>
-              );
-            })}
-        </div>
-      )}
     </div>
   );
 }

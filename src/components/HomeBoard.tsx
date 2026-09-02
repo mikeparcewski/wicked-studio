@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import { listCampaigns, type CampaignSummary } from '../api/campaigns.js';
+import { listCampaigns, type Campaign } from '../api/campaigns.js';
 import { getDiagnostics, type Diagnostics } from '../api/diagnostics.js';
 import type { SteeringRule } from '../api/steering.js';
 import type { GovernanceClaim, SessionView } from '../api/types.js';
@@ -133,7 +133,7 @@ function BandGrid({ items, columns, rowH, firstRow, lastRow, navigate, cursor }:
  *  unless) each answers; absence degrades the feature, never the page. */
 interface HomeWires {
   chats: LiveChatSnapshot[] | null;
-  campaigns: CampaignSummary[] | null;
+  campaigns: Campaign[] | null;
   claims: GovernanceClaim[] | null;
   rules: SteeringRule[] | null;
   perRule: WikiRuleEvidenceRow[] | null;

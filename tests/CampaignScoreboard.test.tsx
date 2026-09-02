@@ -2,20 +2,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { CoreEvent, SessionView } from '../src/api/types.js';
 import type { SessionWithDelivery } from '../src/api/types.js';
-import type { CampaignDetail } from '../src/api/campaigns.js';
+import { attachedRun, makeCampaign, type NodeFixture } from './campaignFactories.js';
 import { makeUnit, makeView } from './factories.js';
 
 /**
  * The campaign scoreboard (TH-14, extends studio#27) — ONE surface groups a campaign's
- * sibling runs, demo-able entirely off mocked wire payloads + mocked Campaign* frames.
- * Pinned here:
- *   - the ladder is one row per filed sibling, joined live to the run list;
- *   - the delivery rollup reads `session.delivery` (crew#321) / the detail's server-resolved
- *     prUrl — NEVER a per-run transcript fetch (asserted: zero network calls on render);
+ * sibling runs, over the REAL wire (`GET /campaigns/:id` → the engine Campaign + the
+ * daemon-joined 0.19.0 rollup fields), demo-able entirely off mocked payloads + mocked
+ * Campaign* frames. Pinned here:
+ *   - the ladder is one row per DAG node (undispatched included), attached runs after,
+ *     marked as provenance;
+ *   - the delivery rollup reads `node_delivery`/`attached_runs` + the live list's
+ *     `session.delivery` — NEVER a per-run transcript fetch (asserted: zero network calls);
+ *   - every PR href passes the isPrUrl shape gate, whichever wire carried it;
  *   - node status flips LIVE off Campaign* frames (data-status-source="frame");
  *   - verdict chips load behind ONE explicit gesture, terminal rows only;
- *   - §3.3 denominator honesty ("of N landed" vs "of N landed so far" — two strings);
- *   - the cost column is an honest "—" until TH-20's wire exists;
  *   - an unknown campaign states the fact and offers /campaigns, never a spinner.
  */
 
@@ -36,42 +37,15 @@ const { ApiError } = await import('../src/api/errors.js');
 const frame = (type: string, fields: Record<string, unknown> = {}): CoreEvent =>
   ({ type, ...fields }) as CoreEvent;
 
-function detail(over: Partial<CampaignDetail['campaign']> = {}, runs: CampaignDetail['runs'] = []): CampaignDetail {
-  return {
-    campaign: { id: 'DES-X', title: null, expected: null, created_at: 1, updated_at: 2, ...over },
-    runs,
-    counts: {
-      filed: runs.length,
-      landed: runs.filter((r) => r.status === 'completed').length,
-      failed: 0,
-      cancelled: 0,
-      running: 0,
-      awaitingHuman: 0,
-      other: 0,
-      archived: runs.filter((r) => r.archived).length,
-    },
-  };
-}
+const campaign = (nodes: NodeFixture[], over = {}) => makeCampaign('DES-X', nodes, over);
 
-const row = (
-  runId: string,
-  over: Partial<CampaignDetail['runs'][number]> = {},
-): CampaignDetail['runs'][number] => ({
-  runId,
-  status: 'completed',
-  projectId: null,
-  problem: `problem of ${runId}`,
-  filed_at: 10,
-  archived: false,
-  ...over,
-});
-
-/** A sibling that DELIVERED: approved deliver unit + the wire-carried session.delivery. */
+/** A sibling that DELIVERED per the LIVE run list: the 0.18.0 wire string + url. */
 function deliveredView(id: string, url: string): SessionView {
   const v = makeView({ id, status: 'completed' }, [
     makeUnit({ id: `wf-${id}:deliver`, session_id: id, status: 'done' }),
   ]);
-  (v.session as SessionWithDelivery).delivery = { kind: 'pull_request', url };
+  (v.session as SessionWithDelivery).delivery = 'delivered';
+  (v.session as SessionWithDelivery).deliverUrl = url;
   return v;
 }
 
@@ -82,7 +56,7 @@ beforeEach(() => {
   getRunAcceptance.mockReset();
   fetchSpy.mockClear();
   vi.stubGlobal('fetch', fetchSpy);
-  useCampaignsStore.setState({ support: 'unknown', summaries: [], live: {} });
+  useCampaignsStore.setState({ support: 'unknown', campaigns: [], groups: [], live: {} });
   useAcceptanceStore.setState({ byRun: {} });
 });
 afterEach(() => {
@@ -95,31 +69,34 @@ function board(runs: SessionView[], navigate: (p: string) => void = () => {}) {
 }
 
 describe('one surface groups the sibling runs', () => {
-  it('renders one ladder row per filed sibling — live, archived and gone alike', async () => {
-    getCampaign.mockResolvedValue(
-      detail({ expected: 3 }, [
-        row('r1'),
-        row('r2', { status: 'executing' }),
-        row('r3', { archived: true, prUrl: 'https://github.com/o/x/pull/7' }),
-      ]),
-    );
+  it('renders one ladder row per DAG node — live, gone and undispatched alike — then the attached provenance rows', async () => {
+    getCampaign.mockResolvedValue(campaign(
+      [
+        { id: 'n-api', status: 'completed', runId: 'r1' },
+        { id: 'n-ui', status: 'running', runId: 'r2' },
+        { id: 'n-later' }, // declared, not yet dispatched — still a rung
+      ],
+      { attached_runs: [attachedRun('r-adhoc', { status: 'executing', delivery: 'none' })] },
+    ));
     board([deliveredView('r1', 'https://github.com/o/x/pull/5'), makeView({ id: 'r2', status: 'executing' })]);
 
     await waitFor(() => expect(screen.getByTestId('campaign-scoreboard')).toBeInTheDocument());
-    const rows = screen.getAllByTestId('campaign-ladder-row').map((r) => r.getAttribute('data-run-id'));
-    expect(rows).toEqual(['r1', 'r2', 'r3']);
-    // The archived sibling is stated, never dropped (§4.2's whole argument).
-    expect(screen.getByText('archived')).toBeInTheDocument();
+    const rows = screen.getAllByTestId('campaign-ladder-row');
+    expect(rows.map((r) => r.getAttribute('data-run-id'))).toEqual(['r1', 'r2', null, 'r-adhoc']);
+    expect(rows.map((r) => r.getAttribute('data-kind'))).toEqual(['node', 'node', 'node', 'attached']);
+    // The attached run is provenance, said so on the row.
+    expect(rows[3]!.textContent).toContain('attached');
   });
 
-  it('the delivery rollup reads session.delivery + the snapshot prUrl — ZERO fetches', async () => {
-    getCampaign.mockResolvedValue(
-      detail({ expected: 3 }, [
-        row('r1'),
-        row('r2', { status: 'executing' }),
-        row('r3', { archived: true, prUrl: 'https://github.com/o/x/pull/7' }),
-      ]),
-    );
+  it('the delivery rollup reads the wire facts + session.delivery — ZERO fetches', async () => {
+    getCampaign.mockResolvedValue(campaign(
+      [
+        { id: 'n1', status: 'completed', runId: 'r1', delivery: { delivery: 'delivered', deliverUrl: 'https://github.com/o/x/pull/5' } },
+        { id: 'n2', status: 'running', runId: 'r2' },
+        // Archived/gone from the live list — the daemon-joined snapshot still answers (§4.2).
+        { id: 'n3', status: 'completed', runId: 'r3', delivery: { delivery: 'delivered', deliverUrl: 'https://github.com/o/x/pull/7' } },
+      ],
+    ));
     board([deliveredView('r1', 'https://github.com/o/x/pull/5'), makeView({ id: 'r2', status: 'executing' })]);
 
     await waitFor(() =>
@@ -129,34 +106,51 @@ describe('one surface groups the sibling runs', () => {
     // beyond the mocked GET /campaigns/:id this surface owns.
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(getRunAcceptance).not.toHaveBeenCalled();
-    // The wire-carried url renders as the linkable PR claim on the delivered row.
     const links = screen.getAllByRole('link');
+    // The live sibling's wire-carried url renders as the linkable PR claim.
     expect(links.map((l) => l.getAttribute('href'))).toContain('https://github.com/o/x/pull/5');
-    // The archived row's server-resolved snapshot url is linkable too (§4.3).
+    // The gone sibling's daemon-joined snapshot url is linkable too.
     expect(links.map((l) => l.getAttribute('href'))).toContain('https://github.com/o/x/pull/7');
   });
 
-  it('§3.3 denominator honesty: expected set vs unset are two DIFFERENT strings', async () => {
-    getCampaign.mockResolvedValue(detail({ expected: 18 }, [row('r1')]));
+  it('a snapshot url that fails the isPrUrl shape gate never becomes an anchor', async () => {
+    getCampaign.mockResolvedValue(campaign([
+      { id: 'n1', status: 'completed', runId: 'r-gone', delivery: { delivery: 'delivered', deliverUrl: 'https://github.com/o/x/pull/new/branch' } },
+    ]));
+    board([]);
+    await waitFor(() => expect(screen.getByTestId('campaign-scoreboard')).toBeInTheDocument());
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
+  });
+
+  it('a stranded sibling is surfaced on the header chip AND its row', async () => {
+    getCampaign.mockResolvedValue(campaign([
+      { id: 'n1', status: 'completed', runId: 'r1', delivery: { delivery: 'stranded' } },
+      { id: 'n2', status: 'completed', runId: 'r2', delivery: { delivery: 'delivered', deliverUrl: 'https://github.com/o/x/pull/9' } },
+    ]));
+    board([]);
+    await waitFor(() => expect(screen.getByTestId('campaign-stranded-chip')).toBeInTheDocument());
+    expect(screen.getByTestId('campaign-stranded-chip').textContent).toContain('stranded · 1');
+    // The row itself wears the daemon's own word.
+    const cells = screen.getAllByTestId('campaign-run-delivery').map((c) => c.textContent);
+    expect(cells).toContain('stranded');
+  });
+
+  it('the campaign DAG is a DECLARED denominator — "n of N landed", never "so far"', async () => {
+    getCampaign.mockResolvedValue(campaign([
+      { id: 'n1', status: 'completed', runId: 'r1' }, { id: 'n2', status: 'running' }, { id: 'n3' },
+    ]));
     board([]);
     await waitFor(() =>
-      expect(screen.getByTestId('campaign-progress').textContent).toContain('1 of 18 landed'),
+      expect(screen.getByTestId('campaign-progress').textContent).toContain('1 of 3 landed'),
     );
     expect(screen.getByTestId('campaign-progress').textContent).not.toContain('so far');
-    cleanup();
-
-    getCampaign.mockResolvedValue(detail({ expected: null }, [row('r1')]));
-    board([]);
-    await waitFor(() =>
-      expect(screen.getByTestId('campaign-progress').textContent).toContain('1 of 1 landed so far'),
-    );
   });
 });
 
 describe('node status from Campaign* WS frames (mocked — the TH-9 wire shape)', () => {
-  it('a campaignNodeStarted frame flips the joined row to frame-sourced Executing, live', async () => {
-    getCampaign.mockResolvedValue(detail({}, [row('r1', { status: 'planning' })]));
-    board([makeView({ id: 'r1', status: 'planning' })]);
+  it('a campaignNodeStarted frame flips the node row to frame-sourced Executing, live', async () => {
+    getCampaign.mockResolvedValue(campaign([{ id: 'n-r1', status: 'pending', runId: 'r1' }]));
+    board([]);
     await waitFor(() => expect(screen.getByTestId('campaign-scoreboard')).toBeInTheDocument());
 
     act(() => {
@@ -168,50 +162,53 @@ describe('node status from Campaign* WS frames (mocked — the TH-9 wire shape)'
     await waitFor(() => {
       const chip = screen
         .getAllByTestId('campaign-node-status')
-        .find((c) => c.closest('[data-run-id]')?.getAttribute('data-run-id') === 'r1');
+        .find((c) => c.closest('[data-node-id]')?.getAttribute('data-node-id') === 'n-r1');
       expect(chip?.getAttribute('data-status-source')).toBe('frame');
       expect(chip?.textContent).toBe('Executing');
     });
   });
 
-  it('an awaitingHuman frame carries its prompt onto the chip; nodes with no filed run render as pending rungs', async () => {
-    getCampaign.mockResolvedValue(detail({}, [row('r1', { status: 'executing' })]));
-    board([makeView({ id: 'r1', status: 'executing' })]);
+  it('an awaitingHuman frame carries its prompt onto the chip', async () => {
+    getCampaign.mockResolvedValue(campaign([{ id: 'n-r1', status: 'running', runId: 'r1' }]));
+    board([]);
     await waitFor(() => expect(screen.getByTestId('campaign-scoreboard')).toBeInTheDocument());
 
     act(() => {
       useCampaignsStore.getState().ingest(
         frame('campaignNodeAwaitingHuman', { campaign: 'DES-X', node: 'n-r1', runId: 'r1', prompt: 'approve AC-3?' }),
       );
-      useCampaignsStore.getState().ingest(frame('campaignNodeReady', { campaign: 'DES-X', node: 'n-later' }));
     });
 
     await waitFor(() => {
       const chip = screen
         .getAllByTestId('campaign-node-status')
-        .find((c) => c.closest('[data-run-id]')?.getAttribute('data-run-id') === 'r1');
+        .find((c) => c.closest('[data-node-id]')?.getAttribute('data-node-id') === 'n-r1');
       expect(chip?.textContent).toBe('Awaiting human');
       expect(chip?.getAttribute('title')).toBe('approve AC-3?');
     });
-    expect(screen.getByTestId('campaign-pending-nodes').textContent).toContain('n-later');
   });
 
-  it('campaign-level frames render the live-status chip', async () => {
-    getCampaign.mockResolvedValue(detail({}, [row('r1')]));
+  it('campaign-level frames override the wire status chip', async () => {
+    getCampaign.mockResolvedValue(campaign([{ id: 'n1', status: 'running', runId: 'r1' }]));
     board([]);
-    await waitFor(() => expect(screen.getByTestId('campaign-scoreboard')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('campaign-live-status').textContent).toBe('running'));
+    expect(screen.getByTestId('campaign-live-status').getAttribute('data-status-source')).toBe('snapshot');
     act(() => {
       useCampaignsStore.getState().ingest(frame('campaignPaused', { campaign: 'DES-X' }));
     });
     await waitFor(() => expect(screen.getByTestId('campaign-live-status').textContent).toBe('paused'));
+    expect(screen.getByTestId('campaign-live-status').getAttribute('data-status-source')).toBe('frame');
   });
 });
 
 describe('verdict chips — per-run acceptance behind ONE explicit gesture', () => {
-  it('zero acceptance reads on render; the gesture fires exactly one per TERMINAL sibling', async () => {
-    getCampaign.mockResolvedValue(
-      detail({}, [row('r1'), row('r2', { status: 'executing' }), row('r3', { status: 'failed' })]),
-    );
+  it('zero acceptance reads on render; the gesture fires exactly one per TERMINAL sibling with a run', async () => {
+    getCampaign.mockResolvedValue(campaign([
+      { id: 'n1', status: 'completed', runId: 'r1' },
+      { id: 'n2', status: 'running', runId: 'r2' },
+      { id: 'n3', status: 'failed', runId: 'r3' },
+      { id: 'n4' }, // undispatched — no run to read
+    ]));
     getRunAcceptance.mockImplementation((id: string) =>
       Promise.resolve({
         runId: id,
@@ -227,7 +224,7 @@ describe('verdict chips — per-run acceptance behind ONE explicit gesture', () 
 
     fireEvent.click(screen.getByTestId('campaign-load-verdicts'));
     await waitFor(() => expect(screen.getAllByTestId('campaign-verdict-chip')).toHaveLength(2));
-    // Exactly the terminal siblings — never the executing one.
+    // Exactly the terminal siblings — never the executing one, never a run-less node.
     expect(getRunAcceptance.mock.calls.map((c) => c[0]).sort()).toEqual(['r1', 'r3']);
 
     const chips = screen.getAllByTestId('campaign-verdict-chip');
@@ -249,11 +246,10 @@ describe('honest degradation', () => {
     expect(navigate).toHaveBeenCalledWith('/testing/campaigns');
   });
 
-  it('the cost column renders an honest "—" until TH-20 wires per-node cost', async () => {
-    getCampaign.mockResolvedValue(detail({}, [row('r1'), row('r2', { cost: 1.5 })]));
+  it('a pre-0.19 payload (no node_delivery) renders NO delivery rollup — absence, never "0 of N"', async () => {
+    getCampaign.mockResolvedValue(campaign([{ id: 'n1', status: 'completed', runId: 'r1' }]));
     board([]);
-    await waitFor(() => expect(screen.getAllByTestId('campaign-cost-cell')).toHaveLength(2));
-    const cells = screen.getAllByTestId('campaign-cost-cell').map((c) => c.textContent);
-    expect(cells).toEqual(['—', '$1.50']);
+    await waitFor(() => expect(screen.getByTestId('campaign-scoreboard')).toBeInTheDocument());
+    expect(screen.queryByTestId('campaign-delivery-rollup')).toBeNull();
   });
 });
