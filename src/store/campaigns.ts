@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { listCampaigns, type CampaignSummary } from '../api/campaigns.js';
+import { listCampaigns, type Campaign, type RunGroup } from '../api/campaigns.js';
 import type { CoreEvent } from '../api/types.js';
 
 /**
@@ -75,8 +75,10 @@ const CAMPAIGN_STATUS_BY_TYPE: Record<string, CampaignLiveStatus> = {
 
 interface CampaignsStore {
   support: CampaignSupport;
-  /** `GET /campaigns` rows, server-ordered (newest-updated first). */
-  summaries: CampaignSummary[];
+  /** `GET /campaigns` rows, server-ordered. */
+  campaigns: Campaign[];
+  /** Ad-hoc label groups (api-types 0.19.0) — `[]` on a pre-0.19 daemon (normalized). */
+  groups: RunGroup[];
   /** Live frame fold, keyed by campaign id. */
   live: Record<string, CampaignLive>;
   /** Probe + (re)fetch the list. Sets `support` from the answer (§1.5). */
@@ -90,19 +92,20 @@ let inflight: Promise<void> | null = null;
 
 export const useCampaignsStore = create<CampaignsStore>((set) => ({
   support: 'unknown',
-  summaries: [],
+  campaigns: [],
+  groups: [],
   live: {},
 
   refresh: () => {
     if (inflight !== null) return inflight;
     inflight = listCampaigns()
-      .then(({ campaigns }) => {
-        set({ support: 'supported', summaries: campaigns });
+      .then(({ campaigns, groups }) => {
+        set({ support: 'supported', campaigns, groups });
       })
       .catch(() => {
-        // 404 = the route does not exist on this daemon (§1.5's whole discriminator);
+        // 404/501 = this daemon predates campaigns (§1.5's whole discriminator);
         // anything else (network, 500) also reads as unsupported — said once, not spun on.
-        set({ support: 'unsupported', summaries: [] });
+        set({ support: 'unsupported', campaigns: [], groups: [] });
       })
       .finally(() => {
         inflight = null;

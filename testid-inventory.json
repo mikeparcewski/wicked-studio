@@ -11,8 +11,8 @@
   "studioVersion": "0.4.9",
   "counts": {
     "files": 117,
-    "occurrences": 942,
-    "static": 806,
+    "occurrences": 947,
+    "static": 811,
     "dynamic": 43,
     "computed": 6
   },
@@ -530,7 +530,31 @@
       ]
     },
     {
+      "testId": "campaign-card-delivery",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-card-narration",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-card-pr",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
       "testId": "campaign-card-progress",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-card-run",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
@@ -542,9 +566,9 @@
       ]
     },
     {
-      "testId": "campaign-cost-cell",
+      "testId": "campaign-card-stranded",
       "files": [
-        "src/components/CampaignScoreboard.tsx"
+        "src/components/CampaignsPage.tsx"
       ]
     },
     {
@@ -597,18 +621,6 @@
     },
     {
       "testId": "campaign-notfound",
-      "files": [
-        "src/components/CampaignScoreboard.tsx"
-      ]
-    },
-    {
-      "testId": "campaign-pending-node",
-      "files": [
-        "src/components/CampaignScoreboard.tsx"
-      ]
-    },
-    {
-      "testId": "campaign-pending-nodes",
       "files": [
         "src/components/CampaignScoreboard.tsx"
       ]
@@ -1785,6 +1797,24 @@
       "testId": "graph-node-stats",
       "files": [
         "src/components/RepoGraphModal.tsx"
+      ]
+    },
+    {
+      "testId": "group-attach",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "group-label-input",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "group-pill",
+      "files": [
+        "src/components/ChatInput.tsx"
       ]
     },
     {

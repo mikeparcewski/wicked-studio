@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client.js';
 import type { EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
+import { useCampaignsStore } from '../store/campaigns.js';
 import { useComposerPrefsStore } from '../store/composerPrefs.js';
 import { useGateStore } from '../store/gates.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
@@ -147,6 +148,32 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // Synchronous guard prevents a second inject from firing before the first
   // setInjecting(true) call re-renders the disabled state.
   const injectInflightRef = useRef(false);
+
+  // ── Ad-hoc grouping (wicked-studio#27, api-types 0.19.0) ───────────────────
+  // ONE structural control, so the wire's mutual exclusivity (campaignId XOR
+  // groupLabel, both ⇒ 400) cannot be violated from here: none, an EXISTING
+  // campaign to attach onto (`c:<id>`), an existing group label (`g:<label>`),
+  // or `new` — a label typed free-form (a group is created on first use, never
+  // pre-registered). DELIBERATELY STICKY across launches: filing several
+  // sibling launches under one label is the feature. Validation stays the
+  // daemon's, loudly — an unknown campaign is a 404 with NOTHING launched, a
+  // pre-0.19 daemon 400s naming the field; both render verbatim in the launch
+  // error, never a silent ungrouped launch.
+  const [groupChoice, setGroupChoice] = useState('');
+  /** The free-text label while `new` is selected (submitted trimmed). */
+  const [newGroupLabel, setNewGroupLabel] = useState('');
+  const knownCampaigns = useCampaignsStore((s) => s.campaigns);
+  const knownGroups = useCampaignsStore((s) => s.groups);
+  const refreshCampaigns = useCampaignsStore((s) => s.refresh);
+  /** The wire keys the current choice resolves to — `{}` for none/blank-label. */
+  const groupAttach = ((): { campaignId?: string; groupLabel?: string } => {
+    if (groupChoice.startsWith('c:')) return { campaignId: groupChoice.slice(2) };
+    if (groupChoice.startsWith('g:')) return { groupLabel: groupChoice.slice(2) };
+    if (groupChoice === 'new' && newGroupLabel.trim() !== '') {
+      return { groupLabel: newGroupLabel.trim() };
+    }
+    return {};
+  })();
 
   // ── Launch form state — a retry prefill seeds the initial values (§4.3);
   //    everything stays fully editable before send. ──────────────────────────
@@ -488,6 +515,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // never inferred from prompt equality. The pill above is the operator's
     // way to drop the claim before sending.
     if (retryOf) body.retryOf = retryOf;
+    // Ad-hoc grouping (wicked-studio#27, api-types 0.19.0): provenance only —
+    // the run executes byte-identically. One control ⇒ never both keys. An
+    // empty typed label sends NOTHING (omitting the key is pre-0.19 behavior,
+    // byte for byte) rather than a 400 the operator didn't mean.
+    if (groupAttach.campaignId !== undefined) body.campaignId = groupAttach.campaignId;
+    if (groupAttach.groupLabel !== undefined) body.groupLabel = groupAttach.groupLabel;
 
     try {
       let launched;
@@ -867,6 +900,15 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       onClear: resetCliSelection,
     });
   }
+  if (groupAttach.campaignId !== undefined || groupAttach.groupLabel !== undefined) {
+    activePills.push({
+      label: groupAttach.campaignId !== undefined
+        ? `Campaign: ${groupAttach.campaignId}`
+        : `Group: ${groupAttach.groupLabel!}`,
+      onClear: () => { setGroupChoice(''); setNewGroupLabel(''); },
+      attrs: { 'data-testid': 'group-pill' },
+    });
+  }
 
   return (
     <div
@@ -900,11 +942,75 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           dropUp={!embedded}
         />
 
+        {/* ── Ad-hoc grouping (wicked-studio#27, api-types 0.19.0): file this
+            launch under an existing campaign, an existing group label, or a
+            new label — ONE control, so campaignId XOR groupLabel is structural.
+            The lists load lazily on first interaction (the ProjectSwitcher
+            idiom); a daemon that predates campaigns simply lists none, and the
+            typed-label path still works where the daemon accepts the field. ── */}
+        <span
+          className="text-[11px] font-mono uppercase tracking-widest ml-auto"
+          style={{ color: 'var(--ink-dim)' }}
+        >
+          Group
+        </span>
+        <select
+          data-testid="group-attach"
+          aria-label="File this run under a campaign or group"
+          title="Attach this launch to a campaign or an ad-hoc group — provenance only, the run executes unchanged"
+          className="rounded-lg px-2 py-1 text-[11px] font-mono"
+          style={{
+            background: 'var(--surface-card)',
+            border: '1px solid var(--surface-raised)',
+            color: 'var(--ink-high)',
+            maxWidth: '160px',
+          }}
+          value={groupChoice}
+          onMouseDown={() => void refreshCampaigns()}
+          onChange={(e) => setGroupChoice(e.target.value)}
+        >
+          <option value="">none</option>
+          {knownCampaigns.length > 0 && (
+            <optgroup label="campaigns">
+              {knownCampaigns.map((c) => (
+                <option key={c.id} value={`c:${c.id}`}>
+                  {c.def.name !== '' ? c.def.name : c.id}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {knownGroups.length > 0 && (
+            <optgroup label="groups">
+              {knownGroups.map((g) => (
+                <option key={g.label} value={`g:${g.label}`}>{g.label}</option>
+              ))}
+            </optgroup>
+          )}
+          <option value="new">new group…</option>
+        </select>
+        {groupChoice === 'new' && (
+          <input
+            data-testid="group-label-input"
+            aria-label="New group label"
+            value={newGroupLabel}
+            onChange={(e) => setNewGroupLabel(e.target.value)}
+            placeholder="group label…"
+            maxLength={200}
+            className="rounded-lg px-2 py-1 text-[11px] font-mono"
+            style={{
+              background: 'var(--surface-card)',
+              border: '1px solid var(--surface-raised)',
+              color: 'var(--ink-high)',
+              width: '140px',
+            }}
+          />
+        )}
+
         {/* ── Gate posture at top level (§7.8, slice AC) — the + drawer keeps
             the full matrix; this is the always-visible control whose shipped
             default is COMPOSER_DEFAULT_GATE_POSTURE (never "none"). ── */}
         <span
-          className="text-[11px] font-mono uppercase tracking-widest ml-auto"
+          className="text-[11px] font-mono uppercase tracking-widest"
           style={{ color: 'var(--ink-dim)' }}
         >
           Gate

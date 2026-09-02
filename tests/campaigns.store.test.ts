@@ -24,7 +24,7 @@ const frame = (type: string, fields: Record<string, unknown> = {}): CoreEvent =>
 
 beforeEach(() => {
   listCampaigns.mockReset();
-  useCampaignsStore.setState({ support: 'unknown', summaries: [], live: {} });
+  useCampaignsStore.setState({ support: 'unknown', campaigns: [], groups: [], live: {} });
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -33,11 +33,12 @@ describe('the §1.5 support probe — three states, never a boolean', () => {
     expect(useCampaignsStore.getState().support).toBe('unknown');
   });
 
-  it('200 with [] is SUPPORTED — the "no campaigns yet" answer, never a 404', async () => {
-    listCampaigns.mockResolvedValue({ campaigns: [] });
+  it('200 with empty lists is SUPPORTED — the "no campaigns yet" answer, never a 404', async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
     await useCampaignsStore.getState().refresh();
     expect(useCampaignsStore.getState().support).toBe('supported');
-    expect(useCampaignsStore.getState().summaries).toEqual([]);
+    expect(useCampaignsStore.getState().campaigns).toEqual([]);
+    expect(useCampaignsStore.getState().groups).toEqual([]);
   });
 
   it('404 = this daemon predates campaigns → unsupported', async () => {

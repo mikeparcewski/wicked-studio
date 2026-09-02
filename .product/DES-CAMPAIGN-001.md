@@ -13,6 +13,17 @@ explains why keeping the engine off the critical path is the point of the chosen
 > `DES-CAMPAIGN-001` and is about a *grouping surface*. Where the two must be distinguished below,
 > the engine's is written **core's DES-CAMPAIGN-001**. §1.3 and §6 say exactly how they relate.
 
+> **Reality note (2026-09, #27 remainder).** The wire crew ACTUALLY shipped (crew#342 + the
+> api-types 0.19.0 additions) superseded §1.4's crew-side label store: `GET /campaigns` serves
+> the ENGINE campaign (`id`/`def`/`node_status`/`node_run_id` + daemon-joined `node_delivery`/
+> `attached_runs`) beside ad-hoc `RunGroup`s (`groups`), and launch-time attach is
+> `LaunchRunBody.campaignId` XOR `groupLabel` on `POST /runs` (404 unknown campaign, 400 both).
+> Studio's surface (`src/api/campaigns.ts`, `board/campaignStats.ts`, `CampaignsPage`,
+> `CampaignScoreboard`, the composer's Group control) is written against THAT contract —
+> verified against a daemon built from the crew branch. §1.4(b)–(e)/§2.3's shapes are the
+> historical design, kept for the rationale (§3's board UX, §3.3 denominator honesty, §1.5's
+> probe), which still governs.
+
 ---
 
 ## 0 The problem
