@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.11] — 2026-09-05
+
+### Changed
+- **Chrome + rail control affordances (#183, operator direction).** The rail header now spaces
+  Notifications, Ask, and the menu as distinct actions rather than one cluster. NotificationBell
+  is centered inside a token border, with the unread count moved from an overlaid badge to inside
+  the border (right of the label, shown only when unread > 0). Ask takes the slot next to the
+  logo where the connection "live" word used to sit; the status dot stays as the minimal
+  glanceable state and still expands the rail-foot Health section on click.
+
 ## [0.4.10] — 2026-09-02
 
 ### Added
