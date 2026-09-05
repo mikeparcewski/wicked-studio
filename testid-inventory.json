@@ -2911,7 +2911,7 @@
     {
       "testId": "rail-ask",
       "files": [
-        "src/components/LeftSidebar.tsx"
+        "src/components/AppChrome.tsx"
       ]
     },
     {

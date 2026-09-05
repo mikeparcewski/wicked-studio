@@ -4,10 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { chordMatches, registerShortcuts, type ShortcutEntry } from '../src/hooks/useGlobalShortcuts.js';
 
 /**
- * The rail's ASK entry (the app-wide ask feature): BELOW Notifications, ABOVE Projects,
- * and its OWN idiom — an accent-dressed action button (`data-idiom="ask"`), not a nav
- * heading row and not a bell sibling. Its chord (Ctrl/⌘+Shift+A) registers in the ONE
- * shortcut registry, so the '?' overlay documents it for free.
+ * The ASK entry (the app-wide ask feature): relocated by the rail-header restyle
+ * into the app chrome, taking the connection dot's old status-word slot — it now
+ * sits NEXT TO the connection dot and ABOVE the notification bell. It keeps its
+ * OWN idiom: an accent-dressed action button (`data-idiom="ask"`), not a nav
+ * heading row and not a bell sibling. Its chord (Ctrl/⌘+Shift+A) registers in
+ * the ONE shortcut registry, so the '?' overlay documents it for free.
  */
 
 vi.mock('../src/hooks/useBoardModel.js', () => ({
@@ -38,15 +40,16 @@ beforeEach(() => {
   cleanup();
 });
 
-describe('the Ask rail entry — placement + idiom', () => {
-  it('sits BELOW the notification bell and ABOVE the Projects heading', () => {
+describe('the Ask entry — placement in the chrome + idiom', () => {
+  it('sits in the chrome NEXT TO the connection dot and ABOVE the notification bell', () => {
     rail(() => undefined);
     const ask = screen.getByTestId('rail-ask');
+    const dot = screen.getByTestId('connection-dot');
     const bell = screen.getByTitle('Notifications'); // the bell trigger
-    const projects = screen.getByTestId('rail-heading-projects');
-    // DOM order is the rail order: bell → ask → projects.
-    expect(bell.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(ask.compareDocumentPosition(projects) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The Ask took the connection word's slot: the dot precedes it in the chrome.
+    expect(dot.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The chrome (with Ask) is above the bell row: ask → bell in DOM order.
+    expect(ask.compareDocumentPosition(bell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('is its OWN idiom: an accent button, not a heading row and not a bell sibling', () => {
@@ -73,6 +76,18 @@ describe('the Ask rail entry — placement + idiom', () => {
   it('renders NO Ask entry when the app has not wired one (no dead door)', () => {
     rail(undefined);
     expect(screen.queryByTestId('rail-ask')).toBeNull();
+  });
+
+  it('collapsed: preserves the Ask action as an icon beside the compact chrome', async () => {
+    rail(() => undefined);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+
+    const ask = screen.getByTestId('rail-ask');
+    expect(ask.style.width).toBe('28px');
+    expect(ask.style.height).toBe('28px');
+    expect(ask).not.toHaveTextContent('Ask');
+    expect(screen.getByTestId('connection-dot')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
   });
 });
 
