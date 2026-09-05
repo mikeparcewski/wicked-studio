@@ -53,8 +53,9 @@ interface Props {
    *  auto-collapses the rail to its icon state; leaving restores what the user had.
    *  Hover-peek still works, and the expand control stays live — auto, not locked. */
   immersive?: boolean;
-  /** Opens the app-wide ASK dock (the AskDock binding of the assist panel). The Ask
-   *  entry renders only when the app wires this — the rail never paints a dead door. */
+  /** Opens the app-wide ASK dock (the AskDock binding of the assist panel). Threaded
+   *  into the chrome (AppChrome), where the Ask entry took the connection word's slot;
+   *  it renders only when the app wires this — the chrome never paints a dead door. */
   onOpenAsk?: () => void;
 }
 
@@ -637,9 +638,12 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
       onMouseLeave={() => setHovered(false)}
     >
       {/* The app chrome (DES-VISION-001 §6.3 slice 3): logo slot + product name
-          + connection dot — untouched by the round-4 re-architecture (§8.2). */}
-      <div className={`flex shrink-0 ${isExpanded ? 'items-center pr-2' : 'flex-col items-center pt-2 gap-1'}`}>
-        <AppChrome collapsed={!isExpanded} navigate={navigate} onDotClick={onDotClick} />
+          + connection dot — and, in the connection word's old slot, the Ask entry
+          (rail-header restyle). `gap-2` gives the chrome cluster (Ask) and the
+          collapse/expand "menu" control clear separation — distinct actions,
+          not one cluster (item 1). */}
+      <div className={`flex shrink-0 ${isExpanded ? 'items-center gap-2 pr-2' : 'flex-col items-center pt-2 gap-2'}`}>
+        <AppChrome collapsed={!isExpanded} navigate={navigate} onDotClick={onDotClick} {...(onOpenAsk !== undefined ? { onOpenAsk } : {})} />
         <button
           type="button"
           onClick={() => setCollapsed(v => !v)}
@@ -651,48 +655,13 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
         </button>
       </div>
 
-      {/* Notification bell — stays exactly where it is (§6.1, the operator's word). */}
-      <div className={isExpanded ? 'px-4 pb-2' : 'flex justify-center pb-2'}>
+      {/* Notification bell — stays in its slot below the chrome (§6.1). The top
+          spacing (pt-3 expanded / pt-2 collapsed) separates it from the chrome
+          cluster above: Notifications reads as its own distinct action, not part
+          of the header cluster (item 1). */}
+      <div className={isExpanded ? 'px-4 pt-3 pb-3' : 'flex justify-center pt-2 pb-2'}>
         <NotificationBell navigate={navigate} collapsed={!isExpanded} />
       </div>
-
-      {/* ASK — below Notifications, above Projects, and deliberately its OWN idiom:
-          an accent-dressed action button, not a nav heading and not a bell sibling.
-          It opens the app-wide assist dock in the ask context (AskDock); the chord
-          Ctrl/⌘+Shift+A does the same and is documented in the '?' overlay. */}
-      {onOpenAsk !== undefined && (
-        <div className={isExpanded ? 'px-3 pb-2' : 'flex justify-center pb-2'}>
-          <button
-            type="button"
-            data-testid="rail-ask"
-            data-idiom="ask"
-            aria-label="Ask — governed answers about your projects, repos, and this studio (Ctrl/⌘+Shift+A)"
-            aria-keyshortcuts="Control+Shift+A Meta+Shift+A"
-            title="Ask — governed answers about your projects, repos, and this studio (Ctrl/⌘+Shift+A)"
-            onClick={onOpenAsk}
-            className={
-              isExpanded
-                ? 'w-full flex items-center gap-2 rounded-lg px-3 py-2 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-1'
-                : 'w-9 h-9 flex items-center justify-center rounded-lg transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-1'
-            }
-            style={{
-              background: 'var(--accent-subtle)',
-              border: '1px solid var(--accent)',
-              color: 'var(--accent)',
-            }}
-          >
-            <span aria-hidden style={{ fontSize: 'var(--text-sm)', lineHeight: 1 }}>✦</span>
-            {isExpanded && (
-              <>
-                <span className="flex-1 text-left text-xs" style={{ fontWeight: 'var(--weight-semi)', fontFamily: 'var(--font-sans)' }}>
-                  Ask
-                </span>
-                <kbd className="font-mono text-[9px]" style={{ opacity: 0.75 }}>⌘⇧A</kbd>
-              </>
-            )}
-          </button>
-        </div>
-      )}
 
       {isExpanded ? (
         <div className="flex-1 overflow-y-auto flex flex-col min-h-0 px-2 pt-1" style={{ borderTop: `1px solid ${S.border}` }}>

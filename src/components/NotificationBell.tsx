@@ -134,15 +134,20 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
         aria-haspopup="true"
         title="Notifications"
         onClick={() => setOpen(!open)}
-        className="relative flex items-center rounded transition-opacity hover:opacity-70"
+        className="flex items-center rounded transition-opacity hover:opacity-70"
         style={{
-          gap: collapsed ? 0 : '6px',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          width: collapsed ? '28px' : 'auto',
+          // Content is CENTERED in both rail states; the trigger carries a
+          // visible border in the SAME token as the popover (--surface-raised),
+          // so bell and dropdown read as one family (restyle item 2).
+          gap: '6px',
+          justifyContent: 'center',
+          width: collapsed ? undefined : '100%',
+          minWidth: collapsed ? '28px' : undefined,
           height: '28px',
           color: unreadCount > 0 ? S.accent : S.faint,
           background: 'transparent',
-          padding: collapsed ? 0 : '0 6px 0 4px',
+          border: '1px solid var(--surface-raised)',
+          padding: collapsed ? '0 6px' : '0 10px',
         }}
       >
         <IconBell />
@@ -151,10 +156,13 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
             Notifications
           </span>
         )}
+        {/* Unread count lives INSIDE the border, to the RIGHT of the icon/text,
+            and renders only when there is something unread — no overlaid badge,
+            no empty pill. Collapsed keeps it too (icon + count, no label). */}
         {unreadCount > 0 && (
           <span
             aria-hidden
-            className="absolute -top-0.5 -right-0.5 flex items-center justify-center rounded-full text-[9px] font-bold"
+            className="flex items-center justify-center rounded-full text-[9px] font-bold"
             style={{
               minWidth: '14px',
               height: '14px',

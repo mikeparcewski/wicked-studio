@@ -90,6 +90,20 @@ describe('AppChrome (DES-VISION-001 §3.1, §5.2)', () => {
     }
   });
 
+  it('keeps the bare status dot and replaces its status word with Ask', () => {
+    render(<AppChrome collapsed={false} navigate={() => {}} onOpenAsk={() => {}} />);
+    const dot = screen.getByTestId('connection-dot');
+    const ask = screen.getByTestId('rail-ask');
+
+    // The dot remains the compact, glanceable connection state; its old text
+    // label has yielded its slot to the working Ask action.
+    expect(dot).toBeInTheDocument();
+    expect(dot.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('live')).toBeNull();
+    expect(screen.queryByText('connecting…')).toBeNull();
+    expect(screen.queryByText('offline')).toBeNull();
+  });
+
   // DES-FEEDBACK-001 §1.2/§4.4 (slice A): the settings gear LEFT the chrome —
   // its dropdown lives in the rail's SettingsRailSection now. The chrome keeps
   // exactly the logo slot, the product name, and the connection dot.
