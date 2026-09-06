@@ -12,6 +12,11 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.13] — 2026-09-06
+
+### Changed
+- **Unified governed-knowledge surface (DES-MEM-FACETED-001, #187).** Steering is now the home for both **Policies** and **Memories**, each sub-section carrying *manage existing* AND *proposals*: the seven steering-type pages collapse into one type-filtered Policies view (all rule-management preserved) with policy proposals folded in; a new Memories sub-section browses the memory store, retires (subtree-scoped), and reviews memory proposals. The standalone Proposals surface is retired into these sub-sections (`/proposals` and legacy `/steering/:type` redirect).
+
 ## [0.4.12] — 2026-09-06
 
 ### Added
@@ -344,7 +349,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.12...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.13...HEAD
+[0.4.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.12...v0.4.13
 [0.4.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.11...v0.4.12
 [0.4.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.10...v0.4.11
 [0.4.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.9...v0.4.10
