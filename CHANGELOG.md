@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.12] — 2026-09-06
+
+### Added
+- **The proposal approval-queue surface** (DES-MEM-FACETED-001, #185). A dedicated queue for
+  governed-knowledge proposals: browse pending proposals, filter by type, and approve or reject
+  each in place. The `Proposal` type is defined locally for this release (per the `src/api/wiki.ts`
+  pattern) pending `wicked-crew-api-types@0.21.0`.
+
 ## [0.4.11] — 2026-09-05
 
 ### Changed
@@ -336,7 +344,9 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.10...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.12...HEAD
+[0.4.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.11...v0.4.12
+[0.4.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.10...v0.4.11
 [0.4.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.9...v0.4.10
 [0.4.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.7...v0.4.8
