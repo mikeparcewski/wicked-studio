@@ -64,7 +64,7 @@ function PayloadDetail({ proposal }: { proposal: Proposal }): React.ReactElement
   return (
     <DetailRow label="Payload" testid="proposal-raw-payload">
       <code className="whitespace-pre-wrap break-all font-mono text-[10px]">
-        {JSON.stringify(proposal.payload)}
+        {proposal.payload === undefined ? '(no payload)' : JSON.stringify(proposal.payload)}
       </code>
     </DetailRow>
   );
