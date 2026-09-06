@@ -92,10 +92,10 @@ function GapNearestRules({ result, navigate }: {
   navigate: (path: string) => void;
 }): React.ReactElement {
   const nearest = result.nearest_rules ?? [];
-  // Where a nearest-rule link lands (qe finding: hints become LINKS): the
-  // sample's own type page, with `?rule=<id>` opening that rule's drawer.
+  // Where a nearest-rule link lands (qe finding: hints become LINKS): the unified Policies view,
+  // FILTERED to the sample's type (`?type=`), with `?rule=<id>` opening that rule's drawer.
   const rulePath = (id: string): string =>
-    `/steering/${encodeURIComponent(result.sample.steering_type)}?rule=${encodeURIComponent(id)}`;
+    `/steering/policies?type=${encodeURIComponent(result.sample.steering_type)}&rule=${encodeURIComponent(id)}`;
   return (
     <div
       data-testid="testing-evals-nearest"

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { api } from '../api/client.js';
+import { isSteeringType, policiesPath, memoriesPath } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
 import { modePath, projectPath, type Mode, type Navigate } from './useRoute.js';
 
@@ -101,26 +102,49 @@ export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void 
 }
 
 /**
- * The Steering surface's address normalizer (the STEERING program, re-aimed by the steering-UX
- * wave): bare `/steering` IS the landing now — the seven type cards — and never redirects. Any
- * OTHER parse that landed on `panel: 'steering'` without a valid type — a typo'd
- * `/steering/foo`, and the RETIRED addresses `/wiki` (the old Architecture Wiki page), `/rules`
- * (the old RuleManager), and `/policies` (the old policies settings panel, merged into steering
- * rules) — is replaced with the landing's real URL. REPLACE, like every redirect in this
- * module, so Back never re-enters the dead address; the page itself renders the landing on the
- * pre-redirect tick, so nothing flashes.
+ * The unified Steering surface's address normalizer (DES-MEM-FACETED-001, unified surface).
+ * `/steering/policies` and `/steering/memories` are the real addresses and never redirect; every
+ * OTHER parse that landed on `panel: 'steering'` with `steeringSection === null` is an address
+ * that needs to resolve onto one of the two sub-sections:
+ *
+ *   /steering                → /steering/policies             (the default home)
+ *   /steering/:type          → /steering/policies?type=:type  (the seven pages collapsed into a
+ *                              filter — bookmarks keep their type)
+ *   /wiki, /rules, /policies  → /steering/policies             (the retired governance panels)
+ *   /proposals               → /steering/policies             (the retired standalone queue)
+ *   /proposals?type=memory   → /steering/memories             (its memory filter → the Memories
+ *                              sub-section, which reviews memory proposals)
+ *
+ * A typo'd `/steering/foo` parses to `not-found` (usability review #4), so this hook never sees
+ * `panel: 'steering'` for it and leaves the address alone. REPLACE, like every redirect in this
+ * module, so Back never re-enters the dead address; the parse already lands these on the Policies
+ * view (`steeringSection` null renders Policies), so nothing flashes.
  */
 export function useSteeringRedirect(
   panel: string,
-  steeringType: string | null,
+  steeringSection: string | null,
   pathname: string,
+  search: string,
   navigate: Navigate,
 ): void {
   useEffect(() => {
-    if (panel !== 'steering' || steeringType !== null) return;
-    if (pathname === '/steering' || pathname === '/steering/') return; // the landing IS the page
-    navigate('/steering', { replace: true });
-  }, [panel, steeringType, pathname, navigate]);
+    if (panel !== 'steering' || steeringSection !== null) return;
+    const [, first = '', second = ''] = pathname.split('/');
+    // The retired standalone review queue: its memory filter routes to the Memories sub-section,
+    // everything else to Policies.
+    if (first === 'proposals') {
+      const kind = new URLSearchParams(search).get('type');
+      navigate(kind === 'memory' ? memoriesPath() : policiesPath(), { replace: true });
+      return;
+    }
+    // A legacy `/steering/:type` keeps its type as the Policies filter.
+    if (first === 'steering' && isSteeringType(second)) {
+      navigate(policiesPath(second), { replace: true });
+      return;
+    }
+    // Bare `/steering` and the retired `/wiki` `/rules` `/policies` panels → the Policies home.
+    navigate(policiesPath(), { replace: true });
+  }, [panel, steeringSection, pathname, search, navigate]);
 }
 
 /**

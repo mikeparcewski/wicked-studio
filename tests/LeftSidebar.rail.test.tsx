@@ -58,7 +58,7 @@ const W2_ORDERED = [
   bp('scratch', 'quiet', 0),
 ];
 
-const HEADING_KEYS = ['projects', 'make', 'chat', 'repos', 'testing', 'steering', 'proposals', 'settings'] as const;
+const HEADING_KEYS = ['projects', 'make', 'chat', 'repos', 'testing', 'steering', 'settings'] as const;
 
 function rail(props: Partial<{ pathname: string; navigate: (p: string) => void; runs: ReturnType<typeof makeView>[] }> = {}): ReturnType<typeof render> {
   return render(
@@ -100,16 +100,13 @@ describe('the route→heading map (§3.2)', () => {
     for (const p of ['/system', '/theme', '/coverage', '/domain', '/workflows']) {
       expect(headingForPath(p)).toBe('settings');
     }
-    // Steering owns its routes AND the retired /wiki + /rules addresses (they
-    // redirect to /steering — the rail must not flash Settings
-    // open on the pre-redirect tick).
-    // /policies retired into Steering (policies merged into steering rules) — same contract.
-    for (const p of ['/steering', '/steering/architecture', '/steering/security', '/wiki', '/rules', '/policies']) {
+    // Steering owns its sub-sections AND the retired /wiki + /rules + /policies panels AND the
+    // retired standalone /proposals queue (all redirect into Steering — the rail must not flash
+    // Settings open on the pre-redirect tick). The seven types are a `?type=` filter under
+    // /steering/policies now, so a legacy /steering/:type still maps here too.
+    for (const p of ['/steering', '/steering/policies', '/steering/memories', '/steering/security', '/wiki', '/rules', '/policies', '/proposals']) {
       expect(headingForPath(p)).toBe('steering');
     }
-    // Proposals owns its route (the governed-knowledge review queue, DES-MEM-FACETED-001).
-    // headingForPath receives the bare pathname (the ?type= filter rides the search string).
-    expect(headingForPath('/proposals')).toBe('proposals');
     // Testing owns its routes AND the retired flat /campaigns addresses (they
     // redirect to /testing/campaigns — same pre-redirect-tick contract).
     for (const p of ['/testing/harness', '/testing/evals', '/testing/campaigns', '/testing/campaigns/c-1', '/campaigns', '/campaigns/c-1']) {
@@ -121,15 +118,17 @@ describe('the route→heading map (§3.2)', () => {
   });
 });
 
-describe('the eight heading rows (§3.1 + STEERING + the testing wave + Proposals)', () => {
-  it('renders all eight headings; Testing, Steering, Proposals and Settings are icon-less, the other four carry ▦ and ＋', async () => {
+describe('the seven heading rows (§3.1 + STEERING + the testing wave)', () => {
+  it('renders all seven headings; Testing, Steering and Settings are icon-less, the other four carry ▦ and ＋', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     for (const k of HEADING_KEYS) {
       expect(screen.getByTestId(`rail-heading-${k}`)).toBeInTheDocument();
     }
-    for (const k of ['testing', 'steering', 'proposals', 'settings']) {
+    // The standalone Proposals heading retired — proposals live inside Steering's sub-sections.
+    expect(screen.queryByTestId('rail-heading-proposals')).toBeNull();
+    for (const k of ['testing', 'steering', 'settings']) {
       const h = screen.getByTestId(`rail-heading-${k}`);
       expect(within(h).queryByTestId('heading-dashboard')).toBeNull();
       expect(within(h).queryByTestId('heading-new')).toBeNull();
@@ -141,18 +140,16 @@ describe('the eight heading rows (§3.1 + STEERING + the testing wave + Proposal
     }
   });
 
-  it('Testing → Steering → Proposals → Settings, each immediately before the next (the placement contract)', async () => {
+  it('Testing → Steering → Settings, each immediately before the next (the placement contract)', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     const testing = screen.getByTestId('rail-heading-testing');
     const steering = screen.getByTestId('rail-heading-steering');
-    const proposals = screen.getByTestId('rail-heading-proposals');
     const settings = screen.getByTestId('rail-heading-settings');
-    // Same container, adjacent, testing → steering → proposals → settings — DOM-order assertions.
+    // Same container, adjacent, testing → steering → settings — DOM-order assertions.
     expect(testing.nextElementSibling).toBe(steering);
-    expect(steering.nextElementSibling).toBe(proposals);
-    expect(proposals.nextElementSibling).toBe(settings);
+    expect(steering.nextElementSibling).toBe(settings);
     expect(steering.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -381,21 +378,22 @@ describe('accordion contents (§3.3)', () => {
     expect(within(settings).getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument();
   });
 
-  it('Steering expands to the seven type rows, each navigating to its sub-page; the route expands it', async () => {
+  it('Steering expands to the two sub-section rows (Policies / Memories), each navigating to its page; the route expands it', async () => {
     const navigate = vi.fn();
-    rail({ pathname: '/steering/security', navigate });
+    rail({ pathname: '/steering/policies', navigate });
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     const steering = screen.getByTestId('rail-heading-steering');
     expect(steering.getAttribute('aria-expanded')).toBe('true');
-    const rows = within(steering).getAllByTestId('rail-steering-type');
-    expect(rows.map((r) => r.dataset.type)).toEqual([
-      'architecture', 'development', 'security', 'testing', 'operations', 'compliance', 'design-ux',
-    ]);
-    expect(rows[6]).toHaveTextContent('Design/UX');
+    const rows = within(steering).getAllByTestId('rail-steering-section');
+    expect(rows.map((r) => r.dataset.section)).toEqual(['policies', 'memories']);
+    expect(rows[0]).toHaveTextContent('Policies');
+    expect(rows[1]).toHaveTextContent('Memories');
+    // The seven types retired into a `?type=` filter under Policies — no per-type rail rows now.
+    expect(within(steering).queryByTestId('rail-steering-type')).toBeNull();
 
-    fireEvent.click(rows[3]!);
-    expect(navigate).toHaveBeenCalledWith('/steering/testing');
+    fireEvent.click(rows[1]!);
+    expect(navigate).toHaveBeenCalledWith('/steering/memories');
   });
 
   it('Testing expands to the two page rows, each navigating to its sub-page; the route expands it', async () => {
@@ -415,15 +413,15 @@ describe('accordion contents (§3.3)', () => {
 });
 
 describe('the collapsed rail (§3.2)', () => {
-  it('shows exactly eight glyph links (Testing → its Campaigns landing, Steering → its landing, Proposals → its queue, Settings → /system)', async () => {
+  it('shows exactly seven glyph links (Testing → its Campaigns landing, Steering → its Policies home, Settings → /system)', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
-    expect(glyphs).toHaveLength(8);
+    expect(glyphs).toHaveLength(7);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/make', '/chats', '/repos', '/testing/campaigns', '/steering', '/proposals', '/system',
+      '/projects', '/make', '/chats', '/repos', '/testing/campaigns', '/steering/policies', '/system',
     ]);
     // Accordions don't exist at this width.
     expect(screen.queryByTestId('rail-heading-projects')).toBeNull();

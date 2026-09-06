@@ -21,7 +21,7 @@ import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { SteeringPage } from './components/SteeringPage.js';
-import { ProposalsPage } from './components/ProposalsPage.js';
+import { MemoriesPanel } from './components/MemoriesPanel.js';
 import { TestingPage } from './components/TestingPage.js';
 import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
@@ -47,7 +47,7 @@ import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
-import { isSteeringType } from './api/steering.js';
+import { readSteeringTypeFilter } from './api/steering.js';
 import { isTestingSubPage } from './api/testing.js';
 import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
@@ -75,7 +75,7 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
 const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignId, steeringType, testingPage, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignId, steeringSection, testingPage, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
@@ -144,10 +144,10 @@ export function App(): React.ReactElement {
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
   useLegacyRedirect({ panel, runId, projectId, mode, showLaunch, chatMode }, navigate);
 
-  // The retired governance addresses (`/wiki`, `/rules`, `/policies`) and any invalid-type
-  // `/steering/*` address normalize onto the `/steering` landing (the bare landing never
-  // redirects — it IS the page now).
-  useSteeringRedirect(panel, steeringType, pathname, navigate);
+  // Bare `/steering`, a legacy `/steering/:type`, the retired governance panels
+  // (`/wiki`/`/rules`/`/policies`) and the retired standalone `/proposals` queue normalize onto
+  // the unified surface's two sub-sections (`/steering/policies[?type=]` or `/steering/memories`).
+  useSteeringRedirect(panel, steeringSection, pathname, search, navigate);
 
   // The retired `/coverage` and `/domain` settings panels normalize onto `/system`.
   useRetiredSettingsRedirect(pathname, navigate);
@@ -478,31 +478,30 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/steering[/:type]` — the STEERING surface: ONE shell, parameterized by type. A null
-    // type IS the landing (the seven type cards); the retired `/wiki`/`/rules`/`/policies`
-    // addresses render it for the tick before useSteeringRedirect lands.
+    // `/steering/{policies,memories}` — the unified governed-knowledge surface: ONE home, two
+    // sub-sections, each managing existing items AND reviewing proposals. Memories renders the
+    // memory store + memory proposals; Policies (the default — also the tick before
+    // useSteeringRedirect lands for bare `/steering`, a legacy `/steering/:type`, or the retired
+    // `/wiki`/`/rules`/`/policies`/`/proposals` addresses) renders the seven-type rule grid (the
+    // `?type=` filter collapsing the old seven pages) + policy proposals.
     if (panel === 'steering') {
-      // No page-level scroll wrapper here: the SteeringPage owns its layout — the landing
-      // scrolls itself, and a TYPE page is a two-column flex (grid column scrolls, the assist
-      // dock is a full-height sibling — DES-ASSIST-DOCK §2).
+      // No page-level scroll wrapper here: each sub-section owns its layout — a two-column flex
+      // (the management column scrolls, the assist dock is a full-height sibling — DES-ASSIST-DOCK §2).
+      if (steeringSection === 'memories') {
+        return (
+          <div className="flex flex-1 overflow-hidden">
+            <MemoriesPanel />
+          </div>
+        );
+      }
       return (
         <div className="flex flex-1 overflow-hidden">
           <SteeringPage
-            type={steeringType !== null && isSteeringType(steeringType) ? steeringType : null}
+            type={readSteeringTypeFilter(search)}
             navigate={navigate}
             search={search}
             runs={runs}
           />
-        </div>
-      );
-    }
-    // `/proposals` — the governed-knowledge review queue (DES-MEM-FACETED-001), Steering-adjacent:
-    // Steering authors policies, this reviews the agent-proposed memories AND policies. The type
-    // filter rides `?type=` in `search`, which the page reads.
-    if (panel === 'proposals') {
-      return (
-        <div className="flex-1 overflow-y-auto">
-          <ProposalsPage navigate={navigate} search={search} />
         </div>
       );
     }

@@ -180,7 +180,7 @@ describe('SteeringUsageBand — the folds', () => {
     band({ navigate });
 
     await user.click(await screen.findByTestId('steering-usage-rules'));
-    expect(navigate).toHaveBeenCalledWith('/steering/security?usage=unused');
+    expect(navigate).toHaveBeenCalledWith('/steering/policies?type=security&usage=unused');
   });
 
   it('scoreboard unsupported → the rules tile is honestly absent, not zero', async () => {
@@ -237,7 +237,7 @@ describe('the ?usage=unused click-through — the grid filters to the unused ids
       expect(rows[0]).toHaveAttribute('data-rule-id', 'PAT-003');
     });
     expect(screen.getByTestId('steering-usage-filter-note')).toHaveTextContent('the enforcement record never cites');
-    expect(screen.getByTestId('steering-usage-filter-clear')).toHaveAttribute('href', '/steering/security');
+    expect(screen.getByTestId('steering-usage-filter-clear')).toHaveAttribute('href', '/steering/policies?type=security');
   });
 
   it('without the scoreboard the filter says it cannot compute and shows ALL rules', async () => {

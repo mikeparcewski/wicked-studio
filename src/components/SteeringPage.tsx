@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import {
   authorSteeringRules,
+  DEFAULT_STEERING_TYPE,
   importSteeringRules,
   importEntryOutcome,
   isSteeringUnsupported,
+  policiesPath,
   STEERING_TYPE_LABELS,
   STEERING_UNSUPPORTED_COPY,
   steeringTypeOf,
@@ -23,42 +25,44 @@ import {
 import type { SessionView } from '../api/types.js';
 import { ruleUsage } from '../board/steeringUsage.js';
 import { AssistDock, useAssistDockOpen, type AssistNote, type AssistVerbs } from './AssistDock.js';
+import { ProposalsSection } from './ProposalsSection.js';
 import { SteeringAddMenu } from './SteeringAddMenu.js';
 import { SteeringUsageBand } from './SteeringUsageBand.js';
 import { SteeringGrid } from './SteeringGrid.js';
 import { SteeringHealth, SteeringStoreHealth, type ScoreboardState } from './SteeringHealth.js';
 import { SteeringRuleDrawer } from './SteeringRuleDrawer.js';
 import { SteeringRuleFormModal } from './SteeringRuleForm.js';
-import { SteeringTypeCards } from './SteeringTypeCards.js';
+import { SteeringTypeFilter } from './SteeringTypeFilter.js';
 
 /**
- * The Steering surface after the SPREADSHEET wave (round-3 operator steer: "steering should be
- * treated like a spreadsheet … with a right panel that lets you add data by chatting or
- * analysis of docs or uploading directly"):
+ * The Steering surface's POLICIES sub-section (`/steering/policies`, DES-MEM-FACETED-001 unified
+ * surface). One page that both MANAGES existing policies and REVIEWS policy proposals:
  *
- *  - `/steering` (type === null) — the LANDING, unchanged: a calm grid of seven compact type
- *    cards, each carrying that type's rule count from the ONE rules fetch.
- *  - `/steering/:type` — the rule GRID (SteeringGrid): an editable spreadsheet over the common
- *    columns, per-row saves on the SHIPPING upsert wire (optimistic here, reverted on error,
- *    the server's answer reloaded — the "where the server filed it" honesty note included),
- *    add = a draft row, remove = the retire kill switch. The ADVANCED fields stay in the
- *    DRAWER a row's id cell opens.
- *  - The ASSIST DOCK (AssistDock — v1 of the app-wide panel, DES-ASSIST-DOCK) sits beside the
- *    grid: a typed message launches the governed steering-author run for THIS page's type and
- *    narrates inline; rule-shaped attachments fork import-directly vs analyze-with-chat.
+ *  - the old seven type pages/cards COLLAPSED into ONE grid with a TYPE FILTER (SteeringTypeFilter:
+ *    `All` + the seven types, riding `?type=` in the URL). `type === null` is the `All` view — the
+ *    grid shows every rule (each row still shows its type, editable inline) and the store-wide
+ *    health + usage band render; a `type` scopes the grid and shows that type's health header.
+ *  - the GRID (SteeringGrid) is the editable spreadsheet over the common columns — per-row saves on
+ *    the SHIPPING upsert wire (optimistic here, reverted on error, the server's answer reloaded, the
+ *    "where the server filed it" honesty note included); add = a draft row; remove = the retire kill
+ *    switch. The ADVANCED fields stay in the DRAWER the id cell opens.
+ *  - the ASSIST DOCK (DES-ASSIST-DOCK) sits beside the grid: a typed message launches the governed
+ *    steering-author run for the active type (architecture in the `All` view) and narrates inline;
+ *    rule-shaped attachments fork import-directly vs analyze-with-chat.
+ *  - the POLICY PROPOSALS section (ProposalsSection, below the grid) reviews the agent-proposed
+ *    steering policies awaiting a human approve/reject — the review half of this sub-section.
  *
- * Every management write still goes through crew's API (the governed operator path) — estate
- * MCP stays read-only (AW-11).
+ * Every management write still goes through crew's API (the governed operator path) — estate MCP
+ * stays read-only (AW-11).
  */
 
 export function SteeringPage({ type, navigate, search = '', runs = [] }: {
-  /** The routed steering type — null on the bare `/steering` landing. */
+  /** The active type FILTER read from `?type=` — `null` is the `All` view (every rule). */
   type: SteeringType | null;
   navigate: (path: string) => void;
-  /** The URL search string — `?rule=<id>` deep-links a rule's drawer open
-   *  (the Evals gap rows link here, qe finding: hints became links);
-   *  `?usage=unused` filters a type page's grid to the rules the enforcement
-   *  record never cites (the usage band's click-through). */
+  /** The URL search string — `?type=<type>` is the type filter; `?rule=<id>` deep-links a rule's
+   *  drawer open (the Evals gap rows link here); `?usage=unused` filters the grid to the rules the
+   *  enforcement record never cites (the usage band's click-through). */
   search?: string;
   /** The app's one runs list — the usage band's governed-runs join. */
   runs?: SessionView[];
@@ -79,6 +83,10 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
   /** Bumped by the Add ▾ menu — the grid opens its draft row on change. */
   const [addTick, setAddTick] = useState(0);
   const [dockOpen, setDockOpen] = useAssistDockOpen('steering');
+
+  /** The type a new/authored rule defaults to — the active filter, or architecture in the `All`
+   *  view (the engine's serde default; the draft's type cell stays editable). */
+  const pageType: SteeringType = type ?? DEFAULT_STEERING_TYPE;
 
   const loadRules = useCallback(async (): Promise<SteeringRule[]> => {
     setRulesLoading(true);
@@ -111,10 +119,9 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
       .catch(() => setMeta(null));
   }, [loadRules]);
 
-  // Type change is a NAVIGATION between sub-pages: page-local UI state resets with it
-  // (the grid's facets reset via its `key={type}` remount below). The dock deliberately
-  // does NOT remount — its thread survives the walk across type pages; the verbs close
-  // over the CURRENT type on every render.
+  // A filter change is a NAVIGATION between views: page-local UI state resets with it (the grid's
+  // facets reset via its `key={type}` remount below). The dock deliberately does NOT remount — its
+  // thread survives the walk across filters; the verbs close over the CURRENT type on every render.
   useEffect(() => {
     setSelectedId(null);
     setEditing(null);
@@ -123,24 +130,15 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
     setCommitError(null);
   }, [type]);
 
-  // `?rule=<id>` deep-links a rule's drawer open (the Evals gap rows link
-  // here). Declared AFTER the type-reset effect so a cross-page navigation
-  // that carries both a new type and a rule id lands with the drawer open.
+  // `?rule=<id>` deep-links a rule's drawer open (the Evals gap rows and the failure banner link
+  // here). It opens the drawer regardless of the active type filter — a rule filed under a
+  // neighbouring type still opens, exactly as the eval-sample link intends. Declared AFTER the
+  // filter-reset effect so a navigation carrying both a new filter and a rule id lands with the
+  // drawer open.
   useEffect(() => {
     const routed = new URLSearchParams(search).get('rule');
     if (routed !== null && rules.some((r) => r.id === routed)) setSelectedId(routed);
   }, [search, rules]);
-
-  // A `?rule=<id>` deep link on the LANDING (the failure banner links here because a rule id
-  // alone does not name its type page): once rules load, resolve the id to its type and land on
-  // that page with the drawer open. Unknown ids stay on the landing — no dead redirect.
-  useEffect(() => {
-    if (type !== null || rulesLoading || rulesError !== null) return;
-    const routed = new URLSearchParams(search).get('rule');
-    if (routed === null) return;
-    const hit = rules.find((r) => r.id === routed);
-    if (hit !== undefined) navigate(`/steering/${steeringTypeOf(hit)}?rule=${encodeURIComponent(routed)}`);
-  }, [type, search, rules, rulesLoading, rulesError, navigate]);
 
   /** evidence_count join: the AW-23 per-rule evidence rows, when the scoreboard is served. */
   const evidenceOf = (id: string): { denial_claims: number; governs_evidence: number } | null => {
@@ -172,7 +170,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
           `Saved ${id} — but this daemon's engine predates steering_type, so the server filed it under ${STEERING_TYPE_LABELS[landed]}.`,
         );
       } else if (landed !== null && type !== null && landed !== type) {
-        setSavedNote(`Saved ${id} — filed under ${STEERING_TYPE_LABELS[landed]}; it lives on that page now.`);
+        setSavedNote(`Saved ${id} — filed under ${STEERING_TYPE_LABELS[landed]}; it lives under that filter now.`);
       } else {
         setSavedNote(`Saved ${id}.`);
       }
@@ -181,7 +179,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
 
   const onSaved = (id: string): void => {
     setEditing(null);
-    afterSaved(id, type ?? 'architecture');
+    afterSaved(id, pageType);
   };
 
   /** A grid cell commit: OPTIMISTIC apply, per-row revert on error, server reload on success. */
@@ -206,7 +204,6 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
   };
 
   // ── The assist dock's Steering binding (DES-ASSIST-DOCK §3) ────────────────────────────────
-  const pageType: SteeringType = type ?? 'architecture';
   const dockVerbs: AssistVerbs = useMemo(() => ({
     send: async (text, documents) => {
       try {
@@ -250,43 +247,9 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
     },
   }), [pageType, loadRules]);
 
-  // ── The landing (`/steering`) — the calm grid, nothing else open by default ─────────────────
-  if (type === null) {
-    return (
-      <div className="flex-1 overflow-y-auto p-6">
-        <div data-testid="steering-landing" className="flex max-w-5xl flex-col gap-4">
-          <div>
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Steering</h2>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-              The governance surface — one steering-rule model across seven types. Pick a type to
-              browse and manage its rules.
-            </p>
-          </div>
-          {/* The store-wide verdict lives HERE, the one place it is actionable
-              (review #5) — its raw diagnostics fold behind a details toggle. */}
-          <SteeringStoreHealth state={scoreboard} />
-          {/* When/how steering was used and its success rate — the usage band
-              (claims + per_rule evidence + the session's latest eval). */}
-          <SteeringUsageBand runs={runs} rules={rules} scoreboard={scoreboard} navigate={navigate} />
-          {rulesLoading ? (
-            <p data-testid="steering-rules-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading rules…</p>
-          ) : rulesError !== null ? (
-            <p data-testid="steering-rules-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-              {rulesError}
-            </p>
-          ) : (
-            <SteeringTypeCards rules={rules} navigate={navigate} />
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── A type page (`/steering/:type`) — the grid + the dock ──────────────────────────────────
-
-  // The id alone selects (no type gate): the type-change effect above already
-  // resets a stale selection, and a `?rule=` deep link may name a rule filed
-  // under a neighbouring type — the drawer must still open for it.
+  // The id alone selects (no type gate): the filter-change effect above already resets a stale
+  // selection, and a `?rule=` deep link may name a rule filed under a neighbouring type — the
+  // drawer must still open for it.
   const selected = selectedId === null
     ? null
     : rules.find((r) => r.id === selectedId) ?? null;
@@ -307,31 +270,27 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
       ? ruleUsage(rules, scoreboard.scoreboard.evidence.per_rule).unusedIds
       : null;
 
+  /** Where the `Show all` link in the usage-filter note points — the current filter, usage cleared. */
+  const clearUsageHref = policiesPath(type);
+
   return (
     <div
       data-testid="steering-page"
-      data-steering-type={type}
+      data-steering-type={type ?? 'all'}
       className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden"
     >
       {/* The page column — scrolls on its own; the GRID additionally scrolls horizontally
           inside its container, so grid + dock coexist at 1440×700 with zero page-level
           horizontal scroll. */}
       <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
-        <div className="flex items-center gap-2">
-          {/* The breadcrumb back to the landing — the seven-tab strip retired with it. */}
-          <a
-            data-testid="steering-breadcrumb"
-            href="/steering"
-            onClick={(e) => { e.preventDefault(); navigate('/steering'); }}
-            className="text-sm font-semibold hover:underline"
-            style={{ color: 'var(--ink-muted)', textDecoration: 'none' }}
-          >
-            Steering
-          </a>
-          <span aria-hidden className="text-sm" style={{ color: 'var(--ink-dim)' }}>›</span>
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>
-            {STEERING_TYPE_LABELS[type]}
-          </h2>
+        <div className="flex items-start gap-2">
+          <div>
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Steering · Policies</h2>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+              The governance surface — the seven-type steering-rule corpus. Filter by type, manage
+              rules inline, and review the agent-proposed policies awaiting your approval below.
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => void loadRules()}
@@ -342,125 +301,149 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
           </button>
         </div>
 
-        {/* TYPE-scoped numbers only (review #5); an empty type page renders no
-            stats at all — the store-wide verdict + diagnostics live on the
-            landing, where they are actionable. */}
-        <SteeringHealth
-          state={scoreboard}
-          type={type}
-          typeRuleCount={rules.filter((r) => steeringTypeOf(r) === type).length}
-        />
-
-        {unseeded && (
-          <div
-            data-testid="steering-unseeded"
-            className="flex flex-col gap-2 rounded p-4"
-            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
-          >
-            <p className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>
-              No steering rules seeded yet.
-            </p>
-            <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-              Add a row, or open the assistant to import a doctrine doc or author with chat — or
-              run the seed runbook at{' '}
-              <a href={SEED_RUNBOOK_URL} target="_blank" rel="noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
-                {SEED_RUNBOOK_PATH}
-              </a>:
-            </p>
-            <code
-              data-testid="steering-seed-command"
-              className="overflow-x-auto whitespace-pre rounded px-2 py-1.5 font-mono text-[10px]"
-              style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
-            >
-              {SEED_COMMAND}
-            </code>
-          </div>
+        {/* The type FILTER — `All` + the seven types, the collapse of the old seven cards/pages. */}
+        {rulesError === null && (
+          <SteeringTypeFilter rules={rules} activeType={type} navigate={navigate} />
         )}
 
-        {/* ONE Add menu — two entries now: the grid's draft row, and the assist dock
-            (import / add-with-chat live THERE). */}
-        <SteeringAddMenu
-          key={`add-${type}`}
-          onAddRow={() => setAddTick((t) => t + 1)}
-          onOpenAssistant={() => setDockOpen(true)}
-        />
-
-        {usageFilterAsked && (
-          <p
-            data-testid="steering-usage-filter-note"
-            className="rounded px-3 py-2 text-[11px]"
-            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-          >
-            {unusedIds !== null ? (
+        {rulesLoading && rules.length === 0 ? (
+          <p data-testid="steering-rules-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading rules…</p>
+        ) : rulesError !== null ? (
+          <p data-testid="steering-rules-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
+            {rulesError}
+          </p>
+        ) : (
+          <>
+            {/* Health: store-wide (verdict + usage band) in the `All` view — the one place the
+                store-wide numbers are actionable; TYPE-scoped numbers on a filtered view. */}
+            {type === null ? (
               <>
-                Showing the {unusedIds.length} rule{unusedIds.length === 1 ? '' : 's'} the enforcement
-                record never cites (no denial claims, no governs evidence).{' '}
+                <SteeringStoreHealth state={scoreboard} />
+                <SteeringUsageBand runs={runs} rules={rules} scoreboard={scoreboard} navigate={navigate} />
               </>
             ) : (
-              <>
-                This daemon does not serve the governance scoreboard, so &ldquo;unused&rdquo; cannot be
-                computed — showing all rules.{' '}
-              </>
+              <SteeringHealth
+                state={scoreboard}
+                type={type}
+                typeRuleCount={rules.filter((r) => steeringTypeOf(r) === type).length}
+              />
             )}
-            <a
-              data-testid="steering-usage-filter-clear"
-              href={`/steering/${type}`}
-              onClick={(e) => { e.preventDefault(); navigate(`/steering/${type}`); }}
-              className="underline"
-              style={{ color: 'var(--accent)' }}
-            >
-              Show all
-            </a>
-          </p>
-        )}
 
-        {savedNote !== null && (
-          <p
-            data-testid="steering-saved-note"
-            className="rounded px-3 py-2 text-[11px]"
-            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-          >
-            {savedNote}
-          </p>
-        )}
+            {unseeded && (
+              <div
+                data-testid="steering-unseeded"
+                className="flex flex-col gap-2 rounded p-4"
+                style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
+              >
+                <p className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>
+                  No steering rules seeded yet.
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                  Add a row, or open the assistant to import a doctrine doc or author with chat — or
+                  run the seed runbook at{' '}
+                  <a href={SEED_RUNBOOK_URL} target="_blank" rel="noreferrer" className="underline" style={{ color: 'var(--accent)' }}>
+                    {SEED_RUNBOOK_PATH}
+                  </a>:
+                </p>
+                <code
+                  data-testid="steering-seed-command"
+                  className="overflow-x-auto whitespace-pre rounded px-2 py-1.5 font-mono text-[10px]"
+                  style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+                >
+                  {SEED_COMMAND}
+                </code>
+              </div>
+            )}
 
-        {commitError !== null && (
-          <p
-            data-testid="steering-commit-error"
-            className="rounded px-3 py-2 text-[11px]"
-            style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
-          >
-            {commitError} — the cell reverted to the server&rsquo;s value.
-          </p>
-        )}
+            {/* ONE Add menu — two entries: the grid's draft row, and the assist dock
+                (import / add-with-chat live THERE). */}
+            <SteeringAddMenu
+              key={`add-${type ?? 'all'}`}
+              onAddRow={() => setAddTick((t) => t + 1)}
+              onOpenAssistant={() => setDockOpen(true)}
+            />
 
-        {retiredNote !== null && (
-          <p
-            data-testid="steering-retired-note"
-            className="rounded px-3 py-2 text-[11px]"
-            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-          >
-            Retired <span className="font-mono">{retiredNote.id}</span> — withdrawn from recall and
-            enforcement; the record stays listed. Your reason, for the doc PR if this rule came from
-            one: <em>&ldquo;{retiredNote.reason}&rdquo;</em>
-          </p>
-        )}
+            {usageFilterAsked && (
+              <p
+                data-testid="steering-usage-filter-note"
+                className="rounded px-3 py-2 text-[11px]"
+                style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+              >
+                {unusedIds !== null ? (
+                  <>
+                    Showing the {unusedIds.length} rule{unusedIds.length === 1 ? '' : 's'} the enforcement
+                    record never cites (no denial claims, no governs evidence).{' '}
+                  </>
+                ) : (
+                  <>
+                    This daemon does not serve the governance scoreboard, so &ldquo;unused&rdquo; cannot be
+                    computed — showing all rules.{' '}
+                  </>
+                )}
+                <a
+                  data-testid="steering-usage-filter-clear"
+                  href={clearUsageHref}
+                  onClick={(e) => { e.preventDefault(); navigate(clearUsageHref); }}
+                  className="underline"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Show all
+                </a>
+              </p>
+            )}
 
-        {!unseeded && (
-          <SteeringGrid
-            key={`grid-${type}`}
-            rules={rules}
-            type={type}
-            loading={rulesLoading}
-            error={rulesError}
-            selectedId={selectedId}
-            onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
-            onCommit={commitRule}
-            onCreate={createRule}
-            onRetired={onRetired}
-            addRequestTick={addTick}
-            idFilter={unusedIds}
-          />
+            {savedNote !== null && (
+              <p
+                data-testid="steering-saved-note"
+                className="rounded px-3 py-2 text-[11px]"
+                style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+              >
+                {savedNote}
+              </p>
+            )}
+
+            {commitError !== null && (
+              <p
+                data-testid="steering-commit-error"
+                className="rounded px-3 py-2 text-[11px]"
+                style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
+              >
+                {commitError} — the cell reverted to the server&rsquo;s value.
+              </p>
+            )}
+
+            {retiredNote !== null && (
+              <p
+                data-testid="steering-retired-note"
+                className="rounded px-3 py-2 text-[11px]"
+                style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+              >
+                Retired <span className="font-mono">{retiredNote.id}</span> — withdrawn from recall and
+                enforcement; the record stays listed. Your reason, for the doc PR if this rule came from
+                one: <em>&ldquo;{retiredNote.reason}&rdquo;</em>
+              </p>
+            )}
+
+            {!unseeded && (
+              <SteeringGrid
+                key={`grid-${type ?? 'all'}`}
+                rules={rules}
+                type={type ?? 'all'}
+                loading={rulesLoading}
+                error={rulesError}
+                selectedId={selectedId}
+                onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
+                onCommit={commitRule}
+                onCreate={createRule}
+                onRetired={onRetired}
+                addRequestTick={addTick}
+                idFilter={unusedIds}
+              />
+            )}
+
+            {/* The REVIEW half of this sub-section — the agent-proposed steering policies. */}
+            <ProposalsSection kind="policy" heading="Policy proposals" />
+          </>
         )}
       </div>
 
@@ -469,10 +452,10 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
         context={{
           surface: 'steering',
           title: 'Assistant',
-          contextLabel: `Steering · ${STEERING_TYPE_LABELS[type]}`,
-          placeholder: `Describe the ${STEERING_TYPE_LABELS[type]} rules to author…`,
+          contextLabel: `Steering · ${type === null ? 'Policies' : STEERING_TYPE_LABELS[type]}`,
+          placeholder: `Describe the ${STEERING_TYPE_LABELS[pageType]} rules to author…`,
           hint: 'A message launches a governed authoring run: it reads what you attach, drafts '
-            + `${STEERING_TYPE_LABELS[type]} steering rules, and stops at a propose gate — nothing `
+            + `${STEERING_TYPE_LABELS[pageType]} steering rules, and stops at a propose gate — nothing `
             + 'is written until you approve it here. Drop .md/.json rule files to import them directly.',
         }}
         verbs={dockVerbs}
@@ -493,7 +476,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
 
       {editing !== null && (
         <SteeringRuleFormModal
-          type={type}
+          type={pageType}
           initial={editing}
           onClose={() => setEditing(null)}
           onSaved={onSaved}

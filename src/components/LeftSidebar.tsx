@@ -7,8 +7,7 @@ import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
-import { steeringPath, STEERING_TYPE_LABELS, STEERING_TYPES } from '../api/steering.js';
-import { proposalsPath, PROPOSAL_KIND_LABELS, PROPOSAL_KINDS } from '../api/proposals.js';
+import { memoriesPath, policiesPath, STEERING_SECTIONS, STEERING_SECTION_LABELS, type SteeringSection } from '../api/steering.js';
 import { testingPath, TESTING_PAGE_LABELS, TESTING_PAGES } from '../api/testing.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
@@ -74,7 +73,7 @@ const S = {
 
 // ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'testing' | 'steering' | 'proposals' | 'settings';
+export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'testing' | 'steering' | 'settings';
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
  *  links `/system` in the collapsed column — it has no dashboard). `noun` is
@@ -90,18 +89,14 @@ const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Re
 // its verbs live on the pages); its accordion rows are the two sub-pages, its collapsed
 // glyph links the Campaigns landing (THE testing dashboard — the retired Harness folded in).
 const P_TESTING: PathSpec  = { key: 'testing',  title: 'Testing',      noun: 'Campaign',   glyph: '✓', dash: null,        collapsedHref: testingPath('campaigns') };
-// Steering (the STEERING program): the governance surface, a PRIMARY path placed immediately
-// BEFORE Settings. Like Settings it is title-only (no ▦/＋ — its management verbs live on the
-// pages); its accordion rows are the seven steering types, its collapsed glyph links the
-// `/steering` landing (the seven type cards — the steering-UX wave's calm entry).
-const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: '/steering' };
-// Proposals (DES-MEM-FACETED-001): the governed-knowledge REVIEW queue, a PRIMARY path placed
-// immediately AFTER Steering (Steering authors rules; this reviews the agent-proposed memories +
-// policies). Like Steering it is title-only (no ▦/＋ — approve/reject live on the cards); its
-// accordion rows are the type filters, its collapsed glyph links the unfiltered `/proposals` queue.
-const P_PROPOSALS: PathSpec = { key: 'proposals', title: 'Proposals',   noun: 'Proposal',   glyph: '📥', dash: null,        collapsedHref: '/proposals' };
+// Steering (DES-MEM-FACETED-001, unified surface): the governed-knowledge home, a PRIMARY path
+// placed immediately BEFORE Settings. Like Settings it is title-only (no ▦/＋ — its management +
+// review verbs live on the pages); its accordion rows are the TWO sub-sections (Policies /
+// Memories — each managing existing items AND reviewing proposals), its collapsed glyph links
+// the Policies home (the default sub-section — the standalone Proposals queue folded in here).
+const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: policiesPath() };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
-const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_TESTING, P_STEERING, P_PROPOSALS, P_SETTINGS];
+const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_TESTING, P_STEERING, P_SETTINGS];
 
 // `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
 // retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
@@ -123,10 +118,10 @@ export function headingForPath(pathname: string): PathKey | null {
   // The retired flat `/campaigns` addresses redirect into Testing — map them there too, so
   // the rail is already on the right heading on the pre-redirect tick.
   if (first === 'testing' || first === 'campaigns') return 'testing';
-  // The retired `/wiki` + `/rules` + `/policies` addresses redirect into Steering — map them
+  // The retired `/wiki` + `/rules` + `/policies` panels AND the retired standalone `/proposals`
+  // queue redirect into Steering (proposals now live inside its two sub-sections) — map them
   // there too, so the rail never flashes Settings open on the pre-redirect tick.
-  if (first === 'steering' || first === 'wiki' || first === 'rules' || first === 'policies') return 'steering';
-  if (first === 'proposals') return 'proposals';
+  if (first === 'steering' || first === 'wiki' || first === 'rules' || first === 'policies' || first === 'proposals') return 'steering';
   if (SETTINGS_ROUTES.has(first)) return 'settings';
   return null;
 }
@@ -518,46 +513,26 @@ function TestingPageRows({ navigate }: { navigate: (p: string) => void }): React
   );
 }
 
-/** The Steering accordion's rows: one per steering type, each a navigate() shortcut to its
- *  sub-page — the SettingsShortcutRows grammar, never a parallel steering surface. */
-function SteeringTypeRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+/** The Steering accordion's rows: one per sub-section (Policies / Memories), each a navigate()
+ *  shortcut to its page — the SettingsShortcutRows grammar. Each sub-section manages existing
+ *  items AND reviews proposals, so there are no per-type or per-kind rows here any more (the seven
+ *  types are a `?type=` filter inside Policies; proposals live inside each sub-section). */
+function SteeringSectionRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+  const href = (s: SteeringSection): string => (s === 'memories' ? memoriesPath() : policiesPath());
   return (
     <div role="menu" className="flex flex-col pt-0.5">
-      {STEERING_TYPES.map((t) => (
+      {STEERING_SECTIONS.map((s) => (
         <button
-          key={t}
+          key={s}
           type="button"
           role="menuitem"
-          data-testid="rail-steering-type"
-          data-type={t}
-          onClick={() => navigate(steeringPath(t))}
+          data-testid="rail-steering-section"
+          data-section={s}
+          onClick={() => navigate(href(s))}
           className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
           style={{ color: 'var(--ink-muted)' }}
         >
-          {STEERING_TYPE_LABELS[t]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** The Proposals accordion's rows: one per type filter (all | memory | policy), each a
- *  navigate() shortcut to the deep-linked queue — the SteeringTypeRows grammar. */
-function ProposalKindRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
-  return (
-    <div role="menu" className="flex flex-col pt-0.5">
-      {PROPOSAL_KINDS.map((k) => (
-        <button
-          key={k}
-          type="button"
-          role="menuitem"
-          data-testid="rail-proposal-kind"
-          data-kind={k}
-          onClick={() => navigate(proposalsPath(k))}
-          className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
-          style={{ color: 'var(--ink-muted)' }}
-        >
-          {PROPOSAL_KIND_LABELS[k]}
+          {STEERING_SECTION_LABELS[s]}
         </button>
       ))}
     </div>
@@ -844,24 +819,15 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             <TestingPageRows navigate={navigate} />
           </RailHeading>
 
-          {/* ── Steering — the governance surface, BEFORE Settings (STEERING). ─ */}
+          {/* ── Steering — the governed-knowledge home, BEFORE Settings. Its two rows
+                (Policies / Memories) each manage existing items AND review proposals. ─ */}
           <RailHeading
             path={P_STEERING}
             open={openHeading === 'steering'}
             onToggle={() => toggle('steering')}
             navigate={navigate}
           >
-            <SteeringTypeRows navigate={navigate} />
-          </RailHeading>
-
-          {/* ── Proposals — the governed-knowledge review queue, AFTER Steering. ─ */}
-          <RailHeading
-            path={P_PROPOSALS}
-            open={openHeading === 'proposals'}
-            onToggle={() => toggle('proposals')}
-            navigate={navigate}
-          >
-            <ProposalKindRows navigate={navigate} />
+            <SteeringSectionRows navigate={navigate} />
           </RailHeading>
 
           {/* ── Settings — title only, no ▦/＋ (the operator's word, §3.1) ───── */}

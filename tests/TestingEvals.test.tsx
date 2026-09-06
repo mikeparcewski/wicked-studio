@@ -180,10 +180,10 @@ describe('Evals — the run', () => {
     await user.click(screen.getByTestId('testing-evals-gap-toggle'));
 
     const links = await screen.findAllByTestId('testing-evals-nearest-link');
-    expect(links[0]).toHaveAttribute('href', '/steering/security?rule=POL-104');
+    expect(links[0]).toHaveAttribute('href', '/steering/policies?type=security&rule=POL-104');
     await user.click(links[0]!);
-    // The sample's type page, with ?rule opening that rule's drawer.
-    expect(navigate).toHaveBeenCalledWith('/steering/security?rule=POL-104');
+    // The unified Policies view, filtered to the sample's type, with ?rule opening the drawer.
+    expect(navigate).toHaveBeenCalledWith('/steering/policies?type=security&rule=POL-104');
   });
 
   it('a gap whose nearest_rules is EMPTY says "nothing nearby" in words — never a blank panel', async () => {

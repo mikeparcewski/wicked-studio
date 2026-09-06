@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { ApiError, isRouteAbsent } from '../api/errors.js';
-import { steeringPath, STEERING_TYPE_LABELS } from '../api/steering.js';
+import { policiesPath, STEERING_TYPE_LABELS } from '../api/steering.js';
 import type { SteeringRule } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
 import type { GovernanceClaim, SessionView } from '../api/types.js';
@@ -88,7 +88,7 @@ export function SteeringUsageBand({ runs, rules, scoreboard, navigate, now }: {
 
   const unusedHome =
     usage !== null && usage.unusedIds.length > 0
-      ? `${steeringPath(usage.unusedHomeType ?? 'architecture')}?usage=unused`
+      ? `${policiesPath(usage.unusedHomeType ?? 'architecture')}&usage=unused`
       : null;
 
   return (

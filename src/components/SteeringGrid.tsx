@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  DEFAULT_STEERING_TYPE,
   nextRuleId,
   ruleIdIssue,
   ruleTypeOfId,
@@ -9,6 +10,10 @@ import {
   type SteeringRule,
   type SteeringType,
 } from '../api/steering.js';
+
+/** The grid's page scope: one of the seven types, or `all` — the Policies view's `All` filter,
+ *  which shows every rule (the type still shows per-row via the type cell). */
+export type GridScope = SteeringType | 'all';
 import { FilterStrip } from './dashboardKit.js';
 import { SteeringRetireModal } from './SteeringRetireModal.js';
 
@@ -49,11 +54,12 @@ export interface GridFacets {
 export const GRID_FACETS_DEFAULT: GridFacets = { query: '', severity: 'all', includeRetired: true };
 
 /** The page-scope + facet predicate over the shipping rules wire — pinned by unit test.
- *  A rule belongs to exactly ONE page: `steeringTypeOf` (absent = architecture). */
-export function filterSteeringRules(rules: SteeringRule[], type: SteeringType, f: GridFacets): SteeringRule[] {
+ *  A rule belongs to exactly ONE type (`steeringTypeOf`: absent = architecture); scope `all` keeps
+ *  every type, so the Policies `All` filter shows the whole corpus in one grid. */
+export function filterSteeringRules(rules: SteeringRule[], type: GridScope, f: GridFacets): SteeringRule[] {
   const q = f.query.trim().toLowerCase();
   return rules.filter((r) => {
-    if (steeringTypeOf(r) !== type) return false;
+    if (type !== 'all' && steeringTypeOf(r) !== type) return false;
     if (f.severity !== 'all' && r.severity !== f.severity) return false;
     if (!f.includeRetired && r.retired === true) return false;
     if (q !== '' && !r.id.toLowerCase().includes(q) && !r.statement.toLowerCase().includes(q)) return false;
@@ -329,12 +335,14 @@ interface DraftState {
   error: string | null;
 }
 
-function freshDraft(rules: SteeringRule[], type: SteeringType): DraftState {
+function freshDraft(rules: SteeringRule[], type: GridScope): DraftState {
   return {
     // A SUGGESTION prefill (max PAT ordinal + 1) — the id stays fully manual, per the
     // spreadsheet contract; validation below is the engine's steering-scoped INV-C1.
     id: nextRuleId(rules, 'pattern'),
-    steering_type: type,
+    // In the `All` view there is no page type — a new row defaults to architecture (the engine's
+    // serde default) with its type cell editable, so the draft is always concretely typed.
+    steering_type: type === 'all' ? DEFAULT_STEERING_TYPE : type,
     severity: 'warn',
     statement: '',
     weight: '1.0',
@@ -371,7 +379,8 @@ const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ value: s, label: s }));
 export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0, idFilter = null }: {
   /** The FULL store — this grid applies the page scope itself, one predicate everywhere. */
   rules: SteeringRule[];
-  type: SteeringType;
+  /** The page scope: one of the seven types, or `all` (the Policies `All` filter — every rule). */
+  type: GridScope;
   loading: boolean;
   error: string | null;
   selectedId: string | null;
@@ -400,7 +409,10 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
     const allowed = new Set(idFilter);
     return faceted.filter((r) => allowed.has(r.id));
   }, [rules, type, facets, idFilter]);
-  const typeRules = useMemo(() => rules.filter((r) => steeringTypeOf(r) === type), [rules, type]);
+  const typeRules = useMemo(
+    () => (type === 'all' ? rules : rules.filter((r) => steeringTypeOf(r) === type)),
+    [rules, type],
+  );
   const severityCounts = useMemo(() => {
     const counts: Record<string, number> = { all: typeRules.length };
     for (const s of SEVERITIES) counts[s] = typeRules.filter((r) => r.severity === s).length;
@@ -457,7 +469,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
           {typeRules.length > 0
             ? 'No rules match these filters.'
             : rules.length > 0
-              ? `No ${STEERING_TYPE_LABELS[type]} steering rules yet — add a row, or open the assistant to import a doc or author with chat.`
+              ? `No ${type === 'all' ? '' : `${STEERING_TYPE_LABELS[type]} `}steering rules yet — add a row, or open the assistant to import a doc or author with chat.`
               : 'No steering rules in the store.'}
         </p>
       );

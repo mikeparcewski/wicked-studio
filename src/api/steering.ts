@@ -62,9 +62,49 @@ export function isSteeringType(s: string): s is SteeringType {
   return (STEERING_TYPES as readonly string[]).includes(s);
 }
 
-/** The one spelling of a steering sub-page's route. */
+/** The one spelling of a LEGACY per-type route (`/steering/:type`). Kept as the canonical
+ *  spelling of the address that now redirects onto `/steering/policies?type=<type>` — bookmarks
+ *  and any old deep link land on the unified Policies surface, type-filtered. */
 export function steeringPath(type: SteeringType): string {
   return `/steering/${type}`;
+}
+
+// ── The unified governed-knowledge surface (`/steering/{policies,memories}`) ──────────────────
+//
+// Steering is one home with TWO sub-sections, each carrying BOTH "manage existing" and
+// "proposals (review)": Policies (the seven-type rule corpus + policy proposals) and Memories
+// (the memory store + memory proposals). The seven types collapsed into a `?type=` FILTER on the
+// Policies view (All + 7) — a rule still belongs to exactly one type, but the surface is one grid.
+
+export const STEERING_SECTIONS = ['policies', 'memories'] as const;
+
+export type SteeringSection = (typeof STEERING_SECTIONS)[number];
+
+export const STEERING_SECTION_LABELS: Record<SteeringSection, string> = {
+  policies: 'Policies',
+  memories: 'Memories',
+};
+
+export function isSteeringSection(s: string): s is SteeringSection {
+  return (STEERING_SECTIONS as readonly string[]).includes(s);
+}
+
+/** The Policies sub-section's route — bare for the All view, `?type=<type>` for a filtered one
+ *  (deep-linkable, back-button-correct; shared by the page's chips and every deep link into it). */
+export function policiesPath(type?: SteeringType | null): string {
+  return type == null ? '/steering/policies' : `/steering/policies?type=${type}`;
+}
+
+/** The Memories sub-section's route. */
+export function memoriesPath(): string {
+  return '/steering/memories';
+}
+
+/** The active Policies type FILTER read from a `location.search` string; an absent or unknown
+ *  `type` resolves to `null` (the All view) — a mangled bookmark shows every rule, never an error. */
+export function readSteeringTypeFilter(search: string): SteeringType | null {
+  const raw = new URLSearchParams(search).get('type');
+  return raw !== null && isSteeringType(raw) ? raw : null;
 }
 
 // ── The unified steering rule ─────────────────────────────────────────────────────────────────
