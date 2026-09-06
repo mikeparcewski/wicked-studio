@@ -24,9 +24,13 @@ import { isTestingSubPage } from '../api/testing.js';
 // the RETIRED addresses (wiki/rules/policies, coverage/domain, the flat
 // campaigns, the bare /runs listing) keep their redirects: those are moves with
 // a known destination, not typos.
-export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'not-found';
+// `proposals` is the governed-knowledge review queue (`/proposals`, DES-MEM-FACETED-001) —
+// Steering-adjacent (Steering authors policies; this reviews the proposed memories AND policies).
+// It carries no sub-type path segment: its type filter (all | memory | policy) rides `?type=` in
+// the search string, so the bare `/proposals` parse below is all it needs.
+export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'proposals' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'not-found';
 
-const PANELS: Panel[] = ['runs', 'workflows', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
+const PANELS: Panel[] = ['runs', 'workflows', 'proposals', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not

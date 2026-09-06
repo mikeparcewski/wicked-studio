@@ -21,6 +21,7 @@ import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { SteeringPage } from './components/SteeringPage.js';
+import { ProposalsPage } from './components/ProposalsPage.js';
 import { TestingPage } from './components/TestingPage.js';
 import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
@@ -492,6 +493,16 @@ export function App(): React.ReactElement {
             search={search}
             runs={runs}
           />
+        </div>
+      );
+    }
+    // `/proposals` — the governed-knowledge review queue (DES-MEM-FACETED-001), Steering-adjacent:
+    // Steering authors policies, this reviews the agent-proposed memories AND policies. The type
+    // filter rides `?type=` in `search`, which the page reads.
+    if (panel === 'proposals') {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <ProposalsPage navigate={navigate} search={search} />
         </div>
       );
     }

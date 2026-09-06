@@ -8,6 +8,7 @@ import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
 import { steeringPath, STEERING_TYPE_LABELS, STEERING_TYPES } from '../api/steering.js';
+import { proposalsPath, PROPOSAL_KIND_LABELS, PROPOSAL_KINDS } from '../api/proposals.js';
 import { testingPath, TESTING_PAGE_LABELS, TESTING_PAGES } from '../api/testing.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
@@ -73,7 +74,7 @@ const S = {
 
 // ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'testing' | 'steering' | 'settings';
+export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'testing' | 'steering' | 'proposals' | 'settings';
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
  *  links `/system` in the collapsed column — it has no dashboard). `noun` is
@@ -94,8 +95,13 @@ const P_TESTING: PathSpec  = { key: 'testing',  title: 'Testing',      noun: 'Ca
 // pages); its accordion rows are the seven steering types, its collapsed glyph links the
 // `/steering` landing (the seven type cards — the steering-UX wave's calm entry).
 const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: '/steering' };
+// Proposals (DES-MEM-FACETED-001): the governed-knowledge REVIEW queue, a PRIMARY path placed
+// immediately AFTER Steering (Steering authors rules; this reviews the agent-proposed memories +
+// policies). Like Steering it is title-only (no ▦/＋ — approve/reject live on the cards); its
+// accordion rows are the type filters, its collapsed glyph links the unfiltered `/proposals` queue.
+const P_PROPOSALS: PathSpec = { key: 'proposals', title: 'Proposals',   noun: 'Proposal',   glyph: '📥', dash: null,        collapsedHref: '/proposals' };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
-const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_TESTING, P_STEERING, P_SETTINGS];
+const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_TESTING, P_STEERING, P_PROPOSALS, P_SETTINGS];
 
 // `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
 // retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
@@ -120,6 +126,7 @@ export function headingForPath(pathname: string): PathKey | null {
   // The retired `/wiki` + `/rules` + `/policies` addresses redirect into Steering — map them
   // there too, so the rail never flashes Settings open on the pre-redirect tick.
   if (first === 'steering' || first === 'wiki' || first === 'rules' || first === 'policies') return 'steering';
+  if (first === 'proposals') return 'proposals';
   if (SETTINGS_ROUTES.has(first)) return 'settings';
   return null;
 }
@@ -534,6 +541,29 @@ function SteeringTypeRows({ navigate }: { navigate: (p: string) => void }): Reac
   );
 }
 
+/** The Proposals accordion's rows: one per type filter (all | memory | policy), each a
+ *  navigate() shortcut to the deep-linked queue — the SteeringTypeRows grammar. */
+function ProposalKindRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+  return (
+    <div role="menu" className="flex flex-col pt-0.5">
+      {PROPOSAL_KINDS.map((k) => (
+        <button
+          key={k}
+          type="button"
+          role="menuitem"
+          data-testid="rail-proposal-kind"
+          data-kind={k}
+          onClick={() => navigate(proposalsPath(k))}
+          className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
+          style={{ color: 'var(--ink-muted)' }}
+        >
+          {PROPOSAL_KIND_LABELS[k]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 const flatRunPath = (id: string): string => `/runs/${encodeURIComponent(id)}`;
@@ -822,6 +852,16 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             navigate={navigate}
           >
             <SteeringTypeRows navigate={navigate} />
+          </RailHeading>
+
+          {/* ── Proposals — the governed-knowledge review queue, AFTER Steering. ─ */}
+          <RailHeading
+            path={P_PROPOSALS}
+            open={openHeading === 'proposals'}
+            onToggle={() => toggle('proposals')}
+            navigate={navigate}
+          >
+            <ProposalKindRows navigate={navigate} />
           </RailHeading>
 
           {/* ── Settings — title only, no ▦/＋ (the operator's word, §3.1) ───── */}

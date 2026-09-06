@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.11",
   "counts": {
-    "files": 117,
-    "occurrences": 947,
-    "static": 811,
+    "files": 120,
+    "occurrences": 965,
+    "static": 826,
     "dynamic": 43,
     "computed": 6
   },
@@ -2867,6 +2867,90 @@
       ]
     },
     {
+      "testId": "proposal-approve",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-card",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-kind-chip",
+      "files": [
+        "src/components/ProposalChips.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-policy-target",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-reject",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-empty",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-error",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-filter",
+      "files": [
+        "src/components/ProposalsPage.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-filter-chip",
+      "files": [
+        "src/components/ProposalsPage.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-list",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-loading",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-note",
+      "files": [
+        "src/components/ProposalsPage.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-page",
+      "files": [
+        "src/components/ProposalsPage.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-unsupported",
+      "files": [
+        "src/components/ProposalsPage.tsx"
+      ]
+    },
+    {
       "testId": "quick-action",
       "files": [
         "src/components/ProjectCard.tsx"
@@ -2964,6 +3048,12 @@
     },
     {
       "testId": "rail-project",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "testId": "rail-proposal-kind",
       "files": [
         "src/components/LeftSidebar.tsx"
       ]
@@ -5208,6 +5298,8 @@
       "files": [
         "src/components/CampaignScoreboard.tsx",
         "src/components/GroupChat.tsx",
+        "src/components/ProposalChips.tsx",
+        "src/components/ProposalsList.tsx",
         "src/components/SteeringAddMenu.tsx",
         "src/components/SteeringGrid.tsx",
         "src/components/SteeringHealth.tsx",
