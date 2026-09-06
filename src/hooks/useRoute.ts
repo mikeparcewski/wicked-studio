@@ -214,11 +214,11 @@ function parse(pathname: string): Route {
   // `/steering/{policies,memories}` — the unified governed-knowledge surface: one page per
   // sub-section, each managing existing items AND reviewing proposals. Bare `/steering` and a
   // LEGACY `/steering/:type` (a valid steering type — the seven pages collapsed into a `?type=`
-  // filter on Policies) parse with `steeringSection` policies so the Policies view renders
-  // instantly; `useSteeringRedirect` then replaces the address (bare → `/steering/policies`,
-  // legacy type → `/steering/policies?type=<type>`). An address that names neither a sub-section
-  // nor a valid type (a typo'd `/steering/foo`) is a dead address — not-found, never a silent
-  // swap (usability review #4).
+  // filter on Policies) parse with `steeringSection: null` (they do NOT render directly);
+  // `useSteeringRedirect` then replaces the address onto the canonical URL (bare →
+  // `/steering/policies`, legacy type → `/steering/policies?type=<type>`). An address that names
+  // neither a sub-section nor a valid type (a typo'd `/steering/foo`) is a dead address —
+  // not-found, never a silent swap (usability review #4).
   if (first === 'steering') {
     if (!second) return route({ panel: 'steering', steeringSection: null });
     if (isSteeringSection(second)) return route({ panel: 'steering', steeringSection: second });

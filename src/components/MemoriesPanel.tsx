@@ -52,6 +52,9 @@ export function MemoriesPanel(): React.ReactElement {
       const rows = await listMemories(q === '' ? {} : { query: q });
       setMemories(rows);
     } catch (e) {
+      // Clear stale rows so the facet chips (derived from `memories`) don't linger on the
+      // unsupported/error view — otherwise a prior successful load's chips render over the notice.
+      setMemories([]);
       if (isMemoryUnsupported(e)) setUnsupported(true);
       else setError(e instanceof Error ? e.message : String(e));
     } finally {
