@@ -53,7 +53,7 @@ describe('FailureBanner (§11.5 — run-halted explainer)', () => {
     expect(screen.getByTestId('failure-engine-detail')).toHaveTextContent('claim boundary-deny:unit-2');
   });
 
-  it('links a rule denial to the Steering drawer via /steering?rule=', () => {
+  it('links a rule denial to the Steering drawer via /steering/policies?rule=', () => {
     const navigate = vi.fn();
     const view = makeView({ status: 'failed' }, [
       Object.assign(
@@ -65,7 +65,7 @@ describe('FailureBanner (§11.5 — run-halted explainer)', () => {
     const link = screen.getByTestId('failure-rule-link');
     expect(link).toHaveTextContent('SEC-101');
     fireEvent.click(link);
-    expect(navigate).toHaveBeenCalledWith('/steering?rule=SEC-101');
+    expect(navigate).toHaveBeenCalledWith('/steering/policies?rule=SEC-101');
   });
 
   it('carries the failure-context "All runs ›" link to /work?filter=failed', () => {

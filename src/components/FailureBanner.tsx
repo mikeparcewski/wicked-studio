@@ -82,11 +82,11 @@ export function FailureBanner({ view, log, navigate }: Props): React.ReactElemen
                     facts.ruleIds.map((id) => (
                       <a
                         key={id}
-                        href={`/steering?rule=${id}`}
+                        href={`/steering/policies?rule=${id}`}
                         data-testid="failure-rule-link"
                         className="ml-2 transition-opacity hover:opacity-80"
                         style={{ color: 'var(--accent)', textDecoration: 'none' }}
-                        onClick={(e) => { e.preventDefault(); navigate(`/steering?rule=${id}`); }}
+                        onClick={(e) => { e.preventDefault(); navigate(`/steering/policies?rule=${id}`); }}
                       >
                         Review {id} ›
                       </a>

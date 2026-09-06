@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_STEERING_TYPE,
+  isSteeringSection,
   isSteeringType,
   isValidRuleId,
+  memoriesPath,
   nextRuleId,
+  policiesPath,
+  readSteeringTypeFilter,
   steeringPath,
   STEERING_RULE_TEMPLATE,
+  STEERING_SECTIONS,
   STEERING_TYPES,
   steeringTypeOf,
   type SteeringRule,
@@ -107,7 +112,37 @@ describe('the type roster and paths', () => {
     expect(isSteeringType('wiki')).toBe(false);
   });
 
-  it('steeringPath is the one spelling of a sub-page route', () => {
+  it('steeringPath is the one spelling of the LEGACY per-type route (now redirected)', () => {
     expect(steeringPath('design-ux')).toBe('/steering/design-ux');
+  });
+});
+
+describe('the unified sub-section paths + the Policies type filter', () => {
+  it('spells the two sub-sections', () => {
+    expect([...STEERING_SECTIONS]).toEqual(['policies', 'memories']);
+    expect(isSteeringSection('policies')).toBe(true);
+    expect(isSteeringSection('memories')).toBe(true);
+    expect(isSteeringSection('security')).toBe(false);
+    expect(isSteeringSection('proposals')).toBe(false);
+  });
+
+  it('policiesPath is bare for the All view, ?type= for a filtered one; memoriesPath is fixed', () => {
+    expect(policiesPath()).toBe('/steering/policies');
+    expect(policiesPath(null)).toBe('/steering/policies');
+    expect(policiesPath('security')).toBe('/steering/policies?type=security');
+    expect(policiesPath('design-ux')).toBe('/steering/policies?type=design-ux');
+    expect(memoriesPath()).toBe('/steering/memories');
+  });
+
+  it('readSteeringTypeFilter reads the type back from search; unknown/absent → null (the All view)', () => {
+    expect(readSteeringTypeFilter('?type=security')).toBe('security');
+    expect(readSteeringTypeFilter('?type=design-ux')).toBe('design-ux');
+    expect(readSteeringTypeFilter('')).toBeNull();
+    expect(readSteeringTypeFilter('?type=bogus')).toBeNull();
+    expect(readSteeringTypeFilter('?rule=PAT-001')).toBeNull();
+    // Round-trips against policiesPath for every type.
+    for (const t of STEERING_TYPES) {
+      expect(readSteeringTypeFilter(policiesPath(t).replace('/steering/policies', ''))).toBe(t);
+    }
   });
 });

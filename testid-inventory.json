@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.12",
   "counts": {
-    "files": 120,
-    "occurrences": 965,
-    "static": 826,
+    "files": 121,
+    "occurrences": 982,
+    "static": 842,
     "dynamic": 43,
     "computed": 6
   },
@@ -2397,6 +2397,132 @@
       ]
     },
     {
+      "testId": "memories-coverage",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-empty",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-error",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-facet-chip",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-facet-filter",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-list",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-loading",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-note",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-panel",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-refresh",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-search",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-search-go",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memories-unsupported",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memory-content",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retire",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retire-cancel",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retire-confirm",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retire-confirm-banner",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memory-row",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memory-scope",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memory-tier",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "mode-fill",
       "files": [
         "src/components/ModeSwitcher.tsx"
@@ -2909,18 +3035,6 @@
       ]
     },
     {
-      "testId": "proposals-filter",
-      "files": [
-        "src/components/ProposalsPage.tsx"
-      ]
-    },
-    {
-      "testId": "proposals-filter-chip",
-      "files": [
-        "src/components/ProposalsPage.tsx"
-      ]
-    },
-    {
       "testId": "proposals-list",
       "files": [
         "src/components/ProposalsList.tsx"
@@ -2933,21 +3047,27 @@
       ]
     },
     {
-      "testId": "proposals-note",
+      "testId": "proposals-section",
       "files": [
-        "src/components/ProposalsPage.tsx"
+        "src/components/ProposalsSection.tsx"
       ]
     },
     {
-      "testId": "proposals-page",
+      "testId": "proposals-section-note",
       "files": [
-        "src/components/ProposalsPage.tsx"
+        "src/components/ProposalsSection.tsx"
       ]
     },
     {
-      "testId": "proposals-unsupported",
+      "testId": "proposals-section-refresh",
       "files": [
-        "src/components/ProposalsPage.tsx"
+        "src/components/ProposalsSection.tsx"
+      ]
+    },
+    {
+      "testId": "proposals-section-unsupported",
+      "files": [
+        "src/components/ProposalsSection.tsx"
       ]
     },
     {
@@ -3053,12 +3173,6 @@
       ]
     },
     {
-      "testId": "rail-proposal-kind",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
       "testId": "rail-repo",
       "files": [
         "src/components/LeftSidebar.tsx"
@@ -3096,7 +3210,7 @@
       ]
     },
     {
-      "testId": "rail-steering-type",
+      "testId": "rail-steering-section",
       "files": [
         "src/components/LeftSidebar.tsx"
       ]
@@ -3622,12 +3736,6 @@
       ]
     },
     {
-      "testId": "steering-breadcrumb",
-      "files": [
-        "src/components/SteeringPage.tsx"
-      ]
-    },
-    {
       "testId": "steering-cancel",
       "files": [
         "src/components/SteeringGate.tsx"
@@ -3862,12 +3970,6 @@
       ]
     },
     {
-      "testId": "steering-landing",
-      "files": [
-        "src/components/SteeringPage.tsx"
-      ]
-    },
-    {
       "testId": "steering-live-chip",
       "files": [
         "src/components/ChatInput.tsx"
@@ -4044,21 +4146,15 @@
       ]
     },
     {
-      "testId": "steering-type-card",
+      "testId": "steering-type-chip",
       "files": [
-        "src/components/SteeringTypeCards.tsx"
+        "src/components/SteeringTypeFilter.tsx"
       ]
     },
     {
-      "testId": "steering-type-card-count",
+      "testId": "steering-type-filter",
       "files": [
-        "src/components/SteeringTypeCards.tsx"
-      ]
-    },
-    {
-      "testId": "steering-type-cards",
-      "files": [
-        "src/components/SteeringTypeCards.tsx"
+        "src/components/SteeringTypeFilter.tsx"
       ]
     },
     {

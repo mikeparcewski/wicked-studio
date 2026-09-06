@@ -5,19 +5,20 @@ import { useRetiredSettingsRedirect, useSteeringRedirect } from '../src/hooks/us
 import { STEERING_TYPES } from '../src/api/steering.js';
 
 /**
- * The Steering routes (the STEERING program, re-aimed by the steering-UX wave):
- *  - `/steering/:type` parses to the steering panel for each of the seven types;
- *  - bare `/steering` IS the landing (the seven type cards) — parsed with a null type and
- *    NEVER redirected;
- *  - the RETIRED addresses `/wiki` (the old Architecture Wiki page), `/rules` (the old
- *    RuleManager) and `/policies` (the old policies settings panel — policies merged into
- *    steering rules) parse to the steering panel with a null type, then get REPLACED by
- *    `useSteeringRedirect` with the landing's real URL, so bookmarks land on the surface
- *    that replaced them;
- *  - a typo'd `/steering/foo` normalizes onto the landing the same way; a VALID type never
- *    redirects;
- *  - the RETIRED `/coverage` and `/domain` settings panels parse to the System page and get
- *    REPLACED with `/system` by `useRetiredSettingsRedirect`.
+ * The unified Steering surface's routes (DES-MEM-FACETED-001, unified surface): one home, two
+ * sub-sections (`/steering/policies`, `/steering/memories`), each managing existing items AND
+ * reviewing proposals.
+ *  - `/steering/policies` and `/steering/memories` parse to the steering panel with their section;
+ *  - bare `/steering` and a LEGACY `/steering/:type` (a valid type — the seven pages collapsed into
+ *    a `?type=` filter on Policies) parse with `steeringSection: null`, then `useSteeringRedirect`
+ *    REPLACES the address (bare → `/steering/policies`, legacy type → `/steering/policies?type=…`);
+ *  - the RETIRED addresses `/wiki`, `/rules`, `/policies` (the old governance panels) and
+ *    `/proposals` (the standalone review queue — proposals now live inside the sub-sections) parse
+ *    to the steering panel with a null section and are REPLACED onto the right sub-section
+ *    (`/proposals?type=memory` → Memories, everything else → Policies);
+ *  - a typo'd `/steering/foo` normalizes onto nothing — it is the not-found panel (review #4);
+ *  - the RETIRED `/coverage` and `/domain` settings panels parse to System and get REPLACED with
+ *    `/system` by `useRetiredSettingsRedirect`.
  */
 
 function routeAt(path: string) {
@@ -29,32 +30,40 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
-describe('useRoute — /steering[/:type]', () => {
-  it('parses every steering type to the one steering panel', () => {
+describe('useRoute — /steering/{policies,memories}', () => {
+  it('parses the two sub-sections to the one steering panel', () => {
+    const pol = routeAt('/steering/policies').current;
+    expect(pol).toMatchObject({ panel: 'steering', steeringSection: 'policies' });
+    expect(pol.runId).toBeNull();
+    expect(pol.projectId).toBeNull();
+    expect(routeAt('/steering/memories').current).toMatchObject({ panel: 'steering', steeringSection: 'memories' });
+  });
+
+  it('a bare /steering parses with steeringSection null — the redirect resolves it onto Policies', () => {
+    expect(routeAt('/steering').current).toMatchObject({ panel: 'steering', steeringSection: null });
+    expect(routeAt('/steering/').current).toMatchObject({ panel: 'steering', steeringSection: null });
+  });
+
+  it('a LEGACY /steering/:type parses to the steering panel (section null — the redirect adds ?type=)', () => {
     for (const t of STEERING_TYPES) {
       const r = routeAt(`/steering/${t}`).current;
       expect(r.panel).toBe('steering');
-      expect(r.steeringType).toBe(t);
+      expect(r.steeringSection).toBeNull();
       // No run-selected machinery ever fires against a steering address.
       expect(r.runId).toBeNull();
       expect(r.projectId).toBeNull();
     }
   });
 
-  it('a bare /steering parses with steeringType null — the landing IS the page', () => {
-    expect(routeAt('/steering').current).toMatchObject({ panel: 'steering', steeringType: null });
-    expect(routeAt('/steering/').current).toMatchObject({ panel: 'steering', steeringType: null });
-  });
-
-  it('an unknown steering type is a DEAD address — not-found, never a silent swap (review #4)', () => {
+  it('an unknown steering sub-route is a DEAD address — not-found, never a silent swap (review #4)', () => {
     expect(routeAt('/steering/bogus').current).toMatchObject({ panel: 'not-found' });
     expect(routeAt('/steering/securty').current).toMatchObject({ panel: 'not-found' });
   });
 
-  it('the retired /wiki, /rules and /policies addresses fold into the steering panel', () => {
-    expect(routeAt('/wiki').current).toMatchObject({ panel: 'steering', steeringType: null });
-    expect(routeAt('/rules').current).toMatchObject({ panel: 'steering', steeringType: null });
-    expect(routeAt('/policies').current).toMatchObject({ panel: 'steering', steeringType: null });
+  it('the retired /wiki, /rules, /policies panels and the /proposals queue fold into the steering panel', () => {
+    for (const p of ['/wiki', '/rules', '/policies', '/proposals']) {
+      expect(routeAt(p).current).toMatchObject({ panel: 'steering', steeringSection: null });
+    }
   });
 
   it('the retired /coverage and /domain settings panels fold into the System page', () => {
@@ -62,38 +71,55 @@ describe('useRoute — /steering[/:type]', () => {
     expect(routeAt('/domain').current.panel).toBe('system');
   });
 
-  it('every other route spells steeringType null without claiming the steering panel', () => {
+  it('every other route spells steeringSection null without claiming the steering panel', () => {
     const r = routeAt('/work').current;
     expect(r.panel).toBe('work');
-    expect(r.steeringType).toBeNull();
+    expect(r.steeringSection).toBeNull();
   });
 });
 
 describe('useSteeringRedirect', () => {
-  it('leaves the bare /steering landing alone — it IS the page', () => {
+  it('leaves the real sub-section addresses alone', () => {
     const navigate = vi.fn();
-    renderHook(() => useSteeringRedirect('steering', null, '/steering', navigate));
-    renderHook(() => useSteeringRedirect('steering', null, '/steering/', navigate));
+    renderHook(() => useSteeringRedirect('steering', 'policies', '/steering/policies', '', navigate));
+    renderHook(() => useSteeringRedirect('steering', 'memories', '/steering/memories', '', navigate));
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('REPLACES the retired addresses with the landing — a typo’d type is not-found instead, no redirect', () => {
-    for (const path of ['/wiki', '/rules', '/policies']) {
+  it('REPLACES bare /steering and the retired panels with the Policies home', () => {
+    for (const path of ['/steering', '/wiki', '/rules', '/policies']) {
       const navigate = vi.fn();
-      renderHook(() => useSteeringRedirect('steering', null, path, navigate));
-      expect(navigate).toHaveBeenCalledWith('/steering', { replace: true });
+      renderHook(() => useSteeringRedirect('steering', null, path, '', navigate));
+      expect(navigate).toHaveBeenCalledWith('/steering/policies', { replace: true });
     }
-    // `/steering/bogus` parses to the not-found panel (review #4), so this hook
-    // never sees `panel: 'steering'` for it and MUST leave the address alone.
-    const navigate = vi.fn();
-    renderHook(() => useSteeringRedirect('not-found', null, '/steering/bogus', navigate));
-    expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('leaves a valid type alone, and every non-steering panel alone', () => {
+  it('REPLACES a legacy /steering/:type with Policies filtered to that type (bookmarks keep their type)', () => {
     const navigate = vi.fn();
-    renderHook(() => useSteeringRedirect('steering', 'security', '/steering/security', navigate));
-    renderHook(() => useSteeringRedirect('system', null, '/system', navigate));
+    renderHook(() => useSteeringRedirect('steering', null, '/steering/security', '', navigate));
+    expect(navigate).toHaveBeenCalledWith('/steering/policies?type=security', { replace: true });
+  });
+
+  it('REPLACES the retired /proposals queue onto a sub-section by its ?type= filter', () => {
+    const toPolicies = vi.fn();
+    renderHook(() => useSteeringRedirect('steering', null, '/proposals', '', toPolicies));
+    expect(toPolicies).toHaveBeenCalledWith('/steering/policies', { replace: true });
+
+    const toMemories = vi.fn();
+    renderHook(() => useSteeringRedirect('steering', null, '/proposals', '?type=memory', toMemories));
+    expect(toMemories).toHaveBeenCalledWith('/steering/memories', { replace: true });
+
+    // A policy-filtered proposals bookmark lands on Policies (its proposals live there).
+    const toPolicies2 = vi.fn();
+    renderHook(() => useSteeringRedirect('steering', null, '/proposals', '?type=policy', toPolicies2));
+    expect(toPolicies2).toHaveBeenCalledWith('/steering/policies', { replace: true });
+  });
+
+  it('leaves a typo (parsed not-found) and every non-steering panel alone', () => {
+    const navigate = vi.fn();
+    // `/steering/bogus` parses to not-found, so this hook never sees `panel: 'steering'` for it.
+    renderHook(() => useSteeringRedirect('not-found', null, '/steering/bogus', '', navigate));
+    renderHook(() => useSteeringRedirect('system', null, '/system', '', navigate));
     expect(navigate).not.toHaveBeenCalled();
   });
 });
@@ -109,7 +135,7 @@ describe('useRetiredSettingsRedirect', () => {
 
   it('leaves every live route alone', () => {
     const navigate = vi.fn();
-    for (const path of ['/system', '/theme', '/workflows', '/steering', '/steering/security', '/']) {
+    for (const path of ['/system', '/theme', '/workflows', '/steering/policies', '/steering/memories', '/']) {
       renderHook(() => useRetiredSettingsRedirect(path, navigate));
     }
     expect(navigate).not.toHaveBeenCalled();

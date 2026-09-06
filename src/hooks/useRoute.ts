@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import { isSteeringType } from '../api/steering.js';
+import { isSteeringSection, isSteeringType, type SteeringSection } from '../api/steering.js';
 import { isTestingSubPage } from '../api/testing.js';
 
 // `make` is the round-4 primary-path dashboard route (DES-FEEDBACK-003 §2.1) —
 // a CLIENT route (a new panel id in this union), not a wire. Slice M registers
 // it with a placeholder surface; the real dashboard is slice O (§4.2).
-// `steering` is the STEERING program's surface (`/steering[/:type]`) — the panels
-// it replaced (`wiki`, `rules`, and the steering-UX wave's `policies`: the old
-// policies settings panel, merged into steering rules) are gone from this union;
-// their old paths parse to `steering` with a null type, which `useSteeringRedirect`
-// normalizes onto the `/steering` landing.
+// `steering` is the unified governed-knowledge surface (`/steering/{policies,memories}`) — one
+// home with two sub-sections, each carrying BOTH "manage existing" and "proposals (review)":
+// Policies (the seven-type rule corpus — the seven pages collapsed into a `?type=` FILTER on one
+// grid — plus policy proposals) and Memories (the memory store plus memory proposals). The panels
+// it absorbed (`wiki`, `rules`, the old `policies` settings panel, and the standalone `proposals`
+// review queue) are gone from this union; their old paths parse to `steering` and
+// `useSteeringRedirect` normalizes them onto the right sub-section (`/steering/policies` by
+// default, `/steering/memories` for `/proposals?type=memory`, `/steering/policies?type=<type>`
+// for a legacy `/steering/:type`).
 // `testing` is the Testing surface (`/testing/:page` — campaigns/evals; campaigns is
 // the landing, and the retired `/testing/harness` redirects onto it);
 // the flat campaign panels it absorbed (`campaigns`, `campaign-detail`) are gone
@@ -24,13 +28,13 @@ import { isTestingSubPage } from '../api/testing.js';
 // the RETIRED addresses (wiki/rules/policies, coverage/domain, the flat
 // campaigns, the bare /runs listing) keep their redirects: those are moves with
 // a known destination, not typos.
-// `proposals` is the governed-knowledge review queue (`/proposals`, DES-MEM-FACETED-001) —
-// Steering-adjacent (Steering authors policies; this reviews the proposed memories AND policies).
-// It carries no sub-type path segment: its type filter (all | memory | policy) rides `?type=` in
-// the search string, so the bare `/proposals` parse below is all it needs.
-export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'proposals' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'not-found';
+// The standalone `proposals` review queue RETIRED into Steering (DES-MEM-FACETED-001, unified
+// surface): policy proposals live under `/steering/policies`, memory proposals under
+// `/steering/memories`. Its old `/proposals` address (and `?type=memory` deep link) fold into
+// those sub-sections via `useSteeringRedirect`.
+export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'not-found';
 
-const PANELS: Panel[] = ['runs', 'workflows', 'proposals', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
+const PANELS: Panel[] = ['runs', 'workflows', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
@@ -73,10 +77,12 @@ interface Route {
    *  label. The legacy flat `/campaigns/:id` parses to the same route while `useTestingRedirect`
    *  rewrites the address. */
   campaignId: string | null;
-  /** The steering sub-page's type on `/steering/:type`. `null` while panel === 'steering' means
-   *  an address that names no valid type (bare `/steering`, the legacy `/wiki` and `/rules`) —
-   *  `useSteeringRedirect` replaces those with the Architecture page's real URL. */
-  steeringType: string | null;
+  /** The steering sub-section on `/steering/{policies,memories}`. `null` while panel === 'steering'
+   *  means an address that names no valid sub-section (bare `/steering`, a legacy `/steering/:type`,
+   *  `/wiki`, `/rules`, `/policies`, the retired `/proposals`) — `useSteeringRedirect` replaces
+   *  those with the right sub-section's real URL. The Policies type filter is NOT a route field:
+   *  it rides `?type=` in `search`, read via `readSteeringTypeFilter`. */
+  steeringSection: SteeringSection | null;
   /** The testing sub-page on `/testing/:page` (`campaigns` | `evals`). `null` while
    *  panel === 'testing' means an address that names no page (bare `/testing`, the retired
    *  `/testing/harness`) — `useTestingRedirect` replaces those with the Campaigns landing. */
@@ -96,7 +102,7 @@ const INERT: Route = {
   artifactId: null,
   chronicleView: false,
   campaignId: null,
-  steeringType: null,
+  steeringSection: null,
   testingPage: null,
 };
 
@@ -205,22 +211,29 @@ function parse(pathname: string): Route {
       chatMode: mode === 'chat',
     });
   }
-  // `/steering[/:type]` — the STEERING surface: one page component, parameterized by type.
-  // The bare `/steering` address IS the landing (the seven type cards); an address that names
-  // an INVALID type (a typo'd `/steering/foo`) is a dead address — the not-found view, never a
-  // silent swap onto the landing (usability review #4).
+  // `/steering/{policies,memories}` — the unified governed-knowledge surface: one page per
+  // sub-section, each managing existing items AND reviewing proposals. Bare `/steering` and a
+  // LEGACY `/steering/:type` (a valid steering type — the seven pages collapsed into a `?type=`
+  // filter on Policies) parse with `steeringSection` policies so the Policies view renders
+  // instantly; `useSteeringRedirect` then replaces the address (bare → `/steering/policies`,
+  // legacy type → `/steering/policies?type=<type>`). An address that names neither a sub-section
+  // nor a valid type (a typo'd `/steering/foo`) is a dead address — not-found, never a silent
+  // swap (usability review #4).
   if (first === 'steering') {
-    if (!second) return route({ panel: 'steering', steeringType: null });
+    if (!second) return route({ panel: 'steering', steeringSection: null });
+    if (isSteeringSection(second)) return route({ panel: 'steering', steeringSection: second });
     return isSteeringType(second)
-      ? route({ panel: 'steering', steeringType: second })
+      ? route({ panel: 'steering', steeringSection: null })
       : route({ panel: 'not-found' });
   }
   // The RETIRED governance addresses: `/wiki` (the old Architecture Wiki page), `/rules` (the
-  // old RuleManager), and `/policies` (the old policies settings panel — merged into steering
-  // rules) all fold into Steering — parsed here so the landing renders instantly, redirected
-  // (replace) so bookmarks land on the surface's real URL.
-  if (first === 'wiki' || first === 'rules' || first === 'policies') {
-    return route({ panel: 'steering', steeringType: null });
+  // old RuleManager), `/policies` (the old policies settings panel — merged into steering rules)
+  // and `/proposals` (the standalone review queue — proposals now live inside the two
+  // sub-sections) all fold into Steering — parsed here so a sub-section renders instantly,
+  // redirected (replace) by `useSteeringRedirect` so bookmarks land on the surface's real URL
+  // (`/proposals?type=memory` → Memories; everything else → Policies).
+  if (first === 'wiki' || first === 'rules' || first === 'policies' || first === 'proposals') {
+    return route({ panel: 'steering', steeringSection: null });
   }
   // The RETIRED `coverage`/`domain` settings panels (orphaned, context-free) fold into the
   // System settings page — parsed here so it renders instantly, redirected (replace) by

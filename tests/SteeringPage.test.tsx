@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SteeringPage } from '../src/components/SteeringPage.js';
 import { filterSteeringRules, GRID_FACETS_DEFAULT, type GridFacets } from '../src/components/SteeringGrid.js';
-import { countByType } from '../src/components/SteeringTypeCards.js';
+import { countByType } from '../src/components/SteeringTypeFilter.js';
 import { ApiError } from '../src/api/errors.js';
 import type { SteeringRule, SteeringType } from '../src/api/steering.js';
 import type { WikiMeta, WikiScoreboard } from '../src/api/wiki.js';
@@ -98,6 +98,9 @@ function wire(w: {
   apiFetch.mockImplementation((path: unknown) => {
     if (path === '/governance/wiki/scoreboard') return (w.scoreboard ?? routeAbsent)();
     if (path === '/governance/wiki/meta') return (w.meta ?? routeAbsent)();
+    // The unified surface embeds the policy-proposals section — default it to an empty queue so
+    // its review half renders "no proposals" quietly (its own wire is exercised elsewhere).
+    if (String(path).startsWith('/proposals')) return Promise.resolve({ proposals: [] });
     return Promise.reject(new Error(`unexpected apiFetch path: ${String(path)}`));
   });
 }
@@ -118,7 +121,7 @@ beforeEach(() => {
   listClaims.mockRejectedValue(new ApiError(404, 'not found'));
 });
 
-describe('SteeringPage — the /steering landing (type null)', () => {
+describe('SteeringPage — the Policies All view (type null)', () => {
   const corpus = [
     rule(), // no steering_type → architecture (the serde default)
     rule({ id: 'PAT-002', statement: 'Pin the fetch boundary', steering_type: 'architecture' }),
@@ -126,47 +129,52 @@ describe('SteeringPage — the /steering landing (type null)', () => {
     rule({ id: 'POL-100', rule_type: 'policy', statement: 'No secrets in logs', steering_type: 'security', severity: 'critical' }),
   ];
 
-  it('renders seven compact type cards, each counting that type from the one rules fetch', async () => {
+  it('renders the type-FILTER chips (All + 7, each with its active count), the full grid, and store health', async () => {
     listConformanceRules.mockResolvedValue({ rules: corpus });
-    wire();
+    wire({ scoreboard: () => Promise.resolve({ scoreboard: scoreboard() }) });
     page(null);
 
-    const cards = await screen.findAllByTestId('steering-type-card');
-    expect(cards.map((c) => c.getAttribute('data-type'))).toEqual([
-      'architecture', 'development', 'security', 'testing', 'operations', 'compliance', 'design-ux',
+    // The seven cards COLLAPSED into a filter: All + the seven types, in nav order.
+    const chips = await screen.findAllByTestId('steering-type-chip');
+    expect(chips.map((c) => c.getAttribute('data-type'))).toEqual([
+      'all', 'architecture', 'development', 'security', 'testing', 'operations', 'compliance', 'design-ux',
     ]);
-    const counts = cards.map((c) => within(c).getByTestId('steering-type-card-count').textContent);
-    expect(counts).toEqual(['2', '0', '1', '0', '0', '0', '0']);
-    // The retired architecture rule counts as retired, never silently dropped.
-    expect(cards[0]).toHaveTextContent('1 retired');
-    // The landing is CALM: no grid, no forms, no dock, no health tiles.
-    expect(screen.queryByTestId('steering-grid-row')).toBeNull();
-    expect(screen.queryByTestId('steering-add-menu')).toBeNull();
-    expect(screen.queryByTestId('steering-rule-form')).toBeNull();
-    expect(screen.queryByTestId('assist-dock')).toBeNull();
-    expect(screen.queryByTestId('steering-health')).toBeNull();
+    // All is active on the bare view; its count is every ACTIVE rule (PAT-003 is retired).
+    expect(chips[0]).toHaveAttribute('data-active', 'true');
+    expect(chips[0]).toHaveTextContent('All (3)');
+    expect(chips[1]).toHaveTextContent('Architecture (2)');
+    expect(chips[3]).toHaveTextContent('Security (1)');
+    // The All view shows EVERY rule (all types, retired included) in ONE grid.
+    const rows = await screen.findAllByTestId('steering-grid-row');
+    expect(rows.map((r) => r.getAttribute('data-rule-id')).sort()).toEqual(['PAT-001', 'PAT-002', 'PAT-003', 'POL-100']);
+    // The unified surface: management (grid + add + dock) AND store-wide health are present.
+    expect(screen.getByTestId('steering-store-health')).toBeInTheDocument();
+    expect(screen.getByTestId('steering-add-menu')).toBeInTheDocument();
+    expect(screen.getByTestId('assist-dock')).toBeInTheDocument();
+    expect(screen.getByTestId('steering-page')).toHaveAttribute('data-steering-type', 'all');
     expect(listConformanceRules).toHaveBeenCalledTimes(1);
   });
 
-  it('a card click navigates to that type page', async () => {
+  it('a type chip click navigates to the filtered Policies URL', async () => {
     const user = userEvent.setup();
     const navigate = vi.fn();
     listConformanceRules.mockResolvedValue({ rules: corpus });
     wire();
     page(null, navigate);
 
-    const cards = await screen.findAllByTestId('steering-type-card');
-    await user.click(cards[2]!);
-    expect(navigate).toHaveBeenCalledWith('/steering/security');
+    const chips = await screen.findAllByTestId('steering-type-chip');
+    await user.click(chips[3]!); // security
+    expect(navigate).toHaveBeenCalledWith('/steering/policies?type=security');
   });
 
-  it('a failed rules fetch surfaces on the landing instead of seven fabricated zeros', async () => {
+  it('a failed rules fetch surfaces instead of a fabricated grid or chips', async () => {
     listConformanceRules.mockRejectedValue(new ApiError(500, 'store locked'));
     wire();
     page(null);
 
     expect(await screen.findByTestId('steering-rules-error')).toHaveTextContent(/store locked/);
-    expect(screen.queryByTestId('steering-type-card')).toBeNull();
+    expect(screen.queryByTestId('steering-type-chip')).toBeNull();
+    expect(screen.queryByTestId('steering-grid-row')).toBeNull();
   });
 });
 
@@ -217,18 +225,21 @@ describe('SteeringPage — one shell, parameterized by type', () => {
     expect(screen.queryByTestId('steering-unseeded')).toBeNull();
   });
 
-  it('the breadcrumb walks back to the /steering landing', async () => {
+  it('the filter chips are the navigation — the All chip clears the type filter back to the All view', async () => {
     const user = userEvent.setup();
     const navigate = vi.fn();
     listConformanceRules.mockResolvedValue({ rules: [] });
     wire();
     page('development', navigate);
 
-    const crumb = screen.getByTestId('steering-breadcrumb');
-    expect(crumb).toHaveAttribute('href', '/steering');
-    await user.click(crumb);
-    expect(navigate).toHaveBeenCalledWith('/steering');
-    // The old seven-tab strip retired with the landing — the cards are the navigation now.
+    const chips = await screen.findAllByTestId('steering-type-chip');
+    // The active chip is the routed type; All is the way back to every rule.
+    const dev = chips.find((c) => c.getAttribute('data-type') === 'development')!;
+    expect(dev).toHaveAttribute('data-active', 'true');
+    await user.click(chips.find((c) => c.getAttribute('data-type') === 'all')!);
+    expect(navigate).toHaveBeenCalledWith('/steering/policies');
+    // The old breadcrumb + seven-tab strip retired with the landing — the chips are it now.
+    expect(screen.queryByTestId('steering-breadcrumb')).toBeNull();
     expect(screen.queryByTestId('steering-tab')).toBeNull();
   });
 });
@@ -331,7 +342,7 @@ describe('SteeringPage — health header (TYPE-scoped, usability review #5)', ()
     expect(screen.queryByTestId('steering-stat-rules-type')).toBeNull();
   });
 
-  it('the LANDING carries the store-wide verdict, with diagnostics behind a details toggle', async () => {
+  it('the All view carries the store-wide verdict, with diagnostics behind a details toggle', async () => {
     listConformanceRules.mockResolvedValue({ rules: [rule()] });
     wire({ scoreboard: () => Promise.resolve({ scoreboard: scoreboard() }) });
     page(null);
@@ -625,27 +636,31 @@ describe('SteeringPage — ?rule deep link opens the drawer (qe finding: eval ga
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
   });
 
-  // The failure banner links `/steering?rule=<id>` (a rule id alone does not name its type
-  // page): the LANDING resolves the id to its type once rules load and navigates there with
-  // the drawer param intact. Unknown ids stay put — no dead redirect.
-  it('landing resolves ?rule=<id> to the rule\'s type page', async () => {
+  // The failure banner links `/steering/policies?rule=<id>` (the unified All view shows every rule):
+  // the page opens the rule's drawer directly — no type-page hop, no navigate. Unknown ids open
+  // nothing.
+  it('the All view opens the drawer for ?rule=<id> directly — no navigation needed', async () => {
     listConformanceRules.mockResolvedValue({ rules: [
-      { id: 'SEC-101', rule_type: 'policy', statement: 's', severity: 'critical', confidence: 1,
+      { id: 'SEC-101', rule_type: 'policy', statement: 'No secrets in logs', severity: 'critical', confidence: 1,
         targets: {}, provenance: { source: 'policy', source_kinds: [] }, retired: false,
         steering_type: 'security' },
     ] });
     wire();
     const navigate = vi.fn();
     render(<SteeringPage type={null} navigate={navigate} search="?rule=SEC-101" />);
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/steering/security?rule=SEC-101'));
+    const drawer = await screen.findByTestId('steering-rule-drawer');
+    expect(drawer).toHaveTextContent('SEC-101');
+    expect(drawer).toHaveTextContent('No secrets in logs');
+    expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('landing stays put on an unknown ?rule id', async () => {
+  it('the All view stays put on an unknown ?rule id — never a fabricated drawer', async () => {
     listConformanceRules.mockResolvedValue({ rules: [] });
     wire();
     const navigate = vi.fn();
     render(<SteeringPage type={null} navigate={navigate} search="?rule=NOPE-1" />);
-    await screen.findByTestId('steering-landing');
+    await screen.findByTestId('steering-page');
+    expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
     expect(navigate).not.toHaveBeenCalled();
   });
 
