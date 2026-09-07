@@ -112,6 +112,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
 
   const [rerunning, setRerunning] = useState<Record<string, boolean>>({});
+  const [capturing, setCapturing] = useState<Record<string, boolean>>({});
   const [rerunError, setRerunError] = useState<Record<string, string>>({});
   const [showRegister, setShowRegister] = useState(autoShowRegister ?? false);
   const [sourceMode, setSourceMode] = useState<SourceMode>('local');
@@ -187,6 +188,35 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
       }));
     } finally {
       setRerunning((prev) => ({ ...prev, [repoId]: false }));
+    }
+  }
+
+  /**
+   * Capture learnings (studio "Capture learnings" verb): launch the governed
+   * capture-learnings workflow over this repo — a REAL governed run (mine the
+   * repo's history/graph into durable memory + knowledge), so it lands on the
+   * run the operator can watch, never a hidden relaunch. Reuses the shared
+   * `launchRun` wire (`POST /runs {problem, repoRef, workflow}`) — no new type.
+   * Failures surface in the card's existing `rerunError` slot (only one card
+   * action runs at a time), the loading label rides its own `capturing` map.
+   */
+  async function captureLearnings(repoId: string, repoName: string): Promise<void> {
+    setCapturing((prev) => ({ ...prev, [repoId]: true }));
+    setRerunError((prev) => ({ ...prev, [repoId]: '' }));
+    try {
+      const { runId } = await api.launchRun({
+        problem: `Capture learnings from ${repoName}`,
+        repoRef: repoId,
+        workflow: 'capture-learnings',
+      });
+      onSelectRun?.(runId);
+    } catch (err) {
+      setRerunError((prev) => ({
+        ...prev,
+        [repoId]: err instanceof Error ? err.message : String(err),
+      }));
+    } finally {
+      setCapturing((prev) => ({ ...prev, [repoId]: false }));
     }
   }
 
@@ -766,6 +796,26 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     >
                       View →
                     </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {/* Capture learnings — a REAL governed run (launchRun), not a prefill:
+                        mine this repo's history/graph into durable memory. */}
+                    <button
+                      type="button"
+                      data-testid="repo-capture-learnings"
+                      data-repo-id={repo.id}
+                      disabled={capturing[repo.id] ?? false}
+                      title="Launch a governed run that mines this repo's history into durable memory + knowledge — a tracked run you can watch"
+                      onClick={() => void captureLearnings(repo.id, repo.name)}
+                      className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--ink-muted)',
+                        border: '1px solid var(--surface-raised)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {(capturing[repo.id] ?? false) ? 'Starting…' : 'Capture learnings'}
+                    </button>
                     {m.onboard.run !== null ? (
                       <button
                         type="button"
@@ -799,6 +849,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                         {isRerunning ? 'Starting…' : 'Onboard'}
                       </button>
                     )}
+                    </div>
                   </div>
                 </div>
               );
