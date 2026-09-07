@@ -12,6 +12,22 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.15] — 2026-09-07
+
+### Added
+- **Governed-knowledge dashboard (#195).** `/steering/dashboard` is the new Steering
+  landing: a KPI band (Needs review · Memories · Active rules by severity), a
+  consolidated review inbox (memory + policy proposals in one place, approve/reject
+  inline), and browse. A "Needs review" governed-knowledge band on the project homepage.
+  The propose→promote review queue is no longer buried at the bottom of the Policies and
+  Memories pages.
+- **`FacetAutocomplete` (#195).** The facet chip filters became a `key=value` typeahead.
+
+### Changed
+- **Nav tweaks (#194).** Removed the logo connection dot; the Health heart is colored by
+  health; Ask is a compact `?`-circle; Testing is relabelled "Test" and moved below Make;
+  a custom site name in Settings → Appearance.
+
 ## [0.4.14] — 2026-09-07
 
 ### Added
