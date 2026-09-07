@@ -87,7 +87,7 @@ what changed, check the [releases](https://github.com/mikeparcewski/wicked-crew/
 - **Node.js ≥ 22**, npm ≥ 10
 - A running **wicked-crew daemon, v0.7.0+** (bundled and started for you by `npx wicked-crew serve`
   — you only need this floor if you point a standalone studio at your own daemon)
-- A modern browser (Chrome, Edge, Firefox, Safari) on macOS, Linux, or Windows
+- A modern browser — Chrome, Edge, or Firefox on macOS, Linux, or Windows (or Safari on macOS)
 
 ---
 
