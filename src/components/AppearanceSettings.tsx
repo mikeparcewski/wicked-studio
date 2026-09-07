@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAppearanceStore } from '../theming/appearance.js';
+import { DEFAULT_SITE_NAME, useAppearanceStore } from '../theming/appearance.js';
 import { WickedLogo } from './WickedLogo.js';
 
 /**
@@ -299,6 +299,27 @@ export function AppearanceSettings(): React.ReactElement {
           {logoError !== null && (
             <p className="text-xs mt-1" style={{ color: 'var(--status-fail)' }} data-testid="logo-error">{logoError}</p>
           )}
+        </div>
+      </div>
+
+      {/* ── Site name (nav-ui-tweaks): overrides the chrome wordmark; blank reverts ── */}
+      <div className="flex items-start gap-4 py-4 border-b" style={{ borderColor: 'var(--surface-raised)' }}>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium" style={{ color: 'var(--ink-high)' }}>Site name</p>
+          <p className="text-xs mt-0.5 mb-2" style={{ color: 'var(--ink-muted)' }}>
+            The product name shown beside the logo in the chrome. Leave blank for the
+            default (<span className="font-mono">{DEFAULT_SITE_NAME}</span>).
+          </p>
+          <input
+            type="text"
+            data-testid="site-name-input"
+            aria-label="Site name"
+            placeholder={DEFAULT_SITE_NAME}
+            value={appearance.site_name ?? ''}
+            onChange={(e) => update({ site_name: e.target.value.trim() === '' ? null : e.target.value })}
+            className="w-64 rounded px-2 py-1 text-xs font-mono focus:outline-none"
+            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+          />
         </div>
       </div>
 

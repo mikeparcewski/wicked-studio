@@ -60,14 +60,16 @@ describe('testid-inventory.json (TH-13)', () => {
     expect(inv.$doc.join(' ').toLowerCase()).toContain('no agentic fallback');
   });
 
-  it('declares the selectors the 2026-08 campaign drifted on (both must stay declared)', () => {
+  it('declares the connection-status selector the 2026-08 campaign drifted on', () => {
     // The campaign hit exactly this class of drift: the shipped bundle had `connection-dot`
-    // where the spec said `connection-status` (studio-campaign-results.json env_notes).
-    // Both exist in src today as distinct affordances; losing either is a contract change
-    // a generator must see in this file's diff, not discover at runtime.
+    // where the spec said `connection-status` (studio-campaign-results.json env_notes). The
+    // chrome `connection-dot` was since removed (nav-ui-tweaks); `connection-status` remains
+    // the live affordance — losing it is a contract change a generator must see in this
+    // file's diff, not discover at runtime.
     const ids = new Set(committed().static.map((e) => e.testId));
-    expect(ids.has('connection-dot')).toBe(true);
     expect(ids.has('connection-status')).toBe(true);
+    // The retired dot must NOT reappear as a silent duplicate of connection-status.
+    expect(ids.has('connection-dot')).toBe(false);
   });
 
   it('covers the whole declared surface and stays deterministically ordered', () => {

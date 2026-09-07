@@ -119,6 +119,18 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
   // The passive header summary (§6.2): fail-red if any seat is inactive or the
   // socket is down — the rail's foot says "look inside" without being opened.
   const sick = wsDown || (roster ?? []).some((s) => s.health?.status === 'inactive');
+  // The ♥ glyph is colored by health (nav-ui-tweaks): red when unhealthy (a
+  // seat down or the socket gone), amber when degraded (socket still connecting,
+  // a probe errored, or the API server not reporting ok), green otherwise. It
+  // reads the same signals the section already computes — no new data source.
+  const degraded =
+    wsStatus === 'connecting' || healthError || rosterError || (health !== null && health.status !== 'ok');
+  const heartState = sick ? 'unhealthy' : degraded ? 'degraded' : 'healthy';
+  const heartColor = sick
+    ? 'var(--status-fail)'
+    : degraded
+      ? 'var(--status-gate)'
+      : 'var(--status-run)';
 
   return (
     <div
@@ -153,7 +165,14 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
         >
           ›
         </span>
-        <span aria-hidden>♥</span>
+        <span
+          aria-hidden
+          data-testid="rail-health-heart"
+          data-health={heartState}
+          style={{ color: heartColor }}
+        >
+          ♥
+        </span>
         <span>Health</span>
         {sick && (
           <span

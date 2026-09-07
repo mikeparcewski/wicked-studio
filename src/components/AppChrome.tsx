@@ -1,6 +1,4 @@
-import { useConnectionStore } from '../store/connection.js';
-import { useAppearanceStore } from '../theming/appearance.js';
-import { prefersReducedMotion } from './LiveEdge.js';
+import { DEFAULT_SITE_NAME, useAppearanceStore } from '../theming/appearance.js';
 import { WickedLogo } from './WickedLogo.js';
 
 /**
@@ -24,90 +22,37 @@ import { WickedLogo } from './WickedLogo.js';
  *   - the default mark is an SVG path stroked in `var(--accent)` (WickedLogo);
  *     the old `[W]` font-character fallback is gone.
  *
- * The connection dot carries `data-state` = the websocket state, and its color
- * is the STATUS layer, not the accent (§2.6): live = run-emerald, connecting =
- * gate-amber, lost = fail-red. The reconnecting pulse is the ONE loop the
- * motion grammar allows (§1.6) — it is state communication, and it stops for
- * `prefers-reduced-motion`.
+ * The connection status dot RETIRED from the chrome (nav-ui-tweaks): the logo
+ * slot and the product name are the only branding the header carries now.
+ * Health detail lives in ONE place — the rail-foot HealthRailSection, opened
+ * from its own header toggle (its ♥ glyph is colored by health there).
  *
- * The health POPOVER retired (DES-FEEDBACK-003 §6.2/§8.2, slice O): the dot
- * stays as glanceable ws state, and clicking it now expands the rail-foot
- * HealthRailSection (one surface for health detail, not two) — CheckRow and
- * the `getHealth()` fetch moved there verbatim.
- *
- * The dot's status WORD retired too (rail-header restyle): the `live` /
- * `connecting…` / `offline` label that once sat next to the logo/name is
- * REPLACED by the Ask entry (the accent-dressed action that opens the app-wide
- * assist dock). The bare dot stays as the minimal glanceable state — its click
- * still expands the rail-foot Health; the word slot next to it is now Ask.
+ * The Ask entry took the slot the connection word once held (rail-header
+ * restyle): a compact circular `?` button that opens the app-wide assist dock.
  */
 
 interface Props {
   /** The rail's collapsed state: icon-only column instead of the header row. */
   collapsed: boolean;
   navigate: (path: string) => void;
-  /** Clicking the dot expands the rail-foot Health section (§6.2, slice O). */
-  onDotClick?: () => void;
-  /** Opens the app-wide ASK dock (AskDock). The Ask entry — which took the
-   *  connection word's slot — renders only when the app wires this; the chrome
-   *  never paints a dead door. The Ctrl/⌘+Shift+A chord does the same. */
+  /** Opens the app-wide ASK dock (AskDock). The Ask entry renders only when the
+   *  app wires this; the chrome never paints a dead door. The Ctrl/⌘+Shift+A
+   *  chord does the same. */
   onOpenAsk?: () => void;
 }
 
-const DOT_COLOR = {
-  connected: 'var(--status-run)',
-  connecting: 'var(--status-gate)',
-  disconnected: 'var(--status-fail)',
-} as const;
-
 /**
- * The connection status dot — glanceable ws state. Its old health popover is
- * RETIRED (§8.2): a click hands off to the rail-foot Health section instead.
- */
-function ConnectionDot({ onClick }: { onClick?: (() => void) | undefined }): React.ReactElement {
-  const wsStatus = useConnectionStore((s) => s.status);
-
-  const pillLabel =
-    wsStatus === 'connected' ? 'Connected' :
-    wsStatus === 'connecting' ? 'Connecting' : 'Disconnected';
-
-  return (
-    <div style={{ position: 'relative', flexShrink: 0 }}>
-      <button
-        type="button"
-        onClick={onClick}
-        title={`Connection: ${pillLabel} — health details below`}
-        aria-label={`Connection: ${pillLabel}`}
-        style={{
-          display: 'flex', alignItems: 'center', gap: '5px', background: 'transparent',
-          border: 'none', padding: 'var(--space-1)', cursor: 'pointer',
-        }}
-      >
-        <span
-          data-testid="connection-dot"
-          data-state={wsStatus}
-          style={{
-            width: '7px', height: '7px', borderRadius: 'var(--radius-full)',
-            background: DOT_COLOR[wsStatus], flexShrink: 0,
-            // §1.6's one allowed loop: reconnecting IS a state, and it reads as one.
-            animation: wsStatus === 'connecting' && !prefersReducedMotion()
-              ? 'wk-live-pulse 2s ease-in-out infinite' : undefined,
-          }}
-        />
-      </button>
-    </div>
-  );
-}
-
-/**
- * The Ask entry — the accent-dressed action that took the connection word's
- * slot (rail-header restyle). Its OWN idiom, not a nav row and not a bell
- * sibling; opening the app-wide assist dock (AskDock). The chord
+ * The Ask entry — a compact CIRCULAR `?` button (nav-ui-tweaks) that opens the
+ * app-wide assist dock (AskDock). Its OWN idiom, not a nav row and not a bell
+ * sibling; the accent dress keeps it visually distinct. The chord
  * Ctrl/⌘+Shift+A does the same and is documented in the '?' overlay. Renders
  * only when the app wires `onOpenAsk` — the chrome never paints a dead door.
  */
 const ASK_LABEL = 'Ask — governed answers about your projects, repos, and this studio (Ctrl/⌘+Shift+A)';
 function AskEntry({ collapsed, onOpenAsk }: { collapsed: boolean; onOpenAsk: () => void }): React.ReactElement {
+  // A circle either way; collapsed keeps the 28px hit target, expanded is a
+  // touch smaller to sit inside the header row.
+  const size = collapsed ? '28px' : '24px';
   return (
     <button
       type="button"
@@ -115,31 +60,28 @@ function AskEntry({ collapsed, onOpenAsk }: { collapsed: boolean; onOpenAsk: () 
       data-idiom="ask"
       aria-label={ASK_LABEL}
       aria-keyshortcuts="Control+Shift+A Meta+Shift+A"
-      title={ASK_LABEL}
+      title="ask"
       onClick={onOpenAsk}
-      className="flex items-center gap-1 rounded-lg transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-1"
+      className="flex items-center justify-center transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-1"
       style={{
         flexShrink: 0,
+        width: size, height: size, padding: 0,
+        borderRadius: 'var(--radius-full)',
         background: 'var(--accent-subtle)',
         border: '1px solid var(--accent)',
         color: 'var(--accent)',
-        ...(collapsed
-          ? { width: '28px', height: '28px', justifyContent: 'center', padding: 0 }
-          : { height: '24px', padding: '0 var(--space-2)' }),
       }}
     >
-      <span aria-hidden style={{ fontSize: 'var(--text-xs)', lineHeight: 1 }}>✦</span>
-      {!collapsed && (
-        <span style={{ fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semi)', fontFamily: 'var(--font-sans)' }}>
-          Ask
-        </span>
-      )}
+      <span aria-hidden style={{ fontSize: 'var(--text-xs)', lineHeight: 1, fontWeight: 'var(--weight-semi)' }}>?</span>
     </button>
   );
 }
 
-export function AppChrome({ collapsed, navigate, onDotClick, onOpenAsk }: Props): React.ReactElement {
+export function AppChrome({ collapsed, navigate, onOpenAsk }: Props): React.ReactElement {
   const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
+  // The product name shown in the chrome (nav-ui-tweaks): a Settings override,
+  // falling back to the default wordmark when unset.
+  const siteName = useAppearanceStore((s) => s.appearance.site_name)?.trim() || DEFAULT_SITE_NAME;
 
   // The §3.1 slot: 32×32 exactly, clearspace by margin, contain-fit custom
   // asset via the --logo-url custom property. The accent-stroked default mark
@@ -172,7 +114,6 @@ export function AppChrome({ collapsed, navigate, onDotClick, onOpenAsk }: Props)
         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-1)' }}
       >
         {logoSlot}
-        <ConnectionDot onClick={onDotClick} />
         {onOpenAsk !== undefined && <AskEntry collapsed onOpenAsk={onOpenAsk} />}
       </div>
     );
@@ -198,10 +139,9 @@ export function AppChrome({ collapsed, navigate, onDotClick, onOpenAsk }: Props)
           fontWeight: 'var(--weight-semi)', color: 'var(--ink-body)',
         }}
       >
-        wicked-studio
+        {siteName}
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>
-        <ConnectionDot onClick={onDotClick} />
         {onOpenAsk !== undefined && <AskEntry collapsed={false} onOpenAsk={onOpenAsk} />}
       </div>
     </div>
