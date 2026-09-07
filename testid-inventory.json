@@ -11,8 +11,8 @@
   "studioVersion": "0.4.13",
   "counts": {
     "files": 121,
-    "occurrences": 982,
-    "static": 842,
+    "occurrences": 983,
+    "static": 843,
     "dynamic": 43,
     "computed": 6
   },
@@ -3231,6 +3231,12 @@
       "testId": "raw-event",
       "files": [
         "src/components/NarratorFeed.tsx"
+      ]
+    },
+    {
+      "testId": "repo-capture-learnings",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
       ]
     },
     {
