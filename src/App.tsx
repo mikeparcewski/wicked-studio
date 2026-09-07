@@ -155,7 +155,8 @@ export function App(): React.ReactElement {
   useRetiredSettingsRedirect(pathname, navigate);
 
   // The retired flat campaign addresses (`/campaigns`, `/campaigns/:id`) rewrite onto
-  // `/testing/campaigns[...]`, and any page-less `/testing` address normalizes onto Campaigns.
+  // `/testing/campaigns[...]`, and any page-less `/testing` address normalizes onto Evals
+  // (the nav-reorg's renamed section home; Campaigns moved into the project shell).
   useTestingRedirect(panel, testingPage, pathname, navigate);
 
   // The retired `/make` address (the nav-reorg split Make into Execute/Vibe/Demo) normalizes
