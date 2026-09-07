@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.4.14] — 2026-09-07
+
+### Added
+- **Capture learnings action (#189).** A per-repo verb on the Repositories panel
+  launches the governed `capture-learnings` workflow over the repo (`launchRun`
+  with `workflow:'capture-learnings'`) — a tracked run the operator watches that
+  mines the repo's churn + hotspots into faceted memory and policy proposals,
+  reviewed in the Steering surfaces. Marks the run launched-here (studio
+  provenance), mutually disables with Onboard, and guards against double-click.
+
 ## [0.4.13] — 2026-09-06
 
 ### Changed
@@ -349,7 +359,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.13...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.14...HEAD
+[0.4.14]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.13...v0.4.14
 [0.4.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.12...v0.4.13
 [0.4.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.11...v0.4.12
 [0.4.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.10...v0.4.11
