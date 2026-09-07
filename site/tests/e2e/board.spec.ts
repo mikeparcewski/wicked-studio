@@ -7,11 +7,11 @@ import { bringIntoView } from './utils';
  * the status button resumes the cycle.
  */
 test.describe('the run board [data-board]', () => {
-  test('eight real panels render; clicking one pins the stage to it', async ({ page }) => {
+  test('seven real panels render; clicking one pins the stage to it', async ({ page }) => {
     await page.goto('/');
     const board = page.locator('[data-board]');
     await bringIntoView(board);
-    await expect(board.locator('[data-board-item]')).toHaveCount(8);
+    await expect(board.locator('[data-board-item]')).toHaveCount(7);
 
     // Pin the workflows panel: the stage swaps to its name + real route.
     await board.getByRole('tab', { name: 'workflows' }).click();
@@ -23,9 +23,9 @@ test.describe('the run board [data-board]', () => {
     // Pinning pauses the auto-cycle and says so.
     await expect(page.locator('[data-board-status-txt]')).toContainText('pinned');
 
-    // Pin policies: honest line — the skin surfaces the gate, never grades.
-    await board.getByRole('tab', { name: 'policies' }).click();
-    await expect(page.locator('[data-bs-api]')).toHaveText('GET /governance/policies');
+    // Pin steering: the governance surface (rules + proposals) — honest line, the skin never grades.
+    await board.getByRole('tab', { name: 'steering' }).click();
+    await expect(page.locator('[data-bs-api]')).toHaveText('GET /governance/rules · /proposals');
     await expect(page.locator('[data-bs-line]')).toContainText('never grades');
 
     // The status button resumes the auto-cycle.
