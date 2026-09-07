@@ -18,7 +18,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write # create the GitHub Release after a successful npm publish
   # OIDC trusted publishing — no NPM_TOKEN stored in this repo.
   id-token: write
 
@@ -79,3 +79,35 @@ jobs:
           done
           echo "::error::wicked-studio@${TAG_VERSION} is still not resolvable after publish (FINDING-096)."
           exit 1
+
+      # Cut the GitHub Release only after npm publish AND the registry-serve check pass — so a
+      # release is advertised only for a version the registry can actually serve, never a tag whose
+      # publish failed. This is the step studio lacked: it published to npm every release but never
+      # created a GitHub Release, so the Releases page stayed empty while npm shipped through
+      # v0.4.14. Idempotent — an existing release (e.g. a hand-backfilled one) is updated in place.
+      - name: Create the GitHub Release from CHANGELOG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          # Notes = this version's CHANGELOG section. Distinguish "no section" (exit 1 → generic
+          # note) from a real script failure (exit 2 → missing/unreadable CHANGELOG, usage bug),
+          # which must FAIL rather than silently ship a generic note.
+          set +e
+          python3 scripts/changelog-section.py "$TAG" > /tmp/relnotes.md
+          code=$?
+          set -e
+          if [ "$code" -eq 1 ]; then
+            printf 'Release %s\n' "$TAG" > /tmp/relnotes.md
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::changelog-section.py failed (exit $code) — refusing to publish a release with fallback notes"
+            exit "$code"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file /tmp/relnotes.md
+            echo "updated existing GitHub Release $TAG"
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file /tmp/relnotes.md --verify-tag
+            echo "created GitHub Release $TAG"
+          fi
