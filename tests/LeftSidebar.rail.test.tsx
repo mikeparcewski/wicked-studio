@@ -390,7 +390,7 @@ describe('accordion contents (§3.3)', () => {
     expect(within(settings).getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument();
   });
 
-  it('Steering expands to the two sub-section rows (Policies / Memories), each navigating to its page; the route expands it', async () => {
+  it('Steering expands to the three sub-section rows (Dashboard / Policies / Memories), each navigating to its page; the route expands it', async () => {
     const navigate = vi.fn();
     rail({ pathname: '/steering/policies', navigate });
     await screen.findByRole('button', { name: 'wicked-studio' });
@@ -398,13 +398,16 @@ describe('accordion contents (§3.3)', () => {
     const steering = screen.getByTestId('rail-heading-steering');
     expect(steering.getAttribute('aria-expanded')).toBe('true');
     const rows = within(steering).getAllByTestId('rail-steering-section');
-    expect(rows.map((r) => r.dataset.section)).toEqual(['policies', 'memories']);
-    expect(rows[0]).toHaveTextContent('Policies');
-    expect(rows[1]).toHaveTextContent('Memories');
+    expect(rows.map((r) => r.dataset.section)).toEqual(['dashboard', 'policies', 'memories']);
+    expect(rows[0]).toHaveTextContent('Dashboard');
+    expect(rows[1]).toHaveTextContent('Policies');
+    expect(rows[2]).toHaveTextContent('Memories');
     // The seven types retired into a `?type=` filter under Policies — no per-type rail rows now.
     expect(within(steering).queryByTestId('rail-steering-type')).toBeNull();
 
-    fireEvent.click(rows[1]!);
+    fireEvent.click(rows[0]!);
+    expect(navigate).toHaveBeenCalledWith('/steering/dashboard');
+    fireEvent.click(rows[2]!);
     expect(navigate).toHaveBeenCalledWith('/steering/memories');
   });
 
@@ -425,7 +428,7 @@ describe('accordion contents (§3.3)', () => {
 });
 
 describe('the collapsed rail (§3.2)', () => {
-  it('shows exactly seven glyph links (Testing → its Campaigns landing, Steering → its Policies home, Settings → /system)', async () => {
+  it('shows exactly seven glyph links (Testing → its Campaigns landing, Steering → its Dashboard home, Settings → /system)', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
@@ -433,7 +436,7 @@ describe('the collapsed rail (§3.2)', () => {
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
     expect(glyphs).toHaveLength(7);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/make', '/testing/campaigns', '/chats', '/repos', '/steering/policies', '/system',
+      '/projects', '/make', '/testing/campaigns', '/chats', '/repos', '/steering/dashboard', '/system',
     ]);
     // Accordions don't exist at this width.
     expect(screen.queryByTestId('rail-heading-projects')).toBeNull();

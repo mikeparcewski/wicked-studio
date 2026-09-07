@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import { listDocs, type DocSummary } from '../api/interactive.js';
+import { listProposals, proposalKind } from '../api/proposals.js';
+import { steeringDashboardPath } from '../api/steering.js';
 import { useDocsCache } from '../store/docsCache.js';
 import type { SessionView } from '../api/types.js';
 import { compareScored, scoreOf, type Signal, type SignalKind } from '../board/boardAttention.js';
@@ -193,6 +195,24 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
       .catch(() => { /* bridge cold/unreachable — no doc cards, never an error wall */ });
     return () => { cancelled = true; };
   }, [projectId, project]);
+
+  // The governed-knowledge headline (DES-MEM-FACETED-001; governed-knowledge dashboard): how many
+  // agent-proposed memories + policies are pending review. `null` = the daemon does not serve the
+  // proposal queue, so the whole GK band is omitted rather than showing a lying zero.
+  const [pendingReview, setPendingReview] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ps = await listProposals({ state: 'pending' });
+        if (!cancelled) setPendingReview(ps.filter((p) => proposalKind(p) !== 'other').length);
+      } catch {
+        // Unsupported OR any read failure: no GK band, never an error wall on the project home.
+        if (!cancelled) setPendingReview(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // ── The project's runs, attention-ordered (needs-you floats FIRST) ─────────
   const fallbackAt = project?.updated_at ?? 0;
@@ -455,6 +475,23 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
             onOpen={() => setChip('failed')}
           />
         </KpiGroup>
+        {/* ── Governed knowledge (DES-MEM-FACETED-001): the un-buried review headline, a door
+              straight into the dashboard's consolidated inbox. Omitted on a daemon that does not
+              serve the proposal queue (`pendingReview === null`), never a lying zero. ── */}
+        {pendingReview !== null && (
+          <KpiGroup label="Governed knowledge" grow={1}>
+            <StatTile
+              testId="stat-needs-review"
+              label="Needs review"
+              value={pendingReview}
+              valueColor={pendingReview > 0 ? 'var(--status-gate)' : undefined}
+              context={pendingReview > 0 ? 'proposals waiting' : 'nothing waiting'}
+              title="Agent-proposed memories & policies pending review — open the governed-knowledge dashboard"
+              href={steeringDashboardPath()}
+              onOpen={() => navigate(steeringDashboardPath())}
+            />
+          </KpiGroup>
+        )}
       </KpiBand>
 
       {/* ── The gate inbox — FIRST: attention routing beats navigation ── */}

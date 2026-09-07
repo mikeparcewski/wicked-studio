@@ -8,22 +8,22 @@ import {
   type MemoryCoverage,
   type MemoryItem,
 } from '../api/memory.js';
-import { ProposalsSection } from './ProposalsSection.js';
+import { FacetAutocomplete } from './FacetAutocomplete.js';
 import { KeyValueChips } from './ProposalChips.js';
 
 /**
  * The Steering surface's MEMORIES sub-section (`/steering/memories`, DES-MEM-FACETED-001 unified
- * surface). One page that both MANAGES existing memories and REVIEWS memory proposals:
+ * surface; governed-knowledge dashboard). The "manage existing memories" deep-dive — the REVIEW of
+ * memory proposals now lives in the dashboard's consolidated inbox (`/steering/dashboard`), so it
+ * is no longer buried below this browser:
  *
  *  - the store BROWSER (`GET /memory`): every stored memory, with a text search that re-queries the
- *    wire and a client-side FACET filter (the facet key:value chips the loaded set carries). Each
- *    row shows content, tier, scope, and facets, with a RETIRE action.
+ *    wire and a client-side FACET filter — the facet `key=value` TYPEAHEAD (FacetAutocomplete),
+ *    whose vocabulary is derived from the loaded set. Each row shows content, tier, scope, and
+ *    facets, with a RETIRE action.
  *  - RETIRE is honest about granularity: the wire erases a scope SUBTREE (`POST /memory/retire`
  *    with `scope_prefix`), so retiring a memory reaches everything filed at or under its scope — the
  *    confirm says so, and the note reports how many rows the server erased.
- *  - the MEMORY PROPOSALS section (ProposalsSection, below) reviews the agent-proposed memories
- *    awaiting a human approve/reject — the review half of this sub-section. It has its own adoption
- *    seam, so proposals still render even on a daemon whose memory-management wire is absent.
  *
  * Every write goes through crew's API (the governed operator path) — estate MCP stays read-only.
  */
@@ -121,8 +121,8 @@ export function MemoriesPanel(): React.ReactElement {
         <div>
           <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Steering · Memories</h2>
           <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-            The agent memory store — browse and filter what has been remembered, retire a scope, and
-            review the agent-proposed memories awaiting your approval below.
+            The agent memory store — browse and filter what has been remembered, and retire a scope.
+            Agent-proposed memories are reviewed in the governed-knowledge dashboard.
             {coverageTotal !== null && (
               <span data-testid="memories-coverage" className="ml-1 font-mono" style={{ color: 'var(--ink-dim)' }}>
                 · {coverageTotal} in store
@@ -166,48 +166,14 @@ export function MemoriesPanel(): React.ReactElement {
       </div>
 
       {facetPairs.length > 0 && (
-        <div data-testid="memories-facet-filter" role="tablist" aria-label="Filter memories by facet" className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={facet === null}
-            data-testid="memories-facet-chip"
-            data-facet="all"
-            data-active={facet === null}
-            onClick={() => setFacet(null)}
-            className="rounded px-2 py-1 text-[10px] font-mono transition-colors"
-            style={{
-              background: facet === null ? 'var(--surface-raised)' : 'transparent',
-              color: facet === null ? 'var(--ink-high)' : 'var(--ink-muted)',
-              border: '1px solid var(--surface-raised)',
-            }}
-          >
-            all
-          </button>
-          {facetPairs.map((pair) => {
-            const active = facet === pair;
-            return (
-              <button
-                key={pair}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                data-testid="memories-facet-chip"
-                data-facet={pair}
-                data-active={active}
-                onClick={() => setFacet(active ? null : pair)}
-                className="rounded px-2 py-1 text-[10px] font-mono transition-colors"
-                style={{
-                  background: active ? 'var(--surface-raised)' : 'transparent',
-                  color: active ? 'var(--ink-high)' : 'var(--ink-muted)',
-                  border: '1px solid var(--surface-raised)',
-                }}
-              >
-                {pair}
-              </button>
-            );
-          })}
-        </div>
+        <FacetAutocomplete
+          testId="memories-facet-filter"
+          options={facetPairs}
+          value={facet}
+          onChange={setFacet}
+          label="Filter memories by facet"
+          placeholder="Filter by facet (key=value)…"
+        />
       )}
 
       {note !== null && (
@@ -306,9 +272,6 @@ export function MemoriesPanel(): React.ReactElement {
           ))}
         </ul>
       )}
-
-      {/* The REVIEW half of this sub-section — the agent-proposed memories. */}
-      <ProposalsSection kind="memory" heading="Memory proposals" />
     </div>
   );
 }
