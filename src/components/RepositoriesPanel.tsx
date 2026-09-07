@@ -114,6 +114,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
 
   const [rerunning, setRerunning] = useState<Record<string, boolean>>({});
   const [capturing, setCapturing] = useState<Record<string, boolean>>({});
+  // Synchronous in-flight guard: the button's `disabled` only applies after a
+  // re-render, so a fast double-click can fire captureLearnings twice before then.
+  const capturingRef = useRef<Set<string>>(new Set());
   const [rerunError, setRerunError] = useState<Record<string, string>>({});
   const [showRegister, setShowRegister] = useState(autoShowRegister ?? false);
   const [sourceMode, setSourceMode] = useState<SourceMode>('local');
@@ -202,6 +205,10 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
    * action runs at a time), the loading label rides its own `capturing` map.
    */
   async function captureLearnings(repoId: string, repoName: string): Promise<void> {
+    // Bail if a capture for this repo is already in flight (double-click before the
+    // disabled state re-renders) — the ref is updated synchronously, unlike state.
+    if (capturingRef.current.has(repoId)) return;
+    capturingRef.current.add(repoId);
     setCapturing((prev) => ({ ...prev, [repoId]: true }));
     setRerunError((prev) => ({ ...prev, [repoId]: '' }));
     try {
@@ -220,6 +227,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
         [repoId]: err instanceof Error ? err.message : String(err),
       }));
     } finally {
+      capturingRef.current.delete(repoId);
       setCapturing((prev) => ({ ...prev, [repoId]: false }));
     }
   }
