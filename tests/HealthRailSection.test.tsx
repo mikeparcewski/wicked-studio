@@ -159,7 +159,7 @@ describe('the passive summary dot (§6.2/§6.3)', () => {
   });
 });
 
-describe('the chrome dot hands off to the section (§6.2/§8.2)', () => {
+describe('the rail-foot section (nav-ui-tweaks removed the chrome dot)', () => {
   it('renders the section at the rail foot, collapsed, with the old testid gone', () => {
     render(<LeftSidebar runs={[]} navigate={() => {}} pathname="/" />);
     expect(screen.getByTestId('rail-health-section')).toHaveAttribute('data-open', 'false');
@@ -167,13 +167,49 @@ describe('the chrome dot hands off to the section (§6.2/§8.2)', () => {
     expect(getRoster).not.toHaveBeenCalled();
   });
 
-  it('clicking the connection dot expands the section; no popover mounts', async () => {
+  it('the chrome paints no connection dot; the section opens from its own header', async () => {
     render(<LeftSidebar runs={[]} navigate={() => {}} pathname="/" />);
-    fireEvent.click(screen.getByTestId('connection-dot'));
+    // The chrome dot that used to expand this section is gone (nav-ui-tweaks).
+    expect(screen.queryByTestId('connection-dot')).toBeNull();
+    fireEvent.click(screen.getByTestId('rail-health-toggle'));
     expect(screen.getByTestId('rail-health-section')).toHaveAttribute('data-open', 'true');
     await screen.findAllByTestId('rail-seat-row');
     expect(getRoster).toHaveBeenCalledTimes(1);
-    // The retired popover's DOM is absent: health detail has ONE surface now.
-    expect(screen.queryByText('Health checks')).toBeNull();
+  });
+});
+
+describe('the health-colored heart (nav-ui-tweaks)', () => {
+  it('is green when the socket is live and no seat is inactive', async () => {
+    rosterAnswer = [SEATS[0]!, SEATS[2]!]; // active + unknown — neither inactive
+    render(<Harness initialOpen />);
+    await screen.findAllByTestId('rail-seat-row');
+    const heart = screen.getByTestId('rail-health-heart');
+    expect(heart).toHaveAttribute('data-health', 'healthy');
+    expect(heart.style.color).toBe('var(--status-run)');
+  });
+
+  it('is amber (degraded) while the socket is still connecting', () => {
+    useConnectionStore.setState({ status: 'connecting' });
+    render(<Harness />); // collapsed — the ws state alone drives the glyph
+    const heart = screen.getByTestId('rail-health-heart');
+    expect(heart).toHaveAttribute('data-health', 'degraded');
+    expect(heart.style.color).toBe('var(--status-gate)');
+  });
+
+  it('is red (unhealthy) when the socket is down', () => {
+    useConnectionStore.setState({ status: 'disconnected' });
+    render(<Harness />);
+    const heart = screen.getByTestId('rail-health-heart');
+    expect(heart).toHaveAttribute('data-health', 'unhealthy');
+    expect(heart.style.color).toBe('var(--status-fail)');
+  });
+
+  it('is red (unhealthy) once an inactive seat is known', async () => {
+    rosterAnswer = SEATS; // codex is inactive
+    render(<Harness initialOpen />);
+    await screen.findAllByTestId('rail-seat-row');
+    const heart = screen.getByTestId('rail-health-heart');
+    expect(heart).toHaveAttribute('data-health', 'unhealthy');
+    expect(heart.style.color).toBe('var(--status-fail)');
   });
 });

@@ -58,7 +58,7 @@ const W2_ORDERED = [
   bp('scratch', 'quiet', 0),
 ];
 
-const HEADING_KEYS = ['projects', 'make', 'chat', 'repos', 'testing', 'steering', 'settings'] as const;
+const HEADING_KEYS = ['projects', 'make', 'testing', 'chat', 'repos', 'steering', 'settings'] as const;
 
 function rail(props: Partial<{ pathname: string; navigate: (p: string) => void; runs: ReturnType<typeof makeView>[] }> = {}): ReturnType<typeof render> {
   return render(
@@ -140,17 +140,29 @@ describe('the seven heading rows (§3.1 + STEERING + the testing wave)', () => {
     }
   });
 
-  it('Testing → Steering → Settings, each immediately before the next (the placement contract)', async () => {
+  it('Make → Test adjacency, and Steering → Settings (the nav-ui-tweaks placement contract)', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
+    const make = screen.getByTestId('rail-heading-make');
     const testing = screen.getByTestId('rail-heading-testing');
+    const chat = screen.getByTestId('rail-heading-chat');
     const steering = screen.getByTestId('rail-heading-steering');
     const settings = screen.getByTestId('rail-heading-settings');
-    // Same container, adjacent, testing → steering → settings — DOM-order assertions.
-    expect(testing.nextElementSibling).toBe(steering);
+    // Test now sits immediately BELOW Make, before Chat (nav-ui-tweaks).
+    expect(make.nextElementSibling).toBe(testing);
+    expect(testing.nextElementSibling).toBe(chat);
+    // Steering → Settings still tail the rail, adjacent.
     expect(steering.nextElementSibling).toBe(settings);
     expect(steering.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('the Test heading is labelled "Test" though its key stays testing', async () => {
+    rail();
+    await screen.findByRole('button', { name: 'wicked-studio' });
+    const title = within(screen.getByTestId('rail-heading-testing')).getByTestId('rail-title-testing');
+    expect(title).toHaveTextContent('Test');
+    expect(title).not.toHaveTextContent('Testing');
   });
 
   it('▦ icons are real links to the §2.1 dashboard routes', async () => {
@@ -421,7 +433,7 @@ describe('the collapsed rail (§3.2)', () => {
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
     expect(glyphs).toHaveLength(7);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/make', '/chats', '/repos', '/testing/campaigns', '/steering/policies', '/system',
+      '/projects', '/make', '/testing/campaigns', '/chats', '/repos', '/steering/policies', '/system',
     ]);
     // Accordions don't exist at this width.
     expect(screen.queryByTestId('rail-heading-projects')).toBeNull();

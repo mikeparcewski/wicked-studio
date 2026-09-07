@@ -67,38 +67,28 @@ describe('AppChrome (DES-VISION-001 §3.1, §5.2)', () => {
     expect(navigate).toHaveBeenCalledTimes(2);
   });
 
-  it('the connection dot carries data-state matching the websocket state', () => {
+  it('carries NO connection dot — it was removed from the chrome (nav-ui-tweaks)', () => {
     for (const status of ['connecting', 'connected', 'disconnected'] as const) {
       useConnectionStore.setState({ status });
       const { unmount } = render(<AppChrome collapsed={false} navigate={() => {}} />);
-      expect(screen.getByTestId('connection-dot')).toHaveAttribute('data-state', status);
+      // The green/amber/red status dot no longer sits beside the logo/name —
+      // health detail lives in the rail-foot HealthRailSection now.
+      expect(screen.queryByTestId('connection-dot')).toBeNull();
       unmount();
     }
   });
 
-  it('the dot speaks the status layer, never the accent (EC12)', () => {
-    const expected = {
-      connected: 'var(--status-run)',
-      disconnected: 'var(--status-fail)',
-      connecting: 'var(--status-gate)',
-    } as const;
-    for (const [status, token] of Object.entries(expected)) {
-      useConnectionStore.setState({ status: status as keyof typeof expected });
-      const { unmount } = render(<AppChrome collapsed={false} navigate={() => {}} />);
-      expect(screen.getByTestId('connection-dot').style.background).toBe(token);
-      unmount();
-    }
-  });
-
-  it('keeps the bare status dot and replaces its status word with Ask', () => {
+  it('renders the Ask entry (a ? circle) in the slot the connection word held', () => {
     render(<AppChrome collapsed={false} navigate={() => {}} onOpenAsk={() => {}} />);
-    const dot = screen.getByTestId('connection-dot');
     const ask = screen.getByTestId('rail-ask');
 
-    // The dot remains the compact, glanceable connection state; its old text
-    // label has yielded its slot to the working Ask action.
-    expect(dot).toBeInTheDocument();
-    expect(dot.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The chrome carries no status dot; the Ask action is the only thing beside
+    // the wordmark, and it is a compact circular '?' button.
+    expect(screen.queryByTestId('connection-dot')).toBeNull();
+    expect(ask).toHaveTextContent('?');
+    expect(ask.style.borderRadius).toBe('var(--radius-full)');
+    expect(ask).toHaveAttribute('title', 'ask');
+    // No leftover status words next to the logo/name.
     expect(screen.queryByText('live')).toBeNull();
     expect(screen.queryByText('connecting…')).toBeNull();
     expect(screen.queryByText('offline')).toBeNull();
@@ -113,11 +103,21 @@ describe('AppChrome (DES-VISION-001 §3.1, §5.2)', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('collapsed: keeps the slot and the dot — no product name, no gear', () => {
+  it('collapsed: keeps the slot — no dot, no product name, no gear', () => {
     render(<AppChrome collapsed navigate={() => {}} />);
     expect(screen.getByTestId('logo-slot')).toBeInTheDocument();
-    expect(screen.getByTestId('connection-dot')).toBeInTheDocument();
+    expect(screen.queryByTestId('connection-dot')).toBeNull();
     expect(screen.queryByTestId('chrome-settings')).toBeNull();
+    expect(screen.queryByText('wicked-studio')).toBeNull();
+  });
+
+  it('the product name honors the site_name appearance override', () => {
+    useAppearanceStore.setState({
+      appearance: { ...DEFAULT_APPEARANCE, site_name: 'Acme Studio' },
+      loaded: true,
+    });
+    render(<AppChrome collapsed={false} navigate={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Acme Studio' })).toBeInTheDocument();
     expect(screen.queryByText('wicked-studio')).toBeNull();
   });
 });

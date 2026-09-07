@@ -41,13 +41,13 @@ beforeEach(() => {
 });
 
 describe('the Ask entry — placement in the chrome + idiom', () => {
-  it('sits in the chrome NEXT TO the connection dot and ABOVE the notification bell', () => {
+  it('sits in the chrome ABOVE the notification bell; the connection dot is gone', () => {
     rail(() => undefined);
     const ask = screen.getByTestId('rail-ask');
-    const dot = screen.getByTestId('connection-dot');
     const bell = screen.getByTitle('Notifications'); // the bell trigger
-    // The Ask took the connection word's slot: the dot precedes it in the chrome.
-    expect(dot.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The connection dot was removed (nav-ui-tweaks) — Ask now owns the chrome
+    // slot beside the wordmark.
+    expect(screen.queryByTestId('connection-dot')).toBeNull();
     // The chrome (with Ask) is above the bell row: ask → bell in DOM order.
     expect(ask.compareDocumentPosition(bell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -86,7 +86,8 @@ describe('the Ask entry — placement in the chrome + idiom', () => {
     expect(ask.style.width).toBe('28px');
     expect(ask.style.height).toBe('28px');
     expect(ask).not.toHaveTextContent('Ask');
-    expect(screen.getByTestId('connection-dot')).toBeInTheDocument();
+    // The connection dot was removed from the chrome (nav-ui-tweaks).
+    expect(screen.queryByTestId('connection-dot')).toBeNull();
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
   });
 });

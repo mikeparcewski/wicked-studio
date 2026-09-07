@@ -84,11 +84,12 @@ const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     noun: 'Pr
 const P_MAKE: PathSpec     = { key: 'make',     title: 'Make',         noun: 'Document',   glyph: '⚒', dash: '/make',     collapsedHref: '/make' };
 const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         noun: 'Chat',       glyph: '💬', dash: '/chats',    collapsedHref: '/chats' };
 const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Repository', glyph: '⬡', dash: '/repos',    collapsedHref: '/repos' };
-// Testing (the testing wave; landing re-aimed by the testing-UX wave): the quality surface, a PRIMARY path placed immediately BEFORE
-// Steering (order: … Testing, Steering, Settings). Like Steering it is title-only (no ▦/＋ —
-// its verbs live on the pages); its accordion rows are the two sub-pages, its collapsed
-// glyph links the Campaigns landing (THE testing dashboard — the retired Harness folded in).
-const P_TESTING: PathSpec  = { key: 'testing',  title: 'Testing',      noun: 'Campaign',   glyph: '✓', dash: null,        collapsedHref: testingPath('campaigns') };
+// Test (the testing wave; nav-ui-tweaks re-placed + relabelled it): the quality surface, a
+// PRIMARY path placed immediately BELOW Make (order: Projects, Make, Test, Chat, …). Its
+// display label is "Test" though its key + routes stay `testing`. Like Steering it is
+// title-only (no ▦/＋ — its verbs live on the pages); its accordion rows are the two
+// sub-pages, its collapsed glyph links the Campaigns landing (THE testing dashboard).
+const P_TESTING: PathSpec  = { key: 'testing',  title: 'Test',         noun: 'Campaign',   glyph: '✓', dash: null,        collapsedHref: testingPath('campaigns') };
 // Steering (DES-MEM-FACETED-001, unified surface): the governed-knowledge home, a PRIMARY path
 // placed immediately BEFORE Settings. Like Settings it is title-only (no ▦/＋ — its management +
 // review verbs live on the pages); its accordion rows are the TWO sub-sections (Policies /
@@ -96,7 +97,8 @@ const P_TESTING: PathSpec  = { key: 'testing',  title: 'Testing',      noun: 'Ca
 // the Policies home (the default sub-section — the standalone Proposals queue folded in here).
 const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: policiesPath() };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
-const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_CHAT, P_REPOS, P_TESTING, P_STEERING, P_SETTINGS];
+// Order (nav-ui-tweaks): Test sits immediately below Make; Steering + Settings tail.
+const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_TESTING, P_CHAT, P_REPOS, P_STEERING, P_SETTINGS];
 
 // `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
 // retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
@@ -548,13 +550,10 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
   const [hovered, setHovered] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [makePickerOpen, setMakePickerOpen] = useState(false);
-  // The rail-foot health section (§6.2, slice O) — controlled here so the
-  // chrome's connection dot can expand it (its old popover retired, §8.2).
+  // The rail-foot health section (§6.2, slice O) — controlled here; it toggles
+  // from its own header (the chrome connection dot that used to expand it was
+  // removed in nav-ui-tweaks).
   const [healthOpen, setHealthOpen] = useState(false);
-  const onDotClick = (): void => {
-    setCollapsed(false);
-    setHealthOpen(true);
-  };
   // §7.3 auto-collapse: entering an immersive mode stashes the user's state and
   // collapses; leaving restores it. `null` = nothing stashed. The user can still
   // re-expand mid-mode — this fires only on the transition, never per render.
@@ -642,13 +641,14 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
       onMouseEnter={() => { if (collapsed) setHovered(true); }}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* The app chrome (DES-VISION-001 §6.3 slice 3): logo slot + product name
-          + connection dot — and, in the connection word's old slot, the Ask entry
-          (rail-header restyle). `gap-2` gives the chrome cluster (Ask) and the
+      {/* The app chrome (DES-VISION-001 §6.3 slice 3): logo slot + product name,
+          and — in the connection word's old slot — the Ask entry (a compact
+          `?` circle, rail-header restyle; the connection dot was removed in
+          nav-ui-tweaks). `gap-2` gives the chrome cluster (Ask) and the
           collapse/expand "menu" control clear separation — distinct actions,
           not one cluster (item 1). */}
       <div className={`flex shrink-0 ${isExpanded ? 'items-center gap-2 pr-2' : 'flex-col items-center pt-2 gap-2'}`}>
-        <AppChrome collapsed={!isExpanded} navigate={navigate} onDotClick={onDotClick} {...(onOpenAsk !== undefined ? { onOpenAsk } : {})} />
+        <AppChrome collapsed={!isExpanded} navigate={navigate} {...(onOpenAsk !== undefined ? { onOpenAsk } : {})} />
         <button
           type="button"
           onClick={() => setCollapsed(v => !v)}
@@ -714,6 +714,16 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
                 </>
               )}
             <ViewAll href="/make" navigate={navigate} />
+          </RailHeading>
+
+          {/* ── Test — the quality surface, immediately below Make (nav-ui-tweaks). ─ */}
+          <RailHeading
+            path={P_TESTING}
+            open={openHeading === 'testing'}
+            onToggle={() => toggle('testing')}
+            navigate={navigate}
+          >
+            <TestingPageRows navigate={navigate} />
           </RailHeading>
 
           {/* ── Chat ─────────────────────────────────────────────────────────── */}
@@ -807,16 +817,6 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
                   </button>
                 ))}
             <ViewAll href="/repos" navigate={navigate} />
-          </RailHeading>
-
-          {/* ── Testing — the quality surface, BEFORE Steering (testing wave). ─ */}
-          <RailHeading
-            path={P_TESTING}
-            open={openHeading === 'testing'}
-            onToggle={() => toggle('testing')}
-            navigate={navigate}
-          >
-            <TestingPageRows navigate={navigate} />
           </RailHeading>
 
           {/* ── Steering — the governed-knowledge home, BEFORE Settings. Its two rows

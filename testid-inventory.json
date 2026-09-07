@@ -11,8 +11,8 @@
   "studioVersion": "0.4.14",
   "counts": {
     "files": 121,
-    "occurrences": 983,
-    "static": 843,
+    "occurrences": 984,
+    "static": 844,
     "dynamic": 43,
     "computed": 6
   },
@@ -999,12 +999,6 @@
       "testId": "conformance-rule-citation",
       "files": [
         "src/components/GovernanceAudit.tsx"
-      ]
-    },
-    {
-      "testId": "connection-dot",
-      "files": [
-        "src/components/AppChrome.tsx"
       ]
     },
     {
@@ -3143,6 +3137,12 @@
       ]
     },
     {
+      "testId": "rail-health-heart",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
       "testId": "rail-health-section",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -3607,6 +3607,12 @@
       "testId": "signin-warning",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "site-name-input",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
       ]
     },
     {

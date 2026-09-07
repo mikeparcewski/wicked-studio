@@ -23,17 +23,25 @@ export interface StudioAppearance {
   accent_l: number;
   logo_url: string | null;
   theme: 'dark' | 'light';
+  /** A custom product name for the chrome (nav-ui-tweaks). `null` = the default
+   *  wordmark (`DEFAULT_SITE_NAME`); a non-empty string overrides it. */
+  site_name: string | null;
 }
 
 export const APPEARANCE_KEY = 'studio.appearance';
 
-/** §2.5's defaults: violet-indigo accent, no custom logo, the dark theme (§2.13). */
+/** The default product wordmark shown in the chrome when no custom name is set. */
+export const DEFAULT_SITE_NAME = 'wicked-studio';
+
+/** §2.5's defaults: violet-indigo accent, no custom logo, the dark theme (§2.13),
+ *  the default wordmark (no custom site name). */
 export const DEFAULT_APPEARANCE: StudioAppearance = {
   accent_h: 258,
   accent_s: 72,
   accent_l: 62,
   logo_url: null,
   theme: 'dark',
+  site_name: null,
 };
 
 const PERSIST_DEBOUNCE_MS = 400;
@@ -53,6 +61,7 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
     accent_l: clamp(o.accent_l, 0, 100, DEFAULT_APPEARANCE.accent_l),
     logo_url: typeof o.logo_url === 'string' && o.logo_url !== '' ? o.logo_url : null,
     theme: o.theme === 'light' ? 'light' : 'dark',
+    site_name: typeof o.site_name === 'string' && o.site_name.trim() !== '' ? o.site_name : null,
   };
 }
 
