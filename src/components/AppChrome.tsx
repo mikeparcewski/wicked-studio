@@ -81,7 +81,7 @@ export function AppChrome({ collapsed, navigate, onOpenAsk }: Props): React.Reac
   const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
   // The product name shown in the chrome (nav-ui-tweaks): a Settings override,
   // falling back to the default wordmark when unset.
-  const siteName = useAppearanceStore((s) => s.appearance.site_name) ?? DEFAULT_SITE_NAME;
+  const siteName = useAppearanceStore((s) => s.appearance.site_name)?.trim() || DEFAULT_SITE_NAME;
 
   // The §3.1 slot: 32×32 exactly, clearspace by margin, contain-fit custom
   // asset via the --logo-url custom property. The accent-stroked default mark

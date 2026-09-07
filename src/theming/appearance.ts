@@ -61,7 +61,7 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
     accent_l: clamp(o.accent_l, 0, 100, DEFAULT_APPEARANCE.accent_l),
     logo_url: typeof o.logo_url === 'string' && o.logo_url !== '' ? o.logo_url : null,
     theme: o.theme === 'light' ? 'light' : 'dark',
-    site_name: typeof o.site_name === 'string' && o.site_name.trim() !== '' ? o.site_name : null,
+    site_name: typeof o.site_name === 'string' && o.site_name.trim() !== '' ? o.site_name.trim() : null,
   };
 }
 
@@ -109,9 +109,9 @@ function persistSoon(read: () => StudioAppearance): void {
     persistTimer = null;
     // Fire-and-forget with ONE silent retry (§3.3); the retry re-reads the
     // store so a newer edit is never clobbered by a stale snapshot.
-    api.putAppearanceSettings(read()).catch(() => {
+    api.putAppearanceSettings(sanitizeAppearance(read())).catch(() => {
       setTimeout(() => {
-        api.putAppearanceSettings(read()).catch(() => { /* stay silent (§3.3) */ });
+        api.putAppearanceSettings(sanitizeAppearance(read())).catch(() => { /* stay silent (§3.3) */ });
       }, RETRY_MS);
     });
   }, PERSIST_DEBOUNCE_MS);
