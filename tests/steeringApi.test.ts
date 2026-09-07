@@ -8,6 +8,7 @@ import {
   nextRuleId,
   policiesPath,
   readSteeringTypeFilter,
+  steeringDashboardPath,
   steeringPath,
   STEERING_RULE_TEMPLATE,
   STEERING_SECTIONS,
@@ -118,20 +119,22 @@ describe('the type roster and paths', () => {
 });
 
 describe('the unified sub-section paths + the Policies type filter', () => {
-  it('spells the two sub-sections', () => {
-    expect([...STEERING_SECTIONS]).toEqual(['policies', 'memories']);
+  it('spells the dashboard home + the two management sub-sections (dashboard leads = the default)', () => {
+    expect([...STEERING_SECTIONS]).toEqual(['dashboard', 'policies', 'memories']);
+    expect(isSteeringSection('dashboard')).toBe(true);
     expect(isSteeringSection('policies')).toBe(true);
     expect(isSteeringSection('memories')).toBe(true);
     expect(isSteeringSection('security')).toBe(false);
     expect(isSteeringSection('proposals')).toBe(false);
   });
 
-  it('policiesPath is bare for the All view, ?type= for a filtered one; memoriesPath is fixed', () => {
+  it('policiesPath is bare for the All view, ?type= for a filtered one; memoriesPath + steeringDashboardPath are fixed', () => {
     expect(policiesPath()).toBe('/steering/policies');
     expect(policiesPath(null)).toBe('/steering/policies');
     expect(policiesPath('security')).toBe('/steering/policies?type=security');
     expect(policiesPath('design-ux')).toBe('/steering/policies?type=design-ux');
     expect(memoriesPath()).toBe('/steering/memories');
+    expect(steeringDashboardPath()).toBe('/steering/dashboard');
   });
 
   it('readSteeringTypeFilter reads the type back from search; unknown/absent → null (the All view)', () => {

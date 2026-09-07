@@ -28,11 +28,14 @@ import { ProposalsList } from './ProposalsList.js';
  *    a daemon that predates the routes is never an error card.
  */
 
-export function ProposalsSection({ kind, heading }: {
+export function ProposalsSection({ kind, heading, onDecision }: {
   /** Which proposals this section reviews — the sub-section it lives in. */
   kind: Extract<ProposalKind, 'memory' | 'policy'>;
   /** The section title, e.g. "Policy proposals" / "Memory proposals". */
   heading: string;
+  /** Fired after a successful approve/reject — lets a host (the dashboard) refresh its own
+   *  headline count, which this self-contained section otherwise cannot know changed. */
+  onDecision?: (() => void) | undefined;
 }): React.ReactElement {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +80,7 @@ export function ProposalsSection({ kind, heading }: {
         // server's state (another reviewer may have decided others in the meantime).
         setProposals((cur) => cur.filter((p) => p.id !== id));
         setNote(`${verb === 'approve' ? 'Approved' : 'Rejected'} ${id}.`);
+        onDecision?.();
         void loadProposals();
       })
       .catch((e: unknown) => {
@@ -89,7 +93,7 @@ export function ProposalsSection({ kind, heading }: {
           return next;
         });
       });
-  }, [loadProposals]);
+  }, [loadProposals, onDecision]);
 
   const onApprove = useCallback((id: string) => decide(id, 'approve'), [decide]);
   const onReject = useCallback((id: string) => decide(id, 'reject'), [decide]);

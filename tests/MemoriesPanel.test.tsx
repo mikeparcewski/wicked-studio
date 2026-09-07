@@ -8,9 +8,10 @@ import userEvent from '@testing-library/user-event';
  *  - the store browser (`GET /memory`) lists content / tier / scope / facets; the search box
  *    re-queries the wire and the facet chips narrow the loaded set client-side;
  *  - RETIRE is honest about granularity — it erases a scope SUBTREE (`POST /memory/retire` with a
- *    `scope_prefix`), the confirm says so, and the note reports how many rows the server erased;
- *  - the memory-proposals section renders below (its own adoption seam), so proposals still appear
- *    even when the memory-management wire is absent.
+ *    `scope_prefix`), the confirm says so, and the note reports how many rows the server erased.
+ *
+ * The memory PROPOSALS review moved to the governed-knowledge dashboard (`/steering/dashboard`) —
+ * this page no longer renders it (the un-burying); it is the pure "manage existing" surface now.
  */
 
 const apiFetch = vi.fn();
@@ -80,19 +81,26 @@ describe('MemoriesPanel — the store browser', () => {
     expect(apiFetch).toHaveBeenCalledWith('/memory');
   });
 
-  it('a facet chip narrows the loaded set client-side', async () => {
+  it('the facet TYPEAHEAD narrows the loaded set client-side (autocomplete over the derived vocab)', async () => {
     wire([M1, M2]);
     render(<MemoriesPanel />);
     const user = userEvent.setup();
 
     await screen.findAllByTestId('memory-row');
-    // The facet chips come from the loaded set (project=wicked, domain=ops, domain=macos).
+    // The facet vocabulary is derived from the loaded set (project=wicked, domain=ops, domain=macos).
+    const input = screen.getByTestId('memories-facet-filter-input');
+    await user.click(input); // focus opens the option list
+    await user.type(input, 'macos'); // narrows the options to the domain=macos pair
     const macos = screen.getByTestId('memories-facet-filter').querySelector('[data-facet="domain=macos"]') as HTMLElement;
     await user.click(macos);
 
     const rows = screen.getAllByTestId('memory-row');
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveAttribute('data-memory-id', 'm2');
+    // The applied facet renders as a clearable pill; clearing restores the full set.
+    expect(screen.getByTestId('memories-facet-filter-active')).toHaveTextContent('domain=macos');
+    await user.click(screen.getByTestId('memories-facet-filter-clear'));
+    expect(screen.getAllByTestId('memory-row')).toHaveLength(2);
   });
 
   it('the search box re-queries the wire with the recall query', async () => {
@@ -121,8 +129,13 @@ describe('MemoriesPanel — the store browser', () => {
     });
     render(<MemoriesPanel />);
     expect(await screen.findByTestId('memories-unsupported')).toHaveTextContent(/predates memory management/);
-    // The review half still renders — its own adoption seam, independent of the store wire.
-    expect(screen.getByTestId('proposals-section')).toHaveAttribute('data-kind', 'memory');
+  });
+
+  it('no longer renders the buried proposals-review section — that moved to the dashboard', async () => {
+    wire([M1, M2]);
+    render(<MemoriesPanel />);
+    await screen.findAllByTestId('memory-row');
+    expect(screen.queryByTestId('proposals-section')).toBeNull();
   });
 });
 

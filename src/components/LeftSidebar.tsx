@@ -7,7 +7,7 @@ import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
-import { memoriesPath, policiesPath, STEERING_SECTIONS, STEERING_SECTION_LABELS, type SteeringSection } from '../api/steering.js';
+import { memoriesPath, policiesPath, steeringDashboardPath, STEERING_SECTIONS, STEERING_SECTION_LABELS, type SteeringSection } from '../api/steering.js';
 import { testingPath, TESTING_PAGE_LABELS, TESTING_PAGES } from '../api/testing.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
@@ -95,7 +95,7 @@ const P_TESTING: PathSpec  = { key: 'testing',  title: 'Test',         noun: 'Ca
 // review verbs live on the pages); its accordion rows are the TWO sub-sections (Policies /
 // Memories — each managing existing items AND reviewing proposals), its collapsed glyph links
 // the Policies home (the default sub-section — the standalone Proposals queue folded in here).
-const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: policiesPath() };
+const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: steeringDashboardPath() };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
 // Order (nav-ui-tweaks): Test sits immediately below Make; Steering + Settings tail.
 const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_TESTING, P_CHAT, P_REPOS, P_STEERING, P_SETTINGS];
@@ -515,12 +515,13 @@ function TestingPageRows({ navigate }: { navigate: (p: string) => void }): React
   );
 }
 
-/** The Steering accordion's rows: one per sub-section (Policies / Memories), each a navigate()
- *  shortcut to its page — the SettingsShortcutRows grammar. Each sub-section manages existing
- *  items AND reviews proposals, so there are no per-type or per-kind rows here any more (the seven
- *  types are a `?type=` filter inside Policies; proposals live inside each sub-section). */
+/** The Steering accordion's rows: one per sub-section (Dashboard / Policies / Memories), each a
+ *  navigate() shortcut to its page — the SettingsShortcutRows grammar. The Dashboard is the
+ *  review-forward home (the consolidated propose→promote inbox); Policies and Memories are the
+ *  "manage existing" deep-dives (the seven types are a `?type=` filter inside Policies). */
 function SteeringSectionRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
-  const href = (s: SteeringSection): string => (s === 'memories' ? memoriesPath() : policiesPath());
+  const href = (s: SteeringSection): string =>
+    s === 'memories' ? memoriesPath() : s === 'policies' ? policiesPath() : steeringDashboardPath();
   return (
     <div role="menu" className="flex flex-col pt-0.5">
       {STEERING_SECTIONS.map((s) => (
@@ -819,8 +820,8 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             <ViewAll href="/repos" navigate={navigate} />
           </RailHeading>
 
-          {/* ── Steering — the governed-knowledge home, BEFORE Settings. Its two rows
-                (Policies / Memories) each manage existing items AND review proposals. ─ */}
+          {/* ── Steering — the governed-knowledge home, BEFORE Settings. Its three rows:
+                Dashboard (the review-forward home) + the Policies / Memories deep-dives. ─ */}
           <RailHeading
             path={P_STEERING}
             open={openHeading === 'steering'}

@@ -30,8 +30,12 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
-describe('useRoute — /steering/{policies,memories}', () => {
-  it('parses the two sub-sections to the one steering panel', () => {
+describe('useRoute — /steering/{dashboard,policies,memories}', () => {
+  it('parses the dashboard home + the two management sub-sections to the one steering panel', () => {
+    const dash = routeAt('/steering/dashboard').current;
+    expect(dash).toMatchObject({ panel: 'steering', steeringSection: 'dashboard' });
+    expect(dash.runId).toBeNull();
+    expect(dash.projectId).toBeNull();
     const pol = routeAt('/steering/policies').current;
     expect(pol).toMatchObject({ panel: 'steering', steeringSection: 'policies' });
     expect(pol.runId).toBeNull();
@@ -39,7 +43,7 @@ describe('useRoute — /steering/{policies,memories}', () => {
     expect(routeAt('/steering/memories').current).toMatchObject({ panel: 'steering', steeringSection: 'memories' });
   });
 
-  it('a bare /steering parses with steeringSection null — the redirect resolves it onto Policies', () => {
+  it('a bare /steering parses with steeringSection null — the redirect resolves it onto the Dashboard', () => {
     expect(routeAt('/steering').current).toMatchObject({ panel: 'steering', steeringSection: null });
     expect(routeAt('/steering/').current).toMatchObject({ panel: 'steering', steeringSection: null });
   });
@@ -79,15 +83,22 @@ describe('useRoute — /steering/{policies,memories}', () => {
 });
 
 describe('useSteeringRedirect', () => {
-  it('leaves the real sub-section addresses alone', () => {
+  it('leaves the real sub-section addresses alone (dashboard / policies / memories)', () => {
     const navigate = vi.fn();
+    renderHook(() => useSteeringRedirect('steering', 'dashboard', '/steering/dashboard', '', navigate));
     renderHook(() => useSteeringRedirect('steering', 'policies', '/steering/policies', '', navigate));
     renderHook(() => useSteeringRedirect('steering', 'memories', '/steering/memories', '', navigate));
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('REPLACES bare /steering and the retired panels with the Policies home', () => {
-    for (const path of ['/steering', '/wiki', '/rules', '/policies']) {
+  it('REPLACES bare /steering with the Dashboard home (the review-forward default)', () => {
+    const navigate = vi.fn();
+    renderHook(() => useSteeringRedirect('steering', null, '/steering', '', navigate));
+    expect(navigate).toHaveBeenCalledWith('/steering/dashboard', { replace: true });
+  });
+
+  it('REPLACES the retired /wiki, /rules, /policies rule-management panels with the Policies home', () => {
+    for (const path of ['/wiki', '/rules', '/policies']) {
       const navigate = vi.fn();
       renderHook(() => useSteeringRedirect('steering', null, path, '', navigate));
       expect(navigate).toHaveBeenCalledWith('/steering/policies', { replace: true });
@@ -100,19 +111,14 @@ describe('useSteeringRedirect', () => {
     expect(navigate).toHaveBeenCalledWith('/steering/policies?type=security', { replace: true });
   });
 
-  it('REPLACES the retired /proposals queue onto a sub-section by its ?type= filter', () => {
-    const toPolicies = vi.fn();
-    renderHook(() => useSteeringRedirect('steering', null, '/proposals', '', toPolicies));
-    expect(toPolicies).toHaveBeenCalledWith('/steering/policies', { replace: true });
-
-    const toMemories = vi.fn();
-    renderHook(() => useSteeringRedirect('steering', null, '/proposals', '?type=memory', toMemories));
-    expect(toMemories).toHaveBeenCalledWith('/steering/memories', { replace: true });
-
-    // A policy-filtered proposals bookmark lands on Policies (its proposals live there).
-    const toPolicies2 = vi.fn();
-    renderHook(() => useSteeringRedirect('steering', null, '/proposals', '?type=policy', toPolicies2));
-    expect(toPolicies2).toHaveBeenCalledWith('/steering/policies', { replace: true });
+  it('REPLACES the retired /proposals queue onto the Dashboard review inbox (its successor), for every ?type=', () => {
+    // The standalone review queue folded into the dashboard's consolidated inbox, which reviews
+    // BOTH kinds in one place — so every proposals bookmark (and its old ?type= filter) lands there.
+    for (const search of ['', '?type=memory', '?type=policy']) {
+      const navigate = vi.fn();
+      renderHook(() => useSteeringRedirect('steering', null, '/proposals', search, navigate));
+      expect(navigate).toHaveBeenCalledWith('/steering/dashboard', { replace: true });
+    }
   });
 
   it('leaves a typo (parsed not-found) and every non-steering panel alone', () => {

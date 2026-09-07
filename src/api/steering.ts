@@ -71,22 +71,31 @@ export function steeringPath(type: SteeringType): string {
 
 // ── The unified governed-knowledge surface (`/steering/{policies,memories}`) ──────────────────
 //
-// Steering is one home with TWO sub-sections, each carrying BOTH "manage existing" and
-// "proposals (review)": Policies (the seven-type rule corpus + policy proposals) and Memories
-// (the memory store + memory proposals). The seven types collapsed into a `?type=` FILTER on the
-// Policies view (All + 7) — a rule still belongs to exactly one type, but the surface is one grid.
+// Steering is one home — a review-forward DASHBOARD (`/steering/dashboard`, the default) that
+// un-buries the propose→promote queue — plus TWO management sub-sections, each carrying BOTH
+// "manage existing" and "proposals (review)": Policies (the seven-type rule corpus) and Memories
+// (the memory store). The seven types collapsed into a `?type=` FILTER on the Policies view
+// (All + 7) — a rule still belongs to exactly one type, but the surface is one grid. `dashboard`
+// leads the list so it is the default sub-section bare `/steering` resolves onto.
 
-export const STEERING_SECTIONS = ['policies', 'memories'] as const;
+export const STEERING_SECTIONS = ['dashboard', 'policies', 'memories'] as const;
 
 export type SteeringSection = (typeof STEERING_SECTIONS)[number];
 
 export const STEERING_SECTION_LABELS: Record<SteeringSection, string> = {
+  dashboard: 'Dashboard',
   policies: 'Policies',
   memories: 'Memories',
 };
 
 export function isSteeringSection(s: string): s is SteeringSection {
   return (STEERING_SECTIONS as readonly string[]).includes(s);
+}
+
+/** The governed-knowledge dashboard's route — the Steering home (review-forward). Bare
+ *  `/steering` redirects here, and the rail's Steering glyph + accordion link it. */
+export function steeringDashboardPath(): string {
+  return '/steering/dashboard';
 }
 
 /** The Policies sub-section's route — bare for the All view, `?type=<type>` for a filtered one

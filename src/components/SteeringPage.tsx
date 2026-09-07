@@ -25,7 +25,6 @@ import {
 import type { SessionView } from '../api/types.js';
 import { ruleUsage } from '../board/steeringUsage.js';
 import { AssistDock, useAssistDockOpen, type AssistNote, type AssistVerbs } from './AssistDock.js';
-import { ProposalsSection } from './ProposalsSection.js';
 import { SteeringAddMenu } from './SteeringAddMenu.js';
 import { SteeringUsageBand } from './SteeringUsageBand.js';
 import { SteeringGrid } from './SteeringGrid.js';
@@ -49,8 +48,9 @@ import { SteeringTypeFilter } from './SteeringTypeFilter.js';
  *  - the ASSIST DOCK (DES-ASSIST-DOCK) sits beside the grid: a typed message launches the governed
  *    steering-author run for the active type (architecture in the `All` view) and narrates inline;
  *    rule-shaped attachments fork import-directly vs analyze-with-chat.
- *  - the POLICY PROPOSALS section (ProposalsSection, below the grid) reviews the agent-proposed
- *    steering policies awaiting a human approve/reject — the review half of this sub-section.
+ *  - the agent-proposed steering policies are REVIEWED in the governed-knowledge dashboard's
+ *    consolidated inbox (`/steering/dashboard`) — no longer buried below this grid; this page is
+ *    the pure "manage existing" surface.
  *
  * Every management write still goes through crew's API (the governed operator path) — estate MCP
  * stays read-only (AW-11).
@@ -287,8 +287,8 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
           <div>
             <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Steering · Policies</h2>
             <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-              The governance surface — the seven-type steering-rule corpus. Filter by type, manage
-              rules inline, and review the agent-proposed policies awaiting your approval below.
+              The governance surface — the seven-type steering-rule corpus. Filter by type and manage
+              rules inline. Agent-proposed policies are reviewed in the governed-knowledge dashboard.
             </p>
           </div>
           <button
@@ -440,9 +440,6 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
                 idFilter={unusedIds}
               />
             )}
-
-            {/* The REVIEW half of this sub-section — the agent-proposed steering policies. */}
-            <ProposalsSection kind="policy" heading="Policy proposals" />
           </>
         )}
       </div>

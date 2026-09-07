@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { api } from '../api/client.js';
-import { isSteeringType, policiesPath, memoriesPath } from '../api/steering.js';
+import { isSteeringType, policiesPath, steeringDashboardPath } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
 import { modePath, projectPath, type Mode, type Navigate } from './useRoute.js';
 
@@ -102,23 +102,24 @@ export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void 
 }
 
 /**
- * The unified Steering surface's address normalizer (DES-MEM-FACETED-001, unified surface).
- * `/steering/policies` and `/steering/memories` are the real addresses and never redirect; every
- * OTHER parse that landed on `panel: 'steering'` with `steeringSection === null` is an address
- * that needs to resolve onto one of the two sub-sections:
+ * The unified Steering surface's address normalizer (DES-MEM-FACETED-001, unified surface;
+ * governed-knowledge dashboard). `/steering/dashboard`, `/steering/policies` and
+ * `/steering/memories` are the real addresses and never redirect; every OTHER parse that landed on
+ * `panel: 'steering'` with `steeringSection === null` is an address that needs to resolve onto one
+ * of the sub-sections:
  *
- *   /steering                → /steering/policies             (the default home)
+ *   /steering                → /steering/dashboard            (the review-forward home)
  *   /steering/:type          → /steering/policies?type=:type  (the seven pages collapsed into a
  *                              filter — bookmarks keep their type)
- *   /wiki, /rules, /policies  → /steering/policies             (the retired governance panels)
- *   /proposals               → /steering/policies             (the retired standalone queue)
- *   /proposals?type=memory   → /steering/memories             (its memory filter → the Memories
- *                              sub-section, which reviews memory proposals)
+ *   /wiki, /rules, /policies  → /steering/policies             (the retired governance panels — the
+ *                              rule-management surface)
+ *   /proposals               → /steering/dashboard            (the retired standalone review queue
+ *                              → the dashboard's consolidated review inbox, its successor — for
+ *                              every ?type=, since the inbox reviews BOTH kinds in one place)
  *
  * A typo'd `/steering/foo` parses to `not-found` (usability review #4), so this hook never sees
  * `panel: 'steering'` for it and leaves the address alone. REPLACE, like every redirect in this
- * module, so Back never re-enters the dead address; the parse already lands these on the Policies
- * view (`steeringSection` null renders Policies), so nothing flashes.
+ * module, so Back never re-enters the dead address.
  */
 export function useSteeringRedirect(
   panel: string,
@@ -130,11 +131,11 @@ export function useSteeringRedirect(
   useEffect(() => {
     if (panel !== 'steering' || steeringSection !== null) return;
     const [, first = '', second = ''] = pathname.split('/');
-    // The retired standalone review queue: its memory filter routes to the Memories sub-section,
-    // everything else to Policies.
+    // The retired standalone review queue → the dashboard's consolidated review inbox (its
+    // successor), which reviews memory AND policy proposals in one place (its old ?type= filter no
+    // longer forks the target — `search` stays a dep only so a query-only change still re-runs).
     if (first === 'proposals') {
-      const kind = new URLSearchParams(search).get('type');
-      navigate(kind === 'memory' ? memoriesPath() : policiesPath(), { replace: true });
+      navigate(steeringDashboardPath(), { replace: true });
       return;
     }
     // A legacy `/steering/:type` keeps its type as the Policies filter.
@@ -142,8 +143,13 @@ export function useSteeringRedirect(
       navigate(policiesPath(second), { replace: true });
       return;
     }
-    // Bare `/steering` and the retired `/wiki` `/rules` `/policies` panels → the Policies home.
-    navigate(policiesPath(), { replace: true });
+    // The retired `/wiki` `/rules` `/policies` panels are the rule-management surface → Policies.
+    if (first === 'wiki' || first === 'rules' || first === 'policies') {
+      navigate(policiesPath(), { replace: true });
+      return;
+    }
+    // Bare `/steering` → the review-forward dashboard home.
+    navigate(steeringDashboardPath(), { replace: true });
   }, [panel, steeringSection, pathname, search, navigate]);
 }
 

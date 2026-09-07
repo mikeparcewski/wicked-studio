@@ -22,6 +22,7 @@ import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
+import { GovernanceDashboard } from './components/GovernanceDashboard.js';
 import { TestingPage } from './components/TestingPage.js';
 import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
@@ -478,15 +479,23 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/steering/{policies,memories}` — the unified governed-knowledge surface: ONE home, two
-    // sub-sections, each managing existing items AND reviewing proposals. Memories renders the
-    // memory store + memory proposals; Policies (the default — also the tick before
-    // useSteeringRedirect lands for bare `/steering`, a legacy `/steering/:type`, or the retired
-    // `/wiki`/`/rules`/`/policies`/`/proposals` addresses) renders the seven-type rule grid (the
-    // `?type=` filter collapsing the old seven pages) + policy proposals.
+    // `/steering/{dashboard,policies,memories}` — the unified governed-knowledge surface: ONE home,
+    // a review-forward DASHBOARD (the default) plus two management deep-dives. The dashboard
+    // un-buries the propose→promote review inbox; Memories renders the memory store; Policies (also
+    // the tick before useSteeringRedirect lands for a legacy `/steering/:type` or the retired
+    // `/wiki`/`/rules`/`/policies` addresses) renders the seven-type rule grid (the `?type=` filter
+    // collapsing the old seven pages). Bare `/steering` and the retired `/proposals` queue redirect
+    // to the dashboard.
     if (panel === 'steering') {
       // No page-level scroll wrapper here: each sub-section owns its layout — a two-column flex
       // (the management column scrolls, the assist dock is a full-height sibling — DES-ASSIST-DOCK §2).
+      if (steeringSection === 'dashboard') {
+        return (
+          <div className="flex flex-1 overflow-hidden">
+            <GovernanceDashboard navigate={navigate} />
+          </div>
+        );
+      }
       if (steeringSection === 'memories') {
         return (
           <div className="flex flex-1 overflow-hidden">

@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.4.14",
   "counts": {
-    "files": 121,
-    "occurrences": 984,
-    "static": 844,
-    "dynamic": 43,
+    "files": 123,
+    "occurrences": 1006,
+    "static": 861,
+    "dynamic": 47,
     "computed": 6
   },
   "static": [
@@ -1746,6 +1746,84 @@
       ]
     },
     {
+      "testId": "gk-browse-memories",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-browse-memories-manage",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-browse-rules",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-browse-rules-manage",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-memories-empty",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-memories-list",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-memories-loading",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-memories-unsupported",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-memory-row",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-rule-row",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-rules-empty",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "gk-rules-list",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "governance-browse",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
       "testId": "governance-claims-unavailable",
       "files": [
         "src/components/GovernanceAudit.tsx"
@@ -1758,9 +1836,45 @@
       ]
     },
     {
+      "testId": "governance-dashboard",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
       "testId": "governance-enforcement",
       "files": [
         "src/components/GovernanceAudit.tsx"
+      ]
+    },
+    {
+      "testId": "governance-manage-memories",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "governance-manage-policies",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "governance-refresh",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "governance-review",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "governance-review-inbox",
+      "files": [
+        "src/components/GovernanceDashboard.tsx"
       ]
     },
     {
@@ -2404,18 +2518,6 @@
     },
     {
       "testId": "memories-error",
-      "files": [
-        "src/components/MemoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "memories-facet-chip",
-      "files": [
-        "src/components/MemoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "memories-facet-filter",
       "files": [
         "src/components/MemoriesPanel.tsx"
       ]
@@ -5108,6 +5210,12 @@
   ],
   "dynamic": [
     {
+      "pattern": "*-active",
+      "files": [
+        "src/components/FacetAutocomplete.tsx"
+      ]
+    },
+    {
       "pattern": "*-bridge-hint",
       "files": [
         "src/components/SurfaceState.tsx"
@@ -5139,6 +5247,12 @@
       ]
     },
     {
+      "pattern": "*-clear",
+      "files": [
+        "src/components/FacetAutocomplete.tsx"
+      ]
+    },
+    {
       "pattern": "*-editor",
       "files": [
         "src/components/SteeringGrid.tsx"
@@ -5153,7 +5267,20 @@
     {
       "pattern": "*-input",
       "files": [
+        "src/components/FacetAutocomplete.tsx",
         "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "pattern": "*-option",
+      "files": [
+        "src/components/FacetAutocomplete.tsx"
+      ]
+    },
+    {
+      "pattern": "*-options",
+      "files": [
+        "src/components/FacetAutocomplete.tsx"
       ]
     },
     {
@@ -5393,6 +5520,7 @@
         "src/components/AppearanceSettings.tsx",
         "src/components/ChatPanel.tsx",
         "src/components/DashboardTiles.tsx",
+        "src/components/FacetAutocomplete.tsx",
         "src/components/HomeCommand.tsx",
         "src/components/MetricTile.tsx",
         "src/components/ProvenanceLine.tsx",
