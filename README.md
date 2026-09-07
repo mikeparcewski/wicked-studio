@@ -2,166 +2,163 @@
 
 > [![npm](https://img.shields.io/npm/v/wicked-studio)](https://www.npmjs.com/package/wicked-studio) · [![CI](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/mikeparcewski/wicked-studio/actions/workflows/ci.yml) · [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-**The coder-facing skin of the wicked experience plane.** A React SPA that is a *pure HTTP/WS
-client* of the [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon: launch and
-steer governed agent runs, answer human gates, watch live CoreEvent streams, browse projects,
-repo intelligence, evidence, coverage, and the decisions ledger — everything the daemon exposes
-on `/api/v1` and `/ws`, and nothing else.
+**The cockpit for AI coding agents you can actually trust.** wicked-studio is a browser UI for
+running coding-agent CLIs (Claude Code, Codex, Antigravity, and more) as *governed* workers:
+you give an intent, the agents do the work behind verification gates, and you approve the
+decisions that matter — with the evidence behind every "done" one click away.
 
-## What the skin surfaces (0.4.x)
+It's the human surface of the [wicked](https://github.com/mikeparcewski/wicked-crew) platform.
+The agents run headless in the background; studio is where you point them at your repos, watch
+them work in real time, unblock them when they need a human, and see what actually happened.
 
-Every capability below is a real `/api/v1` or `/ws` wire — no invented routes — verified by a
-21-scenario functional campaign against an isolated daemon (21/21 PASS, evidence-graded;
-`estate-review/STUDIO-CAMPAIGN.md`). Legs the campaign could only prove over the wire rather
-than through the UI are marked as such below.
+---
 
-- **Projects** — create/rename/archive/restore, attach and detach members (repos, runs, chats,
-  docs), a merged activity feed with a prompt inbox, a per-project dashboard, and a four-mode
-  project shell (chat / build / document / video) with deep-linkable routes (`/p/:id/…`).
-- **Repo intelligence** — register a local path or clone from a URL; either launches a governed
-  onboarding run (`index` → `annotate`, two tool units) that builds the repo's code graph. Then:
-  graph view with ego-focus navigation, **blast radius** for any symbol, hotspots, the domain
-  graph + coverage view, and a requirements browser with operator overrides (PATCH
-  title/notes/status/risk).
-- **Governed runs** — the composer (Ask / Balanced / Autonomous, seat selection, repo binding,
-  PR delivery), run list/detail/timeline with event backfill on reload, **HITL steering gates**
-  (approve / approve-with-steer / reject, plus keyboard batch triage), elicitation prompts,
-  durable pre-gate guidance notes, and the lifecycle verbs the UI wires today: cancel, inject
-  a message, unarchive, retry lineage. (Resume and archive exist as typed client wires,
-  campaign-verified over the API — the UI affordances are a filed gap, not yet shipped.)
-- **Evidence** — per-unit transcripts, the worktree file & diff viewer, and one-click
-  **evidence bundle download** for any run. The skin surfaces the gates; it never grades.
-- **Group chat** — fan one question out to your whole warm CLI roster and watch each seat
-  answer side by side.
-- **Governed PTY terminals** — real terminals (xterm over `/ws/terminals/:id`), including the
-  seat sign-in flow from settings.
-- **Workflow builder** — inspect and create WorkflowDefs (phases, gates, validation) and their
-  inline tool scripts, then launch runs against them.
-- **Governance** — policies, conformance rules (with facet preview), the decisions/claims
-  ledger, and the audit view.
-- **Settings** — daemon settings plus `studio.*` namespaced keys: appearance/theme (including
-  brand-learn), notifications, composer preferences.
-- **Document & Video modes** — the merged creator surface, riding crew's proxied interactive
-  bridge under `/api/v1/projects/:id/interactive/*`.
-- **Command palette + deep links** — Cmd+K verbs (open terminal, answer prompts), bookmarkable
-  routes throughout, desktop gate notifications.
+## Why you'd want it
 
-```
-┌─────────────────────┐         HTTP /api/v1  +  WS /ws          ┌──────────────────────┐
-│   wicked-studio     │ ───────────────────────────────────────▶ │  wicked-crew daemon  │
-│   (this repo, SPA)  │ ◀─────────────────────────────────────── │  (control plane:     │
-│   the skin          │       wire contract: wicked-crew-api-types │  API/engine/gates)  │
-└─────────────────────┘                                           └──────────────────────┘
-```
+Coding agents are fast but unsupervised — they assert "done," grade their own work, and bury the
+reasoning in a scrollback you'll never read. wicked-studio flips that:
 
-## The division of labor
+- **Direct, don't babysit.** Launch runs across many repos and projects at once, then let them
+  work. Attention comes to *you* when a run hits a gate — you don't sit watching one terminal.
+- **Approve what matters.** Human-in-the-loop gates surface the real decisions (approve, approve
+  with a steer, or reject) — with keyboard batch triage when several pile up.
+- **"Done" is proven, not claimed.** The evaluator is never the creator. Every run leaves
+  transcripts, diffs, and a downloadable evidence bundle; studio shows you the gate outcomes, it
+  never grades the work itself.
+- **Understand the code first.** Onboard a repo and studio builds its graph — then blast-radius
+  for any symbol, hotspots, the domain/requirements view, and a searchable map of what calls what.
 
-- **wicked-crew is the control plane** — the daemon, the `/api/v1` REST surface, the `/ws`
-  event stream, the wicked-core engine underneath, the gates and the evidence. It is fully
-  functional headless.
-- **wicked-studio is the skin** — a client of that control plane, developed, versioned, and
-  released as its own product. It imports **zero** crew source; the only thing the two share is
-  the published wire contract, [`wicked-crew-api-types`](https://github.com/mikeparcewski/wicked-crew/tree/main/packages/crew-api-types).
-- **Crew still ships a default skin.** wicked-crew's release build (`build:with-studio`) copies
-  this package's built `dist/` into the daemon's serving tree, so `npx wicked-crew serve` keeps
-  the one-command local UX — UI and API same-origin on one port. The dependency direction is
-  *control-plane-ships-a-dist-artifact*: crew depends on studio's build output, never on its
-  source; studio depends on crew's wire contract, never on its internals.
+## What you can do
 
-## Pairing with a daemon
+- **Run governed agents on your repos** — register a local path or clone a URL; studio builds the
+  code graph, then you launch runs (ask / balanced / autonomous), pick which agent seats join, and
+  bind a repo with optional PR delivery.
+- **Steer runs live** — a real-time timeline of every run, human gates with approve / steer /
+  reject, elicitation prompts, pre-gate guidance notes, and lifecycle controls (cancel, inject a
+  message, retry).
+- **See the evidence** — per-step transcripts, a worktree file + diff viewer, and one-click
+  evidence-bundle download for any run.
+- **Explore your codebase** — graph view with focus navigation, blast radius, hotspots, and the
+  domain graph with coverage.
+- **Ask your whole model roster at once** — fan one question out to every warm CLI and compare the
+  answers side by side.
+- **Govern the work** — author steering rules and policies, browse the decisions ledger, and review
+  what the platform has learned about your repos.
+- **Work in projects** — group repos, runs, chats, and docs; a merged activity feed and dashboard
+  per project; deep-linkable routes throughout.
+- **Plus** governed terminals, a Cmd+K command palette, document & video creation modes, and
+  desktop notifications when a run needs you.
 
-The connection surface is deliberately small (`src/api/client.ts`):
+---
 
-| Mode | How the SPA finds the daemon |
-|---|---|
-| **Bundled / same-origin** (production) | `window.location.origin` — whatever origin the daemon serves the SPA from is where the SPA calls back to. `--port` / `CREW_PORT` just work; no host is baked into the bundle. |
-| **Split dev or standalone** | `VITE_API_HOST` (host:port, no scheme), baked at build time by Vite. `.env.development` sets `127.0.0.1:7701` — the crew daemon's default — for the `npm run dev` server on :4200. |
+## Get started
 
-The daemon's loopback CORS admits any `http://localhost:*` / `http://127.0.0.1:*` origin, so a
-standalone studio on its own port can drive a local daemon out of the box.
-
-## Install
-
-You rarely install studio directly: **`npx wicked-crew serve` ships this UI bundled**,
-same-origin on one port. Or use the family installer — [`npx wicked-installer`](https://www.npmjs.com/package/wicked-installer)
-installs/updates the whole wicked-\* family (wicked-crew, which serves this skin, included).
-For a studio you build and host yourself, see [Standalone build](#standalone-build).
-
-## Develop
+Studio ships **inside** wicked-crew — one command gives you the API, the engine, and this UI on a
+single port:
 
 ```sh
-# a running control plane (defaults to 127.0.0.1:7701)
 npx wicked-crew serve
-
-# then, in this repo
-npm install
-npm run dev        # vite on http://127.0.0.1:4200, pointed at :7701 via .env.development
+# then open the URL it prints (default http://127.0.0.1:7701)
 ```
 
-`npm test` (vitest + testing-library), `npm run typecheck`, `npm run lint`, `npm run build`
-(tsc + vite → `dist/`). CI runs all four on every PR.
-
-## Standalone build
+That's the whole install for most people — no separate studio setup. Prefer a guided setup, or
+want the rest of the wicked family too? Use the installer:
 
 ```sh
-VITE_API_HOST=127.0.0.1:7701 npm run build
-# serve dist/ from ANY static server (SPA fallback to index.html), e.g.:
-npx serve dist   # or python -m http.server -d dist
+npx wicked-installer
 ```
 
-`e2e/studio_standalone_test.py` is the scripted proof of this mode: it builds the SPA, serves
-`dist/` from a plain static server on its own port, points it at a live daemon, and drives a
-real flow (list runs → open a run → approve a human gate → watch CoreEvents over WS) with a
-real browser. See the header of that file for prerequisites and knobs.
+It installs and wires wicked-crew (which serves this UI) alongside the other wicked-\* tools,
+across whichever coding-agent CLIs you already use.
 
-## Releasing / how crew consumes this
+## Keeping it up to date
 
-The npm package ships `dist/` only (`files: ["dist"]`). wicked-crew declares `wicked-studio` as
-a devDependency and its `build:with-studio` copies `node_modules/wicked-studio/dist` into
-`packages/crew/dist/studio`, which the daemon serves same-origin (headless fallback when
-absent). Installs from git get a fresh `dist/` via the `prepare` hook
-(`scripts/prepare-dist.mjs`); publishers run `npm run build && npm publish` so the tarball is
-built from the tagged source.
+Studio rides along with crew, so you update it by updating crew:
 
-### The data-testid contract (`testid-inventory.json`)
+```sh
+npm i -g wicked-crew@latest    # or: npx wicked-installer  (updates the whole family)
+```
 
-`testid-inventory.json` (repo root, committed; emitted into `dist/testid-inventory.json` by the
-build) is the machine-readable inventory of every `data-testid` the UI declares — the selector
-contract that test generators and the model-free campaign runner build against, versioned with
-this package. `tests/testidInventory.test.ts` re-scans `src/` and fails CI on any drift, so a
-testid change (or a `package.json` version bump — the artifact carries `studioVersion`) ships
-only together with a reviewed `npm run manifest:testids` regeneration. The drift-handling
-doctrine downstream is embedded in the file's `$doc` header: a selector miss fails the
-deterministic run; the authoring agent re-authors against the live DOM; the runner re-records;
-the substitution lands in the spec diff. No agentic fallback inside the runner.
-
-## Provenance
-
-Extracted from the wicked-crew monorepo (`packages/studio`) as its own product — the carve kept
-the code as-is and preserved the package's full in-monorepo history via `git subtree split`
-(92 commits). An earlier, pre-consolidation incarnation of this product is archived read-only at
-[wicked-studio-archived](https://github.com/mikeparcewski/wicked-studio-archived).
+Each wicked-crew release bundles the matching studio build, so a fresh crew is a fresh UI. To see
+what changed, check the [releases](https://github.com/mikeparcewski/wicked-crew/releases).
 
 ## Requirements
 
-- Node.js ≥ 22.0.0
-- npm ≥ 10 (for workspaces and `prepare` hooks)
-- A running [wicked-crew](https://github.com/mikeparcewski/wicked-crew) daemon (**v0.7.0+**) for
-  the SPA to connect to. The floor is real, not ceremonial: the UI calls routes that first
-  shipped in crew 0.7.0 — `PUT /runs/:id/guidance` (the durable pre-gate note) exists only
-  there, and the projects surface, `/audit`, and run archiving need ≥ 0.6.0 — so an older
-  daemon 404s on surfaces the skin treats as present.
-- A modern browser (Chrome, Edge, Firefox, Safari)
-- macOS, Linux, or Windows
+- **Node.js ≥ 22**, npm ≥ 10
+- A running **wicked-crew daemon, v0.7.0+** (bundled and started for you by `npx wicked-crew serve`
+  — you only need this floor if you point a standalone studio at your own daemon)
+- A modern browser (Chrome, Edge, Firefox, Safari) on macOS, Linux, or Windows
 
-## Contributing
+---
 
-1. Fork the repo and create a feature branch.
+## For developers
+
+Studio is a Vite/React SPA and a *pure HTTP/WS client* of the wicked-crew daemon — it talks only to
+crew's published `/api/v1` REST surface and `/ws` event stream, and imports **zero** crew source.
+The one thing the two share is the wire-contract package
+[`wicked-crew-api-types`](https://github.com/mikeparcewski/wicked-crew/tree/main/packages/crew-api-types).
+
+```
+┌─────────────────┐     HTTP /api/v1 + WS /ws    ┌────────────────────┐
+│  wicked-studio  │ ───────────────────────────▶ │ wicked-crew daemon │
+│   (React SPA)   │ ◀─────────────────────────── │  API · engine ·    │
+│                 │   contract: wicked-crew-api-types │  gates · evidence │
+└─────────────────┘                              └────────────────────┘
+```
+
+### Develop
+
+```sh
+npx wicked-crew serve          # a control plane on :7701 for the SPA to talk to
+npm install
+npm run dev                    # vite on http://127.0.0.1:4200, pointed at :7701
+```
+
+`npm test` (vitest + testing-library), `npm run typecheck`, `npm run lint`, `npm run build`
+(tsc + vite → `dist/`). CI runs all four on ubuntu / macos / windows for every PR.
+
+### Standalone build
+
+You can build studio and host it yourself, pointed at any reachable daemon:
+
+```sh
+VITE_API_HOST=127.0.0.1:7701 npm run build
+npx serve dist                 # any static server with SPA fallback works
+```
+
+The SPA finds its daemon two ways: **bundled/same-origin** (production) calls back to
+`window.location.origin`, so `--port` / `CREW_PORT` just work with no host baked in; **standalone**
+uses `VITE_API_HOST` (host:port, no scheme) fixed at build time. The daemon's loopback CORS admits
+any `localhost` / `127.0.0.1` origin, so a standalone studio drives a local daemon out of the box.
+`e2e/studio_standalone_test.py` is the scripted proof of this mode.
+
+### How crew ships this UI
+
+The npm package publishes `dist/` only. wicked-crew declares `wicked-studio` as a devDependency and
+its `build:with-studio` step copies `node_modules/wicked-studio/dist` into the daemon's serving
+tree, so `npx wicked-crew serve` is same-origin UI + API on one port (with a headless fallback when
+the dist is absent). A studio release therefore also bumps crew's devDep pin.
+
+The repo also carries a `data-testid` selector contract (`testid-inventory.json`, regenerated with
+`npm run manifest:testids` and drift-checked in CI) that the test generators build against — see
+[`CLAUDE.md`](./CLAUDE.md) for the full contributor doctrine.
+
+### Contributing
+
+1. Fork and branch.
 2. `npm install && npm run dev` — SPA on `:4200`, daemon on `:7701`.
 3. `npm test && npm run typecheck && npm run lint` before committing.
 4. Open a PR; CI runs all four gates on ubuntu / macos / windows.
 
-The only external coupling is the wire contract (`wicked-crew-api-types`). Studio imports **zero** crew source — all crew interaction goes through `/api/v1` and `/ws`. Keep it that way.
+Keep the wire-contract boundary intact: all crew interaction goes through `/api/v1` and `/ws`, never
+a crew-source import — if a type is missing, it lands in `wicked-crew-api-types` first.
+
+### Provenance
+
+Studio was extracted from the wicked-crew monorepo (`packages/studio`) as its own product,
+preserving the full in-monorepo history via `git subtree split`. An earlier, pre-consolidation
+incarnation is archived read-only at
+[wicked-studio-archived](https://github.com/mikeparcewski/wicked-studio-archived).
 
 ## License
 
