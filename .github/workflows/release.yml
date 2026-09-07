@@ -91,8 +91,19 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          python3 scripts/changelog-section.py "$TAG" > /tmp/relnotes.md \
-            || printf 'Release %s\n' "$TAG" > /tmp/relnotes.md
+          # Notes = this version's CHANGELOG section. Distinguish "no section" (exit 1 → generic
+          # note) from a real script failure (exit 2 → missing/unreadable CHANGELOG, usage bug),
+          # which must FAIL rather than silently ship a generic note.
+          set +e
+          python3 scripts/changelog-section.py "$TAG" > /tmp/relnotes.md
+          code=$?
+          set -e
+          if [ "$code" -eq 1 ]; then
+            printf 'Release %s\n' "$TAG" > /tmp/relnotes.md
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::changelog-section.py failed (exit $code) — refusing to publish a release with fallback notes"
+            exit "$code"
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file /tmp/relnotes.md
             echo "updated existing GitHub Release $TAG"
