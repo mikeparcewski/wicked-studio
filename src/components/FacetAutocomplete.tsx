@@ -57,7 +57,7 @@ export function FacetAutocomplete({
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setOpen(true);
-      setHighlight((h) => Math.min(h + 1, matches.length - 1));
+      setHighlight((h) => Math.min(h + 1, Math.max(0, matches.length - 1)));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlight((h) => Math.max(h - 1, 0));

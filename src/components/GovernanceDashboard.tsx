@@ -78,6 +78,7 @@ export function GovernanceDashboard({ navigate }: { navigate: Navigate }): React
   // ── The three best-effort KPI reads ────────────────────────────────────────
   const [pending, setPending] = useState<Proposal[] | null>(null);
   const [proposalsUnsupported, setProposalsUnsupported] = useState(false);
+  const [proposalsError, setProposalsError] = useState(false);
   const [coverageTotal, setCoverageTotal] = useState<number | null>(null);
   const [rules, setRules] = useState<SteeringRule[]>([]);
 
@@ -86,9 +87,18 @@ export function GovernanceDashboard({ navigate }: { navigate: Navigate }): React
       const ps = await listProposals({ state: 'pending' });
       setPending(ps);
       setProposalsUnsupported(false);
+      setProposalsError(false);
     } catch (e) {
-      setPending([]);
-      if (isProposalsUnsupported(e)) setProposalsUnsupported(true);
+      if (isProposalsUnsupported(e)) {
+        setProposalsUnsupported(true);
+        setPending([]);
+      } else {
+        // A real load failure must NOT read as "0 needs review" (an empty list is
+        // indistinguishable from "no proposals"). Keep pending unknown (null) and flag the error so
+        // the tile renders "—", never a fabricated zero.
+        setProposalsError(true);
+        setPending(null);
+      }
     }
   }, []);
 
@@ -155,10 +165,11 @@ export function GovernanceDashboard({ navigate }: { navigate: Navigate }): React
           <StatTile
             testId="gk-stat-needs-review"
             label="Needs review"
-            value={proposalsUnsupported ? '—' : needsReview}
-            valueColor={needsReview > 0 ? 'var(--status-gate)' : undefined}
+            value={proposalsUnsupported || proposalsError ? '—' : needsReview}
+            valueColor={!proposalsError && needsReview > 0 ? 'var(--status-gate)' : undefined}
             context={
               proposalsUnsupported ? 'not served by this daemon'
+                : proposalsError ? 'could not load — refresh'
                 : needsReview === 0 ? 'nothing waiting'
                 : `${memPending} memory · ${polPending} policy`
             }
