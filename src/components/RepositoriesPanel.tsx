@@ -10,6 +10,7 @@ import {
 } from '../board/windowStats.js';
 import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { useMembershipStore } from '../store/membership.js';
+import { useProvenanceStore } from '../store/provenance.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 import {
   DashboardGrid, FilterStrip, KpiBand, KpiGroup, Sparkline, StatTile, type FilterChip,
@@ -209,6 +210,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
         repoRef: repoId,
         workflow: 'capture-learnings',
       });
+      // Studio witnessed this launch — record it so the run's provenance line
+      // reads 'via studio', not the API fallback (same as ChatInput's launch).
+      useProvenanceStore.getState().markLaunchedHere(runId);
       onSelectRun?.(runId);
     } catch (err) {
       setRerunError((prev) => ({
@@ -803,7 +807,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                       type="button"
                       data-testid="repo-capture-learnings"
                       data-repo-id={repo.id}
-                      disabled={capturing[repo.id] ?? false}
+                      disabled={(capturing[repo.id] ?? false) || isRerunning}
                       title="Launch a governed run that mines this repo's history into durable memory + knowledge — a tracked run you can watch"
                       onClick={() => void captureLearnings(repo.id, repo.name)}
                       className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
@@ -837,7 +841,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                       <button
                         type="button"
                         data-testid="repo-onboard"
-                        disabled={isRerunning}
+                        disabled={isRerunning || (capturing[repo.id] ?? false)}
                         onClick={() => void rerunOnboarding(repo.id)}
                         className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
                         style={{
