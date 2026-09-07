@@ -8,7 +8,7 @@ import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
 import { memoriesPath, policiesPath, steeringDashboardPath, STEERING_SECTIONS, STEERING_SECTION_LABELS, type SteeringSection } from '../api/steering.js';
-import { testingPath, TESTING_PAGE_LABELS, TESTING_PAGES } from '../api/testing.js';
+import { testingPath } from '../api/testing.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
 import { HealthRailSection } from './HealthRailSection.js';
@@ -73,7 +73,7 @@ const S = {
 
 // ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'testing' | 'steering' | 'settings';
+export type PathKey = 'projects' | 'execute' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'steering' | 'settings';
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
  *  links `/system` in the collapsed column — it has no dashboard). `noun` is
@@ -81,24 +81,30 @@ export type PathKey = 'projects' | 'make' | 'chat' | 'repos' | 'testing' | 'stee
  *  "New Project", never "New Projects"). */
 interface PathSpec { key: PathKey; title: string; noun: string; glyph: string; dash: string | null; collapsedHref: string }
 const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     noun: 'Project',    glyph: '◇', dash: '/projects', collapsedHref: '/projects' };
-const P_MAKE: PathSpec     = { key: 'make',     title: 'Make',         noun: 'Document',   glyph: '⚒', dash: '/make',     collapsedHref: '/make' };
+// The nav-reorg promoted each of Make's three forks (build|document|video) to a top-level path,
+// each reusing the Make/Chat rail grammar (▦ dashboard + ＋ create + accordion list + view-all):
+// Execute ← build, Vibe ← document, Demo ← video. Execute's ＋ launches a build run directly
+// (like Chat's ＋); Vibe/Demo's ＋ open a project-picker popover locked to their mode.
+const P_EXECUTE: PathSpec  = { key: 'execute',  title: 'Execute',      noun: 'Run',        glyph: '▸', dash: '/execute',  collapsedHref: '/execute' };
+const P_VIBE: PathSpec      = { key: 'vibe',     title: 'Vibe',         noun: 'Document',   glyph: '▤', dash: '/vibe',     collapsedHref: '/vibe' };
+const P_DEMO: PathSpec      = { key: 'demo',     title: 'Demo',         noun: 'Demo',       glyph: '▶', dash: '/demo',     collapsedHref: '/demo' };
 const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         noun: 'Chat',       glyph: '💬', dash: '/chats',    collapsedHref: '/chats' };
 const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Repository', glyph: '⬡', dash: '/repos',    collapsedHref: '/repos' };
-// Test (the testing wave; nav-ui-tweaks re-placed + relabelled it): the quality surface, a
-// PRIMARY path placed immediately BELOW Make (order: Projects, Make, Test, Chat, …). Its
-// display label is "Test" though its key + routes stay `testing`. Like Steering it is
-// title-only (no ▦/＋ — its verbs live on the pages); its accordion rows are the two
-// sub-pages, its collapsed glyph links the Campaigns landing (THE testing dashboard).
-const P_TESTING: PathSpec  = { key: 'testing',  title: 'Test',         noun: 'Campaign',   glyph: '✓', dash: null,        collapsedHref: testingPath('campaigns') };
+// Evals (the nav-reorg): the top-level Testing section became Evals — a NORMAL section (▦
+// dashboard + ＋ create-new + list) whose surface is the steering-rule eval runner (the one QE
+// capability with no project home). Campaigns moved into the project shell (`/p/:id/campaigns`),
+// so they are no longer a top-level nav item; the unscoped cross-project sweep keeps its own
+// `/testing/campaigns` route. The key + routes stay `testing`; only the display + list changed.
+const P_TESTING: PathSpec  = { key: 'testing',  title: 'Evals',        noun: 'Eval',       glyph: '✓', dash: testingPath('evals'), collapsedHref: testingPath('evals') };
 // Steering (DES-MEM-FACETED-001, unified surface): the governed-knowledge home, a PRIMARY path
-// placed immediately BEFORE Settings. Like Settings it is title-only (no ▦/＋ — its management +
-// review verbs live on the pages); its accordion rows are the TWO sub-sections (Policies /
-// Memories — each managing existing items AND reviewing proposals), its collapsed glyph links
-// the Policies home (the default sub-section — the standalone Proposals queue folded in here).
-const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: null,        collapsedHref: steeringDashboardPath() };
+// placed immediately BEFORE Settings. The nav-reorg moved its Dashboard from a sub-row to the
+// heading's ▦ (dash → the dashboard, same affordance Projects/Execute/Chat/Repos use); it keeps
+// NO ＋. Its accordion rows are the TWO management sub-sections (Policies / Memories).
+const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: steeringDashboardPath(), collapsedHref: steeringDashboardPath() };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
-// Order (nav-ui-tweaks): Test sits immediately below Make; Steering + Settings tail.
-const PATHS: PathSpec[] = [P_PROJECTS, P_MAKE, P_TESTING, P_CHAT, P_REPOS, P_STEERING, P_SETTINGS];
+// Order (nav-reorg): Execute / Vibe / Demo replace Make and sit before Evals; Chat / Repos /
+// Steering / Settings tail.
+const PATHS: PathSpec[] = [P_PROJECTS, P_EXECUTE, P_VIBE, P_DEMO, P_TESTING, P_CHAT, P_REPOS, P_STEERING, P_SETTINGS];
 
 // `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
 // retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
@@ -113,7 +119,11 @@ const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workf
 export function headingForPath(pathname: string): PathKey | null {
   const [, first = '', second = ''] = pathname.split('/');
   if (first === 'projects' || first === 'p') return 'projects';
-  if (first === 'make') return 'make';
+  // Execute / Vibe / Demo (nav-reorg). The retired `/make` maps to Execute so the rail never
+  // flashes headless on the pre-redirect tick (useMakeRedirect replaces it with /execute).
+  if (first === 'execute' || first === 'make') return 'execute';
+  if (first === 'vibe') return 'vibe';
+  if (first === 'demo') return 'demo';
   // `/chat/new` AND `/chat/:id` (J4/C6: a live session's real URL) are Chat's.
   if (first === 'chats' || (first === 'chat' && second !== '')) return 'chat';
   if (first === 'repos' || first === 'repo-detail') return 'repos';
@@ -143,12 +153,11 @@ function orderRuns(runs: SessionView[]): SessionView[] {
 
 // Accordion caps (§3.3): shortcuts, never a second dashboard.
 const PROJECTS_MAX = 6;
+/** Cap for the Execute run list and each of the Vibe / Demo doc lists (per-project
+ *  loaded docs only — §4.2.2's scoped rule; the complete census lives on each dashboard). */
 const MADE_MAX = 5;
 const CHATS_MAX = 5;
 const REPOS_MAX = 4;
-/** Of MADE_MAX, at most this many are doc/demo rows (per-project loaded docs
- *  only — §4.2.2's scoped rule; the complete census lives on `/make`). */
-const MADE_DOCS_MAX = 2;
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -368,9 +377,9 @@ function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }:
             data-testid="heading-new"
             aria-label={`New ${path.noun}`}
             title={`New ${path.noun}`}
-            // Keep the mousedown out of the make-picker's outside-close
-            // listener, so ＋ is a true toggle (open picker + click ＋ again
-            // = closed, not close-then-reopen).
+            // Keep the mousedown out of a picker's outside-close listener (Vibe/Demo),
+            // so ＋ is a true toggle (open picker + click ＋ again = closed, not
+            // close-then-reopen).
             onMouseDown={(e) => e.stopPropagation()}
             onClick={onNew}
             className="w-7 h-7 shrink-0 flex items-center justify-center rounded transition-colors"
@@ -392,21 +401,24 @@ function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }:
   );
 }
 
-// ── The make-picker (§3.4): Make's ＋ forks three ways ─────────────────────────
+// ── The project-mode picker (nav-reorg): Vibe/Demo's ＋ opens straight to the ──
+//    project stage, locked to one mode. A doc (Document) / demo (Video) lives in
+//    a project, so the ＋ picks the project first, then opens the mode surface
+//    there. (Execute's ＋ needs no picker — it launches a build run directly.)
 
-const MAKE_MODES: Mode[] = ['build', 'document', 'video'];
-
-export function MakePicker({ navigate, onClose, ambient }: {
+export function ProjectModePicker({ mode, navigate, onClose }: {
+  /** The mode this picker is locked to — 'document' (Vibe) or 'video' (Demo). */
+  mode: 'document' | 'video';
   navigate: (p: string) => void;
   onClose: () => void;
-  /** The ambient project (shared derivation, DES-UX-001 §2.3 rule 1) — Build
-   *  from inside a project context opens the PRE-BOUND form, never Unfiled. */
-  ambient: string | null;
 }): React.ReactElement {
-  /** null = the three rows; a mode = the project-picker stage (Document/Video). */
-  const [stage, setStage] = useState<Mode | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const projects = useProjectsStore((s) => s.projects);
+
+  // Entering the picker is the gesture that loads the project list if cold.
+  useEffect(() => {
+    if (projects.length === 0) void useProjectsStore.getState().load();
+  }, [projects.length]);
 
   useEffect(() => {
     function onOutside(e: MouseEvent): void {
@@ -416,27 +428,13 @@ export function MakePicker({ navigate, onClose, ambient }: {
     return () => document.removeEventListener('mousedown', onOutside);
   }, [onClose]);
 
-  const pick = (m: Mode): void => {
-    if (m === 'build') {
-      // Slice S (DES-UX-001 §2.3 rule 1): inside a project context the launch
-      // form opens PRE-BOUND (`/p/:id/build/new`, the slice-B lock); outside
-      // one, the flat Unfiled-default form — the old slice-B semantics (§3.4).
-      onClose();
-      navigate(launchPath(ambient, 'build'));
-      return;
-    }
-    // A doc lives in a project — the bridge mounts per project (§3.4): pick one
-    // first. Entering the stage is the gesture that loads the list if cold.
-    if (projects.length === 0) void useProjectsStore.getState().load();
-    setStage(m);
-  };
-
   const real = projects.filter((p) => p.id !== 'default');
 
   return (
     <div
       ref={ref}
-      data-testid="make-picker"
+      data-testid="project-mode-picker"
+      data-mode={mode}
       role="menu"
       className="absolute right-0 top-8 z-30 w-60 py-1"
       style={{
@@ -445,86 +443,62 @@ export function MakePicker({ navigate, onClose, ambient }: {
         borderRadius: 'var(--radius-md)',
       }}
     >
-      {stage === null ? (
-        MAKE_MODES.map((m) => (
-          <button
-            key={m}
-            type="button"
-            role="menuitem"
-            data-testid="make-picker-row"
-            data-mode={m}
-            onClick={() => pick(m)}
-            className="w-full flex items-baseline gap-2 px-3 py-1.5 text-left transition-colors"
-            style={{ background: 'transparent', outlineColor: S.accent }}
-            onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <span aria-hidden style={{ fontSize: 'var(--text-xs)' }}>{MODE_SPECS[m].glyph}</span>
-            <span style={{ fontSize: 'var(--text-xs)', color: S.ink, fontFamily: 'var(--font-sans)', fontWeight: 'var(--weight-semi)' }}>
-              {MODE_SPECS[m].label}
-            </span>
-            <span className="truncate" style={{ fontSize: 'var(--text-2xs)', color: S.faint, fontFamily: 'var(--font-sans)' }}>
-              {MODE_SPECS[m].sublabel}
-            </span>
-          </button>
-        ))
-      ) : (
-        <div className="px-3 py-1.5 flex flex-col gap-1.5" data-testid="make-picker-project-stage">
-          <p style={{ fontSize: 'var(--text-2xs)', color: S.faint, fontFamily: 'var(--font-sans)', margin: 0 }}>
-            {real.length === 0
-              ? `No projects yet — a ${MODE_SPECS[stage].label.toLowerCase()} can start Unfiled, or create one:`
-              : 'Pick a project — or keep it Unfiled:'}
-          </p>
-          <ProjectSwitcher
-            current={null}
-            projects={projects}
-            onSelect={(pid) => {
-              // DES-UX-001 §6.2 (slice U): Unfiled is NO dead end — it routes to
-              // the `default` project's mount, the daemon's own unfiled home
-              // (crew synthesizes that mount; the doc is created UNBOUND there).
-              onClose();
-              navigate(modePath(pid ?? UNFILED_MOUNT, stage));
-            }}
-          />
-        </div>
-      )}
+      <div className="px-3 py-1.5 flex flex-col gap-1.5" data-testid="project-mode-picker-stage">
+        <p style={{ fontSize: 'var(--text-2xs)', color: S.faint, fontFamily: 'var(--font-sans)', margin: 0 }}>
+          {real.length === 0
+            ? `No projects yet — a ${MODE_SPECS[mode].label.toLowerCase()} can start Unfiled, or create one:`
+            : 'Pick a project — or keep it Unfiled:'}
+        </p>
+        <ProjectSwitcher
+          current={null}
+          projects={projects}
+          onSelect={(pid) => {
+            // DES-UX-001 §6.2 (slice U): Unfiled is NO dead end — it routes to
+            // the `default` project's mount, the daemon's own unfiled home
+            // (crew synthesizes that mount; the doc is created UNBOUND there).
+            onClose();
+            navigate(modePath(pid ?? UNFILED_MOUNT, mode));
+          }}
+        />
+      </div>
     </div>
   );
 }
 
-/** The Testing accordion's rows: one per sub-page (Campaigns / Evals), each a
- *  navigate() shortcut — the SettingsShortcutRows grammar, never a parallel testing surface. */
-function TestingPageRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+/** The Evals accordion's single shortcut row (nav-reorg): Evals has no persistent list entity —
+ *  the eval runner produces a report, not a stored corpus of "evals" — so the accordion is one
+ *  "Run evals" shortcut into the runner (the ▦ links the same page; the ＋ launches a new run).
+ *  The row grammar is SettingsShortcutRows'. (A future eval-run store is the natural list
+ *  source; until then this is the honest surface — see the nav-reorg risk note.) */
+function EvalsRailRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
   return (
     <div role="menu" className="flex flex-col pt-0.5">
-      {TESTING_PAGES.map((p) => (
-        <button
-          key={p}
-          type="button"
-          role="menuitem"
-          data-testid="rail-testing-page"
-          data-page={p}
-          onClick={() => navigate(testingPath(p))}
-          className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
-          style={{ color: 'var(--ink-muted)' }}
-        >
-          {TESTING_PAGE_LABELS[p]}
-        </button>
-      ))}
+      <button
+        type="button"
+        role="menuitem"
+        data-testid="rail-evals-run"
+        onClick={() => navigate(testingPath('evals'))}
+        className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
+        style={{ color: 'var(--ink-muted)' }}
+      >
+        Run evals
+      </button>
     </div>
   );
 }
 
-/** The Steering accordion's rows: one per sub-section (Dashboard / Policies / Memories), each a
- *  navigate() shortcut to its page — the SettingsShortcutRows grammar. The Dashboard is the
- *  review-forward home (the consolidated propose→promote inbox); Policies and Memories are the
- *  "manage existing" deep-dives (the seven types are a `?type=` filter inside Policies). */
+/** The Steering accordion's rows: one per MANAGEMENT sub-section (Policies / Memories), each a
+ *  navigate() shortcut to its page — the SettingsShortcutRows grammar. The nav-reorg moved the
+ *  Dashboard from a sub-row to the heading's ▦ (same affordance Projects/Execute/Chat/Repos use),
+ *  so it is FILTERED out here — leaving the two "manage existing" deep-dives (the seven types are
+ *  a `?type=` filter inside Policies). `STEERING_SECTIONS` itself is unchanged (the route
+ *  vocabulary + test-pinned); the filter is at the render site only. */
 function SteeringSectionRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
   const href = (s: SteeringSection): string =>
     s === 'memories' ? memoriesPath() : s === 'policies' ? policiesPath() : steeringDashboardPath();
   return (
     <div role="menu" className="flex flex-col pt-0.5">
-      {STEERING_SECTIONS.map((s) => (
+      {STEERING_SECTIONS.filter((s) => s !== 'dashboard').map((s) => (
         <button
           key={s}
           type="button"
@@ -550,7 +524,9 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [makePickerOpen, setMakePickerOpen] = useState(false);
+  // Vibe / Demo each fork their ＋ into a project-picker popover locked to their mode.
+  const [vibePickerOpen, setVibePickerOpen] = useState(false);
+  const [demoPickerOpen, setDemoPickerOpen] = useState(false);
   // The rail-foot health section (§6.2, slice O) — controlled here; it toggles
   // from its own header (the chrome connection dot that used to expand it was
   // removed in nav-ui-tweaks).
@@ -613,7 +589,7 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
   const q = searchQuery.trim().toLowerCase();
   const filteredRepos = q ? repos.filter(r => r.name.toLowerCase().includes(q)) : repos;
 
-  // The Make/Chat partition invariant (§3.3): every run under exactly ONE path.
+  // The Execute/Chat partition invariant (§3.3): every run under exactly ONE path.
   const chatRuns = orderRuns(runs.filter(isChatRun)).slice(0, CHATS_MAX);
   // Live pool sessions this client knows about (J4 round 2): deposited by
   // GroupChat's open/rejoin and by chat frames on the app's /ws fold — never
@@ -623,11 +599,15 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
   const liveChats = Object.values(liveChatSessions)
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
     .slice(0, CHATS_MAX);
-  const madeDocs = items
+  // Execute ← the non-chat (build) runs, needs-you-first (orderRuns = active before terminal).
+  const executeRuns = orderRuns(runs.filter((v) => !isChatRun(v))).slice(0, MADE_MAX);
+  // Vibe ← documents, Demo ← demos — the board model's per-project docs, split by kind, newest
+  // first. Each list is capped independently (they are peer sections now, not one Make list).
+  const allDocs = items
     .flatMap((item) => item.docs.map((doc) => ({ doc, projectId: item.project.id, projectName: item.project.name })))
-    .sort((a, b) => (b.doc.updated_at ?? '').localeCompare(a.doc.updated_at ?? ''))
-    .slice(0, MADE_DOCS_MAX);
-  const madeRuns = orderRuns(runs.filter((v) => !isChatRun(v))).slice(0, MADE_MAX - madeDocs.length);
+    .sort((a, b) => (b.doc.updated_at ?? '').localeCompare(a.doc.updated_at ?? ''));
+  const vibeDocs = allDocs.filter(({ doc }) => doc.kind !== 'demo').slice(0, MADE_MAX);
+  const demoDocs = allDocs.filter(({ doc }) => doc.kind === 'demo').slice(0, MADE_MAX);
 
   /** Enter a project: its DASHBOARD (DES-FEEDBACK-001 §4.1) — context before actions. */
   const openProject = (projectId: string): void => {
@@ -691,40 +671,69 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             <ViewAll href="/projects" navigate={navigate} />
           </RailHeading>
 
-          {/* ── Make — Build ∪ Document ∪ Video (§2.2 Reading 1) ─────────────── */}
+          {/* ── Execute ← build runs (nav-reorg): ＋ launches a build run directly ── */}
           <RailHeading
-            path={P_MAKE}
-            open={openHeading === 'make'}
-            onToggle={() => toggle('make')}
-            onNew={() => setMakePickerOpen(v => !v)}
+            path={P_EXECUTE}
+            open={openHeading === 'execute'}
+            onToggle={() => toggle('execute')}
+            onNew={() => navigate(launchPath(ambient, 'build'))}
             navigate={navigate}
-            extra={makePickerOpen
-              ? <MakePicker navigate={navigate} onClose={() => setMakePickerOpen(false)} ambient={ambient} />
-              : undefined}
           >
-            {madeRuns.length === 0 && madeDocs.length === 0
-              ? <EmptyRow label="Nothing made yet" href="/make" navigate={navigate} />
-              : (
-                <>
-                  {madeRuns.map((view) => (
-                    <RunRow key={view.session.id} view={view} onOpen={() => navigate(runPath(view.session.id))} />
-                  ))}
-                  {madeDocs.map(({ doc, projectId, projectName }) => (
-                    <DocRow key={`${projectId}:${doc.name}`} doc={doc} projectId={projectId} projectName={projectName} navigate={navigate} />
-                  ))}
-                </>
-              )}
-            <ViewAll href="/make" navigate={navigate} />
+            {executeRuns.length === 0
+              ? <EmptyRow label="Nothing run yet" href="/execute" navigate={navigate} />
+              : executeRuns.map((view) => (
+                  <RunRow key={view.session.id} view={view} onOpen={() => navigate(runPath(view.session.id))} />
+                ))}
+            <ViewAll href="/execute" navigate={navigate} />
           </RailHeading>
 
-          {/* ── Test — the quality surface, immediately below Make (nav-ui-tweaks). ─ */}
+          {/* ── Vibe ← documents (nav-reorg): ＋ opens a project-picker locked to Document ── */}
+          <RailHeading
+            path={P_VIBE}
+            open={openHeading === 'vibe'}
+            onToggle={() => toggle('vibe')}
+            onNew={() => setVibePickerOpen(v => !v)}
+            navigate={navigate}
+            extra={vibePickerOpen
+              ? <ProjectModePicker mode="document" navigate={navigate} onClose={() => setVibePickerOpen(false)} />
+              : undefined}
+          >
+            {vibeDocs.length === 0
+              ? <EmptyRow label="No documents yet" href="/vibe" navigate={navigate} />
+              : vibeDocs.map(({ doc, projectId, projectName }) => (
+                  <DocRow key={`${projectId}:${doc.name}`} doc={doc} projectId={projectId} projectName={projectName} navigate={navigate} />
+                ))}
+            <ViewAll href="/vibe" navigate={navigate} />
+          </RailHeading>
+
+          {/* ── Demo ← demos (nav-reorg): ＋ opens a project-picker locked to Video ── */}
+          <RailHeading
+            path={P_DEMO}
+            open={openHeading === 'demo'}
+            onToggle={() => toggle('demo')}
+            onNew={() => setDemoPickerOpen(v => !v)}
+            navigate={navigate}
+            extra={demoPickerOpen
+              ? <ProjectModePicker mode="video" navigate={navigate} onClose={() => setDemoPickerOpen(false)} />
+              : undefined}
+          >
+            {demoDocs.length === 0
+              ? <EmptyRow label="No demos yet" href="/demo" navigate={navigate} />
+              : demoDocs.map(({ doc, projectId, projectName }) => (
+                  <DocRow key={`${projectId}:${doc.name}`} doc={doc} projectId={projectId} projectName={projectName} navigate={navigate} />
+                ))}
+            <ViewAll href="/demo" navigate={navigate} />
+          </RailHeading>
+
+          {/* ── Evals — the steering-rule eval runner, a normal section (nav-reorg) ── */}
           <RailHeading
             path={P_TESTING}
             open={openHeading === 'testing'}
             onToggle={() => toggle('testing')}
+            onNew={() => navigate(testingPath('evals'))}
             navigate={navigate}
           >
-            <TestingPageRows navigate={navigate} />
+            <EvalsRailRows navigate={navigate} />
           </RailHeading>
 
           {/* ── Chat ─────────────────────────────────────────────────────────── */}

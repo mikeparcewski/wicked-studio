@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { isSteeringSection, isSteeringType, type SteeringSection } from '../api/steering.js';
 import { isTestingSubPage } from '../api/testing.js';
 
-// `make` is the round-4 primary-path dashboard route (DES-FEEDBACK-003 §2.1) —
-// a CLIENT route (a new panel id in this union), not a wire. Slice M registers
-// it with a placeholder surface; the real dashboard is slice O (§4.2).
+// `execute` / `vibe` / `demo` are the three primary-path dashboard routes the
+// nav-reorg split the former `Make` union into (build → Execute, document → Vibe,
+// video → Demo) — CLIENT routes (new panel ids in this union), not wires. Each is
+// the MadeDashboard parameterized by mode. The retired `/make` address parses to
+// `execute` (so the rail never flashes headless on the pre-redirect tick) and
+// `useMakeRedirect` replaces it with `/execute`.
 // `steering` is the unified governed-knowledge surface (`/steering/{policies,memories}`) — one
 // home with two sub-sections, each carrying BOTH "manage existing" and "proposals (review)":
 // Policies (the seven-type rule corpus — the seven pages collapsed into a `?type=` FILTER on one
@@ -32,9 +35,9 @@ import { isTestingSubPage } from '../api/testing.js';
 // surface): policy proposals live under `/steering/policies`, memory proposals under
 // `/steering/memories`. Its old `/proposals` address (and `?type=memory` deep link) fold into
 // those sub-sections via `useSteeringRedirect`.
-export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'make' | 'not-found';
+export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'not-found';
 
-const PANELS: Panel[] = ['runs', 'workflows', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'make'];
+const PANELS: Panel[] = ['runs', 'workflows', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
@@ -73,6 +76,12 @@ interface Route {
    *  VIEW of the project's build work, §3's adopted additive position), so
    *  this flag — not a fifth Mode — is what selects the view. */
   chronicleView: boolean;
+  /** True on `/p/:projectId/campaigns` (nav-reorg): the project-scoped Campaigns surface,
+   *  re-homed under the project shell (a campaign is a DAG workload, not a project — so it
+   *  is a project-scoped VIEW, not a fifth Mode). Rides no mode segment; `renderCenter`
+   *  selects the campaign surface off this flag. The unscoped cross-project sweep keeps its
+   *  own top-level `/testing/campaigns` route. */
+  campaignsView: boolean;
   /** Non-null only on `/testing/campaigns/:id` (DES-CAMPAIGN-001 §3.5 / TH-14) — the campaign
    *  label. The legacy flat `/campaigns/:id` parses to the same route while `useTestingRedirect`
    *  rewrites the address. */
@@ -101,6 +110,7 @@ const INERT: Route = {
   mode: null,
   artifactId: null,
   chronicleView: false,
+  campaignsView: false,
   campaignId: null,
   steeringSection: null,
   testingPage: null,
@@ -191,6 +201,13 @@ function parse(pathname: string): Route {
     if (third === 'chronicle') {
       return route({ projectId: safeDecode(second), mode: 'build', chronicleView: true });
     }
+    // `/p/:projectId/campaigns` (nav-reorg): the project-scoped Campaigns surface. Rides no
+    // mode (mode stays null — the ModeSwitcher's four-verb vocabulary is untouched); the
+    // flag selects the campaign surface, exactly the chronicle idiom. Never an artifact named
+    // "campaigns".
+    if (third === 'campaigns') {
+      return route({ projectId: safeDecode(second), campaignsView: true });
+    }
     const mode = asMode(third);
     const raw = mode !== null && fourth ? safeDecode(fourth) : null;
     // `/p/:projectId/:mode/new` is the project-scoped CREATE route (DES-FEEDBACK-001
@@ -266,6 +283,12 @@ function parse(pathname: string): Route {
       testingPage: 'campaigns',
       campaignId: second ? safeDecode(second) : null,
     });
+  }
+  // The RETIRED `/make` address (the nav-reorg split it into Execute / Vibe / Demo): parsed
+  // to `execute` so the rail never flashes headless on the pre-redirect tick, then REPLACED
+  // onto `/execute` by `useMakeRedirect`.
+  if (first === 'make') {
+    return route({ panel: 'execute' });
   }
   if (first === 'repo-detail' && second) {
     return route({ panel: 'repo-detail', repoId: safeDecode(second) });

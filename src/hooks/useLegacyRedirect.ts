@@ -168,6 +168,21 @@ export function useRetiredSettingsRedirect(pathname: string, navigate: Navigate)
 }
 
 /**
+ * The retired `/make` address normalizer (the nav-reorg split Make into Execute / Vibe / Demo):
+ * `/make` parses to the `execute` panel (so the Execute dashboard renders instantly on the
+ * pre-redirect tick) and this hook REPLACES the address with `/execute`, so Back never re-enters
+ * the dead address. Only the bare `/make` moves — Vibe and Demo have their own top-level routes,
+ * and the in-project `/p/:id/:mode` document/video vocabulary is untouched.
+ */
+export function useMakeRedirect(pathname: string, navigate: Navigate): void {
+  useEffect(() => {
+    const [, first = ''] = pathname.split('/');
+    if (first !== 'make') return;
+    navigate('/execute', { replace: true });
+  }, [pathname, navigate]);
+}
+
+/**
  * The Testing surface's address normalizer (same grammar as {@link useSteeringRedirect}):
  *
  *  - the RETIRED flat campaign addresses `/campaigns` and `/campaigns/:id` (the campaign
