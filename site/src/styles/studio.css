@@ -306,7 +306,7 @@ code {
 /* ── The run board (panel switcher) ───────────────────────────────────── */
 .board { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
 /* Additive sections (steering + governed knowledge; the requirements-graph forward view).
-   They reuse .ctx-grid/.ctx-card and .sec-head, so only the section shell is defined here —
+   They use the .gk-* namespace (duplicating the .ctx-* visuals) and .sec-head, so only the section shell is defined here —
    and it MUST stay in the snap selector list above or the browser scrolls straight past it. */
 .steer, .reqs { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
 .board-layout { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 1fr); gap: clamp(14px, 2vw, 26px); align-items: start; }
