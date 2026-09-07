@@ -7,10 +7,11 @@
  * delivery. A Vite/React SPA that is a PURE HTTP/WS client of the wicked-crew
  * daemon: launch and steer governed runs, answer human gates, watch live
  * CoreEvent streams, drive terminals — everything the daemon exposes on
- * /api/v1 and /ws, and nothing else. Its sibling front door is
- * wicked-interactive (now the document ENGINE, not a skin — its UI moved here); this
- * surface is a pure client of the same
- * control plane.
+ * /api/v1 and /ws, and nothing else. It also SURFACES a foundation-plane
+ * sibling, wicked-interactive — the API-only document engine (doc storage,
+ * version lineage, HTML/PDF/PPTX rendering) that crew spawns and proxies. It is
+ * NOT a skin and has no UI of its own; you depend on it, you don't visit it.
+ * This surface is a pure client of the same control plane.
  *
  * HONEST BOUNDARIES honored on this page:
  *  - Studio imports ZERO crew source. The only artifact the two products share
@@ -37,7 +38,12 @@
  *    crew's — studio SURFACES it, it does not own it. The skin never grades
  *    anything.
  *  - Panels named on the board are the SPA's real routes (useRoute.ts):
- *    runs, work, chats, coverage, workflows, domain, policies, rules, repos.
+ *    runs, work, chats, workflows, steering, testing, repos. The governance
+ *    panel is STEERING (`/steering/{policies,memories}`) — the seven-type rule
+ *    corpus and the memory store, each with a propose→promote queue. The old
+ *    policies/rules/coverage/domain panels retired: policies+rules folded into
+ *    Steering, coverage+domain into System. The requirements/domain graph is
+ *    elevated to its own "forward view" section, not an auto-cycling panel.
  */
 import Base from 'wicked-web/layouts/Base.astro';
 import Topbar from 'wicked-web/components/Topbar.astro';
@@ -60,10 +66,9 @@ const PANELS = [
   { id: 'runs',       api: 'GET /runs · WS /ws',            line: 'The run board itself: launch from a brief, watch the phase ladder and unit list move, read live output, answer the steering timeline.' },
   { id: 'work',       api: 'GET /runs/:id/events',           line: 'Every work unit across every run in one queue — what’s streaming, what’s held at a gate, what landed.' },
   { id: 'chats',      api: 'POST /chats',                    line: 'Group chat with your whole roster: fan one question out, watch each seat answer side by side.' },
-  { id: 'coverage',   api: 'GET /governance/coverage?repo=', line: 'Repo-scoped coverage with a graph view — scoped to the repo you asked about, never a vacuous store-wide 1.0.' },
   { id: 'workflows',  api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
-  { id: 'domain',     api: 'GET /domain-graph',              line: 'The domain-model browser: requirements and their graph, per repo — what the record actually knows about your problem space.' },
-  { id: 'policies',   api: 'GET /governance/policies',       line: 'Policies and conformance rules — the deterministic floor a run must clear. The skin surfaces the gate; it never grades.' },
+  { id: 'steering',   api: 'GET /governance/rules · /proposals', line: 'The governance surface: the seven-type steering-rule corpus and the memory store, each with a proposals queue — agents propose, you promote. The skin surfaces the rules; it never grades.' },
+  { id: 'testing',    api: 'POST /testing/evals/run',        line: 'Run the seven steering types against your own dev-behavior corpora — each verdict lands caught, gap, or false-positive, so a rule earns its keep before it governs a run.' },
   { id: 'repos',      api: 'POST /repos',                    line: 'Registered repos, their onboarding runs, and code-graph summaries — the ground the workers stand on.' },
 ];
 
@@ -71,7 +76,7 @@ const PANELS = [
 const RAIL = [
   { id: 'Burn',        line: 'Tokens, cost, and rework per CLI — live during the run, not on the invoice.' },
   { id: 'Decisions',   line: 'Every human call on the record: who approved what, when, and why.' },
-  { id: 'Governance',  line: 'The audit view: which policies were checked, which verdicts held the run.' },
+  { id: 'Governance',  line: 'The audit view: which steering rules were checked, which verdicts held the run.' },
   { id: 'Assumptions', line: 'External transforms recorded with honest confidence — needs-research is badged for you.' },
   { id: 'Steering',    line: 'The timeline of gates raised and answered — approve, amend, reject.' },
   { id: 'Files',       line: 'The diffs each unit produced, straight from the worktree.' },
@@ -225,7 +230,59 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  <!-- ── One project, two skins — the experience-plane story ─────────────── -->
+  <!-- ── Steering + governed knowledge — governance is more than a gate ───── -->
+  <section class="steer" aria-labelledby="steer-h">
+    <div class="wrap">
+      <div class="sec-head sec-head--wide">
+        <div class="kicker">Governance · steering, not a settings page</div>
+        <h2 id="steer-h">The gate is the floor. Steering is the doctrine.</h2>
+        <p class="sec-sub">
+          A deny-dominates gate is the deterministic floor a run must clear. <b>Steering</b> is the
+          layer above it: the ecosystem’s doctrine, authored as rules and projected into the record
+          as citable law a run can point at. And the record isn’t written by the agents that use it —
+          they <b>propose</b>, you <b>promote</b>. The vocabulary is
+          <a href="https://wc.wickedagile.com">crew’s</a> and the store is
+          <a href="https://we.wickedagile.com">estate’s</a>; the skin surfaces both and grades nothing.
+        </p>
+      </div>
+
+      <div class="gk-grid">
+        <div class="gk-card">
+          <span class="gk-k">steering · seven types</span>
+          <p class="gk-p">
+            Rules across <b>architecture, development, security, testing, operations, compliance and
+            design/UX</b> — authored in git or here, projected into the record as rules a run can
+            cite. One home, type-filtered: <code>GET /governance/rules</code>.
+          </p>
+        </div>
+        <div class="gk-card">
+          <span class="gk-k">governed knowledge · propose → promote</span>
+          <p class="gk-p">
+            An agent never writes to the record. A run <b>proposes</b> a memory or a policy; it lands
+            <code>pending</code> in a queue with its provenance; you approve or reject. Nothing enters
+            doctrine without a human call — <code>POST /proposals/:id/approve</code>.
+          </p>
+        </div>
+        <div class="gk-card gk-card--limit">
+          <span class="gk-k">the rule that stays in command</span>
+          <p class="gk-p">
+            estate’s MCP is <b>read-only</b>; every write rides crew’s governed operator path. The
+            skin shows you the corpus and the queue and <b>never self-writes, never grades</b> — the
+            promote button is yours, and only yours.
+          </p>
+        </div>
+      </div>
+
+      <p class="gk-foot">
+        The Steering surface is <code>/steering/{'{'}policies,memories{'}'}</code> — one home, two
+        sub-sections, each carrying a manage view <b>and</b> a proposals queue. Run the seven types
+        against your own dev-behavior corpora under <b>Testing</b>; verdicts land caught, gap or
+        false-positive, so a rule earns its keep before it ever governs a run.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── One project, two views — the experience-plane story ─────────────── -->
   <section class="proj" aria-labelledby="proj-h">
     <div class="wrap">
       <div class="sec-head sec-head--wide">
@@ -242,31 +299,31 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
       <div class="proj-card" data-proj data-skin="studio">
         <div class="proj-bar">
           <span class="proj-id">project · <b>payments-refresh</b></span>
-          <div class="proj-skins" role="tablist" aria-label="Which skin renders this project">
+          <div class="proj-skins" role="tablist" aria-label="Which view renders this project">
             <button type="button" role="tab" class="proj-skin is-active" data-proj-skin="studio" aria-selected="true">as a run board</button>
             <button type="button" role="tab" class="proj-skin" data-proj-skin="interactive" aria-selected="false">as a document</button>
           </div>
         </div>
 
-        <!-- The STUDIO rendering: the merged activity feed as a run board log. -->
-        <ol class="proj-feed proj-feed--studio" aria-label="The project as the coder’s skin renders it">
+        <!-- The RUN-BOARD rendering: the merged activity feed as a run board log. -->
+        <ol class="proj-feed proj-feed--studio" aria-label="The project as the run board renders it">
           <li><span class="pf-src pf-src--crew">crew</span><code>run r-7c19</code><span class="pf-note">feature workflow · build → adversarial-review → test — held once, steered, landed</span></li>
           <li><span class="pf-src pf-src--crew">crew</span><code>gate decision</code><span class="pf-note">schema-drift DENY → approved with steer · on the decisions ledger</span></li>
-          <li><span class="pf-src pf-src--int">interactive</span><code>doc payments-deck</code><span class="pf-note">the creator skin’s deck, in this same feed — created, drafted, delivered</span></li>
+          <li><span class="pf-src pf-src--int">interactive</span><code>doc payments-deck</code><span class="pf-note">the document engine’s deck, in this same feed — created, drafted, delivered</span></li>
           <li><span class="pf-src pf-src--crew">crew</span><code>chat c-2214</code><span class="pf-note">roster fan-out: “what breaks if we shard the ledger?” — three seats answered</span></li>
         </ol>
 
-        <!-- The INTERACTIVE rendering: the same project as the creator's canvas. -->
-        <ol class="proj-feed proj-feed--interactive" aria-label="The project as the creator’s skin renders it">
-          <li><span class="pf-src pf-src--int">interactive</span><code>wicked.interactive.doc.created</code><span class="pf-note">the deck asks for a first draft — over the bus</span></li>
+        <!-- The DOCUMENT rendering: the same project centred on the document engine's work. -->
+        <ol class="proj-feed proj-feed--interactive" aria-label="The project as the document view renders it">
+          <li><span class="pf-src pf-src--int">interactive</span><code>wicked.interactive.doc.created</code><span class="pf-note">the deck asks for a first draft — over the bus, from the document engine crew proxies</span></li>
           <li><span class="pf-src pf-src--crew">crew</span><code>governed run answers</code><span class="pf-note">a crew run drafts it — heartbeats stream while it works</span></li>
           <li><span class="pf-src pf-src--int">interactive</span><code>wicked.interactive.draft.completed</code><span class="pf-note">a real draft, idempotency-keyed — replays can’t double-deliver</span></li>
-          <li><span class="pf-src pf-src--crew">crew</span><code>run r-7c19 · evidence</code><span class="pf-note">the coder’s run sits in the creator’s view too — same feed, other door</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>run r-7c19 · evidence</code><span class="pf-note">the coder’s run sits in the document view too — same feed, one project</span></li>
         </ol>
 
         <div class="proj-foot">
           <code class="proj-call">GET /api/v1/projects/payments-refresh/activity</code>
-          <span class="proj-same" data-proj-same>same project · same feed · rendered by the <b data-proj-skin-label>run board</b> skin</span>
+          <span class="proj-same" data-proj-same>same project · same feed · rendered as the <b data-proj-skin-label>run board</b> view</span>
         </div>
       </div>
 
@@ -409,6 +466,57 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
+  <!-- ── The forward view — the requirements graph as the source of truth ──── -->
+  <section class="reqs" aria-labelledby="reqs-h">
+    <div class="wrap">
+      <div class="sec-head sec-head--wide">
+        <div class="kicker">The forward view · requirements as the record</div>
+        <h2 id="reqs-h">The code graph is what exists. The requirements graph is where it’s going.</h2>
+        <p class="sec-sub">
+          A run needs more than a picture of the code it’s about to change — it needs to know what
+          the code is <b>for</b>. Every registered repo carries a <b>requirements graph</b>:
+          requirements and their edges, browsable and searchable right here. It’s the forward edge of
+          the record — and it’s <b>becoming the source of truth</b> a run is measured against, not a
+          spec doc that rots in a folder. <code>GET /domain-graph</code> ·
+          per-repo <code>requirements_graph.json</code>.
+        </p>
+      </div>
+
+      <div class="gk-grid">
+        <div class="gk-card">
+          <span class="gk-k">requirements · per repo</span>
+          <p class="gk-p">
+            Browse and search a repo’s requirements and the graph that links them — tokenized
+            match, risk and domain filters, pagination.
+            <code>GET /repos/:id/requirements</code>.
+          </p>
+        </div>
+        <div class="gk-card">
+          <span class="gk-k">the forward view, not a snapshot</span>
+          <p class="gk-p">
+            The requirements graph is the intent a governed run answers to. <b>“Done” is re-derived
+            from evidence against it</b> — never asserted by the agent that wrote the code — so the
+            record leads the work instead of trailing it.
+          </p>
+        </div>
+        <div class="gk-card gk-card--limit">
+          <span class="gk-k">confidence + provenance on every node</span>
+          <p class="gk-p">
+            Each node carries how sure the record is and where it came from, so a heuristic reads as
+            a heuristic, never a fact. What the graph doesn’t know yet, it <b>says</b> it doesn’t
+            know — <code>graph</code> is honestly <code>null</code> until it’s generated.
+          </p>
+        </div>
+      </div>
+
+      <p class="gk-foot">
+        Elevated from one panel in the cycle to the point of the thing: the app’s intent, versioned
+        beside its code, that every governed run is answerable to. Where estate holds the record,
+        this is the part of it that points <b>forward</b>.
+      </p>
+    </div>
+  </section>
+
   <!-- ── The client seam — a pure client, nothing privileged ─────────────── -->
   <section class="pair" id="client" aria-labelledby="pair-h">
     <div class="wrap">
@@ -485,7 +593,8 @@ wsBase()  → ws://127.0.0.1:7701                  <span class="c"># same contra
           </p>
           <p class="get-alt">
             Prefer the whole family? <code>npx wicked-installer</code> is the interactive,
-            cross-CLI installer for every wicked-* product.
+            cross-CLI installer for every wicked-* product — Claude Code, Antigravity, Codex,
+            OpenCode and Pi.
           </p>
         </div>
         <div class="install-stack">
@@ -749,7 +858,7 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
       var LINES = [
         'Tokens, cost, and rework per CLI — live during the run, not on the invoice.',
         'Every human call on the record: who approved what, when, and why.',
-        'The audit view: which policies were checked, which verdicts held the run.',
+        'The audit view: which steering rules were checked, which verdicts held the run.',
         'External transforms recorded with honest confidence — needs-research is badged for you.',
         'The timeline of gates raised and answered — approve, amend, reject.',
         'The diffs each unit produced, straight from the worktree.',
@@ -784,10 +893,9 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
         { id: 'runs',      api: 'GET /runs · WS /ws',            line: 'The run board itself: launch from a brief, watch the phase ladder and unit list move, read live output, answer the steering timeline.' },
         { id: 'work',      api: 'GET /runs/:id/events',           line: 'Every work unit across every run in one queue — what’s streaming, what’s held at a gate, what landed.' },
         { id: 'chats',     api: 'POST /chats',                    line: 'Group chat with your whole roster: fan one question out, watch each seat answer side by side.' },
-        { id: 'coverage',  api: 'GET /governance/coverage?repo=', line: 'Repo-scoped coverage with a graph view — scoped to the repo you asked about, never a vacuous store-wide 1.0.' },
         { id: 'workflows', api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
-        { id: 'domain',    api: 'GET /domain-graph',              line: 'The domain-model browser: requirements and their graph, per repo — what the record actually knows about your problem space.' },
-        { id: 'policies',  api: 'GET /governance/policies',       line: 'Policies and conformance rules — the deterministic floor a run must clear. The skin surfaces the gate; it never grades.' },
+        { id: 'steering',  api: 'GET /governance/rules · /proposals', line: 'The governance surface: the seven-type steering-rule corpus and the memory store, each with a proposals queue — agents propose, you promote. The skin surfaces the rules; it never grades.' },
+        { id: 'testing',   api: 'POST /testing/evals/run',        line: 'Run the seven steering types against your own dev-behavior corpora — each verdict lands caught, gap, or false-positive, so a rule earns its keep before it governs a run.' },
         { id: 'repos',     api: 'POST /repos',                    line: 'Registered repos, their onboarding runs, and code-graph summaries — the ground the workers stand on.' }
       ];
       var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

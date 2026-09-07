@@ -45,7 +45,7 @@ body { padding-top: var(--topbar-h); }
    straight past — that is exactly what happened to .work and .ctx, which read as "the snap skips
    sections". Anything added below must join this selector. */
 html { scroll-snap-type: y proximity; scroll-padding-top: var(--topbar-h); }
-.hero, .board, .proj, .work, .ctx, .pair, .get {
+.hero, .board, .steer, .proj, .work, .ctx, .reqs, .pair, .get {
   min-height: calc(100svh - var(--topbar-h));
   scroll-snap-align: start;
   display: flex;
@@ -54,10 +54,10 @@ html { scroll-snap-type: y proximity; scroll-padding-top: var(--topbar-h); }
 }
 /* Alternating section bands — translucent darkening so the background art
    shows THROUGH instead of being painted over. */
-.board, .pair { background: color-mix(in oklab, #000 7%, transparent); }
+.board, .steer, .pair { background: color-mix(in oklab, #000 7%, transparent); }
 @media (max-width: 768px) {
   html { scroll-snap-type: none; }
-  .hero, .board, .proj, .work, .ctx, .pair, .get { min-height: 0; }
+  .hero, .board, .steer, .proj, .work, .ctx, .reqs, .pair, .get { min-height: 0; }
 }
 
 /* ── Studio background — ITS OWN motif: the CODER'S FRONT DOOR ─────────────
@@ -305,6 +305,10 @@ code {
 
 /* ── The run board (panel switcher) ───────────────────────────────────── */
 .board { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
+/* Additive sections (steering + governed knowledge; the requirements-graph forward view).
+   They reuse .ctx-grid/.ctx-card and .sec-head, so only the section shell is defined here —
+   and it MUST stay in the snap selector list above or the browser scrolls straight past it. */
+.steer, .reqs { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
 .board-layout { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 1fr); gap: clamp(14px, 2vw, 26px); align-items: start; }
 .board-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .board-item {
@@ -513,23 +517,26 @@ code {
   padding: clamp(40px, 6vh, 68px) 0;
   padding: clamp(40px, 6svh, 68px) 0;
 }
-.ctx-grid {
+/* .gk-* is the shared card namespace for the additive sections (.steer, .reqs). It carries the
+   SAME visuals as .ctx-* but its own class names, so the e2e locators that target `.ctx-card--limit`
+   / `.ctx-foot` / `.work-*` globally never collide with these sections. */
+.ctx-grid, .gk-grid {
   display: grid; gap: 14px; margin-top: 28px;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
-.ctx-card {
+.ctx-card, .gk-card {
   border: 1px solid var(--hairline-strong); border-radius: 14px; padding: 18px 18px 16px;
   background: color-mix(in oklab, var(--surface-2) 82%, #000 6%);
 }
-.ctx-card--limit { border-color: color-mix(in oklab, var(--accent) 42%, var(--hairline-strong)); }
-.ctx-k {
+.ctx-card--limit, .gk-card--limit { border-color: color-mix(in oklab, var(--accent) 42%, var(--hairline-strong)); }
+.ctx-k, .gk-k {
   display: block; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.04em;
   text-transform: lowercase; color: var(--amb); margin-bottom: 8px;
 }
-.ctx-card--limit .ctx-k { color: var(--accent); }
-.ctx-p { margin: 0; font-size: 0.94rem; line-height: 1.62; color: color-mix(in oklab, var(--ink) 86%, transparent); }
-.ctx-p code, .ctx-foot code { font-family: var(--font-mono); font-size: 0.86em; }
-.ctx-foot {
+.ctx-card--limit .ctx-k, .gk-card--limit .gk-k { color: var(--accent); }
+.ctx-p, .gk-p { margin: 0; font-size: 0.94rem; line-height: 1.62; color: color-mix(in oklab, var(--ink) 86%, transparent); }
+.ctx-p code, .ctx-foot code, .gk-p code, .gk-foot code { font-family: var(--font-mono); font-size: 0.86em; }
+.ctx-foot, .gk-foot {
   margin: 22px 0 0; font-size: 0.88rem; line-height: 1.6;
   color: color-mix(in oklab, var(--ink) 68%, transparent);
 }
