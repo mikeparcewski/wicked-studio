@@ -141,6 +141,90 @@ export function healthColor(h: Health): string | undefined {
     : undefined;
 }
 
+// ── Real TIME windows (AgentSession.created_at, api-types 0.24.0) ─────────────
+//
+// The command deck's numbers are time-honest, not positional: `created_at` (unix SECONDS, present
+// on runs a 0.24.0+ daemon launched) lets a "30d" window mean thirty DAYS, and a delta compare this
+// window against the SAME-LENGTH window immediately before it. A run with no `created_at`
+// (onboarding / campaign-DAG / a pre-field daemon) is EXCLUDED from every time window — never
+// bucketed at an invented time, which would relabel an undated run as "today".
+
+const DAY_MS = 24 * 3_600_000;
+
+/** A run's launch instant in millis, or null when the daemon recorded none (excluded from windows). */
+export function createdAtMs(v: SessionView): number | null {
+  const secs = v.session.created_at;
+  return typeof secs === 'number' && secs > 0 ? secs * 1000 : null;
+}
+
+/** Runs launched within the last `days` days by real `created_at`. Undated runs are excluded. */
+export function withinDays(runs: SessionView[], days: number, now: number): SessionView[] {
+  const floor = now - days * DAY_MS;
+  return runs.filter((v) => {
+    const at = createdAtMs(v);
+    return at !== null && at >= floor && at < now;
+  });
+}
+
+/**
+ * A real time window and the SAME-LENGTH window immediately before it, split by `created_at`:
+ * `current` = `[now - days, now)`, `previous` = `[now - 2·days, now - days)`. Undated runs land in
+ * neither. `previous` is null only for a caller that opts out (days ≤ 0) — otherwise it is a real
+ * (possibly empty) prior window, because a time bucket is always the same length whether or not it
+ * holds rows (unlike the positional split, where a short history has no full prior bucket).
+ */
+export function createdAtWindow(
+  runs: SessionView[],
+  days: number,
+  now: number,
+): { current: SessionView[]; previous: SessionView[] } {
+  const curFloor = now - days * DAY_MS;
+  const prevFloor = now - 2 * days * DAY_MS;
+  const current: SessionView[] = [];
+  const previous: SessionView[] = [];
+  for (const v of runs) {
+    const at = createdAtMs(v);
+    if (at === null) continue;
+    if (at >= curFloor && at < now) current.push(v);
+    else if (at >= prevFloor && at < curFloor) previous.push(v);
+  }
+  return { current, previous };
+}
+
+/** A time-window delta over a predicate: current-window count and prior-window count. */
+export function timeDelta(
+  window: { current: SessionView[]; previous: SessionView[] },
+  count: (runs: SessionView[]) => number,
+): StatDelta {
+  return { current: count(window.current), previous: count(window.previous) };
+}
+
+/**
+ * Daily run counts, oldest→newest, off the REAL `created_at` clock (the honest successor to
+ * {@link attachSeries}, which bucketed on the membership-attach proxy). Undated runs and runs
+ * outside the span are simply absent — absence stays absent, never painted at an invented time.
+ */
+export function createdAtSeries(runs: SessionView[], days: number, now: number): number[] {
+  const counts = new Array<number>(days).fill(0);
+  for (const v of runs) {
+    const at = createdAtMs(v);
+    if (at === null) continue;
+    const age = now - at;
+    if (age < 0 || age >= days * DAY_MS) continue;
+    const bucket = days - 1 - Math.floor(age / DAY_MS);
+    counts[bucket] = (counts[bucket] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** How many of these runs carry a real `created_at` — the denominator honesty check: when it is 0,
+ *  every time window is empty and the deck should say "positional" / "no dated runs", not "0". */
+export function datedCount(runs: SessionView[]): number {
+  let n = 0;
+  for (const v of runs) if (createdAtMs(v) !== null) n += 1;
+  return n;
+}
+
 // ── The sparkline series (the honest attach clock, daily buckets) ─────────────
 
 /**

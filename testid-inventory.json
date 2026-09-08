@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.15",
   "counts": {
-    "files": 123,
-    "occurrences": 1010,
-    "static": 856,
+    "files": 124,
+    "occurrences": 1012,
+    "static": 857,
     "dynamic": 56,
     "computed": 6
   },
@@ -2049,6 +2049,12 @@
       "testId": "home-essence",
       "files": [
         "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "home-kpis",
+      "files": [
+        "src/components/DeckKpiRibbon.tsx"
       ]
     },
     {
@@ -5544,6 +5550,7 @@
         "src/components/AppearanceSettings.tsx",
         "src/components/ChatPanel.tsx",
         "src/components/DashboardTiles.tsx",
+        "src/components/DeckKpiRibbon.tsx",
         "src/components/FacetAutocomplete.tsx",
         "src/components/HomeCommand.tsx",
         "src/components/MetricTile.tsx",

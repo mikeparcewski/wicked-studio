@@ -127,7 +127,7 @@ describe('HomeBoard — the portfolio KPI band', () => {
     await vi.waitFor(() => {
       expect(screen.getByTestId('home-kpi-governed')).toHaveAttribute('data-value', '18%');
     });
-    expect(screen.getByTestId('home-kpi-governed').textContent).toContain('2 of 11');
+    expect(screen.getByTestId('home-kpi-governed').textContent).toContain('2/11');
   });
 
   it('a daemon without the claims wire gets an honest "—" governed tile', async () => {
@@ -135,14 +135,14 @@ describe('HomeBoard — the portfolio KPI band', () => {
     await mountBoard(RUNS);
     const tile = screen.getByTestId('home-kpi-governed');
     expect(tile).toHaveAttribute('data-value', '—');
-    expect(tile.textContent).toContain('not served by this daemon');
+    expect(tile.textContent).toContain('not served');
   });
 
   it('no terminal runs in the window ⇒ success rate has no verdict, no color', async () => {
     await mountBoard([makeView({ id: 'r-a', status: 'executing' })]);
     const tile = screen.getByTestId('home-kpi-success');
     expect(tile).toHaveAttribute('data-value', '—');
-    expect(tile.textContent).toContain('no finished runs in the window');
+    expect(tile.textContent).toContain('no finished runs');
   });
 });
 

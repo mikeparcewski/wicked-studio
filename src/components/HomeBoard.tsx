@@ -16,7 +16,8 @@ import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/us
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { BatchGateBar } from './BatchGateBar.js';
-import { EssenceStrip, essenceEntries, HomeKpiBand, HomeVerbs, RecentActivity } from './HomeCommand.js';
+import { EssenceStrip, essenceEntries, HomeVerbs, RecentActivity } from './HomeCommand.js';
+import { DeckKpiRibbon } from './DeckKpiRibbon.js';
 import { NeedsYouQueue } from './NeedsYouQueue.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
@@ -371,13 +372,18 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
 
       {!fresh && !loading && error === null && (
         <>
-          {/* ── The command center: queue (spine, left) + the analytics column.
-                 Both the queue and the KPI band are fully visible at 1440×700. ── */}
+          {/* ── The KPI ribbon: the hero, full-width — FLOW / ATTENTION / TRUST&SPEND on the real
+                 created_at clock (the command-deck redesign). ── */}
+          <div style={{ flexShrink: 0, padding: '0 var(--space-6)' }}>
+            <DeckKpiRibbon runs={runs} claims={wires.claims} needCount={needRows.length} navigate={navigate} now={now} />
+          </div>
+
+          {/* ── The command center: the needs-you queue (spine, left) + the live-pulse column. ── */}
           <div
             data-testid="command-center"
             style={{
               flexShrink: 0, display: 'flex', gap: 'var(--space-4)', alignItems: 'stretch',
-              padding: '0 var(--space-6) var(--space-4)', maxHeight: '56vh', minHeight: 0,
+              padding: '0 var(--space-6) var(--space-4)', maxHeight: '52vh', minHeight: 0,
             }}
           >
             <NeedsYouQueue rows={needRows} runs={runs} navigate={navigate} now={now} />
@@ -387,14 +393,6 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                 gap: 'var(--space-3)', overflowY: 'auto', minHeight: 0,
               }}
             >
-              <HomeKpiBand
-                runs={runs}
-                attachedAt={attachedAt}
-                needRows={needRows}
-                claims={wires.claims}
-                navigate={navigate}
-                now={now}
-              />
               <RecentActivity runs={runs} navigate={navigate} now={now} />
             </div>
           </div>
