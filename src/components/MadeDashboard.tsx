@@ -477,6 +477,10 @@ function CorpusDashboard({ mode, navigate }: {
             type="button"
             data-testid={`${mode}-new`}
             aria-expanded={pickerOpen}
+            // Keep the mousedown out of ProjectModePicker's outside-close listener (Copilot #197),
+            // same pattern as the rail heading ＋ — so ＋ is a true toggle (open + click ＋ again =
+            // closed, not close-on-mousedown then reopen-on-click).
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setPickerOpen((v) => !v)}
             style={{
               background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
