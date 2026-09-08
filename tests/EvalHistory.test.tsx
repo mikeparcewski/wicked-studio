@@ -47,6 +47,15 @@ describe('EvalHistory', () => {
     expect(getEvalRun).toHaveBeenCalledWith('run-1');
   });
 
+  it('a failed detail fetch shows an error, not an endless "Loading…" (copilot #198)', async () => {
+    listEvalRuns.mockResolvedValue([row()]);
+    getEvalRun.mockRejectedValue(new Error('boom'));
+    render(<EvalHistory now={NOW} />);
+    await waitFor(() => expect(screen.getByTestId('eval-history-row')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('eval-history-row').querySelector('button')!);
+    await waitFor(() => expect(screen.getByTestId('eval-history-detail-error')).toBeInTheDocument());
+  });
+
   it('an empty store shows the honest empty state', async () => {
     listEvalRuns.mockResolvedValue([]);
     render(<EvalHistory now={NOW} />);

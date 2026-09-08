@@ -227,10 +227,15 @@ export function datedCount(runs: SessionView[]): number {
 
 // ── Delivery outcomes (the verified-vs-needs-review split, off the run DTO) ───
 
-/** The wire `delivery` state as a plain string (tolerant of the legacy 0.11–0.17 object). */
+/** The wire `delivery` state as a plain string, tolerant of the legacy 0.11–0.17 object form (the
+ *  same compatibility `deliveryOf` keeps): that object was `{kind:'pull_request', url}`, which meant
+ *  a PR was opened — i.e. `'delivered'`. Without this, `deliveryCounts` undercounts delivered runs
+ *  on an older daemon even though the object is right there (Copilot #198). */
 export function wireDelivery(v: SessionView): string | null {
   const d = (v.session as SessionWithDelivery).delivery;
-  return typeof d === 'string' ? d : null;
+  if (typeof d === 'string') return d;
+  if (d !== null && typeof d === 'object' && d.kind === 'pull_request') return 'delivered';
+  return null;
 }
 
 export interface DeliveryCounts {

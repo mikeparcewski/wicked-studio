@@ -27,4 +27,18 @@ describe('DeckVerifiedStrip', () => {
     expect(screen.getByTestId('delivery-stranded').textContent).toContain('1');
     expect(screen.getByTestId('delivery-vacuous').textContent).toContain('1');
   });
+
+  it('counts the LEGACY 0.11–0.17 object delivery form as delivered (copilot #198)', () => {
+    render(
+      <DeckVerifiedStrip
+        runs={[
+          makeView({ id: 'a', delivery: 'delivered' }),
+          // A legacy daemon's object form ({kind:'pull_request', url}) — still a delivered PR.
+          makeView({ id: 'b', delivery: { kind: 'pull_request', url: 'https://x/pull/9' } as unknown as 'delivered' }),
+        ]}
+        navigate={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('delivery-verified').textContent).toContain('2');
+  });
 });

@@ -77,8 +77,8 @@ describe('STEERING_RULE_TEMPLATE engine-invariant conformance', () => {
 describe('steeringTypeOf — the serde-default fold, pinned', () => {
   it('absent and empty steering_type read as architecture (the engine default)', () => {
     expect(steeringTypeOf(rule())).toBe('architecture');
-    expect(steeringTypeOf(rule({ steering_type: '' as SteeringType }))).toBe('architecture');
-    expect(steeringTypeOf(rule({ steering_type: '  ' as SteeringType }))).toBe('architecture');
+    expect(steeringTypeOf(rule({ steering_type: '' as unknown as SteeringType }))).toBe('architecture');
+    expect(steeringTypeOf(rule({ steering_type: '  ' as unknown as SteeringType }))).toBe('architecture');
   });
 
   it('every enum value reads as itself', () => {
@@ -88,7 +88,7 @@ describe('steeringTypeOf — the serde-default fold, pinned', () => {
   });
 
   it('an out-of-enum value folds to architecture — never invisible on all seven pages', () => {
-    expect(steeringTypeOf(rule({ steering_type: 'bogus' as SteeringType }))).toBe('architecture');
+    expect(steeringTypeOf(rule({ steering_type: 'bogus' as unknown as SteeringType }))).toBe('architecture');
   });
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getEvalRun, listEvalRuns } from '../api/testing.js';
 import { isRouteAbsent } from '../api/errors.js';
 import type { EvalRunDetail, EvalRunSummary } from '../api/types.js';
@@ -35,7 +35,11 @@ export function EvalHistory({ refreshKey = 0, now = Date.now() }: {
 }): React.ReactElement {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [openId, setOpenId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<EvalRunDetail | null>(null);
+  // Detail is keyed by the run id + carries its own load state, so a slow response for a row you've
+  // since closed (or swapped) never paints stale results, and a failed fetch shows an error rather
+  // than an endless "Loading…" (Copilot #198). `reqSeq` guards against out-of-order resolutions.
+  const [detail, setDetail] = useState<{ id: string; kind: 'loading' | 'error' | 'ready'; data?: EvalRunDetail } | null>(null);
+  const reqSeq = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,10 +55,13 @@ export function EvalHistory({ refreshKey = 0, now = Date.now() }: {
   }, [refreshKey]);
 
   const toggle = (id: string): void => {
-    if (openId === id) { setOpenId(null); return; }
+    if (openId === id) { setOpenId(null); setDetail(null); return; }
     setOpenId(id);
-    setDetail(null);
-    void getEvalRun(id).then((d) => setDetail(d)).catch(() => setDetail(null));
+    const req = (reqSeq.current += 1);
+    setDetail({ id, kind: 'loading' });
+    void getEvalRun(id)
+      .then((d) => { if (reqSeq.current === req) setDetail({ id, kind: 'ready', data: d }); })
+      .catch(() => { if (reqSeq.current === req) setDetail({ id, kind: 'error' }); });
   };
 
   if (load.kind === 'loading') {
@@ -113,26 +120,12 @@ export function EvalHistory({ refreshKey = 0, now = Date.now() }: {
               </button>
               {openId === r.id && (
                 <div data-testid="eval-history-detail" className="px-6 pb-3" style={{ background: 'var(--surface-card)' }}>
-                  {detail === null ? (
+                  {detail === null || detail.id !== r.id || detail.kind === 'loading' ? (
                     <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>Loading results…</p>
+                  ) : detail.kind === 'error' || detail.data === undefined ? (
+                    <p data-testid="eval-history-detail-error" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>Could not load this run&rsquo;s results.</p>
                   ) : (
-                    <div className="flex flex-col gap-1">
-                      <p className="text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>
-                        {detail.summary.total} samples · {detail.summary.caught} caught · {detail.summary.gaps} gaps · {detail.summary.false_positives} false positives
-                      </p>
-                      {detail.results.filter((x) => x.verdict !== 'caught').slice(0, 12).map((x) => (
-                        <div key={x.sample.id} className="grid gap-2 text-[11px]" style={{ gridTemplateColumns: 'auto auto 1fr' }}>
-                          <span className="font-mono" style={{ color: x.verdict === 'gap' ? 'var(--status-gate)' : 'var(--status-fail)' }}>
-                            {x.verdict === 'gap' ? 'GAP' : 'FP'}
-                          </span>
-                          <span className="font-mono" style={{ color: 'var(--ink-dim)' }}>{x.sample.steering_type}</span>
-                          <span style={{ color: 'var(--ink-body)' }}>{x.sample.description}</span>
-                        </div>
-                      ))}
-                      {detail.results.every((x) => x.verdict === 'caught') && (
-                        <p className="text-[11px]" style={{ color: 'var(--status-run)' }}>Every behavior caught — no gaps or false positives.</p>
-                      )}
-                    </div>
+                    <DetailBody detail={detail.data} />
                   )}
                 </div>
               )}
@@ -140,6 +133,30 @@ export function EvalHistory({ refreshKey = 0, now = Date.now() }: {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** One run's drilldown: the rollup line + the non-caught samples (gaps/false-positives). */
+function DetailBody({ detail }: { detail: EvalRunDetail }): React.ReactElement {
+  const misses = detail.results.filter((x) => x.verdict !== 'caught');
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+        {detail.summary.total} samples · {detail.summary.caught} caught · {detail.summary.gaps} gaps · {detail.summary.false_positives} false positives
+      </p>
+      {misses.slice(0, 12).map((x) => (
+        <div key={x.sample.id} className="grid gap-2 text-[11px]" style={{ gridTemplateColumns: 'auto auto 1fr' }}>
+          <span className="font-mono" style={{ color: x.verdict === 'gap' ? 'var(--status-gate)' : 'var(--status-fail)' }}>
+            {x.verdict === 'gap' ? 'GAP' : 'FP'}
+          </span>
+          <span className="font-mono" style={{ color: 'var(--ink-dim)' }}>{x.sample.steering_type}</span>
+          <span style={{ color: 'var(--ink-body)' }}>{x.sample.description}</span>
+        </div>
+      ))}
+      {misses.length === 0 && (
+        <p className="text-[11px]" style={{ color: 'var(--status-run)' }}>Every behavior caught — no gaps or false positives.</p>
+      )}
     </div>
   );
 }

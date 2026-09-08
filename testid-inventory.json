@@ -11,8 +11,8 @@
   "studioVersion": "0.4.15",
   "counts": {
     "files": 128,
-    "occurrences": 1028,
-    "static": 872,
+    "occurrences": 1029,
+    "static": 873,
     "dynamic": 56,
     "computed": 6
   },
@@ -1507,6 +1507,12 @@
     },
     {
       "testId": "eval-history-detail",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-detail-error",
       "files": [
         "src/components/EvalHistory.tsx"
       ]
