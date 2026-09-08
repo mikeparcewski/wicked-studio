@@ -373,14 +373,15 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
                 {MODE_LABEL[m]}
               </a>
             ))}
-            {/* The project-scoped Campaigns surface (nav-reorg) — re-homed under the project
-                shell at `/p/:id/campaigns`, not a fifth mode. */}
+            {/* The project-scoped Test surface (usability wave) — re-homed under the project shell
+                at `/p/:id/campaigns`, where "New test" / "Run recon" launch a test scoped to THIS
+                project. Labeled Test (the section's name), not a fifth mode. */}
             <a
               {...link(`/p/${encodeURIComponent(projectId)}/campaigns`)}
               data-testid="dashboard-campaigns"
               style={CSS.modeBtn}
             >
-              Campaigns
+              Test
             </a>
           </div>
           <span style={{ flex: 1 }} />

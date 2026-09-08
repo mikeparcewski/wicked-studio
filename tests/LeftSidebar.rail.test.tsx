@@ -140,14 +140,15 @@ describe('the ten heading rows (§3.1 + nav-reorg + usability wave)', () => {
       expect(within(h).queryByTestId('heading-dashboard')).toBeNull();
       expect(within(h).queryByTestId('heading-new')).toBeNull();
     }
-    // Steering: ▦ (the nav-reorg moved the Dashboard onto the heading), but NO ＋.
-    {
-      const h = screen.getByTestId('rail-heading-steering');
+    // Steering AND Evals carry ▦ (the Dashboard) but NO ＋ — system sections, not create surfaces
+    // (usability wave: Evals lost its ＋, it only opens its dashboard).
+    for (const k of ['steering', 'testing']) {
+      const h = screen.getByTestId(`rail-heading-${k}`);
       expect(within(h).getByTestId('heading-dashboard')).toBeInTheDocument();
       expect(within(h).queryByTestId('heading-new')).toBeNull();
     }
-    // Every other heading carries both ▦ and ＋ — including Test and Evals.
-    for (const k of ['projects', 'execute', 'test', 'vibe', 'demo', 'testing', 'chat', 'repos']) {
+    // Every work heading carries both ▦ and ＋ — including Test.
+    for (const k of ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos']) {
       const h = screen.getByTestId(`rail-heading-${k}`);
       expect(within(h).getByTestId('heading-dashboard')).toBeInTheDocument();
       expect(within(h).getByTestId('heading-new')).toBeInTheDocument();
@@ -286,7 +287,7 @@ describe('the ＋ create actions (§2.1/§3.4)', () => {
     expect(screen.queryByTestId('new-project-modal')).toBeNull();
   });
 
-  it('Execute ＋ launches a build run directly; Chat ＋ / Repos ＋ / Evals ＋ navigate to their routes', async () => {
+  it('Execute ＋ launches a build run directly; Chat ＋ / Repos ＋ / Test ＋ navigate to their routes (Evals has no ＋)', async () => {
     const navigate = vi.fn();
     rail({ navigate });
     await screen.findByRole('button', { name: 'wicked-studio' });
@@ -297,8 +298,11 @@ describe('the ＋ create actions (§2.1/§3.4)', () => {
     expect(navigate).toHaveBeenCalledWith('/chat/new');
     fireEvent.click(within(screen.getByTestId('rail-heading-repos')).getByTestId('heading-new'));
     expect(navigate).toHaveBeenCalledWith('/repos/new');
-    fireEvent.click(within(screen.getByTestId('rail-heading-testing')).getByTestId('heading-new'));
-    expect(navigate).toHaveBeenCalledWith('/testing/evals');
+    // Test ＋ → the campaigns/recon landing (project-optional).
+    fireEvent.click(within(screen.getByTestId('rail-heading-test')).getByTestId('heading-new'));
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns');
+    // Evals is a system section now — dashboard only, no ＋.
+    expect(within(screen.getByTestId('rail-heading-testing')).queryByTestId('heading-new')).toBeNull();
   });
 
   it('Vibe ＋ opens a project-picker locked to Document; Demo ＋ one locked to Video', async () => {

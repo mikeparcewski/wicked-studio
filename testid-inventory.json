@@ -11,8 +11,8 @@
   "studioVersion": "0.5.0",
   "counts": {
     "files": 128,
-    "occurrences": 1029,
-    "static": 873,
+    "occurrences": 1030,
+    "static": 874,
     "dynamic": 56,
     "computed": 6
   },
@@ -4513,6 +4513,12 @@
     },
     {
       "testId": "testing-evals-gap-detail",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-gap-hint",
       "files": [
         "src/components/TestingPage.tsx"
       ]

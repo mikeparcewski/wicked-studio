@@ -10,6 +10,7 @@ import {
 } from '../api/memory.js';
 import { FacetAutocomplete } from './FacetAutocomplete.js';
 import { KeyValueChips } from './ProposalChips.js';
+import { KpiBand, KpiGroup, StatTile } from './dashboardKit.js';
 
 /**
  * The Steering surface's MEMORIES sub-section (`/steering/memories`, DES-MEM-FACETED-001 unified
@@ -111,6 +112,16 @@ export function MemoriesPanel(): React.ReactElement {
   };
 
   const coverageTotal = typeof coverage?.total === 'number' ? coverage.total : null;
+  // Per-tier tiles (session / project / global / …) from the coverage wire — the store's shape at a
+  // glance, capped so the band stays a band. Absent → no tier group.
+  const tierTiles = useMemo(() => {
+    const byTier = coverage?.by_tier;
+    if (byTier === undefined || byTier === null) return [];
+    return Object.entries(byTier)
+      .filter(([, n]) => typeof n === 'number')
+      .slice(0, 3)
+      .map(([tier, n]) => <StatTile key={tier} testId={`mem-stat-tier-${tier}`} label={tier} value={n} />);
+  }, [coverage]);
 
   return (
     <div
@@ -140,6 +151,36 @@ export function MemoriesPanel(): React.ReactElement {
           Refresh
         </button>
       </div>
+
+      {/* The store stats — mirrors the Policies store-health band (usability wave): the memory
+          store's size and its per-tier split come from the store-wide coverage wire; the facet-value
+          count is over the loaded set (the current query/recall page), not store-wide — its context
+          says so. An absent coverage wire omits the band rather than fabricating zeros. */}
+      {coverage !== null && (
+        <KpiBand testId="memories-stats">
+          <KpiGroup label="Store" grow={1}>
+            <StatTile
+              testId="mem-stat-total"
+              label="Memories"
+              value={coverageTotal ?? '—'}
+              context="in the store"
+            />
+          </KpiGroup>
+          {tierTiles.length > 0 && (
+            <KpiGroup label="By tier" grow={Math.min(3, tierTiles.length)}>
+              {tierTiles}
+            </KpiGroup>
+          )}
+          <KpiGroup label="Annotation" grow={1}>
+            <StatTile
+              testId="mem-stat-facets"
+              label="Facet values"
+              value={facetPairs.length}
+              context="distinct key=value, loaded set"
+            />
+          </KpiGroup>
+        </KpiBand>
+      )}
 
       {/* The store browser — search re-queries the wire; the facet chips narrow client-side. */}
       <div className="flex flex-wrap items-center gap-2">

@@ -301,9 +301,11 @@ interface Props {
   /** The board's live run list — KPI windows, gate jumps and narration read it, zero extra fetches. */
   runs: SessionView[];
   navigate: (path: string) => void;
+  /** When rendered inside a project shell (`/p/:id/campaigns`), the project a new test auto-scopes to. */
+  projectId?: string | null;
 }
 
-export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
+export function CampaignsPage({ runs, navigate, projectId = null }: Props): React.ReactElement {
   const support = useCampaignsStore((s) => s.support);
   const campaigns = useCampaignsStore((s) => s.campaigns);
   const groups = useCampaignsStore((s) => s.groups);
@@ -451,6 +453,7 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
           navigate={navigate}
           onClose={() => setPanel(null)}
           onLaunched={() => void refresh()}
+          initialProjectId={projectId ?? undefined}
         />
       )}
       {/* The steering AuthorPanel, REUSED VERBATIM with this surface's type: the authoring run
@@ -565,7 +568,7 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
         testId="campaigns-filter"
         query={query}
         onQuery={setQuery}
-        placeholder="Search campaigns…"
+        placeholder="Search tests…"
         chips={chips}
         active={chip}
         onChip={(id) => setChip(id as CampaignChip)}

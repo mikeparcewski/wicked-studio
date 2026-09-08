@@ -956,8 +956,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         </span>
         <select
           data-testid="group-attach"
-          aria-label="File this run under a campaign or group"
-          title="Attach this launch to a campaign or an ad-hoc group — provenance only, the run executes unchanged"
+          aria-label="File this run under a test or group"
+          title="Attach this launch to a test or an ad-hoc group — provenance only, the run executes unchanged"
           className="rounded-lg px-2 py-1 text-[11px] font-mono"
           style={{
             background: 'var(--surface-card)',
@@ -971,7 +971,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         >
           <option value="">none</option>
           {knownCampaigns.length > 0 && (
-            <optgroup label="campaigns">
+            <optgroup label="tests">
               {knownCampaigns.map((c) => (
                 <option key={c.id} value={`c:${c.id}`}>
                   {c.def.name !== '' ? c.def.name : c.id}
