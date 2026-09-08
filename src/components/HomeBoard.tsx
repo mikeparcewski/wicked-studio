@@ -18,6 +18,7 @@ import { useMembershipStore } from '../store/membership.js';
 import { BatchGateBar } from './BatchGateBar.js';
 import { EssenceStrip, essenceEntries, HomeVerbs, RecentActivity } from './HomeCommand.js';
 import { DeckKpiRibbon } from './DeckKpiRibbon.js';
+import { DeckVerifiedStrip } from './DeckVerifiedStrip.js';
 import { NeedsYouQueue } from './NeedsYouQueue.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
@@ -395,6 +396,11 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
             >
               <RecentActivity runs={runs} navigate={navigate} now={now} />
             </div>
+          </div>
+
+          {/* Verified vs needs-review — the delivery outcomes pulled up from run detail. */}
+          <div style={{ flexShrink: 0, padding: '0 var(--space-6) var(--space-3)' }}>
+            <DeckVerifiedStrip runs={runs} navigate={navigate} />
           </div>
 
           {/* The essence strip rides full-width under the command center — a

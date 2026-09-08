@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.15",
   "counts": {
-    "files": 124,
-    "occurrences": 1012,
-    "static": 857,
+    "files": 125,
+    "occurrences": 1016,
+    "static": 861,
     "dynamic": 56,
     "computed": 6
   },
@@ -1224,6 +1224,24 @@
       ]
     },
     {
+      "testId": "delivery-stranded",
+      "files": [
+        "src/components/DeckVerifiedStrip.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-vacuous",
+      "files": [
+        "src/components/DeckVerifiedStrip.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-verified",
+      "files": [
+        "src/components/DeckVerifiedStrip.tsx"
+      ]
+    },
+    {
       "testId": "demo-picker",
       "files": [
         "src/components/VideoStoryboard.tsx"
@@ -2043,6 +2061,12 @@
       "testId": "home-calm",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "home-delivery-strip",
+      "files": [
+        "src/components/DeckVerifiedStrip.tsx"
       ]
     },
     {

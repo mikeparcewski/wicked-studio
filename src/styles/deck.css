@@ -73,3 +73,23 @@
 .deck-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-dim));
   box-shadow: 0 0 10px color-mix(in oklab, var(--accent) 50%, transparent); }
 .deck-sub { font-size: 10.5px; color: var(--ink-dim); margin-top: 7px; line-height: 1.4; }
+
+/* ── Verified / needs-review strip ── */
+.deck-vrbar {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+  background: var(--surface-raised); border: 1px solid var(--surface-raised);
+  border-radius: var(--radius-lg); overflow: hidden; margin-top: var(--space-4);
+  box-shadow: var(--shadow-card);
+}
+.deck-vrcell {
+  background: linear-gradient(180deg, var(--surface-rail), var(--surface-base));
+  padding: 13px 15px; display: flex; flex-direction: column; gap: 3px;
+  text-decoration: none; color: inherit; transition: background var(--dur-fast, 120ms) var(--ease-out);
+}
+.deck-vrcell:hover { background: var(--surface-card); }
+.deck-vrcell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.deck-vn { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: var(--weight-bold); letter-spacing: -0.01em; }
+.deck-vn.ok { color: var(--status-run); text-shadow: 0 0 16px color-mix(in oklab, var(--status-run) 28%, transparent); }
+.deck-vn.warn { color: var(--status-gate); }
+.deck-vn.bad { color: var(--status-fail); }
+.deck-vl { font-size: var(--text-xs); color: var(--ink-muted); }

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { GovernanceClaim, SessionView, SessionWithDelivery } from '../api/types.js';
+import type { GovernanceClaim, SessionView } from '../api/types.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { governedRuns } from '../board/steeringUsage.js';
 import { observedSpend } from '../board/metrics.js';
@@ -9,6 +9,7 @@ import {
   createdAtSeries,
   createdAtWindow,
   datedCount,
+  deliveryCounts,
   deltaWord,
   healthColor,
   healthOf,
@@ -36,12 +37,6 @@ import { Sparkline } from './dashboardKit.js';
 
 const DAYS = 30;
 const SPARK_DAYS = 14;
-
-/** The wire delivery state as a plain string (verified/needs-review), tolerant of the legacy shape. */
-function wireDelivery(v: SessionView): string | null {
-  const d = (v.session as SessionWithDelivery).delivery;
-  return typeof d === 'string' ? d : null;
-}
 
 interface Props {
   runs: SessionView[];
@@ -80,16 +75,8 @@ export function DeckKpiRibbon({ runs, claims, needCount, navigate, now }: Props)
     const successWord = counts.terminal === 0 ? '—' : `${Math.round((counts.done / counts.terminal) * 100)}%`;
 
     // Delivery outcomes across all live runs (the review-queue count + the strip below the feed).
-    let verified = 0;
-    let stranded = 0;
-    let vacuous = 0;
-    for (const v of live) {
-      const d = wireDelivery(v);
-      if (d === 'delivered') verified += 1;
-      else if (d === 'stranded') stranded += 1;
-      else if (d === 'vacuous') vacuous += 1;
-    }
-    const reviewQueue = stranded + vacuous;
+    const dc = deliveryCounts(live);
+    const reviewQueue = dc.stranded + dc.vacuous;
 
     // Rework: share of live runs that are a retry of another.
     const retries = live.filter((v) => typeof v.session.retry_of === 'string' && v.session.retry_of !== '').length;
@@ -101,7 +88,7 @@ export function DeckKpiRibbon({ runs, claims, needCount, navigate, now }: Props)
     return {
       real, windowLabel: real ? '30d' : 'last 30',
       runsCurrent: current.length, runsDelta, failedDelta, counts, activeNow, spark,
-      health, successWord, verified, stranded, vacuous, reviewQueue, reworkPct, governed, spend,
+      health, successWord, reviewQueue, reworkPct, governed, spend,
     };
   }, [runs, claims, logs, at]);
 

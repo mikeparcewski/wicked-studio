@@ -1,4 +1,4 @@
-import type { SessionView } from '../api/types.js';
+import type { SessionView, SessionWithDelivery } from '../api/types.js';
 import { outcomeOf } from './metrics.js';
 import { RANGE_LIMITS, rangeWord, type TimeRange } from '../hooks/useTimeRange.js';
 
@@ -223,6 +223,37 @@ export function datedCount(runs: SessionView[]): number {
   let n = 0;
   for (const v of runs) if (createdAtMs(v) !== null) n += 1;
   return n;
+}
+
+// ── Delivery outcomes (the verified-vs-needs-review split, off the run DTO) ───
+
+/** The wire `delivery` state as a plain string (tolerant of the legacy 0.11–0.17 object). */
+export function wireDelivery(v: SessionView): string | null {
+  const d = (v.session as SessionWithDelivery).delivery;
+  return typeof d === 'string' ? d : null;
+}
+
+export interface DeliveryCounts {
+  /** `delivered` — a PR was opened: verified, shipped. */
+  delivered: number;
+  /** `stranded` — completed work nobody lifted: needs review (recoverable). */
+  stranded: number;
+  /** `vacuous` — completed with nothing liftable: needs a retry. */
+  vacuous: number;
+}
+
+/** Count the three delivery outcomes across live runs — the deck's verified/needs-review strip and
+ *  the ATTENTION "review" tile read the SAME fold, so they can never disagree. */
+export function deliveryCounts(runs: SessionView[]): DeliveryCounts {
+  const c: DeliveryCounts = { delivered: 0, stranded: 0, vacuous: 0 };
+  for (const v of runs) {
+    if (v.session.archived_at != null) continue;
+    const d = wireDelivery(v);
+    if (d === 'delivered') c.delivered += 1;
+    else if (d === 'stranded') c.stranded += 1;
+    else if (d === 'vacuous') c.vacuous += 1;
+  }
+  return c;
 }
 
 // ── The sparkline series (the honest attach clock, daily buckets) ─────────────
