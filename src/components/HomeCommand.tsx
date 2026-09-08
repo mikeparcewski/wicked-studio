@@ -255,7 +255,7 @@ export function essenceEntries(inputs: {
   }
   out.push({ id: 'repos', label: 'Repos', value: String(inputs.repos.length), path: '/repos', title: 'Registered repositories' });
   if (inputs.campaigns !== null) {
-    out.push({ id: 'campaigns', label: 'Tests', value: String(inputs.campaigns), path: '/testing/campaigns', title: 'Governed tests (each groups its sibling runs)' });
+    out.push({ id: 'campaigns', label: 'Tests', value: String(inputs.campaigns), path: '/testing/campaigns', title: 'Governed tests (each test groups its sibling runs)' });
   }
   if (inputs.rules !== null) {
     const unused = inputs.perRule !== null ? ruleUsage(inputs.rules, inputs.perRule).unusedIds.length : null;

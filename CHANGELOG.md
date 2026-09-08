@@ -16,7 +16,7 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 - **Honest dashboard stat framing (#200, Copilot review).** The home essence tile for tests reads
-  "Governed tests (each groups its sibling runs)" instead of "Test runs" — the value is the
+  "Governed tests (each test groups its sibling runs)" instead of "Test runs" — the value is the
   test/campaign count, not a run count. The Memories store band no longer falls back to the
   query-scoped loaded count for the store-wide total (shows "—" when coverage is absent), and the
   facet-value tile states it counts the loaded recall page, not the whole store.
