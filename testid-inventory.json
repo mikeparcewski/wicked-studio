@@ -11,8 +11,8 @@
   "studioVersion": "0.4.15",
   "counts": {
     "files": 125,
-    "occurrences": 1016,
-    "static": 861,
+    "occurrences": 1019,
+    "static": 863,
     "dynamic": 56,
     "computed": 6
   },
@@ -3227,6 +3227,12 @@
       ]
     },
     {
+      "testId": "rail-divider",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
       "testId": "rail-doc",
       "files": [
         "src/components/LeftSidebar.tsx"
@@ -3319,6 +3325,12 @@
     },
     {
       "testId": "rail-steering-section",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "testId": "rail-test-recon",
       "files": [
         "src/components/LeftSidebar.tsx"
       ]

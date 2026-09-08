@@ -73,7 +73,7 @@ const S = {
 
 // ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-export type PathKey = 'projects' | 'execute' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'steering' | 'settings';
+export type PathKey = 'projects' | 'execute' | 'test' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'steering' | 'settings';
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
  *  links `/system` in the collapsed column — it has no dashboard). `noun` is
@@ -95,7 +95,12 @@ const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Re
 // capability with no project home). Campaigns moved into the project shell (`/p/:id/campaigns`),
 // so they are no longer a top-level nav item; the unscoped cross-project sweep keeps its own
 // `/testing/campaigns` route. The key + routes stay `testing`; only the display + list changed.
-const P_TESTING: PathSpec  = { key: 'testing',  title: 'Evals',        noun: 'Eval',       glyph: '✓', dash: testingPath('evals'), collapsedHref: testingPath('evals') };
+// Test — the campaign/recon testing capability as a standalone WORK section (usability wave):
+// project-optional (recon takes an optional project), placed right below Execute. Routes to the
+// existing `/testing/campaigns` page; the rail split (headingForPath) keeps it distinct from Evals.
+const P_TEST: PathSpec      = { key: 'test',     title: 'Test',         noun: 'Campaign',   glyph: '✓', dash: testingPath('campaigns'), collapsedHref: testingPath('campaigns') };
+// Evals — steering-rule evals, moved beside Steering (a SYSTEM concept, not a work one). Glyph ◈.
+const P_TESTING: PathSpec  = { key: 'testing',  title: 'Evals',        noun: 'Eval',       glyph: '◈', dash: testingPath('evals'), collapsedHref: testingPath('evals') };
 // Steering (DES-MEM-FACETED-001, unified surface): the governed-knowledge home, a PRIMARY path
 // placed immediately BEFORE Settings. The nav-reorg moved its Dashboard from a sub-row to the
 // heading's ▦ (dash → the dashboard, same affordance Projects/Execute/Chat/Repos use); it keeps
@@ -104,7 +109,7 @@ const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Ru
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
 // Order (nav-reorg): Execute / Vibe / Demo replace Make and sit before Evals; Chat / Repos /
 // Steering / Settings tail.
-const PATHS: PathSpec[] = [P_PROJECTS, P_EXECUTE, P_VIBE, P_DEMO, P_TESTING, P_CHAT, P_REPOS, P_STEERING, P_SETTINGS];
+const PATHS: PathSpec[] = [P_PROJECTS, P_EXECUTE, P_TEST, P_VIBE, P_DEMO, P_CHAT, P_REPOS, P_STEERING, P_TESTING, P_SETTINGS];
 
 // `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
 // retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
@@ -127,9 +132,12 @@ export function headingForPath(pathname: string): PathKey | null {
   // `/chat/new` AND `/chat/:id` (J4/C6: a live session's real URL) are Chat's.
   if (first === 'chats' || (first === 'chat' && second !== '')) return 'chat';
   if (first === 'repos' || first === 'repo-detail') return 'repos';
-  // The retired flat `/campaigns` addresses redirect into Testing — map them there too, so
-  // the rail is already on the right heading on the pre-redirect tick.
-  if (first === 'testing' || first === 'campaigns') return 'testing';
+  // The `/testing/*` surface splits into TWO rail sections (usability wave): Test (campaigns/recon,
+  // a work section that needs no project) and Evals (steering-rule evals, a system section beside
+  // Steering). Both are still panel `testing`; the rail heading is chosen by the sub-page. The
+  // retired flat `/campaigns` addresses (which redirect onto `/testing/campaigns`) map to Test.
+  if (first === 'campaigns') return 'test';
+  if (first === 'testing') return second === 'campaigns' ? 'test' : 'testing';
   // The retired `/wiki` + `/rules` + `/policies` panels AND the retired standalone `/proposals`
   // queue redirect into Steering (proposals now live inside its two sub-sections) — map them
   // there too, so the rail never flashes Settings open on the pre-redirect tick.
@@ -487,6 +495,27 @@ function EvalsRailRows({ navigate }: { navigate: (p: string) => void }): React.R
   );
 }
 
+/** The Test accordion's shortcut row (usability wave): a "Run recon" launcher into the campaigns
+ *  landing — Test works WITHOUT a project (recon takes an optional one), so it lives here as a
+ *  standalone work section. The ▦ links the campaigns dashboard; this row is the create verb's
+ *  sibling. Same grammar as {@link EvalsRailRows}. */
+function TestRailRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+  return (
+    <div role="menu" className="flex flex-col pt-0.5">
+      <button
+        type="button"
+        role="menuitem"
+        data-testid="rail-test-recon"
+        onClick={() => navigate(testingPath('campaigns'))}
+        className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
+        style={{ color: 'var(--ink-muted)' }}
+      >
+        Run recon
+      </button>
+    </div>
+  );
+}
+
 /** The Steering accordion's rows: one per MANAGEMENT sub-section (Policies / Memories), each a
  *  navigate() shortcut to its page — the SettingsShortcutRows grammar. The nav-reorg moved the
  *  Dashboard from a sub-row to the heading's ▦ (same affordance Projects/Execute/Chat/Repos use),
@@ -690,6 +719,18 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             <ViewAll href="/execute" navigate={navigate} />
           </RailHeading>
 
+          {/* ── Test — campaigns/recon as a standalone work section (usability wave): below Execute,
+                 works with or without a project. ＋ launches a recon into the campaigns landing. ── */}
+          <RailHeading
+            path={P_TEST}
+            open={openHeading === 'test'}
+            onToggle={() => toggle('test')}
+            onNew={() => navigate(testingPath('campaigns'))}
+            navigate={navigate}
+          >
+            <TestRailRows navigate={navigate} />
+          </RailHeading>
+
           {/* ── Vibe ← documents (nav-reorg): ＋ opens a project-picker locked to Document ── */}
           <RailHeading
             path={P_VIBE}
@@ -726,17 +767,6 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
                   <DocRow key={`${projectId}:${doc.name}`} doc={doc} projectId={projectId} projectName={projectName} navigate={navigate} />
                 ))}
             <ViewAll href="/demo" navigate={navigate} />
-          </RailHeading>
-
-          {/* ── Evals — the steering-rule eval runner, a normal section (nav-reorg) ── */}
-          <RailHeading
-            path={P_TESTING}
-            open={openHeading === 'testing'}
-            onToggle={() => toggle('testing')}
-            onNew={() => navigate(testingPath('evals'))}
-            navigate={navigate}
-          >
-            <EvalsRailRows navigate={navigate} />
           </RailHeading>
 
           {/* ── Chat ─────────────────────────────────────────────────────────── */}
@@ -832,8 +862,12 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             <ViewAll href="/repos" navigate={navigate} />
           </RailHeading>
 
-          {/* ── Steering — the governed-knowledge home, BEFORE Settings. Its three rows:
-                Dashboard (the review-forward home) + the Policies / Memories deep-dives. ─ */}
+          {/* ── The work/system boundary (usability wave): a bar separating the work sections above
+                 from the governance/system sections (Steering, Evals) below. ── */}
+          <div aria-hidden data-testid="rail-divider" style={{ borderTop: '1px solid var(--surface-raised)', margin: '8px 12px' }} />
+
+          {/* ── Steering — the governed-knowledge home. Its three rows: Dashboard (the review-forward
+                home, on the ▦) + the Policies / Memories deep-dives. ─ */}
           <RailHeading
             path={P_STEERING}
             open={openHeading === 'steering'}
@@ -843,7 +877,22 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             <SteeringSectionRows navigate={navigate} />
           </RailHeading>
 
-          {/* ── Settings — title only, no ▦/＋ (the operator's word, §3.1) ───── */}
+          {/* ── Evals — steering-rule evals, moved beside Steering (similar system concepts): the
+                eval runner + its run history. ── */}
+          <RailHeading
+            path={P_TESTING}
+            open={openHeading === 'testing'}
+            onToggle={() => toggle('testing')}
+            onNew={() => navigate(testingPath('evals'))}
+            navigate={navigate}
+          >
+            <EvalsRailRows navigate={navigate} />
+          </RailHeading>
+
+          {/* ── The bar below Steering/Evals, with Settings under it (usability wave). ── */}
+          <div aria-hidden data-testid="rail-divider" style={{ borderTop: '1px solid var(--surface-raised)', margin: '8px 12px' }} />
+
+          {/* ── Settings — title only, no ＋ (the operator's word, §3.1) ───── */}
           <RailHeading
             path={P_SETTINGS}
             open={openHeading === 'settings'}

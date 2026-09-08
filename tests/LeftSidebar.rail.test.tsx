@@ -57,7 +57,7 @@ const W2_ORDERED = [
   bp('scratch', 'quiet', 0),
 ];
 
-const HEADING_KEYS = ['projects', 'execute', 'vibe', 'demo', 'testing', 'chat', 'repos', 'steering', 'settings'] as const;
+const HEADING_KEYS = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'steering', 'testing', 'settings'] as const;
 
 function rail(props: Partial<{ pathname: string; navigate: (p: string) => void; runs: ReturnType<typeof makeView>[] }> = {}): ReturnType<typeof render> {
   return render(
@@ -110,8 +110,12 @@ describe('the route→heading map (§3.2)', () => {
     for (const p of ['/steering', '/steering/policies', '/steering/memories', '/steering/security', '/wiki', '/rules', '/policies', '/proposals']) {
       expect(headingForPath(p)).toBe('steering');
     }
-    // Evals (key stays `testing`) owns its routes AND the retired flat /campaigns addresses.
-    for (const p of ['/testing/harness', '/testing/evals', '/testing/campaigns', '/testing/campaigns/c-1', '/campaigns', '/campaigns/c-1']) {
+    // The /testing surface splits: Test owns campaigns/recon (+ the retired flat /campaigns
+    // addresses), Evals (key stays `testing`) owns the eval runner + bare /testing + the retired harness.
+    for (const p of ['/testing/campaigns', '/testing/campaigns/c-1', '/campaigns', '/campaigns/c-1']) {
+      expect(headingForPath(p)).toBe('test');
+    }
+    for (const p of ['/testing', '/testing/harness', '/testing/evals']) {
       expect(headingForPath(p)).toBe('testing');
     }
     expect(headingForPath('/')).toBeNull();
@@ -120,8 +124,8 @@ describe('the route→heading map (§3.2)', () => {
   });
 });
 
-describe('the nine heading rows (§3.1 + nav-reorg)', () => {
-  it('renders all nine headings; Settings is icon-less, Steering carries ▦ only, the rest carry ▦ and ＋', async () => {
+describe('the ten heading rows (§3.1 + nav-reorg + usability wave)', () => {
+  it('renders all ten headings; Settings is icon-less, Steering carries ▦ only, the rest carry ▦ and ＋', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
@@ -142,27 +146,30 @@ describe('the nine heading rows (§3.1 + nav-reorg)', () => {
       expect(within(h).getByTestId('heading-dashboard')).toBeInTheDocument();
       expect(within(h).queryByTestId('heading-new')).toBeNull();
     }
-    // Every other heading carries both ▦ and ＋ — including Evals (the normalized Test section).
-    for (const k of ['projects', 'execute', 'vibe', 'demo', 'testing', 'chat', 'repos']) {
+    // Every other heading carries both ▦ and ＋ — including Test and Evals.
+    for (const k of ['projects', 'execute', 'test', 'vibe', 'demo', 'testing', 'chat', 'repos']) {
       const h = screen.getByTestId(`rail-heading-${k}`);
       expect(within(h).getByTestId('heading-dashboard')).toBeInTheDocument();
       expect(within(h).getByTestId('heading-new')).toBeInTheDocument();
     }
   });
 
-  it('order: Projects → Execute → Vibe → Demo → Evals → Chat → Repos → Steering → Settings', async () => {
+  it('order: Projects → Execute → Test → Vibe → Demo → Chat → Repos ┃ Steering → Evals ┃ Settings', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     const el = (k: string): HTMLElement => screen.getByTestId(`rail-heading-${k}`);
-    expect(el('projects').nextElementSibling).toBe(el('execute'));
-    expect(el('execute').nextElementSibling).toBe(el('vibe'));
-    expect(el('vibe').nextElementSibling).toBe(el('demo'));
-    expect(el('demo').nextElementSibling).toBe(el('testing'));
-    expect(el('testing').nextElementSibling).toBe(el('chat'));
-    expect(el('chat').nextElementSibling).toBe(el('repos'));
-    expect(el('repos').nextElementSibling).toBe(el('steering'));
-    expect(el('steering').nextElementSibling).toBe(el('settings'));
+    // Dividers now sit between the work sections, Steering/Evals and Settings, so check DOCUMENT
+    // order (compareDocumentPosition) rather than nextElementSibling — Test below Execute, Evals
+    // beside Steering.
+    const order = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'steering', 'testing', 'settings'];
+    for (let i = 0; i < order.length - 1; i += 1) {
+      const rel = el(order[i]!).compareDocumentPosition(el(order[i + 1]!));
+      expect(rel & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    // Evals sits AFTER Steering (moved there), and Test sits AFTER Execute.
+    expect(el('steering').compareDocumentPosition(el('testing')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(el('execute').compareDocumentPosition(el('test')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('the promoted headings are labelled Execute / Vibe / Demo, and the Test section is labelled Evals', async () => {
@@ -452,15 +459,15 @@ describe('accordion contents (§3.3)', () => {
 });
 
 describe('the collapsed rail (§3.2)', () => {
-  it('shows exactly nine glyph links (Evals → its runner, Steering → its Dashboard, Settings → /system)', async () => {
+  it('shows exactly ten glyph links (Evals → its runner, Steering → its Dashboard, Settings → /system)', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
-    expect(glyphs).toHaveLength(9);
+    expect(glyphs).toHaveLength(10);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/execute', '/vibe', '/demo', '/testing/evals', '/chats', '/repos', '/steering/dashboard', '/system',
+      '/projects', '/execute', '/testing/campaigns', '/vibe', '/demo', '/chats', '/repos', '/steering/dashboard', '/testing/evals', '/system',
     ]);
     expect(screen.queryByTestId('rail-heading-projects')).toBeNull();
   });
