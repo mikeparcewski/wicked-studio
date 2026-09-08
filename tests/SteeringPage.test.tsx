@@ -182,7 +182,7 @@ describe('countByType — the landing count fold, pinned to agree with the pages
   it('folds absent/out-of-enum steering_type to architecture and splits active/retired', () => {
     const counts = countByType([
       rule(),
-      rule({ id: 'PAT-009', steering_type: 'not-a-type' }),
+      rule({ id: 'PAT-009', steering_type: 'not-a-type' as SteeringType }),
       rule({ id: 'PAT-010', retired: true }),
       rule({ id: 'POL-100', steering_type: 'security' }),
     ]);
@@ -255,7 +255,7 @@ describe('filterSteeringRules — the page-scope + facet predicate, pinned', () 
   });
 
   it('an out-of-enum steering_type folds to architecture rather than vanishing from all pages', () => {
-    const odd = rule({ id: 'PAT-009', steering_type: 'not-a-type' });
+    const odd = rule({ id: 'PAT-009', steering_type: 'not-a-type' as SteeringType });
     expect(filterSteeringRules([odd], 'architecture', f()).map((r) => r.id)).toEqual(['PAT-009']);
   });
 

@@ -45,7 +45,7 @@ export type * from 'wicked-crew-api-types';
  * (`src/components/delivery.ts`) still TOLERATES the legacy object from a
  * 0.11–0.17 daemon, which is why {@link SessionDelivery} survives below.
  */
-export type RunDeliveryState = 'delivered' | 'stranded' | 'none';
+export type RunDeliveryState = 'delivered' | 'stranded' | 'vacuous' | 'none';
 
 /** The LEGACY 0.11.0–0.17.0 object spelling of `session.delivery` (crew#321).
  *  Gone from the 0.18.0 wire; kept only so the derivation can read the url off
@@ -57,7 +57,10 @@ export interface SessionDelivery {
 
 /** `AgentSession` as the daemon sends it: 0.18.0's string + `deliverUrl`, or the
  *  legacy 0.11–0.17 object, or neither (≤0.10). See {@link RunDeliveryState}. */
-export type SessionWithDelivery = AgentSession & {
+export type SessionWithDelivery = Omit<AgentSession, 'delivery' | 'deliverUrl'> & {
+  // Widen (not intersect) `delivery`: api-types now types it as the string union, but the
+  // derivation still TOLERATES the legacy 0.11–0.17 object at runtime — an intersection would
+  // narrow the object branch to `never`. `Omit`-then-re-add keeps both wire forms readable.
   delivery?: RunDeliveryState | SessionDelivery | null;
   /** The delivered PR's URL — present exactly when `delivery === 'delivered'`. */
   deliverUrl?: string;

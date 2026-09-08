@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Command Deck</title>
+<meta name="description" content="A redesigned wicked-studio landing — a mission-control command deck with a luminous KPI ribbon, an attention feed, and a live-pulse column." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+<style>
+  :root {
+    /* wicked-studio dark identity, painted explicitly */
+    --s0:#08080e; --s1:#101019; --s2:#171724; --s3:#20202f; --s4:#2a2a3c;
+    --ink-dim:rgba(233,233,255,.36); --ink-muted:rgba(233,233,255,.56);
+    --ink-body:rgba(233,233,255,.82); --ink-high:#f5f5ff;
+    --accent:hsl(258 78% 66%); --accent-2:hsl(268 70% 60%); --accent-dim:hsl(258 60% 46%);
+    --accent-deep:hsl(258 40% 26%);
+    --gate:hsl(43 92% 66%); --gate-dim:hsl(43 55% 20%);
+    --fail:hsl(2 84% 64%); --fail-dim:hsl(2 48% 18%);
+    --run:hsl(151 60% 55%); --run-dim:hsl(151 40% 15%);
+    --hair:rgba(233,233,255,.08); --hair-2:rgba(233,233,255,.14);
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --sans:'Inter',system-ui,sans-serif;
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:dark; }
+  body {
+    background:var(--s0); color:var(--ink-body); font-family:var(--sans); margin:0;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; position:relative;
+    min-height:100vh; overflow-x:hidden;
+  }
+  /* Ambient console atmosphere — a low violet aurora top-center + a whisper of grid */
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(1200px 480px at 24% -8%, hsl(258 70% 40% / .20), transparent 60%),
+      radial-gradient(900px 420px at 92% 0%, hsl(151 50% 34% / .08), transparent 55%);
+  }
+  body::after {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.4;
+    background-image:linear-gradient(var(--hair) 1px,transparent 1px),linear-gradient(90deg,var(--hair) 1px,transparent 1px);
+    background-size:48px 48px; mask-image:radial-gradient(1000px 600px at 50% -10%,#000,transparent 75%);
+  }
+  /* ── App shell: left rail + main ── */
+  .shell { position:relative; z-index:1; display:flex; min-height:100vh; }
+  .rail { width:236px; flex-shrink:0; background:linear-gradient(180deg,var(--s1),#0d0d15);
+    border-right:1px solid var(--hair); display:flex; flex-direction:column; padding:16px 12px 12px;
+    position:sticky; top:0; height:100vh; }
+  @media (max-width:820px){ .rail{ display:none; } }
+  .brand-top { display:flex; align-items:center; gap:10px; padding:6px 8px 16px; cursor:pointer; }
+  .logo { width:30px; height:30px; border-radius:9px; flex-shrink:0; display:grid; place-items:center;
+    background:linear-gradient(140deg,var(--accent),var(--accent-2)); color:#fff; font-weight:800;
+    font-size:15px; box-shadow:0 3px 14px hsl(258 78% 50% /.4); }
+  .wordmark { font-weight:700; font-size:14px; color:var(--ink-high); letter-spacing:-.01em; }
+  .wordmark span { color:var(--ink-dim); font-weight:500; }
+  .nav { display:flex; flex-direction:column; gap:1px; flex:1; }
+  .nav .sec { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:11px;
+    padding:8px 9px; border-radius:9px; cursor:pointer; color:var(--ink-muted); transition:.14s; position:relative; }
+  .nav .sec:hover { background:hsl(258 40% 50% /.09); color:var(--ink-body); }
+  .nav .sec.on { background:hsl(258 45% 45% /.16); color:var(--ink-high); }
+  .nav .sec.on::before { content:''; position:absolute; left:-12px; top:8px; bottom:8px; width:3px;
+    border-radius:0 3px 3px 0; background:var(--accent); box-shadow:0 0 10px hsl(258 78% 60% /.6); }
+  .nav .sec .g { font-size:14px; width:18px; text-align:center; opacity:.9; }
+  .nav .sec .tt { font-size:13px; font-weight:500; }
+  .nav .sec .dash { font-size:12px; color:var(--ink-dim); opacity:0; transition:.14s; }
+  .nav .sec:hover .dash, .nav .sec.on .dash { opacity:1; }
+  .nav .kids { display:flex; flex-direction:column; gap:1px; margin:1px 0 3px 30px; padding-left:9px;
+    border-left:1px solid var(--hair); }
+  .nav .kid { font-size:12px; color:var(--ink-muted); font-family:var(--mono); padding:5px 8px;
+    border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:8px; transition:.14s; }
+  .nav .kid:hover { color:var(--ink-body); background:hsl(258 40% 50% /.07); }
+  .nav .kid .kd { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+  .nav .divider { height:1px; background:var(--hair); margin:8px 6px; }
+  .nav .spacer { flex:1; }
+  /* Daemon health bar — pinned at the rail's foot */
+  .health { display:flex; align-items:center; gap:10px; width:100%; text-align:left; cursor:pointer;
+    margin-top:8px; padding:10px 11px; border-radius:10px; border:1px solid var(--hair);
+    background:linear-gradient(180deg,var(--s2),var(--s1)); transition:.14s; font-family:var(--sans); }
+  .health:hover { border-color:var(--run-dim); }
+  .health .hdot { width:8px; height:8px; border-radius:50%; background:var(--run); flex-shrink:0;
+    box-shadow:0 0 0 3px var(--run-dim), 0 0 10px hsl(151 60% 55% /.7); animation:breathe 2.6s ease-in-out infinite; }
+  @media (prefers-reduced-motion:reduce){ .health .hdot{animation:none} }
+  .health .hinfo { display:flex; flex-direction:column; gap:1px; min-width:0; }
+  .health .hl { font-size:12px; font-weight:600; color:var(--ink-high); }
+  .health .hs { font-size:10px; color:var(--ink-dim); font-family:var(--mono); }
+  .deck { position:relative; z-index:1; flex:1; min-width:0; max-width:1320px; margin:0 auto;
+    padding:26px 32px 56px; animation:rise .5s var(--ease) both; }
+  @keyframes rise { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
+  @media (prefers-reduced-motion:reduce){ .deck{animation:none} }
+  h1,h2,h3 { margin:0; }
+  a { color:inherit; text-decoration:none; }
+  .num { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .eyebrow { font-size:10px; letter-spacing:.16em; text-transform:uppercase; font-weight:700;
+    color:var(--ink-dim); }
+
+  /* ── Status header ── */
+  .head { display:flex; align-items:flex-end; gap:24px; flex-wrap:wrap; padding-bottom:22px;
+    position:relative; }
+  .head::after { content:''; position:absolute; left:0; right:0; bottom:0; height:1px;
+    background:linear-gradient(90deg,var(--hair-2),transparent 40%); }
+  .brand { display:flex; flex-direction:column; gap:9px; min-width:0; }
+  .kicker { display:flex; align-items:center; gap:10px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--run);
+    box-shadow:0 0 0 3px var(--run-dim), 0 0 12px hsl(151 60% 55% / .7); animation:breathe 2.6s ease-in-out infinite; }
+  @keyframes breathe { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @media (prefers-reduced-motion:reduce){ .dot{animation:none} }
+  .brand h1 { font-size:34px; font-weight:800; letter-spacing:-.025em; color:var(--ink-high);
+    line-height:1; text-wrap:balance; }
+  .situation { font-size:13.5px; color:var(--ink-muted); letter-spacing:.005em; }
+  .situation b { color:var(--ink-body); font-weight:600; }
+  .situation .hot { color:var(--gate); font-weight:700; }
+  .verbs { margin-left:auto; display:flex; align-items:center; gap:9px; flex-wrap:wrap; align-self:center; }
+  .verb { font-size:12.5px; font-weight:600; padding:9px 15px; border-radius:9px;
+    border:1px solid var(--hair-2); color:var(--ink-body);
+    background:linear-gradient(180deg,var(--s2),var(--s1)); display:inline-flex; align-items:center; gap:8px;
+    cursor:pointer; transition:.16s var(--ease); }
+  .verb:hover { border-color:var(--accent-dim); color:var(--ink-high); transform:translateY(-1px); }
+  .verb .k { font-family:var(--mono); font-size:13px; opacity:.7; }
+  /* The Make breakout — Execute / Vibe / Demo as one segmented "work" control */
+  .makeseg { display:inline-flex; border:1px solid var(--hair-2); border-radius:10px; overflow:hidden;
+    background:linear-gradient(180deg,var(--s2),var(--s1)); box-shadow:inset 0 1px 0 hsl(0 0% 100% /.04); }
+  .makeseg button { border:0; background:none; cursor:pointer; font-family:var(--sans);
+    font-size:12.5px; font-weight:600; color:var(--ink-body); padding:9px 15px;
+    display:inline-flex; align-items:center; gap:7px; border-right:1px solid var(--hair);
+    transition:.16s var(--ease); }
+  .makeseg button:last-child { border-right:0; }
+  .makeseg button:hover { color:var(--ink-high); background:hsl(258 40% 50% /.10); }
+  .makeseg button .glyph { font-size:11px; opacity:.7; }
+  .makeseg button.primary { background:linear-gradient(180deg,var(--accent),var(--accent-2));
+    color:#fff; box-shadow:0 4px 18px hsl(258 78% 50% /.38); }
+  .makeseg button.primary:hover { background:linear-gradient(180deg,var(--accent),var(--accent-2)); filter:brightness(1.06); }
+  .makeseg button.primary .glyph { opacity:.85; }
+  .vdiv { width:1px; height:24px; background:var(--hair-2); margin:0 3px; }
+
+  /* ── KPI ribbon: the hero — luminous telemetry ── */
+  .ribbon { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:24px 0 26px; }
+  @media (max-width:1080px){ .ribbon{grid-template-columns:1fr} }
+  .group {
+    position:relative; border-radius:16px; padding:17px 19px 18px; overflow:hidden;
+    background:
+      radial-gradient(120% 100% at 0% 0%, var(--gtint,transparent), transparent 46%),
+      linear-gradient(180deg,var(--s2),var(--s1));
+    border:1px solid var(--hair);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / .05), 0 2px 8px rgba(0,0,0,.4);
+  }
+  .group::before { content:''; position:absolute; inset:0 0 auto; height:2px;
+    background:linear-gradient(90deg,var(--gcol),transparent 72%); }
+  .group.flow  { --gcol:var(--run);   --gtint:hsl(151 60% 40% / .10); }
+  .group.attn  { --gcol:var(--gate);  --gtint:hsl(43 80% 45% / .10); }
+  .group.trust { --gcol:var(--accent);--gtint:hsl(258 70% 50% / .12); }
+  .ghead { display:flex; align-items:center; gap:8px; margin-bottom:15px; }
+  .ghead .tag { color:var(--gcol); letter-spacing:.14em; }
+  .ghead .glyph { color:var(--gcol); font-size:11px; filter:drop-shadow(0 0 6px currentColor); opacity:.9; }
+  .tiles { display:flex; gap:14px; }
+  .tile { flex:1; min-width:0; }
+  .tile.lead { flex:1.15; }
+  .tile .lab { font-size:11px; color:var(--ink-muted); white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; font-weight:500; }
+  .tile .val { display:flex; align-items:baseline; gap:7px; margin-top:5px; }
+  .big { font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:34px; font-weight:700;
+    color:var(--ink-high); line-height:.95; letter-spacing:-.02em;
+    text-shadow:0 0 24px hsl(0 0% 100% / .10); }
+  .big.accent { color:var(--gate); text-shadow:0 0 22px hsl(43 92% 60% / .28); }
+  .unit { font-size:13px; color:var(--ink-dim); font-family:var(--mono); font-weight:500; }
+  .delta { font-size:11px; font-family:var(--mono); font-weight:600; display:inline-flex;
+    align-items:center; gap:2px; padding:1px 5px; border-radius:5px; }
+  .delta.up { color:var(--run); background:var(--run-dim); }
+  .delta.down { color:var(--fail); background:var(--fail-dim); }
+  .spark { margin-top:11px; height:26px; width:100%; display:block; }
+  .tile .sub { font-size:10.5px; color:var(--ink-dim); margin-top:7px; line-height:1.4; }
+  .splitbar { display:flex; height:6px; border-radius:3px; overflow:hidden; margin-top:11px;
+    background:var(--s3); }
+  .splitbar i { display:block; height:100%; box-shadow:0 0 10px hsl(258 78% 60% / .5); }
+
+  /* ── Workbench ── */
+  .bench { display:grid; grid-template-columns:1.38fr 1fr; gap:18px; align-items:start; }
+  @media (max-width:1080px){ .bench{grid-template-columns:1fr} }
+  .panel { background:linear-gradient(180deg,var(--s1),#0e0e16); border:1px solid var(--hair);
+    border-radius:16px; box-shadow:inset 0 1px 0 hsl(0 0% 100% / .04), 0 2px 10px rgba(0,0,0,.35); overflow:hidden; }
+  .panel > header { display:flex; align-items:center; gap:12px; padding:15px 18px 13px;
+    border-bottom:1px solid var(--hair); }
+  .panel > header h2 { font-size:13px; font-weight:700; color:var(--ink-high); letter-spacing:.01em;
+    display:flex; align-items:center; gap:9px; }
+  .panel > header .gl { filter:drop-shadow(0 0 6px currentColor); }
+  .panel > header .count { font-family:var(--mono); font-size:11.5px; font-weight:600; color:var(--gate);
+    background:var(--gate-dim); padding:2px 9px; border-radius:999px; }
+  .panel > header .link { font-size:11px; color:var(--ink-muted); transition:.14s; }
+  .panel > header .link:hover { color:var(--ink-high); }
+
+  .feed { display:flex; flex-direction:column; }
+  .item { display:grid; grid-template-columns:3px 1fr auto; gap:15px; align-items:center;
+    padding:15px 18px; border-bottom:1px solid var(--hair); transition:background .16s; }
+  .item:last-child { border-bottom:0; }
+  .item:hover { background:hsl(258 40% 50% / .05); }
+  .item .stripe { align-self:stretch; border-radius:3px; }
+  .item.gate .stripe{ background:linear-gradient(180deg,var(--gate),transparent); box-shadow:0 0 10px hsl(43 92% 60% /.5);}
+  .item.fail .stripe{ background:linear-gradient(180deg,var(--fail),transparent); box-shadow:0 0 10px hsl(2 84% 60% /.5);}
+  .item.strand .stripe{ background:linear-gradient(180deg,var(--accent),transparent); box-shadow:0 0 10px hsl(258 78% 60% /.5);}
+  .item.prop .stripe{ background:linear-gradient(180deg,var(--run),transparent); box-shadow:0 0 10px hsl(151 60% 55% /.5);}
+  .item .body { min-width:0; }
+  .item .top { display:flex; align-items:center; gap:10px; }
+  .kind { font-family:var(--mono); font-size:9.5px; font-weight:700; letter-spacing:.08em;
+    text-transform:uppercase; padding:3px 8px; border-radius:5px; }
+  .item.gate .kind{ color:var(--gate); background:var(--gate-dim);}
+  .item.fail .kind{ color:var(--fail); background:var(--fail-dim);}
+  .item.strand .kind{ color:hsl(258 78% 80%); background:var(--accent-deep);}
+  .item.prop .kind{ color:var(--run); background:var(--run-dim);}
+  .item .who { font-size:11.5px; color:var(--ink-dim); font-family:var(--mono); }
+  .item .title { font-size:13px; color:var(--ink-high); font-weight:500; margin-top:6px; line-height:1.4; }
+  .item .meta { font-size:11px; color:var(--ink-muted); margin-top:4px; }
+  .act { font-size:12px; font-weight:600; padding:8px 14px; border-radius:9px; white-space:nowrap;
+    border:1px solid var(--hair-2); background:var(--s2); color:var(--ink-high); cursor:pointer;
+    transition:.16s var(--ease); }
+  .act:hover{ border-color:var(--accent-dim); transform:translateY(-1px);}
+  .act.go { background:linear-gradient(180deg,var(--gate),hsl(40 90% 58%)); border-color:transparent;
+    color:#1c1405; box-shadow:0 3px 14px hsl(43 92% 55% / .35); }
+  .act.go:hover{ box-shadow:0 5px 18px hsl(43 92% 55% / .5);}
+
+  .vrbar { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--hair);
+    border:1px solid var(--hair); border-radius:14px; overflow:hidden; margin-top:16px;
+    box-shadow:0 2px 10px rgba(0,0,0,.3); }
+  .vrcell { background:linear-gradient(180deg,var(--s1),#0e0e16); padding:15px 17px;
+    display:flex; flex-direction:column; gap:4px; cursor:pointer; transition:.16s; position:relative; }
+  .vrcell:hover{ background:var(--s2);}
+  .vrcell .n { font-family:var(--mono); font-size:24px; font-weight:700; letter-spacing:-.01em; }
+  .vrcell .n.ok{ color:var(--run); text-shadow:0 0 18px hsl(151 60% 50% /.3);}
+  .vrcell .n.warn{ color:var(--gate);} .vrcell .n.bad{ color:var(--fail);}
+  .vrcell .l { font-size:11px; color:var(--ink-muted); }
+
+  /* live pulse */
+  .pulse-card { padding:16px 18px 8px; }
+  .pulse-head { display:flex; align-items:baseline; justify-content:space-between; }
+  .pulse-head .t { font-size:11px; color:var(--ink-muted); font-weight:500; }
+  .pulse-head .v { font-family:var(--mono); font-size:16px; color:var(--ink-high); font-weight:700; }
+  .pulse-head .v small{ color:var(--ink-dim); font-weight:400; font-size:11px; }
+  .chart { width:100%; height:104px; display:block; margin-top:10px; }
+  .rangebtns { display:flex; gap:6px; }
+  .rb { font-family:var(--mono); font-size:10px; padding:4px 9px; border-radius:7px;
+    border:1px solid var(--hair); color:var(--ink-muted); cursor:pointer; transition:.14s; }
+  .rb:hover{ color:var(--ink-body);}
+  .rb.on { color:var(--ink-high); border-color:var(--accent-dim); background:hsl(258 40% 40% /.18); }
+
+  .activity { display:flex; flex-direction:column; padding-bottom:4px; }
+  .act-row { display:grid; grid-template-columns:auto 1fr auto; gap:11px; align-items:center;
+    padding:10px 18px; border-top:1px solid var(--hair); font-size:12px; }
+  .act-row .sd { width:6px; height:6px; border-radius:50%; box-shadow:0 0 8px currentColor; }
+  .act-row .msg { color:var(--ink-body); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .act-row .msg b { color:var(--ink-high); font-weight:600; }
+  .act-row .ts { font-family:var(--mono); font-size:10px; color:var(--ink-dim); }
+
+  /* ── Section doors (the nav made legible on the landing) ── */
+  .doors { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }
+  .door { flex:1 1 0; min-width:132px; display:flex; align-items:center; gap:11px;
+    padding:12px 14px; border-radius:12px; border:1px solid var(--hair); cursor:pointer;
+    background:linear-gradient(180deg,var(--s1),#0e0e16); transition:.16s var(--ease); }
+  .door:hover { border-color:var(--accent-dim); transform:translateY(-1px); }
+  .door .dg { width:30px; height:30px; border-radius:9px; display:grid; place-items:center;
+    font-size:14px; color:var(--dcol,var(--accent)); background:hsl(258 40% 40% /.14);
+    border:1px solid var(--hair); flex-shrink:0; }
+  .door.exec .dg{ --dcol:var(--run); background:var(--run-dim);}
+  .door.test .dg{ --dcol:hsl(168 62% 55%); background:hsl(168 50% 28% /.2);}
+  .door.vibe .dg{ --dcol:hsl(198 80% 62%); background:hsl(198 60% 30% /.2);}
+  .door.demo .dg{ --dcol:hsl(320 70% 66%); background:hsl(320 50% 34% /.2);}
+  .door.evals .dg{ --dcol:var(--gate); background:var(--gate-dim);}
+  .door.steer .dg{ --dcol:var(--accent); background:hsl(258 50% 40% /.2);}
+  .door .dt { min-width:0; }
+  .door .dl { font-size:12px; font-weight:600; color:var(--ink-high); }
+  .door .dc { font-size:10.5px; color:var(--ink-muted); font-family:var(--mono); margin-top:1px; }
+
+  /* ── Portfolio wall ── */
+  .wall { margin-top:28px; }
+  .wall-head { display:flex; align-items:baseline; gap:13px; margin-bottom:14px; }
+  .wall-head h2 { font-size:14px; font-weight:700; color:var(--ink-high); letter-spacing:.01em; }
+  .wall-head .sub { font-size:11px; color:var(--ink-dim); }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(276px,1fr)); gap:14px; }
+  .card { position:relative; border:1px solid var(--hair); border-radius:14px; padding:16px;
+    cursor:pointer; transition:.18s var(--ease); overflow:hidden;
+    background:linear-gradient(180deg,var(--s2),var(--s1));
+    box-shadow:inset 0 1px 0 hsl(0 0% 100% /.04); }
+  .card:hover{ border-color:var(--accent-dim); transform:translateY(-2px);
+    box-shadow:0 8px 26px rgba(0,0,0,.4), inset 0 1px 0 hsl(0 0% 100% /.05); }
+  .card.hot::before{ content:''; position:absolute; inset:0 0 auto; height:2px;
+    background:linear-gradient(90deg,var(--hotcol),transparent 70%); }
+  .card.hot.gatehot{ --hotcol:var(--gate); } .card.hot.strandhot{ --hotcol:var(--accent); }
+  .card.hot.failhot{ --hotcol:var(--fail); }
+  .card .ct { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .card .nm { font-size:14.5px; font-weight:600; color:var(--ink-high); }
+  .card .stt { font-family:var(--mono); font-size:9.5px; font-weight:600; padding:3px 8px; border-radius:5px;
+    letter-spacing:.04em; text-transform:uppercase; }
+  .stt.running{ color:var(--run); background:var(--run-dim);}
+  .stt.gate{ color:var(--gate); background:var(--gate-dim);}
+  .stt.failed{ color:var(--fail); background:var(--fail-dim);}
+  .stt.quiet{ color:var(--ink-dim); border:1px solid var(--hair);}
+  .card .stat { display:flex; gap:18px; margin-top:14px; }
+  .card .stat .k { font-family:var(--mono); font-size:17px; font-weight:700; color:var(--ink-body); letter-spacing:-.01em; }
+  .card .stat .kl { font-size:9.5px; color:var(--ink-dim); margin-top:2px; letter-spacing:.04em; text-transform:uppercase; }
+  .card .cspark { margin-top:12px; height:22px; width:100%; display:block; }
+  .card .gatechip { margin-top:12px; font-size:11px; color:var(--gate); display:flex; gap:8px;
+    align-items:center; font-weight:500; }
+  .card .gatechip .g { width:5px; height:5px; border-radius:50%; box-shadow:0 0 8px currentColor; }
+  footer.note { margin-top:30px; font-size:11px; color:var(--ink-dim); font-family:var(--mono);
+    border-top:1px solid var(--hair); padding-top:16px; line-height:1.7; }
+</style>
+
+</head>
+<body>
+<div class="shell">
+  <aside class="rail" aria-label="Sections">
+    <div class="brand-top">
+      <div class="logo">w</div>
+      <div class="wordmark">wicked <span>studio</span></div>
+    </div>
+    <nav class="nav">
+      <div class="sec"><span class="g">◇</span><span class="tt">Projects</span><span class="dash">▦</span></div>
+      <div class="sec"><span class="g">▸</span><span class="tt">Execute</span><span class="dash">▦</span></div>
+      <div class="kids">
+        <div class="kid"><span class="kd" style="background:var(--run)"></span>auth-refactor</div>
+        <div class="kid"><span class="kd" style="background:var(--gate)"></span>api-migration</div>
+        <div class="kid" style="color:var(--ink-dim)">view all ›</div>
+      </div>
+      <div class="sec"><span class="g">✓</span><span class="tt">Test</span><span class="dash">▦</span></div>
+      <div class="sec"><span class="g">▤</span><span class="tt">Vibe</span><span class="dash">▦</span></div>
+      <div class="sec"><span class="g">▶</span><span class="tt">Demo</span><span class="dash">▦</span></div>
+      <div class="sec"><span class="g">💬</span><span class="tt">Chat</span><span class="dash">▦</span></div>
+      <div class="sec"><span class="g">⬡</span><span class="tt">Repositories</span><span class="dash">▦</span></div>
+      <div class="divider"></div>
+      <div class="sec"><span class="g">☸</span><span class="tt">Steering</span><span class="dash">▦</span></div>
+      <div class="sec"><span class="g">◈</span><span class="tt">Evals</span><span class="dash">▦</span></div>
+      <div class="divider"></div>
+      <div class="sec"><span class="g">⚙</span><span class="tt">Settings</span><span class="dash">▦</span></div>
+      <div class="spacer"></div>
+      <button class="health" title="Daemon status">
+        <span class="hdot"></span>
+        <span class="hinfo">
+          <span class="hl">Daemon healthy</span>
+          <span class="hs">v0.7.24 · :7701 · 3 active</span>
+        </span>
+      </button>
+    </nav>
+  </aside>
+
+  <div class="deck">
+  <header class="head">
+    <div class="brand">
+      <div class="kicker">
+        <span class="dot"></span>
+        <span class="eyebrow">Command Deck · daemon healthy · :7701</span>
+      </div>
+      <h1>Good afternoon, Mike.</h1>
+      <p class="situation">
+        <span class="hot">4 things need you</span> ·
+        <b>3</b> runs executing · <b>41</b> verified this month ·
+        last delivery <b>8 min ago</b>
+      </p>
+    </div>
+    <nav class="verbs" aria-label="Start work">
+      <div class="makeseg" role="group" aria-label="New work — Execute, Vibe or Demo">
+        <button class="primary" title="Execute — a build run"><span class="glyph">▸</span> Execute</button>
+        <button title="Vibe — a document"><span class="glyph">▤</span> Vibe</button>
+        <button title="Demo — a video"><span class="glyph">▶</span> Demo</button>
+      </div>
+      <span class="vdiv" aria-hidden="true"></span>
+      <button class="verb">＋ Project</button>
+      <button class="verb">＋ Chat</button>
+      <button class="verb">Ask <span class="k">⌘K</span></button>
+    </nav>
+  </header>
+
+  <section class="ribbon" aria-label="Key metrics">
+    <div class="group flow">
+      <div class="ghead"><span class="glyph">◆</span><span class="eyebrow tag">Flow</span></div>
+      <div class="tiles">
+        <div class="tile lead">
+          <div class="lab">Runs · 30d</div>
+          <div class="val"><span class="big">128</span><span class="delta up">▲ 12</span></div>
+          <svg class="spark" viewBox="0 0 120 26" preserveAspectRatio="none" aria-hidden="true">
+            <defs><linearGradient id="gf" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stop-color="hsl(151 60% 55%)" stop-opacity=".4"/>
+              <stop offset="1" stop-color="hsl(151 60% 55%)" stop-opacity="0"/></linearGradient></defs>
+            <path d="M0,21 6,20 12,18 18,19 24,15 30,16 36,12 42,14 48,10 54,11 60,8 66,10 72,7 78,9 84,6 90,8 96,5 102,7 108,4 114,5 120,3 120,26 0,26 Z" fill="url(#gf)"/>
+            <polyline points="0,21 6,20 12,18 18,19 24,15 30,16 36,12 42,14 48,10 54,11 60,8 66,10 72,7 78,9 84,6 90,8 96,5 102,7 108,4 114,5 120,3" fill="none" stroke="hsl(151 62% 60%)" stroke-width="1.6" style="filter:drop-shadow(0 0 4px hsl(151 60% 55% /.6))"/>
+            <circle cx="120" cy="3" r="2.2" fill="hsl(151 65% 66%)"/>
+          </svg>
+        </div>
+        <div class="tile">
+          <div class="lab">Active</div>
+          <div class="val"><span class="big">3</span></div>
+          <div class="sub">2 building<br/>1 in council</div>
+        </div>
+        <div class="tile">
+          <div class="lab">Success</div>
+          <div class="val"><span class="big">88</span><span class="unit">%</span></div>
+          <div class="sub"><span class="delta up">▲ 4pt</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="group attn">
+      <div class="ghead"><span class="glyph">▲</span><span class="eyebrow tag">Attention</span></div>
+      <div class="tiles">
+        <div class="tile lead">
+          <div class="lab">Needs you</div>
+          <div class="val"><span class="big accent">4</span></div>
+          <div class="sub">2 gates · 1 stranded<br/>1 proposal</div>
+        </div>
+        <div class="tile">
+          <div class="lab">Failed · 30d</div>
+          <div class="val"><span class="big">6</span><span class="delta down">▼ 2</span></div>
+          <div class="sub">rework 7%</div>
+        </div>
+        <div class="tile">
+          <div class="lab">Review</div>
+          <div class="val"><span class="big">6</span></div>
+          <div class="sub">stranded + vacuous</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="group trust">
+      <div class="ghead"><span class="glyph">◈</span><span class="eyebrow tag">Trust &amp; Spend</span></div>
+      <div class="tiles">
+        <div class="tile lead">
+          <div class="lab">Governed</div>
+          <div class="val"><span class="big">92</span><span class="unit">%</span></div>
+          <div class="splitbar"><i style="width:92%;background:linear-gradient(90deg,var(--accent),var(--accent-2))"></i></div>
+        </div>
+        <div class="tile">
+          <div class="lab">Spend · session</div>
+          <div class="val"><span class="big">2</span><span class="unit">.10$</span></div>
+          <div class="sub">1.9M tokens</div>
+        </div>
+        <div class="tile">
+          <div class="lab">Rework</div>
+          <div class="val"><span class="big">7</span><span class="unit">%</span></div>
+          <div class="sub"><span class="delta up">▲ better</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="bench">
+    <div>
+      <section class="panel">
+        <header>
+          <h2><span class="gl" style="color:var(--gate)">▲</span> Needs you</h2>
+          <span class="count">4 open</span>
+          <a class="link" href="#" style="margin-left:auto">Work queue ›</a>
+        </header>
+        <div class="feed">
+          <div class="item gate">
+            <span class="stripe"></span>
+            <div class="body">
+              <div class="top"><span class="kind">Gate</span><span class="who">auth-refactor · claude</span></div>
+              <div class="title">Approve the deliver plan — 3 files, opens PR to <span class="num">main</span></div>
+              <div class="meta">waiting 6 min · evaluator passed 5/5</div>
+            </div>
+            <button class="act go">Review →</button>
+          </div>
+          <div class="item strand">
+            <span class="stripe"></span>
+            <div class="body">
+              <div class="top"><span class="kind">Stranded</span><span class="who">api-migration · codex</span></div>
+              <div class="title">Deliver hit a lift conflict — worktree held for re-lift</div>
+              <div class="meta">completed 22 min ago · recoverable</div>
+            </div>
+            <button class="act">Open run →</button>
+          </div>
+          <div class="item fail">
+            <span class="stripe"></span>
+            <div class="body">
+              <div class="top"><span class="kind">Failed</span><span class="who">upload-endpoint · opencode</span></div>
+              <div class="title">Build failed at unit 3 — <span class="num">tsc</span> type error in the route handler</div>
+              <div class="meta">14 min ago · retry as prefill</div>
+            </div>
+            <button class="act">Retry →</button>
+          </div>
+          <div class="item prop">
+            <span class="stripe"></span>
+            <div class="body">
+              <div class="top"><span class="kind">Proposal</span><span class="who">steering · security</span></div>
+              <div class="title">2 rules proposed from a chat — awaiting your promote</div>
+              <div class="meta">pending review · POL-041, PAT-118</div>
+            </div>
+            <button class="act">Decide →</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="vrbar" role="group" aria-label="Delivery outcomes">
+        <div class="vrcell"><span class="n ok num">41</span><span class="l">Verified &amp; delivered</span></div>
+        <div class="vrcell"><span class="n warn num">5</span><span class="l">Stranded — needs review</span></div>
+        <div class="vrcell"><span class="n bad num">1</span><span class="l">Vacuous — needs retry</span></div>
+      </div>
+    </div>
+
+    <div>
+      <section class="panel">
+        <header>
+          <h2><span class="gl" style="color:var(--accent)">◆</span> Live pulse</h2>
+          <div class="rangebtns" style="margin-left:auto"><span class="rb">7d</span><span class="rb on">30d</span><span class="rb">90d</span></div>
+        </header>
+        <div class="pulse-card">
+          <div class="pulse-head">
+            <span class="t">Run cadence &amp; spend</span>
+            <span class="v">$2.10 <small>· session</small></span>
+          </div>
+          <svg class="chart" viewBox="0 0 320 104" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="burn" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stop-color="hsl(258 78% 66%)" stop-opacity=".42"/>
+                <stop offset="1" stop-color="hsl(258 78% 66%)" stop-opacity="0"/></linearGradient>
+            </defs>
+            <line x1="0" y1="26" x2="320" y2="26" stroke="hsl(233 30% 60% /.07)"/>
+            <line x1="0" y1="65" x2="320" y2="65" stroke="hsl(233 30% 60% /.07)"/>
+            <g fill="hsl(151 55% 52% /.32)">
+              <rect x="6"  y="86" width="7" height="14" rx="1.5"/><rect x="32" y="82" width="7" height="18" rx="1.5"/>
+              <rect x="58" y="78" width="7" height="22" rx="1.5"/><rect x="84" y="84" width="7" height="16" rx="1.5"/>
+              <rect x="110" y="72" width="7" height="28" rx="1.5"/><rect x="136" y="76" width="7" height="24" rx="1.5"/>
+              <rect x="162" y="66" width="7" height="34" rx="1.5"/><rect x="188" y="70" width="7" height="30" rx="1.5"/>
+              <rect x="214" y="60" width="7" height="40" rx="1.5"/><rect x="240" y="64" width="7" height="36" rx="1.5"/>
+              <rect x="266" y="54" width="7" height="46" rx="1.5"/><rect x="292" y="50" width="7" height="50" rx="1.5"/>
+            </g>
+            <path d="M0,92 20,86 40,88 60,78 80,80 100,68 120,70 140,58 160,61 180,48 200,51 220,42 240,44 260,34 280,37 300,27 320,23 320,104 0,104 Z" fill="url(#burn)"/>
+            <polyline points="0,92 20,86 40,88 60,78 80,80 100,68 120,70 140,58 160,61 180,48 200,51 220,42 240,44 260,34 280,37 300,27 320,23" fill="none" stroke="hsl(258 82% 72%)" stroke-width="1.9" style="filter:drop-shadow(0 0 5px hsl(258 78% 60% /.7))"/>
+            <circle cx="320" cy="23" r="2.6" fill="hsl(258 85% 78%)"/>
+          </svg>
+        </div>
+        <div class="activity">
+          <div class="act-row"><span class="sd" style="background:var(--run);color:var(--run)"></span><span class="msg"><b>auth-refactor</b> council reached agreement 5/5</span><span class="ts">now</span></div>
+          <div class="act-row"><span class="sd" style="background:var(--gate);color:var(--gate)"></span><span class="msg"><b>api-migration</b> paused at deliver gate</span><span class="ts">2m</span></div>
+          <div class="act-row"><span class="sd" style="background:var(--run);color:var(--run)"></span><span class="msg"><b>q3-review-deck</b> delivered → PR #218</span><span class="ts">8m</span></div>
+          <div class="act-row"><span class="sd" style="background:var(--fail);color:var(--fail)"></span><span class="msg"><b>upload-endpoint</b> failed at unit 3</span><span class="ts">14m</span></div>
+          <div class="act-row"><span class="sd" style="background:var(--ink-dim)"></span><span class="msg"><b>notes</b> completed · no delivery</span><span class="ts">31m</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ── Section doors — the Execute/Vibe/Demo/Evals/Steering breakout, made legible ── -->
+  <nav class="doors" aria-label="Sections">
+    <a class="door exec"><span class="dg">▸</span><span class="dt"><div class="dl">Execute</div><div class="dc">128 runs · 3 active</div></span></a>
+    <a class="door test"><span class="dg">✓</span><span class="dt"><div class="dl">Test</div><div class="dc">4 campaigns · 1 active</div></span></a>
+    <a class="door vibe"><span class="dg">▤</span><span class="dt"><div class="dl">Vibe</div><div class="dc">14 documents</div></span></a>
+    <a class="door demo"><span class="dg">▶</span><span class="dt"><div class="dl">Demo</div><div class="dc">3 videos</div></span></a>
+    <a class="door evals"><span class="dg">◈</span><span class="dt"><div class="dl">Evals</div><div class="dc">12 runs · 2 gaps</div></span></a>
+    <a class="door steer"><span class="dg">☸</span><span class="dt"><div class="dl">Steering</div><div class="dc">48 rules · 92% governed</div></span></a>
+  </nav>
+
+  <section class="wall">
+    <div class="wall-head">
+      <h2>Portfolio</h2>
+      <span class="sub">6 projects · sorted by attention</span>
+    </div>
+    <div class="cards">
+      <div class="card hot gatehot">
+        <div class="ct"><span class="nm">auth-refactor</span><span class="stt gate">gate</span></div>
+        <div class="stat"><div><div class="k num">12</div><div class="kl">runs 30d</div></div><div><div class="k num">2</div><div class="kl">active</div></div><div><div class="k num">92%</div><div class="kl">success</div></div></div>
+        <div class="gatechip"><span class="g" style="background:var(--gate)"></span>Deliver gate waiting · 6 min</div>
+      </div>
+      <div class="card hot strandhot">
+        <div class="ct"><span class="nm">api-migration</span><span class="stt gate">review</span></div>
+        <div class="stat"><div><div class="k num">31</div><div class="kl">runs 30d</div></div><div><div class="k num">1</div><div class="kl">active</div></div><div><div class="k num">84%</div><div class="kl">success</div></div></div>
+        <div class="gatechip" style="color:hsl(258 78% 78%)"><span class="g" style="background:var(--accent)"></span>1 stranded · needs re-lift</div>
+      </div>
+      <div class="card">
+        <div class="ct"><span class="nm">q3-review-deck</span><span class="stt running">running</span></div>
+        <div class="stat"><div><div class="k num">7</div><div class="kl">runs 30d</div></div><div><div class="k num">1</div><div class="kl">active</div></div><div><div class="k num">100%</div><div class="kl">success</div></div></div>
+        <svg class="cspark" viewBox="0 0 200 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,17 20,16 40,13 60,15 80,10 100,12 120,8 140,10 160,6 180,8 200,4" fill="none" stroke="hsl(151 60% 55%)" stroke-width="1.6" opacity=".85"/></svg>
+      </div>
+      <div class="card hot failhot">
+        <div class="ct"><span class="nm">upload-endpoint</span><span class="stt failed">failed</span></div>
+        <div class="stat"><div><div class="k num">9</div><div class="kl">runs 30d</div></div><div><div class="k num">0</div><div class="kl">active</div></div><div><div class="k num">67%</div><div class="kl">success</div></div></div>
+        <div class="gatechip" style="color:var(--fail)"><span class="g" style="background:var(--fail)"></span>Last run failed · retry</div>
+      </div>
+      <div class="card">
+        <div class="ct"><span class="nm">notes</span><span class="stt quiet">quiet</span></div>
+        <div class="stat"><div><div class="k num">3</div><div class="kl">runs 30d</div></div><div><div class="k num">0</div><div class="kl">active</div></div><div><div class="k num">100%</div><div class="kl">success</div></div></div>
+        <svg class="cspark" viewBox="0 0 200 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,11 40,12 80,10 120,13 160,11 200,12" fill="none" stroke="hsl(233 20% 60% /.4)" stroke-width="1.6"/></svg>
+      </div>
+      <div class="card">
+        <div class="ct"><span class="nm">smoke-tests</span><span class="stt quiet">quiet</span></div>
+        <div class="stat"><div><div class="k num">2</div><div class="kl">runs 30d</div></div><div><div class="k num">0</div><div class="kl">active</div></div><div><div class="k num">100%</div><div class="kl">success</div></div></div>
+        <svg class="cspark" viewBox="0 0 200 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,13 40,11 80,12 120,10 160,12 200,11" fill="none" stroke="hsl(233 20% 60% /.4)" stroke-width="1.6"/></svg>
+      </div>
+    </div>
+  </section>
+
+  <footer class="note">
+    Mockup — every number is real once wired: runs bucketed on the new AgentSession.created_at (7/30/90d),
+    delivery split from the run DTO, spend summed from live cliUsage frames.<br/>
+    Sections: Execute · Vibe · Demo · Evals · Steering.
+  </footer>
+  </div>
+</div>
+
+</body>
+</html>

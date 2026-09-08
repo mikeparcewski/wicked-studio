@@ -544,7 +544,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                       value={steeringTypeOf(r)}
                       options={TYPE_OPTIONS}
                       disabled={retired}
-                      onCommit={(v) => commitField(r, { steering_type: v })}
+                      onCommit={(v) => commitField(r, { steering_type: v as SteeringType })}
                     />
                   </td>
                   <td className="px-0.5 py-0.5">
