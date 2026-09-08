@@ -35,8 +35,11 @@ export const TESTING_PAGES = ['campaigns', 'evals'] as const;
 
 export type TestingSubPage = (typeof TESTING_PAGES)[number];
 
+// The `campaigns` sub-page IS the Test section now (usability wave): the rail renames it Test and
+// Evals is a separate section beside Steering. The route stays `/testing/campaigns` (the backend's
+// campaign grouping is the mechanism); only the user-facing label is Test.
 export const TESTING_PAGE_LABELS: Record<TestingSubPage, string> = {
-  campaigns: 'Campaigns',
+  campaigns: 'Test',
   evals: 'Evals',
 };
 

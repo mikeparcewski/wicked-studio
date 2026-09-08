@@ -5,9 +5,7 @@ import {
   importEvalCorpus,
   isTestingUnsupported,
   runEvals,
-  testingPath,
   TESTING_PAGE_LABELS,
-  TESTING_PAGES,
   TESTING_UNSUPPORTED_COPY,
   type CorpusImportResult,
   type EvalReport,
@@ -463,40 +461,15 @@ export function TestingPage({ page, campaignId, runs, navigate }: {
 }): React.ReactElement {
   return (
     <div data-testid="testing-page" data-testing-page={page} className="flex flex-col">
+      {/* Test and Evals are now SEPARATE rail sections (usability wave), so the header is just the
+          section name — no "Testing ·" prefix and no sibling-tab strip (each is standalone). */}
       <div className="flex flex-col gap-4 px-6 pt-6">
         <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>
-          Testing · {TESTING_PAGE_LABELS[page]}
+          {TESTING_PAGE_LABELS[page]}
         </h2>
-
-        {/* The sub-page strip: real navigations — the SteeringPage tab grammar. Campaigns is
-            the landing; Evals stays the sibling page. */}
-        <nav data-testid="testing-tabs" aria-label="Testing pages" className="flex flex-wrap gap-1">
-          {TESTING_PAGES.map((p) => (
-            <a
-              key={p}
-              data-testid="testing-tab"
-              data-page={p}
-              href={testingPath(p)}
-              aria-current={p === page ? 'page' : undefined}
-              onClick={(e) => {
-                e.preventDefault();
-                navigate(testingPath(p));
-              }}
-              className="rounded px-2 py-1 text-[11px] font-semibold"
-              style={{
-                textDecoration: 'none',
-                color: p === page ? 'var(--ink-high)' : 'var(--ink-muted)',
-                background: p === page ? 'var(--surface-raised)' : 'transparent',
-                border: `1px solid ${p === page ? 'var(--surface-raised)' : 'transparent'}`,
-              }}
-            >
-              {TESTING_PAGE_LABELS[p]}
-            </a>
-          ))}
-        </nav>
       </div>
 
-      {/* Campaigns (the landing + scoreboard) keep their own internal padding and full width;
+      {/* Test (the recon landing + scoreboard) keeps its own internal padding and full width;
           Evals content shares this shell's gutter. */}
       {page === 'campaigns' ? (
         campaignId !== null ? (

@@ -11,8 +11,8 @@
   "studioVersion": "0.4.15",
   "counts": {
     "files": 125,
-    "occurrences": 1019,
-    "static": 863,
+    "occurrences": 1017,
+    "static": 861,
     "dynamic": 56,
     "computed": 6
   },
@@ -4659,18 +4659,6 @@
       "testId": "testing-recon-open",
       "files": [
         "src/components/CampaignsPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-tab",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-tabs",
-      "files": [
-        "src/components/TestingPage.tsx"
       ]
     },
     {

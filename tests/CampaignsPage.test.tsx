@@ -72,11 +72,11 @@ describe('the §1.5 probe states', () => {
     expect(screen.getByTestId('testing-author-open')).toBeInTheDocument();
   });
 
-  it('200 with empty lists is the "no campaigns yet" answer, with a CTA that opens the New campaign flow', async () => {
+  it('200 with empty lists is the "no tests yet" answer, with a CTA that opens the New test flow', async () => {
     listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
     page();
     await waitFor(() => expect(screen.getByTestId('campaigns-empty')).toBeInTheDocument());
-    expect(screen.getByTestId('campaigns-empty').textContent).toContain('launch a run with a campaign label');
+    expect(screen.getByTestId('campaigns-empty').textContent).toContain('run recon over a codebase');
     fireEvent.click(screen.getByTestId('campaigns-empty-cta'));
     expect(await screen.findByTestId('testing-launch-panel')).toHaveAttribute('data-intent', 'campaign');
   });
