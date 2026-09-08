@@ -248,7 +248,7 @@ export function essenceEntries(inputs: {
 }): EssenceEntry[] {
   const out: EssenceEntry[] = [
     { id: 'projects', label: 'Projects', value: String(inputs.projects), path: '/projects', title: 'The project register' },
-    { id: 'docs', label: 'Docs', value: String(inputs.docs), path: '/make', title: 'Documents across your interactive projects' },
+    { id: 'docs', label: 'Docs', value: String(inputs.docs), path: '/vibe', title: 'Documents across your interactive projects' },
   ];
   if (inputs.chats !== null) {
     out.push({ id: 'chats', label: 'Chats', value: String(inputs.chats), path: '/chats', title: 'Live chat sessions (warm seats)' });

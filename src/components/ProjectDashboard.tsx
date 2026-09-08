@@ -373,6 +373,15 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
                 {MODE_LABEL[m]}
               </a>
             ))}
+            {/* The project-scoped Campaigns surface (nav-reorg) — re-homed under the project
+                shell at `/p/:id/campaigns`, not a fifth mode. */}
+            <a
+              {...link(`/p/${encodeURIComponent(projectId)}/campaigns`)}
+              data-testid="dashboard-campaigns"
+              style={CSS.modeBtn}
+            >
+              Campaigns
+            </a>
           </div>
           <span style={{ flex: 1 }} />
           {/* The section's creation verb — one click from wherever the need appears. */}

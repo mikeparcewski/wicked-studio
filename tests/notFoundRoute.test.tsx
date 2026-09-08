@@ -49,7 +49,9 @@ describe('useRoute — dead addresses parse to the not-found panel', () => {
   it('every real page still parses to itself', () => {
     expect(routeAt('/').current.panel).toBe('home');
     expect(routeAt('/work').current.panel).toBe('work');
-    expect(routeAt('/make').current.panel).toBe('make');
+    expect(routeAt('/execute').current.panel).toBe('execute');
+    expect(routeAt('/vibe').current.panel).toBe('vibe');
+    expect(routeAt('/demo').current.panel).toBe('demo');
     expect(routeAt('/steering').current.panel).toBe('steering');
     expect(routeAt('/steering/security').current.panel).toBe('steering');
     expect(routeAt('/testing/harness').current.panel).toBe('testing');
@@ -59,6 +61,7 @@ describe('useRoute — dead addresses parse to the not-found panel', () => {
 
   it('the retired addresses still parse to their destinations (moves, not typos)', () => {
     expect(routeAt('/runs').current.panel).toBe('runs'); // → /work via useLegacyRedirect
+    expect(routeAt('/make').current.panel).toBe('execute'); // → /execute via useMakeRedirect
     expect(routeAt('/wiki').current.panel).toBe('steering');
     expect(routeAt('/coverage').current.panel).toBe('system');
     expect(routeAt('/campaigns').current).toMatchObject({ panel: 'testing', testingPage: 'campaigns' });

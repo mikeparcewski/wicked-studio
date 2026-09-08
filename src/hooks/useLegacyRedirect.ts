@@ -168,14 +168,34 @@ export function useRetiredSettingsRedirect(pathname: string, navigate: Navigate)
 }
 
 /**
+ * The retired `/make` address normalizer (the nav-reorg split Make into Execute / Vibe / Demo):
+ * `/make` parses to the `execute` panel (so the Execute dashboard renders instantly on the
+ * pre-redirect tick) and this hook REPLACES the address with `/execute`, so Back never re-enters
+ * the dead address. Only the bare `/make` moves — Vibe and Demo have their own top-level routes,
+ * and the in-project `/p/:id/:mode` document/video vocabulary is untouched.
+ */
+export function useMakeRedirect(pathname: string, navigate: Navigate): void {
+  useEffect(() => {
+    const [, first = '', second = ''] = pathname.split('/');
+    // Only the BARE `/make` (and a trailing-slash `/make/`) moves — a deeper `/make/foo` is not a
+    // retired Make address (Make had no URL sub-vocabulary; the in-project `/p/:id/:mode` document/
+    // video paths are untouched), so blanket-collapsing it to `/execute` would silently swallow a
+    // typo that should honestly reach `not-found`.
+    if (first !== 'make' || second !== '') return;
+    navigate('/execute', { replace: true });
+  }, [pathname, navigate]);
+}
+
+/**
  * The Testing surface's address normalizer (same grammar as {@link useSteeringRedirect}):
  *
  *  - the RETIRED flat campaign addresses `/campaigns` and `/campaigns/:id` (the campaign
  *    surface MOVED under Testing) rewrite onto `/testing/campaigns[...]` — the path tail rides
  *    along verbatim, so a bookmarked scoreboard lands on the same campaign;
  *  - a page-less `/testing` address — the bare parent AND the RETIRED `/testing/harness`
- *    (the Harness folded into the Campaigns landing's creation verbs, testing-UX wave) —
- *    normalizes onto the Campaigns landing: campaigns IS `/testing`'s home now.
+ *    (the Harness folded into the eval runner's creation verbs, testing-UX wave) — normalizes
+ *    onto Evals: the nav-reorg renamed the section Evals and Evals IS `/testing`'s home now
+ *    (Campaigns moved into the project shell), so the bare parent lands there, not on Campaigns.
  *
  * REPLACE, like every redirect in this module, so Back never re-enters the dead address; the
  * parse already lands both on `panel: 'testing'`, so the page renders instantly on the
@@ -193,6 +213,6 @@ export function useTestingRedirect(
       navigate(`/testing${pathname}`, { replace: true });
       return;
     }
-    if (testingPage === null) navigate(testingPath('campaigns'), { replace: true });
+    if (testingPage === null) navigate(testingPath('evals'), { replace: true });
   }, [panel, testingPage, pathname, navigate]);
 }

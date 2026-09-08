@@ -4,18 +4,17 @@ import type { BoardProject } from '../src/hooks/useBoardModel.js';
 import { makeView } from './factories.js';
 
 /**
- * The six-path accordion rail (DES-FEEDBACK-003 §2/§3, slice M; Steering added
- * by the STEERING program): Projects / Make / Chat / Repositories / Steering /
- * Settings heading rows, a strict ONE-OPEN accordion (EC26), route-aware
- * default expansion (§3.2), ▦/＋ heading icons (Steering and Settings
- * icon-less — the operator's word), and the slice-A rail zones
- * (QUICK, inline runs, standalone taxonomies, bottom settings section) GONE
- * (§8.1). The repo 5s poll is retired: fetch-on-expand through the session
- * cache shared with the palette (§3.3).
+ * The nine-path accordion rail (DES-FEEDBACK-003 §2/§3; nav-reorg): Projects / Execute / Vibe /
+ * Demo / Evals / Chat / Repositories / Steering / Settings heading rows, a strict ONE-OPEN
+ * accordion (EC26), route-aware default expansion (§3.2), ▦/＋ heading icons.
  *
- * The board model is mocked: the rail's contract is "render what the model
- * ordered, verbatim" — the ordering arithmetic itself is pinned in
- * boardAttention.test.ts / boardModel.test.ts.
+ * The nav-reorg promoted each of Make's three forks (build|document|video) to a top-level path —
+ * Execute ← build, Vibe ← document, Demo ← video — each reusing the Make/Chat rail grammar; moved
+ * Steering's Dashboard from a sub-row to the heading's ▦; and made the former Test section into
+ * Evals, a normal section whose list is the eval runner (campaigns moved into the project shell).
+ *
+ * The board model is mocked: the rail's contract is "render what the model ordered, verbatim" —
+ * the ordering arithmetic itself is pinned in boardAttention.test.ts / boardModel.test.ts.
  */
 
 let boardItems: BoardProject[] = [];
@@ -58,7 +57,7 @@ const W2_ORDERED = [
   bp('scratch', 'quiet', 0),
 ];
 
-const HEADING_KEYS = ['projects', 'make', 'testing', 'chat', 'repos', 'steering', 'settings'] as const;
+const HEADING_KEYS = ['projects', 'execute', 'vibe', 'demo', 'testing', 'chat', 'repos', 'steering', 'settings'] as const;
 
 function rail(props: Partial<{ pathname: string; navigate: (p: string) => void; runs: ReturnType<typeof makeView>[] }> = {}): ReturnType<typeof render> {
   return render(
@@ -89,7 +88,12 @@ describe('the route→heading map (§3.2)', () => {
     expect(headingForPath('/projects')).toBe('projects');
     expect(headingForPath('/p/abc/build')).toBe('projects');
     expect(headingForPath('/p/abc')).toBe('projects');
-    expect(headingForPath('/make')).toBe('make');
+    // Execute / Vibe / Demo (nav-reorg); the retired /make maps to Execute for the
+    // pre-redirect tick.
+    expect(headingForPath('/execute')).toBe('execute');
+    expect(headingForPath('/make')).toBe('execute');
+    expect(headingForPath('/vibe')).toBe('vibe');
+    expect(headingForPath('/demo')).toBe('demo');
     expect(headingForPath('/chats')).toBe('chat');
     expect(headingForPath('/chat/new')).toBe('chat');
     expect(headingForPath('/repos')).toBe('repos');
@@ -101,14 +105,12 @@ describe('the route→heading map (§3.2)', () => {
       expect(headingForPath(p)).toBe('settings');
     }
     // Steering owns its sub-sections AND the retired /wiki + /rules + /policies panels AND the
-    // retired standalone /proposals queue (all redirect into Steering — the rail must not flash
-    // Settings open on the pre-redirect tick). The seven types are a `?type=` filter under
+    // retired standalone /proposals queue. The seven types are a `?type=` filter under
     // /steering/policies now, so a legacy /steering/:type still maps here too.
     for (const p of ['/steering', '/steering/policies', '/steering/memories', '/steering/security', '/wiki', '/rules', '/policies', '/proposals']) {
       expect(headingForPath(p)).toBe('steering');
     }
-    // Testing owns its routes AND the retired flat /campaigns addresses (they
-    // redirect to /testing/campaigns — same pre-redirect-tick contract).
+    // Evals (key stays `testing`) owns its routes AND the retired flat /campaigns addresses.
     for (const p of ['/testing/harness', '/testing/evals', '/testing/campaigns', '/testing/campaigns/c-1', '/campaigns', '/campaigns/c-1']) {
       expect(headingForPath(p)).toBe('testing');
     }
@@ -118,8 +120,8 @@ describe('the route→heading map (§3.2)', () => {
   });
 });
 
-describe('the seven heading rows (§3.1 + STEERING + the testing wave)', () => {
-  it('renders all seven headings; Testing, Steering and Settings are icon-less, the other four carry ▦ and ＋', async () => {
+describe('the nine heading rows (§3.1 + nav-reorg)', () => {
+  it('renders all nine headings; Settings is icon-less, Steering carries ▦ only, the rest carry ▦ and ＋', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
@@ -128,44 +130,55 @@ describe('the seven heading rows (§3.1 + STEERING + the testing wave)', () => {
     }
     // The standalone Proposals heading retired — proposals live inside Steering's sub-sections.
     expect(screen.queryByTestId('rail-heading-proposals')).toBeNull();
-    for (const k of ['testing', 'steering', 'settings']) {
-      const h = screen.getByTestId(`rail-heading-${k}`);
+    // Settings: no ▦, no ＋ (the operator's word).
+    {
+      const h = screen.getByTestId('rail-heading-settings');
       expect(within(h).queryByTestId('heading-dashboard')).toBeNull();
       expect(within(h).queryByTestId('heading-new')).toBeNull();
     }
-    for (const k of ['projects', 'make', 'chat', 'repos']) {
+    // Steering: ▦ (the nav-reorg moved the Dashboard onto the heading), but NO ＋.
+    {
+      const h = screen.getByTestId('rail-heading-steering');
+      expect(within(h).getByTestId('heading-dashboard')).toBeInTheDocument();
+      expect(within(h).queryByTestId('heading-new')).toBeNull();
+    }
+    // Every other heading carries both ▦ and ＋ — including Evals (the normalized Test section).
+    for (const k of ['projects', 'execute', 'vibe', 'demo', 'testing', 'chat', 'repos']) {
       const h = screen.getByTestId(`rail-heading-${k}`);
       expect(within(h).getByTestId('heading-dashboard')).toBeInTheDocument();
       expect(within(h).getByTestId('heading-new')).toBeInTheDocument();
     }
   });
 
-  it('Make → Test adjacency, and Steering → Settings (the nav-ui-tweaks placement contract)', async () => {
+  it('order: Projects → Execute → Vibe → Demo → Evals → Chat → Repos → Steering → Settings', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
-    const make = screen.getByTestId('rail-heading-make');
-    const testing = screen.getByTestId('rail-heading-testing');
-    const chat = screen.getByTestId('rail-heading-chat');
-    const steering = screen.getByTestId('rail-heading-steering');
-    const settings = screen.getByTestId('rail-heading-settings');
-    // Test now sits immediately BELOW Make, before Chat (nav-ui-tweaks).
-    expect(make.nextElementSibling).toBe(testing);
-    expect(testing.nextElementSibling).toBe(chat);
-    // Steering → Settings still tail the rail, adjacent.
-    expect(steering.nextElementSibling).toBe(settings);
-    expect(steering.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const el = (k: string): HTMLElement => screen.getByTestId(`rail-heading-${k}`);
+    expect(el('projects').nextElementSibling).toBe(el('execute'));
+    expect(el('execute').nextElementSibling).toBe(el('vibe'));
+    expect(el('vibe').nextElementSibling).toBe(el('demo'));
+    expect(el('demo').nextElementSibling).toBe(el('testing'));
+    expect(el('testing').nextElementSibling).toBe(el('chat'));
+    expect(el('chat').nextElementSibling).toBe(el('repos'));
+    expect(el('repos').nextElementSibling).toBe(el('steering'));
+    expect(el('steering').nextElementSibling).toBe(el('settings'));
   });
 
-  it('the Test heading is labelled "Test" though its key stays testing', async () => {
+  it('the promoted headings are labelled Execute / Vibe / Demo, and the Test section is labelled Evals', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
-    const title = within(screen.getByTestId('rail-heading-testing')).getByTestId('rail-title-testing');
-    expect(title).toHaveTextContent('Test');
-    expect(title).not.toHaveTextContent('Testing');
+    expect(within(screen.getByTestId('rail-heading-execute')).getByTestId('rail-title-execute')).toHaveTextContent('Execute');
+    expect(within(screen.getByTestId('rail-heading-vibe')).getByTestId('rail-title-vibe')).toHaveTextContent('Vibe');
+    expect(within(screen.getByTestId('rail-heading-demo')).getByTestId('rail-title-demo')).toHaveTextContent('Demo');
+    const evals = within(screen.getByTestId('rail-heading-testing')).getByTestId('rail-title-testing');
+    expect(evals).toHaveTextContent('Evals');
+    expect(evals).not.toHaveTextContent('Test');
+    // No "Make" anywhere on the rail.
+    expect(screen.queryByTestId('rail-heading-make')).toBeNull();
   });
 
-  it('▦ icons are real links to the §2.1 dashboard routes', async () => {
+  it('▦ icons are real links to the dashboard routes', async () => {
     const navigate = vi.fn();
     rail({ navigate });
     await screen.findByRole('button', { name: 'wicked-studio' });
@@ -174,17 +187,21 @@ describe('the seven heading rows (§3.1 + STEERING + the testing wave)', () => {
       within(screen.getByTestId(`rail-heading-${k}`))
         .getByTestId('heading-dashboard').getAttribute('href');
     expect(hrefOf('projects')).toBe('/projects');
-    expect(hrefOf('make')).toBe('/make');
+    expect(hrefOf('execute')).toBe('/execute');
+    expect(hrefOf('vibe')).toBe('/vibe');
+    expect(hrefOf('demo')).toBe('/demo');
+    expect(hrefOf('testing')).toBe('/testing/evals');
     expect(hrefOf('chat')).toBe('/chats');
     expect(hrefOf('repos')).toBe('/repos');
+    expect(hrefOf('steering')).toBe('/steering/dashboard');
 
-    fireEvent.click(within(screen.getByTestId('rail-heading-make')).getByTestId('heading-dashboard'));
-    expect(navigate).toHaveBeenCalledWith('/make');
+    fireEvent.click(within(screen.getByTestId('rail-heading-execute')).getByTestId('heading-dashboard'));
+    expect(navigate).toHaveBeenCalledWith('/execute');
     // The ▦ never toggles expansion (§3.1).
     expect(expandedKeys()).toEqual([]);
   });
 
-  it('the slice-A zones are GONE: no QUICK, no inline runs, no standalone taxonomies, no bottom settings section (§8.1)', async () => {
+  it('the slice-A zones are GONE (§8.1)', async () => {
     rail({ runs: [makeView({ id: 'r-live', status: 'executing' })] });
     await screen.findByRole('button', { name: 'wicked-studio' });
 
@@ -192,8 +209,6 @@ describe('the seven heading rows (§3.1 + STEERING + the testing wave)', () => {
     expect(screen.queryByTestId('rail-actions')).toBeNull();
     expect(screen.queryByTestId('rail-runs')).toBeNull();
     expect(screen.queryByTestId('rail-settings-section')).toBeNull();
-    expect(screen.queryByTestId('rail-section-projects')).toBeNull();
-    expect(screen.queryByTestId('rail-section-repos')).toBeNull();
     expect(screen.queryByText('QUICK')).toBeNull();
   });
 
@@ -210,8 +225,8 @@ describe('the one-open accordion (§3.2, EC26)', () => {
     await screen.findByRole('button', { name: 'wicked-studio' });
     expect(expandedKeys()).toEqual([]); // landing on / — the calm frame
 
-    fireEvent.click(screen.getByTestId('rail-title-make'));
-    expect(expandedKeys()).toEqual(['make']);
+    fireEvent.click(screen.getByTestId('rail-title-execute'));
+    expect(expandedKeys()).toEqual(['execute']);
 
     fireEvent.click(screen.getByTestId('rail-title-projects'));
     expect(expandedKeys()).toEqual(['projects']);
@@ -221,7 +236,7 @@ describe('the one-open accordion (§3.2, EC26)', () => {
     expect(expandedKeys()).toEqual([]);
   });
 
-  it('derives the default from the route: /p/* expands Projects, / expands none, /chats expands Chat', async () => {
+  it('derives the default from the route: /p/* expands Projects, / expands none, /vibe expands Vibe', async () => {
     rail({ pathname: '/p/abc/build' });
     await screen.findByRole('button', { name: 'wicked-studio' });
     expect(expandedKeys()).toEqual(['projects']);
@@ -232,9 +247,9 @@ describe('the one-open accordion (§3.2, EC26)', () => {
     expect(expandedKeys()).toEqual([]);
     cleanup();
 
-    rail({ pathname: '/chats' });
+    rail({ pathname: '/vibe' });
     await screen.findByRole('button', { name: 'wicked-studio' });
-    expect(expandedKeys()).toEqual(['chat']);
+    expect(expandedKeys()).toEqual(['vibe']);
   });
 
   it('respects a manual collapse within one territory; re-fires on a territory change (§3.2)', async () => {
@@ -242,20 +257,18 @@ describe('the one-open accordion (§3.2, EC26)', () => {
     await screen.findByRole('button', { name: 'wicked-studio' });
     expect(expandedKeys()).toEqual(['projects']);
 
-    // Manual collapse, then move between the SAME project's modes: stays collapsed.
     fireEvent.click(screen.getByTestId('rail-title-projects'));
     expect(expandedKeys()).toEqual([]);
     view.rerender(<LeftSidebar runs={[]} navigate={() => {}} pathname="/p/abc/chat" />);
     expect(expandedKeys()).toEqual([]);
 
-    // A DIFFERENT heading's territory re-fires the map.
     view.rerender(<LeftSidebar runs={[]} navigate={() => {}} pathname="/repos" />);
     expect(expandedKeys()).toEqual(['repos']);
   });
 });
 
 describe('the ＋ create actions (§2.1/§3.4)', () => {
-  it('Projects ＋ opens the new-project modal — the slice-A component unchanged', async () => {
+  it('Projects ＋ opens the new-project modal', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
@@ -266,40 +279,51 @@ describe('the ＋ create actions (§2.1/§3.4)', () => {
     expect(screen.queryByTestId('new-project-modal')).toBeNull();
   });
 
-  it('Chat ＋ and Repositories ＋ navigate to their existing create routes', async () => {
+  it('Execute ＋ launches a build run directly; Chat ＋ / Repos ＋ / Evals ＋ navigate to their routes', async () => {
     const navigate = vi.fn();
     rail({ navigate });
     await screen.findByRole('button', { name: 'wicked-studio' });
 
+    fireEvent.click(within(screen.getByTestId('rail-heading-execute')).getByTestId('heading-new'));
+    expect(navigate).toHaveBeenCalledWith('/runs/new');
     fireEvent.click(within(screen.getByTestId('rail-heading-chat')).getByTestId('heading-new'));
     expect(navigate).toHaveBeenCalledWith('/chat/new');
     fireEvent.click(within(screen.getByTestId('rail-heading-repos')).getByTestId('heading-new'));
     expect(navigate).toHaveBeenCalledWith('/repos/new');
+    fireEvent.click(within(screen.getByTestId('rail-heading-testing')).getByTestId('heading-new'));
+    expect(navigate).toHaveBeenCalledWith('/testing/evals');
   });
 
-  it('Make ＋ opens the three-way make-picker; Build routes to the unbound launch form', async () => {
-    const navigate = vi.fn();
-    rail({ navigate });
-    await screen.findByRole('button', { name: 'wicked-studio' });
-
-    fireEvent.click(within(screen.getByTestId('rail-heading-make')).getByTestId('heading-new'));
-    const picker = screen.getByTestId('make-picker');
-    const rows = within(picker).getAllByTestId('make-picker-row');
-    expect(rows.map((r) => r.dataset.mode)).toEqual(['build', 'document', 'video']);
-
-    fireEvent.click(rows[0]!);
-    expect(navigate).toHaveBeenCalledWith('/runs/new');
-    expect(screen.queryByTestId('make-picker')).toBeNull();
-  });
-
-  it('Make ＋ → Document goes through the project picker — a doc lives in a project (§3.4)', async () => {
+  it('Vibe ＋ opens a project-picker locked to Document; Demo ＋ one locked to Video', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
-    fireEvent.click(within(screen.getByTestId('rail-heading-make')).getByTestId('heading-new'));
-    fireEvent.click(screen.getAllByTestId('make-picker-row')[1]!);
-    expect(screen.getByTestId('make-picker-project-stage')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId('rail-heading-vibe')).getByTestId('heading-new'));
+    const vibePicker = screen.getByTestId('project-mode-picker');
+    expect(vibePicker.dataset.mode).toBe('document');
+    expect(screen.getByTestId('project-mode-picker-stage')).toBeInTheDocument();
     expect(screen.getByTestId('project-switcher')).toBeInTheDocument();
+    // Re-clicking ＋ toggles it closed.
+    fireEvent.click(within(screen.getByTestId('rail-heading-vibe')).getByTestId('heading-new'));
+    expect(screen.queryByTestId('project-mode-picker')).toBeNull();
+
+    fireEvent.click(within(screen.getByTestId('rail-heading-demo')).getByTestId('heading-new'));
+    expect(screen.getByTestId('project-mode-picker').dataset.mode).toBe('video');
+  });
+
+  it('opening one picker closes the other — never two at once (copilot #197)', async () => {
+    rail();
+    await screen.findByRole('button', { name: 'wicked-studio' });
+
+    // Open Vibe's picker…
+    fireEvent.click(within(screen.getByTestId('rail-heading-vibe')).getByTestId('heading-new'));
+    expect(screen.getByTestId('project-mode-picker').dataset.mode).toBe('document');
+
+    // …then open Demo's. Vibe's must close: exactly ONE picker is mounted, locked to Video.
+    fireEvent.click(within(screen.getByTestId('rail-heading-demo')).getByTestId('heading-new'));
+    const pickers = screen.getAllByTestId('project-mode-picker');
+    expect(pickers).toHaveLength(1);
+    expect(pickers[0]!.dataset.mode).toBe('video');
   });
 });
 
@@ -316,18 +340,18 @@ describe('accordion contents (§3.3)', () => {
     expect(within(section).getByTestId('rail-view-all')).toHaveAttribute('href', '/projects');
   });
 
-  it('partitions runs: a workflow-less run is a CHAT (ChatsPage predicate verbatim), never double-listed under Make', async () => {
+  it('partitions runs: a workflow-less run is a CHAT, never double-listed under Execute', async () => {
     const runs = [
       makeView({ id: 'r-build', workflow_id: 'wf-1', problem: 'ship the thing', status: 'executing' }),
       makeView({ id: 'r-chat', workflow_id: 'chat', problem: 'talk it over', status: 'executing' }),
       makeView({ id: 'r-legacy', workflow_id: undefined as unknown as string, problem: 'old chat', status: 'completed' }),
     ];
-    rail({ runs, pathname: '/make' });
+    rail({ runs, pathname: '/execute' });
     await screen.findByRole('button', { name: 'wicked-studio' });
 
-    const make = screen.getByTestId('rail-heading-make');
-    const makeIds = within(make).getAllByTestId('rail-run').map((r) => r.dataset.runId);
-    expect(makeIds).toEqual(['r-build']);
+    const exec = screen.getByTestId('rail-heading-execute');
+    const execIds = within(exec).getAllByTestId('rail-run').map((r) => r.dataset.runId);
+    expect(execIds).toEqual(['r-build']);
 
     fireEvent.click(screen.getByTestId('rail-title-chat'));
     const chat = screen.getByTestId('rail-heading-chat');
@@ -335,24 +359,31 @@ describe('accordion contents (§3.3)', () => {
     expect(chatIds).toEqual(['r-chat', 'r-legacy']); // active before terminal
   });
 
-  it('a Make run row navigates via runPath; no `+` glyph rides inside accordion contents (EC20 amended)', async () => {
+  it('an Execute run row navigates via runPath; no `+` glyph rides inside accordion contents', async () => {
     const navigate = vi.fn();
     render(
       <LeftSidebar
         runs={[makeView({ id: 'r-1', workflow_id: 'wf-1', status: 'executing' })]}
         navigate={navigate}
-        pathname="/make"
+        pathname="/execute"
         runPath={(id) => `/p/abc/build/${id}`}
       />,
     );
     await screen.findByRole('button', { name: 'wicked-studio' });
 
-    const make = screen.getByTestId('rail-heading-make');
-    fireEvent.click(within(make).getByTestId('rail-run'));
+    const exec = screen.getByTestId('rail-heading-execute');
+    fireEvent.click(within(exec).getByTestId('rail-run'));
     expect(navigate).toHaveBeenCalledWith('/p/abc/build/r-1');
-    // Accordion CONTENTS carry no `+` glyph — the ＋ lives at heading level only.
-    const contents = within(make).getByTestId('rail-run').parentElement!;
+    const contents = within(exec).getByTestId('rail-run').parentElement!;
     expect(contents.textContent).not.toContain('+');
+  });
+
+  it('Vibe/Demo empty states say documents / demos, not "made"', async () => {
+    rail({ pathname: '/vibe' });
+    await screen.findByRole('button', { name: 'wicked-studio' });
+    expect(within(screen.getByTestId('rail-heading-vibe')).getByText('No documents yet')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('rail-title-demo'));
+    expect(within(screen.getByTestId('rail-heading-demo')).getByText('No demos yet')).toBeInTheDocument();
   });
 
   it('Repositories: fetch on EXPAND only, once per session — the 5s poll is retired (§3.3)', async () => {
@@ -361,13 +392,12 @@ describe('accordion contents (§3.3)', () => {
       rail();
       expect(listRepos).not.toHaveBeenCalled();
       await act(async () => { await vi.advanceTimersByTimeAsync(11_000); });
-      expect(listRepos).not.toHaveBeenCalled(); // no poll, no mount fetch
+      expect(listRepos).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByTestId('rail-title-repos'));
       await act(async () => { await vi.advanceTimersByTimeAsync(10); });
       expect(listRepos).toHaveBeenCalledTimes(1);
 
-      // Collapse and re-expand: the session cache is warm — no second GET.
       fireEvent.click(screen.getByTestId('rail-title-repos'));
       fireEvent.click(screen.getByTestId('rail-title-repos'));
       await act(async () => { await vi.advanceTimersByTimeAsync(10); });
@@ -383,14 +413,11 @@ describe('accordion contents (§3.3)', () => {
 
     const settings = screen.getByTestId('rail-heading-settings');
     expect(settings.getAttribute('aria-expanded')).toBe('true');
-    // 3 rows: Theme, Workflows, System — Rules and Arch Wiki retired into the
-    // Steering heading (the STEERING program), and the steering-UX wave retired
-    // Policies (→ /steering) plus the orphaned Coverage/Domain panels (→ /system).
     expect(within(settings).getAllByRole('menuitem')).toHaveLength(3);
     expect(within(settings).getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument();
   });
 
-  it('Steering expands to the three sub-section rows (Dashboard / Policies / Memories), each navigating to its page; the route expands it', async () => {
+  it('Steering expands to the TWO management sub-section rows (Policies / Memories); Dashboard moved to the ▦', async () => {
     const navigate = vi.fn();
     rail({ pathname: '/steering/policies', navigate });
     await screen.findByRole('button', { name: 'wicked-studio' });
@@ -398,47 +425,43 @@ describe('accordion contents (§3.3)', () => {
     const steering = screen.getByTestId('rail-heading-steering');
     expect(steering.getAttribute('aria-expanded')).toBe('true');
     const rows = within(steering).getAllByTestId('rail-steering-section');
-    expect(rows.map((r) => r.dataset.section)).toEqual(['dashboard', 'policies', 'memories']);
-    expect(rows[0]).toHaveTextContent('Dashboard');
-    expect(rows[1]).toHaveTextContent('Policies');
-    expect(rows[2]).toHaveTextContent('Memories');
-    // The seven types retired into a `?type=` filter under Policies — no per-type rail rows now.
-    expect(within(steering).queryByTestId('rail-steering-type')).toBeNull();
+    expect(rows.map((r) => r.dataset.section)).toEqual(['policies', 'memories']);
+    expect(rows[0]).toHaveTextContent('Policies');
+    expect(rows[1]).toHaveTextContent('Memories');
+    // The Dashboard is no longer a sub-row — it is the heading's ▦.
+    expect(rows.map((r) => r.dataset.section)).not.toContain('dashboard');
+    expect(within(steering).getByTestId('heading-dashboard')).toHaveAttribute('href', '/steering/dashboard');
 
-    fireEvent.click(rows[0]!);
-    expect(navigate).toHaveBeenCalledWith('/steering/dashboard');
-    fireEvent.click(rows[2]!);
+    fireEvent.click(rows[1]!);
     expect(navigate).toHaveBeenCalledWith('/steering/memories');
   });
 
-  it('Testing expands to the two page rows, each navigating to its sub-page; the route expands it', async () => {
+  it('Evals expands to the "Run evals" shortcut row, navigating to the runner; the route expands it', async () => {
     const navigate = vi.fn();
     rail({ pathname: '/testing/evals', navigate });
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     const testing = screen.getByTestId('rail-heading-testing');
     expect(testing.getAttribute('aria-expanded')).toBe('true');
-    const rows = within(testing).getAllByTestId('rail-testing-page');
-    expect(rows.map((r) => r.dataset.page)).toEqual(['campaigns', 'evals']);
-    expect(rows[0]).toHaveTextContent('Campaigns');
-
-    fireEvent.click(rows[0]!);
-    expect(navigate).toHaveBeenCalledWith('/testing/campaigns');
+    // Campaigns is no longer a rail sub-page (it moved into the project shell).
+    expect(within(testing).queryByTestId('rail-testing-page')).toBeNull();
+    const run = within(testing).getByTestId('rail-evals-run');
+    fireEvent.click(run);
+    expect(navigate).toHaveBeenCalledWith('/testing/evals');
   });
 });
 
 describe('the collapsed rail (§3.2)', () => {
-  it('shows exactly seven glyph links (Testing → its Campaigns landing, Steering → its Dashboard home, Settings → /system)', async () => {
+  it('shows exactly nine glyph links (Evals → its runner, Steering → its Dashboard, Settings → /system)', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
-    expect(glyphs).toHaveLength(7);
+    expect(glyphs).toHaveLength(9);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/make', '/testing/campaigns', '/chats', '/repos', '/steering/dashboard', '/system',
+      '/projects', '/execute', '/vibe', '/demo', '/testing/evals', '/chats', '/repos', '/steering/dashboard', '/system',
     ]);
-    // Accordions don't exist at this width.
     expect(screen.queryByTestId('rail-heading-projects')).toBeNull();
   });
 });

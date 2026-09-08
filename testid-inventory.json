@@ -11,9 +11,9 @@
   "studioVersion": "0.4.15",
   "counts": {
     "files": 123,
-    "occurrences": 1006,
-    "static": 861,
-    "dynamic": 47,
+    "occurrences": 1010,
+    "static": 856,
+    "dynamic": 56,
     "computed": 6
   },
   "static": [
@@ -1038,6 +1038,12 @@
       ]
     },
     {
+      "testId": "dashboard-campaigns",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
       "testId": "dashboard-clear-filters",
       "files": [
         "src/components/ProjectDashboard.tsx"
@@ -1479,6 +1485,60 @@
       "testId": "evidence-ref",
       "files": [
         "src/components/Markdown.tsx"
+      ]
+    },
+    {
+      "testId": "execute-clear-filters",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "execute-hidden-chip",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "execute-list",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "execute-needs-you",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "execute-new",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "execute-retry",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "execute-run-row",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "execute-run-title",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "execute-runs-empty",
+      "files": [
+        "src/components/MadeDashboard.tsx"
       ]
     },
     {
@@ -2385,120 +2445,6 @@
       ]
     },
     {
-      "testId": "make-clear-filters",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-corpus-label",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-corpus-why",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-corpus-why-popover",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-dashboard",
-      "files": [
-        "src/App.tsx"
-      ]
-    },
-    {
-      "testId": "make-doc-row",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-fanout-progress",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-hidden-chip",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-list",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-load-all-docs",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-needs-you",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-new",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-picker",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "make-picker-project-stage",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "make-picker-row",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "make-retry",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-run-row",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-run-title",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "make-runs-empty",
-      "files": [
-        "src/components/MakeDashboard.tsx"
-      ]
-    },
-    {
       "testId": "mapper-adjustments",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -2974,6 +2920,18 @@
       ]
     },
     {
+      "testId": "project-campaigns",
+      "files": [
+        "src/App.tsx"
+      ]
+    },
+    {
+      "testId": "project-campaigns-back",
+      "files": [
+        "src/App.tsx"
+      ]
+    },
+    {
       "testId": "project-card",
       "files": [
         "src/components/ProjectCard.tsx",
@@ -2996,6 +2954,18 @@
       "testId": "project-home",
       "files": [
         "src/components/ProjectShell.tsx"
+      ]
+    },
+    {
+      "testId": "project-mode-picker",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "testId": "project-mode-picker-stage",
+      "files": [
+        "src/components/LeftSidebar.tsx"
       ]
     },
     {
@@ -3233,6 +3203,12 @@
       ]
     },
     {
+      "testId": "rail-evals-run",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
       "testId": "rail-health-chevron",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -3313,12 +3289,6 @@
     },
     {
       "testId": "rail-steering-section",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-testing-page",
       "files": [
         "src/components/LeftSidebar.tsx"
       ]
@@ -5253,6 +5223,36 @@
       ]
     },
     {
+      "pattern": "*-corpus-label",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "pattern": "*-corpus-why",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "pattern": "*-corpus-why-popover",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "pattern": "*-dashboard",
+      "files": [
+        "src/App.tsx"
+      ]
+    },
+    {
+      "pattern": "*-doc-row",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
       "pattern": "*-editor",
       "files": [
         "src/components/SteeringGrid.tsx"
@@ -5265,10 +5265,34 @@
       ]
     },
     {
+      "pattern": "*-fanout-progress",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
       "pattern": "*-input",
       "files": [
         "src/components/FacetAutocomplete.tsx",
         "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "pattern": "*-list",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "pattern": "*-load-all",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "pattern": "*-new",
+      "files": [
+        "src/components/MadeDashboard.tsx"
       ]
     },
     {

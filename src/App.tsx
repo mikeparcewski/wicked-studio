@@ -5,7 +5,8 @@ import { CommandPalette, paletteShortcutEntries } from './components/CommandPale
 import { ChatsPage } from './components/ChatsPage.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { HomeBoard } from './components/HomeBoard.js';
-import { MakeDashboard } from './components/MakeDashboard.js';
+import { MadeDashboard } from './components/MadeDashboard.js';
+import { CampaignsPage } from './components/CampaignsPage.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
@@ -35,7 +36,7 @@ import { ThemePage } from './components/ThemePage.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
-import { useLegacyRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
+import { useLegacyRedirect, useMakeRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
@@ -76,7 +77,7 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
 const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignId, steeringSection, testingPage, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignsView, campaignId, steeringSection, testingPage, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
@@ -154,8 +155,13 @@ export function App(): React.ReactElement {
   useRetiredSettingsRedirect(pathname, navigate);
 
   // The retired flat campaign addresses (`/campaigns`, `/campaigns/:id`) rewrite onto
-  // `/testing/campaigns[...]`, and any page-less `/testing` address normalizes onto Harness.
+  // `/testing/campaigns[...]`, and any page-less `/testing` address normalizes onto Evals
+  // (the nav-reorg's renamed section home; Campaigns moved into the project shell).
   useTestingRedirect(panel, testingPage, pathname, navigate);
+
+  // The retired `/make` address (the nav-reorg split Make into Execute/Vibe/Demo) normalizes
+  // onto `/execute`.
+  useMakeRedirect(pathname, navigate);
 
   // FINDING-013: /ws has no late-join replay, so a page reloaded against a run shows an empty Burn
   // panel even though usage was durably recorded. When the selected run has no frames yet (a reload
@@ -454,6 +460,42 @@ export function App(): React.ReactElement {
         </ProjectShell>
       );
     }
+    // `/p/:projectId/campaigns` (nav-reorg): the project-scoped Campaigns surface — the
+    // campaign scoreboard/list re-homed under the project shell. A campaign is a DAG workload,
+    // not a project, so this is a project-scoped VIEW (mode stays null — the ModeSwitcher's
+    // four verbs are untouched), reached from the project dashboard. The campaign store is not
+    // project-partitioned on the wire yet, so the surface renders the full campaign command
+    // surface framed by the project context; true per-project scoping is a data-layer follow-up.
+    if (projectId !== null && campaignsView) {
+      return (
+        <div className="flex-1 overflow-y-auto" data-testid="project-campaigns" data-project-id={projectId}>
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '10px 24px 0', flexShrink: 0,
+            }}
+          >
+            <button
+              type="button"
+              data-testid="project-campaigns-back"
+              onClick={() => navigate(`/p/${encodeURIComponent(projectId)}`)}
+              title="Back to the project dashboard"
+              style={{
+                background: 'transparent', border: 'none', color: 'var(--ink-dim)', cursor: 'pointer',
+                fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)', padding: 0,
+              }}
+            >
+              ‹ Project
+            </button>
+            <span aria-hidden style={{ color: 'var(--ink-dim)', fontSize: 'var(--text-xs)' }}>›</span>
+            <span style={{ color: 'var(--ink-high)', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)' }}>
+              Campaigns
+            </span>
+          </div>
+          <CampaignsPage runs={runs} navigate={navigate} />
+        </div>
+      );
+    }
     // `/p/:projectId` with NO mode segment is the PROJECT DASHBOARD (DES-FEEDBACK-001
     // §4.1, slice D) — context before actions, replacing the last-used-mode redirect.
     // Not a fifth mode: no shell, no switcher tab; the mode verbs live in its header.
@@ -564,12 +606,14 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/make` — the Make path's combined list + reporting dashboard
-    // (DES-FEEDBACK-003 §4.2, slice O; the slice-M placeholder retired).
-    if (panel === 'make') {
+    // `/execute` · `/vibe` · `/demo` — the three Made command surfaces the nav-reorg split the
+    // former `/make` dashboard into (build → Execute, document → Vibe, video → Demo). ONE
+    // parameterized MadeDashboard, not three copies. `/make` parses here (panel 'execute') for
+    // the pre-redirect tick before `useMakeRedirect` replaces it with `/execute`.
+    if (panel === 'execute' || panel === 'vibe' || panel === 'demo') {
       return (
-        <div className="flex-1 overflow-y-auto" data-testid="make-dashboard">
-          <MakeDashboard runs={runs} navigate={navigate} runPath={runPath} />
+        <div className="flex-1 overflow-y-auto" data-testid={`${panel}-dashboard`}>
+          <MadeDashboard mode={panel} runs={runs} navigate={navigate} runPath={runPath} />
         </div>
       );
     }
