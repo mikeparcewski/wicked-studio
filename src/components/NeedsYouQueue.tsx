@@ -129,7 +129,14 @@ export function NeedsYouQueue({ rows, runs, navigate, now }: {
               data-testid="need-row"
               data-kind={row.kind}
               data-key={row.key}
-              style={CSS.row}
+              // Severity stripe (command-deck redesign): a glowing left edge colored by the row's
+              // tone, so what needs you reads by color at a glance (gate/failed/stranded/…).
+              style={{
+                ...CSS.row,
+                borderLeft: `3px solid ${TONE_COLOR[row.tone]}`,
+                paddingLeft: '9px',
+                boxShadow: `inset 4px 0 10px -6px ${TONE_COLOR[row.tone]}`,
+              }}
             >
               <span aria-hidden style={{ color: TONE_COLOR[row.tone], flexShrink: 0, fontSize: 'var(--text-xs)' }}>
                 {TONE_GLYPH[row.tone]}
