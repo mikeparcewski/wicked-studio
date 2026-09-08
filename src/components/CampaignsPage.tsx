@@ -565,7 +565,7 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
         testId="campaigns-filter"
         query={query}
         onQuery={setQuery}
-        placeholder="Search campaigns…"
+        placeholder="Search tests…"
         chips={chips}
         active={chip}
         onChip={(id) => setChip(id as CampaignChip)}

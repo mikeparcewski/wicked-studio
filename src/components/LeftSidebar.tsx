@@ -883,7 +883,6 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             path={P_TESTING}
             open={openHeading === 'testing'}
             onToggle={() => toggle('testing')}
-            onNew={() => navigate(testingPath('evals'))}
             navigate={navigate}
           >
             <EvalsRailRows navigate={navigate} />

@@ -28,7 +28,7 @@
 .deck-group::before {
   content: '';
   position: absolute; inset: 0 0 auto; height: 2px;
-  background: linear-gradient(90deg, var(--deck-gcol), transparent 72%);
+  background: linear-gradient(90deg, var(--deck-gcol, var(--accent)), transparent 72%);
 }
 .deck-group.flow  { --deck-gcol: var(--status-run);  --deck-gtint: color-mix(in oklab, var(--status-run) 12%, transparent); }
 .deck-group.attn  { --deck-gcol: var(--status-gate); --deck-gtint: color-mix(in oklab, var(--status-gate) 10%, transparent); }
@@ -37,9 +37,9 @@
 .deck-ghead { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
 .deck-tag {
   font-size: var(--text-2xs); font-weight: var(--weight-bold);
-  letter-spacing: 0.14em; text-transform: uppercase; color: var(--deck-gcol);
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--deck-gcol, var(--accent));
 }
-.deck-glyph { color: var(--deck-gcol); font-size: 11px; filter: drop-shadow(0 0 6px currentColor); opacity: 0.9; }
+.deck-glyph { color: var(--deck-gcol, var(--accent)); font-size: 11px; filter: drop-shadow(0 0 6px currentColor); opacity: 0.9; }
 
 .deck-tiles { display: flex; gap: 14px; }
 .deck-tile {

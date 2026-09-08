@@ -40,36 +40,36 @@ import { SteeringGate } from './SteeringGate.js';
 
 /** The recon framing — what "Run recon" sends is this prefix, a blank line, then the brief. */
 export const RECON_PROBLEM_PREFIX =
-  'Campaign recon: survey the target and propose a test campaign — the scenarios, their ' +
+  'Recon: survey the target and propose a test plan — the scenarios, their ' +
   'dependencies, and which are deterministic tool checks vs governed agent runs. Present the ' +
-  'proposed campaign at the intake gate and launch nothing until it is approved.';
+  'proposed plan at the intake gate and launch nothing until it is approved.';
 
-/** The campaign-kickoff framing — "New campaign" sends this prefix + blank line + brief. */
+/** The test-kickoff framing — "New test" sends this prefix + blank line + brief. */
 export const CAMPAIGN_PROBLEM_PREFIX =
-  'New test campaign: plan the campaign for the attached scope — the scenarios, their ' +
+  'New test: plan the test for the attached scope — the scenarios, their ' +
   'dependencies, and which are deterministic tool checks vs governed agent runs — and run the ' +
-  'approved plan as governed sibling runs under one campaign label. Present the plan at the ' +
+  'approved plan as governed sibling runs under one test. Present the plan at the ' +
   'intake gate and launch nothing until it is approved.';
 
 export type LaunchIntent = 'recon' | 'campaign';
 
 const INTENT_COPY: Record<LaunchIntent, { title: string; blurb: string; cta: string; prefix: string }> = {
   recon: {
-    title: 'Run a campaign recon',
+    title: 'Run recon',
     blurb:
-      'Launches a governed recon run: it surveys the attached codebases, drafts a test ' +
-      'campaign — the scenarios and their dependencies — and stops at its intake gate. ' +
+      'Launches a governed recon run: it surveys the attached codebases, drafts a test plan ' +
+      '— the scenarios and their dependencies — and stops at its intake gate. ' +
       'Nothing runs until you approve the gate here.',
     cta: 'Launch recon',
     prefix: RECON_PROBLEM_PREFIX,
   },
   campaign: {
-    title: 'New campaign',
+    title: 'New test',
     blurb:
-      'Launches a governed campaign kickoff: it plans the campaign over the attached ' +
+      'Launches a governed test kickoff: it plans the test over the attached ' +
       'codebases and stops at its intake gate — you approve the plan before anything runs. ' +
-      'The campaign appears below with its first run.',
-    cta: 'Launch campaign',
+      'The test appears below with its first run.',
+    cta: 'Launch test',
     prefix: CAMPAIGN_PROBLEM_PREFIX,
   },
 };
@@ -276,7 +276,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched }: {
             data-testid="testing-launch-instructions"
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
-            placeholder="What should this campaign cover? Name the surfaces, risks, or behaviors to test."
+            placeholder="What should this test cover? Name the surfaces, risks, or behaviors to test."
             className="min-h-[4rem] resize-y rounded px-2 py-1 text-[11px] focus:outline-none"
             style={FIELD_STYLE}
           />
@@ -399,7 +399,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched }: {
             {launched.campaign !== null ? (
               <> under <span className="font-mono" data-testid="testing-launch-fanout-label">{launched.campaign}</span></>
             ) : (
-              <> — one per attached codebase, under one campaign label</>
+              <> — one per attached codebase, under one test</>
             )}
             .
           </p>

@@ -1,6 +1,11 @@
+import { createContext, useContext } from 'react';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 import type { TimeRange } from '../hooks/useTimeRange.js';
 import type { StatDelta } from '../board/windowStats.js';
+
+/** True inside a {@link KpiGroup} — tiles render FLAT (transparent) so the GROUP panel is the deck
+ *  material (like DeckKpiRibbon), instead of each tile carrying its own card. */
+const InKpiGroup = createContext(false);
 
 /**
  * The section-dashboard kit (lane B): built once, worn by /projects, /p/:id
@@ -173,20 +178,23 @@ export function StatTile({
     </>
   );
 
+  const flat = useContext(InKpiGroup);
   const style: React.CSSProperties = {
     flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column',
     alignItems: 'stretch', gap: '4px', textAlign: 'left', textDecoration: 'none',
-    // Deck panel: a layered gradient + inset top-light + soft shadow (the DeckKpiRibbon material),
-    // so every section dashboard's KPI band reads like the landing's ribbon.
-    background: 'linear-gradient(180deg, var(--surface-card), var(--surface-rail))',
-    border: '1px solid var(--surface-raised)', boxShadow: 'var(--shadow-card)',
-    borderRadius: 'var(--radius-lg)', padding: 'var(--space-3) var(--space-4)',
+    // Inside a KpiGroup the GROUP is the deck panel, so the tile is FLAT (transparent) — like the
+    // landing ribbon's tiles. Standalone (no group) it carries its own deck-material card.
+    background: flat ? 'transparent' : 'linear-gradient(180deg, var(--surface-card), var(--surface-rail))',
+    border: flat ? 'none' : '1px solid var(--surface-raised)',
+    boxShadow: flat ? 'none' : 'var(--shadow-card)',
+    borderRadius: flat ? 0 : 'var(--radius-lg)',
+    padding: flat ? '2px 0' : 'var(--space-3) var(--space-4)',
     cursor: onOpen !== undefined ? 'pointer' : 'default',
     color: 'inherit', font: 'inherit',
   };
   const common = {
     'data-testid': testId,
-    className: 'deck-stat',
+    className: flat ? 'deck-stat deck-stat-flat' : 'deck-stat',
     'data-value': String(value),
     ...(delta !== undefined
       ? { 'data-delta': delta.previous === null ? 'none' : String(delta.current - delta.previous) }
@@ -237,25 +245,18 @@ export function KpiGroup({ label, children, grow = 1 }: {
   /** Relative width — a two-tile group grows twice a one-tile group. */
   grow?: number;
 }): React.ReactElement {
+  // The deck-group PANEL (the DeckKpiRibbon material): a gradient surface + accent top-edge + a
+  // glowing tag header, wrapping FLAT tiles — so every section dashboard's KPI band reads like the
+  // landing ribbon. `deck-group` / `deck-ghead` / `deck-tag` styles live in deck.css.
   return (
     <section
+      className="deck-group"
       data-kpi-group={label.toLowerCase()}
-      style={{
-        flex: `${grow} 1 ${grow * 150}px`, minWidth: `${grow * 140}px`,
-        display: 'flex', flexDirection: 'column', gap: '6px',
-      }}
+      style={{ flex: `${grow} 1 ${grow * 160}px`, minWidth: `${grow * 150}px` }}
     >
-      <p
-        style={{
-          margin: 0, fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semi)',
-          letterSpacing: '0.1em', textTransform: 'uppercase',
-          color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)',
-        }}
-      >
-        {label}
-      </p>
-      <div style={{ display: 'flex', gap: 'var(--space-3)', flex: 1, alignItems: 'stretch' }}>
-        {children}
+      <div className="deck-ghead"><span className="deck-tag">{label}</span></div>
+      <div className="deck-tiles">
+        <InKpiGroup.Provider value={true}>{children}</InKpiGroup.Provider>
       </div>
     </section>
   );
