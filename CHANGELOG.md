@@ -12,6 +12,17 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-09-08
+
+### Fixed
+- **Honest dashboard stat framing (#200, Copilot review).** The home essence tile for tests reads
+  "Governed tests (each test groups its sibling runs)" instead of "Test runs" — the value is the
+  test/campaign count, not a run count. The Memories store band no longer falls back to the
+  query-scoped loaded count for the store-wide total (shows "—" when coverage is absent), and the
+  facet-value tile states it counts the loaded recall page, not the whole store.
+- Renamed the exported `CAMPAIGN_PROBLEM_PREFIX` → `TEST_PROBLEM_PREFIX` to match the "New test"
+  verb it now frames.
+
 ## [0.5.0] — 2026-09-08
 
 ### Changed
@@ -391,7 +402,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.15...v0.5.0
 [0.4.15]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.14...v0.4.15
 [0.4.14]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.13...v0.4.14
