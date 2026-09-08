@@ -525,8 +525,11 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
   const [hovered, setHovered] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // Vibe / Demo each fork their ＋ into a project-picker popover locked to their mode.
-  const [vibePickerOpen, setVibePickerOpen] = useState(false);
-  const [demoPickerOpen, setDemoPickerOpen] = useState(false);
+  // Vibe's and Demo's ＋ pickers are ONE mutually-exclusive popover (not two independent booleans):
+  // each ＋ stops its mousedown from reaching the OTHER picker's outside-close listener (so ＋ stays a
+  // clean toggle), which means opening one could otherwise leave the other open (Copilot #197). A
+  // single `openPicker` closes the sibling by construction — only one is ever mounted.
+  const [openPicker, setOpenPicker] = useState<'vibe' | 'demo' | null>(null);
   // The rail-foot health section (§6.2, slice O) — controlled here; it toggles
   // from its own header (the chrome connection dot that used to expand it was
   // removed in nav-ui-tweaks).
@@ -692,10 +695,10 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             path={P_VIBE}
             open={openHeading === 'vibe'}
             onToggle={() => toggle('vibe')}
-            onNew={() => setVibePickerOpen(v => !v)}
+            onNew={() => setOpenPicker(p => (p === 'vibe' ? null : 'vibe'))}
             navigate={navigate}
-            extra={vibePickerOpen
-              ? <ProjectModePicker mode="document" navigate={navigate} onClose={() => setVibePickerOpen(false)} />
+            extra={openPicker === 'vibe'
+              ? <ProjectModePicker mode="document" navigate={navigate} onClose={() => setOpenPicker(null)} />
               : undefined}
           >
             {vibeDocs.length === 0
@@ -711,10 +714,10 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             path={P_DEMO}
             open={openHeading === 'demo'}
             onToggle={() => toggle('demo')}
-            onNew={() => setDemoPickerOpen(v => !v)}
+            onNew={() => setOpenPicker(p => (p === 'demo' ? null : 'demo'))}
             navigate={navigate}
-            extra={demoPickerOpen
-              ? <ProjectModePicker mode="video" navigate={navigate} onClose={() => setDemoPickerOpen(false)} />
+            extra={openPicker === 'demo'
+              ? <ProjectModePicker mode="video" navigate={navigate} onClose={() => setOpenPicker(null)} />
               : undefined}
           >
             {demoDocs.length === 0

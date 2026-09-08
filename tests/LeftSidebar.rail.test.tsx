@@ -310,6 +310,21 @@ describe('the ＋ create actions (§2.1/§3.4)', () => {
     fireEvent.click(within(screen.getByTestId('rail-heading-demo')).getByTestId('heading-new'));
     expect(screen.getByTestId('project-mode-picker').dataset.mode).toBe('video');
   });
+
+  it('opening one picker closes the other — never two at once (copilot #197)', async () => {
+    rail();
+    await screen.findByRole('button', { name: 'wicked-studio' });
+
+    // Open Vibe's picker…
+    fireEvent.click(within(screen.getByTestId('rail-heading-vibe')).getByTestId('heading-new'));
+    expect(screen.getByTestId('project-mode-picker').dataset.mode).toBe('document');
+
+    // …then open Demo's. Vibe's must close: exactly ONE picker is mounted, locked to Video.
+    fireEvent.click(within(screen.getByTestId('rail-heading-demo')).getByTestId('heading-new'));
+    const pickers = screen.getAllByTestId('project-mode-picker');
+    expect(pickers).toHaveLength(1);
+    expect(pickers[0]!.dataset.mode).toBe('video');
+  });
 });
 
 describe('accordion contents (§3.3)', () => {
