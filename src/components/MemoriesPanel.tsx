@@ -153,15 +153,16 @@ export function MemoriesPanel(): React.ReactElement {
       </div>
 
       {/* The store stats — mirrors the Policies store-health band (usability wave): the memory
-          store's size, its per-tier split, and the distinct facet values it is annotated with. An
-          absent coverage wire omits the band rather than fabricating zeros. */}
+          store's size and its per-tier split come from the store-wide coverage wire; the facet-value
+          count is over the loaded set (the current query/recall page), not store-wide — its context
+          says so. An absent coverage wire omits the band rather than fabricating zeros. */}
       {coverage !== null && (
         <KpiBand testId="memories-stats">
           <KpiGroup label="Store" grow={1}>
             <StatTile
               testId="mem-stat-total"
               label="Memories"
-              value={coverageTotal ?? memories.length}
+              value={coverageTotal ?? '—'}
               context="in the store"
             />
           </KpiGroup>
@@ -175,7 +176,7 @@ export function MemoriesPanel(): React.ReactElement {
               testId="mem-stat-facets"
               label="Facet values"
               value={facetPairs.length}
-              context="distinct key=value"
+              context="distinct key=value, loaded set"
             />
           </KpiGroup>
         </KpiBand>

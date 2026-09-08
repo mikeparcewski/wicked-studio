@@ -45,7 +45,7 @@ export const RECON_PROBLEM_PREFIX =
   'proposed plan at the intake gate and launch nothing until it is approved.';
 
 /** The test-kickoff framing — "New test" sends this prefix + blank line + brief. */
-export const CAMPAIGN_PROBLEM_PREFIX =
+export const TEST_PROBLEM_PREFIX =
   'New test: plan the test for the attached scope — the scenarios, their ' +
   'dependencies, and which are deterministic tool checks vs governed agent runs — and run the ' +
   'approved plan as governed sibling runs under one test. Present the plan at the ' +
@@ -70,7 +70,7 @@ const INTENT_COPY: Record<LaunchIntent, { title: string; blurb: string; cta: str
       'codebases and stops at its intake gate — you approve the plan before anything runs. ' +
       'The test appears below with its first run.',
     cta: 'Launch test',
-    prefix: CAMPAIGN_PROBLEM_PREFIX,
+    prefix: TEST_PROBLEM_PREFIX,
   },
 };
 

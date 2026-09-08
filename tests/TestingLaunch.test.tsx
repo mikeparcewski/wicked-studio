@@ -45,7 +45,7 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { CampaignsPage } = await import('../src/components/CampaignsPage.js');
-const { RECON_PROBLEM_PREFIX, CAMPAIGN_PROBLEM_PREFIX } = await import('../src/components/TestingLaunchPanel.js');
+const { RECON_PROBLEM_PREFIX, TEST_PROBLEM_PREFIX } = await import('../src/components/TestingLaunchPanel.js');
 const { MULTI_SCOPE_UNSUPPORTED_COPY, launchedRunIds, isMultiScopeUnsupported } = await import('../src/api/testing.js');
 const { useCampaignsStore } = await import('../src/store/campaigns.js');
 
@@ -162,7 +162,7 @@ describe('the launch wire — the pinned body on POST /testing/recon, exactly', 
 
     await screen.findByTestId('testing-launch-fanout');
     expect(launchBody()).toEqual({
-      problem: `${CAMPAIGN_PROBLEM_PREFIX}\n\nSmoke both services`,
+      problem: `${TEST_PROBLEM_PREFIX}\n\nSmoke both services`,
       repoRefs: ['r-1', 'r-2'],
     });
   });
@@ -237,7 +237,7 @@ describe('the launch wire — the pinned body on POST /testing/recon, exactly', 
 
     await screen.findByTestId('testing-launch-fanout');
     expect(launchBody()).toEqual({
-      problem: `${CAMPAIGN_PROBLEM_PREFIX}\n\nUnion scope`,
+      problem: `${TEST_PROBLEM_PREFIX}\n\nUnion scope`,
       projectId: 'proj-a',
       repoRefs: ['r-2', 'r-3'],
     });
