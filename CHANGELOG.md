@@ -12,6 +12,22 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-08
+
+### Changed
+- **The command-deck landing rebuild.** A ground-up redesign of `/` on real wire data: a themed KPI
+  ribbon (FLOW / ATTENTION / TRUST&SPEND) on the real `AgentSession.created_at` clock (true 30d
+  windows + prior-window deltas, degrading to positional when no run is dated), a needs-you feed with
+  severity stripes, a verified-vs-needs-review strip, a live-pulse burn chart, and section doors.
+- **Nav usability wave.** Test split out below Execute (a standalone, project-optional work section,
+  renamed from "Campaigns"); Evals moved beside Steering; work/system dividers + a Settings bar; the
+  daemon health bar stays at the rail's foot.
+- **The deck design applied to every section dashboard** (the shared `StatTile` reskin).
+
+### Added
+- The Evals section lists the persisted eval-run history + drilldown (`GET /testing/evals[/:id]`).
+- Bumped `wicked-crew-api-types` 0.8.0 → 0.25.0; new `--section-{test,vibe,demo}` tokens.
+
 ## [0.4.15] — 2026-09-07
 
 ### Added
@@ -375,7 +391,9 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.14...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.15...v0.5.0
+[0.4.15]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.14...v0.4.15
 [0.4.14]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.13...v0.4.14
 [0.4.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.12...v0.4.13
 [0.4.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.11...v0.4.12
