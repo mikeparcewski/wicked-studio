@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.15",
   "counts": {
-    "files": 127,
-    "occurrences": 1026,
-    "static": 870,
+    "files": 128,
+    "occurrences": 1028,
+    "static": 872,
     "dynamic": 56,
     "computed": 6
   },
@@ -509,6 +509,12 @@
       "testId": "burn-rework",
       "files": [
         "src/components/Burn.tsx"
+      ]
+    },
+    {
+      "testId": "burn-total",
+      "files": [
+        "src/components/DeckBurnChart.tsx"
       ]
     },
     {
@@ -2097,6 +2103,12 @@
       "testId": "home-ask",
       "files": [
         "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "home-burn-chart",
+      "files": [
+        "src/components/DeckBurnChart.tsx"
       ]
     },
     {

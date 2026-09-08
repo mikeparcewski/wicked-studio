@@ -120,3 +120,11 @@
 .deck-stat:hover { border-color: var(--accent-subtle); }
 a.deck-stat:hover, button.deck-stat:hover { transform: translateY(-1px); border-color: var(--accent-dim); }
 .deck-stat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Live-pulse burn chart ── */
+.deck-pulse { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px 8px; }
+.deck-pulse-head { display: flex; align-items: baseline; justify-content: space-between; }
+.deck-pulse-t { font-size: var(--text-xs); color: var(--ink-muted); font-weight: var(--weight-medium); }
+.deck-pulse-v { font-family: var(--font-mono); font-size: var(--text-md); color: var(--ink-high); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.deck-pulse-v small { color: var(--ink-dim); font-weight: var(--weight-normal); font-size: var(--text-xs); }
+.deck-pulse-chart { width: 100%; height: 96px; display: block; }

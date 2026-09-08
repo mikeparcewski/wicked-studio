@@ -20,6 +20,7 @@ import { HomeVerbs, RecentActivity } from './HomeCommand.js';
 import { DeckKpiRibbon } from './DeckKpiRibbon.js';
 import { DeckVerifiedStrip } from './DeckVerifiedStrip.js';
 import { DeckSectionDoors, type SectionDoor } from './DeckSectionDoors.js';
+import { DeckBurnChart } from './DeckBurnChart.js';
 import { listEvalRuns } from '../api/testing.js';
 import { NeedsYouQueue } from './NeedsYouQueue.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
@@ -398,6 +399,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                 gap: 'var(--space-3)', overflowY: 'auto', minHeight: 0,
               }}
             >
+              <DeckBurnChart />
               <RecentActivity runs={runs} navigate={navigate} now={now} />
             </div>
           </div>
