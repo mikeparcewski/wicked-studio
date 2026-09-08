@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.15",
   "counts": {
-    "files": 125,
-    "occurrences": 1017,
-    "static": 861,
+    "files": 126,
+    "occurrences": 1024,
+    "static": 868,
     "dynamic": 56,
     "computed": 6
   },
@@ -1491,6 +1491,48 @@
       "testId": "essence-entry",
       "files": [
         "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-detail",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-empty",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-error",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-loading",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-row",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-unavailable",
+      "files": [
+        "src/components/EvalHistory.tsx"
       ]
     },
     {

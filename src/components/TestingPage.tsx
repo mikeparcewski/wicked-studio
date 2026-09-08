@@ -16,6 +16,7 @@ import {
 import { useEvalReportStore } from '../store/evalReport.js';
 import { CampaignScoreboard } from './CampaignScoreboard.js';
 import { CampaignsPage } from './CampaignsPage.js';
+import { EvalHistory } from './EvalHistory.js';
 import { readFileText } from './fileText.js';
 
 /**
@@ -268,6 +269,8 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
   const [state, setState] = useState<EvalsRunState>({ kind: 'idle' });
   const [corpusName, setCorpusName] = useState('');
   const [importState, setImportState] = useState<CorpusImportState>({ kind: 'idle' });
+  /** Bumped after a successful run so the persisted history (EvalHistory) re-fetches. */
+  const [historyKey, setHistoryKey] = useState(0);
 
   const run = async (): Promise<void> => {
     if (state.kind === 'busy') return;
@@ -279,8 +282,10 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
         ...(corpusUsed !== null ? { corpus: corpusUsed } : {}),
       });
       setState({ kind: 'done', report, corpus: corpusUsed });
-      // Deposit for the Steering landing's success-lens tile (session-local — the
-      // daemon keeps no queryable eval history, so THIS is the latest-eval record).
+      // The daemon now PERSISTS every run (crew-side EvalRunStore) — refresh the history below so
+      // this run appears without a reload. The session-local deposit stays as the Steering landing's
+      // success-lens tile source (a zero-fetch latest-eval snapshot).
+      setHistoryKey((k) => k + 1);
       useEvalReportStore.getState().deposit(report, corpusUsed);
     } catch (e) {
       if (isTestingUnsupported(e)) setState({ kind: 'unsupported' });
@@ -445,6 +450,10 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
           </p>
         )}
       </div>
+
+      {/* The persisted run history (crew-side EvalRunStore) — every run above is recorded here,
+          drillable. `historyKey` bumps on a successful run so it refreshes without a reload. */}
+      <EvalHistory refreshKey={historyKey} />
     </div>
   );
 }

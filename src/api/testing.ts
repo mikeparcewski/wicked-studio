@@ -25,6 +25,7 @@
 
 import { apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
+import type { EvalRunDetail, EvalRunSummary, ListEvalRunsResponse } from './types.js';
 
 // ── The Testing surface's sub-pages (client route vocabulary, not a wire) ────────────────────
 
@@ -254,6 +255,24 @@ export function runEvals(body: RunEvalsBody): Promise<EvalReport> {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+// ── The eval RUN history (crew-side EvalRunStore, api-types 0.25.0) ────────────────────────────
+
+/** `GET /testing/evals` — the persisted eval-run history, newest first (global per daemon).
+ *  `{ runs: [] }` on a daemon that recorded none (or predates the store). */
+export async function listEvalRuns(filter?: { type?: string; corpus?: string }): Promise<EvalRunSummary[]> {
+  const q = new URLSearchParams();
+  if (filter?.type !== undefined && filter.type !== '') q.set('type', filter.type);
+  if (filter?.corpus !== undefined && filter.corpus !== '') q.set('corpus', filter.corpus);
+  const qs = q.toString();
+  const res = await apiFetch<ListEvalRunsResponse>(`/testing/evals${qs !== '' ? `?${qs}` : ''}`);
+  return res.runs;
+}
+
+/** `GET /testing/evals/:id` — one run WITH its full per-sample results (the drilldown); 404 unknown. */
+export function getEvalRun(id: string): Promise<EvalRunDetail> {
+  return apiFetch<EvalRunDetail>(`/testing/evals/${encodeURIComponent(id)}`);
 }
 
 // ── `POST /testing/corpora/import` ────────────────────────────────────────────────────────────
