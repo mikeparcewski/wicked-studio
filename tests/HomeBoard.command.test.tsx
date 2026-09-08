@@ -146,7 +146,7 @@ describe('HomeBoard — the portfolio KPI band', () => {
   });
 });
 
-describe('HomeBoard — the section essence strip', () => {
+describe('HomeBoard — the section doors', () => {
   beforeEach(() => {
     projects = [{ id: 'p-1', name: 'proj', description: null, status: 'active', scope: 's', created_at: 1, updated_at: 1 }];
     repos = [{ id: 'repo-1', name: 'a' }, { id: 'repo-2', name: 'b' }];
@@ -175,46 +175,42 @@ describe('HomeBoard — the section essence strip', () => {
 
   afterEach(() => cleanup());
 
-  it('one number + one door per ANSWERED section — repos ride the board read', async () => {
-    // The repos' newest state is "never onboarded", which also queues rows —
-    // give each repo a completed onboard so the strip is what's under test.
-    await mountBoard([
-      makeView({ id: 'r-ob1', status: 'completed', workflow_id: 'onboarding', repo_ref: 'repo-1' }),
-      makeView({ id: 'r-ob2', status: 'completed', workflow_id: 'onboarding', repo_ref: 'repo-2' }),
-    ]);
+  it('renders the six section doors (the Execute/Test/Vibe/Demo/Evals/Steering breakout) with live counts', async () => {
+    // campaignsAnswer stays [] (the beforeEach default): an ANSWERED wire, so Test shows "0 tests".
+    await mountBoard([makeView({ id: 'r-1', status: 'completed' })]);
     await vi.waitFor(() => {
-      const strip = screen.getByTestId('home-essence');
+      const doors = screen.getByTestId('home-section-doors');
       const bySection = new Map(
-        within(strip).getAllByTestId('essence-entry').map((e) => [e.getAttribute('data-section'), e]),
+        within(doors).getAllByTestId('section-door').map((d) => [d.getAttribute('data-section'), d]),
       );
-      expect(bySection.get('projects')).toHaveAttribute('data-value', '1');
-      expect(bySection.get('chats')).toHaveAttribute('data-value', '2');
-      expect(bySection.get('repos')).toHaveAttribute('data-value', '2');
-      expect(bySection.get('campaigns')).toHaveAttribute('data-value', '0');
-      expect(bySection.get('steering')).toHaveAttribute('data-value', '2 rules · 1 unused');
-      expect(bySection.get('daemon')).toHaveAttribute('data-value', 'crew 0.7.7 · up 2h');
-      expect(bySection.get('projects')).toHaveAttribute('href', '/projects');
-      expect(bySection.get('steering')).toHaveAttribute('href', '/steering');
+      expect([...bySection.keys()].sort()).toEqual(['demo', 'evals', 'execute', 'steering', 'test', 'vibe']);
+      // Execute always has a count (runs, no wire needed); wired sections carry theirs.
+      expect(bySection.get('execute')?.textContent).toContain('1 run');
+      expect(bySection.get('test')?.textContent).toContain('0 tests');
+      expect(bySection.get('steering')?.textContent).toContain('3 rules'); // 2 active + 1 retired
+      // Each door links its section (the Make-breakout routes).
+      expect(bySection.get('execute')).toHaveAttribute('href', '/execute');
+      expect(bySection.get('test')).toHaveAttribute('href', '/testing/campaigns');
+      expect(bySection.get('evals')).toHaveAttribute('href', '/testing/evals');
+      expect(bySection.get('steering')).toHaveAttribute('href', '/steering/dashboard');
     });
   });
 
-  it('an absent wire is an OMITTED entry — never a fabricated zero', async () => {
-    chats = new Error('no /chats on this daemon');
+  it('an absent wire → the door still renders, but shows NO count (never a fabricated zero)', async () => {
     campaignsAnswer = new Error('404');
     rules = new Error('404');
-    diagAnswer = new Error('404');
     await mountBoard([makeView({ id: 'r-a', status: 'executing' })]);
-    // Let the wires settle (they all reject asynchronously).
-    await vi.waitFor(() => {
-      expect(screen.getByTestId('home-essence')).toBeInTheDocument();
-    });
-    const sections = screen.getAllByTestId('essence-entry').map((e) => e.getAttribute('data-section'));
-    expect(sections).toContain('projects');
-    expect(sections).toContain('repos');
-    expect(sections).not.toContain('chats');
-    expect(sections).not.toContain('campaigns');
-    expect(sections).not.toContain('steering');
-    expect(sections).not.toContain('daemon');
+    await vi.waitFor(() => expect(screen.getByTestId('home-section-doors')).toBeInTheDocument());
+    const doors = screen.getByTestId('home-section-doors');
+    const bySection = new Map(
+      within(doors).getAllByTestId('section-door').map((d) => [d.getAttribute('data-section'), d]),
+    );
+    // Every door still renders (they always link), but the ones whose wire 404'd carry no count.
+    expect([...bySection.keys()].length).toBe(6);
+    expect(bySection.get('test')?.querySelector('.deck-door-count')).toBeNull();
+    expect(bySection.get('steering')?.querySelector('.deck-door-count')).toBeNull();
+    // Execute's count needs no wire — it's always there.
+    expect(bySection.get('execute')?.textContent).toContain('1 run');
   });
 });
 

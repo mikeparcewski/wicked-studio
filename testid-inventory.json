@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.15",
   "counts": {
-    "files": 126,
-    "occurrences": 1024,
-    "static": 868,
+    "files": 127,
+    "occurrences": 1026,
+    "static": 870,
     "dynamic": 56,
     "computed": 6
   },
@@ -2124,6 +2124,12 @@
       ]
     },
     {
+      "testId": "home-section-doors",
+      "files": [
+        "src/components/DeckSectionDoors.tsx"
+      ]
+    },
+    {
       "testId": "home-verb-project",
       "files": [
         "src/components/HomeCommand.tsx"
@@ -3751,6 +3757,12 @@
       "testId": "seat-state",
       "files": [
         "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "section-door",
+      "files": [
+        "src/components/DeckSectionDoors.tsx"
       ]
     },
     {
