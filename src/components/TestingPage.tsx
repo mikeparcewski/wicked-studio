@@ -181,6 +181,19 @@ function EvalReportView({ report, corpus, navigate }: {
         <span style={{ color: EVAL_VERDICT_COLOR.false_positive }}>{s.false_positives} false positives</span>
       </p>
 
+      {/* Why gaps happen (content-quality guidance): a gap is a behavior no steering rule matched.
+          On the BUILT-IN generic corpus that usually means the corpus tests behaviors your steering
+          doesn't target — not that your rules are broken. Import a corpus that mirrors your steering,
+          or add rules for the behaviors you DO want caught. Facet-only recall also widens gaps. */}
+      {s.gaps > 0 && corpus === null && (
+        <p data-testid="testing-evals-gap-hint" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--surface-rail)', color: 'var(--ink-muted)' }}>
+          A gap is a behavior no steering rule matched. These are from the built-in <em>generic</em>
+          corpus — if your steering targets your own codebase&rsquo;s concerns rather than these, that
+          is expected, not broken rules. Import a corpus that mirrors your steering (Import a corpus,
+          below), or add rules for the behaviors you want caught{report.degraded === 'facet-only' ? ' — and note facet-only recall widens gaps a semantic embedder would close' : ''}.
+        </p>
+      )}
+
       {report.results.length === 0 ? (
         <p data-testid="testing-evals-empty" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>
           The corpus served no samples — import one below, or run against the built-in default
