@@ -67,6 +67,15 @@
   --status-done:      var(--_ink-a35);
   --status-done-dim:  transparent;
 
+  /* ── Section-identity accents (§2.6b) — the landing's section doors + rail glyphs. Distinct
+     from the ONE customizable accent and from the status hues: fixed section colors so Execute /
+     Test / Vibe / Demo / Evals / Steering read apart at a glance. Mid-lightness, legible on both
+     grounds (defined once here). Execute reuses the running-emerald, Evals the gate-amber, Steering
+     the accent; Test / Vibe / Demo get their own hues. */
+  --section-test: hsl(168 62% 55%);   /* teal */
+  --section-vibe: hsl(198 80% 62%);   /* cyan */
+  --section-demo: hsl(320 70% 66%);   /* magenta */
+
   /* ── Spacing scale (§2.7) — base unit 4px ── */
   --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
   --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;

@@ -146,9 +146,12 @@ export function StatTile({
         <span
           data-testid="stat-value"
           style={{
-            fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-semi)',
+            fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)',
             fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums',
-            lineHeight: 1.1, color: valueColor ?? 'var(--ink-high)',
+            lineHeight: 1.05, letterSpacing: '-0.02em', color: valueColor ?? 'var(--ink-high)',
+            // The command-deck signature: a subtle luminance on the metric so the number reads as
+            // live telemetry, not flat text (matches DeckKpiRibbon so home + sections are one look).
+            textShadow: '0 0 22px color-mix(in oklab, var(--ink-high) 11%, transparent)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}
         >
@@ -173,13 +176,17 @@ export function StatTile({
   const style: React.CSSProperties = {
     flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column',
     alignItems: 'stretch', gap: '4px', textAlign: 'left', textDecoration: 'none',
-    background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
+    // Deck panel: a layered gradient + inset top-light + soft shadow (the DeckKpiRibbon material),
+    // so every section dashboard's KPI band reads like the landing's ribbon.
+    background: 'linear-gradient(180deg, var(--surface-card), var(--surface-rail))',
+    border: '1px solid var(--surface-raised)', boxShadow: 'var(--shadow-card)',
     borderRadius: 'var(--radius-lg)', padding: 'var(--space-3) var(--space-4)',
     cursor: onOpen !== undefined ? 'pointer' : 'default',
     color: 'inherit', font: 'inherit',
   };
   const common = {
     'data-testid': testId,
+    className: 'deck-stat',
     'data-value': String(value),
     ...(delta !== undefined
       ? { 'data-delta': delta.previous === null ? 'none' : String(delta.current - delta.previous) }

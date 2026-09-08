@@ -243,7 +243,7 @@ describe('deliveryOf — five mutually exclusive states, zero fetches', () => {
   it('reads the server-carried url when the daemon carries one (crew#321)', () => {
     const view = composed('done');
     const session = { ...view.session, delivery: { kind: 'pull_request', url: 'https://x/pull/9' } };
-    expect(deliveryOf({ ...view, session: session as typeof view.session }).url)
+    expect(deliveryOf({ ...view, session: session as unknown as typeof view.session }).url)
       .toBe('https://x/pull/9');
   });
 });
@@ -286,7 +286,7 @@ describe('resolveDelivery — the PR claim needs a URL IN HAND (D1/D2)', () => {
   it('a WIRE-carried url earns it with no read at all (crew#321)', () => {
     const view = composed('done');
     const session = { ...view.session, delivery: { kind: 'pull_request', url: 'https://x/pull/9' } };
-    const r = resolveDelivery(deliveryOf({ ...view, session: session as typeof view.session }));
+    const r = resolveDelivery(deliveryOf({ ...view, session: session as unknown as typeof view.session }));
     expect(r.claim).toBe('pr-open');
     expect(r.href).toBe('https://x/pull/9');
   });
@@ -300,7 +300,7 @@ describe('resolveDelivery — the PR claim needs a URL IN HAND (D1/D2)', () => {
     // exported and takes a hand-built `Delivery`).
     const view = composed('done');
     const session = { ...view.session, delivery: { kind: 'pull_request', url: '' } };
-    expect(deliveryOf({ ...view, session: session as typeof view.session }).url).toBeNull();
+    expect(deliveryOf({ ...view, session: session as unknown as typeof view.session }).url).toBeNull();
 
     const hand = { state: 'delivered' as const, unitId: 'r:deliver', reason: null, url: '' };
     expect(resolveDelivery(hand).claim).toBe('delivered');
@@ -446,7 +446,7 @@ describe('deliverySummary — the census over ALL DELIVERABLE runs', () => {
     const view = composed('done');
     const withUrl = {
       ...view,
-      session: { ...view.session, delivery: { kind: 'pull_request', url: 'https://x/pull/9' } } as typeof view.session,
+      session: { ...view.session, delivery: { kind: 'pull_request', url: 'https://x/pull/9' } } as unknown as typeof view.session,
     };
     expect(deliverySummary([withUrl, composed('done')])).toBe('1 PR open · 1 ran deliver');
   });

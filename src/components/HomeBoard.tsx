@@ -16,7 +16,12 @@ import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/us
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { BatchGateBar } from './BatchGateBar.js';
-import { EssenceStrip, essenceEntries, HomeKpiBand, HomeVerbs, RecentActivity } from './HomeCommand.js';
+import { HomeVerbs, RecentActivity } from './HomeCommand.js';
+import { DeckKpiRibbon } from './DeckKpiRibbon.js';
+import { DeckVerifiedStrip } from './DeckVerifiedStrip.js';
+import { DeckSectionDoors, type SectionDoor } from './DeckSectionDoors.js';
+import { DeckBurnChart } from './DeckBurnChart.js';
+import { listEvalRuns } from '../api/testing.js';
 import { NeedsYouQueue } from './NeedsYouQueue.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
@@ -138,9 +143,11 @@ interface HomeWires {
   rules: SteeringRule[] | null;
   perRule: WikiRuleEvidenceRow[] | null;
   diag: Diagnostics | null;
+  /** Count of recorded eval runs (the eval store) — the Evals door's number. */
+  evalCount: number | null;
 }
 
-const NO_WIRES: HomeWires = { chats: null, campaigns: null, claims: null, rules: null, perRule: null, diag: null };
+const NO_WIRES: HomeWires = { chats: null, campaigns: null, claims: null, rules: null, perRule: null, diag: null, evalCount: null };
 
 export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElement {
   const { items, unfiled, failedAt, repos, loading, error } = useBoardModel(runs);
@@ -182,6 +189,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
       (r) => r !== null && deposit({ perRule: r.scoreboard.evidence.per_rule }),
     );
     void read(() => getDiagnostics()).then((r) => r !== null && deposit({ diag: r }));
+    void read(() => listEvalRuns()).then((r) => r !== null && deposit({ evalCount: r.length }));
     return () => { cancelled = true; };
   }, []);
 
@@ -292,21 +300,20 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
   });
 
   const docsCount = useMemo(() => items.reduce((a, i) => a + i.docs.length, 0), [items]);
-  const essences = useMemo(
-    () =>
-      essenceEntries({
-        projects: items.length,
-        docs: docsCount,
-        chats: wires.chats === null ? null : wires.chats.length,
-        repos,
-        campaigns: wires.campaigns === null ? null : wires.campaigns.length,
-        rules: wires.rules,
-        perRule: wires.perRule,
-        diag: wires.diag,
-        now,
-      }),
-    [items.length, docsCount, wires, repos, now],
-  );
+
+  // The section-doors strip (redesign): the Execute/Test/Vibe/Demo/Evals/Steering breakout made
+  // legible on the landing, each with a live count (absent counts show no number, never a zero).
+  const sectionDoors = useMemo<SectionDoor[]>(() => {
+    const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
+    return [
+      { key: 'execute', label: 'Execute', glyph: '▸', count: plural(runs.length, 'run'), href: '/execute', color: 'var(--status-run)' },
+      { key: 'test', label: 'Test', glyph: '✓', count: wires.campaigns === null ? null : plural(wires.campaigns.length, 'test'), href: '/testing/campaigns', color: 'var(--section-test)' },
+      { key: 'vibe', label: 'Vibe', glyph: '▤', count: plural(docsCount, 'document'), href: '/vibe', color: 'var(--section-vibe)' },
+      { key: 'demo', label: 'Demo', glyph: '▶', count: null, href: '/demo', color: 'var(--section-demo)' },
+      { key: 'evals', label: 'Evals', glyph: '◈', count: wires.evalCount === null ? null : plural(wires.evalCount, 'run'), href: '/testing/evals', color: 'var(--status-gate)' },
+      { key: 'steering', label: 'Steering', glyph: '☸', count: wires.rules === null ? null : plural(wires.rules.length, 'rule'), href: '/steering/dashboard', color: 'var(--accent)' },
+    ];
+  }, [runs.length, docsCount, wires.campaigns, wires.evalCount, wires.rules]);
 
   // The fresh-install welcome (§6): verbs + Ask, prominent — and NOTHING
   // measured, because nothing has ever run (no fabricated zeros).
@@ -371,13 +378,18 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
 
       {!fresh && !loading && error === null && (
         <>
-          {/* ── The command center: queue (spine, left) + the analytics column.
-                 Both the queue and the KPI band are fully visible at 1440×700. ── */}
+          {/* ── The KPI ribbon: the hero, full-width — FLOW / ATTENTION / TRUST&SPEND on the real
+                 created_at clock (the command-deck redesign). ── */}
+          <div style={{ flexShrink: 0, padding: '0 var(--space-6)' }}>
+            <DeckKpiRibbon runs={runs} claims={wires.claims} needCount={needRows.length} navigate={navigate} now={now} />
+          </div>
+
+          {/* ── The command center: the needs-you queue (spine, left) + the live-pulse column. ── */}
           <div
             data-testid="command-center"
             style={{
               flexShrink: 0, display: 'flex', gap: 'var(--space-4)', alignItems: 'stretch',
-              padding: '0 var(--space-6) var(--space-4)', maxHeight: '56vh', minHeight: 0,
+              padding: '0 var(--space-6) var(--space-4)', maxHeight: '52vh', minHeight: 0,
             }}
           >
             <NeedsYouQueue rows={needRows} runs={runs} navigate={navigate} now={now} />
@@ -387,22 +399,20 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                 gap: 'var(--space-3)', overflowY: 'auto', minHeight: 0,
               }}
             >
-              <HomeKpiBand
-                runs={runs}
-                attachedAt={attachedAt}
-                needRows={needRows}
-                claims={wires.claims}
-                navigate={navigate}
-                now={now}
-              />
+              <DeckBurnChart />
               <RecentActivity runs={runs} navigate={navigate} now={now} />
             </div>
           </div>
 
-          {/* The essence strip rides full-width under the command center — a
-              compact row of section doors that can never clip in a column. */}
+          {/* Verified vs needs-review — the delivery outcomes pulled up from run detail. */}
           <div style={{ flexShrink: 0, padding: '0 var(--space-6) var(--space-3)' }}>
-            <EssenceStrip entries={essences} navigate={navigate} />
+            <DeckVerifiedStrip runs={runs} navigate={navigate} />
+          </div>
+
+          {/* The section doors — the Execute/Test/Vibe/Demo/Evals/Steering breakout, made legible
+              on the landing with live counts (the redesign's "where do I go"). */}
+          <div style={{ flexShrink: 0, padding: '0 var(--space-6) var(--space-3)' }}>
+            <DeckSectionDoors doors={sectionDoors} navigate={navigate} />
           </div>
 
           {/* Slice L: the batch bar docks above the wall while ≥1 simple gate is selected. */}

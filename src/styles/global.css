@@ -11,6 +11,7 @@
 @import './tokens.css';
 @import './themes/dark.css';
 @import './themes/light.css';
+@import './deck.css';
 
 @tailwind base;
 @tailwind components;

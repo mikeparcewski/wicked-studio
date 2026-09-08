@@ -5,9 +5,7 @@ import {
   importEvalCorpus,
   isTestingUnsupported,
   runEvals,
-  testingPath,
   TESTING_PAGE_LABELS,
-  TESTING_PAGES,
   TESTING_UNSUPPORTED_COPY,
   type CorpusImportResult,
   type EvalReport,
@@ -18,6 +16,7 @@ import {
 import { useEvalReportStore } from '../store/evalReport.js';
 import { CampaignScoreboard } from './CampaignScoreboard.js';
 import { CampaignsPage } from './CampaignsPage.js';
+import { EvalHistory } from './EvalHistory.js';
 import { readFileText } from './fileText.js';
 
 /**
@@ -270,6 +269,8 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
   const [state, setState] = useState<EvalsRunState>({ kind: 'idle' });
   const [corpusName, setCorpusName] = useState('');
   const [importState, setImportState] = useState<CorpusImportState>({ kind: 'idle' });
+  /** Bumped after a successful run so the persisted history (EvalHistory) re-fetches. */
+  const [historyKey, setHistoryKey] = useState(0);
 
   const run = async (): Promise<void> => {
     if (state.kind === 'busy') return;
@@ -281,8 +282,10 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
         ...(corpusUsed !== null ? { corpus: corpusUsed } : {}),
       });
       setState({ kind: 'done', report, corpus: corpusUsed });
-      // Deposit for the Steering landing's success-lens tile (session-local — the
-      // daemon keeps no queryable eval history, so THIS is the latest-eval record).
+      // The daemon now PERSISTS every run (crew-side EvalRunStore) — refresh the history below so
+      // this run appears without a reload. The session-local deposit stays as the Steering landing's
+      // success-lens tile source (a zero-fetch latest-eval snapshot).
+      setHistoryKey((k) => k + 1);
       useEvalReportStore.getState().deposit(report, corpusUsed);
     } catch (e) {
       if (isTestingUnsupported(e)) setState({ kind: 'unsupported' });
@@ -447,6 +450,10 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
           </p>
         )}
       </div>
+
+      {/* The persisted run history (crew-side EvalRunStore) — every run above is recorded here,
+          drillable. `historyKey` bumps on a successful run so it refreshes without a reload. */}
+      <EvalHistory refreshKey={historyKey} />
     </div>
   );
 }
@@ -463,40 +470,15 @@ export function TestingPage({ page, campaignId, runs, navigate }: {
 }): React.ReactElement {
   return (
     <div data-testid="testing-page" data-testing-page={page} className="flex flex-col">
+      {/* Test and Evals are now SEPARATE rail sections (usability wave), so the header is just the
+          section name — no "Testing ·" prefix and no sibling-tab strip (each is standalone). */}
       <div className="flex flex-col gap-4 px-6 pt-6">
         <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>
-          Testing · {TESTING_PAGE_LABELS[page]}
+          {TESTING_PAGE_LABELS[page]}
         </h2>
-
-        {/* The sub-page strip: real navigations — the SteeringPage tab grammar. Campaigns is
-            the landing; Evals stays the sibling page. */}
-        <nav data-testid="testing-tabs" aria-label="Testing pages" className="flex flex-wrap gap-1">
-          {TESTING_PAGES.map((p) => (
-            <a
-              key={p}
-              data-testid="testing-tab"
-              data-page={p}
-              href={testingPath(p)}
-              aria-current={p === page ? 'page' : undefined}
-              onClick={(e) => {
-                e.preventDefault();
-                navigate(testingPath(p));
-              }}
-              className="rounded px-2 py-1 text-[11px] font-semibold"
-              style={{
-                textDecoration: 'none',
-                color: p === page ? 'var(--ink-high)' : 'var(--ink-muted)',
-                background: p === page ? 'var(--surface-raised)' : 'transparent',
-                border: `1px solid ${p === page ? 'var(--surface-raised)' : 'transparent'}`,
-              }}
-            >
-              {TESTING_PAGE_LABELS[p]}
-            </a>
-          ))}
-        </nav>
       </div>
 
-      {/* Campaigns (the landing + scoreboard) keep their own internal padding and full width;
+      {/* Test (the recon landing + scoreboard) keeps its own internal padding and full width;
           Evals content shares this shell's gutter. */}
       {page === 'campaigns' ? (
         campaignId !== null ? (

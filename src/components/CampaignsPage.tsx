@@ -401,8 +401,8 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
         <p style={{ flex: 1, minWidth: 0, fontSize: '13px', color: S.muted, margin: 0 }}>
-          Test campaigns over your codebases — recon proposes, you approve at the gate, sibling
-          runs land the work.
+          Test your codebases — recon proposes, you approve at the gate, sibling runs land the work.
+          Works with or without a project.
         </p>
         <button
           type="button"
@@ -441,7 +441,7 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
             flexShrink: 0,
           }}
         >
-          New campaign
+          New test
         </button>
       </div>
 
@@ -492,19 +492,19 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
         <KpiGroup label="Performance" grow={2}>
           <StatTile
             testId="stat-campaigns"
-            label="Campaigns"
+            label="Tests"
             value={totals.campaigns + totals.groups}
             context={`${totals.activeNow} active now${totals.groups > 0 ? ` · ${totals.groups} ad-hoc group${totals.groups === 1 ? '' : 's'}` : ''}`}
-            title="Every campaign and ad-hoc group on this daemon — click to clear filters"
+            title="Every test and ad-hoc group on this daemon — click to clear filters"
             onOpen={() => { setChip('all'); setQuery(''); }}
           />
           <StatTile
             testId="stat-campaign-runs"
-            label="Campaign runs"
+            label="Test runs"
             value={buckets.current.length}
             delta={runsDelta}
             context={deltaWord(range, runsDelta)}
-            title="Campaign-member runs in the window — open the Work list"
+            title="Test-member runs in the window — open the Work list"
             href="/work"
             onOpen={() => navigate('/work')}
           />
@@ -515,7 +515,7 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
             label="Running"
             value={totals.running}
             context="right now"
-            title="Campaign runs moving under their own power — open the Work list"
+            title="Test runs moving under their own power — open the Work list"
             href="/work?filter=active"
             onOpen={() => navigate('/work?filter=active')}
           />
@@ -524,7 +524,7 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
             label="Needs you"
             value={totals.awaitingHuman}
             valueColor={totals.awaitingHuman > 0 ? 'var(--status-gate)' : undefined}
-            context={totals.awaitingHuman > 0 ? `${chipCounts['needs-you']} campaign${chipCounts['needs-you'] === 1 ? '' : 's'} waiting` : 'nothing waiting'}
+            context={totals.awaitingHuman > 0 ? `${chipCounts['needs-you']} test${chipCounts['needs-you'] === 1 ? '' : 's'} waiting` : 'nothing waiting'}
             title={firstWaiting !== null
               ? 'A sibling run is waiting on you — jump to its approval dock'
               : 'Runs waiting on a human — filter the grid to them'}
@@ -544,7 +544,7 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
             delta={failedDelta}
             deltaSense="bad-up"
             context={deltaWord(range, failedDelta)}
-            title="Failed campaign runs in the window — open them on the Work list"
+            title="Failed test runs in the window — open them on the Work list"
             href="/work?filter=failed"
             onOpen={() => navigate('/work?filter=failed')}
           />
@@ -554,7 +554,7 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
             value={passRateWord(totals.landed, totals.terminal)}
             valueColor={healthColor(passHealth)}
             context={totals.terminal > 0 ? `${totals.landed} landed of ${totals.terminal} finished` : 'no finished runs yet'}
-            title="Landed over finished, across every campaign — filter to the failing ones"
+            title="Landed over finished, across every test — filter to the failing ones"
             onOpen={() => setChip('failing')}
           />
         </KpiGroup>
@@ -597,10 +597,10 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
           background: S.card, border: `1px solid ${S.border}`, borderRadius: '12px',
         }}>
           <p style={{ fontSize: '14px', color: S.muted, margin: 0, marginBottom: '4px' }}>
-            No campaigns yet
+            No tests yet
           </p>
           <p style={{ fontSize: '12px', color: S.faint, margin: 0 }}>
-            Campaigns appear when you launch a run with a campaign label — start one here.
+            Tests appear when you run recon over a codebase — start one here.
           </p>
           <button
             type="button"
@@ -612,7 +612,7 @@ export function CampaignsPage({ runs, navigate }: Props): React.ReactElement {
               fontWeight: 600, border: 'none', cursor: 'pointer',
             }}
           >
-            New campaign
+            New test
           </button>
         </div>
       ) : visible.length === 0 ? (

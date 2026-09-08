@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.4.15",
   "counts": {
-    "files": 123,
-    "occurrences": 1010,
-    "static": 856,
+    "files": 128,
+    "occurrences": 1029,
+    "static": 873,
     "dynamic": 56,
     "computed": 6
   },
@@ -509,6 +509,12 @@
       "testId": "burn-rework",
       "files": [
         "src/components/Burn.tsx"
+      ]
+    },
+    {
+      "testId": "burn-total",
+      "files": [
+        "src/components/DeckBurnChart.tsx"
       ]
     },
     {
@@ -1224,6 +1230,24 @@
       ]
     },
     {
+      "testId": "delivery-stranded",
+      "files": [
+        "src/components/DeckVerifiedStrip.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-vacuous",
+      "files": [
+        "src/components/DeckVerifiedStrip.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-verified",
+      "files": [
+        "src/components/DeckVerifiedStrip.tsx"
+      ]
+    },
+    {
       "testId": "demo-picker",
       "files": [
         "src/components/VideoStoryboard.tsx"
@@ -1473,6 +1497,54 @@
       "testId": "essence-entry",
       "files": [
         "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-detail",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-detail-error",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-empty",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-error",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-loading",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-row",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-unavailable",
+      "files": [
+        "src/components/EvalHistory.tsx"
       ]
     },
     {
@@ -2040,15 +2112,39 @@
       ]
     },
     {
+      "testId": "home-burn-chart",
+      "files": [
+        "src/components/DeckBurnChart.tsx"
+      ]
+    },
+    {
       "testId": "home-calm",
       "files": [
         "src/components/NeedsYouQueue.tsx"
       ]
     },
     {
+      "testId": "home-delivery-strip",
+      "files": [
+        "src/components/DeckVerifiedStrip.tsx"
+      ]
+    },
+    {
       "testId": "home-essence",
       "files": [
         "src/components/HomeCommand.tsx"
+      ]
+    },
+    {
+      "testId": "home-kpis",
+      "files": [
+        "src/components/DeckKpiRibbon.tsx"
+      ]
+    },
+    {
+      "testId": "home-section-doors",
+      "files": [
+        "src/components/DeckSectionDoors.tsx"
       ]
     },
     {
@@ -3197,6 +3293,12 @@
       ]
     },
     {
+      "testId": "rail-divider",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
       "testId": "rail-doc",
       "files": [
         "src/components/LeftSidebar.tsx"
@@ -3289,6 +3391,12 @@
     },
     {
       "testId": "rail-steering-section",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "testId": "rail-test-recon",
       "files": [
         "src/components/LeftSidebar.tsx"
       ]
@@ -3667,6 +3775,12 @@
       "testId": "seat-state",
       "files": [
         "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "section-door",
+      "files": [
+        "src/components/DeckSectionDoors.tsx"
       ]
     },
     {
@@ -4620,18 +4734,6 @@
       ]
     },
     {
-      "testId": "testing-tab",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "testId": "testing-tabs",
-      "files": [
-        "src/components/TestingPage.tsx"
-      ]
-    },
-    {
       "testId": "theme-page-link",
       "files": [
         "src/components/SystemSettings.tsx"
@@ -5544,6 +5646,7 @@
         "src/components/AppearanceSettings.tsx",
         "src/components/ChatPanel.tsx",
         "src/components/DashboardTiles.tsx",
+        "src/components/DeckKpiRibbon.tsx",
         "src/components/FacetAutocomplete.tsx",
         "src/components/HomeCommand.tsx",
         "src/components/MetricTile.tsx",

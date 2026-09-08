@@ -1,4 +1,4 @@
-import type { SessionView } from '../api/types.js';
+import type { SessionView, SessionWithDelivery } from '../api/types.js';
 import { outcomeOf } from './metrics.js';
 import { RANGE_LIMITS, rangeWord, type TimeRange } from '../hooks/useTimeRange.js';
 
@@ -139,6 +139,126 @@ export function healthColor(h: Health): string | undefined {
     : h === 'warn' ? 'var(--status-gate)'
     : h === 'bad' ? 'var(--status-fail)'
     : undefined;
+}
+
+// ── Real TIME windows (AgentSession.created_at, api-types 0.24.0) ─────────────
+//
+// The command deck's numbers are time-honest, not positional: `created_at` (unix SECONDS, present
+// on runs a 0.24.0+ daemon launched) lets a "30d" window mean thirty DAYS, and a delta compare this
+// window against the SAME-LENGTH window immediately before it. A run with no `created_at`
+// (onboarding / campaign-DAG / a pre-field daemon) is EXCLUDED from every time window — never
+// bucketed at an invented time, which would relabel an undated run as "today".
+
+const DAY_MS = 24 * 3_600_000;
+
+/** A run's launch instant in millis, or null when the daemon recorded none (excluded from windows). */
+export function createdAtMs(v: SessionView): number | null {
+  const secs = v.session.created_at;
+  return typeof secs === 'number' && secs > 0 ? secs * 1000 : null;
+}
+
+/** Runs launched within the last `days` days by real `created_at`. Undated runs are excluded. */
+export function withinDays(runs: SessionView[], days: number, now: number): SessionView[] {
+  const floor = now - days * DAY_MS;
+  return runs.filter((v) => {
+    const at = createdAtMs(v);
+    return at !== null && at >= floor && at < now;
+  });
+}
+
+/**
+ * A real time window and the SAME-LENGTH window immediately before it, split by `created_at`:
+ * `current` = `[now - days, now)`, `previous` = `[now - 2·days, now - days)`. Undated runs land in
+ * neither. `previous` is null only for a caller that opts out (days ≤ 0) — otherwise it is a real
+ * (possibly empty) prior window, because a time bucket is always the same length whether or not it
+ * holds rows (unlike the positional split, where a short history has no full prior bucket).
+ */
+export function createdAtWindow(
+  runs: SessionView[],
+  days: number,
+  now: number,
+): { current: SessionView[]; previous: SessionView[] } {
+  const curFloor = now - days * DAY_MS;
+  const prevFloor = now - 2 * days * DAY_MS;
+  const current: SessionView[] = [];
+  const previous: SessionView[] = [];
+  for (const v of runs) {
+    const at = createdAtMs(v);
+    if (at === null) continue;
+    if (at >= curFloor && at < now) current.push(v);
+    else if (at >= prevFloor && at < curFloor) previous.push(v);
+  }
+  return { current, previous };
+}
+
+/** A time-window delta over a predicate: current-window count and prior-window count. */
+export function timeDelta(
+  window: { current: SessionView[]; previous: SessionView[] },
+  count: (runs: SessionView[]) => number,
+): StatDelta {
+  return { current: count(window.current), previous: count(window.previous) };
+}
+
+/**
+ * Daily run counts, oldest→newest, off the REAL `created_at` clock (the honest successor to
+ * {@link attachSeries}, which bucketed on the membership-attach proxy). Undated runs and runs
+ * outside the span are simply absent — absence stays absent, never painted at an invented time.
+ */
+export function createdAtSeries(runs: SessionView[], days: number, now: number): number[] {
+  const counts = new Array<number>(days).fill(0);
+  for (const v of runs) {
+    const at = createdAtMs(v);
+    if (at === null) continue;
+    const age = now - at;
+    if (age < 0 || age >= days * DAY_MS) continue;
+    const bucket = days - 1 - Math.floor(age / DAY_MS);
+    counts[bucket] = (counts[bucket] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** How many of these runs carry a real `created_at` — the denominator honesty check: when it is 0,
+ *  every time window is empty and the deck should say "positional" / "no dated runs", not "0". */
+export function datedCount(runs: SessionView[]): number {
+  let n = 0;
+  for (const v of runs) if (createdAtMs(v) !== null) n += 1;
+  return n;
+}
+
+// ── Delivery outcomes (the verified-vs-needs-review split, off the run DTO) ───
+
+/** The wire `delivery` state as a plain string, tolerant of the legacy 0.11–0.17 object form (the
+ *  same compatibility `deliveryOf` keeps): that object was `{kind:'pull_request', url}`, which meant
+ *  a PR was opened — i.e. `'delivered'`. Without this, `deliveryCounts` undercounts delivered runs
+ *  on an older daemon even though the object is right there (Copilot #198). */
+export function wireDelivery(v: SessionView): string | null {
+  const d = (v.session as SessionWithDelivery).delivery;
+  if (typeof d === 'string') return d;
+  if (d !== null && typeof d === 'object' && d.kind === 'pull_request') return 'delivered';
+  return null;
+}
+
+export interface DeliveryCounts {
+  /** `delivered` — a PR was opened: verified, shipped. */
+  delivered: number;
+  /** `stranded` — completed work nobody lifted: needs review (recoverable). */
+  stranded: number;
+  /** `vacuous` — completed with nothing liftable: needs a retry. */
+  vacuous: number;
+}
+
+/** Count the three delivery outcomes across live runs — the deck's verified/needs-review strip and
+ *  the ATTENTION "review" tile read the SAME fold, so they can never disagree. */
+export function deliveryCounts(runs: SessionView[]): DeliveryCounts {
+  const c: DeliveryCounts = { delivered: 0, stranded: 0, vacuous: 0 };
+  for (const v of runs) {
+    if (v.session.archived_at != null) continue;
+    const d = wireDelivery(v);
+    if (d === 'delivered') c.delivered += 1;
+    else if (d === 'stranded') c.stranded += 1;
+    else if (d === 'vacuous') c.vacuous += 1;
+  }
+  return c;
 }
 
 // ── The sparkline series (the honest attach clock, daily buckets) ─────────────
