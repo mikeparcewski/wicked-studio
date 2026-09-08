@@ -140,7 +140,10 @@ function ExecuteDashboard({ runs, navigate, runPath }: {
 
   const gateJump = (id: string): string => {
     const pid = projectIdByRun[id];
-    return pid !== undefined ? gateOpenPath(pid, id) : `/runs/${encodeURIComponent(id)}`;
+    // The non-project fallback uses the SAME injected `runPath` a row click does (Copilot #197) —
+    // not a hard-coded `/runs/:id` — so gate-jump and row-open never diverge if the caller's run
+    // routing changes.
+    return pid !== undefined ? gateOpenPath(pid, id) : runPath(id);
   };
 
   const q = query.trim().toLowerCase();
