@@ -131,19 +131,22 @@ interface Launched {
   campaign: string | null;
 }
 
-export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched }: {
+export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, initialProjectId }: {
   intent: LaunchIntent;
   navigate: (path: string) => void;
   onClose: () => void;
   /** Fired once per successful launch with the honest run-id list (fan-out included). */
   onLaunched?: ((ids: string[]) => void) | undefined;
+  /** Pre-select this project (the test is launched FROM a project shell) — so a project-scoped
+   *  "New test" auto-scopes to that project instead of opening unscoped. */
+  initialProjectId?: string | undefined;
 }): React.ReactElement {
   const copy = INTENT_COPY[intent];
   const [instructions, setInstructions] = useState('');
 
   // ── Scope state ────────────────────────────────────────────────────────────
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState('');
+  const [projectId, setProjectId] = useState(initialProjectId ?? '');
   /** The selected project's `crew.repo` member refs — the locked "via project" chips. */
   const [projectRepos, setProjectRepos] = useState<string[] | 'loading'>([]);
   const [repos, setRepos] = useState<RepoEntry[]>([]);

@@ -204,6 +204,17 @@ describe('the launch wire — the pinned body on POST /testing/recon, exactly', 
     });
   });
 
+  it('a project-scoped page PRE-SELECTS that project in the launch panel — create a test from a project (usability wave)', async () => {
+    const user = userEvent.setup();
+    wireUp({ runId: 'run-scoped' });
+    render(<CampaignsPage runs={[]} navigate={() => {}} projectId="proj-a" />);
+    const panel = await openPanel(user, 'testing-recon-open');
+    const select = within(panel).getByTestId('testing-launch-project') as HTMLSelectElement;
+    await within(select).findByRole('option', { name: 'alpha' });
+    // The project is already selected — the test auto-scopes to it, no manual pick needed.
+    expect(select.value).toBe('proj-a');
+  });
+
   it('project + extra explicit repos = the UNION body {problem, projectId, repoRefs} exactly', async () => {
     const user = userEvent.setup();
     wireUp({ runId: 'run-u', runIds: ['run-u', 'run-v', 'run-w'] });

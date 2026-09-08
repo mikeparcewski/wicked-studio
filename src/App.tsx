@@ -492,7 +492,7 @@ export function App(): React.ReactElement {
               Campaigns
             </span>
           </div>
-          <CampaignsPage runs={runs} navigate={navigate} />
+          <CampaignsPage runs={runs} navigate={navigate} projectId={projectId} />
         </div>
       );
     }
