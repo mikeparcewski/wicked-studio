@@ -418,6 +418,9 @@ def teardown_failures(t: dict) -> list[str]:
       - `bridge_lock_pid_invalid`: the advisory `.wi-serve.json` names a pid that is not a positive
         integer (a list, a string, a bool …) — the lock was ignored, cleanup of the independently
         identified processes still ran, but a bridge that writes a malformed lock is a finding;
+      - `bridge_lock_unreadable`: the advisory lock could not be DECODED (not UTF-8, not JSON, or the
+        reader raised) — the identified processes were terminated BEFORE the lock was read, so nothing
+        was left running, but the cross-check against the lock pid could not happen (a finding);
       - `live_observation_lost`: the live `:7701` daemon answered at baseline but not at the final
         snapshot (connection refused / non-200 / non-list) — the before/after run-id diff that
         proves nothing landed there is UNPROVEN, so the isolation verdict cannot be clean;
@@ -452,6 +455,8 @@ def teardown_failures(t: dict) -> list[str]:
             out.append(f"bridge_not_from_pinned_cache: {bridge.get('not_from_pinned_cache')}")
         if bridge.get("lock_pid_invalid"):
             out.append(f"bridge_lock_pid_invalid: {bridge.get('lock_pid_invalid')}")
+        if bridge.get("lock_unreadable"):
+            out.append(f"bridge_lock_unreadable: {bridge.get('lock_unreadable')}")
         if bridge.get("error"):
             out.append(f"bridge_stop_error: {bridge['error']}")
     if t.get("browser_close_error"):
@@ -513,15 +518,17 @@ def exit_code(rep: dict) -> int:
 # ── Pure oracles (self-tested) ────────────────────────────────────────────────
 
 
-def disjoint_pickers_oracle(a_ids: list[str], b_ids: list[str], doc_a: str, doc_b: str, issue: str) -> None:
-    """VIB-3's oracle. OWNERSHIP is a plain assertion (an empty picker is a FAIL, never an expected
-    gap); only the leak itself is the expected gap tied to `issue`."""
-    assert a_ids, f"Project A's picker is empty — it must list at least its own document {doc_a!r}"
-    assert b_ids, f"Project B's picker is empty — it must list at least its own document {doc_b!r}"
-    assert doc_a in a_ids, f"Project A's picker does not list A's own document {doc_a!r}: {a_ids}"
-    assert doc_b in b_ids, f"Project B's picker does not list B's own document {doc_b!r}: {b_ids}"
-    expect_gap(doc_b not in a_ids, issue, f"Project A's picker lists B's document {doc_b!r}: {a_ids}")
-    expect_gap(doc_a not in b_ids, issue, f"Project B's picker lists A's document {doc_a!r}: {b_ids}")
+def disjoint_pickers_oracle(a_ids: list[str], b_ids: list[str], doc_a: str, doc_b: str, issue: str, kind: str = "document") -> None:
+    """VIB-3's / DEM-3's oracle. OWNERSHIP is a plain assertion (an empty picker is a FAIL, never an
+    expected gap); only the leak itself is the expected gap tied to `issue`. `kind` names the artifact
+    in every message (`document` for VIB-3, `demo` for DEM-3 — Copilot: a DEM-3 row must not say
+    "document")."""
+    assert a_ids, f"Project A's picker is empty — it must list at least its own {kind} {doc_a!r}"
+    assert b_ids, f"Project B's picker is empty — it must list at least its own {kind} {doc_b!r}"
+    assert doc_a in a_ids, f"Project A's picker does not list A's own {kind} {doc_a!r}: {a_ids}"
+    assert doc_b in b_ids, f"Project B's picker does not list B's own {kind} {doc_b!r}: {b_ids}"
+    expect_gap(doc_b not in a_ids, issue, f"Project A's picker lists B's {kind} {doc_b!r}: {a_ids}")
+    expect_gap(doc_a not in b_ids, issue, f"Project B's picker lists A's {kind} {doc_a!r}: {b_ids}")
 
 
 def assert_execution_prevented(units: object, events: object) -> dict:
@@ -561,12 +568,42 @@ def event_identity(e: dict) -> tuple[int | None, str, int | None]:
             ord_ if isinstance(ord_, int) and not isinstance(ord_, bool) else None)
 
 
+def _is_num(v: object) -> bool:
+    """JS `typeof v === 'number'` for a JSON value: int or float, never a bool."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _hydrate_compare(a: dict, b: dict) -> int:
+    """`store/events.ts hydrate`: `typeof a.seq === 'number' && typeof b.seq === 'number' ? a.seq - b.seq : 0`."""
+    if _is_num(a.get("seq")) and _is_num(b.get("seq")):
+        return (a["seq"] > b["seq"]) - (a["seq"] < b["seq"])
+    return 0
+
+
+def _feed_compare(a: dict, b: dict) -> int:
+    """`narrator.ts sortFeedEvents`: frames that BOTH carry a numeric `ts` AND `seq` compare by `seq`;
+    every other pair compares EQUAL (0) — an unsequenced frame is never moved, it keeps its relative
+    placement (DES-RUN-NARRATOR §3 rule 2)."""
+    a_s = a["seq"] if _is_num(a.get("ts")) and _is_num(a.get("seq")) else None
+    b_s = b["seq"] if _is_num(b.get("ts")) and _is_num(b.get("seq")) else None
+    if a_s is None or b_s is None:
+        return 0
+    return (a_s > b_s) - (a_s < b_s)
+
+
 def expected_raw_rows(events: list[dict], run_id: str, ignored: set[str]) -> list[tuple[int | None, str, int | None]]:
-    """The rows the raw view MUST show for `GET /runs/:id/events`: the store hydrates `session ==
-    run_id` minus its never-rendered types (store/events.ts IGNORED), and the feed sorts by `seq`
-    (narrator.ts sortFeedEvents — stable, so frames without a seq keep their wire order)."""
+    """The rows the raw view MUST show for `GET /runs/:id/events` — the UI's OWN two comparators, in
+    the UI's order (codex r6 #5): the store hydrates `session == run_id` minus its never-rendered types
+    (store/events.ts IGNORED) sorted by `_hydrate_compare`, then the feed sorts by `_feed_compare`
+    (narrator.ts sortFeedEvents). Both comparators return 0 for any pair with an unsequenced frame, so
+    such a frame KEEPS ITS RELATIVE PLACEMENT — it is never moved to the end (revision 10 keyed it to
+    +inf, which the UI does not do). `Array.prototype.sort` (V8's TimSort, ported from CPython's
+    listsort) and `list.sort` are the same stable algorithm, so the same comparator over the same input
+    yields the same order."""
+    import functools
     kept = [e for e in events if isinstance(e, dict) and e.get("session") == run_id and e.get("type") not in ignored]
-    kept.sort(key=lambda e: (e.get("seq") if isinstance(e.get("seq"), int) and isinstance(e.get("ts"), (int, float)) else float("inf")))
+    kept.sort(key=functools.cmp_to_key(_hydrate_compare))
+    kept.sort(key=functools.cmp_to_key(_feed_compare))
     return [event_identity(e) for e in kept]
 
 
@@ -804,9 +841,12 @@ def seed_registry_manifest(src_npm: Path, dst_npm: Path, name: str) -> dict:
             blob = src_cc / blob_rel
             if not blob.is_file():
                 continue
-            (dst_cc / blob_rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(blob, dst_cc / blob_rel)
-            copied_blobs.append(str(blob_rel))
+            # Two index entries may name the SAME blob (a re-fetch with an unchanged manifest); copy
+            # and list it once (Copilot: the committed report carried a duplicate `blobs` entry).
+            if str(blob_rel) not in copied_blobs:
+                (dst_cc / blob_rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(blob, dst_cc / blob_rel)
+                copied_blobs.append(str(blob_rel))
             try:
                 manifest = json.loads(blob.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
@@ -938,9 +978,69 @@ def _tree_digest(root: Path, errors: list[str], symlinks: list[dict]) -> dict[st
     return out
 
 
-def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | None) -> dict:
+def clone_root_containment(dst: Path, scratch: Path | None) -> dict:
+    """BEFORE anything under the clone is read (codex r6 #1): the clone ROOT itself, and every ancestor
+    of it strictly under `scratch`, is `lstat`ed — a symlink anywhere on that chain is an error (a copied
+    cache-root link would resolve straight back into the operator's cache while the descendant walk
+    sees "zero symlinks"); and the root's realpath must lie inside the scratch dir's realpath. Ancestors
+    ABOVE scratch are not judged (macOS's `/var` → `/private/var` is a symlink the scratch dir legitimately
+    lives under); `scratch=None` still refuses a symlinked root. Pure; self-tested."""
+    import stat as _stat
+    rec: dict = {"scratch": str(scratch) if scratch is not None else None, "ancestors_checked": []}
+    try:
+        st = os.lstat(dst)
+    except OSError as e:
+        rec["error"] = f"the clone root {dst} cannot be lstat'ed: {type(e).__name__}: {e.strerror or e}"
+        return rec
+    rec["root_is_symlink"] = _stat.S_ISLNK(st.st_mode)
+    if rec["root_is_symlink"]:
+        try:
+            target = os.readlink(dst)
+        except OSError as e:
+            target = f"<unreadable: {e.strerror or e}>"
+        rec["root_target"] = target
+        rec["realpath"] = os.path.realpath(dst)
+        rec["error"] = f"the clone root {dst} is a SYMLINK → {target} (resolves to {rec['realpath']}) — refused before reading anything"
+        return rec
+    if not _stat.S_ISDIR(st.st_mode):
+        rec["error"] = f"the clone root {dst} is not a directory"
+        return rec
+    rec["realpath"] = os.path.realpath(dst)
+    if scratch is None:
+        return rec
+    scratch_abs = os.path.abspath(scratch)
+    dst_abs = os.path.abspath(dst)
+    if not (dst_abs == scratch_abs or dst_abs.startswith(scratch_abs + os.sep)):
+        rec["error"] = f"the clone root {dst} is not lexically under the scratch dir {scratch}"
+        return rec
+    # every ancestor strictly under scratch, from the top down, then the root itself (already lstat'ed)
+    rel_parts = Path(dst_abs).relative_to(scratch_abs).parts
+    cur = Path(scratch_abs)
+    for part in rel_parts[:-1]:
+        cur = cur / part
+        rec["ancestors_checked"].append(str(cur))
+        try:
+            if os.path.islink(cur):
+                rec["error"] = f"the clone root's ancestor {cur} under the scratch dir is a SYMLINK → {os.readlink(cur)} — refused before reading anything"
+                return rec
+        except OSError as e:
+            rec["error"] = f"the clone root's ancestor {cur} cannot be inspected: {type(e).__name__}: {e.strerror or e}"
+            return rec
+    scratch_real = os.path.realpath(scratch_abs)
+    rec["scratch_realpath"] = scratch_real
+    rec["inside_scratch"] = rec["realpath"] == scratch_real or rec["realpath"].startswith(scratch_real + os.sep)
+    if not rec["inside_scratch"]:
+        rec["error"] = f"the clone root {dst} resolves to {rec['realpath']}, OUTSIDE the scratch dir {scratch_real} — refused before reading anything"
+    return rec
+
+
+def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | None, *, scratch: Path | None = None) -> dict:
     """Establish what CAN be established about the scratch clone `dst` — pure over the filesystem;
-    self-tested. Four checks, all recorded:
+    self-tested. Five checks, all recorded:
+      0. ROOT CONTAINMENT (codex r6 #1, `clone_root_containment`): BEFORE any read, the clone root and
+         every ancestor under `scratch` are `lstat`ed (a symlink ⇒ error) and the root's realpath must
+         be inside the scratch dir — else `error`, `clone_equals_source: false`, `bytes_authenticated:
+         false`, and nothing under the root is opened.
       1. SYMLINKS ESCAPING: an lstat walk of the clone; every symlink's target (resolved from its own
          directory) must stay INSIDE the clone — an escaping or absolute target is an error (npm's
          `.bin` shims are relative links into `node_modules`, so a legitimate clone has none).
@@ -952,9 +1052,15 @@ def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | No
          path under the source install, with no file missing or extra — the bytes the bridge
          executes are the bytes of the operator's install.
       4. THE TARBALL, when the operator's cacache still holds the content blob for `integrity`:
-         its sha512 must equal the integrity (what npm/pacote verified at install) and every member
-         of `package/` must hash equal to the clone's `node_modules/wicked-interactive` file — ONLY
-         then are the bytes AUTHENTICATED against the registry tarball (`bytes_authenticated: true`).
+         its sha512 must equal the integrity (what npm/pacote verified at install), the tarball's file
+         SET must EQUAL the clone's `node_modules/wicked-interactive` file set (no member missing from
+         the clone, NO installed file the tarball does not carry — codex r6 #3), every member must hash
+         equal, and every symlink member must exist in the clone with the same target (a hard link or
+         any other special member is an error — not comparable) — ONLY then are the bytes AUTHENTICATED
+         against the registry tarball (`bytes_authenticated: true`); any difference is listed under
+         `tarball.{members_missing_in_clone, members_extra_in_clone, members_mismatched,
+         symlinks_missing_in_clone, symlinks_extra_in_clone, symlinks_retargeted, members_unsupported}`
+         with `bytes_authenticated: false`.
          When the blob is absent (npx does not retain tarballs after extraction) there is NO trusted
          source of the package's bytes on the host: npm's lockfiles record the tarball's sha512 but no
          per-file digest, and nothing records the lockfiles' own integrity — so the tie from the bytes
@@ -966,6 +1072,11 @@ def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | No
     import base64
     import tarfile
     rec: dict = {"src": str(src), "dst": str(dst)}
+    containment = clone_root_containment(dst, scratch)
+    rec["root_containment"] = containment
+    if containment.get("error"):
+        rec.update(clone_equals_source=False, bytes_authenticated=False, error=containment["error"])
+        return rec
     errors: list[str] = []
     src_links: list[dict] = []
     dst_links: list[dict] = []
@@ -1026,37 +1137,58 @@ def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | No
             if digest != expected:
                 problems.append(f"the cached tarball {blob} does not hash to the lockfile integrity (sha512 {base64.b64encode(digest).decode()[:24]}…)")
             else:
-                members_mismatched: list[str] = []
-                members_missing: list[str] = []
-                count = 0
+                # COMPLETE comparison (codex r6 #3): the tarball's file set vs the clone's package file
+                # set in BOTH directions, symlink members by target, anything else unsupported.
+                tar_files: dict[str, str | None] = {}
+                tar_links: dict[str, str] = {}
+                unsupported: list[str] = []
                 import io
                 with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
                     for m in tf.getmembers():
-                        if not m.isfile():
+                        if m.isdir():
                             continue
                         rel = m.name.split("/", 1)[1] if "/" in m.name else m.name
-                        count += 1
-                        fh = tf.extractfile(m)
-                        h = hashlib.sha256(fh.read()).hexdigest() if fh is not None else None
-                        if rel not in pkg_files:
-                            members_missing.append(rel)
-                        elif pkg_files[rel] != h:
-                            members_mismatched.append(rel)
-                tarball.update(members=count, members_missing_in_clone=members_missing[:20], members_mismatched=members_mismatched[:20])
-                if members_missing or members_mismatched:
-                    problems.append(f"the clone's {BRIDGE_PACKAGE_REL} differs from the tarball: {len(members_missing)} missing, {len(members_mismatched)} mismatched")
+                        if m.isfile():
+                            fh = tf.extractfile(m)
+                            tar_files[rel] = hashlib.sha256(fh.read()).hexdigest() if fh is not None else None
+                        elif m.issym():
+                            tar_links[rel] = m.linkname
+                        else:
+                            unsupported.append(f"{rel} ({'hardlink' if m.islnk() else m.type!r})")
+                pkg_links = {p[len(pkg_prefix):]: t for p, t in dst_link_map.items() if p.startswith(pkg_prefix)}
+                members_missing = sorted(set(tar_files) - set(pkg_files))
+                members_extra = sorted(set(pkg_files) - set(tar_files))
+                members_mismatched = sorted(p for p in set(tar_files) & set(pkg_files) if tar_files[p] != pkg_files[p])
+                links_missing_t = sorted(set(tar_links) - set(pkg_links))
+                links_extra_t = sorted(set(pkg_links) - set(tar_links))
+                links_retargeted_t = [{"path": p, "tarball_target": tar_links[p], "clone_target": pkg_links[p]}
+                                      for p in sorted(set(tar_links) & set(pkg_links)) if tar_links[p] != pkg_links[p]]
+                tarball.update(members=len(tar_files), symlink_members=len(tar_links), members_missing_in_clone=members_missing[:20],
+                               members_extra_in_clone=members_extra[:20], members_mismatched=members_mismatched[:20],
+                               symlinks_missing_in_clone=links_missing_t[:20], symlinks_extra_in_clone=links_extra_t[:20],
+                               symlinks_retargeted=links_retargeted_t[:20], members_unsupported=unsupported[:20])
+                if members_missing or members_extra or members_mismatched:
+                    problems.append(f"the clone's {BRIDGE_PACKAGE_REL} differs from the tarball: {len(members_missing)} missing, {len(members_extra)} extra "
+                                    f"(installed but not in the tarball), {len(members_mismatched)} mismatched (e.g. {(members_mismatched or members_extra or members_missing)[:3]})")
+                if links_missing_t or links_extra_t or links_retargeted_t:
+                    problems.append(f"the clone's {BRIDGE_PACKAGE_REL} symlinks differ from the tarball's: {len(links_missing_t)} missing, {len(links_extra_t)} extra, "
+                                    f"{len(links_retargeted_t)} retargeted (e.g. {(links_retargeted_t or links_missing_t or links_extra_t)[:3]})")
+                if unsupported:
+                    problems.append(f"the tarball carries {len(unsupported)} member(s) that cannot be compared (hard links / special files): {unsupported[:3]}")
         except (OSError, tarfile.TarError, ValueError) as e:
             tarball["error"] = f"{type(e).__name__}: {e}"
             problems.append(f"the cached tarball could not be verified: {type(e).__name__}: {e}")
     rec["tarball"] = tarball
     rec["clone_equals_source"] = not problems
-    if tarball.get("present") and not problems:
-        rec["bytes_authenticated"] = True
-        rec["bytes_verified_by"] = ("tarball: the cacache blob for the lockfile integrity hashes (sha512) to that integrity and every `package/` member is byte-equal "
-                                    "to the clone's node_modules/wicked-interactive; plus the whole clone tree (files sha256 per file, symlinks by target) is "
-                                    "byte-equal to the source install")
+    # `bytes_authenticated` is ALWAYS stated (codex r6 #3): true only for a present tarball with NO
+    # difference of any kind; false otherwise — with the differences listed under `tarball`.
+    rec["bytes_authenticated"] = bool(tarball.get("present")) and not problems
+    if rec["bytes_authenticated"]:
+        rec["bytes_verified_by"] = ("tarball: the cacache blob for the lockfile integrity hashes (sha512) to that integrity, the tarball's file SET equals the "
+                                    "clone's node_modules/wicked-interactive file set (nothing missing, nothing extra), every member is byte-equal and every "
+                                    "symlink member has the same target; plus the whole clone tree (files sha256 per file, symlinks by target) is byte-equal "
+                                    "to the source install")
     elif not problems:
-        rec["bytes_authenticated"] = False
         rec["bytes_verified_by"] = ("lockfile-metadata (unauthenticated): the tarball for the recorded integrity is not retained in the operator's npm cacache on "
                                     "this host, so NOTHING on the host authenticates the package bytes against that sha512 — npm's lockfiles record the tarball "
                                     "digest but no per-file digest, and nothing records the lockfiles' own integrity. PROVEN: the clone is the source install "
@@ -1149,7 +1281,9 @@ def ps_rows() -> tuple[list[dict], str | None]:
         if len(parts) < 4:
             continue
         try:
-            rows.append({"pid": int(parts[0]), "pgid": int(parts[1]), "ppid": int(parts[2]), "command": parts[3]})
+            # `ps -o command=` pads the column with trailing blanks — strip them so the recorded
+            # command line is the command line (Copilot: trailing spaces in the committed report).
+            rows.append({"pid": int(parts[0]), "pgid": int(parts[1]), "ppid": int(parts[2]), "command": parts[3].rstrip()})
         except ValueError:
             continue
     if res.returncode != 0:
@@ -1176,16 +1310,20 @@ def ps_started_at(pid: int, runner: Callable[..., subprocess.CompletedProcess] =
 
 
 def read_bridge_lock(root: Path) -> tuple[dict | None, str]:
-    """`<root>/.wi-serve.json` — advisory only. A symlink is refused outright."""
+    """`<root>/.wi-serve.json` — advisory only. A symlink is refused outright. NEVER raises on the
+    file's content (codex r6 #2): bytes that are not UTF-8 (`UnicodeDecodeError`), not JSON
+    (`JSONDecodeError`) or any other `ValueError` from decoding come back as `unreadable: <Type>: …`
+    — the caller records that as `bridge_lock_unreadable` (a verdict failure) and has ALREADY
+    terminated the identified processes by the time it reads the lock."""
     lock = root / ".wi-serve.json"
-    if lock.is_symlink():
-        return None, "refused: .wi-serve.json is a symlink"
-    if not lock.is_file():
-        return None, "absent"
     try:
-        data = json.loads(lock.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        return None, f"unreadable: {e}"
+        if lock.is_symlink():
+            return None, "refused: .wi-serve.json is a symlink"
+        if not lock.is_file():
+            return None, "absent"
+        data = json.loads(lock.read_bytes().decode("utf-8"))
+    except (OSError, ValueError) as e:  # UnicodeDecodeError and JSONDecodeError are both ValueErrors
+        return None, f"unreadable: {type(e).__name__}: {str(e)[:200]}"
     if not isinstance(data, dict):
         return None, "refused: lock is not a JSON object"
     return data, "ok"
@@ -1644,7 +1782,7 @@ class Rig:
         # BYTES: the clone must be the pinned install (sha256 per file vs the source; no escaping
         # symlink), tied to the lockfile integrity through the cached tarball when the operator's
         # cacache still holds it, else through npm's hidden lockfile — `verify_bridge_clone` says which.
-        verification = verify_bridge_clone(src, dst, str(pin["integrity"]), REAL_HOME / ".npm" / "_cacache")
+        verification = verify_bridge_clone(src, dst, str(pin["integrity"]), REAL_HOME / ".npm" / "_cacache", scratch=self.tmp)
         info["clone_verification"] = verification
         if verification.get("error"):
             info["error"] = f"the scratch clone could not be verified as the pinned bridge: {verification['error']}"
@@ -2029,26 +2167,44 @@ class Rig:
             cancelled.append(entry)
         return cancelled
 
-    def stop_bridge(self, *, processes: Callable[..., dict] | None = None, terminate: Callable[[list[int]], dict] | None = None) -> dict:
+    def stop_bridge(self, *, processes: Callable[..., dict] | None = None, terminate: Callable[[list[int]], dict] | None = None,
+                    lock_reader: Callable[[Path], tuple[dict | None, str]] | None = None) -> dict:
         """The pool spawns the bridge DETACHED (its own group), so the daemon's group stop does not
-        reach it. Identify it by command line + VERIFIED start time, cross-check the advisory lock,
-        then terminate — never signal a pid the identity check did not produce (`plan_bridge_stop`
+        reach it. Identify it by command line + VERIFIED start time, TERMINATE, then cross-check the
+        advisory lock — never signal a pid the identity check did not produce (`plan_bridge_stop`
         decides; it is pure and self-tested). A failed `ps` signals NOTHING beyond the daemon group
         we spawned (`enumeration_failed`); an alive lock pid nobody identified is `unidentified_alive`
         — both are verdict failures. An identified bridge that did not run from the scratch clone of
         the pinned version is `not_from_pinned_cache`. The lock's `pid` is TYPE-VALIDATED before any
         set membership (a list/str/bool pid is `lock_pid_invalid` — a verdict failure — and the
-        identified processes are still stopped). `processes`/`terminate` are injectable for the
-        self-tests; the suite runs the real `bridge_processes` / `terminate_pids`."""
+        identified processes are still stopped); a lock that cannot be DECODED (invalid UTF-8, not
+        JSON, a raising reader) is `lock_unreadable` — a verdict failure — and, because the terminate
+        already happened, never a running bridge (codex r6 #2). `processes`/`terminate`/`lock_reader`
+        are injectable for the self-tests; the suite runs the real `bridge_processes` /
+        `terminate_pids` / `read_bridge_lock`."""
         processes = processes or bridge_processes
         terminate = terminate or terminate_pids
+        lock_reader = lock_reader or read_bridge_lock
         info: dict = {}
         found = processes(self.idocs, self.daemon_started_at or self.run_started_at)
         procs = found["identified"]
-        lock, lock_state = read_bridge_lock(self.idocs)
+        identified = {p["pid"] for p in procs}
+        # TERMINATE FIRST (codex r5 #1, r6 #2): every identified pid is signalled BEFORE the advisory
+        # lock is read and before any metadata is inspected — `plan_bridge_stop`'s pid set never
+        # depends on the lock (the lock can only ADD a failure, never a pid), so nothing that the lock
+        # or the inspection does afterwards can leave the detached bridge running.
+        pids, _lock_free_plan = plan_bridge_stop(found, None, self.idocs)
+        if pids:
+            info["terminated"] = terminate(pids)
+        try:
+            lock, lock_state = lock_reader(self.idocs)
+        except Exception as e:  # noqa: BLE001 — a lock reader raise is a FINDING (verdict failure), never a skipped teardown
+            lock, lock_state = None, f"unreadable: {type(e).__name__}: {str(e)[:200]}"
+        if str(lock_state).startswith("unreadable"):
+            info["lock_unreadable"] = (f"the advisory .wi-serve.json could not be decoded ({lock_state}) — the lock was IGNORED; the "
+                                       f"{len(identified)} identified process(es) {sorted(identified)} had already been terminated before it was read")
         lock_pid_raw = lock.get("pid") if lock else None
         lock_pid: int | None = lock_pid_raw if valid_pid(lock_pid_raw) else None
-        identified = {p["pid"] for p in procs}
         brief = lambda p: {"pid": p["pid"], "pgid": p["pgid"], "ppid": p["ppid"], "started_at": p["started_at"], "command": p["command"][:200]}  # noqa: E731
         info.update(
             lock=lock_state, lock_pid=lock_pid_raw if isinstance(lock_pid_raw, (int, str, float, bool, type(None))) else repr(lock_pid_raw),
@@ -2061,13 +2217,13 @@ class Rig:
         if lock is not None and "pid" in lock and lock_pid is None:
             info["lock_pid_invalid"] = (f"the advisory .wi-serve.json names pid {lock_pid_raw!r} ({type(lock_pid_raw).__name__}), not a positive integer — "
                                         f"the lock was IGNORED for signalling; the {len(identified)} independently identified process(es) {sorted(identified)} were still stopped")
-        pids, plan = plan_bridge_stop(found, lock_pid, self.idocs)
+        # The lock-AWARE plan adds the `unidentified_alive` cross-check; by construction it names the
+        # same pids — any pid it would add beyond the ones already signalled is signalled now (defensive).
+        pids_aware, plan = plan_bridge_stop(found, lock_pid, self.idocs)
         info.update(plan)
-        # TERMINATE FIRST (codex r5 #1): every identified pid is signalled before any metadata is
-        # inspected — a malformed package.json, a `null` lock field or any other inspection raise can
-        # never leave the detached bridge running. The inspection below is recorded, not relied on.
-        if pids:
-            info["terminated"] = terminate(pids)
+        late = [p for p in pids_aware if p not in pids]
+        if late:
+            info["terminated_after_lock"] = terminate(late)
         try:
             self._inspect_pinned_clone_at_teardown(info, procs, identified, lock)
         except Exception as e:  # noqa: BLE001 — the inspection failing is a FINDING (verdict failure), never a skipped teardown
@@ -3873,7 +4029,7 @@ def run_scenarios(rig: Rig, page) -> None:
         (A, demo_a), (B, demo_b) = ctx["demos"][0], ctx["demos"][1]
         a_ids = picker_ids(page, A, "video")
         b_ids = picker_ids(page, B, "video")
-        disjoint_pickers_oracle(a_ids, b_ids, demo_a, demo_b, "crew#472")
+        disjoint_pickers_oracle(a_ids, b_ids, demo_a, demo_b, "crew#472", kind="demo")
         return "A and B list only their own demos"
 
     suite.run("DEM-3", "Demos are disjoint per project (A ∌ B's demo, B ∌ A's demo)", dem3, xfail="crew#472", requires=("DEM-1D", "DEM-2D"))
@@ -4394,7 +4550,7 @@ def self_test() -> int:
         "daemon": {"pid": 1, "forced": True, "exit_code": None, "group_empty": False}, "daemon_stopped": False,
         "bridge": {"terminated": {"signalled": [9], "forced": [9], "remaining": [9]}, "identity_unverified": "no start time",
                    "enumeration_failed": "ps exited 1", "unidentified_alive": "lock pid 7 alive", "not_from_pinned_cache": "ran from elsewhere",
-                   "lock_pid_invalid": "pid [] (list)"},
+                   "lock_pid_invalid": "pid [] (list)", "lock_unreadable": "unreadable: UnicodeDecodeError: invalid start byte"},
         "browser_close_error": "Target closed",
         "tmp": "/x", "tmp_removed": False, "tmp_remove_error": "EBUSY",
         "isolation_scan_error": "PermissionError: scan aborted",
@@ -4406,8 +4562,8 @@ def self_test() -> int:
     kinds = {f.split(":")[0] for f in fails}
     results["teardown_names_every_failure_kind"] = {
         "run_cancel_failed", "daemon_not_stopped", "bridge_survived_sigkill", "bridge_identity_unverified", "bridge_enumeration_failed",
-        "bridge_unidentified_alive", "bridge_not_from_pinned_cache", "bridge_lock_pid_invalid", "browser_close_error", "tmp_not_removed",
-        "isolation_scan_failed", "live_scan_error", "live_observation_lost", "teardown_step_raised",
+        "bridge_unidentified_alive", "bridge_not_from_pinned_cache", "bridge_lock_pid_invalid", "bridge_lock_unreadable", "browser_close_error",
+        "tmp_not_removed", "isolation_scan_failed", "live_scan_error", "live_observation_lost", "teardown_step_raised",
     } <= kinds
     rep = finalize({"live_touched": [], "setup": {"teardown": {"failures": fails}}}, suite_ok=True)
     results["teardown_failures_force_ok_false_and_nonzero_exit"] = rep["ok"] is False and exit_code(rep) != 0
@@ -4749,6 +4905,87 @@ def self_test() -> int:
                 and tar_ok["tarball"]["members"] == 3 and str(tar_ok["bytes_verified_by"]).startswith("tarball") and tar_ok["bytes_authenticated"] is True)
             blob_path.write_bytes(blob_bytes[:-1] + bytes([blob_bytes[-1] ^ 0xFF]))
             results["bridge_clone_tampered_tarball_is_error"] = "does not hash" in str(verify_bridge_clone(src_install, clone, real_integrity, cacache).get("error"))
+            blob_path.write_bytes(blob_bytes)
+            # codex r6 #3 — tarball COMPLETENESS: an installed file the tarball does not carry (present in
+            # source AND clone, so the clone still equals the source) must NOT authenticate; the diff is listed.
+            for d in (pkg, clone / "node_modules" / "wicked-interactive"):
+                (d / "extra-unpublished.js").write_text("// not in the tarball\n")
+            extra_file = verify_bridge_clone(src_install, clone, real_integrity, cacache)
+            results["bridge_clone_extra_installed_file_is_not_authenticated"] = (
+                extra_file.get("bytes_authenticated") is False and "extra" in str(extra_file.get("error")) and extra_file["clone_equals_source"] is False
+                and extra_file["tarball"]["members_extra_in_clone"] == ["extra-unpublished.js"] and extra_file["tarball"]["members_missing_in_clone"] == []
+                and extra_file["mismatched_count"] == 0 and extra_file["extra_count"] == 0)
+            for d in (pkg, clone / "node_modules" / "wicked-interactive"):
+                (d / "extra-unpublished.js").unlink()
+            # codex r6 #3 — a SYMLINK member of the tarball: missing from the clone ⇒ not authenticated; present
+            # with the same target ⇒ authenticated (counted as a symlink member); RETARGETED ⇒ not authenticated.
+            buf2 = _io.BytesIO()
+            with _tarfile.open(fileobj=buf2, mode="w:gz") as tf:
+                for p in sorted(x for x in pkg.rglob("*") if x.is_file()):
+                    tf.add(p, arcname=f"package/{p.relative_to(pkg)}")
+                link_member = _tarfile.TarInfo("package/bin/alias")
+                link_member.type = _tarfile.SYMTYPE
+                link_member.linkname = "../src/server.js"
+                tf.addfile(link_member)
+            blob2 = buf2.getvalue()
+            integrity2 = "sha512-" + _b64b.b64encode(hashlib.sha512(blob2).digest()).decode()
+            blob2_path = integrity_blob_path(cacache, integrity2)
+            blob2_path.parent.mkdir(parents=True, exist_ok=True)
+            blob2_path.write_bytes(blob2)
+            link_missing = verify_bridge_clone(src_install, clone, integrity2, cacache)
+            results["bridge_clone_tarball_symlink_missing_in_clone_is_not_authenticated"] = (
+                link_missing.get("bytes_authenticated") is False and "symlinks differ from the tarball" in str(link_missing.get("error"))
+                and link_missing["tarball"]["symlinks_missing_in_clone"] == ["bin/alias"] and link_missing["tarball"]["symlink_members"] == 1)
+            for d in (pkg, clone / "node_modules" / "wicked-interactive"):
+                (d / "bin" / "alias").symlink_to("../src/server.js")
+            link_ok = verify_bridge_clone(src_install, clone, integrity2, cacache)
+            results["bridge_clone_tarball_symlink_same_target_authenticates"] = (
+                "error" not in link_ok and link_ok["bytes_authenticated"] is True and link_ok["tarball"]["symlink_members"] == 1
+                and link_ok["tarball"]["symlinks_retargeted"] == [] and "file SET equals" in str(link_ok["bytes_verified_by"]))
+            for d in (pkg, clone / "node_modules" / "wicked-interactive"):
+                (d / "bin" / "alias").unlink()
+                (d / "bin" / "alias").symlink_to("../bin/wicked-interactive.js")
+            link_re = verify_bridge_clone(src_install, clone, integrity2, cacache)
+            results["bridge_clone_tarball_symlink_retargeted_is_not_authenticated"] = (
+                link_re.get("bytes_authenticated") is False and link_re["clone_equals_source"] is False
+                and link_re["tarball"]["symlinks_retargeted"] == [{"path": "bin/alias", "tarball_target": "../src/server.js", "clone_target": "../bin/wicked-interactive.js"}])
+            for d in (pkg, clone / "node_modules" / "wicked-interactive"):
+                (d / "bin" / "alias").unlink()
+            results["bridge_clone_bytes_authenticated_always_stated"] = all(
+                "bytes_authenticated" in r for r in (ok_rec, esc, retargeted, missing_link, extra_link, extra_file, link_missing, link_re))
+            # codex r6 #1 — ROOT CONTAINMENT, the codex probe: a clone root that is a SYMLINK pointing at the
+            # operator cache (here: the fake `_npx` install) is refused BEFORE anything is read — no
+            # `clone_equals_source: true`, no "zero symlinks", no files compared.
+            scratch = clone_root / "scratch"
+            scratch.mkdir()
+            (scratch / "k3-link").symlink_to(src_install)
+            linked_root = verify_bridge_clone(src_install, scratch / "k3-link", GOOD_INTEGRITY, cacache=None, scratch=scratch)
+            results["bridge_clone_symlinked_root_is_refused_before_reading"] = (
+                "SYMLINK" in str(linked_root.get("error")) and linked_root["clone_equals_source"] is False and linked_root["bytes_authenticated"] is False
+                and linked_root["root_containment"]["root_is_symlink"] is True and "files_compared" not in linked_root and "symlinks" not in linked_root
+                and linked_root["root_containment"]["realpath"] == os.path.realpath(src_install))
+            results["bridge_clone_symlinked_root_refused_even_without_scratch"] = "SYMLINK" in str(
+                verify_bridge_clone(src_install, scratch / "k3-link", GOOD_INTEGRITY, cacache=None).get("error"))
+            # an ANCESTOR under scratch that is a symlink (target inside scratch — realpath containment alone would pass)
+            (scratch / "real").mkdir()
+            shutil.copytree(src_install, scratch / "real" / "k3", symlinks=True)
+            (scratch / "alias").symlink_to("real")
+            via_alias = verify_bridge_clone(src_install, scratch / "alias" / "k3", GOOD_INTEGRITY, cacache=None, scratch=scratch)
+            results["bridge_clone_symlinked_ancestor_under_scratch_is_refused"] = (
+                "ancestor" in str(via_alias.get("error")) and str(scratch / "alias") in str(via_alias.get("error")) and "files_compared" not in via_alias)
+            # a real directory whose realpath lies OUTSIDE scratch (given lexically under it through a link) — refused; and a
+            # root that is not lexically under scratch at all — refused
+            (scratch / "outside").symlink_to(clone_root)
+            outside = verify_bridge_clone(src_install, scratch / "outside" / "k3", GOOD_INTEGRITY, cacache=None, scratch=scratch)
+            results["bridge_clone_root_resolving_outside_scratch_is_refused"] = "error" in outside and "files_compared" not in outside
+            not_under = verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None, scratch=scratch)
+            results["bridge_clone_root_not_under_scratch_is_refused"] = "not lexically under" in str(not_under.get("error")) and "files_compared" not in not_under
+            # the legitimate layout — a real directory chain under scratch — passes with the containment recorded
+            contained = verify_bridge_clone(src_install, scratch / "real" / "k3", GOOD_INTEGRITY, cacache=None, scratch=scratch)
+            results["bridge_clone_contained_root_passes_with_containment_recorded"] = (
+                "error" not in contained and contained["root_containment"]["inside_scratch"] is True and contained["root_containment"]["root_is_symlink"] is False
+                and contained["root_containment"]["ancestors_checked"] == [str(scratch / "real")] and contained["clone_equals_source"] is True)
+            results["clone_root_containment_missing_root_is_error"] = "cannot be lstat'ed" in str(clone_root_containment(scratch / "nope", scratch).get("error"))
         finally:
             shutil.rmtree(clone_root, ignore_errors=True)
     finally:
@@ -4876,17 +5113,23 @@ def self_test() -> int:
 
     _NO_PKG = object()
 
-    def stop_probe(lock_body: object, *, scratch_pkg: object = _NO_PKG, inspect_raise: bool = False) -> tuple[dict, list[list[int]], str | None]:
+    def stop_probe(lock_body: object, *, scratch_pkg: object = _NO_PKG, inspect_raise: bool = False, lock_bytes: bytes | None = None,
+                   lock_reader: Callable | None = None, calls: list[list[int]] | None = None) -> tuple[dict, list[list[int]], str | None]:
         """The REAL `Rig.stop_bridge` with an identified bridge (pid 4242). `scratch_pkg` (codex r5 #1)
         materialises a scratch clone whose `node_modules/wicked-interactive/package.json` holds that
         JSON text (a `null`, a list, garbage …) and points `setup.bridge.scratch_path` at it, so the
-        metadata inspection runs; `inspect_raise` makes the inspection itself raise."""
+        metadata inspection runs; `inspect_raise` makes the inspection itself raise. `lock_bytes`
+        (codex r6 #2) writes the lock as RAW bytes (invalid UTF-8 …) instead of `json.dumps(lock_body)`;
+        `lock_reader` injects the lock reader (a raising one, an ordering spy)."""
         pr = Rig.__new__(Rig)
         pr.report = {"setup": {}}
         pr.tmp = Path(mkdtemp(prefix="seed-selftest-lock-")).resolve()
         pr.idocs = pr.tmp / "idocs"
         pr.idocs.mkdir()
-        (pr.idocs / ".wi-serve.json").write_text(json.dumps(lock_body))
+        if lock_bytes is not None:
+            (pr.idocs / ".wi-serve.json").write_bytes(lock_bytes)
+        else:
+            (pr.idocs / ".wi-serve.json").write_text(json.dumps(lock_body))
         pr.daemon_started_at = 100.0
         pr.run_started_at = 100.0
         pr.npm_cache = pr.tmp / "npm-cache"
@@ -4899,11 +5142,12 @@ def self_test() -> int:
             def _boom(*_a, **_k):
                 raise RuntimeError("inspection boom")
             pr._inspect_pinned_clone_at_teardown = _boom  # type: ignore[method-assign]
-        calls: list[list[int]] = []
+        calls = [] if calls is None else calls  # a caller-supplied list lets a lock-reader spy observe the terminate ORDER
         try:
             info = pr.stop_bridge(
                 processes=lambda root, nb: {"identified": [ident_bridge], "unverified": [], "older_excluded": [], "ps_ok": True, "ps_error": None},
                 terminate=lambda pids: (calls.append(list(pids)), {"signalled": list(pids), "forced": [], "remaining": []})[1],
+                lock_reader=lock_reader,
             )
             return info, calls, None
         except Exception as e:  # noqa: BLE001 — the probe records the raise instead of crashing the self-test
@@ -5177,6 +5421,58 @@ def self_test() -> int:
                 results["raw_rows_from_dom_fail_identity_oracle_on_wrong_log"] = raw_raises(rows, events=dom_log[:2] + [dict(dom_log[2], type="WRONG_EVENT")] + dom_log[3:])
             finally:
                 _browser.close()
+    # 33. codex round 6 — (#2) termination is INDEPENDENT of lock decoding: the REAL `stop_bridge` with a lock
+    #     of invalid UTF-8 bytes (the codex probe) must call terminate([4242]) BEFORE the lock is read, never
+    #     raise, and record `lock_unreadable` → `bridge_lock_unreadable` (a verdict failure); a lock reader that
+    #     RAISES likewise; `read_bridge_lock` itself never raises on content. (#5) the raw-event expectation
+    #     mirrors the UI comparators: an unsequenced frame between two sequenced ones KEEPS its place.
+    bad_utf8 = b'{"pid": 4242, "version": "\xff\xfe\x80"}'
+    lock, state = read_bridge_lock(Path(mkdtemp(prefix="seed-selftest-utf8-")))
+    results["read_bridge_lock_absent_is_absent"] = lock is None and state == "absent"
+    utf8_dir = Path(mkdtemp(prefix="seed-selftest-utf8-"))
+    try:
+        (utf8_dir / ".wi-serve.json").write_bytes(bad_utf8)
+        lock, state = read_bridge_lock(utf8_dir)
+        results["read_bridge_lock_invalid_utf8_is_unreadable_not_a_raise"] = lock is None and state.startswith("unreadable: UnicodeDecodeError")
+    finally:
+        shutil.rmtree(utf8_dir, ignore_errors=True)
+    info, calls, raised = stop_probe(None, lock_bytes=bad_utf8)
+    results["lock_invalid_utf8_bridge_still_terminated_no_raise"] = raised is None and calls == [[4242]]
+    results["lock_invalid_utf8_is_recorded_failure"] = (
+        str(info.get("lock", "")).startswith("unreadable: UnicodeDecodeError") and bool(info.get("lock_unreadable"))
+        and any(f.startswith("bridge_lock_unreadable") for f in teardown_failures({"bridge": info})) and info["lock_pid_matches_identified"] is False)
+
+    def _raising_reader(_root: Path) -> tuple[dict | None, str]:
+        raise RuntimeError("lock reader boom")
+
+    info, calls, raised = stop_probe({"pid": 4242}, lock_reader=_raising_reader)
+    results["lock_reader_raise_bridge_still_terminated_no_raise"] = raised is None and calls == [[4242]]
+    results["lock_reader_raise_is_recorded_failure"] = "RuntimeError: lock reader boom" in str(info.get("lock")) and any(
+        f.startswith("bridge_lock_unreadable") for f in teardown_failures({"bridge": info}))
+    order: list[int] = []
+    shared_calls: list[list[int]] = []
+
+    def _spy_reader(root: Path) -> tuple[dict | None, str]:
+        order.append(len(shared_calls))  # how many terminate calls had ALREADY happened when the lock was read
+        return read_bridge_lock(root)
+
+    info, calls, raised = stop_probe({"pid": 4242, "version": "0.8.1"}, lock_reader=_spy_reader, calls=shared_calls)
+    results["terminate_happens_before_the_lock_is_read"] = (
+        raised is None and calls == [[4242]] and order == [1] and "lock_unreadable" not in info and info["lock"] == "ok"
+        and info["lock_pid_matches_identified"] is True and teardown_failures({"bridge": {**info, "terminated": {"remaining": []}}}) == [])
+    mixed = [
+        {"seq": 1, "ts": 1.0, "session": "r", "type": "sessionStarted"},
+        {"session": "r", "type": "liveOnlyFrame"},  # no seq, no ts — the UI keeps it HERE
+        {"seq": 2, "ts": 1.0, "session": "r", "type": "unitPlanned", "ord": 1},
+    ]
+    kept_order = expected_raw_rows(mixed, "r", set())
+    results["rundet_unsequenced_frame_keeps_its_relative_placement"] = kept_order == [(1, "sessionStarted", None), (None, "liveOnlyFrame", None), (2, "unitPlanned", 1)]
+    ui_rows = [{"seq": 1, "type": "sessionStarted", "ord": None}, {"seq": None, "type": "liveOnlyFrame", "ord": None}, {"seq": 2, "type": "unitPlanned", "ord": 1}]
+    results["rundet_ui_interleaved_order_passes_the_oracle"] = assert_raw_view_matches_log(mixed, ui_rows, "r", set())["rows"] == 3
+    moved_to_end = [ui_rows[0], ui_rows[2], ui_rows[1]]  # revision 10's expectation — NOT what the UI renders
+    results["rundet_unsequenced_moved_to_end_is_rejected"] = raw_raises(moved_to_end, events=mixed)
+    results["rundet_seq_without_ts_sorts_in_hydrate_not_in_feed"] = expected_raw_rows(
+        [{"seq": 5, "session": "r", "type": "b"}, {"seq": 4, "session": "r", "type": "a"}], "r", set()) == [(4, "a", None), (5, "b", None)]
     ok = all(results.values())
     print(json.dumps({"self_test": results, "ok": ok}, indent=2))
     return 0 if ok else 1
