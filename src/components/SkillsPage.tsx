@@ -35,7 +35,7 @@ import type { SkillsWriter } from './skillsWriter.js';
  *  - the CATALOG (SkillsGrid): one row per skill with kind / provenance / flags and the enabled
  *    switch — the one inline write, through the daemon's guards;
  *  - the DRAWER (SkillDrawer) a row opens: skill files + support files under tabs, the textarea
- *    editor (Save → PUT → findings), reset / replace / delete. `?skill=<name>` is the drawer's
+ *    editor (Save → PUT → findings), reset / replace. `?skill=<name>` is the drawer's
  *    address — selecting a row is a real navigation (deep-linkable, back-button-correct);
  *  - the page verbs: Add (a pasted files map), Refresh baseline (the three-way upgrade), Analyze
  *    (the publish validation as a dry run) and PUBLISH — validate the whole tree and write the
@@ -195,13 +195,6 @@ export function SkillsPage({ navigate, search = '' }: {
     setNote(`Added ${name} — publish to hand it to workers.`);
     setPageResult(result.findings.length > 0 ? { verb: `Add ${name}`, result } : null);
     void load().then(() => navigate(skillsPath(name)));
-  };
-
-  const onDeleted = (name: string, result: SkillGuardResult): void => {
-    setNote(`Deleted ${name} — removed from the effective root; the current snapshot keeps it until the next publish.`);
-    setPageResult(result.findings.length > 0 ? { verb: `Delete ${name}`, result } : null);
-    navigate(skillsPath());
-    void load();
   };
 
   const baseline = catalog?.manifest.baseline ?? null;
@@ -391,7 +384,6 @@ export function SkillsPage({ navigate, search = '' }: {
           onClose={() => navigate(skillsPath())}
           onToggle={toggle}
           onChanged={() => void load()}
-          onDeleted={onDeleted}
         />
       )}
 

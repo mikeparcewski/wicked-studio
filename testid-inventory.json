@@ -11,8 +11,8 @@
   "studioVersion": "0.5.1",
   "counts": {
     "files": 137,
-    "occurrences": 1108,
-    "static": 947,
+    "occurrences": 1107,
+    "static": 946,
     "dynamic": 57,
     "computed": 6
   },
@@ -3949,12 +3949,6 @@
       "testId": "skills-deep-link-missing",
       "files": [
         "src/components/SkillsPage.tsx"
-      ]
-    },
-    {
-      "testId": "skills-delete-open",
-      "files": [
-        "src/components/SkillDrawer.tsx"
       ]
     },
     {

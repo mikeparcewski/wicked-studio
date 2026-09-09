@@ -333,16 +333,6 @@ export function replaceSkill(name: string, files: SkillFilesMap, expectedRevisio
   return post(`/skills/${encodeURIComponent(name)}/replace`, { files, expectedRevision });
 }
 
-/** `DELETE /skills/:name` — remove a USER-ADDED skill (a shipped skill is disabled or reset, never
- *  deleted). The REST-natural spelling of the design's add/replace pair; the api-types
- *  reconciliation confirms or renames it. */
-export function deleteSkill(name: string, expectedRevision: string): Promise<SkillGuardResult> {
-  return apiFetch<SkillGuardResult>(`/skills/${encodeURIComponent(name)}`, {
-    method: 'DELETE',
-    body: JSON.stringify({ expectedRevision }),
-  });
-}
-
 /** `POST /skills/refresh-baseline` — capture the installed plugin as a new baseline and merge it
  *  three-way per file (unchanged → take new; user-modified & upstream-unchanged → keep; both
  *  changed → keep + `conflict`). Never clobbers an edit. */

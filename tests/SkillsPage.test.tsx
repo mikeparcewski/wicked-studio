@@ -21,7 +21,7 @@ import type { SkillGuardResult, SkillManifestEntry, SkillsCatalog } from '../src
  *    `{content, expectedRevision}`, the findings render, a `blocked` verdict disables Save for
  *    that exact draft, a `truncated` or `binary` read disables Save outright;
  *  - Reset is a typed confirmation over `POST /skills/:name/reset` (disabled for a user-added
- *    skill); Delete (user-added only) over `DELETE /skills/:name`; Replace / Add post files maps;
+ *    skill — no baseline, and no delete verb on the wire); Replace / Add post files maps;
  *  - the page verbs: Publish (`POST /skills/publish`, findings shown, the snapshot line moves),
  *    Analyze (`POST /skills/analyze`, a dry run — no body, no reload), Refresh baseline;
  *  - a daemon WITHOUT the routes (bare 404 / 501) renders the NAMED unsupported state — never a
@@ -633,7 +633,7 @@ describe('SkillsPage — the Support tab (root support files)', () => {
   });
 });
 
-describe('SkillsPage — the drawer verbs: switch, Reset, Replace, Delete', () => {
+describe('SkillsPage — the drawer verbs: switch, Reset, Replace', () => {
   it('the drawer switch flips through the same guarded wire (expectedRevision) and renders the verdict in the drawer', async () => {
     let enabled = true;
     const bodies: unknown[] = [];
@@ -678,7 +678,6 @@ describe('SkillsPage — the drawer verbs: switch, Reset, Replace, Delete', () =
 
     fireEvent.click(within(drawer).getByTestId('skills-reset-open'));
     const modal = screen.getByTestId('skills-confirm-modal');
-    expect(modal.dataset.action).toBe('reset');
     expect(modal).toHaveTextContent(`Reset ${EXTRACTOR}`);
     expect(modal).toHaveTextContent(/stays disabled/);
     const confirm = within(modal).getByTestId('skills-confirm');
@@ -698,38 +697,25 @@ describe('SkillsPage — the drawer verbs: switch, Reset, Replace, Delete', () =
     expect(calls('GET', '/skills')).toBe(2);
   });
 
-  it('a user-added skill cannot Reset (no baseline) but can Delete — typed confirmation over DELETE /skills/:name {expectedRevision}', async () => {
-    const bodies: unknown[] = [];
+  it('a user-added skill cannot Reset (no baseline to restore from) — a shipped one can', async () => {
     wire({
       'GET /skills': () => Promise.resolve(catalog()),
       [`GET /skills/${MINE}/files`]: () => Promise.resolve({ files: [{ path: 'SKILL.md', hash: 'h', size: 4 }] }),
       [`GET /skills/${MINE}/files/SKILL.md`]: () => Promise.resolve(fileRead('SKILL.md', 'mine')),
-      [`DELETE /skills/${MINE}`]: (init) => { bodies.push(body(init)); return Promise.resolve(clear()); },
+      ...fileHandlers(REPO_LEARN),
     });
     render(<Harness />);
-    const drawer = await openDrawer(MINE);
+    let drawer = await openDrawer(MINE);
     await within(drawer).findByTestId('skills-editor');
+    const reset = within(drawer).getByTestId('skills-reset-open');
+    expect(reset).toBeDisabled();
+    expect(reset).toHaveAttribute('title', expect.stringMatching(/no baseline/));
+    // Replace stays available — the way to change a user-added skill wholesale.
+    expect(within(drawer).getByTestId('skills-replace-open')).toBeEnabled();
 
-    expect(within(drawer).getByTestId('skills-reset-open')).toBeDisabled();
-    fireEvent.click(within(drawer).getByTestId('skills-delete-open'));
-    const modal = screen.getByTestId('skills-confirm-modal');
-    expect(modal.dataset.action).toBe('delete');
-    fireEvent.change(within(modal).getByTestId('skills-confirm-input'), { target: { value: MINE } });
-    fireEvent.click(within(modal).getByTestId('skills-confirm'));
-
-    await waitFor(() => expect(calls('DELETE', `/skills/${MINE}`)).toBe(1));
-    expect(bodies).toEqual([{ expectedRevision: REV_1 }]);
-    expect(navigate).toHaveBeenLastCalledWith('/skills');
-    expect(await screen.findByTestId('skills-note')).toHaveTextContent(`Deleted ${MINE}`);
-    await waitFor(() => expect(screen.queryByTestId('skills-drawer')).toBeNull());
-  });
-
-  it('a shipped skill offers no Delete', async () => {
-    wire({ 'GET /skills': () => Promise.resolve(catalog()), ...fileHandlers(REPO_LEARN) });
-    render(<Harness />);
-    const drawer = await openDrawer(REPO_LEARN);
+    fireEvent.click(within(drawer).getByTestId('skills-drawer-close'));
+    drawer = await openDrawer(REPO_LEARN);
     await within(drawer).findByTestId('skills-editor');
-    expect(within(drawer).queryByTestId('skills-delete-open')).toBeNull();
     expect(within(drawer).getByTestId('skills-reset-open')).toBeEnabled();
   });
 

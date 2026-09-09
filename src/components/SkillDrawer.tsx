@@ -12,7 +12,7 @@ import {
 } from '../api/skills.js';
 import { useModalEscape } from './Modal.js';
 import { EnabledToggle, KindChip, ProvenanceChip, SkillFlags } from './SkillChips.js';
-import { SkillConfirmModal, type SkillConfirmAction } from './SkillConfirmModal.js';
+import { SkillConfirmModal } from './SkillConfirmModal.js';
 import { SkillFilesMapModal } from './SkillFilesMapModal.js';
 import { SkillFindings } from './SkillFindings.js';
 import type { SkillsWriter } from './skillsWriter.js';
@@ -26,12 +26,11 @@ import type { SkillsWriter } from './skillsWriter.js';
  * page's CAS writer → the daemon's findings; a `blocked` verdict disables Save for that exact
  * draft until it changes; a `truncated` or `binary` read is read-only (Save never clobbers what
  * the editor cannot show). Plus the enabled switch and the dir-level verbs: Reset (from the
- * baseline; disabled for a user-added skill, which has none), Replace (a pasted files map),
- * Delete (user-added only).
+ * baseline; disabled for a user-added skill, which has none — disable is its off switch) and
+ * Replace (a pasted files map).
  *
  * The page owns the catalog: the drawer reports every applied content write through `onChanged`
- * so the page reloads (provenance flips, hashes move, `unpublished` lights up), and a delete
- * through `onDeleted` so the page closes this drawer and says so.
+ * so the page reloads (provenance flips, hashes move, `unpublished` lights up).
  */
 
 /** The two file trees the drawer edits. */
@@ -39,7 +38,7 @@ type SkillDrawerTab = 'skill' | 'support';
 
 const TAB_LABEL: Record<SkillDrawerTab, string> = { skill: 'Skill files', support: 'Support files' };
 
-export function SkillDrawer({ skill, support, writer, busy, onClose, onToggle, onChanged, onDeleted }: {
+export function SkillDrawer({ skill, support, writer, busy, onClose, onToggle, onChanged }: {
   skill: SkillRow;
   /** The root support files (from the manifest), path-sorted. */
   support: readonly SkillFileEntry[];
@@ -53,7 +52,6 @@ export function SkillDrawer({ skill, support, writer, busy, onClose, onToggle, o
   onToggle: (name: string, enabled: boolean) => Promise<SkillGuardResult | null>;
   /** After any applied content write (save / reset / replace) — the page reloads the catalog. */
   onChanged: () => void;
-  onDeleted: (name: string, result: SkillGuardResult) => void;
 }): React.ReactElement {
   const [tab, setTab] = useState<SkillDrawerTab>('skill');
   const [skillFiles, setSkillFiles] = useState<SkillFileEntry[] | null>(null);
@@ -67,7 +65,7 @@ export function SkillDrawer({ skill, support, writer, busy, onClose, onToggle, o
   const [saving, setSaving] = useState(false);
   const [lastResult, setLastResult] = useState<{ verb: string; result: SkillGuardResult } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [modal, setModal] = useState<SkillConfirmAction | 'replace' | null>(null);
+  const [modal, setModal] = useState<'reset' | 'replace' | null>(null);
   const [discardPrompt, setDiscardPrompt] = useState(false);
 
   const dirty = file !== null && draft !== file.content;
@@ -263,19 +261,6 @@ export function SkillDrawer({ skill, support, writer, busy, onClose, onToggle, o
         >
           Replace…
         </button>
-        {skill.provenance === 'user-added' && (
-          <button
-            data-testid="skills-delete-open"
-            type="button"
-            disabled={verbsDisabled}
-            title="Remove this user-added skill from the effective root (typed confirmation)"
-            onClick={() => setModal('delete')}
-            className="rounded px-2 py-1 text-[10px] font-semibold disabled:opacity-40"
-            style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
-          >
-            Delete…
-          </button>
-        )}
       </div>
 
       {discardPrompt && (
@@ -445,20 +430,12 @@ export function SkillDrawer({ skill, support, writer, busy, onClose, onToggle, o
         </div>
       </div>
 
-      {(modal === 'reset' || modal === 'delete') && (
+      {modal === 'reset' && (
         <SkillConfirmModal
           skill={skill}
-          action={modal}
           writer={writer}
           onClose={() => setModal(null)}
-          onDone={(result) => {
-            if (modal === 'delete') {
-              setModal(null);
-              onDeleted(skill.name, result);
-            } else {
-              afterDirWrite('Reset', result);
-            }
-          }}
+          onDone={(result) => afterDirWrite('Reset', result)}
         />
       )}
       {modal === 'replace' && (

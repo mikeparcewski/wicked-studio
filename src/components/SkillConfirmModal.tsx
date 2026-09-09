@@ -1,43 +1,26 @@
 import { useState } from 'react';
-import { deleteSkill, resetSkill, type SkillGuardResult, type SkillRow } from '../api/skills.js';
+import { resetSkill, type SkillGuardResult, type SkillRow } from '../api/skills.js';
 import { useModalEscape } from './Modal.js';
 import { SkillFindings } from './SkillFindings.js';
 import type { SkillsWriter } from './skillsWriter.js';
 
 /**
- * The typed-confirmation modal for the two destructive skill verbs — the SteeringRetireModal
- * grammar (type the name to arm):
- *  - RESET restores the skill's OWN files from the baseline, discarding every local edit (a nested
- *    child skill's overrides survive); enablement is manifest state and is never flipped by a reset;
- *  - DELETE removes a USER-ADDED skill from the effective root (a shipped skill is disabled or
- *    reset, never deleted — the drawer offers Delete only for user-added).
- * Both run through the page's CAS writer and answer with the daemon's guard envelope: `blocked`
- * keeps the modal open with the findings (nothing changed); anything else closes it through
- * `onDone`; a revision conflict closes it plain — the page's reload prompt owns that moment.
+ * The typed-confirmation modal for RESET — the one destructive skill verb (the SteeringRetireModal
+ * grammar: type the name to arm). Reset restores the skill's OWN files from the baseline,
+ * discarding every local edit (a nested child skill's overrides survive); enablement is manifest
+ * state and is never flipped by a reset. A user-added skill has no baseline, so the drawer never
+ * offers this for one (disable is its off switch; there is no delete verb on the wire).
+ *
+ * Runs through the page's CAS writer and answers with the daemon's guard envelope: `blocked` keeps
+ * the modal open with the findings (nothing changed); anything else closes it through `onDone`; a
+ * revision conflict closes it plain — the page's reload prompt owns that moment.
  */
 
-const COPY = {
-  reset: {
-    title: (name: string) => `Reset ${name}`,
-    body: 'Restores every file this skill owns from the baseline and discards your local edits — the override becomes a shipped skill again. Enablement is manifest state and is NOT touched: a disabled skill stays disabled. Nothing reaches workers until the next Publish.',
-    verb: 'Reset skill',
-    busy: 'Resetting…',
-    color: 'var(--status-gate)',
-  },
-  delete: {
-    title: (name: string) => `Delete ${name}`,
-    body: 'Removes this user-added skill from the effective root. There is no baseline to restore it from — keep a copy of its files if you may want it back. The current snapshot keeps serving it until the next Publish.',
-    verb: 'Delete skill',
-    busy: 'Deleting…',
-    color: 'var(--status-fail)',
-  },
-} as const;
+const BODY =
+  'Restores every file this skill owns from the baseline and discards your local edits — the override becomes a shipped skill again. Enablement is manifest state and is NOT touched: a disabled skill stays disabled. Nothing reaches workers until the next Publish.';
 
-export type SkillConfirmAction = keyof typeof COPY;
-
-export function SkillConfirmModal({ skill, action, writer, onClose, onDone }: {
+export function SkillConfirmModal({ skill, writer, onClose, onDone }: {
   skill: SkillRow;
-  action: SkillConfirmAction;
   writer: SkillsWriter;
   onClose: () => void;
   /** Fires after the wire answered with anything but `blocked`. */
@@ -49,7 +32,7 @@ export function SkillConfirmModal({ skill, action, writer, onClose, onDone }: {
   const [blocked, setBlocked] = useState<SkillGuardResult | null>(null);
   useModalEscape(onClose);
 
-  const copy = COPY[action];
+  const title = `Reset ${skill.name}`;
   const armed = typed === skill.name && !busy;
 
   const confirm = async (): Promise<void> => {
@@ -58,7 +41,7 @@ export function SkillConfirmModal({ skill, action, writer, onClose, onDone }: {
     setError(null);
     setBlocked(null);
     try {
-      const result = await writer.run((rev) => (action === 'reset' ? resetSkill(skill.name, rev) : deleteSkill(skill.name, rev)));
+      const result = await writer.run((rev) => resetSkill(skill.name, rev));
       if (result === null) {
         onClose();
         return;
@@ -79,15 +62,14 @@ export function SkillConfirmModal({ skill, action, writer, onClose, onDone }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
       <div
         data-testid="skills-confirm-modal"
-        data-action={action}
         role="dialog"
         aria-modal="true"
-        aria-label={copy.title(skill.name)}
+        aria-label={title}
         className="flex w-[28rem] max-w-[92vw] flex-col gap-3 rounded-xl p-4 shadow-2xl"
-        style={{ background: 'var(--surface-card)', border: `1px solid ${copy.color}` }}
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--status-gate)' }}
       >
-        <h3 className="text-sm font-semibold" style={{ color: copy.color }}>{copy.title(skill.name)}</h3>
-        <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{copy.body}</p>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--status-gate)' }}>{title}</h3>
+        <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{BODY}</p>
         <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Type the skill name to confirm
           <input
@@ -106,7 +88,7 @@ export function SkillConfirmModal({ skill, action, writer, onClose, onDone }: {
             {error}
           </p>
         )}
-        {blocked !== null && <SkillFindings verb={copy.verb} result={blocked} testId="skills-confirm-findings" />}
+        {blocked !== null && <SkillFindings verb="Reset skill" result={blocked} testId="skills-confirm-findings" />}
         <div className="flex items-center justify-end gap-2">
           <button
             data-testid="skills-confirm-cancel"
@@ -123,9 +105,9 @@ export function SkillConfirmModal({ skill, action, writer, onClose, onDone }: {
             disabled={!armed}
             onClick={() => void confirm()}
             className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
-            style={{ background: copy.color, color: 'var(--surface-base)' }}
+            style={{ background: 'var(--status-gate)', color: 'var(--surface-base)' }}
           >
-            {busy ? copy.busy : copy.verb}
+            {busy ? 'Resetting…' : 'Reset skill'}
           </button>
         </div>
       </div>
