@@ -1132,9 +1132,14 @@ describe('the landing header verbs — the Harness, folded in', () => {
     await user.click(within(fresh).getByTestId('testing-launch-unscoped'));
     await user.click(within(fresh).getByTestId('testing-launch-submit'));
     expect(await screen.findByTestId('testing-launch-waiting')).toHaveTextContent(/run-seco/);
-    expect(bodySentTo('/testing/recon')).toMatchObject({ problem: `${TEST_PROBLEM_PREFIX}\n\nFirst pass` });
-    const bodies = apiFetch.mock.calls.filter(([p]) => p === '/testing/recon');
+    // Two launches, two bodies, IN ORDER: each shortcut arrival sent its own brief. (Asserting
+    // only the first body here would pass even if the second panel re-sent the first brief.)
+    const bodies = apiFetch.mock.calls
+      .filter(([p]) => p === '/testing/recon')
+      .map(([, init]) => JSON.parse((init as { body?: string }).body ?? 'null') as { problem: string });
     expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toMatchObject({ problem: `${TEST_PROBLEM_PREFIX}\n\nFirst pass` });
+    expect(bodies[1]).toMatchObject({ problem: `${TEST_PROBLEM_PREFIX}\n\nSecond pass` });
   });
 
   it('switching the verb after a launch (recon launched → "New test") is a fresh test panel, never a launched recon wearing the test title', async () => {
