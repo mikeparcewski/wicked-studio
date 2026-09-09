@@ -23,5 +23,8 @@ e2e/artifacts/**/*.png
 # observations of runs that cannot be regenerated — committed as evidence and linked from
 # docs/testing/test-feature-live-report.md. Regenerated runs anywhere else stay ignored.
 !e2e/artifacts/test-feature-live/LT-*.png
+# Every harness invocation writes its own e2e/artifacts/test-feature-live/runs/<UTC>-<pid>/ (report.json,
+# plans, screenshots) — scratch until `--promote <run-dir>` copies one into the root deliberately.
+e2e/artifacts/test-feature-live/runs/
 e2e/artifacts/**/.launch.lock
 e2e/artifacts/**/.*.tmp

@@ -322,7 +322,7 @@
       "execution_section_lines": 28,
       "execution_summary_items": 1
      },
-     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins; survey prose excluded: a scenario verb is a STANDALONE word \u2014 'tests' inside a path token ('tests/', 'tests/x.ts') is not a verb \u2014 and a survey bullet (a code-span path followed by ' \u2014 ') proposes nothing)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -1565,7 +1565,8 @@
       "card_ord": null,
       "card_run_id": null,
       "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)",
-      "gate_identity_round7": "re-checked under the round-7 rule (a failed GET /runs/:id/gate falls back ONLY to a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it \u2014 the latest awaitingHuman with no later gateDecided/resumed for its ord; never to events fetched earlier; nothing established \u21d2 gate-state-unknown): the run had a single awaitingHuman (ord 1; event_type_counts.awaitingHuman 1) that closed the log at decision time (gate.events_before_gate[-1] == 'awaitingHuman', 18 events) and the gate POST was accepted (status 200 \u2014 the gate was open at the click), so unresolved_gate() over that log establishes the same ord-1 gate: the identity holds and the decision (approve) is unchanged. The gateDecided (3) and resumed (1) in the final counts follow the click \u2014 the harness's own approval and the run's later auto-gates"
+      "gate_identity_round7": "re-checked under the round-7 rule (a failed GET /runs/:id/gate falls back ONLY to a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it \u2014 the latest awaitingHuman with no later gateDecided/resumed for its ord; never to events fetched earlier; nothing established \u21d2 gate-state-unknown): the run had a single awaitingHuman (ord 1; event_type_counts.awaitingHuman 1) that closed the log at decision time (gate.events_before_gate[-1] == 'awaitingHuman', 18 events) and the gate POST was accepted (status 200 \u2014 the gate was open at the click), so unresolved_gate() over that log establishes the same ord-1 gate: the identity holds and the decision (approve) is unchanged. The gateDecided (3) and resumed (1) in the final counts follow the click \u2014 the harness's own approval and the run's later auto-gates",
+      "gate_identity_round8": "re-checked under the round-8 rule (complete metadata): the gated unit's stage/gate are BOTH recognized wire values (test/auto \u2014 unit_kind_unknown() is None); the gate's identity at decision time is the run's single awaitingHuman event (session = this run, ord 1, verbatim prompt \u2014 complete; GET /runs/:id/gate postdates these launches), and the card rendered `before unit #1` (the 03-gate-card capture) == the current ord 1, which the round-8 approve requires \u2014 `card_ord` was not captured as a field at the time (null) and is NOT backfilled; gate_decision re-decides approve, agreeing with what was clicked"
      }
     ],
     "gates_seen": 1,
@@ -1804,7 +1805,7 @@
       "execution_section_lines": 0,
       "execution_summary_items": 0
      },
-     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins; survey prose excluded: a scenario verb is a STANDALONE word \u2014 'tests' inside a path token ('tests/', 'tests/x.ts') is not a verb \u2014 and a survey bullet (a code-span path followed by ' \u2014 ') proposes nothing)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -2982,7 +2983,8 @@
       "card_ord": null,
       "card_run_id": null,
       "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)",
-      "gate_identity_round7": "re-checked under the round-7 rule (a failed GET /runs/:id/gate falls back ONLY to a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it \u2014 the latest awaitingHuman with no later gateDecided/resumed for its ord; never to events fetched earlier; nothing established \u21d2 gate-state-unknown): the run had a single awaitingHuman (ord 1; event_type_counts.awaitingHuman 1) that closed the log at decision time (gate.events_before_gate[-1] == 'awaitingHuman', 16 events) and the gate POST was accepted (status 200 \u2014 the gate was open at the click), so unresolved_gate() over that log establishes the same ord-1 gate: the identity holds and the decision (approve) is unchanged. The gateDecided (3) and resumed (1) in the final counts follow the click \u2014 the harness's own approval and the run's later auto-gates"
+      "gate_identity_round7": "re-checked under the round-7 rule (a failed GET /runs/:id/gate falls back ONLY to a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it \u2014 the latest awaitingHuman with no later gateDecided/resumed for its ord; never to events fetched earlier; nothing established \u21d2 gate-state-unknown): the run had a single awaitingHuman (ord 1; event_type_counts.awaitingHuman 1) that closed the log at decision time (gate.events_before_gate[-1] == 'awaitingHuman', 16 events) and the gate POST was accepted (status 200 \u2014 the gate was open at the click), so unresolved_gate() over that log establishes the same ord-1 gate: the identity holds and the decision (approve) is unchanged. The gateDecided (3) and resumed (1) in the final counts follow the click \u2014 the harness's own approval and the run's later auto-gates",
+      "gate_identity_round8": "re-checked under the round-8 rule (complete metadata): the gated unit's stage/gate are BOTH recognized wire values (test/auto \u2014 unit_kind_unknown() is None); the gate's identity at decision time is the run's single awaitingHuman event (session = this run, ord 1, verbatim prompt \u2014 complete; GET /runs/:id/gate postdates these launches), and the card rendered `before unit #1` (the 03-gate-card capture) == the current ord 1, which the round-8 approve requires \u2014 `card_ord` was not captured as a field at the time (null) and is NOT backfilled; gate_decision re-decides approve, agreeing with what was clicked"
      }
     ],
     "gates_seen": 1,
@@ -3226,7 +3228,6 @@
      "governed_mentions": 9,
      "scenario_ids": [],
      "scenario_lines": [
-      "tests/ \u2014 220+ Vitest specs (jsdom), covering zustand stores, API client parsing, and component behavior. Includes tests/",
       "Lint / typecheck / build",
       "Vitest unit + component specs",
       "testid-inventory.json drift check",
@@ -3253,7 +3254,7 @@
       "execution_section_lines": 0,
       "execution_summary_items": 0
      },
-     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins; survey prose excluded: a scenario verb is a STANDALONE word \u2014 'tests' inside a path token ('tests/', 'tests/x.ts') is not a verb \u2014 and a survey bullet (a code-span path followed by ' \u2014 ') proposes nothing)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -4405,7 +4406,8 @@
       "card_ord": null,
       "card_run_id": null,
       "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)",
-      "gate_identity_round7": "re-checked under the round-7 rule (a failed GET /runs/:id/gate falls back ONLY to a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it \u2014 the latest awaitingHuman with no later gateDecided/resumed for its ord; never to events fetched earlier; nothing established \u21d2 gate-state-unknown): the run had a single awaitingHuman (ord 1; event_type_counts.awaitingHuman 1) that closed the log at decision time (gate.events_before_gate[-1] == 'awaitingHuman', 16 events) and the gate POST was accepted (status 200 \u2014 the gate was open at the click), so unresolved_gate() over that log establishes the same ord-1 gate: the identity holds and the decision (approve) is unchanged. The gateDecided (3) and resumed (1) in the final counts follow the click \u2014 the harness's own approval and the run's later auto-gates"
+      "gate_identity_round7": "re-checked under the round-7 rule (a failed GET /runs/:id/gate falls back ONLY to a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it \u2014 the latest awaitingHuman with no later gateDecided/resumed for its ord; never to events fetched earlier; nothing established \u21d2 gate-state-unknown): the run had a single awaitingHuman (ord 1; event_type_counts.awaitingHuman 1) that closed the log at decision time (gate.events_before_gate[-1] == 'awaitingHuman', 16 events) and the gate POST was accepted (status 200 \u2014 the gate was open at the click), so unresolved_gate() over that log establishes the same ord-1 gate: the identity holds and the decision (approve) is unchanged. The gateDecided (3) and resumed (1) in the final counts follow the click \u2014 the harness's own approval and the run's later auto-gates",
+      "gate_identity_round8": "re-checked under the round-8 rule (complete metadata): the gated unit's stage/gate are BOTH recognized wire values (test/auto \u2014 unit_kind_unknown() is None); the gate's identity at decision time is the run's single awaitingHuman event (session = this run, ord 1, verbatim prompt \u2014 complete; GET /runs/:id/gate postdates these launches), and the card rendered `before unit #1` (the 03-gate-card capture) == the current ord 1, which the round-8 approve requires \u2014 `card_ord` was not captured as a field at the time (null) and is NOT backfilled; gate_decision re-decides approve, agreeing with what was clicked"
      }
     ],
     "gates_seen": 1,
@@ -4482,7 +4484,7 @@
     "ids_b": [],
     "scenario_titles_overlap_pct": 0.0,
     "titles_a": 28,
-    "titles_b": 22,
+    "titles_b": 21,
     "units_planned": [
      3,
      3
@@ -4541,7 +4543,7 @@
     "LT-3": []
    },
    "result": "pass",
-   "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins)"
+   "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins; survey prose excluded: a scenario verb is a STANDALONE word \u2014 'tests' inside a path token ('tests/', 'tests/x.ts') is not a verb \u2014 and a survey bullet (a code-span path followed by ' \u2014 ') proposes nothing)"
   },
   "LT-5": {
    "scenario": "LT-5",
@@ -5253,6 +5255,72 @@
      "why": "codex round 7 item 1 (HIGH): with the gate endpoint failing, the harness decided on the events the caller had fetched before the card rendered and never re-read /events \u2014 a stale unit-1 card approved a current unit-4 delivery gate; for the three recorded gates the run had exactly one gate, so the identity holds either way"
     }
    ]
+  },
+  {
+   "date": "2026-09-09",
+   "reason": "codex round-8 REVISE on PR #215 (+ four Copilot threads) \u2014 offline re-derivation with the fixed harness over the committed plan files; no new runs, no daemon writes",
+   "changes": [
+    {
+     "field": "LT-3.plan.scenario_lines",
+     "old": 22,
+     "new": 21,
+     "why": "survey prose is not a scenario: the `**`tests/`** \u2014 220+ Vitest specs (jsdom), covering \u2026` survey bullet counted because `tests` inside the path token `tests/` matched the verb regex; a scenario verb is now a STANDALONE word (never adjacent to `/`, `.` or a word character) and a bullet that starts with a code-span path followed by ` \u2014 ` proposes nothing; the plan's 21 explicit scenario rows remain"
+    },
+    {
+     "field": "LT-1.plan.scenario_lines",
+     "old": 28,
+     "new": 28,
+     "why": "re-derived under the same rule: unchanged (no LT-1 scenario line relied on a path-token verb, none is a survey bullet)"
+    },
+    {
+     "field": "LT-2.plan.scenario_lines",
+     "old": 13,
+     "new": 13,
+     "why": "re-derived under the same rule: unchanged (every LT-2 item carries a leading id)"
+    },
+    {
+     "field": "LT-3.consistency_vs_LT-1.titles_b",
+     "old": 22,
+     "new": 21,
+     "why": "LT-3 scenario items re-extracted (the survey bullet dropped)"
+    },
+    {
+     "field": "LT-3.consistency_vs_LT-1.scenario_titles_overlap_pct",
+     "old": 0.0,
+     "new": 0.0,
+     "why": "unchanged \u2014 the dropped line was shared with no LT-1 title (0 of 49 now, 0 of 50 before); files 38.6 % and ids n/a unchanged"
+    },
+    {
+     "field": "LT-1/2/3.plan.measured_over + LT-4.measured_over",
+     "old": "\u2026 the verb wins)",
+     "new": "\u2026 the verb wins; survey prose excluded: \u2026)",
+     "why": "the measurement statement names the round-8 rule"
+    },
+    {
+     "field": "LT-1/2/3.measured.gates[0].gate_identity_round8",
+     "old": null,
+     "new": "note",
+     "why": "the recorded approves re-checked under the complete-metadata rule (stage/gate both wire values; the awaitingHuman event carried session + ord + prompt; the card rendered `before unit #1`) \u2014 no decision changes; card_ord stays null (not captured then, not backfilled)"
+    },
+    {
+     "field": "launch_lock.{origin,key,path,dir}",
+     "old": "http://localhost:7701 / a8dae472c5d3\u2026 (sha256 of the spelled origin) / <system temp dir>/\u2026",
+     "new": "http://loopback:7701 / 28b314d20b7c\u2026 (sha256 of the CANONICAL origin) / /private/tmp/wicked-test-feature-live-<uid>/\u2026",
+     "why": "one reservation per daemon whatever STUDIO_URL spells (localhost \u2261 127.0.0.1 \u2261 [::1]) and whatever TMPDIR is set to (codex round 8, HIGH)"
+    },
+    {
+     "field": "evidence layout",
+     "old": "every invocation wrote e2e/artifacts/test-feature-live/{report.json, LT-*} \u2014 the historical files",
+     "new": "every invocation writes e2e/artifacts/test-feature-live/runs/<UTC>-<pid>/ (report.json \u2192 run_dir); the root is a read-only fixture set; `--promote <run-dir>` copies a run into it deliberately (report.json stamped promoted_from)",
+     "why": "a blocked-preflight invocation or a rerun must never replace the historical three-run evidence (codex round 8 MEDIUM + Copilot's stable-screenshot-names thread)"
+    },
+    {
+     "field": "gate policy",
+     "old": "unknown-gate-kind \u21d2 clicked REJECT; a partially known unit ({stage:null, gate:'human'}) counted as known; a prompt-only GET /runs/:id/gate 2xx was a known gate",
+     "new": "unknown-gate-kind \u21d2 reject-by-abstention (no click; stage AND gate must be recognized wire values recon|build|review|test / auto|human_confirm|human_confirm_if); an incomplete gate record (no runId/ord) is unknown-gate-kind with no events fallback; an APPROVE requires the card to render the current ord",
+     "why": "codex round 8 HIGH: a unit-4 prompt served without an ord was approved against a unit-1 card and unit-1 metadata"
+    }
+   ]
   }
  ],
  "contract_deviation": {
@@ -5265,10 +5333,12 @@
  "fetch_errors": [],
  "launch_lock": {
   "scope": "daemon-origin",
-  "origin": "http://localhost:7701",
-  "key": "a8dae472c5d31bb712a704d93ee93103ccc35d523ac4af5fc9718ecfdf68615c.launch.lock",
-  "path": "<system temp dir>/wicked-test-feature-live-<uid>/a8dae472c5d31bb712a704d93ee93103ccc35d523ac4af5fc9718ecfdf68615c.launch.lock",
+  "origin": "http://loopback:7701",
+  "key": "28b314d20b7cd08c31a8a79c45df1b980266afc9f5093ed70d27e0eab615a7f2.launch.lock",
+  "path": "/private/tmp/wicked-test-feature-live-<uid>/28b314d20b7cd08c31a8a79c45df1b980266afc9f5093ed70d27e0eab615a7f2.launch.lock",
   "held_for_recorded_launches": false,
-  "note": "codex round 7: the reservation protects the DAEMON, not a worktree \u2014 it lives in a per-user directory under the system temp dir (tempfile.gettempdir()/wicked-test-feature-live-<uid>, created 0700, refused unless it is this user's and not writable by anyone else; never under ~/.wicked-crew), named by the sha256 of the daemon origin (scheme://host:port of STUDIO_URL), so every worktree aiming at one daemon contends for ONE lock and different daemons never contend; the live harness records the resolved (scrubbed) path here at launch time. The three recorded launches predate the shared reservation (they held the per-worktree ART/.launch.lock)."
+  "note": "codex round 8: ONE reservation per daemon whatever STUDIO_URL spells and whatever TMPDIR is set to \u2014 the origin is CANONICAL (scheme lower-cased; localhost, 127.0.0.0/8, ::1/[::1] and the machine's loopback aliases collapse to `loopback`, other hosts to the resolver's canonical name; the default port explicit), so localhost:7701 \u2261 127.0.0.1:7701 \u2261 [::1]:7701 hash to this one key, and the directory is fixed per user (/private/tmp/wicked-test-feature-live-<uid> on macOS, /tmp/... elsewhere; created 0700 through the no-follow descriptor walk, refused unless this user's and private; never under the home directory). codex round 7: the reservation protects the DAEMON, not a worktree \u2014 it lives in a per-user directory under the system temp dir (tempfile.gettempdir()/wicked-test-feature-live-<uid>, created 0700, refused unless it is this user's and not writable by anyone else; never under ~/.wicked-crew), named by the sha256 of the daemon origin (scheme://host:port of STUDIO_URL), so every worktree aiming at one daemon contends for ONE lock and different daemons never contend; the live harness records the resolved (scrubbed) path here at launch time. The three recorded launches predate the shared reservation (they held the per-worktree ART/.launch.lock).",
+  "origin_canonical": true,
+  "dir": "/private/tmp/wicked-test-feature-live-<uid>"
  }
 }
