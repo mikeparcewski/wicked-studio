@@ -4,7 +4,7 @@ import { listDocs, type DocSummary } from '../api/interactive.js';
 import { listProposals, proposalKind } from '../api/proposals.js';
 import { steeringDashboardPath } from '../api/steering.js';
 import { useDocsCache } from '../store/docsCache.js';
-import type { SessionView } from '../api/types.js';
+import type { ProjectMember, SessionView } from '../api/types.js';
 import { compareScored, scoreOf, type Signal, type SignalKind } from '../board/boardAttention.js';
 import { gateOpenPath } from '../board/gateActions.js';
 import { outcomeOf, WINDOW_LABEL_STYLE } from '../board/metrics.js';
@@ -28,6 +28,7 @@ import { GateChip } from './GateChip.js';
 import { GateRejectNote } from './GateRejectNote.js';
 import { MODE_LABEL } from './ProjectShell.js';
 import { ago, ATTENTION_DOT } from './ProjectCard.js';
+import { ProjectRepositories } from './ProjectRepositories.js';
 import { ageWord } from './DashboardTiles.js';
 import { deliverySummary } from './delivery.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
@@ -156,7 +157,9 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   // One membership read on mount — the same call the board makes per project.
   const [memberKinds, setMemberKinds] = useState<Record<string, string>>({});
   const [attachedAt, setAttachedAt] = useState<Record<string, number>>({});
-  const [repoRefs, setRepoRefs] = useState<string[]>([]);
+  // The `crew.repo` members as read — the header chips AND the Repositories section
+  // (attach/detach, studio#207) render from this one state, so they can never disagree.
+  const [repoMembers, setRepoMembers] = useState<ProjectMember[]>([]);
   useEffect(() => {
     let cancelled = false;
     api.listProjectMembers(projectId)
@@ -164,10 +167,10 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         if (cancelled) return;
         const kinds: Record<string, string> = {};
         const at: Record<string, number> = {};
-        const repos: string[] = [];
+        const repos: ProjectMember[] = [];
         for (const m of members) {
           if (m.member_kind === 'crew.repo') {
-            repos.push(m.member_ref);
+            repos.push(m);
             continue;
           }
           if (!RUN_KINDS.has(m.member_kind)) continue;
@@ -176,7 +179,7 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         }
         setMemberKinds(kinds);
         setAttachedAt(at);
-        setRepoRefs(repos);
+        setRepoMembers(repos);
       })
       .catch(() => { /* members unreadable — the tiles simply stay empty */ });
     return () => { cancelled = true; };
@@ -405,13 +408,13 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         </p>
         {/* Bound repos in the header's meta-line region — names resolve from the
             SAME session repo cache the palette holds; never a fetch. */}
-        {repoRefs.length > 0 && (
+        {repoMembers.length > 0 && (
           <p data-testid="dashboard-repos" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', margin: '6px 0 0' }}>
-            {repoRefs.map((ref) => {
+            {repoMembers.map(({ id, member_ref: ref }) => {
               const known = getCachedRepos()?.find((r) => r.id === ref || r.name === ref);
               return (
                 <a
-                  key={ref}
+                  key={id}
                   {...link(`/repo-detail/${encodeURIComponent(known?.id ?? ref)}`)}
                   data-testid="dashboard-repo"
                   data-repo-ref={ref}
@@ -776,6 +779,10 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
           </DashboardGrid>
         )}
       </section>
+
+      {/* ── Repositories — the attach/detach surface for `crew.repo` members (studio#207):
+            a project-scoped test cannot launch until the project carries one. ── */}
+      <ProjectRepositories projectId={projectId} members={repoMembers} onMembersChange={setRepoMembers} />
     </div>
   );
 }

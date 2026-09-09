@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import type { ActivityEntry, ProjectDetail, ProjectMember } from '../api/types.js';
 import { useProjectsStore } from '../store/projects.js';
+import { ProjectRepositories } from './ProjectRepositories.js';
+
+/** The Repositories section owns these rows; the generic Members list shows the rest. */
+const REPO_KIND = 'crew.repo';
 
 const S = {
   card:   'var(--surface-card)',
@@ -147,6 +151,7 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
   const isDefault = projectId === 'default';
   const project = detail?.project ?? null;
   const members = detail?.members ?? [];
+  const otherMembers = members.filter((m) => m.member_kind !== REPO_KIND);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -359,16 +364,25 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
         </div>
       )}
 
+      {/* Repositories — attach/detach `crew.repo` members (studio#207); omitted for `default`. */}
+      <div style={{ marginBottom: '28px' }}>
+        <ProjectRepositories
+          projectId={projectId}
+          members={members}
+          onMembersChange={(next) => setDetail((d) => d ? { ...d, members: next } : d)}
+        />
+      </div>
+
       {/* Members */}
       <section style={{ marginBottom: '28px' }}>
         <h2 style={{ fontSize: '13px', fontWeight: 600, color: S.muted, margin: 0, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'monospace' }}>
-          Members ({members.length})
+          Members ({otherMembers.length})
         </h2>
-        {members.length === 0 ? (
+        {otherMembers.length === 0 ? (
           <p style={{ fontSize: '13px', color: S.faint }}>No members attached yet.</p>
         ) : (
           <div style={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: '10px', overflow: 'hidden', padding: '4px' }}>
-            {members.map((m) => (
+            {otherMembers.map((m) => (
               <MemberRow key={m.id} member={m} onDetach={handleDetach} />
             ))}
           </div>

@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.1",
   "counts": {
-    "files": 128,
-    "occurrences": 1030,
-    "static": 874,
+    "files": 129,
+    "occurrences": 1041,
+    "static": 885,
     "dynamic": 56,
     "computed": 6
   },
@@ -3074,6 +3074,72 @@
       "testId": "project-repo",
       "files": [
         "src/components/ProjectCard.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-detach",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-detach-cancel",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-detach-confirm",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-error",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-option",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-options",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-options-empty",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-row",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repo-search",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repos",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
+      "testId": "project-repos-empty",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
       ]
     },
     {
