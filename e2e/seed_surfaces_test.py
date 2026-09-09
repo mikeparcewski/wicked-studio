@@ -50,28 +50,48 @@ What this rig is, and what it is not:
     anywhere, a `runCancelled` after the `awaitingHuman`, every planned unit still un-executed
     (`pending|distributed|rejected`), and a non-empty units array.
   - Steps the UI cannot yet perform are performed over the daemon API and LABELLED
-    `[SUBSTITUTE]` in the report (certify the journey, not the proxy).
+    `[SUBSTITUTE]` in the report (certify the journey, not the proxy). Memories and proposals
+    have NO UI author path (agents are the only producer), so their seeds use a SUBSTITUTE
+    PRODUCER: the very `wicked-estate-mcp` binary crew itself spawns for `/memory*` and
+    `/proposals*` (`core/estate-mcp-client.js`), run with the rig's hermetic env and
+    `WICKED_MEMORY_DB` pinned INTO the temp dir (asserted before every call) — then every
+    management step (retire, approve, reject) runs through the UI and is verified on reload.
   - Known product gaps are UNMET REQUIREMENTS with an issue marker. `expect_gap(...)` marks the
     ONE assertion tied to the issue; every other assertion in an xfail scenario fails normally.
     An xfail that PASSES is `xpass` and fails the suite (stale marker). A scenario the rig cannot
     make observable is `blocked` — explicit, with the reason and issue — never a silent skip.
-  - Skips are restricted to ESTABLISHED environmental causes: a run failing before its gate is a
-    skip only when the roster shows no signed-in seat; a bridge error is a skip only when the
-    daemon itself reports `bridge_unavailable` (503); an unsupported eval surface only when the
-    route answers 501.
+  - Skips are restricted to ESTABLISHED environmental causes: a bridge error is a skip only when
+    the daemon itself reports `bridge_unavailable` (503); an unsupported eval/corpus surface only
+    when the route answers 501. The gate journey (TST-1) can NEVER skip: a pre-gate failure is a
+    FAIL carrying the captured cause (last events, roster snapshot); `SEED_GOVERNED=0` is a FAIL
+    too (certification requires the rejection proven from the run's events).
+  - TEARDOWN AFFECTS THE VERDICT (`teardown_failures`): a failed cancellation, `daemon_stopped=
+    false`, a bridge pid surviving SIGKILL, an unverified bridge identity, a failed temp-dir
+    removal, or an isolation scan that could not run (or hit an unreadable file: `live_scan_error`
+    with path + errno) each make `report.ok=false` — cleanup continues past each failure, and every
+    failure lands in `findings` AND `setup.teardown.failures[]`.
+  - BUILD IDENTITY IS BYTES, not a version label: the served `index.html` and every referenced
+    asset are hashed and compared against THIS worktree's `dist/` build (`npm run build`); a
+    mismatch or a missing asset is a setup failure.
 
 Prereqs: an installed `wicked-crew` (0.7.x; `CREW_CLI=<path to dist/cli/index.js>` overrides),
-Python Playwright (`pip install playwright && playwright install chromium`), `git`.
+`wicked-estate-mcp` on PATH (the substitute producer — the same binary crew spawns), a `dist/`
+build of this checkout (`npm run build`), Python Playwright (`pip install playwright &&
+playwright install chromium`), `git`.
 
 Env knobs: CREW_CLI, SEED_GOVERNED_TIMEOUT_S (default 600), SEED_ONBOARD_TIMEOUT_S (default
-240), SEED_GOVERNED=0 (skip the ONE governed scenario), SEED_KEEP_TMP=1, SEED_HEADED=1.
+240), SEED_GOVERNED=0 (disables the governed scenario — TST-1 then FAILS, by design),
+SEED_KEEP_TMP=1, SEED_HEADED=1. `--report-out <path>` writes the JSON report (operator home
+scrubbed to `~`) to a file as well as stdout.
 
 `python3 e2e/seed_surfaces_test.py --self-test` runs the in-process checks of the harness's own
-safety plumbing (exit semantics, xfail hygiene, pid identity, gate oracle) — no daemon.
+safety plumbing (exit semantics, xfail hygiene, pid identity, gate oracle, fail-closed teardown,
+isolation-scan errors, campaign oracle, build-identity compare, per-target cleanup rows,
+persistence content oracle) — no daemon.
 
 Prints a per-scenario table and a JSON report to stdout. Exit 0 ONLY when `report.ok`: no
-scenario is `fail`/`xpass`, nothing was contaminated, setup did not fail, nothing aborted.
-Screenshots of non-passing scenarios land in e2e/shots/seed-surfaces/.
+scenario is `fail`/`xpass`, nothing was contaminated, setup did not fail, nothing aborted, and
+teardown recorded no failure. Screenshots of non-passing scenarios land in e2e/shots/seed-surfaces/.
 """
 
 from __future__ import annotations
@@ -155,6 +175,28 @@ RULE_STATEMENT = f"Seed-surfaces rule {STAMP}: every wire body must name its pro
 RULE_STATEMENT_EDITED = f"Seed-surfaces rule {STAMP} (edited): every wire body must name its project and repo."
 RETIRE_REASON = f"seed-surfaces suite {STAMP}: retiring the rule it authored"
 TEST_BRIEF_TOKEN = f"seed-surfaces-tst1-{STAMP}"
+# STR-IMP: the .json rule batch the assist dock imports directly (two rules, ids clear of the
+# draft row's max+1 prefill), and STR-INL's inline-cell rewrite of the first.
+IMPORT_IDS = ("PAT-150", "PAT-151")
+IMPORT_STATEMENTS = {
+    "PAT-150": f"Seed-surfaces import {STAMP} A: every imported rule names the batch that carried it.",
+    "PAT-151": f"Seed-surfaces import {STAMP} B: a rule batch is applied per entry, never all-or-nothing.",
+}
+INLINE_STATEMENT = f"Seed-surfaces import {STAMP} A (inline edit): the statement cell commits on Enter."
+# EVL-3: the eval corpus imported through the UI — the store scopes it as `evals:<name>`.
+CORPUS_NAME = f"seed-surfaces-{STAMP}"
+CORPUS_SCOPE = f"evals:{CORPUS_NAME}"
+# MEM-S/MEM-R: two EXCLUSIVE scopes (estate scopes are slash-separated kind:id segments) so the
+# subtree retire of one is provably narrower than the store.
+MEMORY_SCOPE_ROOT = f"suite:seed-surfaces-{STAMP}"
+MEMORY_SCOPE_KEEP = f"{MEMORY_SCOPE_ROOT}/case:keep"
+MEMORY_SCOPE_RETIRE = f"{MEMORY_SCOPE_ROOT}/case:retire"
+MEMORY_CONTENT_KEEP = f"seed-surfaces memory {STAMP} KEEP: the sibling scope must survive a subtree retire."
+MEMORY_CONTENT_RETIRE = f"seed-surfaces memory {STAMP} RETIRE: this scope is erased through the UI."
+# PRP-S/PRP-A/PRP-R: two memory proposals, one approved and one rejected through the dashboard inbox.
+PROPOSAL_CONTENT_APPROVE = f"seed-surfaces-proposal-{STAMP} APPROVE: approving promotes this line into the memory store."
+PROPOSAL_CONTENT_REJECT = f"seed-surfaces-proposal-{STAMP} REJECT: rejecting writes nothing to the memory store."
+SUITE_FACET = {"suite": f"seed-surfaces-{STAMP}"}
 
 ORIGIN = ""  # the disposable daemon's origin — set by Rig
 API = ""
@@ -207,11 +249,16 @@ class Suite:
         xfail: str | None = None,
         requires: tuple[str, ...] = (),
         governed: bool = False,
+        no_skip: bool = False,
     ) -> None:
+        """`no_skip`: the scenario can never be `skip` — a missing prerequisite or a `Skip` raised
+        inside it is recorded as `fail` (the gate journey TST-1: certification needs its verdict)."""
         t0 = time.time()
         missing = [r for r in requires if r not in self.passed]
         if missing:
             status, detail = "skip", f"prerequisite {', '.join(missing)} did not pass"
+            if no_skip:
+                status, detail = "fail", f"{detail} — and this scenario cannot be skipped: certification requires its verdict"
         else:
             try:
                 out = fn() or ""
@@ -221,7 +268,10 @@ class Suite:
                     status = "xpass"
                     detail = f"UNEXPECTED PASS — the gap tracked by {xfail} appears closed; remove the marker. {out}"
             except Skip as e:
-                status, detail = "skip", str(e)
+                if no_skip:
+                    status, detail = "fail", f"skip is not available to this scenario (certification requires its verdict): {e}"
+                else:
+                    status, detail = "skip", str(e)
             except Blocked as e:
                 status, detail = "blocked", str(e)
             except ExpectedGap as e:
@@ -261,14 +311,58 @@ class Suite:
         return {s: sum(1 for r in self.rows if r["status"] == s) for s in self.STATUSES}
 
 
+def teardown_failures(t: dict) -> list[str]:
+    """Derive the VERDICT-AFFECTING failures from a teardown record — pure, self-tested. Cleanup
+    keeps going past each of these; none of them may leave `report.ok` true:
+      - a live-run cancellation that was refused, errored, or never reached a terminal state;
+      - `daemon_stopped` false (leader alive or group non-empty after SIGKILL);
+      - bridge pids still alive after SIGKILL, or a bridge identity that could not be verified
+        (`ps` failed / a candidate had no readable start time) — such pids are never signalled;
+      - the temp dir still present after removal was attempted;
+      - the isolation scan raising, or any unreadable file / stat error inside the operator stores
+        (`live_scan_error`: the store was not fully inspected, so "uncontaminated" is unproven)."""
+    out: list[str] = []
+    for c in t.get("cancelled_runs") or []:
+        if not isinstance(c, dict):
+            continue
+        if "error" in c and "run" not in c:
+            out.append(f"cancel_listing_failed: {c['error']}")
+        elif c.get("error") or c.get("accepted") is not True or c.get("verified_terminal") is not True:
+            out.append(f"run_cancel_failed: run {c.get('run')} accepted={c.get('accepted')} final={c.get('final')} error={c.get('error')}")
+    if "daemon" in t and t.get("daemon_stopped") is not True:
+        out.append(f"daemon_not_stopped: {t.get('daemon')}")
+    bridge = t.get("bridge") or {}
+    if isinstance(bridge, dict):
+        remaining = (bridge.get("terminated") or {}).get("remaining") or []
+        if remaining:
+            out.append(f"bridge_survived_sigkill: pids {remaining}")
+        if bridge.get("identity_unverified"):
+            out.append(f"bridge_identity_unverified: {bridge.get('identity_unverified')}")
+        if bridge.get("error"):
+            out.append(f"bridge_stop_error: {bridge['error']}")
+    if "tmp_removed" in t and t.get("tmp_removed") is not True:
+        out.append(f"tmp_not_removed: {t.get('tmp')} ({t.get('tmp_remove_error') or 'still present'})")
+    if t.get("isolation_scan_error"):
+        out.append(f"isolation_scan_failed: {t['isolation_scan_error']}")
+    scan = t.get("isolation_scan") or {}
+    for e in (scan.get("scan_errors") or []) if isinstance(scan, dict) else []:
+        out.append(f"live_scan_error: {e.get('file')} — {e.get('error')} (errno {e.get('errno')})")
+    for e in t.get("step_errors") or []:
+        out.append(f"teardown_step_raised: {e}")
+    return out
+
+
 def finalize(rep: dict, suite_ok: bool) -> dict:
     """`report.ok` is the ONLY thing the exit code reads: the scenario table AND the isolation proof
-    AND a clean setup/teardown must all hold."""
+    AND a clean setup AND a clean teardown (no verdict-affecting failure) must all hold."""
+    failures = list((rep.get("setup") or {}).get("teardown", {}).get("failures") or [])
+    rep["teardown_failures"] = failures
     rep["ok"] = (
         bool(suite_ok)
         and not rep.get("live_touched")
         and rep.get("setup_failure") is None
         and rep.get("aborted") is None
+        and not failures
     )
     return rep
 
@@ -307,11 +401,69 @@ def assert_execution_prevented(units: object, events: object) -> dict:
     assert gate_at, f"no awaitingHuman event — the intake gate never parked the run; types: {types[-10:]}"
     assert cancelled_at, f"no runCancelled event after the rejection; types: {types[-10:]}"
     assert cancelled_at[-1] > gate_at[-1], f"runCancelled (#{cancelled_at[-1]}) precedes awaitingHuman (#{gate_at[-1]})"
+    after_gate = [t for t in types[gate_at[-1] + 1:] if t in EXECUTION_EVENT_TYPES]
+    assert not after_gate, f"execution events AFTER the gate/rejection: {after_gate}"
     return {
         "units": len(units), "unit_statuses": statuses, "events": len(events),
         "awaiting_human_at": gate_at[-1], "run_cancelled_at": cancelled_at[-1],
         "types_between": types[gate_at[-1] + 1: cancelled_at[-1]],
+        "types_after_cancel": types[cancelled_at[-1] + 1:],
     }
+
+
+def compare_build(dist: dict[str, str], served: dict[str, str]) -> list[str]:
+    """Build identity by BYTES: every served entry (index + each referenced asset) must hash equal
+    to the same path in this worktree's `dist/`. Returns the mismatches (empty = identical)."""
+    problems: list[str] = []
+    if not dist:
+        problems.append("no dist/ build to compare against (run `npm run build` in this checkout)")
+        return problems
+    for path, sha in served.items():
+        expected = dist.get(path)
+        if expected is None:
+            problems.append(f"{path}: served but absent from dist/")
+        elif sha != expected:
+            problems.append(f"{path}: served sha256 {sha[:16]}… ≠ dist {expected[:16]}…")
+    if "index.html" not in served:
+        problems.append("index.html was not served")
+    return problems
+
+
+def campaigns_isolation_oracle(status: int, body: object, a_cards: list[str], b_cards: list[str]) -> dict:
+    """TST-2's deterministic half. The campaigns wire must answer 200 with a list (any other
+    answer is a FAIL carrying status/body — never "zero campaigns"); Project B's cards must exclude
+    every card A renders (the isolation assertion); a card on the single-repo project A FAILS the
+    BLOCKED premise (the assertion then has data and the row must stop being blocked)."""
+    assert status == 200, f"GET /campaigns → {status} {str(body)[:300]}"
+    campaigns = body.get("campaigns") if isinstance(body, dict) else body
+    assert isinstance(campaigns, list), f"GET /campaigns answered 200 without a `campaigns` list: {str(body)[:300]}"
+    leaked = sorted(set(a_cards) & set(b_cards))
+    assert not leaked, f"Project B's campaign list carries A's campaign card(s): {leaked}"
+    return {"engine_campaigns": len(campaigns), "a_cards": a_cards, "b_cards": b_cards}
+
+
+def persistence_oracle(before: dict, after: dict) -> None:
+    """VIB-4's content oracle: what the canvas RENDERED and what the versions wire said (head,
+    lineage, head-html bytes) must be identical before and after a full reload. A 200 with any
+    body is not persistence."""
+    for key in ("rendered_html_sha256", "rendered_text", "head", "lineage", "head_html_sha256"):
+        assert key in before and key in after, f"persistence capture lacks {key!r}: before={sorted(before)} after={sorted(after)}"
+        assert before[key] == after[key], f"{key} changed across the reload: {str(before[key])[:120]!r} → {str(after[key])[:120]!r}"
+    assert before["rendered_html_sha256"] and before["head_html_sha256"], "nothing rendered/served before the reload — nothing to compare"
+    assert isinstance(before["head"], int) and before["head"] in before["lineage"], f"head {before['head']!r} is not in the lineage {before['lineage']}"
+
+
+def run_delete_rows(s: "Suite", targets: list[tuple[str, str, str]], deleter: Callable[[str, str, str], None], issue: str, prefix: str = "CLN-1") -> list[str]:
+    """CLN-1 per TARGET: every seeded doc/demo gets its OWN row, so an ExpectedGap on one never
+    hides the others. `targets` = (project id, mode, name); rows are `<prefix>a`, `<prefix>b`, …"""
+    ids: list[str] = []
+    for i, (pid, mode, name) in enumerate(targets):
+        sid = f"{prefix}{chr(ord('a') + i)}"
+        ids.append(sid)
+        s.run(sid, f"Delete the seeded {'document' if mode == 'document' else 'demo'} {name} through the picker",
+              lambda pid=pid, mode=mode, name=name: (deleter(pid, mode, name), f"{mode} {name} deleted via 🗑 → confirm → Delete; absent after a real reload")[1],
+              xfail=issue)
+    return ids
 
 
 # ── Process identity + termination helpers (self-tested) ──────────────────────
@@ -343,10 +495,15 @@ def group_alive(pgid: int) -> bool:
         return True
 
 
-def ps_rows() -> list[dict]:
-    out = subprocess.run(["ps", "-axo", "pid=,pgid=,ppid=,command="], capture_output=True, text=True).stdout
+def ps_rows() -> tuple[list[dict], str | None]:
+    """The process table, or (partial rows, error) when `ps` itself failed — a failed `ps` must
+    never read as "no bridge running"."""
+    try:
+        res = subprocess.run(["ps", "-axo", "pid=,pgid=,ppid=,command="], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return [], f"ps failed: {e}"
     rows = []
-    for line in out.splitlines():
+    for line in res.stdout.splitlines():
         parts = line.split(None, 3)
         if len(parts) < 4:
             continue
@@ -354,13 +511,22 @@ def ps_rows() -> list[dict]:
             rows.append({"pid": int(parts[0]), "pgid": int(parts[1]), "ppid": int(parts[2]), "command": parts[3]})
         except ValueError:
             continue
-    return rows
+    if res.returncode != 0:
+        return rows, f"ps exited {res.returncode}: {res.stderr.strip()[:200]}"
+    return rows, None
 
 
 def ps_started_at(pid: int) -> float | None:
-    out = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    """The process start time, or None when it could not be READ (a failed/odd `ps`, a vanished
+    pid) — None means UNVERIFIED, never "started recently enough"."""
     try:
-        return time.mktime(time.strptime(out, "%a %b %d %H:%M:%S %Y"))
+        res = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if res.returncode != 0:
+        return None
+    try:
+        return time.mktime(time.strptime(res.stdout.strip(), "%a %b %d %H:%M:%S %Y"))
     except ValueError:
         return None
 
@@ -381,20 +547,34 @@ def read_bridge_lock(root: Path) -> tuple[dict | None, str]:
     return data, "ok"
 
 
-def bridge_processes(root: Path, not_before: float) -> list[dict]:
+def bridge_processes(
+    root: Path, not_before: float, *,
+    ps: Callable[[], tuple[list[dict], str | None]] = ps_rows,
+    started_at: Callable[[int], float | None] = ps_started_at,
+) -> dict:
     """The processes serving OUR docs root — identified by COMMAND LINE (`wicked-interactive` AND
-    the unique temp root), started no earlier than our daemon. Both the detached `npx` wrapper and
-    the node bridge it execs match; an older process merely mentioning the path does not."""
-    mine = []
-    for r in ps_rows():
+    the unique temp root) AND a VERIFIED start time no earlier than our daemon. Both the detached
+    `npx` wrapper and the node bridge it execs match; an older process merely mentioning the path
+    does not. A candidate whose start time cannot be read is `unverified` — listed, NEVER
+    signalled; a failed `ps` makes the whole identification unverified (`ps_ok=false`)."""
+    rows, ps_error = ps()
+    identified: list[dict] = []
+    unverified: list[dict] = []
+    older: list[dict] = []
+    for r in rows:
         cmd = r["command"]
         if "wicked-interactive" not in cmd or str(root) not in cmd:
             continue
-        started = ps_started_at(r["pid"])
-        if started is not None and started < not_before - 5:
-            continue
-        mine.append({**r, "started_at": started})
-    return mine
+        started = started_at(r["pid"])
+        entry = {**r, "started_at": started}
+        if started is None:
+            unverified.append(entry)
+        elif started < not_before - 5:
+            older.append(entry)
+        else:
+            identified.append(entry)
+    return {"identified": identified, "unverified": unverified, "older_excluded": older,
+            "ps_ok": ps_error is None, "ps_error": ps_error}
 
 
 def terminate_pids(pids: list[int], grace_s: float = 10) -> dict:
@@ -567,13 +747,15 @@ def under(path: Path, root: Path) -> bool:
     return path == root or root in path.parents
 
 
-def scan_file_for(path: Path, needles: list[bytes]) -> list[bytes]:
-    """Which needles occur in the file's bytes (chunked; overlap keeps a needle spanning chunks)."""
+def scan_file_for(path: Path, needles: list[bytes], opener: Callable[[Path], object] | None = None) -> tuple[list[bytes], dict | None]:
+    """Which needles occur in the file's bytes (chunked; overlap keeps a needle spanning chunks).
+    Returns (found, error): a file that could not be opened or read is an ERROR carrying the path
+    and errno — never an empty hit list (an unread file proves nothing)."""
     found: list[bytes] = []
     overlap = max((len(n) for n in needles), default=0)
     tail = b""
     try:
-        with path.open("rb") as fh:
+        with (opener(path) if opener is not None else path.open("rb")) as fh:  # type: ignore[attr-defined]
             while True:
                 chunk = fh.read(8 * 1024 * 1024)
                 if not chunk:
@@ -585,9 +767,42 @@ def scan_file_for(path: Path, needles: list[bytes]) -> list[bytes]:
                 if len(found) == len(needles):
                     break
                 tail = buf[-overlap:] if overlap else b""
-    except OSError:
-        pass
-    return found
+    except OSError as e:
+        return found, {"file": str(path), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}"}
+    return found, None
+
+
+def scan_tree(roots: tuple[Path, ...] | list[Path], since: float, needles: list[bytes], opener: Callable[[Path], object] | None = None) -> dict:
+    """Every regular file under `roots` modified since `since` (mtime OR ctime) is byte-scanned for
+    the needles. Stat and read errors are RECORDED (`scan_errors`), and scanning continues — an
+    error means the store was not fully inspected, which `teardown_failures` turns into
+    `live_scan_error`."""
+    modified: list[str] = []
+    hits: list[dict] = []
+    errors: list[dict] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for p in root.rglob("*"):
+            try:
+                if p.is_symlink() or not p.is_file():
+                    continue
+                st = p.stat()
+            except OSError as e:
+                errors.append({"file": str(p), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}"})
+                continue
+            if st.st_mtime < since - 2 and st.st_ctime < since - 2:
+                continue
+            modified.append(str(p))
+            if st.st_size > 512 * 1024 * 1024:
+                hits.append({"file": str(p), "needle": None, "note": "too large to scan — treated as a hit"})
+                continue
+            found, err = scan_file_for(p, needles, opener)
+            for n in found:
+                hits.append({"file": str(p), "needle": n.decode()})
+            if err is not None:
+                errors.append(err)
+    return {"modified": modified, "hits": hits, "scan_errors": errors}
 
 
 class Rig:
@@ -609,6 +824,8 @@ class Rig:
         self.needles: list[str] = [
             f"e2e-scope-{STAMP}", f"seed-surfaces-{STAMP}", f"seed-doc-a-{STAMP}", f"seed-doc-b-{STAMP}",
             f"seed-demo-a-{STAMP}", f"Seed-surfaces rule {STAMP}", TEST_BRIEF_TOKEN,
+            f"Seed-surfaces import {STAMP}", CORPUS_SCOPE, MEMORY_SCOPE_ROOT, f"seed-surfaces memory {STAMP}",
+            f"seed-surfaces-proposal-{STAMP}",
         ]
         self.live_before = snapshot_live_runs()
         self.tmp = Path(mkdtemp(prefix="seed-surfaces-")).resolve()
@@ -829,28 +1046,99 @@ class Rig:
             return "(no daemon.log)"
 
     def build_identity(self) -> None:
-        """The served studio bundle must BE this repo's version (else the results describe some
-        other revision) — enforced, not observed. The served index + every asset it references are
-        hashed into the report so the bytes the scenarios ran against are pinned."""
+        """The served studio bundle must BE this checkout's build — by BYTES, not by version label.
+        The served `index.html` and every `/assets/*` it references are fetched and SHA-256'd, and
+        each must equal the same path under THIS worktree's `dist/` (`npm run build`). Both hash sets
+        land in the report; a mismatch, a missing asset, or no `dist/` is a setup failure (the
+        results would describe some other revision). The version label is recorded, not trusted."""
         pkg = json.loads((REPO / "package.json").read_text())["version"]
-        served = None
+        served_label = None
         if isinstance(self._diagnostics, dict):
-            served = (self._diagnostics.get("components") or {}).get("studioBundle")
+            served_label = (self._diagnostics.get("components") or {}).get("studioBundle")
+        dist_dir = REPO / "dist"
+        dist: dict[str, str] = {}
+        dist_mtime: str | None = None
+        if (dist_dir / "index.html").is_file():
+            for p in [dist_dir / "index.html", *sorted((dist_dir / "assets").glob("*"))]:
+                if p.is_file():
+                    dist[str(p.relative_to(dist_dir))] = hashlib.sha256(p.read_bytes()).hexdigest()
+            dist_mtime = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime((dist_dir / "index.html").stat().st_mtime))
         st, html = fetch("/")
         text = html.decode(errors="replace")
-        assets = sorted(set(re.findall(r'(?:src|href)="(/assets/[^"]+)"', text)))
-        hashes: dict[str, str] = {}
+        assets = sorted(set(re.findall(r'(?:src|href)="/(assets/[^"]+)"', text)))
+        served: dict[str, str] = {"index.html": hashlib.sha256(html).hexdigest()} if st == 200 else {}
+        served_status: dict[str, int] = {"index.html": st}
         for a in assets:
-            ast, body = fetch(a)
-            hashes[a] = hashlib.sha256(body).hexdigest() if ast == 200 else f"HTTP {ast}"
+            ast, body = fetch(f"/{a}")
+            served_status[a] = ast
+            if ast == 200:
+                served[a] = hashlib.sha256(body).hexdigest()
+        mismatches = compare_build(dist, served)
+        for a, ast in served_status.items():
+            if ast != 200:
+                mismatches.append(f"{a}: HTTP {ast}")
+        git_head = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+        src_dirty = subprocess.run(["git", "-C", str(REPO), "status", "--porcelain", "--", "src", "package.json", "vite.config.ts"], capture_output=True, text=True).stdout.strip()
         info = {
-            "ok": served == pkg, "studio_repo_package": pkg, "studio_bundle_served": served,
-            "index_status": st, "index_sha256": hashlib.sha256(html).hexdigest(), "served_assets_sha256": hashes,
+            "ok": not mismatches, "method": "sha256 of served index.html + referenced assets == this worktree's dist/ bytes",
+            "studio_repo_package": pkg, "studio_bundle_served_label": served_label, "label_matches": served_label == pkg,
+            "worktree_head": git_head, "worktree_src_uncommitted_changes": src_dirty or None,
+            "dist_present": bool(dist), "dist_built_at": dist_mtime, "dist_sha256": dist,
+            "served_status": served_status, "served_sha256": served, "mismatches": mismatches,
         }
         self.report["setup"]["build_identity"] = info
-        if served != pkg:
-            raise SetupFailure("build_identity", f"served studioBundle {served!r} ≠ this repo's package.json {pkg!r} — "
-                               "the results would not describe this revision")
+        if mismatches:
+            raise SetupFailure("build_identity", "the served studio bundle is not this worktree's dist/ build: " + "; ".join(mismatches)
+                               + " — the results would not describe this revision (build with `npm run build`, then rerun)")
+
+    # ── substitute producer (memories / proposals have no UI author path) ─────────
+    def estate_tool(self, tool: str, args: dict, timeout_s: int = 60) -> dict:
+        """Call one estate MCP tool the way crew does (`core/estate-mcp-client.js`: spawn
+        `wicked-estate-mcp` per call, initialize → initialized → tools/call, one JSON frame per line)
+        — with the RIG's hermetic env and `WICKED_MEMORY_DB` pinned INTO the temp dir, so the seed
+        lands in exactly the store the daemon's `/memory*` and `/proposals*` routes read. Refuses to
+        run unless that path resolves under the temp dir."""
+        memory_db = Path(self.env["WICKED_HOME"]) / "memory.db"
+        if not under(memory_db.resolve(), self.tmp):
+            raise RuntimeError(f"substitute producer refused: memory store {memory_db} is not under the temp dir {self.tmp}")
+        exe = shutil.which("wicked-estate-mcp", path=self.env["PATH"])
+        if exe is None:
+            raise RuntimeError("wicked-estate-mcp is not on PATH — the substitute producer needs the same binary crew spawns")
+        env = {**self.env, "WICKED_MEMORY_DB": str(memory_db)}
+        frames = [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "seed-surfaces-suite", "version": STAMP}}},
+            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": tool, "arguments": args}},
+        ]
+        proc = subprocess.run([exe], input="".join(json.dumps(f) + "\n" for f in frames), capture_output=True, text=True,
+                              env=env, cwd=str(self.tmp), timeout=timeout_s)
+        server_info = None
+        result = None
+        for line in proc.stdout.splitlines():
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("id") == 1 and isinstance(msg.get("result"), dict):
+                server_info = msg["result"].get("serverInfo")
+            if msg.get("id") == 2:
+                result = msg
+        producer = self.report["setup"].setdefault("substitute_producer", {"exe": exe, "memory_db": str(memory_db), "calls": []})
+        if server_info and "server" not in producer:
+            producer["server"] = server_info
+        producer["calls"].append({"tool": tool, "args": args, "exit": proc.returncode})
+        if result is None:
+            raise RuntimeError(f"{tool}: wicked-estate-mcp gave no id-2 answer (exit {proc.returncode}): {proc.stderr[-400:]}")
+        if isinstance(result.get("error"), dict):
+            raise RuntimeError(f"{tool}: {result['error'].get('code')} {result['error'].get('message')}")
+        content = (result.get("result") or {}).get("content") or []
+        text = content[0].get("text") if content and isinstance(content[0], dict) else None
+        payload = json.loads(text) if isinstance(text, str) else None
+        if (result.get("result") or {}).get("isError"):
+            raise RuntimeError(f"{tool}: tool error {text}")
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"{tool}: result was not a JSON object: {text!r}")
+        return payload
 
     def register_repo(self) -> None:
         """Setup, over the API — labelled. Registration launches the built-in `onboarding` workflow:
@@ -912,18 +1200,29 @@ class Rig:
 
     def stop_bridge(self) -> dict:
         """The pool spawns the bridge DETACHED (its own group), so the daemon's group stop does not
-        reach it. Identify it by command line + start time, cross-check the advisory lock, then
-        terminate — never signal a pid the identity check did not produce."""
+        reach it. Identify it by command line + VERIFIED start time, cross-check the advisory lock,
+        then terminate — never signal a pid the identity check did not produce. A failed `ps` or a
+        candidate with no readable start time leaves the identity UNVERIFIED: nothing is signalled
+        beyond the daemon group we spawned ourselves, and the teardown records the failure."""
         info: dict = {}
-        procs = bridge_processes(self.idocs, self.daemon_started_at or self.run_started_at)
+        found = bridge_processes(self.idocs, self.daemon_started_at or self.run_started_at)
+        procs = found["identified"]
         lock, lock_state = read_bridge_lock(self.idocs)
         lock_pid = lock.get("pid") if lock else None
         identified = {p["pid"] for p in procs}
+        brief = lambda p: {"pid": p["pid"], "pgid": p["pgid"], "ppid": p["ppid"], "started_at": p["started_at"], "command": p["command"][:200]}  # noqa: E731
         info.update(
             lock=lock_state, lock_pid=lock_pid, lock_pid_valid=valid_pid(lock_pid),
-            identified=[{"pid": p["pid"], "pgid": p["pgid"], "ppid": p["ppid"], "started_at": p["started_at"], "command": p["command"][:200]} for p in procs],
+            ps_ok=found["ps_ok"], ps_error=found["ps_error"],
+            identified=[brief(p) for p in procs],
+            unverified=[brief(p) for p in found["unverified"]],
             lock_pid_matches_identified=lock_pid in identified,
         )
+        if not found["ps_ok"]:
+            info["identity_unverified"] = f"ps failed ({found['ps_error']}) — no bridge pid can be identified; only the daemon group we spawned was stopped"
+        elif found["unverified"]:
+            info["identity_unverified"] = (f"{len(found['unverified'])} candidate(s) serving {self.idocs} have no readable start time "
+                                           f"(pids {[p['pid'] for p in found['unverified']]}) — NOT signalled")
         if procs:
             info["terminated"] = terminate_pids(sorted(identified))
         elif valid_pid(lock_pid) and pid_alive(lock_pid):
@@ -948,26 +1247,8 @@ class Rig:
         ~/.wicked-crew are listed; the live :7701 run ids are diffed."""
         needles = [n.encode() for n in dict.fromkeys(self.needles) if n]
         since = self.run_started_at
-        modified: list[str] = []
-        hits: list[dict] = []
-        for root in OPERATOR_STATE_ROOTS:
-            if not root.exists():
-                continue
-            for p in root.rglob("*"):
-                try:
-                    if p.is_symlink() or not p.is_file():
-                        continue
-                    st = p.stat()
-                except OSError:
-                    continue
-                if st.st_mtime < since - 2 and st.st_ctime < since - 2:
-                    continue
-                modified.append(str(p))
-                if st.st_size > 512 * 1024 * 1024:
-                    hits.append({"file": str(p), "needle": None, "note": "too large to scan — treated as a hit"})
-                    continue
-                for n in scan_file_for(p, needles):
-                    hits.append({"file": str(p), "needle": n.decode()})
+        tree = scan_tree(OPERATOR_STATE_ROOTS, since, needles)
+        modified, hits = tree["modified"], tree["hits"]
         stamped = sorted(
             str(p.relative_to(LIVE_STATE_HOME))
             for p in LIVE_STATE_HOME.rglob("*")
@@ -982,6 +1263,7 @@ class Rig:
         return {
             "roots": [str(r) for r in OPERATOR_STATE_ROOTS], "needles": list(dict.fromkeys(self.needles)),
             "files_modified_during_run": len(modified), "modified_sample": modified[:20],
+            "scan_errors": tree["scan_errors"],
             "identifier_hits": hits, "stamped_entries_in_live_state_home": stamped,
             "live_7701": {
                 "reachable_before": self.live_before.get("reachable"), "reachable_after": live_after.get("reachable"),
@@ -991,20 +1273,45 @@ class Rig:
         }
 
     def teardown(self, findings: list[str]) -> list[str]:
-        """Runs on EVERY exit path. Returns the contamination findings (`live_touched`)."""
+        """Runs on EVERY exit path. Every step is attempted even when an earlier one failed; every
+        failure is recorded (`step_errors`, then `failures` via `teardown_failures`) and lands in
+        `findings` — the verdict reads them. Returns the contamination findings (`live_touched`)."""
         t: dict = self.report["setup"].setdefault("teardown", {})
-        t["cancelled_runs"] = self.cancel_live_runs()
-        if self.daemon is not None:
-            t["daemon"] = stop_process_group(self.daemon)
-            t["daemon_stopped"] = self.daemon.returncode is not None and t["daemon"]["group_empty"]
-        if self.daemon_log is not None:
+        step_errors: list[str] = []
+        t["step_errors"] = step_errors
+
+        def step(name: str, fn: Callable[[], None]) -> None:
             try:
+                fn()
+            except BaseException as e:  # noqa: BLE001 — cleanup continues; the failure is recorded, never swallowed
+                step_errors.append(f"{name}: {type(e).__name__}: {e}")
+
+        def _cancel() -> None:
+            t["cancelled_runs"] = self.cancel_live_runs()
+
+        def _daemon() -> None:
+            if self.daemon is not None:
+                t["daemon"] = stop_process_group(self.daemon)
+                t["daemon_stopped"] = self.daemon.returncode is not None and t["daemon"]["group_empty"]
+
+        def _log() -> None:
+            if self.daemon_log is not None:
                 self.daemon_log.close()
-            except OSError:
-                pass
-        t["bridge"] = self.stop_bridge()
-        if self.fixture_httpd is not None:
-            self.fixture_httpd.shutdown()
+
+        def _bridge() -> None:
+            t["bridge"] = self.stop_bridge()
+
+        def _fixture() -> None:
+            if self.fixture_httpd is not None:
+                self.fixture_httpd.shutdown()
+
+        step("cancel_live_runs", _cancel)
+        step("stop_daemon_group", _daemon)
+        step("close_daemon_log", _log)
+        step("stop_bridge", _bridge)
+        step("stop_fixture_server", _fixture)
+        if "bridge" not in t:
+            t["bridge"] = {"error": "stop_bridge raised — see step_errors"}
         home_writes = self.scratch_writes(self.home, cap=100_000)
         tmp_writes = self.scratch_writes(self.tmpdir)
         # Per-directory counts survive the list cap: run 6 wrote 391 codex plugin-clone files that
@@ -1023,23 +1330,37 @@ class Rig:
             findings.append(f"HOME-WRITES: the daemon/bridge/CLIs wrote {len(home_writes)} entries under the scratch HOME "
                             f"(would have landed in the operator's home) — by directory: {t['scratch_home_writes_by_dir']}; "
                             f"plus {len(tmp_writes)} under the scratch TMPDIR")
-        scan = self.scan_operator_state()
-        t["isolation_scan"] = scan
         live_touched: list[str] = []
-        for e in scan["stamped_entries_in_live_state_home"]:
-            live_touched.append(f"~/.wicked-crew/{e} carries this run's stamp")
-        for h in scan["identifier_hits"]:
-            live_touched.append(f"{h['file']} contains {h.get('needle') or h.get('note')}")
-        for rid in scan["live_7701"]["new_runs_carrying_our_identifiers"]:
-            live_touched.append(f"live :7701 gained run {rid} carrying this run's identifiers")
-        if scan["live_7701"]["new_run_ids"] and not scan["live_7701"]["new_runs_carrying_our_identifiers"]:
-            findings.append(f"LIVE-7701: {len(scan['live_7701']['new_run_ids'])} run(s) appeared on the live daemon during this run "
-                            f"without this run's identifiers (operator activity, not ours): {scan['live_7701']['new_run_ids']}")
+        try:
+            scan = self.scan_operator_state()
+        except BaseException as e:  # noqa: BLE001 — an un-run scan is a verdict-affecting failure, never a clean bill
+            t["isolation_scan_error"] = f"{type(e).__name__}: {e}"
+            scan = None
+        if scan is not None:
+            t["isolation_scan"] = scan
+            for e in scan["stamped_entries_in_live_state_home"]:
+                live_touched.append(f"~/.wicked-crew/{e} carries this run's stamp")
+            for h in scan["identifier_hits"]:
+                live_touched.append(f"{h['file']} contains {h.get('needle') or h.get('note')}")
+            for rid in scan["live_7701"]["new_runs_carrying_our_identifiers"]:
+                live_touched.append(f"live :7701 gained run {rid} carrying this run's identifiers")
+            if scan["live_7701"]["new_run_ids"] and not scan["live_7701"]["new_runs_carrying_our_identifiers"]:
+                findings.append(f"LIVE-7701: {len(scan['live_7701']['new_run_ids'])} run(s) appeared on the live daemon during this run "
+                                f"without this run's identifiers (operator activity, not ours): {scan['live_7701']['new_run_ids']}")
+            if scan["scan_errors"]:
+                findings.append(f"LIVE-SCAN-ERROR: {len(scan['scan_errors'])} file(s) inside the operator stores could not be inspected — "
+                                f"the isolation proof is INCOMPLETE: {scan['scan_errors'][:5]}")
         t["tmp"] = str(self.tmp)
         t["tmp_kept"] = KEEP_TMP
         if not KEEP_TMP:
-            shutil.rmtree(self.tmp, ignore_errors=True)
+            try:
+                shutil.rmtree(self.tmp)
+            except OSError as e:
+                t["tmp_remove_error"] = f"{type(e).__name__}: {e}"
             t["tmp_removed"] = not self.tmp.exists()
+        t["failures"] = teardown_failures(t)
+        for f in t["failures"]:
+            findings.append(f"TEARDOWN: {f}")
         return live_touched
 
 
@@ -1293,6 +1614,106 @@ def ui_delete_doc(page, pid: str, mode: str, name: str, bridge_gap_issue: str) -
     assert name not in after, f"{name} still listed under {pid}/{mode} after delete + reload: {after}"
 
 
+def fetch_with_type(path: str, timeout: int = 30) -> tuple[int, str, bytes]:
+    """A raw GET that also reports the Content-Type — the recording probe needs the header."""
+    req = urllib.request.Request(f"{ORIGIN}{path}", method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            return res.status, res.headers.get("Content-Type", ""), res.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers.get("Content-Type", "") if e.headers else "", e.read()
+
+
+def ensure_dock_open(page) -> None:
+    """The assist dock's collapse is a persisted preference — open it if the rail is showing."""
+    if tid(page, "assist-dock").count() == 0:
+        tid(page, "assist-dock-toggle").first.click()
+    tid(page, "assist-dock").wait_for(timeout=10_000)
+
+
+def rule_row_api(rid: str) -> dict | None:
+    st, body = api("GET", "/governance/rules")
+    assert st == 200 and isinstance(body, dict), f"GET /governance/rules → {st}"
+    mine = [r for r in body["rules"] if r["id"] == rid]
+    return mine[0] if mine else None
+
+
+def wait_rule_field(rid: str, field: str, value: object, timeout_s: float = 15) -> dict:
+    """Poll the server row until `field` equals `value` (the UI's optimistic cell must be backed by
+    the store, not just painted)."""
+    deadline = time.time() + timeout_s
+    row = rule_row_api(rid)
+    while time.time() < deadline and not (row is not None and row.get(field) == value):
+        time.sleep(0.5)
+        row = rule_row_api(rid)
+    assert row is not None, f"{rid} vanished from the store"
+    assert row.get(field) == value, f"server row {rid}.{field} = {row.get(field)!r}, expected {value!r} after {timeout_s}s"
+    return row
+
+
+def memory_rows(page) -> list[dict]:
+    """The memories browser's rows as (id, scope, content) — read after the panel settled."""
+    return tid(page, "memory-row").evaluate_all(
+        "els => els.map(e => ({id: e.getAttribute('data-memory-id'), "
+        "scope: (e.querySelector('[data-testid=\"memory-scope\"]')?.textContent ?? '').trim(), "
+        "content: (e.querySelector('[data-testid=\"memory-content\"]')?.textContent ?? '').trim()}))"
+    )
+
+
+def memories_api(scope_prefix: str) -> list[dict]:
+    st, body = api("GET", f"/memory?scope_prefix={quote(scope_prefix, safe='')}")
+    assert st == 200 and isinstance(body, dict) and isinstance(body.get("memories"), list), f"GET /memory?scope_prefix={scope_prefix} → {st} {str(body)[:200]}"
+    return body["memories"]
+
+
+def proposals_api(state: str) -> list[dict]:
+    st, body = api("GET", f"/proposals?state={state}")
+    assert st == 200 and isinstance(body, dict) and isinstance(body.get("proposals"), list), f"GET /proposals?state={state} → {st} {str(body)[:200]}"
+    return body["proposals"]
+
+
+def proposal_section(page, kind: str):
+    section = tid(page, "proposals-section", kind=kind)
+    section.wait_for(timeout=20_000)
+    section.locator('[data-testid="proposals-loading"]').wait_for(state="detached", timeout=20_000)
+    assert section.locator('[data-testid="proposals-section-unsupported"]').count() == 0, "this daemon reports the proposal queue as unsupported"
+    assert section.locator('[data-testid="proposals-error"]').count() == 0, text_of(section.locator('[data-testid="proposals-error"]'))
+    return section
+
+
+def frame_of(iframe_locator):
+    """The Playwright Frame behind an <iframe> locator (srcdoc frames included), loaded."""
+    handle = iframe_locator.element_handle(timeout=15_000)
+    frame = handle.content_frame()
+    assert frame is not None, "the iframe has no content frame"
+    frame.wait_for_load_state("load", timeout=30_000)
+    return frame
+
+
+def doc_versions(pid: str, name: str) -> dict:
+    st, manifest = api("GET", f"/projects/{quote(pid)}/interactive/d/{quote(name)}/api/versions")
+    assert st == 200 and isinstance(manifest, dict), f"versions wire → {st} {str(manifest)[:300]}"
+    return manifest
+
+
+def doc_capture(page, pid: str, name: str) -> dict:
+    """What the canvas RENDERED (the frame's document) + what the wire says (head, lineage, head
+    html bytes) — captured before and after a reload for `persistence_oracle`."""
+    canvas = tid(page, "doc-canvas", doc_id=name)
+    canvas.wait_for(timeout=BRIDGE_TIMEOUT_MS)
+    frame = frame_of(canvas.first)
+    html = frame.evaluate("() => document.documentElement.outerHTML")
+    text = frame.evaluate("() => (document.body?.innerText ?? '').trim()")
+    manifest = doc_versions(pid, name)
+    st, head_html = fetch(f"/api/v1/projects/{quote(pid)}/interactive/d/{quote(name)}/doc")
+    assert st == 200 and head_html, f"the head's rendered document → {st}"
+    return {
+        "rendered_html_sha256": hashlib.sha256(html.encode()).hexdigest(), "rendered_text": text,
+        "head": manifest.get("head"), "lineage": [v.get("version") for v in manifest.get("versions") or []],
+        "head_html_sha256": hashlib.sha256(head_html).hexdigest(), "canvas_version": canvas.first.get_attribute("data-version"),
+    }
+
+
 # ── The scenarios ─────────────────────────────────────────────────────────────
 
 suite = Suite()
@@ -1532,6 +1953,92 @@ def run_scenarios(rig: Rig, page) -> None:
 
     suite.run("STR-4", "Retire with exact id + reason; listed-struck by default; hideable; reload", str4, requires=("STR-3",))
 
+    def strimp() -> str:
+        """Import a .json rule batch through the assist dock's attachment fork ("Import directly" →
+        `importDirect` → POST /governance/steering/import), then verify each rule on a full reload."""
+        goto(page, "/steering/policies")
+        steering_rows_loaded(page)
+        ensure_dock_open(page)
+        batch = [
+            {
+                "id": rid, "rule_type": "pattern", "statement": IMPORT_STATEMENTS[rid], "severity": "warn",
+                "confidence": 0.9, "targets": {}, "provenance": {"source": "ui", "source_kinds": ["doc"]},
+                "steering_type": "architecture", "applies_to": [], "excludes": [], "weight": 1.0,
+            }
+            for rid in IMPORT_IDS
+        ]
+        tid(page, "assist-attach").set_input_files([{
+            "name": f"seed-surfaces-import-{STAMP}.json", "mimeType": "application/json",
+            "buffer": json.dumps(batch, indent=1).encode(),
+        }])
+        chip = tid(page, "assist-attachment-chip", mode="ask")
+        chip.wait_for(timeout=10_000)
+        assert f"seed-surfaces-import-{STAMP}.json" in text_of(chip), text_of(chip)
+        tid(page, "assist-import-now").click()
+        page.wait_for_function(
+            "() => Array.from(document.querySelectorAll('[data-testid=\"assist-note\"]')).some(n => / of \\d+ entr/.test(n.textContent ?? ''))",
+            timeout=30_000,
+        )
+        notes = tid(page, "assist-note").evaluate_all("els => els.map(e => ({tone: e.getAttribute('data-tone'), text: (e.textContent ?? '').trim()}))")
+        summary = [n for n in notes if re.search(r" of \d+ entr", n["text"])][-1]
+        assert re.search(rf"\b{len(IMPORT_IDS)} of {len(IMPORT_IDS)} entr", summary["text"]), f"import summary: {summary} — all notes: {notes}"
+        joined = " | ".join(n["text"] for n in notes)
+        for rid in IMPORT_IDS:
+            assert rid in joined, f"the dock's import notes never name {rid}: {notes}"
+        assert not [n for n in notes if n["tone"] == "fail"], f"a fail-tone note appeared: {notes}"
+        # The page reloaded its rules after the import; a FULL reload proves the store, not the state.
+        goto(page, "/steering/policies")
+        steering_rows_loaded(page)
+        for rid in IMPORT_IDS:
+            row = tid(page, "steering-grid-row", rule_id=rid)
+            row.wait_for(timeout=15_000)
+            assert text_of(row.locator('[data-testid="steering-cell-statement"]')) == IMPORT_STATEMENTS[rid]
+            assert row.locator('[data-testid="steering-cell-severity"]').input_value() == "warn"
+            assert row.locator('[data-testid="steering-cell-type"]').input_value() == "architecture"
+            server = rule_row_api(rid)
+            assert server is not None and server["statement"] == IMPORT_STATEMENTS[rid], f"server row {rid}: {server}"
+        ctx["imported"] = list(IMPORT_IDS)
+        return (f"{', '.join(IMPORT_IDS)} imported through the dock's attachment → 'Import directly' (notes: {summary['text']!r}); "
+                "after a full reload both rows render their statements/severity/type and the server rows agree")
+
+    suite.run("STR-IMP", "Import a .json rule batch via the assist-dock attachment (importDirect) and reload", strimp, requires=("STR-1B",))
+
+    def strinl() -> str:
+        """Inline CELL edits on a grid row (no drawer): severity select, statement text cell (Enter
+        commits), type select — each commit is a per-row upsert; all three survive a full reload."""
+        rid = IMPORT_IDS[0]
+        goto(page, "/steering/policies")
+        steering_rows_loaded(page)
+        row = tid(page, "steering-grid-row", rule_id=rid)
+        row.wait_for(timeout=15_000)
+        row.locator('[data-testid="steering-cell-severity"]').select_option("critical")
+        wait_rule_field(rid, "severity", "critical")
+        assert tid(page, "steering-commit-error").count() == 0, text_of(tid(page, "steering-commit-error"))
+        row.locator('[data-testid="steering-cell-statement"]').click()
+        cell_input = row.locator('[data-testid="steering-cell-statement-input"]')
+        cell_input.wait_for(timeout=5_000)
+        cell_input.fill(INLINE_STATEMENT)
+        cell_input.press("Enter")
+        wait_rule_field(rid, "statement", INLINE_STATEMENT)
+        row.locator('[data-testid="steering-cell-type"]').select_option("security")
+        server = wait_rule_field(rid, "steering_type", "security")
+        assert tid(page, "steering-commit-error").count() == 0, text_of(tid(page, "steering-commit-error"))
+        note = text_of(tid(page, "steering-saved-note"))
+        assert f"Saved {rid}" in note, f"saved note after the inline commits: {note!r}"
+        assert server["severity"] == "critical" and server["statement"] == INLINE_STATEMENT, server
+        goto(page, "/steering/policies")
+        steering_rows_loaded(page)
+        row = tid(page, "steering-grid-row", rule_id=rid)
+        row.wait_for(timeout=15_000)
+        sev = row.locator('[data-testid="steering-cell-severity"]').input_value()
+        typ = row.locator('[data-testid="steering-cell-type"]').input_value()
+        stmt = text_of(row.locator('[data-testid="steering-cell-statement"]'))
+        assert (sev, typ, stmt) == ("critical", "security", INLINE_STATEMENT), f"after reload: severity={sev!r} type={typ!r} statement={stmt!r}"
+        return (f"{rid} edited INLINE (severity cell warn→critical, statement cell rewritten on Enter, type cell architecture→security); "
+                "each commit reached the server row and all three survive a full reload")
+
+    suite.run("STR-INL", "Inline grid-cell edits (severity/statement/type) persist across reload", strinl, requires=("STR-IMP",))
+
     def xps2() -> str:
         goto(page, f"/p/{quote(ctx['B'])}/build")
         tid(page, "project-shell", project_id=ctx["B"]).wait_for(timeout=15_000)
@@ -1607,6 +2114,79 @@ def run_scenarios(rig: Rig, page) -> None:
 
     suite.run("EVL-2", "Eval history + drilldown persist across reload (identity + content)", evl2, requires=("EVL-1",))
 
+    def evl3() -> str:
+        """Corpus SELECTION: import a corpus through the UI (name + .json file), run against it via the
+        `testing-evals-corpus` field, and prove the selection is reflected (provenance line, history
+        row, API) and persists (the recorded run still names the corpus after a full reload)."""
+        goto(page, "/testing/evals")
+        tid(page, "testing-evals").wait_for(timeout=20_000)
+        samples = [
+            {"id": f"seed-{STAMP}-bad", "description": f"seed-surfaces {STAMP}: a wire body that never names its project",
+             "kind": "bad", "steering_type": "architecture",
+             "signals": {"phase": "build", "tool": "Edit", "files": ["src/api/wire.ts"], "content": "post the body without the project field"}},
+            {"id": f"seed-{STAMP}-good", "description": f"seed-surfaces {STAMP}: a wire body that names its project and repo",
+             "kind": "good", "steering_type": "architecture",
+             "signals": {"phase": "build", "tool": "Edit", "files": ["src/api/wire.ts"], "content": "post the body with project and repo named explicitly"}},
+        ]
+        tid(page, "testing-corpus-name").fill(CORPUS_NAME)
+        tid(page, "testing-corpus-file").set_input_files([{"name": f"{CORPUS_NAME}.json", "mimeType": "application/json", "buffer": json.dumps(samples).encode()}])
+        seen = wait_any(page, ["testing-corpus-summary", "testing-corpus-error", "testing-corpus-unsupported"], 60_000)
+        if seen == "testing-corpus-unsupported":
+            st, _ = api("POST", "/testing/corpora/import", {"name": "x", "samples": samples})
+            if st == 501:
+                raise Skip("this daemon's engine predates corpus import (POST /testing/corpora/import → 501)")
+            raise AssertionError(f"the UI shows corpus import as unsupported but the route answers {st}")
+        assert seen == "testing-corpus-summary", f"corpus import failed: {text_of(tid(page, 'testing-corpus-error'))}"
+        summary = text_of(tid(page, "testing-corpus-summary"))
+        assert CORPUS_SCOPE in summary and f"imported {len(samples)} samples" in summary, f"import summary: {summary!r}"
+        embedded = "(embedded)" in summary
+        # The SELECTION: the import pre-fills the corpus field with the landed scope; exercise the field
+        # itself too (clear + type the scope) so the typed path is what the run sends.
+        assert tid(page, "testing-evals-corpus").input_value() == CORPUS_SCOPE, f"corpus field after import: {tid(page, 'testing-evals-corpus').input_value()!r}"
+        tid(page, "testing-evals-corpus").fill("")
+        tid(page, "testing-evals-corpus").fill(CORPUS_SCOPE)
+        tid(page, "testing-evals-run").click()
+        seen = wait_any(page, ["testing-evals-summary", "testing-evals-error", "testing-evals-unsupported"], EVALS_TIMEOUT_MS)
+        assert seen == "testing-evals-summary", f"evals against {CORPUS_SCOPE} failed: {text_of(tid(page, 'testing-evals-error'))}"
+        provenance = text_of(tid(page, "testing-evals-provenance"))
+        assert f"corpus: {CORPUS_SCOPE}" in provenance, f"provenance line {provenance!r} does not name the selected corpus"
+        assert f"{len(samples)} samples" in provenance, provenance
+        history = tid(page, "eval-history-row")
+        page.wait_for_function("n => document.querySelectorAll('[data-testid=\"eval-history-row\"]').length === n", arg=2, timeout=15_000)
+        newest = history.first
+        run_id = newest.get_attribute("data-run-id")
+        assert run_id and run_id != ctx.get("eval_run"), f"newest history row is {run_id!r} (EVL-1's run was {ctx.get('eval_run')!r})"
+        assert CORPUS_SCOPE in text_of(newest), f"the newest history row does not name the corpus: {text_of(newest)!r}"
+        st, listing = api("GET", "/testing/evals")
+        mine = [r for r in listing["runs"] if r["id"] == run_id]
+        assert st == 200 and mine and mine[0].get("corpus") == CORPUS_SCOPE, f"GET /testing/evals row for {run_id}: {mine}"
+        st, detail = api("GET", f"/testing/evals/{quote(run_id)}")
+        assert st == 200 and detail["summary"]["total"] == len(samples), f"GET /testing/evals/{run_id} → {st} {detail.get('summary')}"
+        assert detail.get("corpus", CORPUS_SCOPE) == CORPUS_SCOPE, f"detail corpus: {detail.get('corpus')!r}"
+        newest.locator("button").first.click()
+        detail_el = tid(page, "eval-history-detail")
+        detail_el.wait_for(timeout=15_000)
+        page.wait_for_function("() => /\\d+ samples · \\d+ caught/.test(document.querySelector('[data-testid=\"eval-history-detail\"]')?.textContent ?? '')", timeout=15_000)
+        before = text_of(detail_el)
+        # Persistence: a FULL reload — the recorded run still names the corpus; its drilldown is byte-identical.
+        goto(page, "/testing/evals")
+        row = tid(page, "eval-history-row", run_id=run_id)
+        row.wait_for(timeout=20_000)
+        assert CORPUS_SCOPE in text_of(row), f"after reload the history row no longer names the corpus: {text_of(row)!r}"
+        row.locator("button").first.click()
+        detail_el = tid(page, "eval-history-detail")
+        detail_el.wait_for(timeout=15_000)
+        page.wait_for_function("() => /\\d+ samples · \\d+ caught/.test(document.querySelector('[data-testid=\"eval-history-detail\"]')?.textContent ?? '')", timeout=15_000)
+        assert text_of(detail_el) == before, f"drilldown changed across the reload: {text_of(detail_el)!r} ≠ {before!r}"
+        field_after_reload = tid(page, "testing-evals-corpus").input_value()
+        ctx["eval_corpus_run"] = run_id
+        return (f"corpus {CORPUS_NAME} imported through the UI ({len(samples)} samples → {CORPUS_SCOPE}, {'embedded' if embedded else 'facet-only'}); "
+                f"selected in `testing-evals-corpus` and run: provenance names it, run {run_id} recorded with corpus={CORPUS_SCOPE} "
+                f"(history row + GET /testing/evals + /:id agree, total {len(samples)}); after a full reload the row still names the corpus and its "
+                f"drilldown is byte-identical (the corpus FIELD itself is session state: reads {field_after_reload!r} after reload — the recorded run carries the selection)")
+
+    suite.run("EVL-3", "Corpus selection: import via the UI, run against it, history names it, persists on reload", evl3, requires=("EVL-1",))
+
     # ── Memories (read-only browse; retire is a scope-subtree erasure — never exercised, studio#206) ──
     def memories_state() -> tuple[str, int]:
         tid(page, "memories-panel").wait_for(timeout=20_000)
@@ -1630,6 +2210,143 @@ def run_scenarios(rig: Rig, page) -> None:
 
     suite.run("MEM-2", "Memories browse is read-only, settled, and context-independent", mem2, requires=("PRJ-2",))
 
+    def mems() -> str:
+        """[SUBSTITUTE producer] two memories in EXCLUSIVE sibling scopes via the same estate MCP crew
+        spawns, pinned to the scratch store — then the UI lists both (content + scope), and the wire agrees."""
+        for scope, content in ((MEMORY_SCOPE_KEEP, MEMORY_CONTENT_KEEP), (MEMORY_SCOPE_RETIRE, MEMORY_CONTENT_RETIRE)):
+            rig.estate_tool("memory.capture", {"content": content, "scope": scope, "tier": "semantic", "kind": "fact", "facets": SUITE_FACET})
+        stored = memories_api(MEMORY_SCOPE_ROOT)
+        assert {m["scope"] for m in stored} == {MEMORY_SCOPE_KEEP, MEMORY_SCOPE_RETIRE}, f"GET /memory under {MEMORY_SCOPE_ROOT}: {stored}"
+        goto(page, "/steering/memories")
+        state, _count = memories_state()
+        assert state == "memories-list", f"memories panel state {state!r} after seeding two memories"
+        rows = memory_rows(page)
+        by_scope = {r["scope"]: r for r in rows}
+        for scope, content in ((MEMORY_SCOPE_KEEP, MEMORY_CONTENT_KEEP), (MEMORY_SCOPE_RETIRE, MEMORY_CONTENT_RETIRE)):
+            assert scope in by_scope, f"the browser lists no row for scope {scope}: {rows}"
+            assert by_scope[scope]["content"] == content, f"row {scope} content {by_scope[scope]['content']!r}"
+        coverage = text_of(tid(page, "memories-coverage")) if tid(page, "memories-coverage").count() else ""
+        ctx["memories_seeded"] = True
+        return (f"[SUBSTITUTE producer: {rig.report['setup']['substitute_producer']['exe']} → memory.capture ×2 into the scratch store] "
+                f"the UI lists both rows with their content and scopes ({MEMORY_SCOPE_KEEP}, {MEMORY_SCOPE_RETIRE}); coverage line {coverage!r}; GET /memory agrees")
+
+    suite.run("MEM-S", "Seed two exclusive-scope memories (substitute producer) → the browser lists both", mems, requires=("MEM-2",))
+
+    def memr() -> str:
+        """Retire ONE scope through the UI (row → Retire… → typed banner → confirm): the note reports
+        exactly one erased memory, the sibling scope survives, and a full reload + the wire agree."""
+        goto(page, "/steering/memories")
+        state, _ = memories_state()
+        assert state == "memories-list"
+        target = tid(page, "memory-row").filter(has=page.locator('[data-testid="memory-scope"]', has_text=MEMORY_SCOPE_RETIRE))
+        assert target.count() == 1, f"{target.count()} rows carry scope {MEMORY_SCOPE_RETIRE}"
+        target.locator('[data-testid="memory-retire"]').click()
+        banner = tid(page, "memory-retire-confirm-banner")
+        banner.wait_for(timeout=10_000)
+        assert MEMORY_SCOPE_RETIRE in text_of(banner) and "SUBTREE" in text_of(banner), text_of(banner)
+        tid(page, "memory-retire-confirm").click()
+        note = tid(page, "memories-note")
+        note.wait_for(timeout=20_000)
+        assert text_of(note) == f"Retired scope {MEMORY_SCOPE_RETIRE} — erased 1 memory.", f"retire note: {text_of(note)!r}"
+        # The panel re-reads the wire after the retire; wait for the row to be GONE (not for a loading
+        # marker that may have come and gone), then read the surviving rows.
+        page.wait_for_function(
+            "s => document.querySelector('[data-testid=\"memories-loading\"]') === null && "
+            "!Array.from(document.querySelectorAll('[data-testid=\"memory-scope\"]')).some(e => (e.textContent ?? '').trim() === s)",
+            arg=MEMORY_SCOPE_RETIRE, timeout=20_000,
+        )
+        scopes = {r["scope"] for r in memory_rows(page)}
+        assert MEMORY_SCOPE_RETIRE not in scopes and MEMORY_SCOPE_KEEP in scopes, f"rows after retire: {scopes}"
+        goto(page, "/steering/memories")
+        memories_state()
+        scopes = {r["scope"] for r in memory_rows(page)}
+        assert MEMORY_SCOPE_RETIRE not in scopes and MEMORY_SCOPE_KEEP in scopes, f"rows after a full reload: {scopes}"
+        assert memories_api(MEMORY_SCOPE_RETIRE) == [], "the retired scope still answers memories on the wire"
+        keep = memories_api(MEMORY_SCOPE_KEEP)
+        assert len(keep) == 1 and keep[0]["content"] == MEMORY_CONTENT_KEEP, f"the sibling scope changed: {keep}"
+        assert len(memories_api(MEMORY_SCOPE_ROOT)) == 1, "the suite's root scope should hold exactly the surviving sibling"
+        return (f"{MEMORY_SCOPE_RETIRE} retired through the UI (Retire… → subtree banner → confirm); note 'erased 1 memory'; "
+                f"the sibling {MEMORY_SCOPE_KEEP} survives in the UI and on the wire, before and after a full reload")
+
+    suite.run("MEM-R", "Retire one exclusive scope through the UI; the sibling scope survives; reload + wire agree", memr, requires=("MEM-S",))
+
+    def prps() -> str:
+        """[SUBSTITUTE producer] two MEMORY proposals via `proposal.submit` on the scratch store (agents are
+        the only producer today) — the dashboard's review inbox lists both with their content."""
+        for content in (PROPOSAL_CONTENT_APPROVE, PROPOSAL_CONTENT_REJECT):
+            rig.estate_tool("proposal.submit", {"kind_type": "memory", "payload": {"content": content, "tier": "semantic"}, "facets": SUITE_FACET})
+        pending = proposals_api("pending")
+        ids = {}
+        for p in pending:
+            content = (p.get("payload") or {}).get("content") if isinstance(p.get("payload"), dict) else None
+            if content in (PROPOSAL_CONTENT_APPROVE, PROPOSAL_CONTENT_REJECT):
+                ids[content] = p["id"]
+        assert set(ids) == {PROPOSAL_CONTENT_APPROVE, PROPOSAL_CONTENT_REJECT}, f"pending proposals after submit: {pending}"
+        ctx["proposal_approve"], ctx["proposal_reject"] = ids[PROPOSAL_CONTENT_APPROVE], ids[PROPOSAL_CONTENT_REJECT]
+        rig.needles.extend(ids.values())
+        goto(page, "/steering/dashboard")
+        tid(page, "governance-dashboard").wait_for(timeout=20_000)
+        section = proposal_section(page, "memory")
+        for content, pid_ in ids.items():
+            card = section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]')
+            card.wait_for(timeout=15_000)
+            assert card.get_attribute("data-kind") == "memory"
+            assert text_of(card.locator('[data-testid="proposal-memory-content"]')) == content, text_of(card)
+        return (f"[SUBSTITUTE producer → proposal.submit ×2 (memory)] the dashboard's Memory proposals inbox lists "
+                f"{ctx['proposal_approve']} and {ctx['proposal_reject']} with their content")
+
+    suite.run("PRP-S", "Seed two memory proposals (substitute producer) → the dashboard inbox lists both", prps)
+
+    def prpa() -> str:
+        pid_ = ctx["proposal_approve"]
+        goto(page, "/steering/dashboard")
+        section = proposal_section(page, "memory")
+        card = section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]')
+        card.wait_for(timeout=15_000)
+        card.locator('[data-testid="proposal-approve"]').click()
+        note = section.locator('[data-testid="proposals-section-note"]')
+        note.wait_for(timeout=20_000)
+        assert text_of(note) == f"Approved {pid_}.", f"note after approve: {text_of(note)!r}"
+        card.wait_for(state="detached", timeout=15_000)
+        approved = [p["id"] for p in proposals_api("approved")]
+        assert pid_ in approved, f"GET /proposals?state=approved lacks {pid_}: {approved}"
+        assert pid_ not in [p["id"] for p in proposals_api("pending")]
+        st, body = api("GET", f"/memory?query={quote(PROPOSAL_CONTENT_APPROVE, safe='')}")
+        promoted = [m for m in body["memories"] if m["content"] == PROPOSAL_CONTENT_APPROVE]
+        assert len(promoted) == 1, f"approval did not materialize the memory (GET /memory query): {body}"
+        goto(page, "/steering/dashboard")
+        section = proposal_section(page, "memory")
+        assert section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]').count() == 0, "the approved proposal is still pending after a reload"
+        goto(page, "/steering/memories")
+        memories_state()
+        assert PROPOSAL_CONTENT_APPROVE in {r["content"] for r in memory_rows(page)}, "the memories browser does not list the promoted memory"
+        return (f"{pid_} approved through the inbox (note 'Approved …'); it left pending, GET /proposals?state=approved lists it, the memory "
+                f"materialized in the store (scope {promoted[0]['scope']!r}) and the memories browser lists it after a reload")
+
+    suite.run("PRP-A", "Approve a memory proposal through the inbox → promoted memory; pending excludes it on reload", prpa, requires=("PRP-S",))
+
+    def prpr() -> str:
+        pid_ = ctx["proposal_reject"]
+        goto(page, "/steering/dashboard")
+        section = proposal_section(page, "memory")
+        card = section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]')
+        card.wait_for(timeout=15_000)
+        card.locator('[data-testid="proposal-reject"]').click()
+        note = section.locator('[data-testid="proposals-section-note"]')
+        note.wait_for(timeout=20_000)
+        assert text_of(note) == f"Rejected {pid_}.", f"note after reject: {text_of(note)!r}"
+        card.wait_for(state="detached", timeout=15_000)
+        assert pid_ in [p["id"] for p in proposals_api("rejected")], "GET /proposals?state=rejected lacks the rejected proposal"
+        assert pid_ not in [p["id"] for p in proposals_api("pending")]
+        st, body = api("GET", f"/memory?query={quote(PROPOSAL_CONTENT_REJECT, safe='')}")
+        assert [m for m in body["memories"] if m["content"] == PROPOSAL_CONTENT_REJECT] == [], f"a REJECTED proposal wrote a memory: {body}"
+        goto(page, "/steering/dashboard")
+        section = proposal_section(page, "memory")
+        assert section.locator(f'[data-testid="proposal-card"][data-proposal-id="{pid_}"]').count() == 0, "the rejected proposal is still pending after a reload"
+        return f"{pid_} rejected through the inbox (note 'Rejected …'); it left pending, GET /proposals?state=rejected lists it, and no memory was written"
+
+    suite.run("PRP-R", "Reject a memory proposal through the inbox → nothing written; pending excludes it on reload", prpr, requires=("PRP-S",))
+
     # ── Documents / demos — deterministic seeds (agent answering disabled) + the crew#472 xfails ──
     def vib1d() -> str:
         name = ui_seed_doc(page, ctx["A"], f"seed-doc-a-{STAMP}")
@@ -1647,9 +2364,14 @@ def run_scenarios(rig: Rig, page) -> None:
 
     def vib4() -> str:
         pid, name = ctx["docs"][0]
+        # CONTENT ORACLE: capture what the canvas renders + the wire's head/lineage/head-html BEFORE
+        # the reload, then again AFTER a full reload — equality is the persistence claim.
         goto(page, f"/p/{quote(pid)}/document/{quote(name)}")
-        canvas = tid(page, "doc-canvas", doc_id=name)
-        canvas.wait_for(timeout=BRIDGE_TIMEOUT_MS)
+        before = doc_capture(page, pid, name)
+        goto(page, f"/p/{quote(pid)}/document/{quote(name)}")
+        after = doc_capture(page, pid, name)
+        persistence_oracle(before, after)
+        ctx["doc_a_capture"] = after
         ids = picker_ids(page, pid, "document")
         assert name in ids, f"{name} missing from A's picker after reload: {ids}"
         # The versions wire: 200, a head, a lineage consistent with itself and with the docs listing.
@@ -1674,8 +2396,10 @@ def run_scenarios(rig: Rig, page) -> None:
         assert mine[0].get("head") == head and mine[0].get("versions") == len(versions), f"listing {mine[0]} disagrees with the manifest (head {head}, {len(versions)} versions)"
         st3, html = fetch(f"/api/v1/projects/{quote(pid)}/interactive/d/{quote(name)}/doc")
         assert st3 == 200 and html, f"the head's rendered document → {st3}"
-        return (f"after a full reload the canvas frames '{name}' and A's picker lists it; versions wire → 200 head={head} "
-                f"lineage={numbers} (parents consistent); docs listing agrees (head, {len(versions)} versions); head html renders (200)")
+        assert hashlib.sha256(html).hexdigest() == after["head_html_sha256"], "the head html changed between the capture and the final fetch"
+        return (f"after a full reload the canvas frames '{name}' with IDENTICAL rendered content (frame html sha256 {after['rendered_html_sha256'][:12]}…, "
+                f"text {len(after['rendered_text'])} chars), head={head} lineage={numbers} and head-html sha256 {after['head_html_sha256'][:12]}… all equal "
+                f"before/after; A's picker lists it; docs listing agrees ({len(versions)} versions); head html renders (200)")
 
     suite.run("VIB-4", "Document survives a reload (canvas identity + picker listing + versions head/lineage)", vib4, requires=("VIB-1D",))
 
@@ -1699,6 +2423,89 @@ def run_scenarios(rig: Rig, page) -> None:
 
     suite.run("VIB-3F", "Foreign deep link: /p/B/document/<A's doc> must not frame A's document", vib3f, xfail="crew#472", requires=("VIB-1D", "VIB-2D"))
 
+    def isof() -> str:
+        """MUTATION isolation, the EDIT arm: from Project B's shell, fork A's document (Versions tab →
+        Fork = `POST /d/:doc/api/fork`, a new version). Correct: B's shell does not frame it, or the
+        fork is refused. Expected gap (crew#472): the fork lands a new version on A's document."""
+        (A, doc_a), (B, _doc_b) = ctx["docs"][0], ctx["docs"][1]
+        before = doc_versions(A, doc_a)
+        n_before = len(before["versions"])
+        goto(page, f"/p/{quote(B)}/document/{quote(doc_a)}")
+        seen = wait_any(page, ["doc-canvas", "doc-canvas-error", "doc-picker-empty", "doc-canvas-loading"], BRIDGE_TIMEOUT_MS)
+        if not (seen == "doc-canvas" and tid(page, "doc-canvas", doc_id=doc_a).count() > 0):
+            return f"B's shell does not frame A's document (rendered: {seen}) — no foreign mutation is reachable"
+        # The panel starts collapsed once a doc owns the canvas: the rail's Versions glyph opens it on that tab.
+        tid(page, "panel-rail-tab", tab="versions").click()
+        tid(page, "doc-panel", tab="versions").wait_for(timeout=10_000)
+        head_row = tid(page, "version-detail", version=str(before["head"]))
+        head_row.wait_for(timeout=10_000)
+        head_row.locator('[data-testid="version-fork"]').click()
+        deadline = time.time() + 30
+        outcome = None
+        while time.time() < deadline and outcome is None:
+            if tid(page, "version-fork-error").count() > 0:
+                outcome = ("refused", text_of(tid(page, "version-fork-error")))
+            elif re.search(r"[?&]v=\d+", page.url):
+                outcome = ("landed", page.url)
+            else:
+                page.wait_for_timeout(250)
+        after = doc_versions(A, doc_a)
+        n_after = len(after["versions"])
+        if outcome is None:
+            raise AssertionError(f"the fork from B's shell neither landed nor was refused within 30s (A's versions {n_before} → {n_after})")
+        if outcome[0] == "refused":
+            assert n_after == n_before, f"the UI reported a refused fork but A's document gained versions ({n_before} → {n_after})"
+            return f"B's shell framed A's document but the fork was REFUSED ({outcome[1][:200]}); A's lineage unchanged ({n_before} versions)"
+        expect_gap(n_after == n_before, "crew#472",
+                   f"a fork issued from Project B's shell LANDED on Project A's document {doc_a!r}: versions {n_before} → {n_after} "
+                   f"(new head {after.get('head')}, url {outcome[1].replace(ORIGIN, '')}) — the shared root accepts foreign mutations")
+        return "the fork from B's shell changed nothing on A's document"
+
+    suite.run("ISO-F", "Foreign-context mutation (edit arm): fork A's doc from B's shell must be refused or unreachable", isof,
+              xfail="crew#472", requires=("VIB-1D", "VIB-2D"))
+
+    def isod() -> str:
+        """MUTATION isolation, the DELETE arm: from Project B's picker, delete A's document. Correct:
+        A's doc is not listed under B (invisible) or the delete is refused by scope. Two known gaps
+        gate this today — the picker leak (crew#472) and the pinned bridge's missing DELETE route
+        (studio#213); the one that fires is named in the detail."""
+        (A, doc_a), (B, _doc_b) = ctx["docs"][0], ctx["docs"][1]
+        b_ids = picker_ids(page, B, "document")
+        if doc_a not in b_ids:
+            return f"A's document is invisible from B's picker ({b_ids}) — no foreign delete is reachable"
+        a_before = picker_ids(page, A, "document")
+        assert doc_a in a_before, f"A's own picker lost {doc_a} before the foreign delete: {a_before}"
+        goto(page, f"/p/{quote(B)}/document")
+        wait_any(page, ["doc-picker", "doc-picker-empty", "doc-canvas-error", "doc-canvas-loading"], BRIDGE_TIMEOUT_MS)
+        tid(page, "doc-delete-trigger", doc_id=doc_a).click()
+        tid(page, "doc-delete-confirm").wait_for(timeout=10_000)
+        tid(page, "doc-delete-go").click()
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            if tid(page, "doc-delete-error").count() > 0:
+                wire = text_of(tid(page, "doc-delete-error"))
+                if PREDATES_DELETE_RE.search(wire):
+                    raise ExpectedGap(f"studio#213: the foreign delete cannot reach a scope check — the pinned bridge predates DELETE /api/docs/:doc ({wire[:200]})")
+                if re.search(r"project|scope|not (in|part of)|forbidden|403", wire, re.I):
+                    return f"the delete of A's document from B's shell was REFUSED by scope: {wire[:200]}"
+                raise AssertionError(f"delete from B's shell failed on the wire for an unrelated reason: {wire[:300]}")
+            if tid(page, "doc-delete-partial").count() > 0:
+                raise AssertionError(f"PARTIAL delete from a foreign shell: {text_of(tid(page, 'doc-delete-partial'))[:300]}")
+            if tid(page, "doc-delete-bridge-hint").count() > 0:
+                reason = bridge_unavailable_reason(B)
+                if reason is not None:
+                    raise Skip(f"bridge unavailable during the foreign delete (daemon 503 bridge_unavailable: {reason[:200]})")
+                raise AssertionError(f"foreign delete shows a bridge hint while the daemon serves the bridge: {text_of(tid(page, 'doc-delete-bridge-hint'))[:200]}")
+            if tid(page, "doc-delete-confirm").count() == 0:
+                break
+            page.wait_for_timeout(200)
+        a_after = picker_ids(page, A, "document")
+        expect_gap(doc_a in a_after, "crew#472", f"a delete issued from Project B's shell REMOVED Project A's document {doc_a!r} (A's picker: {a_before} → {a_after})")
+        return "the delete from B's shell left A's document in place"
+
+    suite.run("ISO-D", "Foreign-context mutation (delete arm): delete A's doc from B's shell must be refused or invisible", isod,
+              xfail="studio#213 (delete wire) / crew#472 (leak)", requires=("VIB-1D", "VIB-2D"))
+
     def dem1d() -> str:
         name = ui_seed_demo(page, ctx["A"], f"seed-demo-a-{STAMP}", rig.fixture_url)
         ctx["demos"].append((ctx["A"], name))
@@ -1707,6 +2514,91 @@ def run_scenarios(rig: Rig, page) -> None:
         return f"demo '{name}' created under A via the wizard (target {rig.fixture_url}, one hand-pinned step; authoring agent disabled); A's picker lists it"
 
     suite.run("DEM-1D", "Seed a demo in Project A via the wizard (deterministic)", dem1d, requires=("PRJ-1",))
+
+    def demplay() -> str:
+        """PLAYBACK of the seeded demo: the player frames the storyboard at the manifest head, the
+        head html serves, no recording is offered for a version that has none — and it all survives
+        a full reload."""
+        A, demo = ctx["demos"][0]
+        manifest = doc_versions(A, demo)
+        head = manifest["head"]
+
+        def observe() -> dict:
+            goto(page, f"/p/{quote(A)}/video/{quote(demo)}")
+            player = tid(page, "demo-player", demo_id=demo)
+            player.wait_for(timeout=BRIDGE_TIMEOUT_MS)
+            tid(page, "video-record").wait_for(timeout=15_000)
+            frame = frame_of(player.first)
+            html = frame.evaluate("() => document.documentElement.outerHTML")
+            return {"version": player.first.get_attribute("data-version"), "src": player.first.get_attribute("src"),
+                    "frame_sha256": hashlib.sha256(html.encode()).hexdigest(), "record_state": tid(page, "video-record").get_attribute("data-state")}
+
+        before = observe()
+        assert before["version"] == str(head), f"player shows v{before['version']} while the manifest head is {head}"
+        assert before["record_state"] == "idle", f"record control state {before['record_state']!r}"
+        st, ctype, body = fetch_with_type(f"/api/v1/projects/{quote(A)}/interactive/d/{quote(demo)}/doc/{head}")
+        assert st == 200 and body, f"storyboard html v{head} → {st}"
+        rst, rtype, _ = fetch_with_type(f"/api/v1/projects/{quote(A)}/interactive/d/{quote(demo)}/api/demo/recording/_v{head}.webm")
+        assert not rtype.startswith("video/"), f"a recording is served for v{head} although none was recorded ({rst} {rtype})"
+        after = observe()
+        assert after["version"] == before["version"] and after["frame_sha256"] == before["frame_sha256"], f"player changed across the reload: {before} → {after}"
+        ctx["demo_head_before_record"] = head
+        return (f"demo '{demo}' plays back at v{head} (player frames the storyboard, frame html sha256 {before['frame_sha256'][:12]}…, identical after a full reload); "
+                f"storyboard html 200 ({ctype.split(';')[0]}); no recording offered for v{head} (probe {rst} {rtype.split(';')[0] or 'no type'}); record control idle")
+
+    suite.run("DEM-PLAY", "Demo playback: player frames the storyboard head; identical after reload; no phantom recording", demplay, requires=("DEM-1D",))
+
+    def demrec() -> str:
+        """RECORDING: click ⏺ Re-record and capture what the wire answers. The bridge's recorder
+        (`wicked-interactive/src/service/demo.js recordDemo`) replays the demo's `demo.spec.mjs` in
+        ITS OWN Playwright Chromium — a second browser this hermetic rig does not host — and refuses
+        before any launch when no spec exists, and the spec is written only by the demo AUTHORING run
+        this rig disables by design (`--no-interactive-demo-events`). So the journey is BLOCKED here;
+        a recording that nevertheless lands breaks the premise and FAILS this row."""
+        A, demo = ctx["demos"][0]
+        head = ctx["demo_head_before_record"]
+        n_before = len(doc_versions(A, demo)["versions"])
+        goto(page, f"/p/{quote(A)}/video/{quote(demo)}")
+        tid(page, "demo-player", demo_id=demo).wait_for(timeout=BRIDGE_TIMEOUT_MS)
+        button = tid(page, "video-record")
+        button.wait_for(timeout=15_000)
+        button.click()
+        page.wait_for_function(
+            "() => ['queuing','recording'].includes(document.querySelector('[data-testid=\"video-record\"]')?.getAttribute('data-state')) "
+            "|| document.querySelector('[data-testid=\"video-record-error\"]') !== null",
+            timeout=15_000,
+        )
+        if tid(page, "video-record-error").count() > 0:
+            raise AssertionError(f"the record request itself was refused at the click site: {text_of(tid(page, 'video-record-error'))[:300]}")
+        deadline = time.time() + 30
+        bridge_answer = None
+        landed = None
+        while time.time() < deadline and bridge_answer is None and landed is None:
+            st, conv = api("GET", f"/projects/{quote(A)}/interactive/d/{quote(demo)}/api/conversation")
+            if st == 200 and isinstance(conv, list):
+                for entry in conv:
+                    if isinstance(entry, dict) and "Recording failed" in str(entry.get("text", "")):
+                        bridge_answer = entry
+            m = doc_versions(A, demo)
+            if m["head"] != head or len(m["versions"]) != n_before:
+                landed = m
+            if bridge_answer is None and landed is None:
+                time.sleep(1)
+        if landed is not None:
+            raise AssertionError(f"a recording LANDED (head {head} → {landed['head']}) — the BLOCKED premise no longer holds; implement the playback-of-recording assertion")
+        state = button.get_attribute("data-state")
+        answer = str(bridge_answer.get("text"))[:240] if bridge_answer else "no bridge answer within 30 s"
+        raise Blocked(
+            "BLOCKED — demo RECORDING needs a second browser/recorder the rig cannot host: the record request was queued through the UI "
+            f"(⏺ → data-state {state!r}, POST /api/events wicked.interactive.demo.requested accepted) and the bridge answered: {answer!r}. "
+            "The recorder is the bridge's OWN Playwright Chromium (`recordDemo`: `import('playwright')` → `chromium.launch`), resolved from the "
+            "bridge's HOME/PLAYWRIGHT_BROWSERS_PATH — under the hermetic scratch HOME there is no browser cache, and the rig's Playwright is the "
+            "test client, not the bridge's; it also replays `demo.spec.mjs`, which only the demo AUTHORING run writes (disabled here: "
+            "`--no-interactive-demo-events`, no agent runs in the seed suite; the wizard's steps have no backend consumer — finding 10). "
+            "Playback of the seeded storyboard IS certified (DEM-PLAY). Tracked in studio#217."
+        )
+
+    suite.run("DEM-REC", "Demo recording (⏺ Re-record → new version → playback of the recording)", demrec, requires=("DEM-PLAY",))
 
     def dem3() -> str:
         A, demo_a = ctx["demos"][0]
@@ -1721,9 +2613,9 @@ def run_scenarios(rig: Rig, page) -> None:
     # ── THE ONE GOVERNED SCENARIO — serialized, gate rejected ─────────────────
     def tst1() -> str:
         if not GOVERNED_ENABLED:
-            raise Skip("governed scenario disabled by SEED_GOVERNED=0 — a recon launch convenes the engine's "
-                       "distribution council (real CLI seats) BEFORE its intake gate (crew#473); run with SEED_GOVERNED=1 "
-                       "to exercise the gate, serialized, once")
+            raise AssertionError("governed scenario disabled by the operator (SEED_GOVERNED=0) — certification requires the intake-gate "
+                                 "rejection proven from the run's events; this journey cannot be skipped (a recon launch convenes the "
+                                 "distribution council BEFORE its intake gate, crew#473 — run it serialized, once)")
         A = ctx["A"]
         goto(page, f"/p/{quote(A)}")
         tid(page, "dashboard-campaigns").click()
@@ -1769,18 +2661,17 @@ def run_scenarios(rig: Rig, page) -> None:
                 break
             page.wait_for_timeout(2_000)
         if gate.count() == 0:
+            # A pre-gate failure is a FAIL carrying its captured cause — the roster's `signed_in` flags
+            # are RECORDED (they can read false while a keychain-backed seat still convenes, §6.9),
+            # never used as an excuse; `skip` is not available to this journey at all.
+            roster = rig.report["setup"].get("roster_signed_in") or {}
+            tail = json.dumps(last_events(run_id, 6))[-1600:]
+            ctx["gate_failure_capture"] = {"run": run_id, "status": status, "roster_signed_in": roster, "council": council_activity(run_id), "last_events": last_events(run_id, 6)}
             if status == "failed":
-                tail = json.dumps(last_events(run_id))[-1200:]
-                roster = rig.report["setup"].get("roster_signed_in") or {}
-                nobody_signed_in = bool(roster) and not any(roster.values())
-                if nobody_signed_in:
-                    # The ESTABLISHED cause: under the hermetic HOME no council seat has credentials.
-                    raise Skip(f"run {run_id} failed before its intake gate and the roster shows NO signed-in seat under the "
-                               f"hermetic HOME (roster signed_in={roster}); last events: {tail}")
-                raise AssertionError(f"run {run_id} failed before its intake gate with signed-in seats {roster}: {tail}")
+                raise AssertionError(f"run {run_id} FAILED before its intake gate (roster signed_in={roster}, council {council_activity(run_id)}); last events: {tail}")
             if status == "awaiting_human":
-                raise AssertionError(f"run {run_id} is awaiting_human on the wire but the launch panel never rendered the gate card")
-            raise AssertionError(f"run {run_id} never reached its intake gate within {GOVERNED_TIMEOUT_S}s (status {status})")
+                raise AssertionError(f"run {run_id} is awaiting_human on the wire but the launch panel never rendered the gate card; last events: {tail}")
+            raise AssertionError(f"run {run_id} never reached its intake gate within {GOVERNED_TIMEOUT_S}s (status {status}, roster signed_in={roster}); last events: {tail}")
         prompt = text_of(gate.locator('[data-testid="steering-prompt"]'))
         assert prompt != "", "the gate card carries no prompt"
         assert run_status(run_id) == "awaiting_human"
@@ -1799,12 +2690,10 @@ def run_scenarios(rig: Rig, page) -> None:
                 f"prompt: {prompt[:120]!r}")
 
     suite.run("TST-1", "New test from Project A → intake gate arrives → REJECT (event log proves no execution)", tst1,
-              requires=("ATT-1",), governed=True)
+              requires=("ATT-1",), governed=True, no_skip=True)
 
     def tsts() -> str:
-        run_id = ctx.get("test_run")
-        if run_id is None:
-            raise Skip("no test run was launched")
+        run_id = ctx["test_run"]
         A, B = ctx["A"], ctx["B"]
         goto(page, f"/p/{quote(A)}")
         tid(page, "dashboard-run", run_id=run_id).wait_for(timeout=30_000)
@@ -1816,44 +2705,50 @@ def run_scenarios(rig: Rig, page) -> None:
         assert tid(page, "dashboard-run", run_id=run_id).count() == 0, "Project B's dashboard lists A's test run"
         return f"A's dashboard lists run {run_id} (membership join, problem carries the brief); B's does not"
 
-    suite.run("TST-S", "The test run is scoped: on A's dashboard, absent from B's", tsts, requires=("PRJ-2",))
+    suite.run("TST-S", "The test run is scoped: on A's dashboard, absent from B's", tsts, requires=("PRJ-2", "TST-1"))
 
     def tst2() -> str:
-        A = ctx["A"]
-        goto(page, f"/p/{quote(A)}/campaigns")
-        tid(page, "project-campaigns", project_id=A).wait_for(timeout=15_000)
-        wait_any(page, ["campaigns-page", "campaigns-unsupported"], 30_000)
-        page.wait_for_load_state("networkidle")
-        a_cards = attr_values(page, "campaign-card", "data-campaign-id")
+        """Campaign isolation: the wire MUST answer 200 with a list (anything else FAILS with
+        status/body); Project B's campaign cards MUST exclude A's (the isolation assertion, run on
+        whatever data exists); only the part the governed budget prevents — LAUNCHING a fan so the
+        assertion has a campaign to bite on — is reported blocked."""
+        A, B = ctx["A"], ctx["B"]
+
+        def cards(pid: str) -> list[str]:
+            goto(page, f"/p/{quote(pid)}/campaigns")
+            tid(page, "project-campaigns", project_id=pid).wait_for(timeout=15_000)
+            wait_any(page, ["campaigns-page", "campaigns-unsupported"], 30_000)
+            page.wait_for_load_state("networkidle")
+            return attr_values(page, "campaign-card", "data-campaign-id")
+
+        a_cards = cards(A)
+        b_cards = cards(B)
         st, body = api("GET", "/campaigns")
-        engine_campaigns = body.get("campaigns", []) if isinstance(body, dict) else body
+        proof = campaigns_isolation_oracle(st, body, a_cards, b_cards)
+        ctx["campaigns_proof"] = proof
         if a_cards:
-            raise AssertionError(f"a campaign card rendered on a single-repo project ({a_cards}) — the BLOCKED premise no longer holds; "
-                                 f"implement the partition assertion (App.tsx:466)")
+            raise AssertionError(f"campaign card(s) rendered on the single-repo project A ({a_cards}) — the BLOCKED premise no longer holds; "
+                                 f"the partition assertion ran (B renders {b_cards}) and this row must become a plain verdict (App.tsx:466)")
         raise Blocked(
-            "BLOCKED — the campaign store partition (App.tsx:466) is not observable on this rig: a single-repo test registers no "
-            f"engine campaign (`campaignRegistered:false`; GET /campaigns → {len(engine_campaigns) if isinstance(engine_campaigns, list) else engine_campaigns} campaigns, "
-            f"A renders {len(a_cards)} cards). Observing it needs a ≥2-repo project — a FAN (crew#390 shape) of ≥2 governed runs, which "
-            "exceeds the one-governed-scenario budget. Fixture path when a fan is affordable: attach a second repo to A, launch once, "
-            "assert /p/B/campaigns excludes A's campaign-card. Tracked with the Test-surface findings in studio#216."
+            f"BLOCKED (fan only) — deterministic half executed: GET /campaigns → 200 with a list of {proof['engine_campaigns']} campaigns; "
+            f"A renders {len(a_cards)} campaign cards, B renders {len(b_cards)}, and B's set excludes A's (∩ = ∅). What the budget prevents: "
+            "a single-repo test registers no engine campaign (`campaignRegistered:false`), so the partition (App.tsx:466) has no campaign to bite on; "
+            "observing it needs a ≥2-repo FAN (crew#390 shape) = ≥2 governed runs, over the one-governed-scenario budget. Fixture path when a fan is "
+            "affordable: attach a second repo to A, launch once, then this same assertion (B's cards ∌ A's) is the verdict. Context: studio#216."
         )
 
-    suite.run("TST-2", "Tests list is partitioned per project", tst2, requires=("PRJ-2",))
+    suite.run("TST-2", "Tests list is partitioned per project (campaign isolation)", tst2, requires=("PRJ-2",))
 
     # ── Cleanup — only after every consumer ───────────────────────────────────
-    def cln1() -> str:
-        done = []
-        for pid, name in ctx["docs"]:
-            ui_delete_doc(page, pid, "document", name, bridge_gap_issue="studio#213")
-            done.append(f"doc {name}")
-        for pid, name in ctx["demos"]:
-            ui_delete_doc(page, pid, "video", name, bridge_gap_issue="studio#213")
-            done.append(f"demo {name}")
-        if not done:
-            raise Skip("nothing was seeded to delete")
-        return "deleted via the picker's 🗑 → confirm → Delete, verified absent after a reload: " + ", ".join(done)
+    # CLN-1 PER TARGET: one row per seeded doc/demo — an ExpectedGap on the first never hides the rest.
+    targets = [(pid, "document", name) for pid, name in ctx["docs"]] + [(pid, "video", name) for pid, name in ctx["demos"]]
+    if targets:
+        run_delete_rows(suite, targets, lambda pid, mode, name: ui_delete_doc(page, pid, mode, name, bridge_gap_issue="studio#213"), "studio#213")
+    else:
+        def cln1_nothing() -> str:
+            raise Blocked("nothing was seeded to delete — the seed scenarios (VIB-1D/VIB-2D/DEM-1D) did not run")
 
-    suite.run("CLN-1", "Delete every seeded document/demo through the UI", cln1, xfail="studio#213")
+        suite.run("CLN-1a", "Delete every seeded document/demo through the UI", cln1_nothing)
 
     def clnstr() -> str:
         seed = ctx.get("rule_seed_api")
@@ -1995,11 +2890,145 @@ def self_test() -> int:
         (scratch / ".wi-serve.json").write_text(json.dumps({"pid": 0, "port": 1}))
         lock, state = read_bridge_lock(scratch)
         results["lock_pid_zero_is_not_signallable"] = lock is not None and not valid_pid(lock.get("pid"))
-        results["own_process_never_identified_as_bridge"] = os.getpid() not in {p["pid"] for p in bridge_processes(scratch, 0)}
-        results["stale_older_process_excluded"] = all(p["started_at"] is None or p["started_at"] >= time.time() - 5
-                                                     for p in bridge_processes(scratch, time.time()))
+        found = bridge_processes(scratch, 0)
+        results["own_process_never_identified_as_bridge"] = os.getpid() not in {p["pid"] for p in found["identified"] + found["unverified"]}
+        results["stale_older_process_excluded"] = all(p["started_at"] >= time.time() - 5 for p in bridge_processes(scratch, time.time())["identified"])
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+    # 6. bridge identity fails closed (codex r2 item 8): a candidate with NO readable start time is
+    #    unverified (never identified ⇒ never signalled); a failed `ps` makes the whole lookup unverified.
+    fake_rows = [
+        {"pid": 4242, "pgid": 4242, "ppid": 1, "command": f"node wicked-interactive serve --root {scratch}/idocs"},
+        {"pid": 4343, "pgid": 4343, "ppid": 1, "command": f"node wicked-interactive serve --root {scratch}/idocs"},
+    ]
+    found = bridge_processes(scratch / "idocs", 100.0, ps=lambda: (fake_rows, None), started_at=lambda pid: None if pid == 4242 else 200.0)
+    results["bridge_unverified_start_time_is_not_identified"] = (
+        [p["pid"] for p in found["identified"]] == [4343] and [p["pid"] for p in found["unverified"]] == [4242] and found["ps_ok"]
+    )
+    found = bridge_processes(scratch / "idocs", 100.0, ps=lambda: ([], "ps exited 1"), started_at=lambda pid: 200.0)
+    results["bridge_ps_failure_is_unverified"] = found["ps_ok"] is False and found["identified"] == []
+    results["teardown_flags_unverified_bridge_identity"] = any(
+        f.startswith("bridge_identity_unverified") for f in teardown_failures({"bridge": {"identity_unverified": "ps failed"}}))
+    # 7. teardown affects the verdict (item 2): every failure kind is named, and finalize refuses ok.
+    all_bad = {
+        "cancelled_runs": [{"run": "r1", "before": "running", "accepted": False, "final": "running", "verified_terminal": False}],
+        "daemon": {"pid": 1, "forced": True, "exit_code": None, "group_empty": False}, "daemon_stopped": False,
+        "bridge": {"terminated": {"signalled": [9], "forced": [9], "remaining": [9]}, "identity_unverified": "no start time"},
+        "tmp": "/x", "tmp_removed": False, "tmp_remove_error": "EBUSY",
+        "isolation_scan_error": "PermissionError: scan aborted",
+        "isolation_scan": {"scan_errors": [{"file": "/x/y", "errno": 13, "error": "PermissionError: Permission denied"}]},
+        "step_errors": ["stop_bridge: RuntimeError: boom"],
+    }
+    fails = teardown_failures(all_bad)
+    kinds = {f.split(":")[0] for f in fails}
+    results["teardown_names_every_failure_kind"] = {
+        "run_cancel_failed", "daemon_not_stopped", "bridge_survived_sigkill", "bridge_identity_unverified", "tmp_not_removed",
+        "isolation_scan_failed", "live_scan_error", "teardown_step_raised",
+    } <= kinds
+    rep = finalize({"live_touched": [], "setup": {"teardown": {"failures": fails}}}, suite_ok=True)
+    results["teardown_failures_force_ok_false_and_nonzero_exit"] = rep["ok"] is False and exit_code(rep) != 0
+    results["clean_teardown_keeps_ok"] = teardown_failures({
+        "cancelled_runs": [], "daemon": {"group_empty": True}, "daemon_stopped": True,
+        "bridge": {"terminated": {"remaining": []}}, "tmp_removed": True, "isolation_scan": {"scan_errors": []}, "step_errors": [],
+    }) == [] and finalize({"live_touched": [], "setup": {"teardown": {"failures": []}}}, suite_ok=True)["ok"] is True
+    # 8. the gate journey can never skip (item 3): a Skip inside, a missing prerequisite, and SEED_GOVERNED=0
+    #    all land as FAIL; an execution event after the gate fails the oracle.
+    g = Suite()
+
+    def skipper() -> str:
+        raise Skip("roster shows no signed-in seat")
+
+    g.run("G-skip", "gate scenario raising Skip", skipper, no_skip=True)
+    g.run("G-prereq", "gate scenario with a failed prerequisite", lambda: "unreachable", requires=("ATT-X",), no_skip=True)
+    by_id = {r["id"]: r["status"] for r in g.rows}
+    results["gate_skip_becomes_fail"] = by_id["G-skip"] == "fail"
+    results["gate_missing_prereq_becomes_fail"] = by_id["G-prereq"] == "fail"
+    results["skipped_gate_suite_exits_nonzero"] = g.ok is False and exit_code(finalize({"live_touched": [], "setup": {}}, suite_ok=g.ok)) != 0
+    results["gate_execution_after_rejection_fails"] = gate_raises(good_units, good_events + [{"type": "unitExecuting", "ord": 1}])
+    # 9. the isolation scan fails closed (item 4): an unreadable file is a recorded error (its readable
+    #    sibling is still scanned); a stat error is recorded too — and both are `live_scan_error`.
+    scan_root = Path(mkdtemp(prefix="seed-selftest-scan-"))
+    try:
+        (scan_root / "readable.log").write_bytes(b"prefix e2e-scope-selftest suffix")
+        (scan_root / "secret.log").write_bytes(b"e2e-scope-selftest")
+
+        def opener(p: Path):
+            if p.name == "secret.log":
+                raise PermissionError(13, "Permission denied")
+            return p.open("rb")
+
+        tree = scan_tree([scan_root], 0.0, [b"e2e-scope-selftest"], opener)
+        results["scan_read_error_is_recorded_not_swallowed"] = (
+            any(e["file"].endswith("secret.log") and e["errno"] == 13 for e in tree["scan_errors"])
+            and any(h["file"].endswith("readable.log") for h in tree["hits"])
+        )
+        found_hits, err = scan_file_for(scan_root / "secret.log", [b"e2e-scope-selftest"], opener)
+        results["scan_permission_error_is_not_an_empty_hit_list"] = err is not None and err["errno"] == 13 and found_hits == []
+        real_stat = Path.stat
+
+        def flaky_stat(self: Path, *a, **k):
+            if self.name == "readable.log":
+                raise PermissionError(13, "Permission denied")
+            return real_stat(self, *a, **k)
+
+        Path.stat = flaky_stat  # type: ignore[method-assign]
+        try:
+            tree2 = scan_tree([scan_root], 0.0, [b"e2e-scope-selftest"])
+        finally:
+            Path.stat = real_stat  # type: ignore[method-assign]
+        results["scan_stat_error_is_recorded"] = any(e["file"].endswith("readable.log") for e in tree2["scan_errors"])
+        results["scan_errors_are_live_scan_error_failures"] = any(
+            f.startswith("live_scan_error") for f in teardown_failures({"isolation_scan": {"scan_errors": tree["scan_errors"]}}))
+    finally:
+        shutil.rmtree(scan_root, ignore_errors=True)
+    # 10. campaign isolation oracle (item 5): a 500 body is a FAIL (never "zero campaigns"), a 200
+    #     without a list is a FAIL, B carrying A's card is a FAIL, a clean answer returns.
+    def camp_raises(st, body, a, b) -> bool:
+        try:
+            campaigns_isolation_oracle(st, body, a, b)
+        except AssertionError:
+            return True
+        return False
+    results["campaigns_500_is_fail"] = camp_raises(500, {"error": "database unavailable"}, [], [])
+    results["campaigns_200_without_list_is_fail"] = camp_raises(200, {"ok": True}, [], [])
+    results["campaigns_b_carrying_a_is_fail"] = camp_raises(200, {"campaigns": [{"id": "c1"}]}, ["c1"], ["c1"])
+    results["campaigns_clean_passes"] = not camp_raises(200, {"campaigns": []}, [], []) and not camp_raises(200, {"campaigns": [{"id": "c1"}]}, ["c1"], [])
+    # 11. build identity is bytes (item 6): same label + different bytes, or a missing asset, is a mismatch.
+    dist = {"index.html": "aa" * 32, "assets/index-X.js": "bb" * 32}
+    results["build_identical_bytes_pass"] = compare_build(dist, dict(dist)) == []
+    results["build_same_label_different_bytes_fail"] = compare_build(dist, {"index.html": "aa" * 32, "assets/index-X.js": "cc" * 32}) != []
+    results["build_missing_asset_fail"] = compare_build(dist, {"index.html": "aa" * 32, "assets/other.js": "bb" * 32}) != []
+    results["build_no_dist_fail"] = compare_build({}, {"index.html": "aa" * 32}) != []
+    results["build_no_index_served_fail"] = compare_build(dist, {"assets/index-X.js": "bb" * 32}) != []
+    # 12. CLN-1 per target (item 7): an ExpectedGap on the first target never stops the others.
+    d = Suite()
+    attempted: list[str] = []
+
+    def deleter(pid: str, mode: str, name: str) -> None:
+        attempted.append(name)
+        if name == "doc-a":
+            raise ExpectedGap("issue#0: predates DELETE")
+
+    rows = run_delete_rows(d, [("A", "document", "doc-a"), ("B", "document", "doc-b"), ("A", "video", "demo-a")], deleter, "issue#0")
+    statuses = {r["id"]: r["status"] for r in d.rows}
+    results["cleanup_each_target_attempted"] = attempted == ["doc-a", "doc-b", "demo-a"] and rows == ["CLN-1a", "CLN-1b", "CLN-1c"]
+    results["cleanup_gap_on_one_does_not_hide_others"] = statuses["CLN-1a"] == "xfail" and statuses["CLN-1b"] == "xpass" and statuses["CLN-1c"] == "xpass"
+    # 13. VIB persistence content oracle (item 9): equal captures pass; a changed body/head/lineage fails.
+    cap = {"rendered_html_sha256": "h1", "rendered_text": "hello", "head": 0, "lineage": [0], "head_html_sha256": "d1"}
+
+    def pers_raises(after) -> bool:
+        try:
+            persistence_oracle(cap, after)
+        except AssertionError:
+            return True
+        return False
+    results["persistence_identical_passes"] = not pers_raises(dict(cap))
+    results["persistence_changed_body_fails"] = pers_raises({**cap, "head_html_sha256": "d2"})
+    results["persistence_changed_head_fails"] = pers_raises({**cap, "head": 1, "lineage": [0, 1]})
+    results["persistence_changed_rendered_fails"] = pers_raises({**cap, "rendered_html_sha256": "h2"})
+    results["persistence_missing_key_fails"] = pers_raises({k: v for k, v in cap.items() if k != "lineage"})
+    # 14. the committed report carries no operator home path.
+    results["report_scrub_removes_home"] = str(REAL_HOME) not in scrub_report_text(json.dumps({"p": f"{REAL_HOME}/.wicked-crew/x", "q": f"/private{REAL_HOME}/y"}))
     ok = all(results.values())
     print(json.dumps({"self_test": results, "ok": ok}, indent=2))
     return 0 if ok else 1
@@ -2012,9 +3041,19 @@ def _on_sigterm(*_args) -> None:
     raise KeyboardInterrupt("SIGTERM")
 
 
+def scrub_report_text(text: str) -> str:
+    """The committed artifact must not carry the operator's home path: every occurrence of the real
+    HOME (and its /private-prefixed spelling) reads `~`."""
+    for home in dict.fromkeys([str(REAL_HOME), f"/private{REAL_HOME}", str(Path.home())]):
+        if home and home != "/":
+            text = text.replace(home, "~")
+    return text
+
+
 def main(argv: list[str]) -> int:
     if "--self-test" in argv:
         return self_test()
+    report_out = argv[argv.index("--report-out") + 1] if "--report-out" in argv and argv.index("--report-out") + 1 < len(argv) else None
     signal.signal(signal.SIGTERM, _on_sigterm)
     report: dict = {"ok": False, "setup": {}, "scenarios": suite.rows, "findings": findings, "live_touched": [], "counts": {}}
     rig: Rig | None = None
@@ -2065,8 +3104,17 @@ def main(argv: list[str]) -> int:
     for r in suite.rows:
         first = r["detail"].splitlines()[0] if r["detail"] else ""
         print(f"| {r['id']} | {r['title']} | {r['status'].upper()} | {r['seconds']} | {first.replace('|', '/')} |")
-    print(f"\ncounts: {report['counts']}  live_touched: {len(report['live_touched'])}  ok: {report['ok']}\n")
-    print(json.dumps(report, indent=2, default=str))
+    print(f"\ncounts: {report['counts']}  live_touched: {len(report['live_touched'])}  teardown_failures: {len(report.get('teardown_failures') or [])}  ok: {report['ok']}\n")
+    text = json.dumps(report, indent=2, default=str)
+    print(text)
+    if report_out:
+        try:
+            Path(report_out).parent.mkdir(parents=True, exist_ok=True)
+            Path(report_out).write_text(scrub_report_text(text) + "\n", encoding="utf-8")
+            print(f"[REPORT ] written to {report_out} (operator home scrubbed)", file=sys.stderr)
+        except OSError as e:
+            print(f"[REPORT ] could not write {report_out}: {e}", file=sys.stderr)
+            return 1
     return exit_code(report)
 
 
