@@ -550,6 +550,47 @@ def assert_execution_prevented(units: object, events: object) -> dict:
     }
 
 
+def event_identity(e: dict) -> tuple[int | None, str, int | None]:
+    """What the studio's raw wire view RENDERS per row, as an identity: (`seq`, `type`, `ord`) —
+    NarratorFeed.tsx paints exactly the seq column, the type, `u<ord>` when `ord` is a number, and a
+    narration derived from the payload (no other payload field is painted verbatim)."""
+    seq = e.get("seq")
+    ord_ = e.get("ord")
+    return (seq if isinstance(seq, int) and not isinstance(seq, bool) else None,
+            str(e.get("type", "")),
+            ord_ if isinstance(ord_, int) and not isinstance(ord_, bool) else None)
+
+
+def expected_raw_rows(events: list[dict], run_id: str, ignored: set[str]) -> list[tuple[int | None, str, int | None]]:
+    """The rows the raw view MUST show for `GET /runs/:id/events`: the store hydrates `session ==
+    run_id` minus its never-rendered types (store/events.ts IGNORED), and the feed sorts by `seq`
+    (narrator.ts sortFeedEvents — stable, so frames without a seq keep their wire order)."""
+    kept = [e for e in events if isinstance(e, dict) and e.get("session") == run_id and e.get("type") not in ignored]
+    kept.sort(key=lambda e: (e.get("seq") if isinstance(e.get("seq"), int) and isinstance(e.get("ts"), (int, float)) else float("inf")))
+    return [event_identity(e) for e in kept]
+
+
+def assert_raw_view_matches_log(events: list[dict], rows: list[dict], run_id: str, ignored: set[str]) -> dict:
+    """RUN-DET's equality oracle (codex r5 #6): the raw view's rows must be IDENTICAL to the durable
+    log — the same ordered list of (seq, type, ord), not the same count. A substituted type, a
+    dropped, duplicated or reordered frame, or a corrupted `ord` is a plain FAIL naming the first
+    divergence. `rows` are what the DOM exposes per `raw-event`: `{seq, type, ord}` (None where the
+    view paints nothing)."""
+    assert isinstance(events, list) and events, "GET /runs/:id/events served no events — nothing to compare the raw view against"
+    expected = expected_raw_rows(events, run_id, ignored)
+    assert expected, f"the log holds no renderable frame for run {run_id} (types: {[e.get('type') for e in events[:8]]})"
+    actual = [(r.get("seq"), str(r.get("type", "")), r.get("ord")) for r in rows]
+    assert len(actual) == len(expected), (f"the raw view lists {len(actual)} rows, the log renders to {len(expected)} "
+                                          f"(first UI rows {actual[:4]}, first log rows {expected[:4]})")
+    for i, (a, x) in enumerate(zip(actual, expected)):
+        assert a == x, f"raw view row #{i} is {a}, the log's frame there is {x} (UI {actual[max(0, i - 1): i + 2]} vs log {expected[max(0, i - 1): i + 2]})"
+    seqs = [s for s, _t, _o in actual if s is not None]
+    assert len(seqs) == len(set(seqs)), f"the raw view repeats a seq: {sorted(s for s in set(seqs) if seqs.count(s) > 1)[:5]}"
+    assert seqs == sorted(seqs), f"the raw view is not in seq order: {seqs[:12]}…"
+    return {"rows": len(actual), "with_seq": len(seqs), "first": actual[0], "last": actual[-1],
+            "types": sorted({t for _s, t, _o in actual})}
+
+
 def compare_build(dist: dict[str, str], served: dict[str, str]) -> list[str]:
     """Build identity by BYTES: every served entry (index + each referenced asset) must hash equal
     to the same path in this worktree's `dist/`. Returns the mismatches (empty = identical)."""
@@ -898,21 +939,30 @@ def _tree_digest(root: Path, errors: list[str], symlinks: list[dict]) -> dict[st
 
 
 def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | None) -> dict:
-    """Establish that the scratch clone `dst` IS, byte for byte, the pinned bridge — pure over the
-    filesystem; self-tested. Three checks, all recorded:
-      1. SYMLINKS: an lstat walk of the clone; every symlink's target (resolved from its own
+    """Establish what CAN be established about the scratch clone `dst` — pure over the filesystem;
+    self-tested. Four checks, all recorded:
+      1. SYMLINKS ESCAPING: an lstat walk of the clone; every symlink's target (resolved from its own
          directory) must stay INSIDE the clone — an escaping or absolute target is an error (npm's
          `.bin` shims are relative links into `node_modules`, so a legitimate clone has none).
-      2. CLONE == SOURCE: every regular file under the clone hashes (sha256) equal to the same
+      2. SYMLINKS == SOURCE (codex r5 #2): the clone's symlinks — by path AND by `readlink` target —
+         must be exactly the source install's: a link missing, added, or RETARGETED (e.g. the
+         `.bin/wicked-interactive` shim pointed at another internal file) is an error. Regular-file
+         hashing never sees a link's target, so this is a separate comparison.
+      3. CLONE == SOURCE: every regular file under the clone hashes (sha256) equal to the same
          path under the source install, with no file missing or extra — the bytes the bridge
-         executes are the bytes npm installed.
-      3. THE TARBALL, when the operator's cacache still holds the content blob for `integrity`:
+         executes are the bytes of the operator's install.
+      4. THE TARBALL, when the operator's cacache still holds the content blob for `integrity`:
          its sha512 must equal the integrity (what npm/pacote verified at install) and every member
-         of `package/` must hash equal to the clone's `node_modules/wicked-interactive` file — the
-         clone is then tied to the registry tarball directly. When the blob is absent (npx does not
-         retain tarballs after extraction), the tie is npm's hidden lockfile (already validated by
-         `resolve_bridge_pin`: it records the sha512 npm verified for this very tree) plus check 2.
-    `bytes_verified_by` states which route ran. `error` is set on any failure."""
+         of `package/` must hash equal to the clone's `node_modules/wicked-interactive` file — ONLY
+         then are the bytes AUTHENTICATED against the registry tarball (`bytes_authenticated: true`).
+         When the blob is absent (npx does not retain tarballs after extraction) there is NO trusted
+         source of the package's bytes on the host: npm's lockfiles record the tarball's sha512 but no
+         per-file digest, and nothing records the lockfiles' own integrity — so the tie from the bytes
+         on disk to the recorded sha512 is npm METADATA, mutable and unauthenticated. That route is
+         recorded as `bytes_verified_by: "lockfile-metadata (unauthenticated): …"` with
+         `bytes_authenticated: false`; checks 1–3 still hold (the clone IS the source install), and the
+         claim the plan may make is exactly that much — never "verified against the tarball".
+    `error` is set on any failure."""
     import base64
     import tarfile
     rec: dict = {"src": str(src), "dst": str(dst)}
@@ -927,7 +977,17 @@ def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | No
         resolved = os.path.realpath(os.path.join(dst_real, os.path.dirname(link["path"]), link["target"]))
         if os.path.isabs(link["target"]) or not (resolved == dst_real or resolved.startswith(dst_real + os.sep)):
             escaping.append({**link, "resolves_to": resolved})
-    rec.update(files_compared=len(dst_files), symlinks=len(dst_links), escaping_symlinks=escaping, walk_errors=errors[:20])
+    src_link_map = {l["path"]: l["target"] for l in src_links}
+    dst_link_map = {l["path"]: l["target"] for l in dst_links}
+    links_missing = sorted(set(src_link_map) - set(dst_link_map))
+    links_extra = sorted(set(dst_link_map) - set(src_link_map))
+    links_retargeted = [
+        {"path": p, "source_target": src_link_map[p], "clone_target": dst_link_map[p]}
+        for p in sorted(set(src_link_map) & set(dst_link_map)) if src_link_map[p] != dst_link_map[p]
+    ]
+    rec.update(files_compared=len(dst_files), symlinks=len(dst_links), symlinks_in_source=len(src_links), escaping_symlinks=escaping,
+               symlinks_missing_in_clone=links_missing[:20], symlinks_extra_in_clone=links_extra[:20], symlinks_retargeted=links_retargeted[:20],
+               symlinks_compared_by_target=len(set(src_link_map) & set(dst_link_map)), walk_errors=errors[:20])
     missing = sorted(set(src_files) - set(dst_files))
     extra = sorted(set(dst_files) - set(src_files))
     mismatched = sorted(p for p in set(src_files) & set(dst_files) if src_files[p] != dst_files[p])
@@ -937,12 +997,17 @@ def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | No
     pkg_files = {p[len(pkg_prefix):]: h for p, h in dst_files.items() if p.startswith(pkg_prefix)}
     rec["package_files"] = len(pkg_files)
     rec["package_tree_sha256"] = hashlib.sha256("".join(f"{p}\t{h}\n" for p, h in sorted(pkg_files.items())).encode()).hexdigest()
-    rec["clone_tree_sha256"] = hashlib.sha256("".join(f"{p}\t{h}\n" for p, h in sorted(dst_files.items())).encode()).hexdigest()
+    # The clone digest covers the symlinks too (path + target): a retargeted shim changes it.
+    rec["clone_tree_sha256"] = hashlib.sha256(("".join(f"{p}\t{h}\n" for p, h in sorted(dst_files.items()))
+                                               + "".join(f"{p}\t-> {t}\n" for p, t in sorted(dst_link_map.items()))).encode()).hexdigest()
     problems: list[str] = []
     if errors:
         problems.append(f"{len(errors)} path(s) could not be walked/read: {errors[:3]}")
     if escaping:
         problems.append(f"{len(escaping)} symlink(s) escape the scratch clone: {escaping[:3]}")
+    if links_missing or links_extra or links_retargeted:
+        problems.append(f"the clone's symlinks differ from the source install's: {len(links_missing)} missing, {len(links_extra)} extra, "
+                        f"{len(links_retargeted)} retargeted (e.g. {(links_retargeted or links_missing or links_extra)[:3]})")
     if missing or extra or mismatched:
         problems.append(f"the clone differs from the source install: {len(missing)} missing, {len(extra)} extra, {len(mismatched)} mismatched (e.g. {(mismatched or missing or extra)[:3]})")
     if not pkg_files:
@@ -984,13 +1049,19 @@ def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | No
             tarball["error"] = f"{type(e).__name__}: {e}"
             problems.append(f"the cached tarball could not be verified: {type(e).__name__}: {e}")
     rec["tarball"] = tarball
+    rec["clone_equals_source"] = not problems
     if tarball.get("present") and not problems:
+        rec["bytes_authenticated"] = True
         rec["bytes_verified_by"] = ("tarball: the cacache blob for the lockfile integrity hashes (sha512) to that integrity and every `package/` member is byte-equal "
-                                    "to the clone's node_modules/wicked-interactive; plus the whole clone tree is byte-equal (sha256 per file) to the source install")
+                                    "to the clone's node_modules/wicked-interactive; plus the whole clone tree (files sha256 per file, symlinks by target) is "
+                                    "byte-equal to the source install")
     elif not problems:
-        rec["bytes_verified_by"] = ("hidden lockfile: the tarball is not retained in the operator's npm cacache on this host, so the tie to the integrity is npm's "
-                                    "node_modules/.package-lock.json (it records the sha512 npm verified when it extracted this very tree — validated equal to the root "
-                                    "lockfile by resolve_bridge_pin); the whole clone tree is byte-equal (sha256 per file) to that install, and no symlink escapes it")
+        rec["bytes_authenticated"] = False
+        rec["bytes_verified_by"] = ("lockfile-metadata (unauthenticated): the tarball for the recorded integrity is not retained in the operator's npm cacache on "
+                                    "this host, so NOTHING on the host authenticates the package bytes against that sha512 — npm's lockfiles record the tarball "
+                                    "digest but no per-file digest, and nothing records the lockfiles' own integrity. PROVEN: the clone is the source install "
+                                    "(every file sha256-equal, every symlink target equal, no symlink escapes). UNAUTHENTICATED: that the source install's bytes "
+                                    "are the registry tarball's — that rests on npm's metadata (validated consistent by resolve_bridge_pin), which is mutable")
     if problems:
         rec["error"] = "; ".join(problems)
     return rec
@@ -1018,6 +1089,22 @@ def run_delete_rows(s: "Suite", targets: list[tuple[str, str, str]], deleter: Ca
               lambda pid=pid, mode=mode, name=name: (deleter(pid, mode, name), f"{mode} {name} deleted via 🗑 → confirm → Delete; absent after a real reload")[1],
               xfail=issue)
     return ids
+
+
+def read_package_version(path: Path) -> str:
+    """The `version` of a package.json, or an `unreadable: …` sentence — NEVER a raise (codex r5 #1):
+    a missing file, invalid JSON, a JSON `null`/list/string (no `["version"]`), or a non-string
+    version all come back as text the caller records and compares (it will not equal the pin)."""
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+        return f"unreadable: {type(e).__name__}: {e}"
+    if not isinstance(doc, dict):
+        return f"unreadable: package.json is JSON {type(doc).__name__}, not an object"
+    version = doc.get("version")
+    if not isinstance(version, str):
+        return f"unreadable: version is {type(version).__name__} ({version!r}), not a string"
+    return version
 
 
 # ── Process identity + termination helpers (self-tested) ──────────────────────
@@ -1281,20 +1368,35 @@ def council_activity(run_id: str) -> dict[str, int]:
     return counts
 
 
-def snapshot_live_runs() -> dict:
+def snapshot_live_runs(get: Callable[..., tuple[int, object]] | None = None) -> dict:
     """READ-ONLY look at the live :7701 daemon — its run ids, so teardown can prove nothing new
-    appeared there. Never a POST."""
+    appeared there. Never a POST. `reachable` is true ONLY for a 200 whose body carries a `runs`
+    LIST of run views each naming `session.id` (codex r5 #3): a 200 `{"error": …}`, a `runs` that
+    is not a list, or a malformed run view is NOT an observation — it is recorded unreachable with
+    the shape named, so `scan_operator_state` marks it `observation_lost` (never an empty list, which
+    would read as "no runs" and let a clean verdict through). `get` is injectable for the self-tests."""
+    get = get or api
     try:
-        st, body = api("GET", "/runs", timeout=5, base=f"{LIVE_ORIGIN}/api/v1")
+        st, body = get("GET", "/runs", timeout=5, base=f"{LIVE_ORIGIN}/api/v1")
     except (urllib.error.URLError, OSError, TimeoutError) as e:
         return {"reachable": False, "error": str(e)[:200], "run_ids": []}
     if st != 200 or not isinstance(body, dict):
         return {"reachable": False, "error": f"GET /runs → {st}", "run_ids": []}
-    runs = body.get("runs", [])
-    return {
-        "reachable": True, "run_ids": sorted(r["session"]["id"] for r in runs),
-        "problems": {r["session"]["id"]: str(r["session"].get("problem", ""))[:200] for r in runs},
-    }
+    runs = body.get("runs")
+    if not isinstance(runs, list):
+        return {"reachable": False, "run_ids": [],
+                "error": f"GET /runs → 200 without a `runs` list (body keys {sorted(body)[:8]}: {str(body)[:160]}) — not an observation"}
+    ids: list[str] = []
+    problems: dict[str, str] = {}
+    for i, r in enumerate(runs):
+        session = r.get("session") if isinstance(r, dict) else None
+        rid = session.get("id") if isinstance(session, dict) else None
+        if not isinstance(rid, str) or not rid:
+            return {"reachable": False, "run_ids": [],
+                    "error": f"GET /runs → 200 but runs[{i}] carries no `session.id` ({str(r)[:160]}) — the listing is malformed, not an observation"}
+        ids.append(rid)
+        problems[rid] = str(session.get("problem", ""))[:200]
+    return {"reachable": True, "run_ids": sorted(ids), "problems": problems}
 
 
 # ── The rig ───────────────────────────────────────────────────────────────────
@@ -1850,21 +1952,40 @@ class Rig:
         self.report["setup"]["campaign_seed"] = record
         return record
 
-    def register_repo(self) -> None:
+    def register_repo(self, *, post: Callable[..., tuple[int, object]] | None = None, wait: Callable[[str, int], str] | None = None) -> dict:
         """Setup, over the API — labelled. Registration launches the built-in `onboarding` workflow:
-        two TOOL phases (`wicked-estate index`, `wicked-estate clusters`), no agent, no council."""
-        status, registered = api("POST", "/repos", {"name": f"seed-surfaces-{STAMP}", "rootPath": str(self.repo_root)})
+        two TOOL phases (`wicked-estate index`, `wicked-estate clusters`), no agent, no council.
+        Setup SUCCEEDS only when that run reports `completed` within `ONBOARD_TIMEOUT_S` (codex r5 #5):
+        no `onboardRunId`, a `failed`/`cancelled` run, or one still `running` at the deadline is a
+        `SetupFailure` (`repo_register`, `ok: false`) — the scenarios need an indexed repo, and a
+        half-onboarded one would describe some other fixture. `post`/`wait` are injectable for the
+        self-tests; the suite uses `api` and `wait_terminal`."""
+        post = post or api
+        wait = wait or wait_terminal
+        status, registered = post("POST", "/repos", {"name": f"seed-surfaces-{STAMP}", "rootPath": str(self.repo_root)})
         if status != 201 or not isinstance(registered, dict):
             raise SetupFailure("repo_register", f"POST /repos → {status} {registered}")
         self.repo_id = registered["repo"]["id"]
         self.needles.append(self.repo_id)
         onboard_run = registered.get("onboardRunId")
-        onboard_status = wait_terminal(onboard_run, ONBOARD_TIMEOUT_S) if isinstance(onboard_run, str) else None
-        self.report["setup"]["repo_register"] = {
-            "ok": True, "substitute": "API — harness setup, not a certified journey",
-            "repo_id": self.repo_id, "onboard_run": onboard_run,
-            "onboard_status": onboard_status, "onboard_workflow": "onboarding (tool phases only: estate index → clusters)",
+        record: dict = {
+            "ok": False, "substitute": "API — harness setup, not a certified journey",
+            "repo_id": self.repo_id, "onboard_run": onboard_run, "onboard_status": None,
+            "onboard_workflow": "onboarding (tool phases only: estate index → clusters)", "onboard_deadline_s": ONBOARD_TIMEOUT_S,
         }
+        self.report["setup"]["repo_register"] = record
+        if not isinstance(onboard_run, str) or not onboard_run:
+            record["error"] = f"POST /repos answered 201 without an `onboardRunId` ({str(registered)[:200]}) — onboarding was not launched; the repo is not indexed"
+            raise SetupFailure("repo_register", record["error"])
+        onboard_status = wait(onboard_run, ONBOARD_TIMEOUT_S)
+        record["onboard_status"] = onboard_status
+        if onboard_status != "completed":
+            still = "still" if onboard_status not in TERMINAL_STATUSES else "ended"
+            record["error"] = (f"onboarding run {onboard_run} {still} {onboard_status!r} after {ONBOARD_TIMEOUT_S}s — setup requires `completed` "
+                               f"(a repo whose index/clusters never landed is not the fixture the scenarios describe)")
+            raise SetupFailure("repo_register", record["error"])
+        record["ok"] = True
+        return record
 
     def start_fixture_server(self) -> None:
         """A local fixture page for the demo wizard's target URL (the wizard requires http(s); the
@@ -1942,35 +2063,53 @@ class Rig:
                                         f"the lock was IGNORED for signalling; the {len(identified)} independently identified process(es) {sorted(identified)} were still stopped")
         pids, plan = plan_bridge_stop(found, lock_pid, self.idocs)
         info.update(plan)
-        bridge_setup = self.report["setup"].get("bridge") or {}
-        scratch_key = bridge_setup.get("scratch_path")
-        lock_version = lock.get("version") if lock else None
-        info["lock_version"] = lock_version
-        if procs and scratch_key:
-            problems: list[str] = []
-            if lock_version is not None and str(lock_version) != BRIDGE_PINNED_VERSION:
-                problems.append(f"the running bridge reports version {lock_version!r} in its lock, not the pinned {BRIDGE_PINNED_VERSION}")
-            from_clone = [p["pid"] for p in procs if scratch_key in p["command"]]
-            info["ran_from_pinned_clone"] = from_clone
-            if not from_clone:
-                problems.append(f"none of the identified bridge processes {sorted(identified)} run from the pinned scratch clone {scratch_key} "
-                                f"— commands: {[p['command'][:160] for p in procs]}")
-            try:
-                now_version = json.loads((Path(scratch_key) / "node_modules" / "wicked-interactive" / "package.json").read_text())["version"]
-            except (OSError, json.JSONDecodeError, KeyError) as e:
-                now_version = f"unreadable: {e}"
-            info["pinned_clone_version_at_teardown"] = now_version
-            if now_version != BRIDGE_PINNED_VERSION:
-                problems.append(f"the scratch clone is wicked-interactive {now_version!r} at teardown, not the pinned {BRIDGE_PINNED_VERSION} (npx re-installed)")
-            added = sorted(self._cacache_blobs() - getattr(self, "_cacache_blobs_seeded", set()))
-            info["cacache_blobs_added_during_run"] = added
-            if added:
-                problems.append(f"npm fetched {len(added)} new content blob(s) into the scratch cache during the run (a registry resolution): {added[:5]}")
-            if problems:
-                info["not_from_pinned_cache"] = "; ".join(problems)
+        # TERMINATE FIRST (codex r5 #1): every identified pid is signalled before any metadata is
+        # inspected — a malformed package.json, a `null` lock field or any other inspection raise can
+        # never leave the detached bridge running. The inspection below is recorded, not relied on.
         if pids:
             info["terminated"] = terminate(pids)
+        try:
+            self._inspect_pinned_clone_at_teardown(info, procs, identified, lock)
+        except Exception as e:  # noqa: BLE001 — the inspection failing is a FINDING (verdict failure), never a skipped teardown
+            info["pinned_clone_inspection_error"] = f"{type(e).__name__}: {e}"
+            info["not_from_pinned_cache"] = "; ".join(x for x in (info.get("not_from_pinned_cache"),
+                                                                 f"the pinned-clone inspection at teardown raised {type(e).__name__}: {e} — the bridge's provenance could not be confirmed") if x)
         return info
+
+    def _inspect_pinned_clone_at_teardown(self, info: dict, procs: list[dict], identified: set[int], lock: dict | None) -> None:
+        """AFTER termination: did the identified bridge run from the scratch clone of the pinned version,
+        is the clone still that version, did npm fetch anything? Every read is guarded — an unreadable
+        or malformed answer is recorded as a `not_from_pinned_cache` problem (a verdict failure), so
+        nothing here can raise past `stop_bridge` except a genuine harness bug (which `stop_bridge`
+        records too)."""
+        bridge_setup = self.report["setup"].get("bridge") or {}
+        scratch_key = bridge_setup.get("scratch_path") if isinstance(bridge_setup, dict) else None
+        lock_version = lock.get("version") if isinstance(lock, dict) else None
+        info["lock_version"] = lock_version if isinstance(lock_version, (str, int, float, bool, type(None))) else repr(lock_version)
+        if not (procs and scratch_key):
+            return
+        problems: list[str] = []
+        if lock_version is not None and str(lock_version) != BRIDGE_PINNED_VERSION:
+            problems.append(f"the running bridge reports version {lock_version!r} in its lock, not the pinned {BRIDGE_PINNED_VERSION}")
+        from_clone = [p["pid"] for p in procs if str(scratch_key) in str(p.get("command", ""))]
+        info["ran_from_pinned_clone"] = from_clone
+        if not from_clone:
+            problems.append(f"none of the identified bridge processes {sorted(identified)} run from the pinned scratch clone {scratch_key} "
+                            f"— commands: {[str(p.get('command', ''))[:160] for p in procs]}")
+        now_version = read_package_version(Path(str(scratch_key)) / "node_modules" / "wicked-interactive" / "package.json")
+        info["pinned_clone_version_at_teardown"] = now_version
+        if now_version != BRIDGE_PINNED_VERSION:
+            problems.append(f"the scratch clone is wicked-interactive {now_version!r} at teardown, not the pinned {BRIDGE_PINNED_VERSION} (npx re-installed, or the package metadata is unreadable)")
+        try:
+            added = sorted(self._cacache_blobs() - getattr(self, "_cacache_blobs_seeded", set()))
+        except OSError as e:
+            added = []
+            problems.append(f"the scratch npm cache could not be enumerated at teardown ({type(e).__name__}: {e}) — whether npm fetched anything is unknown")
+        info["cacache_blobs_added_during_run"] = added
+        if added:
+            problems.append(f"npm fetched {len(added)} new content blob(s) into the scratch cache during the run (a registry resolution): {added[:5]}")
+        if problems:
+            info["not_from_pinned_cache"] = "; ".join(problems)
 
     def scratch_writes(self, base: Path, cap: int = 400) -> list[str]:
         """What landed under a scratch dir (informational — the HOME-WRITES finding). Uses the
@@ -2377,13 +2516,65 @@ def ui_seed_demo(page, pid: str, demo_name: str, fixture_url: str) -> str:
 PREDATES_DELETE_RE = re.compile(r"predates\s+DELETE\s+/api/docs|answered 404 without the retire wire", re.I)
 
 
-def ui_delete_doc(page, pid: str, mode: str, name: str, bridge_gap_issue: str) -> None:
+def delete_capture(page, owner: str, name: str, mode: str, foreign: str | None) -> dict:
+    """Everything a REFUSED delete must have left in place, read from the authorities (codex r5 #4):
+    the owner's picker (UI), crew's `interactive.doc` membership for the owner AND the foreign project
+    (server-side owner record), and the artifact's content — versions head + lineage and the head
+    document's bytes (`…/d/:name/doc/:head` — the storyboard for demos). Taken BEFORE the delete and
+    again AFTER the wire refused it; `assert_delete_preserved` compares."""
+    manifest = doc_versions(owner, name)
+    head = manifest.get("head")
+    st, html = fetch(f"/api/v1/projects/{quote(owner)}/interactive/d/{quote(name)}/doc/{head}")
+    assert st == 200 and html, f"{owner}'s {mode} {name!r} head v{head} → {st} — no content to protect"
+    return {
+        "owner_picker": picker_ids(page, owner, mode),
+        "owner_members": doc_members(owner),
+        "foreign_members": doc_members(foreign) if foreign is not None else None,
+        "head": head, "lineage": [v.get("version") for v in manifest.get("versions") or []],
+        "head_html_sha256": hashlib.sha256(html).hexdigest(),
+    }
+
+
+def assert_delete_preserved(before: dict, after: dict, *, owner: str, foreign: str | None, name: str, mode: str) -> None:
+    """BILATERAL preservation after a delete the wire REFUSED — plain assertions, never the excused
+    gap (codex r5 #4): the owner still lists AND still owns the artifact, the foreign project still
+    does not (and its membership is unchanged), and the content is byte-identical (head, lineage,
+    head-document bytes). A refused DELETE that nevertheless dropped the owner record, re-filed the
+    artifact, or altered a version is a regression the xfail must NOT excuse."""
+    for key in ("owner_picker", "owner_members", "head", "lineage", "head_html_sha256"):
+        assert key in before and key in after, f"delete capture lacks {key!r}: before={sorted(before)} after={sorted(after)}"
+    assert name in after["owner_picker"], f"the refused delete REMOVED {owner}'s {mode} {name!r} from its own picker ({before['owner_picker']} → {after['owner_picker']})"
+    assert name in after["owner_members"], (f"the refused delete dropped crew's owner record: {name!r} is no longer an interactive.doc member of {owner} "
+                                            f"({before['owner_members']} → {after['owner_members']})")
+    if foreign is not None:
+        assert isinstance(after.get("foreign_members"), list), f"no membership read for the foreign project {foreign} after the delete"
+        assert name not in after["foreign_members"], f"the refused delete RE-FILED {name!r} under the foreign project {foreign}: {after['foreign_members']}"
+        assert after["foreign_members"] == before.get("foreign_members"), f"{foreign}'s membership changed across the refused delete: {before.get('foreign_members')} → {after['foreign_members']}"
+    assert (after["head"], after["lineage"]) == (before["head"], before["lineage"]), (
+        f"{owner}'s {mode} {name!r} lineage changed across the refused delete: head {before['head']} → {after['head']}, versions {before['lineage']} → {after['lineage']}")
+    assert after["head_html_sha256"] == before["head_html_sha256"], (
+        f"{owner}'s {mode} {name!r} head content changed across the refused delete (sha256 {before['head_html_sha256'][:12]}… → {after['head_html_sha256'][:12]}…)")
+
+
+def refused_delete_gap(before: dict, after: dict, *, owner: str, foreign: str | None, name: str, mode: str, issue: str, message: str) -> None:
+    """The ONLY way a delete row may become the studio#213 xfail: the preservation checks hold as
+    PLAIN assertions first (a failure there is a FAIL), and only then the delete failure itself is
+    raised as the excused `ExpectedGap`. Both delete paths (the CLN-1 cleanup helper and the ISO-D /
+    ISO-DD foreign arm) go through here; self-tested through `Suite.run`."""
+    assert_delete_preserved(before, after, owner=owner, foreign=foreign, name=name, mode=mode)
+    raise ExpectedGap(f"{issue}: {message}")
+
+
+def ui_delete_doc(page, pid: str, mode: str, name: str, bridge_gap_issue: str, foreign: str | None = None) -> None:
     """Picker 🗑 → confirm → Delete → absent after a REAL reload. The ONE expected gap: crew's own
     sentence that the pinned bridge predates `DELETE /api/docs/:doc` (a `wire` failure rendered in
-    `doc-delete-error`, studio#213). A bridge-unavailable hint is a skip only when the daemon
+    `doc-delete-error`, studio#213) — and even then ONLY after the owner's listing + membership and
+    the content are re-read and found preserved, and `foreign` (the other project) still does not own
+    it (`refused_delete_gap`, codex r5 #4). A bridge-unavailable hint is a skip only when the daemon
     confirms it; a partial delete or any other wire error is a plain failure."""
-    before = picker_ids(page, pid, mode)
-    assert name in before, f"{name} not listed under {pid}/{mode} before delete: {before}"
+    before = delete_capture(page, pid, name, mode, foreign)
+    assert name in before["owner_picker"], f"{name} not listed under {pid}/{mode} before delete: {before['owner_picker']}"
+    assert name in before["owner_members"], f"crew does not file {name!r} under {pid} before the delete (interactive.doc members: {before['owner_members']})"
     tid(page, "doc-delete-trigger", doc_id=name).click()
     tid(page, "doc-delete-confirm").wait_for(timeout=10_000)
     tid(page, "doc-delete-go").click()
@@ -2392,7 +2583,10 @@ def ui_delete_doc(page, pid: str, mode: str, name: str, bridge_gap_issue: str) -
         if tid(page, "doc-delete-error").count() > 0:
             wire = text_of(tid(page, "doc-delete-error"))
             if PREDATES_DELETE_RE.search(wire):
-                raise ExpectedGap(f"{bridge_gap_issue}: the pinned bridge predates DELETE /api/docs/:doc — {wire[:300]}")
+                after = delete_capture(page, pid, name, mode, foreign)
+                refused_delete_gap(before, after, owner=pid, foreign=foreign, name=name, mode=mode, issue=bridge_gap_issue,
+                                   message=(f"the pinned bridge predates DELETE /api/docs/:doc — {wire[:300]} — preservation held: {pid} still lists + owns "
+                                            f"{name!r}, {foreign or 'no other project'} does not, head v{after['head']} / lineage {after['lineage']} / content unchanged"))
             raise AssertionError(f"delete failed on the wire: {wire[:400]}")
         if tid(page, "doc-delete-partial").count() > 0:
             raise AssertionError(f"PARTIAL delete: {text_of(tid(page, 'doc-delete-partial'))[:400]}")
@@ -3508,8 +3702,13 @@ def run_scenarios(rig: Rig, page) -> None:
         foreign_ids = picker_ids(page, foreign, mode)
         if name not in foreign_ids:
             return f"{owner}'s {mode} is invisible from {foreign}'s picker ({foreign_ids}) — no foreign delete is reachable"
-        owner_before = picker_ids(page, owner, mode)
+        # Everything the delete must leave in place — owner's picker, crew membership on BOTH sides,
+        # head/lineage/content — read BEFORE, re-read AFTER a refused delete (`refused_delete_gap`).
+        before = delete_capture(page, owner, name, mode, foreign)
+        owner_before = before["owner_picker"]
         assert name in owner_before, f"{owner}'s own picker lost {name} before the foreign delete: {owner_before}"
+        assert name in before["owner_members"] and name not in (before["foreign_members"] or []), (
+            f"crew's membership is not bilateral BEFORE the foreign delete: {owner}∋{name}? {name in before['owner_members']}, {foreign}∌{name}? {name not in (before['foreign_members'] or [])}")
         picker = "doc-picker" if mode == "document" else "demo-picker"
         surface = "doc" if mode == "document" else "video"
         goto(page, f"/p/{quote(foreign)}/{mode}")
@@ -3522,7 +3721,11 @@ def run_scenarios(rig: Rig, page) -> None:
             if tid(page, "doc-delete-error").count() > 0:
                 wire = text_of(tid(page, "doc-delete-error"))
                 if PREDATES_DELETE_RE.search(wire):
-                    raise ExpectedGap(f"studio#213: the foreign delete cannot reach a scope check — the pinned bridge {BRIDGE_PINNED_VERSION} predates DELETE /api/docs/:doc ({wire[:200]})")
+                    after = delete_capture(page, owner, name, mode, foreign)
+                    refused_delete_gap(before, after, owner=owner, foreign=foreign, name=name, mode=mode, issue="studio#213",
+                                       message=(f"the foreign delete cannot reach a scope check — the pinned bridge {BRIDGE_PINNED_VERSION} predates DELETE /api/docs/:doc "
+                                                f"({wire[:200]}) — preservation held bilaterally: {owner} still lists + owns {name!r}, {foreign} does not, "
+                                                f"head v{after['head']} / lineage {after['lineage']} / content unchanged"))
                 if re.search(r"project|scope|not (in|part of)|forbidden|403", wire, re.I):
                     return f"the delete of {owner}'s {mode} from {foreign}'s shell was REFUSED by scope: {wire[:200]}"
                 raise AssertionError(f"delete from {foreign}'s shell failed on the wire for an unrelated reason: {wire[:300]}")
@@ -3858,10 +4061,12 @@ def run_scenarios(rig: Rig, page) -> None:
         that order), offers nothing actionable (no approval dock), and the raw wire view lists exactly
         the durable events `GET /runs/:id/events` serves (minus the store's never-rendered deltas/heartbeats)."""
         rid, A = ctx["test_run"], ctx["A"]
-        assert run_status(rid) == "cancelled", f"TST-1's run is {run_status(rid)!r}, not cancelled"
+        wire_status = run_status(rid)
+        assert wire_status == "cancelled", f"TST-1's run is {wire_status!r}, not cancelled"
         events = run_events(rid)
         assert isinstance(events, list) and events, "GET /runs/:id/events served no events — nothing to compare the detail against"
-        rendered_types = [e.get("type") for e in events if e.get("session") == rid and e.get("type") not in RUN_STORE_IGNORED]
+        expected_rows = expected_raw_rows(events, rid, RUN_STORE_IGNORED)
+        rendered_types = [t for _s, t, _o in expected_rows]
         assert "awaitingHuman" in rendered_types and "runCancelled" in rendered_types, f"the event log lacks the gate/cancel pair: {rendered_types[-8:]}"
 
         def observe() -> dict:
@@ -3871,7 +4076,9 @@ def run_scenarios(rig: Rig, page) -> None:
             header.wait_for(timeout=30_000)
             assert tid(page, "run-pending").count() == 0, "the detail is stuck in its pending state (run not in the shell's index)"
             status_text = text_of(header)
-            assert "Cancelled" in status_text, f"the run header does not read Cancelled: {status_text[:200]!r}"
+            # The header's status word must be the WIRE's status (identity, not a substring of anything).
+            words = {w.strip(" ·—-()").lower() for w in re.split(r"\s+", status_text)}
+            assert wire_status in words, f"the run header does not carry the wire status {wire_status!r} as a word: {status_text[:200]!r}"
             tid(page, "thread").wait_for(timeout=15_000)
             page.wait_for_function(
                 "() => { const t = Array.from(document.querySelectorAll('[data-testid=\"narration-line\"]')).map(e => e.textContent || '');"
@@ -3884,21 +4091,29 @@ def run_scenarios(rig: Rig, page) -> None:
             assert gate_at < cancel_at, f"the feed narrates the cancellation (#{cancel_at}) before the gate (#{gate_at})"
             assert tid(page, "approval-dock").count() == 0 and tid(page, "steering-reject").count() == 0, "a cancelled run still offers an actionable gate"
             tid(page, "feed-view-raw").click()
-            page.wait_for_function("n => document.querySelectorAll('[data-testid=\"raw-event\"]').length === n", arg=len(rendered_types), timeout=20_000)
-            raw_types = tid(page, "raw-event").evaluate_all("els => els.map(e => e.children[1] ? e.children[1].textContent : '')")
-            assert raw_types.count("awaitingHuman") == rendered_types.count("awaitingHuman") and raw_types.count("runCancelled") == rendered_types.count("runCancelled"), \
-                f"raw view types disagree with the event log: {raw_types[-6:]} vs {rendered_types[-6:]}"
+            page.wait_for_function("n => document.querySelectorAll('[data-testid=\"raw-event\"]').length === n", arg=len(expected_rows), timeout=20_000)
+            # Per row, exactly what NarratorFeed.tsx paints as fields: children[0] = seq (blank when
+            # none), children[1] = type, then `u<ord>` when the frame has an ord, then the narration.
+            raw_rows = tid(page, "raw-event").evaluate_all(
+                "els => els.map(e => { const k = Array.from(e.children); const seq = (k[0] ? k[0].textContent : '').trim();"
+                " const ordEl = k.slice(2).find(x => !x.classList.contains('truncate') && /^u\\d+$/.test((x.textContent || '').trim()));"
+                " return { seq: seq === '' ? null : Number(seq), type: k[1] ? k[1].textContent : '',"
+                " ord: ordEl ? Number(ordEl.textContent.trim().slice(1)) : null }; })")
+            identity = assert_raw_view_matches_log(events, raw_rows, rid, RUN_STORE_IGNORED)
             stepper = tid(page, "process-stepper")
             stepper.wait_for(timeout=10_000)
-            return {"status": status_text, "gate_line": lines[gate_at][:160], "cancel_line": lines[cancel_at][:80], "raw_events": len(raw_types), "url": page.url.replace(ORIGIN, "")}
+            return {"status": status_text, "gate_line": lines[gate_at][:160], "cancel_line": lines[cancel_at][:80], "raw_events": identity["rows"],
+                    "raw_identity": identity, "url": page.url.replace(ORIGIN, "")}
 
         first = observe()
         second = observe()  # a second FULL load — the same rendering from the durable log
-        assert (first["raw_events"], first["gate_line"], first["cancel_line"]) == (second["raw_events"], second["gate_line"], second["cancel_line"]), f"the detail changed across reloads: {first} → {second}"
+        assert (first["raw_identity"], first["gate_line"], first["cancel_line"]) == (second["raw_identity"], second["gate_line"], second["cancel_line"]), f"the detail changed across reloads: {first} → {second}"
         ctx["run_detail"] = second
-        return (f"/runs/{rid} → {second['url']} (filed under A); header reads Cancelled; the narrated feed shows the intake gate "
-                f"({second['gate_line']!r}) before {second['cancel_line']!r}; no approval dock; raw view lists {second['raw_events']} events == "
-                f"GET /runs/:id/events ({len(events)} frames, {len(events) - len(rendered_types)} delta/heartbeat frames the store never renders); identical on a second full load")
+        ident = second["raw_identity"]
+        return (f"/runs/{rid} → {second['url']} (filed under A); header carries the wire status {wire_status!r}; the narrated feed shows the intake gate "
+                f"({second['gate_line']!r}) before {second['cancel_line']!r}; no approval dock; raw view == GET /runs/:id/events BY IDENTITY — the same ordered "
+                f"{ident['rows']} (seq, type, ord) rows ({ident['with_seq']} with a seq, first {ident['first']}, last {ident['last']}; {len(events)} frames on the wire, "
+                f"{len(events) - len(expected_rows)} delta/heartbeat frames the store never renders); identical on a second full load")
 
     suite.run("RUN-DET", "Run detail after reload: cancelled status, rejected gate narrated, raw events == API", rundet, requires=("TST-1",))
 
@@ -3977,7 +4192,9 @@ def run_scenarios(rig: Rig, page) -> None:
     # CLN-1 PER TARGET: one row per seeded doc/demo — an ExpectedGap on the first never hides the rest.
     targets = [(pid, "document", name) for pid, name in ctx["docs"]] + [(pid, "video", name) for pid, name in ctx["demos"]]
     if targets:
-        run_delete_rows(suite, targets, lambda pid, mode, name: ui_delete_doc(page, pid, mode, name, bridge_gap_issue="studio#213"), "studio#213")
+        # The OTHER project is the bilateral control: a refused delete may not re-file the artifact there.
+        other = {ctx.get("A"): ctx.get("B"), ctx.get("B"): ctx.get("A")}
+        run_delete_rows(suite, targets, lambda pid, mode, name: ui_delete_doc(page, pid, mode, name, bridge_gap_issue="studio#213", foreign=other.get(pid)), "studio#213")
     else:
         def cln1_nothing() -> str:
             raise Blocked("nothing was seeded to delete — the seed scenarios (VIB-1D/VIB-2D/DEM-1D) did not run")
@@ -4450,7 +4667,11 @@ def self_test() -> int:
             ok_rec = verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None)
             results["bridge_clone_identical_passes_via_hidden_lockfile_route"] = (
                 "error" not in ok_rec and ok_rec["symlinks"] == 1 and ok_rec["escaping_symlinks"] == [] and ok_rec["mismatched_count"] == 0
-                and str(ok_rec.get("bytes_verified_by", "")).startswith("hidden lockfile") and ok_rec["tarball"]["present"] is False)
+                and ok_rec["symlinks_compared_by_target"] == 1 and ok_rec["symlinks_retargeted"] == [] and ok_rec["tarball"]["present"] is False)
+            # codex r5 #2 — without the tarball the bytes are NOT authenticated, and the record says so.
+            results["bridge_clone_without_tarball_is_unauthenticated_not_verified"] = (
+                ok_rec.get("bytes_authenticated") is False and str(ok_rec.get("bytes_verified_by", "")).startswith("lockfile-metadata (unauthenticated)")
+                and "verified against" not in str(ok_rec.get("bytes_verified_by", "")).split("UNAUTHENTICATED")[0].lower() and ok_rec["clone_equals_source"] is True)
             (clone / "node_modules" / ".bin" / "escape").symlink_to("../../../../../../etc/hosts")
             esc = verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None)
             results["bridge_clone_escaping_symlink_is_error"] = "escape" in str(esc.get("error")) and len(esc["escaping_symlinks"]) == 1
@@ -4458,6 +4679,26 @@ def self_test() -> int:
             (clone / "node_modules" / ".bin" / "abs").symlink_to("/etc/hosts")
             results["bridge_clone_absolute_symlink_is_error"] = "escape" in str(verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None).get("error"))
             (clone / "node_modules" / ".bin" / "abs").unlink()
+            # codex r5 #2 — the `.bin/wicked-interactive` shim RETARGETED to another INTERNAL file: no
+            # escape, every regular file still byte-equal — only the target comparison can see it.
+            shim = clone / "node_modules" / ".bin" / "wicked-interactive"
+            shim.unlink()
+            shim.symlink_to("../wicked-interactive/src/server.js")
+            retargeted = verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None)
+            results["bridge_clone_retargeted_internal_symlink_is_error"] = (
+                "retargeted" in str(retargeted.get("error")) and retargeted["escaping_symlinks"] == [] and retargeted["mismatched_count"] == 0
+                and retargeted["symlinks_retargeted"] == [{"path": "node_modules/.bin/wicked-interactive", "source_target": "../wicked-interactive/bin/wicked-interactive.js",
+                                                          "clone_target": "../wicked-interactive/src/server.js"}]
+                and retargeted["clone_tree_sha256"] != ok_rec["clone_tree_sha256"] and "bytes_verified_by" not in retargeted)
+            shim.unlink()
+            missing_link = verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None)
+            results["bridge_clone_missing_symlink_is_error"] = "symlinks differ" in str(missing_link.get("error")) and missing_link["symlinks_missing_in_clone"] == ["node_modules/.bin/wicked-interactive"]
+            shim.symlink_to("../wicked-interactive/bin/wicked-interactive.js")
+            (clone / "node_modules" / ".bin" / "extra").symlink_to("../wicked-interactive/bin/wicked-interactive.js")
+            extra_link = verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None)
+            results["bridge_clone_extra_symlink_is_error"] = "symlinks differ" in str(extra_link.get("error")) and extra_link["symlinks_extra_in_clone"] == ["node_modules/.bin/extra"]
+            (clone / "node_modules" / ".bin" / "extra").unlink()
+            results["bridge_clone_restored_symlinks_pass_again"] = "error" not in verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None)
             (pkg_clone := clone / "node_modules" / "wicked-interactive" / "src" / "server.js").write_text("export const v = '0.8.1'; // tampered\n")
             results["bridge_clone_tampered_byte_is_error"] = "mismatched" in str(verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None).get("error"))
             pkg_clone.write_text("export const v = '0.8.1';\n")
@@ -4478,7 +4719,7 @@ def self_test() -> int:
             tar_ok = verify_bridge_clone(src_install, clone, real_integrity, cacache)
             results["bridge_clone_tarball_route_verifies_sha512_and_members"] = (
                 "error" not in tar_ok and tar_ok["tarball"]["present"] and tar_ok["tarball"]["sha512_matches_integrity"]
-                and tar_ok["tarball"]["members"] == 3 and str(tar_ok["bytes_verified_by"]).startswith("tarball"))
+                and tar_ok["tarball"]["members"] == 3 and str(tar_ok["bytes_verified_by"]).startswith("tarball") and tar_ok["bytes_authenticated"] is True)
             blob_path.write_bytes(blob_bytes[:-1] + bytes([blob_bytes[-1] ^ 0xFF]))
             results["bridge_clone_tampered_tarball_is_error"] = "does not hash" in str(verify_bridge_clone(src_install, clone, real_integrity, cacache).get("error"))
         finally:
@@ -4606,7 +4847,13 @@ def self_test() -> int:
     #     verdict failure) and never raise; a valid matching pid records no such failure.
     ident_bridge = {"pid": 4242, "pgid": 4242, "ppid": 1, "command": "node wicked-interactive serve --root /x/idocs", "started_at": 200.0}
 
-    def stop_probe(lock_body: object) -> tuple[dict, list[list[int]], str | None]:
+    _NO_PKG = object()
+
+    def stop_probe(lock_body: object, *, scratch_pkg: object = _NO_PKG, inspect_raise: bool = False) -> tuple[dict, list[list[int]], str | None]:
+        """The REAL `Rig.stop_bridge` with an identified bridge (pid 4242). `scratch_pkg` (codex r5 #1)
+        materialises a scratch clone whose `node_modules/wicked-interactive/package.json` holds that
+        JSON text (a `null`, a list, garbage …) and points `setup.bridge.scratch_path` at it, so the
+        metadata inspection runs; `inspect_raise` makes the inspection itself raise."""
         pr = Rig.__new__(Rig)
         pr.report = {"setup": {}}
         pr.tmp = Path(mkdtemp(prefix="seed-selftest-lock-")).resolve()
@@ -4615,6 +4862,16 @@ def self_test() -> int:
         (pr.idocs / ".wi-serve.json").write_text(json.dumps(lock_body))
         pr.daemon_started_at = 100.0
         pr.run_started_at = 100.0
+        pr.npm_cache = pr.tmp / "npm-cache"
+        if scratch_pkg is not _NO_PKG:
+            pkg_dir = pr.npm_cache / "_npx" / "k" / "node_modules" / "wicked-interactive"
+            pkg_dir.mkdir(parents=True)
+            (pkg_dir / "package.json").write_text(str(scratch_pkg))
+            pr.report["setup"]["bridge"] = {"scratch_path": str(pr.npm_cache / "_npx" / "k")}
+        if inspect_raise:
+            def _boom(*_a, **_k):
+                raise RuntimeError("inspection boom")
+            pr._inspect_pinned_clone_at_teardown = _boom  # type: ignore[method-assign]
         calls: list[list[int]] = []
         try:
             info = pr.stop_bridge(
@@ -4695,6 +4952,160 @@ def self_test() -> int:
         results["rescrub_file_in_place_leaves_valid_json_without_residue"] = outcome["changed"] is True and json.loads(target.read_text())["source"] == "<repo>" and rescrub_report_file(target)["changed"] is False
     finally:
         shutil.rmtree(rescrub_dir, ignore_errors=True)
+    # 26. bridge termination is INDEPENDENT of metadata (codex r5 #1): the REAL `stop_bridge` with a scratch
+    #     clone whose package.json is JSON `null` (the codex probe), a list, or garbage — and with the
+    #     inspection itself raising — must STILL call terminate([4242]), never raise, and record the
+    #     unreadable metadata as `not_from_pinned_cache` (a verdict failure).
+    for label, pkg_text in (("null", "null"), ("list", "[1, 2]"), ("garbage", "{not json"), ("int_version", '{"version": 81}')):
+        info, calls, raised = stop_probe({"pid": 4242, "version": "0.8.1"}, scratch_pkg=pkg_text)
+        results[f"bridge_metadata_{label}_still_terminates_identified"] = raised is None and calls == [[4242]]
+        results[f"bridge_metadata_{label}_is_recorded_failure"] = (
+            str(info.get("pinned_clone_version_at_teardown", "")).startswith("unreadable") and bool(info.get("not_from_pinned_cache"))
+            and any(f.startswith("bridge_not_from_pinned_cache") for f in teardown_failures({"bridge": info})))
+    info, calls, raised = stop_probe({"pid": 4242, "version": "0.8.1"}, scratch_pkg='{"version": "0.8.1"}', inspect_raise=True)
+    results["bridge_inspection_raise_still_terminates_identified"] = raised is None and calls == [[4242]]
+    results["bridge_inspection_raise_is_recorded_failure"] = (
+        "RuntimeError" in str(info.get("pinned_clone_inspection_error")) and "inspection boom" in str(info.get("not_from_pinned_cache"))
+        and any(f.startswith("bridge_not_from_pinned_cache") for f in teardown_failures({"bridge": info})))
+    pkg_probe = Path(mkdtemp(prefix="seed-selftest-pkg-"))
+    try:
+        results["read_package_version_missing_file_is_unreadable"] = read_package_version(pkg_probe / "nope.json").startswith("unreadable: FileNotFoundError")
+        (pkg_probe / "p.json").write_text("null")
+        results["read_package_version_null_is_unreadable_not_typeerror"] = read_package_version(pkg_probe / "p.json") == "unreadable: package.json is JSON NoneType, not an object"
+        (pkg_probe / "p.json").write_text('{"name": "x"}')
+        results["read_package_version_no_version_is_unreadable"] = read_package_version(pkg_probe / "p.json").startswith("unreadable: version is NoneType")
+        (pkg_probe / "p.json").write_text('{"version": "0.8.1"}')
+        results["read_package_version_reads_string_version"] = read_package_version(pkg_probe / "p.json") == "0.8.1"
+    finally:
+        shutil.rmtree(pkg_probe, ignore_errors=True)
+    # 27. (in §19 above) symlink TARGETS compared source vs clone; no tarball ⇒ `bytes_authenticated: false`.
+    # 28. the live-run response SHAPE (codex r5 #3): the REAL `snapshot_live_runs` with an injected transport —
+    #     HTTP 200 `{"error": "store unavailable"}` (the codex payload), a non-list `runs`, a run view without
+    #     `session.id` are NOT observations (unreachable, shape named); through the REAL `scan_operator_state`
+    #     after a reachable baseline they are `observation_lost` ⇒ verdict failure ⇒ `ok=false`. A well-formed
+    #     listing — including a genuinely EMPTY one — is an observation.
+    def fake_get(st: int, body: object):
+        return lambda *_a, **_k: (st, body)
+
+    snap_err = snapshot_live_runs(get=fake_get(200, {"error": "store unavailable"}))
+    results["live_snapshot_200_error_body_is_unreachable_not_empty"] = snap_err["reachable"] is False and "without a `runs` list" in snap_err["error"] and snap_err["run_ids"] == []
+    results["live_snapshot_runs_not_a_list_is_unreachable"] = snapshot_live_runs(get=fake_get(200, {"runs": "nope"}))["reachable"] is False
+    results["live_snapshot_malformed_run_view_is_unreachable"] = "session.id" in str(snapshot_live_runs(get=fake_get(200, {"runs": [{"session": {}}]}))["error"])
+    good = snapshot_live_runs(get=fake_get(200, {"runs": [{"session": {"id": "r2", "problem": "x"}}, {"session": {"id": "r1"}}]}))
+    results["live_snapshot_well_formed_is_observed"] = good["reachable"] is True and good["run_ids"] == ["r1", "r2"] and good["problems"] == {"r2": "x", "r1": ""}
+    results["live_snapshot_empty_list_is_an_observation"] = snapshot_live_runs(get=fake_get(200, {"runs": []})) == {"reachable": True, "run_ids": [], "problems": {}}
+    results["live_snapshot_transport_error_is_unreachable"] = snapshot_live_runs(get=lambda *_a, **_k: (_ for _ in ()).throw(urllib.error.URLError("refused")))["reachable"] is False
+    live_root = Path(mkdtemp(prefix="seed-selftest-live2-")).resolve()
+    try:
+        lr2 = Rig.__new__(Rig)
+        lr2.report = {"setup": {}}
+        lr2.needles = ["e2e-scope-selftest"]
+        lr2.run_started_at = time.time()
+        lr2.live_before = {"reachable": True, "run_ids": ["r1"], "problems": {}}
+        scan = lr2.scan_operator_state(snapshot=lambda: snapshot_live_runs(get=fake_get(200, {"error": "store unavailable"})),
+                                       roots=(live_root,), state_home=live_root / "no-such-home")
+        scan_fails = teardown_failures({"isolation_scan": scan})
+        results["live_200_error_body_through_real_scan_is_observation_lost"] = (
+            scan["live_7701"]["observation_lost"] is True and scan["live_7701"]["observed"] is False and scan["live_7701"]["new_run_ids"] == []
+            and "without a `runs` list" in str(scan["live_7701"]["error_after"]))
+        results["live_200_error_body_is_verdict_failure_ok_false"] = (
+            any(f.startswith("live_observation_lost") for f in scan_fails)
+            and finalize({"live_touched": [], "setup": {"teardown": {"failures": scan_fails}}}, suite_ok=True)["ok"] is False)
+    finally:
+        shutil.rmtree(live_root, ignore_errors=True)
+    # 29. delete xfails PRESERVE (codex r5 #4): `refused_delete_gap` — the path both delete arms take on the
+    #     old-bridge DELETE error — driven through `Suite.run` with the xfail marker on: preservation intact ⇒
+    #     the ONE xfail; the owner record dropped, the owner's picker emptied, the artifact re-filed under the
+    #     foreign project, the content or lineage changed, or the foreign read missing ⇒ FAIL naming the cause.
+    cap_before = {"owner_picker": ["doc-a"], "owner_members": ["doc-a"], "foreign_members": ["doc-b"], "head": 1, "lineage": [0, 1], "head_html_sha256": "h1"}
+
+    def delete_row(after: dict, *, foreign: str | None = "B") -> dict:
+        d5 = Suite()
+        before = cap_before if foreign is not None else {**cap_before, "foreign_members": None}
+        d5.run("D", "probe", lambda: refused_delete_gap(before, after, owner="A", foreign=foreign, name="doc-a", mode="document",
+                                                          issue="issue#0", message="predates DELETE"), xfail="issue#0")
+        return d5.rows[0]
+
+    results["delete_refused_with_preservation_is_xfail"] = delete_row(dict(cap_before))["status"] == "xfail"
+    dropped = delete_row({**cap_before, "owner_members": []})
+    results["delete_refused_owner_record_dropped_is_fail"] = dropped["status"] == "fail" and "owner record" in dropped["detail"]
+    results["delete_refused_owner_picker_lost_is_fail"] = delete_row({**cap_before, "owner_picker": []})["status"] == "fail"
+    refiled = delete_row({**cap_before, "foreign_members": ["doc-a", "doc-b"]})
+    results["delete_refused_refiled_under_foreign_is_fail"] = refiled["status"] == "fail" and "RE-FILED" in refiled["detail"]
+    results["delete_refused_content_changed_is_fail"] = delete_row({**cap_before, "head_html_sha256": "h2"})["status"] == "fail"
+    results["delete_refused_lineage_changed_is_fail"] = delete_row({**cap_before, "head": 0, "lineage": [0]})["status"] == "fail"
+    results["delete_refused_missing_foreign_read_is_fail"] = delete_row({**cap_before, "foreign_members": None})["status"] == "fail"
+    results["delete_refused_without_control_project_still_guards_owner_and_content"] = (
+        delete_row({**cap_before, "foreign_members": None}, foreign=None)["status"] == "xfail"
+        and delete_row({**cap_before, "foreign_members": None, "owner_members": []}, foreign=None)["status"] == "fail")
+    # 30. onboarding status (codex r5 #5): the REAL `Rig.register_repo` with an injected wire — `failed`, or
+    #     `running` at the deadline, or no `onboardRunId` ⇒ `SetupFailure(repo_register)` with `ok: false`
+    #     ⇒ `finalize(...).ok=false`; `completed` ⇒ the record is ok.
+    def register_probe(onboard_status: str, *, run_id: object = "run-1") -> tuple[dict | None, str | None, dict]:
+        rr = Rig.__new__(Rig)
+        rr.report = {"setup": {}}
+        rr.repo_root = Path("/x/repo")
+        rr.needles = []
+        rr.repo_id = ""
+        body: dict = {"repo": {"id": "repo-1"}}
+        if run_id is not None:
+            body["onboardRunId"] = run_id
+        try:
+            rec = rr.register_repo(post=lambda *_a, **_k: (201, body), wait=lambda _rid, _t: onboard_status)
+            return rec, None, rr.report
+        except SetupFailure as e:
+            return None, f"{e.step}: {e.why}", rr.report
+
+    rec, err, rep = register_probe("failed")
+    results["onboarding_failed_is_setup_failure"] = rec is None and str(err).startswith("repo_register") and "'failed'" in str(err) and rep["setup"]["repo_register"]["ok"] is False
+    results["onboarding_failed_forces_ok_false"] = finalize({"live_touched": [], "setup_failure": {"step": "repo_register", "error": err}}, suite_ok=True)["ok"] is False
+    rec, err, _ = register_probe("running")
+    results["onboarding_running_at_deadline_is_setup_failure"] = rec is None and "still 'running'" in str(err)
+    rec, err, _ = register_probe("completed", run_id=None)
+    results["onboarding_without_run_id_is_setup_failure"] = rec is None and "onboardRunId" in str(err)
+    rec, err, rep = register_probe("completed")
+    results["onboarding_completed_is_ok"] = err is None and rec is not None and rec["ok"] is True and rec["onboard_status"] == "completed" and rep["setup"]["repo_register"] is rec
+    # 31. RUN-DET event EQUALITY (codex r5 #6): `assert_raw_view_matches_log` compares the raw view to the log
+    #     as the ordered list of (seq, type, ord). The codex probe — every other type replaced by WRONG_EVENT
+    #     with the total and the gate/cancel counts preserved — FAILS; so do a dropped, duplicated or
+    #     reordered row, a corrupted ord and a missing seq; ignored and foreign-session frames are excluded
+    #     from the expectation; an identical view passes.
+    log = [
+        {"seq": 10, "ts": 1.0, "session": "r", "type": "sessionStarted"},
+        {"seq": 11, "ts": 1.0, "session": "r", "type": "unitPlanned", "ord": 1},
+        {"seq": 12, "ts": 1.0, "session": "r", "type": "cliOutputDelta", "ord": 1},  # store IGNORED — never rendered
+        {"seq": 13, "ts": 1.0, "session": "other", "type": "unitPlanned", "ord": 9},  # another run's frame
+        {"seq": 14, "ts": 1.0, "session": "r", "type": "councilConvened", "ord": 1},
+        {"seq": 15, "ts": 1.0, "session": "r", "type": "unitDistributed", "ord": 1},
+        {"seq": 16, "ts": 1.0, "session": "r", "type": "awaitingHuman", "ord": 1},
+        {"seq": 17, "ts": 1.0, "session": "r", "type": "runCancelled"},
+    ]
+    ignored = {"cliOutputDelta", "unitOutputDelta", "heartbeat"}
+    rows_ok = [{"seq": 10, "type": "sessionStarted", "ord": None}, {"seq": 11, "type": "unitPlanned", "ord": 1}, {"seq": 14, "type": "councilConvened", "ord": 1},
+               {"seq": 15, "type": "unitDistributed", "ord": 1}, {"seq": 16, "type": "awaitingHuman", "ord": 1}, {"seq": 17, "type": "runCancelled", "ord": None}]
+
+    def raw_raises(rows: list[dict], events: list[dict] = log) -> bool:
+        try:
+            assert_raw_view_matches_log(events, rows, "r", ignored)
+        except AssertionError:
+            return True
+        return False
+
+    results["rundet_identical_rows_pass"] = not raw_raises(rows_ok) and assert_raw_view_matches_log(log, rows_ok, "r", ignored)["rows"] == 6
+    wrong = [dict(r, type="WRONG_EVENT") if i % 2 == 1 and r["type"] not in ("awaitingHuman", "runCancelled") else dict(r) for i, r in enumerate(rows_ok)]
+    results["rundet_probe_keeps_the_counts_the_old_check_read"] = (
+        len(wrong) == len(rows_ok) and [r["type"] for r in wrong].count("awaitingHuman") == 1 and [r["type"] for r in wrong].count("runCancelled") == 1
+        and [r["type"] for r in wrong].count("WRONG_EVENT") == 2)
+    results["rundet_wrong_event_substitution_fails"] = raw_raises(wrong)
+    results["rundet_dropped_row_fails"] = raw_raises(rows_ok[:-1])
+    results["rundet_duplicated_row_same_count_fails"] = raw_raises(rows_ok[:2] + [dict(rows_ok[1])] + rows_ok[3:])
+    results["rundet_reordered_rows_same_counts_fail"] = raw_raises(rows_ok[:4] + [rows_ok[5], rows_ok[4]])
+    results["rundet_corrupted_ord_fails"] = raw_raises([dict(r, ord=2) if r["type"] == "awaitingHuman" else r for r in rows_ok])
+    results["rundet_missing_seq_fails"] = raw_raises([dict(r, seq=None) if r["type"] == "councilConvened" else r for r in rows_ok])
+    results["rundet_ignored_and_foreign_frames_are_excluded"] = expected_raw_rows(log, "r", ignored) == [
+        (10, "sessionStarted", None), (11, "unitPlanned", 1), (14, "councilConvened", 1), (15, "unitDistributed", 1), (16, "awaitingHuman", 1), (17, "runCancelled", None)]
+    results["rundet_expectation_is_seq_ordered_like_the_feed"] = expected_raw_rows(list(reversed(log)), "r", ignored) == expected_raw_rows(log, "r", ignored)
+    results["rundet_empty_log_fails"] = raw_raises(rows_ok, events=[])
     ok = all(results.values())
     print(json.dumps({"self_test": results, "ok": ok}, indent=2))
     return 0 if ok else 1
