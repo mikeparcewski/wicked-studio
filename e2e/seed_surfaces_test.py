@@ -46,9 +46,14 @@ What this rig is, and what it is not:
     (`~/.wicked-crew`, `~/.something-wicked`, `~/.wicked`, `~/wicked-interactive`, `~/.config/wicked-*`)
     modified DURING the run for this run's identifiers (stamp, temp-dir name, project/repo/run ids),
     and (c) diffs the live `:7701` daemon's run ids before/after (read-only GETs). Any hit is
-    `live_touched` and FAILS THE PROCESS regardless of the scenario table. What the daemon wrote
-    into the scratch HOME is listed as the `HOME-WRITES` finding — those are the writes that would
-    have landed in the operator's home without the scratch.
+    `live_touched` and FAILS THE PROCESS regardless of the scenario table. The scan's
+    `files_modified_during_run` count and `modified_sample` are the AMBIENT writes it observed in
+    the window — the live daemon's own log + WAL files, the operator's own tooling — which it
+    cannot attribute to a writer: context, never a verdict input (the output says so in
+    `attribution`; the committed report placeholders the operator-specific segments of those paths
+    — `wicked-<project>`, `<uuid>`, `<proj>`). What the daemon wrote into the scratch HOME is listed
+    as the `HOME-WRITES` finding — those are the writes that would have landed in the operator's
+    home without the scratch.
   - TEARDOWN ON EVERY EXIT PATH. The daemon runs in its own process group; Chromium is launched
     inside the same try/finally that owns it. On any exception or interruption: live runs on the
     disposable daemon are cancelled (responses verified, terminal state polled), the browser is
@@ -139,7 +144,11 @@ SEED_KEEP_TMP=1, SEED_HEADED=1. `--report-out <path>` writes the JSON report to 
 stdout, SCRUBBED (`scrub_report_text`): the operator's home → `~`, this checkout's root → `<repo>`
 (screenshot paths repo-relative), the per-user temp root → `$TMPDIR` — exact strings in both
 `/private` spellings and dashed forms, plus any `/var/folders/<x>/<y>` prefix by shape (truncated
-included). `--rescrub-report <path>` re-applies the current scrub to an existing report offline.
+included); the isolation scan's ambient `modified_sample` paths get stable placeholders for their
+operator-specific segments (`scrub_operator_path`: `wicked-<8 hex>` → `wicked-<project>`, UUIDs →
+`<uuid>`, `proj_<digits>` → `<proj>`) and the scan carries its `attribution` note. `--rescrub-report
+<path>` re-applies the current scrub to an existing report offline — a deterministic re-derivation
+(text scrub, then the JSON-aware pass, re-serialized as `--report-out` writes); a second pass is a no-op.
 
 `python3 e2e/seed_surfaces_test.py --self-test` runs the in-process checks of the harness's own
 safety plumbing (exit semantics, xfail hygiene, pid identity, gate oracle, fail-closed teardown,
@@ -2334,7 +2343,8 @@ class Rig:
         ]
         return {
             "roots": [str(r) for r in roots], "needles": list(dict.fromkeys(self.needles)),
-            "files_modified_during_run": len(modified), "modified_sample": modified[:20],
+            "files_modified_during_run": len(modified), "modified_sample": [scrub_operator_path(p) for p in modified[:20]],
+            "attribution": MODIFIED_ATTRIBUTION,
             "scan_errors": tree["scan_errors"],
             "identifier_hits": hits, "stamped_entries_in_live_state_home": stamped,
             "live_7701": {
@@ -5187,6 +5197,7 @@ def self_test() -> int:
         results["live_final_listing_error_is_lost"] = lost_500["live_7701"]["observation_lost"] is True
         kept = scan_probe({"reachable": True, "run_ids": ["r1"], "problems": {}}, {"reachable": True, "run_ids": ["r1"], "problems": {}})
         results["live_observation_kept_is_clean"] = kept["live_7701"]["observed"] is True and kept["live_7701"]["observation_lost"] is False and teardown_failures({"isolation_scan": kept}) == []
+        results["real_scan_output_carries_attribution_note"] = kept["attribution"] == MODIFIED_ATTRIBUTION and kept["modified_sample"] == [] and kept["files_modified_during_run"] == 0
         never = scan_probe({"reachable": False, "error": "refused", "run_ids": []}, {"reachable": False, "error": "refused", "run_ids": []})
         results["live_never_observed_is_not_lost"] = never["live_7701"]["observation_lost"] is False and never["live_7701"]["observed"] is False
     finally:
@@ -5223,6 +5234,37 @@ def self_test() -> int:
         results["rescrub_file_in_place_leaves_valid_json_without_residue"] = outcome["changed"] is True and json.loads(target.read_text())["source"] == "<repo>" and rescrub_report_file(target)["changed"] is False
     finally:
         shutil.rmtree(rescrub_dir, ignore_errors=True)
+    # 25b. ambient-path placeholders (Copilot on #211): the operator-specific SEGMENTS of `modified_sample`
+    #      — a garden project id, a UUID, an engine project id — become stable placeholders; product names
+    #      and the rig's own identifiers (`needles`) stay verbatim; the JSON-aware pass is scoped to
+    #      `isolation_scan`, inserts `attribution` after `modified_sample`, and is a no-op the second time.
+    #      Synthetic ids throughout — no real operator id is ever spelled in this file.
+    ambient = "~/.something-wicked/wicked-garden/projects/wicked-0badf00d/wicked-mem/emitted/01234567-89ab-cdef-0123-456789abcdef.json"
+    results["scrub_operator_path_placeholders_each_shape"] = (
+        scrub_operator_path(ambient) == "~/.something-wicked/wicked-garden/projects/wicked-<project>/wicked-mem/emitted/<uuid>.json"
+        and scrub_operator_path("~/.wicked-crew/projects/proj_178800000000000000/x") == "~/.wicked-crew/projects/<proj>/x"
+        and scrub_operator_path("~/.wicked-crew/interactive-drafts/proj_1788000000001-run-01234567-89AB-cdef-0123-456789abcdef") == "~/.wicked-crew/interactive-drafts/<proj>-run-<uuid>")
+    results["scrub_operator_path_leaves_product_names_and_short_ids"] = all(
+        scrub_operator_path(p) == p for p in ("~/.wicked-crew/core.db-wal", "~/.something-wicked/wicked-bus/bus.db-wal", "~/.wicked/memory.db.memext",
+                                              "$TMPDIR/seed-surfaces-22jwc682/idocs", "~/wicked-interactive/docs/wicked-crew-x", "wicked-0badf00/short", "proj_/x"))
+    results["scrub_operator_path_is_idempotent"] = scrub_operator_path(scrub_operator_path(ambient)) == scrub_operator_path(ambient)
+    scan_doc = {"setup": {"teardown": {"isolation_scan": {
+        "roots": ["~/.wicked-crew"], "needles": ["proj_178800000000000000", "01234567-89ab-cdef-0123-456789abcdef", "seed-surfaces-x"],
+        "files_modified_during_run": 2, "modified_sample": [ambient, "~/.wicked-crew/core.db-wal"], "scan_errors": [],
+        "identifier_hits": [{"file": "~/.wicked-crew/projects/proj_178800000000000000/x", "needle": "proj_178800000000000000"}],
+        "stamped_entries_in_live_state_home": ["interactive-drafts/proj_178800000000000000"], "live_7701": {}}}},
+        "scenarios": [{"id": "X", "detail": "run 01234567-89ab-cdef-0123-456789abcdef under proj_178800000000000000"}]}
+    first = scrub_report_json(scan_doc)
+    sc = scan_doc["setup"]["teardown"]["isolation_scan"]
+    results["rescrub_json_placeholders_only_the_ambient_sample"] = (
+        first is True and sc["modified_sample"] == [scrub_operator_path(ambient), "~/.wicked-crew/core.db-wal"]
+        and sc["needles"][0] == "proj_178800000000000000" and sc["identifier_hits"][0]["file"].endswith("proj_178800000000000000/x")
+        and sc["stamped_entries_in_live_state_home"] == ["interactive-drafts/proj_178800000000000000"]
+        and scan_doc["scenarios"][0]["detail"].endswith("under proj_178800000000000000"))
+    results["rescrub_json_inserts_attribution_after_modified_sample"] = (
+        sc["attribution"] == MODIFIED_ATTRIBUTION and list(sc)[list(sc).index("modified_sample") + 1] == "attribution")
+    results["rescrub_json_second_pass_is_noop"] = scrub_report_json(scan_doc) is False and sc["attribution"] == MODIFIED_ATTRIBUTION
+    results["rescrub_json_ignores_documents_without_a_scan"] = scrub_report_json({"setup": {}, "scenarios": [{"detail": ambient}]}) is False
     # 26. bridge termination is INDEPENDENT of metadata (codex r5 #1): the REAL `stop_bridge` with a scratch
     #     clone whose package.json is JSON `null` (the codex probe), a list, or garbage — and with the
     #     inspection itself raising — must STILL call terminate([4242]), never raise, and record the
@@ -5524,12 +5566,83 @@ def scrub_report_text(text: str) -> str:
     return text
 
 
+# What the isolation scan's `files_modified_during_run` / `modified_sample` ARE (Copilot on #211): the
+# writes under the operator-global stores that landed in the run window — the live :7701 daemon's own
+# log + WAL files, the operator's own tooling (garden auto-memorize, the bus WAL, `~/.wicked/memory.db*`)
+# — which the scan observes but cannot attribute to a writer. The isolation VERDICT is the identifier
+# scan (`identifier_hits`), the stamp check (`stamped_entries_in_live_state_home`) and the live run-id
+# diff (`live_7701`) → `live_touched`; the count is context, never a verdict input. Emitted with every
+# scan and stamped onto a committed report by `--rescrub-report`.
+MODIFIED_ATTRIBUTION = (
+    "ambient/unattributed: files under the operator-global stores modified during the run window by the "
+    "live :7701 daemon and the operator's own tooling; the scan observes them but cannot attribute them to "
+    "a writer. The isolation verdict is identifier_hits + stamped_entries_in_live_state_home + live_7701 "
+    "(-> live_touched), not this count."
+)
+# The operator-specific SEGMENTS of an ambient path, by shape: a wicked-garden project id (`wicked-` + 8
+# hex), a UUID (a session id, a run id), an engine-minted project id (`proj_` + digits).
+GARDEN_PROJECT_ID_RE = re.compile(r"\bwicked-[0-9a-f]{8}\b")
+UUID_RE = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+ENGINE_PROJECT_ID_RE = re.compile(r"\bproj_[0-9]+\b")
+
+
+def scrub_operator_path(path: str) -> str:
+    """Stable placeholders for the operator-specific segments of an AMBIENT path (`modified_sample`):
+    `wicked-<8 hex>` → `wicked-<project>`, a UUID → `<uuid>`, `proj_<digits>` → `<proj>`. Applied to the
+    ambient paths ONLY — the rig's own identifiers (`needles`, `identifier_hits`,
+    `stamped_entries_in_live_state_home`) are the proof and stay verbatim. Idempotent: no placeholder
+    matches any of the three shapes."""
+    path = GARDEN_PROJECT_ID_RE.sub("wicked-<project>", path)
+    path = UUID_RE.sub("<uuid>", path)
+    return ENGINE_PROJECT_ID_RE.sub("<proj>", path)
+
+
+def scrub_report_json(report: object) -> bool:
+    """The JSON-aware half of the scrub: every `isolation_scan` dict in the document gets its
+    `modified_sample` paths placeholdered (`scrub_operator_path`) and its `attribution` note (inserted
+    right after `modified_sample`, where a fresh scan emits it, when a report written before the note
+    existed lacks it). Scoped to the AMBIENT paths on purpose — `needles`, `identifier_hits` and
+    `stamped_entries_in_live_state_home` are the rig's own identifiers and stay verbatim. Mutates in
+    place; True when anything changed (a second pass over the same document returns False)."""
+    changed = False
+    stack: list[object] = [report]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            scan = node.get("isolation_scan")
+            if isinstance(scan, dict):
+                sample = scan.get("modified_sample")
+                if isinstance(sample, list):
+                    scrubbed = [scrub_operator_path(p) if isinstance(p, str) else p for p in sample]
+                    if scrubbed != sample:
+                        scan["modified_sample"] = scrubbed
+                        changed = True
+                if "attribution" not in scan:
+                    items = list(scan.items())
+                    at = next((i for i, (k, _) in enumerate(items) if k == "modified_sample"), len(items) - 1) + 1
+                    items.insert(at, ("attribution", MODIFIED_ATTRIBUTION))
+                    scan.clear()
+                    scan.update(items)
+                    changed = True
+                elif scan["attribution"] != MODIFIED_ATTRIBUTION:
+                    scan["attribution"] = MODIFIED_ATTRIBUTION
+                    changed = True
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return changed
+
+
 def rescrub_report_file(path: Path) -> dict:
-    """Apply `scrub_report_text` to an EXISTING report file in place (no re-run): the JSON must still
-    parse and no raw temp-root / repo-root / home spelling may survive. Returns what changed."""
+    """Apply the current scrub to an EXISTING report file in place (no re-run): `scrub_report_text`
+    over the text, then `scrub_report_json` over the parsed document, re-serialized exactly as
+    `--report-out` writes it (`json.dumps(indent=2)` + newline). The JSON must still parse and no raw
+    temp-root / repo-root / home spelling may survive. A deterministic re-derivation — a second pass
+    is a no-op. Returns what changed."""
     before = path.read_text(encoding="utf-8")
-    after = scrub_report_text(before)
-    json.loads(after)  # a scrub must never corrupt the artifact
+    report = json.loads(scrub_report_text(before))  # a scrub must never corrupt the artifact
+    scrub_report_json(report)
+    after = json.dumps(report, indent=2, default=str) + "\n"
     residue = [n for n in (str(REPO), "/var/folders/", str(REAL_HOME)) if n in after]
     if residue:
         raise RuntimeError(f"scrub left residue: {residue}")
@@ -5598,6 +5711,7 @@ def main(argv: list[str]) -> int:
         first = r["detail"].splitlines()[0] if r["detail"] else ""
         print(f"| {r['id']} | {r['title']} | {r['status'].upper()} | {r['seconds']} | {first.replace('|', '/')} |")
     print(f"\ncounts: {report['counts']}  live_touched: {len(report['live_touched'])}  teardown_failures: {len(report.get('teardown_failures') or [])}  ok: {report['ok']}\n")
+    scrub_report_json(report)  # idempotent over a fresh scan; keeps `--report-out` == its own `--rescrub-report`
     text = json.dumps(report, indent=2, default=str)
     print(text)
     if report_out:
