@@ -16,7 +16,9 @@
      "load1": 8.49,
      "swap_pct": 93.0,
      "active_runs": [],
-     "blocked_by": []
+     "blocked_by": [],
+     "swap_max_pct": 95,
+     "load1_max": 20
     }
    ],
    "cleared": true,
@@ -32,7 +34,9 @@
      "load1": 8.99,
      "swap_pct": 93.0,
      "active_runs": [],
-     "blocked_by": []
+     "blocked_by": [],
+     "swap_max_pct": 95,
+     "load1_max": 20
     }
    ],
    "cleared": true,
@@ -48,7 +52,9 @@
      "load1": 9.1,
      "swap_pct": 93.0,
      "active_runs": [],
-     "blocked_by": []
+     "blocked_by": [],
+     "swap_max_pct": 95,
+     "load1_max": 20
     }
    ],
    "cleared": true,
@@ -59,7 +65,7 @@
   "LT-1": {
    "scenario": "LT-1",
    "intent": "recon",
-   "result": "pass",
+   "result": "fail",
    "measured": {
     "landing_before": {
      "campaign_cards": 1,
@@ -151,15 +157,7 @@
       "awaitingHuman"
      ]
     },
-    "approve": {
-     "status": 200,
-     "body": {
-      "approve": true
-     },
-     "url": "/api/v1/runs/d293f4d7-1e45-4346-809a-d6f2107c6b18/gate"
-    },
     "panel_resolved_copy": "Intake gate answered \u2014 the campaign\u2019s progress lands on Campaigns, and the run itself is at d293f4d7.",
-    "extra_gates": [],
     "final_status": "completed",
     "wedged": false,
     "approve_to_terminal_s": 564,
@@ -230,26 +228,89 @@
       "SteeringGrid.tsx",
       "SteeringPage.tsx",
       "SteeringUsageBand.tsx",
-      "TestingLaunchPanel.tsx"
+      "TestingLaunchPanel.tsx",
+      "changelog-section.py",
+      "client.ts",
+      "dashboardKit.tsx",
+      "gates.ts",
+      "generate-testid-inventory.mjs",
+      "narrator.ts",
+      "prepare-dist.mjs",
+      "types.ts",
+      "useEventStream.ts",
+      "useLegacyRedirect.ts"
+     ],
+     "canonical_files": [
+      "e2e/studio_standalone_test.py",
+      "scripts/changelog-section.py",
+      "scripts/generate-testid-inventory.mjs",
+      "scripts/prepare-dist.mjs",
+      "src/App.tsx",
+      "src/api/campaigns.ts",
+      "src/api/client.ts",
+      "src/api/steering.ts",
+      "src/api/testing.ts",
+      "src/api/types.ts",
+      "src/components/CampaignScoreboard.tsx",
+      "src/components/CampaignsPage.tsx",
+      "src/components/DashboardTiles.tsx",
+      "src/components/GovernanceDashboard.tsx",
+      "src/components/HomeBoard.tsx",
+      "src/components/HomeCommand.tsx",
+      "src/components/MadeDashboard.tsx",
+      "src/components/NarratorFeed.tsx",
+      "src/components/ProjectDashboard.tsx",
+      "src/components/RunTimeline.tsx",
+      "src/components/RunsSection.tsx",
+      "src/components/SteeringGrid.tsx",
+      "src/components/SteeringPage.tsx",
+      "src/components/SteeringUsageBand.tsx",
+      "src/components/TestingLaunchPanel.tsx",
+      "src/components/dashboardKit.tsx",
+      "src/components/narrator.ts",
+      "src/hooks/useEventStream.ts",
+      "src/hooks/useLegacyRedirect.ts",
+      "src/store/gates.ts",
+      "src/store/runtime.ts"
      ],
      "nonexistent_paths": [],
      "names_real_files": true,
      "classifies": true,
      "deterministic_mentions": 24,
      "governed_mentions": 7,
-     "scenario_ids": [
-      "R-01",
-      "R-02"
-     ],
+     "scenario_ids": [],
      "scenario_lines": [
-      "`npm run lint` / `npm run typecheck` \u2192 clean",
-      "CI (`ci.yml`) = lint \u00b7 typecheck \u00b7 test \u00b7 build, no daemon, no crew checkout \u2014 deliberately decoupled (RAID R-01/R-02)",
-      "A live `wicked-crew` daemon **is** reachable right now at `:7701` (v0.7.25) \u2014 and it's tracking this very session as a r",
-      "*Key gap found**: `e2e/studio_standalone_test.py` (the one operator-run functional gate, per TEST-001 \u00a74) still asserts ",
-      "**#8** 1440\u00d7700 layout budget \u2014 needs Playwright viewport assertion; not jsdom-testable.",
-      "**#10** `e2e/studio_standalone_test.py` (3151 lines) still asserts the **pre-rebuild** DES-MERGE-001 surface (project sh",
-      "*No CLI bin** \u2014 `package.json` has no `bin` field (studio is a pure SPA). \"Entry points\" here means npm scripts (`dev`/`",
-      "*Priority gaps to close**: #1 and #4 have no dedicated unit test file (fold correctness is only asserted indirectly thro"
+      "npm test \u2192 237 files / 2442 tests green",
+      "Needs-you queue: severity order, dedupe (onboard-suppression, campaign-subtraction), windowing",
+      "Contradiction guard: 21 failed runs \u21d2 calm copy cannot render",
+      "KPI band folds/thresholds/deltas, essence-strip omission on absent wires, empty-portfolio state",
+      "Recent-activity narration reuse/ordering/cap",
+      "Nav rename: Execute/Vibe/Demo routes, redirects (/make\u2192/execute bare-only), mutually-exclusive Vibe/Demo pickers, /testi",
+      "Campaign\u2192Test rename: copy, constant rename, project-scoped auto-select",
+      "Memories stats band correctness on absent/present store coverage",
+      "1440\u00d7700 command-center layout budget (queue + KPI both visible, no scroll) \u2014 currently only \"verified by live screensho",
+      "Wire-contract drift: studio's pinned wicked-crew-api-types vs the live daemon's actual response shapes",
+      "Full standalone e2e golden path (launch \u2192 connect \u2192 list/open run \u2192 approve gate \u2192 live WS narration \u2192 evidence)",
+      "Live governed-run observation: spawn a real run through the daemon, watch the Home board's queue re-sort on gate arrival",
+      "npm test",
+      "#10 e2e/studio_standalone_test.py (3151 lines) still asserts the pre-rebuild DES-MERGE-001 surface (project shell, orche",
+      "WS reconnect/backoff, stale-socket guard, malformed-frame skip",
+      "awaitingHuman opens a gate, sessionCompleted prunes it, cache reconciles with GET /runs",
+      "unitPlanned records executor type for council UI; awaitingHuman/sessionCompleted runtime transitions",
+      "Narration strings for unitPlanned/awaitingHuman/sessionCompleted",
+      "GET/POST /runs + subresources (archive, gate, cancel, guidance, resume, deliver, inject) \u2014 request shape, error handling",
+      "/campaigns 404-tolerant probe (older daemon has no route)",
+      "/testing/recon, /testing/evals*, /testing/corpora/import",
+      "/repos* incl. onboard/graph/blast-radius/domain-graph",
+      "/steering/{dashboard,policies,memories} + legacy /steering/:type redirect",
+      "/runs/:id legacy bookmark \u2192 project-shell redirect",
+      "CampaignsPage UI: launch, scoreboard render, project auto-scope",
+      "Run detail rendering (timeline, output, gate chip, diff) inside the project shell",
+      "SteeringPage dashboard/grid/usage band",
+      "Home deck: KPI band, needs-you queue, recent activity (covered in phase 1)",
+      "Real WS frame shapes vs CoreEvent type union \u2014 does a live daemon ever send a type the fold doesn't switch on (additive-",
+      "End-to-end: connect \u2192 GET /runs reconcile \u2192 live awaitingHuman frame opens gate UI \u2192 approve \u2192 sessionCompleted frame cl",
+      "A real governed run (multi-CLI council) producing genuine unitPlanned\u2192awaitingHuman\u2192sessionCompleted frames end to end, "
      ],
      "surfaces": {
       "ws_events": true,
@@ -1398,15 +1459,15 @@
      "busEvent": null
     },
     "siblings_at_terminal": {
-     "new_runs": [],
-     "new_run_problems": [],
+     "attributable_siblings": [],
+     "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
      "sibling_acceptance": {}
     },
     "siblings_after_grace": {
-     "new_runs": [],
-     "new_run_problems": [],
+     "attributable_siblings": [],
+     "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
      "sibling_acceptance": {}
@@ -1457,7 +1518,26 @@
      "unitOutputCaptured",
      "unitOutputDelta",
      "unitPlanned"
-    ]
+    ],
+    "gate_response": {
+     "decision": "approve",
+     "status": 200,
+     "body": {
+      "approve": true
+     },
+     "url": "/api/v1/runs/d293f4d7-1e45-4346-809a-d6f2107c6b18/gate"
+    },
+    "gates": [
+     {
+      "ord": 1,
+      "first": true,
+      "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
+      "decision": "approve",
+      "reason": "no deliver/push/PR/merge/publish/release keyword in the gate prompt",
+      "status": 200
+     }
+    ],
+    "gates_seen": 1
    },
    "notes": [
     "the recon produced a plan but launched no sibling runs \u2014 the feature's copy promises otherwise"
@@ -1470,12 +1550,16 @@
     "e2e/artifacts/test-feature-live/LT-1-06-run-page.png",
     "e2e/artifacts/test-feature-live/LT-1-07-landing-after.png",
     "e2e/artifacts/test-feature-live/LT-1-08-scoreboard.png"
+   ],
+   "harness_ok": true,
+   "fail_reasons": [
+    "no attributable sibling runs after the approved recon completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)"
    ]
   },
   "LT-2": {
    "scenario": "LT-2",
    "intent": "campaign",
-   "result": "pass",
+   "result": "fail",
    "measured": {
     "landing_before": {
      "campaign_cards": 1,
@@ -1564,15 +1648,7 @@
       "awaitingHuman"
      ]
     },
-    "approve": {
-     "status": 200,
-     "body": {
-      "approve": true
-     },
-     "url": "/api/v1/runs/f8bc2bad-47fc-4971-8961-bb49acb1dc6b/gate"
-    },
     "panel_resolved_copy": "Intake gate answered \u2014 the campaign\u2019s progress lands on Campaigns, and the run itself is at f8bc2bad.",
-    "extra_gates": [],
     "final_status": "completed",
     "wedged": false,
     "approve_to_terminal_s": 190,
@@ -1632,22 +1708,63 @@
       "CenterDashboard.tsx",
       "ChatPanel.tsx",
       "HomeBoard.tsx",
-      "SteeringPage.tsx"
+      "SteeringPage.tsx",
+      "campaigns.ts",
+      "studio_standalone_test.py",
+      "testing.ts",
+      "useRoute.ts",
+      "useRuns.ts"
+     ],
+     "canonical_files": [
+      "e2e/studio_standalone_test.py",
+      "src/App.tsx",
+      "src/api/campaigns.ts",
+      "src/api/client.ts",
+      "src/api/testing.ts",
+      "src/components/CampaignsPage.tsx",
+      "src/components/CenterDashboard.tsx",
+      "src/components/ChatPanel.tsx",
+      "src/components/HomeBoard.tsx",
+      "src/components/SteeringPage.tsx",
+      "src/hooks/useEventStream.ts",
+      "src/hooks/useRoute.ts",
+      "src/hooks/useRuns.ts",
+      "src/store/gates.ts"
      ],
      "nonexistent_paths": [],
      "names_real_files": true,
      "classifies": true,
      "deterministic_mentions": 2,
      "governed_mentions": 12,
-     "scenario_ids": [],
+     "scenario_ids": [
+      "1.1",
+      "1.2",
+      "1.3",
+      "1.4",
+      "1.5",
+      "2.1",
+      "2.2",
+      "2.3",
+      "3.1",
+      "3.2",
+      "3.3",
+      "4.1",
+      "4.2"
+     ],
      "scenario_lines": [
-      "A specific set of files/changes you want scenario coverage for",
-      "**An explicit file/change set** you want scenario coverage for",
-      "Proposed test plan (scenarios, dependencies, classification)",
-      "1.2 `[TOOL]` Gap check: no `gates.store.test.ts` found in `tests/` \u2014 confirm `awaitingHuman`'s `choicesOf` parsing and `",
-      "1.5 `[AGENT]` Live-wire proof: drive a real governed run through `awaitingHuman \u2192 approve \u2192 sessionCompleted` against a ",
-      "3.1 `[TOOL]` Run each `package.json` script (`build`, `typecheck`, `lint`, `test`, `manifest:testids`, `prepare`) locall",
-      "*Net dependency structure:** all `[TOOL]` scenarios (1.1\u20131.4, 2.1\u20132.2, 3.1, 3.3, 4.1) are independent, need no daemon, a"
+      "Audit existing coverage of App.tsx's fan-out: tests/events-hydrate.test.ts, events-merge.test.ts, runtime.store.test.ts,",
+      "Gap check: no gates.store.test.ts found in tests/ \u2014 confirm awaitingHuman's choicesOf parsing and approaching-clear logi",
+      "Confirm unitPlanned's dual effect (runtime log line + LIFECYCLE_EVENTS-triggered debounced GET /runs in useRuns.ts) is c",
+      "Confirm sessionCompleted gate-clear + terminal UI state via RunTimeline.test.tsx.",
+      "Live-wire proof: drive a real governed run through awaitingHuman \u2192 approve \u2192 sessionCompleted against a live daemon and ",
+      "Diff campaigns.ts/testing.ts's self-flagged TEMPORARY mirrors against the currently-shipped wicked-crew-api-types versio",
+      "Confirm each named route has mocked-fetch unit coverage: client.resolver.test.ts, clientFiles.test.ts, testingRoutes.tes",
+      "Live route probe (GET /health,/runs,/campaigns,/repos,/projects, real POST /testing/recon launch) against a live daemon.",
+      "Run each package.json script (build, typecheck, lint, test, manifest:testids, prepare) locally \u2014 no daemon.",
+      "python3 e2e/studio_standalone_test.py \u2014 the actual release-gate CLI script; builds studio alone, serves dist/ standalone",
+      "Staleness audit of the other ~57 e2e/*.py slice scripts (read-only, no execution).",
+      "Route-level unit coverage: /testing/campaigns \u2192 CampaignsPage.test.tsx, CampaignScoreboard.test.tsx, TestingLaunch.test.",
+      "Cross-page live walkthrough of one governed run's lifecycle (home deck \u2192 /runs/:id mid-run \u2192 gate approve \u2192 rollup on /t"
      ],
      "surfaces": {
       "ws_events": true,
@@ -2734,15 +2851,15 @@
      "busEvent": null
     },
     "siblings_at_terminal": {
-     "new_runs": [],
-     "new_run_problems": [],
+     "attributable_siblings": [],
+     "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
      "sibling_acceptance": {}
     },
     "siblings_after_grace": {
-     "new_runs": [],
-     "new_run_problems": [],
+     "attributable_siblings": [],
+     "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
      "sibling_acceptance": {}
@@ -2790,7 +2907,26 @@
      "unitOutputCaptured",
      "unitOutputDelta",
      "unitPlanned"
-    ]
+    ],
+    "gate_response": {
+     "decision": "approve",
+     "status": 200,
+     "body": {
+      "approve": true
+     },
+     "url": "/api/v1/runs/f8bc2bad-47fc-4971-8961-bb49acb1dc6b/gate"
+    },
+    "gates": [
+     {
+      "ord": 1,
+      "first": true,
+      "prompt": "Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs \u2014 and run the approved",
+      "decision": "approve",
+      "reason": "no deliver/push/PR/merge/publish/release keyword in the gate prompt",
+      "status": 200
+     }
+    ],
+    "gates_seen": 1
    },
    "notes": [
     "the campaign produced a plan but launched no sibling runs \u2014 the feature's copy promises otherwise"
@@ -2803,12 +2939,17 @@
     "e2e/artifacts/test-feature-live/LT-2-06-run-page.png",
     "e2e/artifacts/test-feature-live/LT-2-07-landing-after.png",
     "e2e/artifacts/test-feature-live/LT-2-08-scoreboard.png"
+   ],
+   "harness_ok": true,
+   "fail_reasons": [
+    "no attributable sibling runs after the approved campaign completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)",
+    "no engine campaign registered for label recon-mttnf3s6-99e928c5 (campaignRegistered=false)"
    ]
   },
   "LT-3": {
    "scenario": "LT-3",
    "intent": "recon",
-   "result": "pass",
+   "result": "fail",
    "measured": {
     "landing_before": {
      "campaign_cards": 1,
@@ -2897,15 +3038,7 @@
       "awaitingHuman"
      ]
     },
-    "approve": {
-     "status": 200,
-     "body": {
-      "approve": true
-     },
-     "url": "/api/v1/runs/d12adb6c-e4be-430a-b0a7-666db5634112/gate"
-    },
     "panel_resolved_copy": "Intake gate answered \u2014 the campaign\u2019s progress lands on Campaigns, and the run itself is at d12adb6c.",
-    "extra_gates": [],
     "final_status": "completed",
     "wedged": false,
     "approve_to_terminal_s": 210,
@@ -2983,7 +3116,46 @@
       "HomeBoard.tsx",
       "RunTimeline.tsx",
       "SteeringPage.tsx",
-      "TestingPage.tsx"
+      "TestingPage.tsx",
+      "interactive_wire_contract_test.py",
+      "prepare-dist.mjs",
+      "studio_standalone_test.py",
+      "testing.ts",
+      "useEventStream.ts",
+      "useRoute.ts",
+      "uxfix_fixture.py"
+     ],
+     "canonical_files": [
+      "e2e/interactive_wire_contract_test.py",
+      "e2e/studio_standalone_test.py",
+      "e2e/ux_sliceR_test.py",
+      "e2e/uxfix_fixture.py",
+      "scripts/changelog-section.py",
+      "scripts/prepare-dist.mjs",
+      "src/App.tsx",
+      "src/api/campaigns.ts",
+      "src/api/client.ts",
+      "src/api/steering.ts",
+      "src/api/testing.ts",
+      "src/api/types.ts",
+      "src/components/CampaignScoreboard.tsx",
+      "src/components/CampaignsPage.tsx",
+      "src/components/CenterDashboard.tsx",
+      "src/components/HomeBoard.tsx",
+      "src/components/RunTimeline.tsx",
+      "src/components/SteeringPage.tsx",
+      "src/components/TestingPage.tsx",
+      "src/hooks/useEventStream.ts",
+      "src/hooks/useRoute.ts",
+      "src/store/annotations.ts",
+      "src/store/campaigns.ts",
+      "src/store/docThread.ts",
+      "src/store/elicitations.ts",
+      "src/store/events.ts",
+      "src/store/gates.ts",
+      "src/store/liveChats.ts",
+      "src/store/notifications.ts",
+      "src/store/runtime.ts"
      ],
      "nonexistent_paths": [],
      "names_real_files": true,
@@ -2992,10 +3164,28 @@
      "governed_mentions": 5,
      "scenario_ids": [],
      "scenario_lines": [
-      "**`tests/`** \u2014 220+ Vitest specs (jsdom), covering zustand stores, API client parsing, and component behavior. Includes ",
-      "`interactive_wire_contract_test.py` \u2014 spawns a real `wicked-interactive` bridge from a sibling checkout; asserts studio'",
-      "Standard gates: `npm run lint`, `npm run typecheck`, `npm run build` \u2014 all deterministic, all required to merge per CI m",
-      "*Gaps to decide on before launch**: (1) `useEventStream.ts` has no direct unit test \u2014 recommend adding one; (2) confirm "
+      "tests/ \u2014 220+ Vitest specs (jsdom), covering zustand stores, API client parsing, and component behavior. Includes tests/",
+      "Lint / typecheck / build",
+      "Vitest unit + component specs",
+      "testid-inventory.json drift check",
+      "Self-contained e2e slice gates (ux/ux2/uxfix/feedback*)",
+      "Visual regression (vision_slice*)",
+      "Standalone daemon integration (studio_standalone_test.py)",
+      "Interactive wire contract",
+      "New-feature spec authoring (no existing testid/spec covers it)",
+      "Selector-drift repair (existing spec fails because a testid renamed)",
+      "Subjective/UX judgment not reducible to a fixed assertion (e.g., \"does this feel right,\" ambiguous DES-* interpretation)",
+      "WS socket lifecycle (reconnect/stale-gate/malformed-frame)",
+      "CoreEvent fold fan-out incl. awaitingHuman/unitPlanned/sessionCompleted",
+      "Per-store ingest reducers",
+      "/api/v1 request/response shape per domain",
+      "manifest:testids / prepare-dist scripts",
+      "/testing/campaigns UI (landing + scoreboard)",
+      "/runs/:id gate approve/reject + timeline",
+      "/steering policies/memories + proposals",
+      "Home deck (board) live re-sort/headline updates",
+      "Live-daemon full flow (list\u2192launch\u2192WS events\u2192gate\u2192evidence)",
+      "New/changed testid or selector-drift repair for any of the above pages"
      ],
      "surfaces": {
       "ws_events": true,
@@ -4057,15 +4247,15 @@
      "busEvent": null
     },
     "siblings_at_terminal": {
-     "new_runs": [],
-     "new_run_problems": [],
+     "attributable_siblings": [],
+     "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
      "sibling_acceptance": {}
     },
     "siblings_after_grace": {
-     "new_runs": [],
-     "new_run_problems": [],
+     "attributable_siblings": [],
+     "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
      "sibling_acceptance": {}
@@ -4112,7 +4302,26 @@
      "unitOutputCaptured",
      "unitOutputDelta",
      "unitPlanned"
-    ]
+    ],
+    "gate_response": {
+     "decision": "approve",
+     "status": 200,
+     "body": {
+      "approve": true
+     },
+     "url": "/api/v1/runs/d12adb6c-e4be-430a-b0a7-666db5634112/gate"
+    },
+    "gates": [
+     {
+      "ord": 1,
+      "first": true,
+      "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
+      "decision": "approve",
+      "reason": "no deliver/push/PR/merge/publish/release keyword in the gate prompt",
+      "status": 200
+     }
+    ],
+    "gates_seen": 1
    },
    "notes": [
     "the recon produced a plan but launched no sibling runs \u2014 the feature's copy promises otherwise"
@@ -4127,30 +4336,28 @@
     "e2e/artifacts/test-feature-live/LT-3-08-scoreboard.png"
    ],
    "consistency_vs_LT-1": {
-    "files_overlap_pct": 32.6,
+    "files_overlap_pct": 38.6,
     "files_only_a": [
-     "DashboardTiles.tsx",
-     "GovernanceDashboard.tsx",
-     "HomeCommand.tsx",
-     "MadeDashboard.tsx",
-     "NarratorFeed.tsx",
-     "ProjectDashboard.tsx",
-     "RunsSection.tsx",
-     "SteeringGrid.tsx",
-     "SteeringUsageBand.tsx",
-     "TestingLaunchPanel.tsx",
-     "src/components/narrator.ts"
+     "scripts/generate-testid-inventory.mjs",
+     "src/components/DashboardTiles.tsx",
+     "src/components/GovernanceDashboard.tsx",
+     "src/components/HomeCommand.tsx",
+     "src/components/MadeDashboard.tsx",
+     "src/components/NarratorFeed.tsx",
+     "src/components/ProjectDashboard.tsx",
+     "src/components/RunsSection.tsx",
+     "src/components/SteeringGrid.tsx",
+     "src/components/SteeringUsageBand.tsx",
+     "src/components/TestingLaunchPanel.tsx",
+     "src/components/dashboardKit.tsx",
+     "src/components/narrator.ts",
+     "src/hooks/useLegacyRedirect.ts"
     ],
     "files_only_b": [
-     "CenterDashboard.tsx",
-     "TestingPage.tsx",
+     "e2e/interactive_wire_contract_test.py",
      "e2e/ux_sliceR_test.py",
-     "scripts/changelog-section.py",
-     "src/App.tsx",
-     "src/api/types.ts",
+     "e2e/uxfix_fixture.py",
      "src/components/CenterDashboard.tsx",
-     "src/components/HomeBoard.tsx",
-     "src/components/SteeringPage.tsx",
      "src/components/TestingPage.tsx",
      "src/hooks/useRoute.ts",
      "src/store/annotations.ts",
@@ -4162,30 +4369,30 @@
      "src/store/notifications.ts"
     ],
     "files_common": [
-     "App.tsx",
-     "CampaignScoreboard.tsx",
-     "CampaignsPage.tsx",
-     "HomeBoard.tsx",
-     "RunTimeline.tsx",
-     "SteeringPage.tsx",
      "e2e/studio_standalone_test.py",
+     "scripts/changelog-section.py",
+     "scripts/prepare-dist.mjs",
+     "src/App.tsx",
      "src/api/campaigns.ts",
      "src/api/client.ts",
      "src/api/steering.ts",
      "src/api/testing.ts",
+     "src/api/types.ts",
+     "src/components/CampaignScoreboard.tsx",
+     "src/components/CampaignsPage.tsx",
+     "src/components/HomeBoard.tsx",
+     "src/components/RunTimeline.tsx",
+     "src/components/SteeringPage.tsx",
      "src/hooks/useEventStream.ts",
      "src/store/gates.ts",
      "src/store/runtime.ts"
     ],
-    "scenario_ids_overlap_pct": 0.0,
-    "ids_a": [
-     "R-01",
-     "R-02"
-    ],
+    "scenario_ids_overlap_pct": null,
+    "ids_a": [],
     "ids_b": [],
     "scenario_titles_overlap_pct": 0.0,
-    "titles_a": 8,
-    "titles_b": 4,
+    "titles_a": 31,
+    "titles_b": 22,
     "units_planned": [
      3,
      3
@@ -4204,7 +4411,11 @@
       "ui_pages": true
      }
     ]
-   }
+   },
+   "harness_ok": true,
+   "fail_reasons": [
+    "no attributable sibling runs after the approved recon completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)"
+   ]
   },
   "LT-4": {
    "scenario": "LT-4",
@@ -4369,5 +4580,170 @@
    "wicked-core": "0.4.0",
    "wicked-estate": "0.15.1"
   }
- }
+ },
+ "preflight_policy": {
+  "swap_max_pct": 95,
+  "contract_swap_max_pct": 85,
+  "load1_max": 20,
+  "active_runs_max": 0,
+  "source": "coordinator relaxation, hard-coded 95 % in the harness at launch time (predates SWAP_MAX_PCT)",
+  "contract_deviation": "swap gate was 95%, not the brief's 85% \u2014 the coordinator authorized the relaxation mid-run because this host idles at ~93% swap; all three recorded launches read 93.0% swap and cleared ONLY because of it; under the now-default 85% none of them would have launched"
+ },
+ "revisions": [
+  {
+   "date": "2026-09-09",
+   "reason": "codex REVISE on PR #215 \u2014 offline re-derivation over the committed verbatim plan files; no new runs, no daemon writes",
+   "changes": [
+    {
+     "field": "preflight_policy + preflights[].readings[].swap_max_pct",
+     "old": null,
+     "new": 95,
+     "why": "backfilled: the threshold each recorded reading was judged against was not recorded at the time"
+    },
+    {
+     "field": "LT-1.plan.files (identity set)",
+     "old": "25 (9 paths + 16 basenames, mixed identities)",
+     "new": "31 canonical repo paths",
+     "why": "bare basenames (now incl. lower-case source names) canonicalized to their unique repo path; tests/ never counted"
+    },
+    {
+     "field": "LT-1.plan.scenario_lines",
+     "old": 8,
+     "new": 31,
+     "why": "plan-table rows now counted; headings/bold labels/survey bullets without a checking verb + surface noun dropped"
+    },
+    {
+     "field": "LT-1.plan.scenario_ids",
+     "old": [
+      "R-01",
+      "R-02"
+     ],
+     "new": [],
+     "why": "only LEADING ids of accepted scenario items count (R-01/R-02 were RAID risk ids inside a survey bullet)"
+    },
+    {
+     "field": "LT-1.measured.gates[] / gates_seen / gate_response",
+     "old": "approve + extra_gates[]",
+     "new": "gates[1] (intake gate, approve, reason recorded)",
+     "why": "one gate policy for every gate; the recorded intake prompt re-evaluated under gate_decision \u2192 approve (agrees with what was clicked)"
+    },
+    {
+     "field": "LT-1.measured.siblings_*",
+     "old": "new_runs: []",
+     "new": "attributable_siblings: [], unrelated_new_runs: []",
+     "why": "siblings are attributed by relationship, not appearance; the recorded samples had zero new runs of either kind"
+    },
+    {
+     "field": "LT-1.result",
+     "old": "pass",
+     "new": "fail (harness_ok=True)",
+     "why": "'pass' now REQUIRES attributable sibling runs with verdicts (+ a registered campaign for New test); recon completion + text heuristics is harness_ok, not pass"
+    },
+    {
+     "field": "LT-2.plan.files (identity set)",
+     "old": "14 (8 paths + 6 basenames, mixed identities)",
+     "new": "14 canonical repo paths",
+     "why": "bare basenames (now incl. lower-case source names) canonicalized to their unique repo path; tests/ never counted"
+    },
+    {
+     "field": "LT-2.plan.scenario_lines",
+     "old": 7,
+     "new": 13,
+     "why": "plan-table rows now counted; headings/bold labels/survey bullets without a checking verb + surface noun dropped"
+    },
+    {
+     "field": "LT-2.plan.scenario_ids",
+     "old": [],
+     "new": [
+      "1.1",
+      "1.2",
+      "1.3",
+      "1.4",
+      "1.5",
+      "2.1",
+      "2.2",
+      "2.3",
+      "3.1",
+      "3.2",
+      "3.3",
+      "4.1",
+      "4.2"
+     ],
+     "why": "only LEADING ids of accepted scenario items count (R-01/R-02 were RAID risk ids inside a survey bullet)"
+    },
+    {
+     "field": "LT-2.measured.gates[] / gates_seen / gate_response",
+     "old": "approve + extra_gates[]",
+     "new": "gates[1] (intake gate, approve, reason recorded)",
+     "why": "one gate policy for every gate; the recorded intake prompt re-evaluated under gate_decision \u2192 approve (agrees with what was clicked)"
+    },
+    {
+     "field": "LT-2.measured.siblings_*",
+     "old": "new_runs: []",
+     "new": "attributable_siblings: [], unrelated_new_runs: []",
+     "why": "siblings are attributed by relationship, not appearance; the recorded samples had zero new runs of either kind"
+    },
+    {
+     "field": "LT-2.result",
+     "old": "pass",
+     "new": "fail (harness_ok=True)",
+     "why": "'pass' now REQUIRES attributable sibling runs with verdicts (+ a registered campaign for New test); recon completion + text heuristics is harness_ok, not pass"
+    },
+    {
+     "field": "LT-3.plan.files (identity set)",
+     "old": "32 (24 paths + 8 basenames, mixed identities)",
+     "new": "30 canonical repo paths",
+     "why": "bare basenames (now incl. lower-case source names) canonicalized to their unique repo path; tests/ never counted"
+    },
+    {
+     "field": "LT-3.plan.scenario_lines",
+     "old": 4,
+     "new": 22,
+     "why": "plan-table rows now counted; headings/bold labels/survey bullets without a checking verb + surface noun dropped"
+    },
+    {
+     "field": "LT-3.measured.gates[] / gates_seen / gate_response",
+     "old": "approve + extra_gates[]",
+     "new": "gates[1] (intake gate, approve, reason recorded)",
+     "why": "one gate policy for every gate; the recorded intake prompt re-evaluated under gate_decision \u2192 approve (agrees with what was clicked)"
+    },
+    {
+     "field": "LT-3.measured.siblings_*",
+     "old": "new_runs: []",
+     "new": "attributable_siblings: [], unrelated_new_runs: []",
+     "why": "siblings are attributed by relationship, not appearance; the recorded samples had zero new runs of either kind"
+    },
+    {
+     "field": "LT-3.result",
+     "old": "pass",
+     "new": "fail (harness_ok=True)",
+     "why": "'pass' now REQUIRES attributable sibling runs with verdicts (+ a registered campaign for New test); recon completion + text heuristics is harness_ok, not pass"
+    },
+    {
+     "field": "LT-3.consistency_vs_LT-1.files_overlap_pct",
+     "old": 32.6,
+     "new": 38.6,
+     "why": "Jaccard over canonical repo paths (App.tsx \u2261 src/App.tsx), lower-case source basenames included, tests/ excluded"
+    },
+    {
+     "field": "LT-3.consistency_vs_LT-1.scenario_ids_overlap_pct",
+     "old": 0.0,
+     "new": null,
+     "why": "neither plan carries leading scenario ids (R-01/R-02 were RAID ids) \u2192 undefined, not 0"
+    },
+    {
+     "field": "LT-3.consistency_vs_LT-1.titles_a",
+     "old": 8,
+     "new": 31,
+     "why": "LT-1 scenario items re-extracted"
+    },
+    {
+     "field": "LT-3.consistency_vs_LT-1.titles_b",
+     "old": 4,
+     "new": 22,
+     "why": "LT-3 scenario items re-extracted"
+    }
+   ]
+  }
+ ]
 }

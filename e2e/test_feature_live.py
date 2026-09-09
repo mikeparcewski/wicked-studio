@@ -24,19 +24,40 @@ Scenarios (see docs/testing/test-feature-live-report.md for the results):
 HARD RULES this harness enforces on itself:
   * SERIALIZATION PREFLIGHT before EVERY governed launch — exactly three gates: (1) zero runs in
     running/executing/awaiting_human on the daemon, (2) 1-minute load average < 20, (3) swap used
-    < 95 %. (`vm_stat` free/available memory is recorded for the report but NOT gated on — macOS
+    < 85 % — the contract default (brief-test-feature-live.md: "refuse to run if … swap > 85%").
+    ONLY an explicit `SWAP_MAX_PCT` env var moves the swap gate, and the move is recorded in every
+    preflight reading and in `report.preflight_policy.contract_deviation` — never a silent constant
+    edit. (`vm_stat` free/available memory is recorded for the report but NOT gated on — macOS
     keeps free pages near zero by design.) Polls every 60 s for up to 20 min; if the gate never
     clears the harness STOPS and reports "preflight never cleared" with the readings.
   * Exactly one governed run in flight at a time; the next launch waits for a terminal/gated state.
-  * Never approves a deliver/push/PR/merge gate — any such gate is REJECTED through the UI card.
+  * ONE gate policy for EVERY gate, the intake gate included (`gate_decision`): a prompt asking to
+    deliver / push / open a PR / merge / publish / release is REJECTED through the UI card; any
+    other gate (plan approval, pre-execution unit gate) is approved. Every decision is recorded in
+    the scenario's `measured.gates[]` with the prompt excerpt and the reason.
   * Never registers/modifies/deletes repos or projects; read-only GETs for every assertion.
   * Never kills a wedged run (no events for 10 min while executing) — it is reported.
+
+VERDICTS are split (`derive_result`): `harness_ok` says the harness did its job (launch → gate on
+the UI → decision → terminal; no wedge, no blocker); `result` is the FEATURE contract —
+`"pass"` REQUIRES attributable sibling runs that reach verdicts (and, for "New test", a registered
+campaign); otherwise `"fail"` with `fail_reasons[]`. Siblings are attributed by a daemon-visible
+relationship (`attribute_siblings`), never by "a run appeared"; attributable siblings are
+followed to a terminal state before their acceptance is sampled. report.json is written
+atomically after every scenario and on every exit path (an abort is recorded in `aborted`).
 
 Usage: python3 e2e/test_feature_live.py            (playwright + chromium must be installed)
 Env:   STUDIO_URL (default http://localhost:7701), TARGET_REPO (default wicked-studio),
        ONLY=LT-1,LT-2 (subset), PREFLIGHT_MAX_MIN (default 20), GATE_TIMEOUT_MIN (default 25),
-       RUN_TIMEOUT_MIN (default 60), SIBLING_GRACE_S (default 120).
+       RUN_TIMEOUT_MIN (default 60), SIBLING_GRACE_S (default 120), SIBLING_FOLLOW_MAX_S
+       (default 900), SWAP_MAX_PCT (default 85 — a contract deviation when set),
+       TEST_PROBLEM_PREFIX (default "" — a marker a sibling's `problem` would carry before the brief).
 Prints a JSON report to stdout; artifacts land in e2e/artifacts/test-feature-live/.
+
+Offline self-test (no daemon, no Playwright, no network; studio's CI runs no Python step, so run
+it by hand before pushing a harness change):
+    python3 -m unittest e2e/test_feature_live_selftest.py -v
+    python3 -m py_compile e2e/test_feature_live.py
 """
 from __future__ import annotations
 
@@ -49,6 +70,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +82,14 @@ PREFLIGHT_MAX_S = int(float(os.environ.get("PREFLIGHT_MAX_MIN", "20")) * 60)
 GATE_TIMEOUT_S = int(float(os.environ.get("GATE_TIMEOUT_MIN", "25")) * 60)
 RUN_TIMEOUT_S = int(float(os.environ.get("RUN_TIMEOUT_MIN", "60")) * 60)
 SIBLING_GRACE_S = int(os.environ.get("SIBLING_GRACE_S", "120"))
+SIBLING_FOLLOW_MAX_S = int(os.environ.get("SIBLING_FOLLOW_MAX_S", "900"))
+TEST_PROBLEM_PREFIX = os.environ.get("TEST_PROBLEM_PREFIX", "")
+# The contract (brief-test-feature-live.md): "the harness must refuse to run if … swap > 85%".
+# The three recorded launches (d293f4d7…, f8bc2bad…, d12adb6c…) cleared under a 95 % threshold the
+# coordinator authorized mid-run because this host idles at ~93 % swap — that relaxation is a
+# recorded contract deviation (see `preflight_policy`), not the default.
+SWAP_MAX_PCT_CONTRACT = 85
+LOAD1_MAX = 20
 WEDGE_S = 10 * 60
 ACTIVE = {"running", "executing", "awaiting_human", "planning", "pending", "starting"}
 TERMINAL = {"completed", "failed", "cancelled", "canceled", "rejected"}
@@ -247,27 +277,63 @@ def readings() -> dict:
     }
 
 
-def preflight_ok(r: dict) -> list[str]:
+def preflight_policy(env: Mapping[str, str] | None = None) -> dict:
+    """The capacity thresholds in force for this invocation. The swap gate is the contract's 85 %
+    unless an EXPLICIT `SWAP_MAX_PCT` env var moves it — and then the report says so
+    (`contract_deviation`), because every launch cleared under a relaxed gate is evidence gathered
+    outside the brief's terms."""
+    env = os.environ if env is None else env
+    raw = (env.get("SWAP_MAX_PCT") or "").strip()
+    swap_max: float = SWAP_MAX_PCT_CONTRACT
+    if raw:
+        try:
+            swap_max = float(raw)
+        except ValueError:
+            raise SystemExit(f"SWAP_MAX_PCT={raw!r} is not a number") from None
+        if not 0 < swap_max <= 100:
+            raise SystemExit(f"SWAP_MAX_PCT={raw!r} must be in (0, 100]")
+        if swap_max.is_integer():
+            swap_max = int(swap_max)
+    policy: dict = {
+        "swap_max_pct": swap_max,
+        "contract_swap_max_pct": SWAP_MAX_PCT_CONTRACT,
+        "load1_max": LOAD1_MAX,
+        "active_runs_max": 0,
+        "source": "SWAP_MAX_PCT env" if raw else "contract default",
+    }
+    if swap_max != SWAP_MAX_PCT_CONTRACT:
+        policy["contract_deviation"] = (
+            f"swap gate is {swap_max}% (SWAP_MAX_PCT), not the brief's {SWAP_MAX_PCT_CONTRACT}% — "
+            "every launch in this report cleared under the relaxed threshold")
+    return policy
+
+
+def preflight_ok(r: dict, policy: dict | None = None) -> list[str]:
+    policy = policy or preflight_policy()
     why = []
-    if r["active_runs"]:
+    if len(r["active_runs"]) > policy["active_runs_max"]:
         why.append(f"active runs: {r['active_runs']}")
     # No free-memory gate: macOS keeps `Pages free` near zero by design (58 MB–2 GB swings were
     # observed at load 9–14) — `free_mb`/`available_mb` are RECORDED for the report, never gated on.
-    if r["load1"] >= 20:
-        why.append(f"load1 {r['load1']} >= 20")
-    if r["swap_pct"] >= 95:
-        why.append(f"swap {r['swap_pct']}% >= 95%")
+    if r["load1"] >= policy["load1_max"]:
+        why.append(f"load1 {r['load1']} >= {policy['load1_max']}")
+    if r["swap_pct"] >= policy["swap_max_pct"]:
+        why.append(f"swap {r['swap_pct']}% >= {policy['swap_max_pct']}%")
     return why
 
 
 def preflight(tag: str) -> bool:
     started = time.time()
+    policy = REPORT.setdefault("preflight_policy", preflight_policy())
     entry = {"scenario": tag, "readings": [], "cleared": False, "waited_s": 0}
     REPORT["preflights"].append(entry)
     while True:
         r = readings()
-        why = preflight_ok(r)
-        entry["readings"].append({**r, "blocked_by": why})
+        why = preflight_ok(r, policy)
+        # Every reading carries the threshold it was judged against — a reader of the report must
+        # never have to guess whether 93 % swap "cleared" under 85 or under a relaxed gate.
+        entry["readings"].append({**r, "swap_max_pct": policy["swap_max_pct"], "load1_max": policy["load1_max"],
+                                  "blocked_by": why})
         if not why:
             entry["cleared"] = True
             entry["waited_s"] = int(time.time() - started)
@@ -312,34 +378,135 @@ def planned_units(events: list[dict]) -> list[dict]:
             for e in events if e.get("type") == "unitPlanned"]
 
 
-def repo_files() -> tuple[set[str], set[str]]:
-    out = subprocess.run(["git", "-C", str(ROOT), "ls-files"], capture_output=True, text=True).stdout
-    paths = set(out.split())
-    return paths, {p.rsplit("/", 1)[-1] for p in paths}
+RepoIndex = tuple[set[str], dict[str, list[str]]]
+_REPO_INDEX: RepoIndex | None = None
 
 
-def analyze_plan(text: str) -> dict:
-    paths, basenames = repo_files()
-    path_hits = set(re.findall(r"(?<![\w/])((?:src|e2e|docs|scripts|public|\.github)/[\w./\-\[\]]+\.(?:tsx?|py|json|md|css|html|ya?ml))", text))
-    bare = set(re.findall(r"\b([A-Z][A-Za-z0-9]+\.(?:tsx?))\b", text))
-    real_paths = sorted(p for p in path_hits if p in paths)
-    real_bare = sorted(b for b in bare if b in basenames)
-    fake_paths = sorted(p for p in path_hits if p not in paths)
-    low = text.lower()
-    id_re = r"\b(?:S|SC|SCN|T|TC|TS|LT|R|D|G)-?\d{1,3}\b"
-    scenario_lines = []
-    for line in text.splitlines():
+def repo_files() -> RepoIndex:
+    """The repo's tracked paths plus a basename → paths index (cached; one `git ls-files`)."""
+    global _REPO_INDEX
+    if _REPO_INDEX is None:
+        out = subprocess.run(["git", "-C", str(ROOT), "ls-files"], capture_output=True, text=True).stdout
+        paths = set(out.split())
+        by_base: dict[str, list[str]] = {}
+        for p in paths:
+            by_base.setdefault(p.rsplit("/", 1)[-1], []).append(p)
+        _REPO_INDEX = (paths, by_base)
+    return _REPO_INDEX
+
+
+def canonical_files(real_paths: list[str], real_bare: list[str], index: RepoIndex) -> list[str]:
+    """One identity per file: a bare `App.tsx` IS `src/App.tsx` when that basename is unique in the
+    repo; an ambiguous basename stays a basename (and is dropped when one of its paths is already
+    named). File-overlap Jaccard is computed over THIS set — a plan that says `App.tsx` and one that
+    says `src/App.tsx` name the same file."""
+    _, by_base = index
+    canon = set(real_paths)
+    for b in real_bare:
+        hits = by_base.get(b, [])
+        if len(hits) == 1:
+            canon.add(hits[0])
+        elif not any(h in canon for h in hits):
+            canon.add(b)
+    return sorted(canon)
+
+
+# What a test scenario looks like (besides carrying an id): a verb from the checking vocabulary AND
+# a noun from the four asked surfaces. A survey bullet, a heading, a table-of-contents line or a
+# toolchain path has neither and is not a scenario.
+SCENARIO_ID_RE = r"(?:\b(?:S|SC|SCN|T|TC|TS|LT|R|D|G)-?\d{1,3}\b|(?<![\d.])\d{1,2}\.\d{1,2}(?![\d.]))"
+SCENARIO_VERB_RE = re.compile(r"\b(?:verif(?:y|ies|ied)|assert(?:s|ed|ing)?|check(?:s|ed|ing)?|should|expect(?:s|ed)?|tests?)\b", re.I)
+SURFACE_NOUN_RE = re.compile(
+    r"/ws\b|websocket|socket|\bframes?\b|coreevent|awaitinghuman|unitplanned|sessioncompleted|\bevents?\b|\bfold\b|\bstores?\b"
+    r"|/api/v1|\broutes?\b|\bendpoints?\b|\b(?:get|post|patch)\s+/|/runs\b|/campaigns\b|/repos\b|/projects\b|/testing\b|/steering\b|/health\b"
+    r"|\bcli\b|\bnpm\b|\bnpx\b|\bscripts?\b|\bbin\b|wicked-crew serve"
+    r"|\bpages?\b|\bui\b|\bdeck\b|\bboard\b|\bcomponents?\b|\brender(?:s|ing|ed)?\b|\btestid|playwright|\be2e\b|\bgates?\b",
+    re.I)
+_BULLET_RE = re.compile(r"^(?:[-*•]|\d{1,3}[.)])\s+(\S.*)$")
+_TAG_RE = re.compile(r"\[(?:TOOL|AGENT)\]|\*\*|`")
+_RULE_RE = re.compile(r"^\|?\s*:?-{2,}")
+# Bare basenames resolve only into the roots the path pattern already counted — a plan naming
+# `needsYou.test.ts` cites its own coverage, not a source file behind a scenario.
+SOURCE_ROOTS = ("src/", "e2e/", "docs/", "scripts/", "public/", ".github/")
+
+
+def _looks_like_scenario(title: str, has_id: bool) -> bool:
+    return has_id or bool(SCENARIO_VERB_RE.search(title) and SURFACE_NOUN_RE.search(title))
+
+
+def _title(text: str) -> str:
+    return re.sub(r"\s+", " ", _TAG_RE.sub("", text)).strip()[:120]
+
+
+def scenario_items(text: str) -> tuple[list[str], list[str]]:
+    """Extract (scenario titles, leading scenario ids) from a plan.
+    * A markdown table whose header names a `Scenario` column IS a plan table: every data row is
+      one scenario (title = that cell) — the author labelled it so; the verb usually sits in the
+      row's Class column, not the title.
+    * Any other table row: title = the first non-numeric cell, accepted only with a leading id or
+      a checking verb AND a surface noun in that cell (a survey table is not a plan).
+    * Bullet / numbered items: accepted with a leading id (`S-1`, `1.2` — a bare number is not an
+      id) or a verb AND a noun in the item text.
+    Headings, bold-label paragraphs, table headers/rules, table-of-contents lines and toolchain
+    paths are none of these and are dropped."""
+    titles: list[str] = []
+    ids: list[str] = []
+    lines = text.splitlines()
+    header: list[str] | None = None
+    for i, line in enumerate(lines):
         s = line.strip()
-        if re.match(r"^\|?\s*-{2,}", s):  # markdown table rule
+        if not s or s.startswith("#"):
             continue
-        is_row = s.startswith("|") and re.search(id_re, s)
-        is_item = re.match(r"^(?:[-*•]|\d+[.)]|#{1,4})\s*\S", s) and re.search(rf"{id_re}|scenario|check|verify|assert|should", s, re.I)
-        if is_row:
+        if _RULE_RE.match(s):  # table rule
+            continue
+        nxt = lines[i + 1].strip() if i + 1 < len(lines) else ""
+        if s.startswith("|"):
             cells = [c.strip() for c in s.strip("|").split("|")]
-            scenario_lines.append(re.sub(r"\s+", " ", " ".join(cells[:2]))[:120])
-        elif is_item:
-            scenario_lines.append(re.sub(r"\s+", " ", re.sub(r"^(?:[-*•]|\d+[.)]|#{1,4})\s*", "", s))[:120])
-    ids = sorted(set(re.findall(id_re, text)))
+            if _RULE_RE.match(nxt):  # this row is a table header
+                header = [c.lower() for c in cells]
+                continue
+            scol = next((j for j, h in enumerate(header or []) if re.search(r"\bscenario", h)), None)
+            if scol is not None and scol < len(cells):
+                body, is_plan_row = cells[scol], True
+            else:
+                body, is_plan_row = next((c for c in cells if c and not re.fullmatch(r"#?\s*\d{1,3}|#", c)), ""), False
+            lead = re.match(rf"^\s*({SCENARIO_ID_RE})\b\s*[:.)\-–—]?\s*", body)
+            lead_id = lead.group(1) if lead else None
+            if not lead_id and cells and re.fullmatch(rf"#?\s*{SCENARIO_ID_RE}", cells[0]):
+                lead_id = re.sub(r"^#?\s*", "", cells[0])
+            title = _title(body[lead.end():] if lead else body)
+            if title and not re.fullmatch(r"\d{1,3}", title) and (is_plan_row or _looks_like_scenario(title, bool(lead_id))):
+                titles.append(title)
+                if lead_id:
+                    ids.append(lead_id)
+            continue
+        header = None
+        b = _BULLET_RE.match(s)
+        if not b:
+            continue
+        body = b.group(1)
+        lead = re.match(rf"^({SCENARIO_ID_RE})\b\s*[:.)\-–—]?\s*", body)
+        lead_id = lead.group(1) if lead else None
+        title = _title(body[lead.end():] if lead else body)
+        if title and _looks_like_scenario(title, bool(lead_id)):
+            titles.append(title)
+            if lead_id:
+                ids.append(lead_id)
+    return titles, sorted(set(ids))
+
+
+def analyze_plan(text: str, index: RepoIndex | None = None) -> dict:
+    paths, by_base = index or repo_files()
+    path_hits = set(re.findall(r"(?<![\w/])((?:src|e2e|docs|scripts|public|\.github)/[\w./\-\[\]]+\.(?:tsx?|py|json|md|css|html|ya?ml))", text))
+    # Bare source basenames (`App.tsx`, `useEventStream.ts`, `gates.ts`) — kept only when the repo
+    # tracks a file of that name, then canonicalized to the repo path when the name is unique.
+    bare = set(re.findall(r"(?<![\w./-])([A-Za-z][\w.-]*\.(?:tsx?|mjs|py))\b", text))
+    real_paths = sorted(p for p in path_hits if p in paths)
+    real_bare = sorted(b for b in bare if any(h.startswith(SOURCE_ROOTS) for h in by_base.get(b, [])))
+    fake_paths = sorted(p for p in path_hits if p not in paths)
+    canon = canonical_files(real_paths, real_bare, (paths, by_base))
+    low = text.lower()
+    scenario_lines, ids = scenario_items(text)
     surfaces = {
         "ws_events": bool(re.search(r"/ws\b|websocket|awaitinghuman|coreevent|unitplanned|sessioncompleted|framereceived", low)),
         "api_routes": bool(re.search(r"/api/v1|/testing/recon|\b(get|post) /|/runs\b|/campaigns\b|/repos\b|/projects\b", low)),
@@ -350,8 +517,9 @@ def analyze_plan(text: str) -> dict:
         "chars": len(text),
         "real_files": real_paths,
         "real_basenames": real_bare,
+        "canonical_files": canon,
         "nonexistent_paths": fake_paths,
-        "names_real_files": len(set(real_paths) | set(real_bare)) >= 3,
+        "names_real_files": len(canon) >= 3,
         "classifies": ("deterministic" in low and "governed" in low) or ("tool check" in low and "agent run" in low),
         "deterministic_mentions": low.count("deterministic"),
         "governed_mentions": low.count("governed"),
@@ -371,9 +539,145 @@ def norm_title(s: str) -> str:
     return re.sub(r"[^a-z0-9 ]", "", s.lower())[:60].strip()
 
 
-# ── The UI-driven governed intake ─────────────────────────────────────────────────────────────
+# ── Gate policy, sibling attribution, the verdict split ───────────────────────────────────────
 
 DELIVER_RE = re.compile(r"deliver|push|pull request|\bpr\b|merge|publish|release", re.I)
+
+
+def gate_decision(prompt: str) -> tuple[str, str]:
+    """THE gate policy, applied to every gate including the first: a prompt asking to deliver /
+    push / open a PR / merge / publish / release is rejected; anything else — the intake gate, a
+    proposed-plan approval, a pre-execution unit gate — is approved. A deny-list, not an
+    allow-list: a legitimate "Approve proposed test plan…" gate must not be rejected for its
+    wording, and the intake gate must not bypass the deliver prohibition."""
+    hit = DELIVER_RE.search(prompt or "")
+    if hit:
+        return "reject", f"deliver-class keyword {hit.group(0)!r} in the gate prompt (never deliver)"
+    return "approve", "no deliver/push/PR/merge/publish/release keyword in the gate prompt"
+
+
+def attribute_siblings(runs: list[dict], campaigns: list[dict], *, before: set[str], own: list[str],
+                       label: str | None, brief: str = "") -> dict:
+    """Split the runs that appeared since launch into ATTRIBUTABLE siblings and unrelated new runs.
+    A sibling is related to this launch by a daemon-visible relationship (wicked-crew-api-types
+    0.25.0 `AgentSession` / `Campaign`): `session.campaign_id` or `group_label` equal to the
+    returned campaign label; membership in that campaign's `node_run_id` values or
+    `attached_runs[].runId` (DAG-node ids are `{campaign}:{node}:a{n}` but the contract says read
+    membership from the campaign, not the id shape); or `session.problem` carrying one of our run
+    ids, the label, or the prefixed brief. A run that merely APPEARED is not a sibling."""
+    linked: set[str] = set()
+    for c in campaigns:
+        if label and c.get("id") == label:
+            linked |= {v for v in (c.get("node_run_id") or {}).values() if isinstance(v, str)}
+            linked |= {a.get("runId") for a in (c.get("attached_runs") or []) if isinstance(a, dict) and a.get("runId")}
+    marker = f"{TEST_PROBLEM_PREFIX}{brief}" if brief else None
+    siblings: list[dict] = []
+    unrelated: list[dict] = []
+    for r in runs:
+        s = r.get("session") or {}
+        rid = s.get("id")
+        if not rid or rid in before or rid in own:
+            continue
+        problem = s.get("problem") or ""
+        why = None
+        if label and (s.get("campaign_id") == label or s.get("group_label") == label):
+            why = "session.campaign_id/group_label == the launch's campaign label"
+        elif rid in linked:
+            why = "listed in the campaign's node_run_id/attached_runs"
+        elif any(o and o in problem for o in own):
+            why = "session.problem carries the launched run id"
+        elif label and label in problem:
+            why = "session.problem carries the campaign label"
+        elif marker and marker in problem:
+            why = "session.problem carries the brief"
+        entry = {"id": rid, "status": s.get("status"), "problem": problem[:100]}
+        if why:
+            siblings.append({**entry, "attributed_by": why})
+        else:
+            unrelated.append(entry)
+    return {"attributable_siblings": siblings, "unrelated_new_runs": unrelated}
+
+
+def follow_siblings(sibling_ids: list[str], max_s: int = SIBLING_FOLLOW_MAX_S, sleep=time.sleep) -> dict:
+    """Follow attributable siblings to a terminal state (or `max_s`), THEN sample their acceptance —
+    a verdict sampled while a sibling is still executing proves nothing either way."""
+    started = time.time()
+    statuses: dict[str, str] = {}
+    while True:
+        for sid in sibling_ids:
+            try:
+                statuses[sid] = run_detail(sid)["session"]["status"]
+            except Exception as e:
+                statuses[sid] = f"ERR {e}"
+        done = all(st in TERMINAL or st.startswith("ERR") for st in statuses.values())
+        if done or time.time() - started >= max_s:
+            break
+        sleep(15)
+    return {
+        "statuses": statuses,
+        "followed_s": int(time.time() - started),
+        "all_terminal": bool(statuses) and all(st in TERMINAL for st in statuses.values()),
+        "acceptance": {sid: (acceptance(sid) or {}).get("acceptance", {}).get("verdict") for sid in sibling_ids},
+    }
+
+
+def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
+    """The verdict split, as a pure function of the measurements (so the committed report can be
+    re-derived offline). `harness_ok`: the harness did its job — launch accepted, gate rendered on
+    the UI, every gate decision posted, terminal state, no wedge, no blocker. `result`: the FEATURE
+    contract — "pass" REQUIRES a completed run whose plan names real files and classifies, PLUS
+    attributable sibling runs that reached acceptance verdicts, PLUS (for the "campaign" intent) a
+    registered campaign served by GET /campaigns. Anything less is "fail" with `fail_reasons[]`;
+    recon completion + text heuristics alone never spell "pass"."""
+    x = m.get("measured") or {}
+    tag, intent = m.get("scenario"), m.get("intent") or "run"
+    if m.get("result") == "blocked-preflight":
+        return {"harness_ok": False, "result": "blocked-preflight", "fail_reasons": ["preflight never cleared"]}
+    hard: list[str] = []
+    st = x.get("post_status")
+    if not (isinstance(st, int) and 200 <= st < 300 and x.get("run_ids")):
+        hard.append(f"launch not accepted (POST /testing/recon → {st})")
+    if not (x.get("gate_on_panel_card") or x.get("gate_via_run_page_fallback")):
+        hard.append("no gate card rendered on the UI")
+    gates = x.get("gates") or []
+    if not gates:
+        hard.append("no gate was answered")
+    elif any(not isinstance(g.get("status"), int) or g["status"] >= 300 for g in gates):
+        hard.append("a gate decision did not post")
+    if x.get("wedged"):
+        hard.append(f"run wedged (no events for {WEDGE_S // 60} min)")
+    if x.get("final_status") not in TERMINAL:
+        hard.append(f"run not terminal (status={x.get('final_status')})")
+    if tag:
+        hard += [f"blocker: {b}" for b in (blockers or []) if b.startswith(f"preflight never cleared for {tag}") or f"{tag}:" in b]
+    harness_ok = not hard
+    fail = list(hard)
+    if x.get("final_status") != "completed":
+        fail.append(f"run ended {x.get('final_status')}, not completed")
+    plan = x.get("plan") or {}
+    if not plan.get("names_real_files"):
+        fail.append("plan names fewer than 3 real files")
+    if not plan.get("classifies"):
+        fail.append("plan does not classify deterministic tool checks vs governed agent runs")
+    after = x.get("siblings_after_grace") or x.get("siblings_at_terminal") or {}
+    sibs = after.get("attributable_siblings") or []
+    if not sibs:
+        fail.append(f"no attributable sibling runs after the approved {intent} completed — the approved plan was never executed"
+                    f" ({len(after.get('unrelated_new_runs') or [])} unrelated new runs ignored)")
+    else:
+        verdicts = {k: v for k, v in ((x.get("siblings_followed") or {}).get("acceptance") or {}).items() if v}
+        if not verdicts:
+            fail.append(f"{len(sibs)} attributable sibling(s) reached no acceptance verdict")
+    if intent == "campaign":
+        if not x.get("campaign_registered"):
+            fail.append(f"no engine campaign registered for label {x.get('campaign_label')} (campaignRegistered=false)")
+        elif not after.get("campaign_for_label"):
+            fail.append(f"campaign label {x.get('campaign_label')} is not served by GET /campaigns")
+    result = "wedged" if x.get("wedged") else ("pass" if not fail else "fail")
+    return {"harness_ok": harness_ok, "result": result, "fail_reasons": fail}
+
+
+# ── The UI-driven governed intake ─────────────────────────────────────────────────────────────
 
 
 def drive_intake(tag: str, intent: str) -> dict:
@@ -381,10 +685,11 @@ def drive_intake(tag: str, intent: str) -> dict:
     from playwright.sync_api import sync_playwright
 
     verb = "testing-recon-open" if intent == "recon" else "testing-campaign-open"
-    m: dict = {"scenario": tag, "intent": intent, "result": "not-run", "measured": {}, "notes": []}
+    m: dict = {"scenario": tag, "intent": intent, "result": "not-run", "harness_ok": False, "fail_reasons": [], "measured": {}, "notes": []}
     REPORT["scenarios"][tag] = m
     if not preflight(tag):
         m["result"] = "blocked-preflight"
+        m.update(derive_result(m, REPORT["blockers"]))
         return m
 
     runs_before = {r["session"]["id"] for r in list_runs()}
@@ -439,10 +744,11 @@ def drive_intake(tag: str, intent: str) -> dict:
         m["measured"]["post_status"] = resp.status
         m["measured"]["launch_answer"] = answer
         if not resp.ok:
-            m["result"] = "fail"
             m["notes"].append(f"launch refused: {resp.status} {answer}")
             shot(page, "03-launch-refused")
             browser.close()
+            m["screenshots"] = shots
+            m.update(derive_result(m, REPORT["blockers"]))
             return m
         run_ids = answer.get("runIds") or ([answer["runId"]] if answer.get("runId") else [])
         run_id = run_ids[0]
@@ -500,10 +806,12 @@ def drive_intake(tag: str, intent: str) -> dict:
         if len(units) != 1:
             finding(f"{tag}: the launch planned {len(units)} units from the UI's prefix + one-sentence brief (product intent is 1 — core#393): {[u['description'][:70] for u in units]}")
         if not gate_seen_ui:
-            m["result"] = "fail"
             m["notes"].append(f"no gate card appeared within {GATE_TIMEOUT_S // 60} min (status={status})")
+            m["measured"]["final_status"] = status
             shot(page, "03-no-gate")
             browser.close()
+            m["screenshots"] = shots
+            m.update(derive_result(m, REPORT["blockers"]))
             return m
 
         prompt = card.first.locator('[data-testid="steering-prompt"]').inner_text()
@@ -520,14 +828,21 @@ def drive_intake(tag: str, intent: str) -> dict:
             finding(f"{tag}: the ONLY human gate is pre-execution ('{prompt[:60]}…') — the operator approves the survey, not a plan (crew#473)")
         shot(page, "03-gate-card")
 
-        # ── APPROVE through the UI card ─────────────────────────────────────────────────────
+        # ── Decide the FIRST gate through the UI card — same policy as every later gate ──────
+        gates: list[dict] = []
+        m["measured"]["gates"] = gates
+        decision, reason = gate_decision(prompt)
         with page.expect_response(lambda r: "/gate" in r.url and r.request.method == "POST", timeout=60000) as gate_resp:
-            card.first.locator('[data-testid="steering-approve"]').click()
+            card.first.locator(f'[data-testid="steering-{decision}"]').click()
         gr = gate_resp.value
-        m["measured"]["approve"] = {"status": gr.status, "body": json.loads(gr.request.post_data or "{}"), "url": gr.url.replace(BASE, "")}
-        t_approve = time.time()
-        log(f"{tag}: APPROVED intake gate via the SteeringGate card → POST {gr.url.replace(BASE, '')} {gr.status}")
-        if not fallback_run_page:
+        gates.append({"ord": awaiting[0].get("ord") if awaiting else None, "first": True, "prompt": prompt[:200],
+                      "decision": decision, "reason": reason, "status": gr.status})
+        m["measured"]["gate_response"] = {"decision": decision, "status": gr.status, "body": json.loads(gr.request.post_data or "{}"), "url": gr.url.replace(BASE, "")}
+        t_approve = time.time()  # the first gate's decision time (approve in every recorded run)
+        log(f"{tag}: {decision.upper()}D intake gate via the SteeringGate card ({reason}) → POST {gr.url.replace(BASE, '')} {gr.status}")
+        if decision == "reject":
+            finding(f"{tag}: the INTAKE gate ('{prompt[:80]}…') was REJECTED by policy (never deliver)")
+        elif not fallback_run_page:
             try:
                 panel.locator('[data-testid="testing-launch-resolved"]').wait_for(timeout=15000)
                 m["measured"]["panel_resolved_copy"] = panel.locator('[data-testid="testing-launch-resolved"]').inner_text()
@@ -536,7 +851,6 @@ def drive_intake(tag: str, intent: str) -> dict:
         shot(page, "04-after-approve")
 
         # ── Wait for terminal state; handle any further gates; detect wedges ────────────────
-        extra_gates: list[dict] = []
         last_seq = max((e.get("seq", 0) for e in events), default=0)
         last_change = time.time()
         wedged = False
@@ -569,12 +883,15 @@ def drive_intake(tag: str, intent: str) -> dict:
                 except Exception:
                     m["notes"].append("later gate present per REST but no card on the run page")
                     continue
-                decision = "reject" if DELIVER_RE.search(ptxt) else ("approve" if re.match(r"Approve unit \d+ before it runs", ptxt) else "reject")
+                # Same deny-list as the first gate: reject iff deliver-class, approve anything else
+                # (a "Approve proposed test plan…" gate is legitimate and must go through).
+                decision, reason = gate_decision(ptxt)
                 shot(page, f"05-gate-{g.get('ord', 'x')}-{decision}")
                 with page.expect_response(lambda r: "/gate" in r.url and r.request.method == "POST", timeout=60000) as gr2:
                     c2.locator(f'[data-testid="steering-{decision}"]').click()
-                extra_gates.append({"ord": g.get("ord"), "prompt": ptxt[:200], "decision": decision, "status": gr2.value.status})
-                log(f"{tag}: later gate ord={g.get('ord')} → {decision}")
+                gates.append({"ord": g.get("ord"), "first": False, "prompt": ptxt[:200], "decision": decision,
+                              "reason": reason, "status": gr2.value.status})
+                log(f"{tag}: later gate ord={g.get('ord')} → {decision} ({reason})")
                 if decision == "reject":
                     finding(f"{tag}: a later gate ('{ptxt[:80]}…') was REJECTED by policy (never deliver)")
                 last_change = time.time()
@@ -584,7 +901,7 @@ def drive_intake(tag: str, intent: str) -> dict:
                 finding(f"{tag}: run {run_id} produced no new events for {WEDGE_S // 60} min while {final_status} — WEDGED (not killed)")
                 break
         t_end = time.time()
-        m["measured"]["extra_gates"] = extra_gates
+        m["measured"]["gates_seen"] = len(gates)
         m["measured"]["final_status"] = final_status
         m["measured"]["wedged"] = wedged
         m["measured"]["approve_to_terminal_s"] = int(t_end - t_approve)
@@ -621,27 +938,31 @@ def drive_intake(tag: str, intent: str) -> dict:
         if m["measured"]["session"]["created_at"] is None:
             finding(f"{tag}: run {run_id} has created_at=null on GET /runs/:id (run-timing not recorded)")
 
-        # ── Siblings / campaign / verdicts — immediately and after a grace period ──────────
+        # ── Siblings / campaign / verdicts — immediately, after a grace period, then followed ──
         def siblings_now() -> dict:
             rs = list_runs()
-            new = [r["session"]["id"] for r in rs if r["session"]["id"] not in runs_before and r["session"]["id"] not in run_ids]
             cs = list_campaigns()
-            newc = [c for c in cs if c["id"] not in camps_before]
+            attributed = attribute_siblings(rs, cs, before=runs_before, own=run_ids, label=campaign_label, brief=INSTRUCTION)
             mine = [c for c in cs if campaign_label and c["id"] == campaign_label]
             return {
-                "new_runs": new,
-                "new_run_problems": [r["session"]["problem"][:100] for r in rs if r["session"]["id"] in new],
-                "new_campaigns": [c["id"] for c in newc],
+                **attributed,
+                "new_campaigns": [c["id"] for c in cs if c["id"] not in camps_before],
                 "campaign_for_label": [{"id": c["id"], "status": c["status"], "node_status": c.get("node_status"), "attached_runs": c.get("attached_runs")} for c in mine],
-                "sibling_acceptance": {sid: (acceptance(sid) or {}).get("acceptance", {}).get("verdict") for sid in new},
+                "sibling_acceptance": {s["id"]: (acceptance(s["id"]) or {}).get("acceptance", {}).get("verdict") for s in attributed["attributable_siblings"]},
             }
         m["measured"]["siblings_at_terminal"] = siblings_now()
         log(f"{tag}: waiting {SIBLING_GRACE_S}s grace for delayed siblings")
-        page.wait_for_timeout(SIBLING_GRACE_S * 1000)
+        page.wait_for_timeout(SIBLING_GRACE_S * 1000)  # the first check; attributable siblings are then FOLLOWED
         m["measured"]["siblings_after_grace"] = siblings_now()
         sib = m["measured"]["siblings_after_grace"]
-        if not sib["new_runs"]:
-            finding(f"{tag}: NO sibling runs were launched after the approved {intent} completed (new runs: 0, campaigns for label {campaign_label}: {len(sib['campaign_for_label'])}) — the plan is never executed (crew#473)")
+        if sib["attributable_siblings"]:
+            ids = [s["id"] for s in sib["attributable_siblings"]]
+            log(f"{tag}: following {len(ids)} attributable sibling(s) to terminal (max {SIBLING_FOLLOW_MAX_S}s)")
+            m["measured"]["siblings_followed"] = follow_siblings(ids)
+        else:
+            finding(f"{tag}: NO attributable sibling runs were launched after the approved {intent} completed "
+                    f"(attributable: 0, unrelated new runs: {len(sib['unrelated_new_runs'])}, campaigns for label {campaign_label}: "
+                    f"{len(sib['campaign_for_label'])}) — the plan is never executed (crew#473)")
 
         # ── LT-5: the operator's view after the run ────────────────────────────────────────
         page.goto(f"{BASE}/runs/{urllib.parse.quote(run_id, safe='')}", wait_until="networkidle")
@@ -677,12 +998,9 @@ def drive_intake(tag: str, intent: str) -> dict:
         browser.close()
 
     m["screenshots"] = shots
-    ok = (final_status == "completed" and m["measured"]["plan"].get("names_real_files") and m["measured"]["plan"].get("classifies"))
-    m["result"] = "pass" if ok else ("wedged" if wedged else "fail")
-    m["notes"].append(
-        f"the {intent} produced a plan but launched no sibling runs — the feature's copy promises otherwise"
-        if ok and not sib["new_runs"] else ""
-    )
+    m.update(derive_result(m, REPORT["blockers"]))
+    if m["harness_ok"] and m["result"] == "fail" and not sib["attributable_siblings"]:
+        m["notes"].append(f"the {intent} produced a plan but launched no sibling runs — the feature's copy promises otherwise")
     m["notes"] = [n for n in m["notes"] if n]
     return m
 
@@ -690,10 +1008,15 @@ def drive_intake(tag: str, intent: str) -> dict:
 # ── LT-3 / LT-4 analysis over the captured plans ──────────────────────────────────────────────
 
 
+def _canon(plan: dict) -> set[str]:
+    if "canonical_files" in plan:
+        return set(plan["canonical_files"])
+    return set(canonical_files(plan.get("real_files", []), plan.get("real_basenames", []), repo_files()))
+
+
 def consistency(a: dict, b: dict) -> dict:
     pa, pb = a.get("measured", {}).get("plan", {}), b.get("measured", {}).get("plan", {})
-    fa = set(pa.get("real_files", [])) | set(pa.get("real_basenames", []))
-    fb = set(pb.get("real_files", [])) | set(pb.get("real_basenames", []))
+    fa, fb = _canon(pa), _canon(pb)  # Jaccard over canonical file identities only
     ta = {norm_title(s) for s in pa.get("scenario_lines", [])}
     tb = {norm_title(s) for s in pb.get("scenario_lines", [])}
     ia, ib = set(pa.get("scenario_ids", [])), set(pb.get("scenario_ids", []))
@@ -706,26 +1029,31 @@ def consistency(a: dict, b: dict) -> dict:
     }
 
 
-def main() -> None:
-    ART.mkdir(parents=True, exist_ok=True)
-    verify_testids()
-    status, health = http_json("GET", f"{API}/health")
-    if status != 200:
-        raise SystemExit(f"daemon at {BASE} not healthy: {status} {health}")
-    REPORT["daemon"] = health
-    st, diag = http_json("GET", f"{API}/diagnostics")
-    if st == 200 and isinstance(diag, dict):
-        REPORT["components"] = diag.get("components")
-    repos = {r["id"] for r in get("/repos")["repos"]}  # type: ignore[index]
-    if TARGET_REPO not in repos:
-        raise SystemExit(f"{TARGET_REPO} is not registered on {BASE} — registering is out of scope for this harness")
-    only = {s.strip() for s in os.environ.get("ONLY", "LT-1,LT-2,LT-3").split(",") if s.strip()}
+def write_report(report: dict | None = None, path: Path | None = None) -> Path:
+    """Persist the evidence ATOMICALLY (tmp + os.replace): a reader never sees partial JSON and a
+    crash never leaves a half-written report.json or a stray tmp file behind. Called after every
+    scenario and on every exit path — a 30-minute run that dies at minute 29 still leaves the
+    first two scenarios' measurements on disk."""
+    report = REPORT if report is None else report
+    path = path or (ART / "report.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(scrub(json.dumps(report, indent=1, default=str)))
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return path
 
-    a = drive_intake("LT-1", "recon") if "LT-1" in only else None
-    b = drive_intake("LT-2", "campaign") if "LT-2" in only else None
-    c = drive_intake("LT-3", "recon") if "LT-3" in only else None
 
-    if a and c and a["result"] in ("pass", "fail") and c["result"] in ("pass", "fail") and a["measured"].get("plan") and c["measured"].get("plan"):
+SCENARIO_PLAN = (("LT-1", "recon"), ("LT-2", "campaign"), ("LT-3", "recon"))
+
+
+def analyze(results: dict[str, dict]) -> None:
+    """LT-3 consistency, LT-4 surfaces coverage, LT-5 operator's-view rollup — over whatever ran."""
+    a, c = results.get("LT-1"), results.get("LT-3")
+    if a and c and a["measured"].get("plan") and c["measured"].get("plan"):
         REPORT["scenarios"]["LT-3"]["consistency_vs_LT-1"] = consistency(a, c)
     # LT-4: surfaces asked vs proposed, per plan.
     asked = {"ws_events": True, "api_routes": True, "cli": True, "ui_pages": True}
@@ -747,9 +1075,43 @@ def main() -> None:
                   for t, s in REPORT["scenarios"].items() if t in ("LT-1", "LT-2", "LT-3") and isinstance(s, dict)},
         "result": "observed" if any(s.get("screenshots") for t, s in REPORT["scenarios"].items() if t in ("LT-1", "LT-2", "LT-3") and isinstance(s, dict)) else "not-run",
     }
-    out = scrub(json.dumps(REPORT, indent=1, default=str))
-    (ART / "report.json").write_text(out)
-    print(out)
+
+
+def main() -> None:
+    ART.mkdir(parents=True, exist_ok=True)
+    REPORT["preflight_policy"] = preflight_policy()
+    if REPORT["preflight_policy"].get("contract_deviation"):
+        log(f"CONTRACT DEVIATION: {REPORT['preflight_policy']['contract_deviation']}")
+    verify_testids()
+    status, health = http_json("GET", f"{API}/health")
+    if status != 200:
+        raise SystemExit(f"daemon at {BASE} not healthy: {status} {health}")
+    REPORT["daemon"] = health
+    st, diag = http_json("GET", f"{API}/diagnostics")
+    if st == 200 and isinstance(diag, dict):
+        REPORT["components"] = diag.get("components")
+    repos = {r["id"] for r in get("/repos")["repos"]}  # type: ignore[index]
+    if TARGET_REPO not in repos:
+        raise SystemExit(f"{TARGET_REPO} is not registered on {BASE} — registering is out of scope for this harness")
+    only = {s.strip() for s in os.environ.get("ONLY", "LT-1,LT-2,LT-3").split(",") if s.strip()}
+
+    results: dict[str, dict] = {}
+    current = None
+    try:
+        for tag, intent in SCENARIO_PLAN:
+            if tag not in only:
+                continue
+            current = tag
+            results[tag] = drive_intake(tag, intent)
+            write_report()  # evidence lands after EVERY scenario, not once at the end
+        current = "analysis"
+        analyze(results)
+    except BaseException as e:  # SystemExit / KeyboardInterrupt included — the partial evidence still lands
+        REPORT["aborted"] = {"scenario": current, "error": f"{type(e).__name__}: {e}"}
+        raise
+    finally:
+        out_path = write_report()
+    print(out_path.read_text())
 
 
 if __name__ == "__main__":

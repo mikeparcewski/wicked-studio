@@ -9,6 +9,13 @@ raw measurements: [`e2e/artifacts/test-feature-live/report.json`](../../e2e/arti
 captured plans: `e2e/artifacts/test-feature-live/LT-{1,2,3}-plan-<run>.md`. Screenshots live beside
 them (gitignored PNGs — regenerate with the harness).
 
+> **Revised 2026-09-09 after the codex review of PR #215.** No new runs were launched and no daemon
+> state was touched: the verdict was split into `harness_ok` vs `result`, the gate policy became one
+> deny-list for every gate, siblings are attributed by relationship, the swap gate reverted to the
+> brief's 85 %, and the plan-consistency measurement was corrected. Every number that changed is
+> annotated inline as *(was X — why)* and listed in `report.json → revisions[]`; the underlying
+> measurements are the originals.
+
 | Component | Version |
 |---|---|
 | wicked-crew daemon (`:7701`) | 0.7.25 (studioBundle 0.5.1, coreTs 0.7.16, wicked-core 0.4.0, wicked-estate 0.15.1) |
@@ -17,11 +24,15 @@ them (gitignored PNGs — regenerate with the harness).
 | browser | Playwright chromium 145 headless, extension-free, 1440×900 |
 
 **Rules the harness held itself to.** One governed run in flight at a time; a serialization
-preflight before every launch (zero executing/awaiting runs on `:7701`, 1-minute load < 20, swap
-used < 95 % — free-memory was recorded but not gated on, see "Preflight history"); the gate decision
-through the UI card only (never the API); no deliver gate approved (none arrived); no repo/project
-writes; read-only GETs for every assertion; a wedge (no events for 10 min) would have been reported,
-not killed (none occurred).
+preflight before every launch (zero executing/awaiting runs on `:7701`, 1-minute load < 20, and a
+swap gate — the brief's contract is **< 85 %**, which the harness now enforces by default; the three
+recorded launches ran under a coordinator-authorized **95 %** with swap reading 93 %, a contract
+deviation recorded in `report.json → preflight_policy` — see "Preflight history"; free memory was
+recorded but not gated on); every gate decided through the UI card only (never the API) under one
+deny-list policy (deliver/push/PR/merge/publish/release → reject, anything else → approve — applied
+to the intake gate too); no deliver gate approved (none arrived); no repo/project writes; read-only
+GETs for every assertion; a wedge (no events for 10 min) would have been reported, not killed (none
+occurred).
 
 **The one-sentence brief** (identical for all three launches — core#393 splits on `.`/`;`/newline,
 so it contains none):
@@ -34,17 +45,24 @@ so it contains none):
 
 ## Results
 
-| Scenario | Result | Units planned | Gate prompt | Launch→gate | Approve→terminal | Siblings launched | Campaign registered | Verdicts | Plan names real files / classifies |
-|---|---|---|---|---|---|---|---|---|---|
-| LT-1 Run recon | **ran to completion; feature contract not met** | **3** (intent 1) | pre-execution: "Approve unit 1 before it runs: Recon: survey the target…" (180 chars, no plan) | 80 s | 564 s (total 651 s) | **0** | **no** (label `recon-mttmyh2a-c635a60c` dangling) | none (`acceptance.required=false`) | yes — 25 real files (9 paths + 16 basenames) / yes |
-| LT-2 New test | **ran to completion; feature contract not met** | **3** (intent 1) | pre-execution: "Approve unit 1 before it runs: New test: plan the test…" (246 chars, no plan) | 67 s | 190 s (total 260 s) | **0** | **no** (`recon-mttnf3s6-99e928c5` dangling) | none | yes — 14 real files / yes (`[TOOL]`/`[AGENT]` tags) |
-| LT-3 Run recon again (identical brief) | **ran to completion** | **3** | pre-execution, same shape as LT-1 | 70 s | 210 s (total 287 s) | **0** | **no** (`recon-mttnnicz-82c6bb65`) | none | yes — 32 real files / yes |
-| LT-3 consistency vs LT-1 | **low** | — | — | — | — | — | — | — | files overlap **32.6 %** (14 common / 43 union); scenario-id overlap **0 %** (neither plan numbers scenarios stably — LT-1 only carries RAID ids R-01/R-02); scenario-title overlap **0 %** (8 vs 4 extracted titles, none shared — an earlier 25 % came from four identical `~/.pi/agent/skills/…` toolchain lines the analyzer mistook for scenario items; they are now elided before analysis) |
-| LT-4 surfaces coverage | **pass (breadth)** | — | — | — | — | — | — | — | all three plans propose tests for all four asked surfaces (WS events, /api/v1 routes, CLI, UI pages); no gap — see quality caveats below |
-| LT-5 operator's view | **observed — stale and misleading** | — | — | — | — | — | — | — | Tests landing identical before/after every run; the finished run is nowhere on the page that launched it; scoreboard for the returned label says "No campaign is filed" (+ console 404); "All campaigns" rename leftover |
+| Scenario | Result | harness_ok | Units planned | Gate prompt | Launch→gate | Approve→terminal | Siblings launched | Campaign registered | Verdicts | Plan names real files / classifies |
+|---|---|---|---|---|---|---|---|---|---|---|
+| LT-1 Run recon | **fail** — feature contract not met | **yes** | **3** (intent 1) | pre-execution: "Approve unit 1 before it runs: Recon: survey the target…" (180 chars, no plan) | 80 s | 564 s (total 651 s) | **0** attributable (0 unrelated) | **no** (label `recon-mttmyh2a-c635a60c` dangling) | none (`acceptance.required=false`) | yes — **31** canonical files *(was 25 = 9 paths + 16 basenames counted as separate identities; bare names now resolve to their repo path and lower-case source names count)* / yes |
+| LT-2 New test | **fail** — feature contract not met | **yes** | **3** (intent 1) | pre-execution: "Approve unit 1 before it runs: New test: plan the test…" (246 chars, no plan) | 67 s | 190 s (total 260 s) | **0** attributable (0 unrelated) | **no** (`recon-mttnf3s6-99e928c5` dangling) | none | yes — **14** canonical files *(was 14 with `App.tsx` double-counted against `src/App.tsx`; `useRoute.ts` now resolved)* / yes (`[TOOL]`/`[AGENT]` tags) |
+| LT-3 Run recon again (identical brief) | **fail** — feature contract not met | **yes** | **3** | pre-execution, same shape as LT-1 | 70 s | 210 s (total 287 s) | **0** attributable (0 unrelated) | **no** (`recon-mttnnicz-82c6bb65`) | none | yes — **30** canonical files *(was 32 = 24 paths + 8 basenames with five files counted twice; now 27 distinct + `interactive_wire_contract_test.py`, `uxfix_fixture.py`, `prepare-dist.mjs` resolved)* / yes |
+| LT-3 consistency vs LT-1 | **low** | — | — | — | — | — | — | — | — | files overlap **38.6 %** (17 common / 44 union) *(was 32.6 % = 14/43 when `App.tsx` and `src/App.tsx` counted as different files — identities are now canonical repo paths)*; scenario-id overlap **n/a** — neither plan carries scenario ids *(was reported 0 % on LT-1's R-01/R-02, which are RAID risk ids inside a survey bullet, not scenario ids; only LT-2 numbers its items, 1.1–4.2)*; scenario-title overlap **0 %** (31 vs 22 extracted scenario titles, none shared) *(was 0 % of 8 vs 4 when the extractor missed the plan tables and counted survey bullets; an earlier 25 % came from toolchain lines, elided since)* |
+| LT-4 surfaces coverage | **pass (breadth)** | — | — | — | — | — | — | — | — | all three plans propose tests for all four asked surfaces (WS events, /api/v1 routes, CLI, UI pages); no gap — see quality caveats below (unchanged by the re-analysis) |
+| LT-5 operator's view | **observed — stale and misleading** | — | — | — | — | — | — | — | — | Tests landing identical before/after every run; the finished run is nowhere on the page that launched it; scoreboard for the returned label says "No campaign is filed" (+ console 404); "All campaigns" rename leftover |
 
-"Ran to completion" is the honest status: each governed run reached `completed` with 3/3 units done,
-no wedge, no extra gate, no deliver. Whether the *feature* did its job is the findings section.
+Two verdicts, deliberately. **`harness_ok: yes`** is the honest *harness* status: each governed run was
+launched from the UI, its intake gate rendered on the card and was decided there, and it reached
+`completed` with 3/3 units done — no wedge, no extra gate, no deliver, no blocker. **`result: fail`**
+is the *feature* verdict: the contract ("run the approved plan as governed sibling runs under one
+test") requires attributable sibling runs that reach verdicts — none appeared (LT-2 additionally has
+no registered campaign). *(An earlier revision of this table said `pass` on "recon completed + the
+plan names real files + classifies"; codex's review called that out and the verdict was split —
+`fail_reasons[]` in `report.json` carries the exact reasons per scenario. The measurements did not
+change; the reading of them did.)*
 
 ### Every run had the same event shape
 
@@ -74,7 +92,7 @@ things**:
 |---|---|---|---|---|---|
 | 1 | prefix sentence 1 only ("Recon: survey the target and propose a test plan…") — **without the operator's brief** | claude | surveyed the **wrong target**: an 11-row plan about the Home command-deck, nav rename, KPI band (the repo's recent ship wave), not the surfaces asked | "I don't see an actual scope attached to this message … Could you point me to the actual scope?" | as LT-1: a plan about the recent ship wave |
 | 2 | prefix sentence 2 only ("Present the (proposed) plan at the intake gate and launch nothing until it is approved") — stage classified as **`build`** | **pi** — `governanceUnenforced`: "not admitted to input governance (acp_input_governance=false); its tool calls are answered by allow_result, unchecked" | **executed** unit 1's plan: ran `npm run typecheck`, `npm run lint` and the full **`npm test` (237 files / 2442 tests)** plus live curl probes of `:7701`, then wrote an "Execution verdict" — inside a run whose copy says nothing runs until approved | "Intake gate: BLOCKED — no testable scope determinable … I am launching nothing and holding at the gate" | audited `tests/` and `TEST-001` (read-only), no suite run |
-| 3 | the operator's sentence | claude | an on-target 17-row plan: WS fold (`useEventStream.ts`, `store/gates.ts:137/159`, `store/runtime.ts:58/91/99`, `narrator.ts`), REST routes per API module, CLI = npm scripts + `scripts/*.mjs` (no `bin`), UI pages per route; classifies Deterministic / Live read-only smoke / Operator-run e2e / Governed agent run; flags two unit-test gaps | an on-target 4-group plan (`[TOOL]`/`[AGENT]`), ends "**Holding at the gate — launching nothing until you approve.** Want me to run the `[TOOL]` checks now and launch a single governed sibling run…?" — a question with no gate to land on; the session completed | on-target plan, 32 real files |
+| 3 | the operator's sentence | claude | an on-target 17-row plan: WS fold (`useEventStream.ts`, `store/gates.ts:137/159`, `store/runtime.ts:58/91/99`, `narrator.ts`), REST routes per API module, CLI = npm scripts + `scripts/*.mjs` (no `bin`), UI pages per route; classifies Deterministic / Live read-only smoke / Operator-run e2e / Governed agent run; flags two unit-test gaps | an on-target 4-group plan (`[TOOL]`/`[AGENT]`), ends "**Holding at the gate — launching nothing until you approve.** Want me to run the `[TOOL]` checks now and launch a single governed sibling run…?" — a question with no gate to land on; the session completed | on-target 11-row plan; the run names 30 canonical files *(was 32 — see Results)* |
 
 Unit 3's outputs are genuinely good recon (real files with line numbers, correct observation that
 studio ships no `bin` and that `/runs/:id` has no dedicated page, both mirrors of
@@ -94,7 +112,9 @@ Breadth is complete in every plan. The quality caveats are (a) the on-target pla
 output and is buried after an off-target plan and an execution transcript; (b) numbering and
 classification vocabulary differ run to run (`Deterministic`/`Live read-only smoke`/`Operator-run
 e2e`/`Governed agent run` vs `[TOOL]`/`[AGENT]`), so two plans for the same brief are not
-diffable — LT-3's 32.6 % file overlap and 0 % id overlap.
+diffable — LT-3's 38.6 % file overlap, no shared scenario ids and 0 % title overlap *(was quoted as
+32.6 % / 0 % id overlap before file identities were canonicalized and the id count corrected — see
+the Results row)*.
 
 ## LT-5 — the operator's view
 
@@ -142,11 +162,12 @@ Screenshots (regenerable): `LT-{1,2,3}-01-landing-before`, `02-panel-filled`, `0
 | F6 | **Dangling campaign label.** Single-repo launches answer `campaign: recon-…` + `campaignRegistered: false`; the panel ignores the flag, its resolved copy sends the operator to "Campaigns", and the scoreboard for that label 404s ("No campaign is filed under …"). | `launch_answer`, `scoreboard.notfound: true` ×3, console 404 ×3 | studio#216 (filed) |
 | F7 | **The Test landing does not reflect the runs launched from it.** Single-repo recon runs are not campaigns, so the landing (which lists `GET /campaigns`) never shows them; its KPIs stayed frozen on a stale Sept-8 cancelled fan (`partially_completed` with both nodes `cancelled`, "0 landed of 2 finished", "PASS RATE 0 %") through all three runs. | `landing_before` == `landing_after` ×3; `GET /campaigns` | studio#216 (filed) |
 | F8 | **Rename leftovers.** "All campaigns" link on the campaign-not-found view; the resolved copy's "Campaigns"; the not-found copy says "campaign" twice; the phase strip labels the middle unit `build`. | `08-scoreboard`, `TestingLaunchPanel.tsx` resolved copy | studio#216 (filed) |
-| F9 | **Two plans for the same brief do not agree.** LT-1 vs LT-3 (identical body): 32.6 % file overlap, 0 % scenario-id overlap, 0 % title overlap; classification vocabularies differ. The feature has no stable plan schema to compare, approve, or execute against. | `consistency_vs_LT-1` | crew#473 (an executable plan needs a schema) |
+| F9 | **Two plans for the same brief do not agree.** LT-1 vs LT-3 (identical body): **38.6 %** file overlap over canonical repo paths (17 of 44 files named by either plan are named by both) *(was 32.6 % when `App.tsx` and `src/App.tsx` counted as two files)*; **no shared scenario ids** — neither plan carries any *(was "0 %" on LT-1's R-01/R-02, which are RAID risk ids in a survey bullet)*; **0 %** scenario-title overlap across 31 vs 22 extracted scenario rows/items *(was 0 % of 8 vs 4 before plan tables were counted)*; classification vocabularies differ. The feature has no stable plan schema to compare, approve, or execute against. | `consistency_vs_LT-1` | crew#473 (an executable plan needs a schema) |
 | F10 | One `councilSeatFailed` (claude, unit 2 council, "exceeded 40s dispatch budget") in LT-1 — the council proceeded on the remaining seats. Recorded, not a blocker. | event seq 895 on d293f4d7 | — |
 | F11 | **A captured unit output ends mid-word at the source.** LT-3 unit 2's `GET /runs/:id/units/2/output` is 5375 chars and stops at "a committed selector cont"; its streamed `unitOutputDelta` frames total 2587 chars over 3 events (units 1 and 3 stream exactly their captured length: 5336 and 7752). The committed plan file reproduces the daemon's output verbatim — the truncation is upstream of the harness, not an artifact-writing defect. | LT-3 plan unit 2; `GET /runs/d12adb6c…/events` vs `/units/2/output` | — (single occurrence; recorded) |
 
-**What worked (so nobody mistakes the above for "the UI is broken").** The launch UX itself is
+**What worked (so nobody mistakes the above for "the UI is broken") — this is what `harness_ok: yes`
+records.** The launch UX itself is
 solid end to end on the dogfood daemon: verb → panel → repo picker → explicit chip → one-sentence
 brief → submit posted **exactly** the pinned `TestingReconBody` (`{problem, repoRefs:["wicked-studio"]}`);
 the daemon answered `{runId, runIds, campaign, campaignRegistered:false}` in < 1 s; the intake gate
@@ -158,14 +179,26 @@ gate, and in what the Test surface shows afterwards.
 
 ## Preflight history (honest)
 
-Three harness attempts. Attempt 1 gated on `vm_stat` "Pages free" ≥ 2 GB and never cleared in its
-first minutes (free swung 58 MB–2 GB while load was 9–14); attempt 2 lowered the floor to 1 GB and
-still sat at 93–178 MB; the operator then ruled that macOS keeps free pages near zero by design and
-that free is not availability on this host, so attempt 3 gates on the three signals that mean
-something here — no executing/awaiting runs on `:7701`, load(1m) < 20, swap < 95 % — and records
-free/available memory for the report. All three launches cleared on the first poll (load 8.49 /
-8.99 / 9.10, swap 93 %, 0 active runs); no launch waited. No other governed run was active at any
-point; the harness never registered, modified or deleted anything on the daemon; no PR/push was
+**The three recorded launches cleared under a 95 % swap threshold, not the brief's 85 %.** The
+brief's contract is "refuse to run if another governed run is executing or swap > 85 %". This host
+idles at ~93 % swap, so an 85 % gate would never have cleared; mid-run the coordinator authorized
+relaxing it to 95 %, the harness was edited to a hard-coded 95, and every recorded reading is swap
+**93.0 %** — i.e. all three launches (LT-1 at 01:06, LT-2 at 01:19, LT-3 at 01:25) happened
+*above* the contract's ceiling and would not have launched under it. That is a contract deviation
+and is now recorded as one: `report.json → preflight_policy.contract_deviation`, and every
+`preflights[].readings[]` entry carries the `swap_max_pct` it was judged against (backfilled with 95
+for these three — the threshold was not recorded at the time). The harness now defaults to the
+contract's 85 %; the only way to move it is an explicit `SWAP_MAX_PCT` env var, which the report
+records as a deviation.
+
+How it got there: three harness attempts. Attempt 1 gated on `vm_stat` "Pages free" ≥ 2 GB and never
+cleared in its first minutes (free swung 58 MB–2 GB while load was 9–14); attempt 2 lowered the floor
+to 1 GB and still sat at 93–178 MB; the operator then ruled that macOS keeps free pages near zero by
+design and that free is not availability on this host, so attempt 3 gates on the three signals that
+mean something here — no executing/awaiting runs on `:7701`, load(1m) < 20, and the swap gate above —
+and records free/available memory for the report. All three launches cleared on the first poll (load
+8.49 / 8.99 / 9.10, swap 93 %, 0 active runs); no launch waited. No other governed run was active at
+any point; the harness never registered, modified or deleted anything on the daemon; no PR/push was
 attempted by any run (`delivery: vacuous`).
 
 ## Reproduce
@@ -174,7 +207,15 @@ attempted by any run (`delivery: vacuous`).
 python3 e2e/test_feature_live.py                 # all of LT-1..LT-3 + LT-4/LT-5 analysis (~35 min)
 ONLY=LT-1 python3 e2e/test_feature_live.py       # one scenario
 STUDIO_URL=http://localhost:7701 TARGET_REPO=wicked-studio   # defaults
+SWAP_MAX_PCT=95 python3 e2e/test_feature_live.py # relax the swap gate — recorded as a contract deviation
+
+python3 -m unittest e2e/test_feature_live_selftest.py -v   # offline self-test: thresholds, gate policy,
+python3 -m py_compile e2e/test_feature_live.py             # verdict split, attribution, scrub, analysis, atomic write
 ```
 
 Requires `pip install playwright && playwright install chromium`, a reachable crew daemon with the
-target repo registered, and nothing else executing on it — the harness refuses to launch otherwise.
+target repo registered, and nothing else executing on it — the harness refuses to launch otherwise
+(swap ≥ 85 % included, unless `SWAP_MAX_PCT` says otherwise). The self-test needs none of that;
+studio's CI runs no Python step, so run it by hand before pushing a harness change. `report.json` is
+written atomically after every scenario and on every exit path — an aborted run still leaves the
+finished scenarios' evidence on disk under `aborted: {scenario, error}`.
