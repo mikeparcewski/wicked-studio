@@ -5,10 +5,10 @@ import {
   readSupportFile,
   writeSkillFile,
   writeSupportFile,
-  type SkillFileContent,
-  type SkillFileEntry,
-  type SkillGuardResult,
+  type SkillMutationResult,
+  type SkillReadResult,
   type SkillRow,
+  type SkillTreeRow,
 } from '../api/skills.js';
 import { useModalEscape } from './Modal.js';
 import { EnabledToggle, KindChip, ProvenanceChip, SkillFlags } from './SkillChips.js';
@@ -19,15 +19,19 @@ import type { SkillsWriter } from './skillsWriter.js';
 
 /**
  * The skill DRAWER — opened from a catalog row (the SteeringRuleDrawer idiom, widened for an
- * editor). Two file trees under tabs: the skill's OWN files (`GET /skills/:name/files`) and the
- * root SUPPORT files every skill shares (`scripts/`, `schemas/`, `.claude-plugin/`, from the
- * manifest's support map — `GET|PUT /skills/support/*path`). A textarea editor over the selected
- * file (v1 — studio has no code editor): Save → `PUT {content, expectedRevision}` through the
- * page's CAS writer → the daemon's findings; a `blocked` verdict disables Save for that exact
- * draft until it changes; a `truncated` or `binary` read is read-only (Save never clobbers what
- * the editor cannot show). Plus the enabled switch and the dir-level verbs: Reset (from the
- * baseline; disabled for a user-added skill, which has none — disable is its off switch) and
- * Replace (a pasted files map).
+ * editor). Two file trees under tabs: the skill's OWN files (`GET /skills/:name/files` —
+ * `SkillFileTree`, a nested skill's files are its own) and the root SUPPORT files every skill
+ * shares (`.claude-plugin/`, `scripts/`, `schemas/`, `docs/examples/` … — the manifest `files` no
+ * skill owns; `GET|PUT /skills/support/*path`). A textarea editor over the selected file (v1 —
+ * studio has no code editor): Save → `PUT {content, expectedRevision}` through the page's CAS
+ * writer → the daemon's `SkillMutationResult`; a `blocked` verdict disables Save for that exact
+ * draft until it changes; a `truncated` or `binary` read (`SkillReadResult`, api-types 0.27.0) is
+ * read-only — Save never clobbers what the editor cannot show. Plus the enabled switch, the
+ * dir-level verbs — Reset (from the baseline; disabled for a user-added skill, which has none —
+ * disable is its off switch) and Replace (a pasted files map) — and the BASELINE SIDE: a read-only
+ * view of the shipped copy of the open file (`?side=baseline`), the "new side" of a refresh
+ * conflict or, for a skill a refresh held back under a name collision (`upstreamDir`), the upstream
+ * file actually read (the answer's `path` names it).
  *
  * Three invariants keep the editor honest about WHAT it is editing:
  *
@@ -52,7 +56,7 @@ import type { SkillsWriter } from './skillsWriter.js';
  *    aside as a STALE read (the draft stays, named).
  *
  * The page owns the catalog: the drawer reports every applied content write through `onChanged`
- * so the page reloads (provenance flips, hashes move, `unpublished` lights up) — and every dirty
+ * so the page reloads (provenance flips, records move, `unpublished` lights up) — and every dirty
  * flip through `onDirtyChange`, so a row click on another skill comes back as `leaveTo` and goes
  * through the same discard confirmation a close does; the page swaps the drawer only on
  * `onLeave(true)`.
@@ -65,21 +69,26 @@ const TAB_LABEL: Record<SkillDrawerTab, string> = { skill: 'Skill files', suppor
 
 /** The file a tree (re)opens: the one last open there when it is still listed, else the first
  *  (SKILL.md for the skill tree — the fold puts it first); `undefined` for an empty tree. */
-function reopenTarget(last: string | null, rows: readonly SkillFileEntry[]): string | undefined {
+function reopenTarget(last: string | null, rows: readonly SkillTreeRow[]): string | undefined {
   return last !== null && rows.some((r) => r.path === last) ? last : rows[0]?.path;
 }
 
 /** The open file: the daemon's typed read bound to the REQUESTED scope + path, stamped with the
  *  catalog revision the page held as the request left — what Save is conditioned on. */
-interface OpenFile extends SkillFileContent {
+interface OpenFile extends SkillReadResult {
   scope: SkillDrawerTab;
-  readAt: string | null;
+  readAt: number | null;
+}
+
+/** The editor's text for a read: `content` is `null` only when `binary` (there is no text to show). */
+function textOf(f: SkillReadResult): string {
+  return f.content ?? '';
 }
 
 export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveTo, onClose, onLeave, onDirtyChange, onToggle, onChanged }: {
   skill: SkillRow;
-  /** The root support files (from the manifest), path-sorted. */
-  support: readonly SkillFileEntry[];
+  /** The root support files (from the manifest's `files`, no owning skill), path-sorted. */
+  support: readonly SkillTreeRow[];
   writer: SkillsWriter;
   /** Bumped by the page on every SUCCESSFUL catalog read — the open file is re-read against it. */
   catalogEpoch: number;
@@ -98,12 +107,12 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
   onDirtyChange: (dirty: boolean) => void;
   /** The page's guarded flip — it reloads the catalog and hands back the daemon's verdict
    *  (`null` on a revision conflict: the page's prompt owns that moment). */
-  onToggle: (name: string, enabled: boolean) => Promise<SkillGuardResult | null>;
+  onToggle: (name: string, enabled: boolean) => Promise<SkillMutationResult | null>;
   /** After any applied content write (save / reset / replace) — the page reloads the catalog. */
   onChanged: () => void;
 }): React.ReactElement {
   const [tab, setTab] = useState<SkillDrawerTab>('skill');
-  const [skillFiles, setSkillFiles] = useState<SkillFileEntry[] | null>(null);
+  const [skillFiles, setSkillFiles] = useState<SkillTreeRow[] | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [file, setFile] = useState<OpenFile | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
@@ -118,7 +127,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
    *  typing; names the path so the operator knows what did not open. */
   const [staleRead, setStaleRead] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [lastResult, setLastResult] = useState<{ verb: string; result: SkillGuardResult } | null>(null);
+  const [lastResult, setLastResult] = useState<{ verb: string; result: SkillMutationResult } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [modal, setModal] = useState<'reset' | 'replace' | null>(null);
   const [discardPrompt, setDiscardPrompt] = useState(false);
@@ -126,6 +135,8 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
    *  to it while the list is pending): the loading state shows, and the open runs ONCE when the
    *  list arrives — cleared by any move away, so a late list is never an instruction to open. */
   const [openOnList, setOpenOnList] = useState(true);
+  /** The BASELINE SIDE of the open file (`?side=baseline`), read-only: the read, or its refusal. */
+  const [baseline, setBaseline] = useState<{ result: SkillReadResult } | { error: string } | 'loading' | null>(null);
 
   /** The intent token: every operator move that changes WHICH content is on screen (a pick, a tab
    *  switch, a save, a dir write) bumps it; an async answer applies only if it is still current. */
@@ -137,7 +148,8 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
   useEffect(() => { fileRef.current = file; }, [file]);
   useEffect(() => { draftRef.current = draft; }, [draft]);
 
-  const dirty = file !== null && draft !== file.content;
+  // A binary read has no text (`content: null`): nothing to be dirty against.
+  const dirty = file !== null && file.content !== null && draft !== file.content;
 
   // The page hears every dirty flip — and a clean slate when this drawer goes — so a row click on
   // another skill is routed through the discard confirmation instead of unmounting the draft.
@@ -166,7 +178,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
     else onClose();
   };
 
-  const loadSkillFiles = useCallback(async (): Promise<SkillFileEntry[]> => {
+  const loadSkillFiles = useCallback(async (): Promise<SkillTreeRow[]> => {
     setFilesError(null);
     try {
       const rows = await listSkillFiles(skill.name);
@@ -197,6 +209,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
     setBlockedDraft(null);
     setIntervening(null);
     setStaleRead(null);
+    setBaseline(null);
     try {
       const f = await readFile(scope, path);
       if (seq !== intent.current) return;
@@ -211,7 +224,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
       }
       lastOpened.current[scope] = path;
       setFile(f);
-      setDraft(f.content);
+      setDraft(textOf(f));
     } catch (e) {
       if (seq !== intent.current) return;
       setFile(null);
@@ -239,12 +252,12 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
     if (target !== undefined) void openFile('skill', target);
   }, [openOnList, skillFiles, openFile]);
 
-  // Every successful catalog read re-reads the open file (content + hash): the page's revision
-  // moved (a Refresh, a toggle, a publish, another session's write) and the content on screen must
-  // be reconciled with it BEFORE any Save rides the new revision. Same bytes → they stand at the
-  // new revision; changed + pristine → adopt the daemon's version; changed + dirty → keep the
-  // draft, surface the intervening change. Not a user intent: it applies only while the file it
-  // reconciled is still the one on screen.
+  // Every successful catalog read re-reads the open file: the page's revision moved (a Refresh, a
+  // toggle, a publish, another session's write) and the content on screen must be reconciled with
+  // it BEFORE any Save rides the new revision. Same bytes → they stand at the new revision;
+  // changed + pristine → adopt the daemon's version; changed + dirty → keep the draft, surface the
+  // intervening change. Not a user intent: it applies only while the file it reconciled is still
+  // the one on screen.
   useEffect(() => {
     const base = fileRef.current;
     if (base === null) return;
@@ -257,9 +270,9 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           setIntervening(null);
           return;
         }
-        if (draftRef.current === base.content) {
+        if (draftRef.current === textOf(base)) {
           setFile(incoming);
-          setDraft(incoming.content);
+          setDraft(textOf(incoming));
           setIntervening(null);
           return;
         }
@@ -273,7 +286,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
       });
   }, [catalogEpoch, readFile]);
 
-  const files: readonly SkillFileEntry[] | null = tab === 'skill' ? skillFiles : support;
+  const files: readonly SkillTreeRow[] | null = tab === 'skill' ? skillFiles : support;
 
   /** No file on screen: a new intent (an in-flight read for the previous tree is void), the
    *  editor and its per-file state cleared. */
@@ -284,6 +297,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
     setIntervening(null);
     setStaleRead(null);
     setBlockedDraft(null);
+    setBaseline(null);
     setFileLoading(false);
   };
 
@@ -311,7 +325,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
   const readOnlyReason =
     file === null ? null
     : file.binary ? 'binary file — not editable here'
-    : file.truncated ? 'this file exceeds the daemon’s read cap and is shown truncated — saving would clobber it, so it is read-only here'
+    : file.truncated ? 'this file exceeds the daemon’s 512 KB read cap and is shown truncated — saving would clobber it, so it is read-only here'
     : null;
 
   const canSave =
@@ -342,7 +356,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
       } else {
         // The base moved: a re-read in flight against the old base is void.
         intent.current += 1;
-        setFile({ ...target, content, readAt: result.revision });
+        setFile({ ...target, content, size: new TextEncoder().encode(content).byteLength, readAt: result.revision });
         setBlockedDraft(null);
         onChanged();
       }
@@ -358,7 +372,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
     if (intervening === null) return;
     intent.current += 1;
     setFile(intervening);
-    setDraft(intervening.content);
+    setDraft(textOf(intervening));
     setIntervening(null);
     setBlockedDraft(null);
   };
@@ -379,7 +393,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
       takeIntervening();
       return;
     }
-    setDraft(file.content);
+    setDraft(textOf(file));
     setBlockedDraft(null);
     setStaleRead(null);
   };
@@ -395,10 +409,11 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
 
   /** After a dir-level write applied (reset / replace): the skill tree and the open file are
    *  reloaded — the content on screen must be the daemon's, never this drawer's memory of it. */
-  const afterDirWrite = (verb: string, result: SkillGuardResult): void => {
+  const afterDirWrite = (verb: string, result: SkillMutationResult): void => {
     setModal(null);
     setLastResult({ verb, result });
     setIntervening(null);
+    setBaseline(null);
     onChanged();
     const current = file !== null && file.scope === 'skill' ? file.path : null;
     const seq = ++intent.current;
@@ -410,7 +425,32 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
     });
   };
 
-  const canReset = skill.baselineHash !== null;
+  /** The BASELINE SIDE of the open file — `?side=baseline`, read-only, bound to the same requested
+   *  identity. The answer's `path` is shown: for a skill a refresh held back (`upstreamDir`) it names
+   *  the upstream file actually read, so the two sides of the collision are comparable. */
+  const toggleBaseline = async (): Promise<void> => {
+    if (file === null) return;
+    if (baseline !== null) { setBaseline(null); return; }
+    const target = file;
+    const seq = intent.current;
+    setBaseline('loading');
+    try {
+      const result = target.scope === 'skill'
+        ? await readSkillFile(skill.name, target.path, 'baseline')
+        : await readSupportFile(target.path, 'baseline');
+      if (seq !== intent.current || fileRef.current !== target) return;
+      setBaseline({ result });
+    } catch (e) {
+      if (seq !== intent.current || fileRef.current !== target) return;
+      setBaseline({ error: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
+  // A user-added skill has no baseline: nothing to reset to — and no shipped side to read, UNLESS a
+  // refresh held back an upstream skill under its name (`upstreamDir`): then `?side=baseline` reads
+  // that upstream directory, so the two sides of the collision are comparable (reset stays refused).
+  const canReset = skill.provenance !== 'user-added';
+  const hasBaseline = canReset || skill.upstreamDir !== null;
   const verbsDisabled = busy || saving;
   const treeLocked = dirty || fileLoading;
 
@@ -441,12 +481,13 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-        <span data-testid="skills-drawer-dir">{skill.dir}</span>
-        <span title="effective content hash">{skill.effectiveHash.slice(0, 12)}</span>
-        {skill.lastPublishedHash !== null && skill.lastPublishedHash !== skill.effectiveHash && (
-          <span title="the hash the current snapshot carries">published {skill.lastPublishedHash.slice(0, 12)}</span>
+        <span data-testid="skills-drawer-dir" title="plugin-relative directory (never renamed — sibling links depend on it)">{skill.dir}</span>
+        {skill.editedAt !== null && <span data-testid="skills-drawer-edited">edited {skill.editedAt}</span>}
+        {skill.upstreamDir !== null && (
+          <span data-testid="skills-drawer-upstream" style={{ color: 'var(--status-gate)' }} title="the last refresh found a name collision: upstream ships a skill under this name at another dir; Baseline side reads that directory">
+            upstream ships this name at {skill.upstreamDir}
+          </span>
         )}
-        {skill.editedAt !== null && <span>edited {skill.editedAt}</span>}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -540,7 +581,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
         ))}
         {tab === 'support' && (
           <span data-testid="skills-support-note" className="ml-2 text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-            shared by every skill — the guards flag each edit as a warning
+            shared by every skill — the guards flag each edit; a path outside the bundle closure is refused
           </span>
         )}
       </div>
@@ -565,23 +606,28 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           ) : (
             files.map((f) => {
               const active = file !== null && file.scope === tab && file.path === f.path;
+              const conflict = f.record?.conflict === true;
               return (
                 <button
                   key={f.path}
                   type="button"
                   data-testid="skills-file"
                   data-path={f.path}
+                  data-conflict={conflict ? 'true' : undefined}
                   aria-current={active ? 'true' : undefined}
                   disabled={treeLocked}
-                  title={treeLocked ? (dirty ? 'save or discard your edits first' : 'loading…') : f.path}
+                  title={treeLocked
+                    ? (dirty ? 'save or discard your edits first' : 'loading…')
+                    : `${f.path}${f.size !== null ? ` · ${f.size} B` : ''}${conflict ? ' · refresh conflict: both sides changed (the effective side was kept)' : ''}`}
                   onClick={() => { setLastResult(null); void openFile(tab, f.path); }}
-                  className="truncate rounded px-2 py-1 text-left font-mono text-[10px] disabled:opacity-40 focus:outline-none focus-visible:ring-1"
+                  className="flex items-center gap-1 truncate rounded px-2 py-1 text-left font-mono text-[10px] disabled:opacity-40 focus:outline-none focus-visible:ring-1"
                   style={{
                     background: active ? 'var(--accent-subtle)' : 'transparent',
                     color: active ? 'var(--ink-high)' : 'var(--ink-muted)',
                   }}
                 >
-                  {f.path}
+                  <span className="truncate">{f.path}</span>
+                  {conflict && <span aria-hidden className="shrink-0" style={{ color: 'var(--status-gate)' }}>⚑</span>}
                 </button>
               );
             })
@@ -599,11 +645,28 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
             <p data-testid="skills-file-none" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>Pick a file to edit.</p>
           ) : (
             <>
-              <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
                 <span data-testid="skills-file-path" data-scope={file.scope} style={{ color: 'var(--ink-muted)' }}>{file.path}</span>
-                <span>{file.size} B</span>
+                <span data-testid="skills-file-size" title="the file's full size in bytes">{file.size} B</span>
                 {dirty && <span data-testid="skills-file-dirty" style={{ color: 'var(--status-gate)' }}>unsaved</span>}
                 {fileLoading && <span data-testid="skills-file-loading">loading…</span>}
+                <span className="flex-1" />
+                {hasBaseline && (
+                  <button
+                    data-testid="skills-baseline-open"
+                    type="button"
+                    aria-pressed={baseline !== null}
+                    disabled={fileLoading}
+                    title={baseline === null
+                      ? 'Read the shipped copy of this file (the baseline side) — the new side of a refresh conflict, or the upstream file a name collision held back'
+                      : 'Hide the baseline side'}
+                    onClick={() => void toggleBaseline()}
+                    className="rounded px-1.5 py-0.5 text-[10px] disabled:opacity-40"
+                    style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
+                  >
+                    {baseline === null ? 'Baseline side' : 'Hide baseline'}
+                  </button>
+                )}
               </div>
               {readOnlyReason !== null && (
                 <p data-testid="skills-file-readonly" className="text-[10px]" style={{ color: 'var(--status-gate)' }}>{readOnlyReason}</p>
@@ -622,8 +685,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
                 >
                   <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>This file changed on the daemon while you were editing.</span>
                   <span>
-                    <span className="font-mono">{file.path}</span> is now <span className="font-mono">{intervening.hash.slice(0, 12)}</span>
-                    {' '}(you started from <span className="font-mono">{file.hash.slice(0, 12)}</span>). Your draft is kept; Save waits until you pick a side.
+                    <span className="font-mono">{file.path}</span> is now {intervening.size} B on the daemon (you started from {file.size} B, catalog revision {file.readAt ?? '?'}). Your draft is kept; Save waits until you pick a side.
                   </span>
                   <span className="flex-1" />
                   <button
@@ -657,6 +719,39 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
                 className="min-h-[18rem] flex-1 resize-y rounded p-2 font-mono text-[11px] focus:outline-none"
                 style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)', lineHeight: 1.5 }}
               />
+              {baseline !== null && (
+                <div
+                  data-testid="skills-baseline-view"
+                  className="flex flex-col gap-1 rounded p-2 text-[10px]"
+                  style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+                >
+                  {baseline === 'loading' ? (
+                    <span data-testid="skills-baseline-loading">Loading the baseline side…</span>
+                  ) : 'error' in baseline ? (
+                    <span data-testid="skills-baseline-error" style={{ color: 'var(--status-fail)' }}>{baseline.error}</span>
+                  ) : (
+                    <>
+                      <span className="flex flex-wrap items-center gap-2 font-mono" style={{ color: 'var(--ink-dim)' }}>
+                        <span>baseline side ·</span>
+                        <span data-testid="skills-baseline-path" style={{ color: 'var(--ink-muted)' }} title="the plugin-relative path the daemon actually read (an upstream skill's dir for a held-back collision)">{baseline.result.path}</span>
+                        <span>{baseline.result.size} B</span>
+                        {baseline.result.truncated && <span style={{ color: 'var(--status-gate)' }}>truncated</span>}
+                        {baseline.result.binary && <span style={{ color: 'var(--status-gate)' }}>binary</span>}
+                        <span className="ml-auto">read-only</span>
+                      </span>
+                      <textarea
+                        data-testid="skills-baseline-content"
+                        aria-label={`${baseline.result.path} baseline content`}
+                        value={textOf(baseline.result)}
+                        readOnly
+                        spellCheck={false}
+                        className="min-h-[10rem] resize-y rounded p-2 font-mono text-[11px] focus:outline-none"
+                        style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)', lineHeight: 1.5 }}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <button
                   data-testid="skills-save"

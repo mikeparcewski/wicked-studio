@@ -1,46 +1,97 @@
 /**
- * The skills wire — types and calls for the Skills surface (`/skills`): the file manager over the
- * daemon's ONE effective garden-shaped plugin root (the skills keystone, design v3).
+ * The skills wire — calls and folds for the Skills surface (`/skills`): the file manager over the
+ * daemon's ONE effective garden-shaped plugin root (the skills keystone, design v3 + v3.1–v3.5).
  *
- * ── INTEGRATION POINT (skills build, paired crew lane) ────────────────────────────────────────
  * Skills are files. Crew owns the effective root under its state home (`skills/effective/`): the
  * installed garden is captured as a content-hashed BASELINE, the operator edits any file in place
  * (or replaces a skill dir), disable = excluded from the published snapshot, reset = restore the
  * skill's content from the baseline. Nothing is live until PUBLISH validates the whole tree and
  * writes an immutable snapshot generation that every worker spawn then receives.
  *
- * Every declaration here is TEMPORARY — hand-mirrored from the design's manifest + guard-envelope
- * contract because the crew slice that serves it (`src/skills/`, built in a parallel lane) is not
- * yet in studio's installed `wicked-crew-api-types`. **Delete the types in this module and
- * re-export from `wicked-crew-api-types`** the moment studio bumps to the api-types version that
- * carries the skills contract (the same stopgap `./steering.ts` wears, and the same exit).
+ * THE TYPES ARE THE CONTRACT'S. Every wire shape here is imported from `./skills-wire.ts` — a
+ * byte-for-byte mirror of the `wicked-crew-api-types@0.27.0` skills block (crew#480), pinned by
+ * `tests/skillsWire.test.ts` against a vendored fixture until the package publishes and the mirror
+ * becomes a re-export. This module adds only what the UI folds from it (rows, counts, ownership,
+ * route identity, the adoption / CAS seams) — never a shape of its own for something the wire spells.
  *
- * The three wire rules every caller leans on:
- *  - CAS EVERYWHERE: every mutation sends `expectedRevision` (the catalog revision it was decided
- *    against) and every 2xx answer is the guard envelope `{verdict, findings, revision}` — the new
- *    revision is adopted by the page; a stale revision is a **409**, folded by
+ * The three wire rules every caller leans on (api-types 0.27.0):
+ *  - CAS EVERYWHERE, IN NUMBERS: every mutation sends `expectedRevision` (the catalog revision it
+ *    was decided against — a non-negative integer, `manifest.revision`) and every 2xx answer is the
+ *    envelope `{verdict, findings, revision}`; the answered revision is adopted by the page. A stale
+ *    revision is a **409** `{error, revision}` — the ONLY thing that answers 409 — folded by
  *    {@link isSkillsConflict} into the reload prompt.
  *  - GUARD RESULTS ARE 2xx: `apiFetch` throws on any non-2xx, so a `blocked` verdict (the daemon
- *    refused the change, the root is unchanged) arrives as a NORMAL answer, never an exception.
- *  - READS ARE TYPED: a file read past the daemon's cap is `truncated`, a NUL-sniffed one `binary`
- *    (content `""`) — Save stays disabled on either so the editor never clobbers what it cannot show.
+ *    refused the change, nothing was written — a core disable, a containment refusal, a publish
+ *    already in flight, the root changed under a publish) arrives as a NORMAL answer, never an
+ *    exception. `warnings` proceeded (a publish with only warnings WROTE its snapshot).
+ *  - READS ARE TYPED: `SkillReadResult` — a file past the daemon's 512 KB cap is `truncated` (the
+ *    head is served), a NUL-sniffed one `binary` (`content: null`) — Save stays disabled on either
+ *    so the editor never clobbers what it cannot show. `?side=baseline` reads the shipped copy.
  *
- * The support probe is the same two-layer adoption seam as the steering reads: a bare 404 means
- * "this crew daemon predates the skills routes"; a 501 means "the route exists but the daemon has
- * no skills root to serve". {@link isSkillsUnsupported} folds both so every caller renders the
- * honest named state, never a raw refusal — and never a crash.
+ * The adoption seam has two honest non-catalog states: a bare unknown-route 404 means "this crew
+ * daemon predates the skills routes" ({@link isSkillsUnsupported}); a **503** means the route exists
+ * but there is no catalog to serve — the root is unseeded (no installed plugin), `current` fails
+ * verification, or the daemon booted without the seam ({@link isSkillsUnavailable}) — a LOUD error
+ * with the daemon's sentence, never an empty catalog pretending.
  */
 
 import { apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
+import type {
+  DiagnosticsSkillsState,
+  SkillAnalyzeResult,
+  SkillBaselineRecord,
+  SkillEntry,
+  SkillFileRecord,
+  SkillFileTree,
+  SkillKind,
+  SkillManifest,
+  SkillMutationResult,
+  SkillProvenance,
+  SkillPublishResult,
+  SkillReadResult,
+  SkillRefreshResult,
+  SkillsManifestResponse,
+} from './skills-wire.js';
+
+// The contract, re-exported for every component so the release swap touches ONE file.
+export type {
+  AddSkillBody,
+  DiagnosticsSkills,
+  DiagnosticsSkillsFinding,
+  DiagnosticsSkillsState,
+  PutSkillFileBody,
+  ReplaceSkillBody,
+  SkillAnalyzeResult,
+  SkillBaselineRecord,
+  SkillConflictFinding,
+  SkillEntry,
+  SkillFileEntry,
+  SkillFileRecord,
+  SkillFileTree,
+  SkillFindingKind,
+  SkillFindingSeverity,
+  SkillKind,
+  SkillManifest,
+  SkillMutationResult,
+  SkillProvenance,
+  SkillPublishedRecord,
+  SkillPublishResult,
+  SkillReadResult,
+  SkillRefreshResult,
+  SkillRevisionBody,
+  SkillRevisionConflict,
+  SkillSourceKind,
+  SkillsManifestResponse,
+  SkillVenvState,
+  SkillVerdict,
+} from './skills-wire.js';
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────────────────────
 
 /** The three skill kinds, fork-first from frontmatter: `context: fork` → fork-worker; else
- *  `user-invocable: true` → router; else module. */
-export const SKILL_KINDS = ['router', 'fork-worker', 'module'] as const;
-
-export type SkillKind = (typeof SKILL_KINDS)[number];
+ *  `user-invocable: true` → router; else module (`SkillKind`, spelled out for the chips). */
+export const SKILL_KINDS: readonly SkillKind[] = ['router', 'fork-worker', 'module'];
 
 export const SKILL_KIND_LABELS: Record<SkillKind, string> = {
   router: 'router',
@@ -52,12 +103,9 @@ export function isSkillKind(s: string): s is SkillKind {
   return (SKILL_KINDS as readonly string[]).includes(s);
 }
 
-/** Where a skill's effective content stands against the baseline — DERIVED from the hashes
- *  ({@link provenanceOf}), never a wire field: no baseline → user-added; equal → shipped
- *  untouched; different → an operator override. */
-export const SKILL_PROVENANCES = ['shipped', 'override', 'user-added'] as const;
-
-export type SkillProvenance = (typeof SKILL_PROVENANCES)[number];
+/** `SkillProvenance` is a WIRE field (0.27.0): `shipped` = every own file byte-identical to the
+ *  baseline; `override` = a shipped skill with edited/replaced files; `user-added` = no baseline. */
+export const SKILL_PROVENANCES: readonly SkillProvenance[] = ['shipped', 'override', 'user-added'];
 
 export const SKILL_PROVENANCE_LABELS: Record<SkillProvenance, string> = {
   shipped: 'shipped',
@@ -65,121 +113,132 @@ export const SKILL_PROVENANCE_LABELS: Record<SkillProvenance, string> = {
   'user-added': 'user-added',
 };
 
-/** The guard verdict over one write/enable/publish. `blocked` = refused, nothing changed. */
-export type SkillVerdict = 'clear' | 'warnings' | 'blocked';
+/** The `diagnostics.skills.state` vocabulary (0.27.0), read as operator copy: whether the engine is
+ *  being handed a verified snapshot, and if not, why. */
+export const SKILLS_ENGINE_STATE_COPY: Record<DiagnosticsSkillsState, string> = {
+  published: 'published — the engine is handed the verified snapshot',
+  fallback: 'fallback — no wicked-garden is installed; the engine resolves the live plugin cache itself',
+  blocked: 'blocked — the first publish is blocked; launches refuse the skills snapshot until the catalog is fixed',
+  'config-error': 'config error — the skills root is corrupt or unusable; launches refuse the skills snapshot',
+  disabled: 'disabled — this daemon booted without the skills seam',
+};
 
-// ── The catalog (`GET /skills` — manifest + revision) ─────────────────────────────────────────
+// ── The catalog (`GET /skills` — manifest + revision + root + current) ────────────────────────
 
-export interface SkillsBaselineSource {
-  kind: 'claude-plugin-cache' | 'checkout' | 'npm-pack';
-  path: string;
-  plugin_version: string;
-  git_sha: string | null;
-  captured_at: string;
-}
+/** `GET /skills` 200 body — the contract's name, kept under the page's word for it. */
+export type SkillsCatalog = SkillsManifestResponse;
 
-/** A baseline is identified by the CONTENT HASH of the bundle it was captured from — never the
- *  version string alone (two "12.32.0" captures can differ). */
-export interface SkillsBaseline {
-  contentHash: string;
-  source: SkillsBaselineSource;
-}
+/** The envelope every mutation answers with on 2xx (`SkillAnalyzeResult` is the base of every
+ *  mutation result: `{verdict, findings, revision}`) — the shape every findings renderer takes. */
+export type SkillGuardResult = SkillAnalyzeResult;
 
-export interface SkillManifestEntry {
-  /** `skills/<nested/path>` under the effective root — never renamed (sibling links depend on it). */
-  dir: string;
-  kind: SkillKind;
-  /** Core-by-reference: in the registered-reference closure (a workflow's `skill_ref`, or a
-   *  referenced skill's `mandates`) — disabling or renaming it is blocking. */
-  core: boolean;
-  /** `false` when the skill leans on `${CLAUDE_PLUGIN_ROOT}`, cwd-relative scripts or `../` links —
-   *  Claude-only by nature, excluded from the other CLIs' mirrors. */
-  portable: boolean;
-  /** Manifest state, orthogonal to content — reset restores content only and never flips this. */
-  enabled: boolean;
-  /** `null` for a user-added skill — there is no baseline to reset to. */
-  baselineHash: string | null;
-  effectiveHash: string;
-  /** The content hash the CURRENT snapshot carries for this skill; `null` when it has never been
-   *  published (a new skill, or no publish yet). */
-  lastPublishedHash: string | null;
-  editedAt: string | null;
-  /** The three-way refresh kept a user edit AND upstream changed the same skill — the new side is
-   *  stored for diff; reset takes it. */
-  conflict: boolean;
-}
-
-export interface SkillsManifest {
-  baseline: SkillsBaseline;
-  /** Keyed by frontmatter `name` (`wicked-garden-<path-joined-by-dashes>`). */
-  skills: Record<string, SkillManifestEntry>;
-  /** Root support files shared by every skill (`scripts/…`, `schemas/…`, `.claude-plugin/…`) →
-   *  effective content hash. */
-  support: Record<string, string>;
-  /** The snapshot generation `current` points at, or `null` before the first publish. */
-  currentGeneration: number | null;
-}
-
-/** `GET /skills`: the manifest plus the CAS revision every mutation is conditioned on. */
-export interface SkillsCatalog {
-  manifest: SkillsManifest;
-  revision: string;
-}
-
-/** A plain object — the only shape a keyed map (`skills`, `support`) may arrive as. Arrays are
+/** A plain object — the only shape a keyed map (`skills`, `files`) may arrive as. Arrays are
  *  objects to `typeof` but `Object.entries` over one yields index keys, not skill names. */
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+function isRevision(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0;
+}
+
+const CATALOG_SHAPE = '{manifest: {skills, files, …}, revision: number, root, current}';
+
 /**
  * The catalog read, shape-checked at the seam: a daemon that answers `/skills` with anything but
- * `{manifest: {skills: {…}, support: {…}}, revision}` gets a NAMED error — never a page rendering
- * zero skills (or index-named rows, or a crash in `supportFiles`) against a daemon that answered
- * something. `skills` and `support` must be PLAIN objects: an array, `null`, or a missing map is
- * a mis-shaped answer.
+ * `SkillsManifestResponse` gets a NAMED error — never a page rendering zero skills (or index-named
+ * rows, or a crash in {@link supportFiles}) against a daemon that answered something. `skills` and
+ * `files` must be PLAIN objects, `revision` a non-negative integer (0.27.0: revisions are numbers —
+ * a string revision is a pre-contract daemon, not a catalog), `root` a string and `current` null or
+ * `{gen, path}`.
  */
 export function readCatalogBody(body: unknown): SkillsCatalog {
   if (isPlainObject(body)) {
-    const { manifest, revision } = body;
+    const { manifest, revision, root, current } = body;
     if (
       isPlainObject(manifest)
       && isPlainObject(manifest.skills)
-      && isPlainObject(manifest.support)
-      && typeof revision === 'string'
+      && isPlainObject(manifest.files)
+      && isRevision(revision)
+      && typeof root === 'string'
+      && (current === null || (isPlainObject(current) && typeof current.gen === 'number' && typeof current.path === 'string'))
     ) {
-      return { manifest: manifest as unknown as SkillsManifest, revision };
+      return { manifest: manifest as unknown as SkillManifest, revision, root, current: current as SkillsCatalog['current'] };
     }
   }
-  throw new Error('the daemon answered /skills with no catalog (expected {manifest: {skills, support}, revision})');
+  throw new Error(`the daemon answered /skills with no catalog (expected ${CATALOG_SHAPE})`);
 }
 
 export async function getSkillsCatalog(): Promise<SkillsCatalog> {
   return readCatalogBody(await apiFetch<unknown>('/skills'));
 }
 
-/** A manifest entry paired with its name and derived provenance — the row shape every list and
- *  drawer renders. */
-export interface SkillRow extends SkillManifestEntry {
+/** The current baseline's record (keyed by content hash in `manifest.baselines`), or `null` when
+ *  the manifest names a hash it does not carry (a corrupt manifest the daemon would have refused). */
+export function currentBaseline(manifest: SkillManifest): (SkillBaselineRecord & { hash: string }) | null {
+  const record = manifest.baselines[manifest.baseline];
+  return record === undefined ? null : { ...record, hash: manifest.baseline };
+}
+
+// ── Ownership: which skill a managed file belongs to (the manifest's `files` map) ─────────────
+
+/** One file record with its plugin-relative path. */
+export interface OwnedFile {
+  path: string;
+  record: SkillFileRecord;
+}
+
+/** The manifest's `files` split by owner: each skill's OWN files (a nested skill's subtree is its
+ *  own — the DEEPEST registered skill dir on the path owns a file), and the root SUPPORT files no
+ *  skill owns (`.claude-plugin/`, `scripts/`, `schemas/`, `docs/examples/`, `pyproject.toml`,
+ *  `uv.lock`). Path-sorted. */
+export function fileOwnership(manifest: SkillManifest): { bySkill: Map<string, OwnedFile[]>; support: OwnedFile[] } {
+  const nameByDir = new Map<string, string>();
+  for (const [name, entry] of Object.entries(manifest.skills)) nameByDir.set(entry.dir, name);
+  const bySkill = new Map<string, OwnedFile[]>();
+  const support: OwnedFile[] = [];
+  const paths = Object.keys(manifest.files).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const path of paths) {
+    const record = manifest.files[path]!;
+    const segments = path.split('/');
+    let owner: string | undefined;
+    for (let depth = segments.length - 1; depth >= 1 && owner === undefined; depth -= 1) {
+      owner = nameByDir.get(segments.slice(0, depth).join('/'));
+    }
+    if (owner === undefined) {
+      support.push({ path, record });
+    } else {
+      const own = bySkill.get(owner);
+      if (own === undefined) bySkill.set(owner, [{ path, record }]);
+      else own.push({ path, record });
+    }
+  }
+  return { bySkill, support };
+}
+
+/**
+ * True when the CURRENT snapshot does not carry this skill's effective content — a publish is
+ * needed before any worker sees it: some own file's `effectiveHash` differs from the hash it had
+ * in the most recent publish (`lastPublishedHash`, `null` = never published). Publish records the
+ * hash only for files it SHIPS, so this is judged for ENABLED skills only — a disabled skill is
+ * left out of the next publish by its manifest state, which the switch already says.
+ */
+export function isUnpublished(entry: Pick<SkillEntry, 'enabled'>, own: readonly OwnedFile[]): boolean {
+  return entry.enabled && own.some(({ record }) => record.effectiveHash !== record.lastPublishedHash);
+}
+
+/** A manifest entry paired with its name and the derived publish state — the row shape every list
+ *  and drawer renders. `provenance` is the wire's. */
+export interface SkillRow extends SkillEntry {
   name: string;
-  provenance: SkillProvenance;
-}
-
-export function provenanceOf(entry: Pick<SkillManifestEntry, 'baselineHash' | 'effectiveHash'>): SkillProvenance {
-  if (entry.baselineHash === null) return 'user-added';
-  return entry.baselineHash === entry.effectiveHash ? 'shipped' : 'override';
-}
-
-/** True when the CURRENT snapshot does not carry this skill's effective content — a publish is
- *  needed before any worker sees it. */
-export function isUnpublished(entry: Pick<SkillManifestEntry, 'effectiveHash' | 'lastPublishedHash'>): boolean {
-  return entry.lastPublishedHash !== entry.effectiveHash;
+  unpublished: boolean;
 }
 
 /** The manifest as rows, name-sorted (plain codepoint order — deterministic across locales). */
-export function skillRows(manifest: SkillsManifest): SkillRow[] {
+export function skillRows(manifest: SkillManifest): SkillRow[] {
+  const { bySkill } = fileOwnership(manifest);
   return Object.entries(manifest.skills)
-    .map(([name, entry]) => ({ name, ...entry, provenance: provenanceOf(entry) }))
+    .map(([name, entry]) => ({ name, ...entry, unpublished: isUnpublished(entry, bySkill.get(name) ?? []) }))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
@@ -203,18 +262,21 @@ export function skillCounts(rows: readonly SkillRow[]): SkillCounts {
   return counts;
 }
 
-// ── Files: the tree and one file ──────────────────────────────────────────────────────────────
+// ── Files: the two trees and one file ─────────────────────────────────────────────────────────
 
-export interface SkillFileEntry {
-  /** Relative to the skill dir (or the root, for support files), forward slashes. */
+/** One row of a file tree in the drawer: a skill's own file (`GET /skills/:name/files` —
+ *  `SkillFileEntry {path, size, sha256, record}`) or a root support file (from the manifest's
+ *  `files` map, which carries records but no sizes — `size: null`). `path` is relative to the
+ *  skill dir for the skill tree and to the plugin root for the support tree. */
+export interface SkillTreeRow {
   path: string;
-  hash: string;
-  /** Absent for a support file — the manifest's support map carries no sizes. */
-  size?: number;
+  size: number | null;
+  /** The manifest record (`null` for a file present on disk but not yet recorded). */
+  record: SkillFileRecord | null;
 }
 
 /** File rows sorted by path with `SKILL.md` first — it IS the skill. */
-export function sortSkillFiles(files: readonly SkillFileEntry[]): SkillFileEntry[] {
+export function sortSkillFiles(files: readonly SkillTreeRow[]): SkillTreeRow[] {
   return [...files].sort((a, b) => {
     if (a.path === 'SKILL.md') return -1;
     if (b.path === 'SKILL.md') return 1;
@@ -223,35 +285,31 @@ export function sortSkillFiles(files: readonly SkillFileEntry[]): SkillFileEntry
 }
 
 /** `GET /skills/:name/files` — the files the skill OWNS (a nested child skill's files belong to
- *  the child; the daemon refuses to serve them through the parent). */
-export async function listSkillFiles(name: string): Promise<SkillFileEntry[]> {
-  const body = await apiFetch<{ files: SkillFileEntry[] }>(`/skills/${skillRouteName(name)}/files`);
-  return sortSkillFiles(body.files);
+ *  the child; the daemon refuses to serve them through the parent). Shape-checked: a body without
+ *  a `files` array is a named error, never an empty tree. */
+export async function listSkillFiles(name: string): Promise<SkillTreeRow[]> {
+  const body = await apiFetch<unknown>(`/skills/${skillRouteName(name)}/files`);
+  if (!isPlainObject(body) || !Array.isArray(body.files)) {
+    throw new Error(`the daemon answered /skills/${name}/files with no file tree (expected {name, dir, enabled, files: [...]})`);
+  }
+  const tree = body as unknown as SkillFileTree;
+  return sortSkillFiles(tree.files.map((f) => ({ path: f.path, size: f.size, record: f.record })));
 }
 
-/** The root support files as tree rows, from the manifest's `support` map (there is no separate
- *  list route — `GET|PUT /skills/support/*path` addresses one file). */
-export function supportFiles(manifest: SkillsManifest): SkillFileEntry[] {
-  return Object.entries(manifest.support)
-    .map(([path, hash]) => ({ path, hash }))
-    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+/** The root support files as tree rows — the manifest `files` no skill owns (there is no list
+ *  route; `GET|PUT /skills/support/*path` addresses one file). Path-sorted, no sizes. */
+export function supportFiles(manifest: SkillManifest): SkillTreeRow[] {
+  return fileOwnership(manifest).support.map(({ path, record }) => ({ path, size: null, record }));
 }
 
-/** A typed, capped file read: `truncated` past the daemon's cap (the head is served), `binary` on
- *  a NUL sniff (content `""`). Save is disabled on either. */
-export interface SkillFileContent {
-  path: string;
-  content: string;
-  size: number;
-  hash: string;
-  truncated: boolean;
-  binary: boolean;
-}
+/** Which copy of a file to read: the effective root (the default) or the baseline — the "new side"
+ *  of a refresh conflict, or the held-back upstream skill of a name collision (`upstreamDir`). */
+export type SkillReadSide = 'effective' | 'baseline';
 
 // ── Route identity: every name and path is VALIDATED before it becomes a route ─────────────────
 //
 // Names and file paths reach this module from the daemon (manifest keys, `GET /skills/:name/files`
-// rows, the support map) — untrusted until checked. `encodeURIComponent` preserves `.` and `..`,
+// rows, the files map) — untrusted until checked. `encodeURIComponent` preserves `.` and `..`,
 // and URL normalization collapses `/skills/<name>/files/../../support/x` into
 // `/skills/support/x` (or `/skills/support/../../settings` into `/settings`) BEFORE crew's
 // skill-scoped containment ever sees the request. So every segment is validated on its LITERAL
@@ -321,107 +379,92 @@ function supportFileRoute(path: string): string {
   return `/skills/support/${skillRoutePath(path)}`;
 }
 
-export async function readSkillFile(name: string, path: string): Promise<SkillFileContent> {
-  return apiFetch<SkillFileContent>(skillFileRoute(name, path));
+/** `?side=baseline` when asked for the shipped copy; nothing for the effective root (the default). */
+function sideQuery(side: SkillReadSide): string {
+  return side === 'baseline' ? '?side=baseline' : '';
 }
 
-export async function readSupportFile(path: string): Promise<SkillFileContent> {
-  return apiFetch<SkillFileContent>(supportFileRoute(path));
+/** `GET /skills/:name/files/*path` — a typed, capped read (`SkillReadResult`). `side: 'baseline'`
+ *  reads the shipped copy; for a skill a refresh held back (`upstreamDir`), the answer's `path`
+ *  names the upstream file actually read. */
+export async function readSkillFile(name: string, path: string, side: SkillReadSide = 'effective'): Promise<SkillReadResult> {
+  return apiFetch<SkillReadResult>(`${skillFileRoute(name, path)}${sideQuery(side)}`);
+}
+
+/** `GET /skills/support/*path` — the same typed read for a root support file. */
+export async function readSupportFile(path: string, side: SkillReadSide = 'effective'): Promise<SkillReadResult> {
+  return apiFetch<SkillReadResult>(`${supportFileRoute(path)}${sideQuery(side)}`);
 }
 
 // ── The guard envelope (every mutation answers with one, on 2xx) ──────────────────────────────
 
-/** `blocking` refuses the change (verdict `blocked`); `warning` lets it through, flagged. */
-export type SkillFindingSeverity = 'blocking' | 'warning';
-
-export interface SkillFinding {
-  /** The guard that fired (e.g. `name-collision`, `frontmatter-name`, `core-disable`,
-   *  `support-edit`, `unresolved-ref`). */
-  kind: string;
-  severity: SkillFindingSeverity;
-  /** The skill the finding is against, when there is one (a collision names the other skill). */
-  skill: string | null;
-  /** The file (relative to the effective root) and line the finding cites, when it cites one —
-   *  an unresolved `${CLAUDE_PLUGIN_ROOT}` reference names its `file:line`. */
-  file: string | null;
-  line: number | null;
-  explanation: string;
-}
-
-export interface SkillGuardResult {
-  verdict: SkillVerdict;
-  findings: SkillFinding[];
-  /** The catalog revision AFTER this call — the next mutation's `expectedRevision`. */
-  revision: string;
-}
-
-function post(path: string, body: Record<string, unknown>): Promise<SkillGuardResult> {
-  return apiFetch<SkillGuardResult>(path, { method: 'POST', body: JSON.stringify(body) });
+function post<T extends SkillAnalyzeResult>(path: string, body: Record<string, unknown>): Promise<T> {
+  return apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) });
 }
 
 /** `PUT /skills/:name/files/*path` — one file, atomic tmp+rename daemon-side. The route is built
  *  from the REQUESTED identity (the validated skill + path the caller opened), never from a path
- *  the daemon echoed back. */
-export async function writeSkillFile(name: string, path: string, content: string, expectedRevision: string): Promise<SkillGuardResult> {
-  return apiFetch<SkillGuardResult>(skillFileRoute(name, path), {
+ *  the daemon echoed back. Body `PutSkillFileBody {content, expectedRevision}`. */
+export async function writeSkillFile(name: string, path: string, content: string, expectedRevision: number): Promise<SkillMutationResult> {
+  return apiFetch<SkillMutationResult>(skillFileRoute(name, path), {
     method: 'PUT',
     body: JSON.stringify({ content, expectedRevision }),
   });
 }
 
-/** `PUT /skills/support/*path` — a root support file; the guards flag every such edit as a
- *  warning (it is shared by every skill). */
-export async function writeSupportFile(path: string, content: string, expectedRevision: string): Promise<SkillGuardResult> {
-  return apiFetch<SkillGuardResult>(supportFileRoute(path), {
+/** `PUT /skills/support/*path` — a root support file (shared by every skill; the guards flag the
+ *  edit, and a path outside the bundle closure is a 2xx `blocked` `outside-closure` envelope). */
+export async function writeSupportFile(path: string, content: string, expectedRevision: number): Promise<SkillMutationResult> {
+  return apiFetch<SkillMutationResult>(supportFileRoute(path), {
     method: 'PUT',
     body: JSON.stringify({ content, expectedRevision }),
   });
 }
 
 /** `POST /skills/:name/{enable,disable}` — enablement is manifest state; the guards run on every
- *  flip (disabling a core skill is blocking). */
-export async function setSkillEnabled(name: string, enabled: boolean, expectedRevision: string): Promise<SkillGuardResult> {
+ *  flip (disabling a core skill is `blocked`, `core-disable`). */
+export async function setSkillEnabled(name: string, enabled: boolean, expectedRevision: number): Promise<SkillMutationResult> {
   return post(`/skills/${skillRouteName(name)}/${enabled ? 'enable' : 'disable'}`, { expectedRevision });
 }
 
 /** `POST /skills/:name/reset` — restore the skill's OWN files from the baseline (a nested child's
  *  overrides survive); never flips `enabled`. Refused for a user-added skill (no baseline). */
-export async function resetSkill(name: string, expectedRevision: string): Promise<SkillGuardResult> {
+export async function resetSkill(name: string, expectedRevision: number): Promise<SkillMutationResult> {
   return post(`/skills/${skillRouteName(name)}/reset`, { expectedRevision });
 }
 
-/** A whole skill dir as a files map — relative path → content. */
+/** A whole skill dir as a files map — skill-relative POSIX path → UTF-8 content. */
 export type SkillFilesMap = Record<string, string>;
 
-/** `POST /skills` — add a user-added skill from a files map. */
-export function addSkill(name: string, files: SkillFilesMap, expectedRevision: string): Promise<SkillGuardResult> {
+/** `POST /skills` — add a user-added skill (`AddSkillBody`); it lands at
+ *  `skills/<name minus "wicked-garden-">`. */
+export function addSkill(name: string, files: SkillFilesMap, expectedRevision: number): Promise<SkillMutationResult> {
   return post('/skills', { name, files, expectedRevision });
 }
 
-/** `POST /skills/:name/replace` — replace the skill's own files wholesale from a files map. */
-export async function replaceSkill(name: string, files: SkillFilesMap, expectedRevision: string): Promise<SkillGuardResult> {
+/** `POST /skills/:name/replace` — replace the skill's own files wholesale (`ReplaceSkillBody`). */
+export async function replaceSkill(name: string, files: SkillFilesMap, expectedRevision: number): Promise<SkillMutationResult> {
   return post(`/skills/${skillRouteName(name)}/replace`, { files, expectedRevision });
 }
 
 /** `POST /skills/refresh-baseline` — capture the installed plugin as a new baseline and merge it
- *  three-way per file (unchanged → take new; user-modified & upstream-unchanged → keep; both
- *  changed → keep + `conflict`). Never clobbers an edit. */
-export function refreshSkillsBaseline(expectedRevision: string): Promise<SkillGuardResult> {
+ *  three-way per FILE (unchanged → take new; user-modified & upstream-unchanged → keep; both
+ *  changed → keep + `conflict`). Never clobbers an edit. Answers `SkillRefreshResult`. */
+export function refreshSkillsBaseline(expectedRevision: number): Promise<SkillRefreshResult> {
   return post('/skills/refresh-baseline', { expectedRevision });
 }
 
-/** `POST /skills/publish` — validate the WHOLE tree (name uniqueness across the full catalog,
- *  frontmatter names, the core closure, every `${CLAUDE_PLUGIN_ROOT}`/`../` reference resolving
- *  inside the bundle), then write an immutable snapshot generation and flip `current`. A
- *  `blocked` verdict writes nothing — workers keep the previous generation. */
-export function publishSkills(expectedRevision: string): Promise<SkillGuardResult> {
+/** `POST /skills/publish` — validate the WHOLE tree, then write an immutable snapshot generation
+ *  and flip `current`. `SkillPublishResult`: `snapshot` is `null` when `blocked` (nothing written,
+ *  `revision` unchanged — workers keep the previous generation); a `warnings` verdict WROTE it. */
+export function publishSkills(expectedRevision: number): Promise<SkillPublishResult> {
   return post('/skills/publish', { expectedRevision });
 }
 
-/** `POST /skills/analyze` — the publish validation as a dry run: the same findings, nothing
- *  written. Takes no `expectedRevision` — it mutates nothing. */
-export function analyzeSkills(): Promise<SkillGuardResult> {
-  return apiFetch<SkillGuardResult>('/skills/analyze', { method: 'POST' });
+/** `POST /skills/analyze` — the publish validation as a PURE dry run: the same findings, nothing
+ *  persisted, `revision` unchanged. Takes no body — it mutates nothing. */
+export function analyzeSkills(): Promise<SkillAnalyzeResult> {
+  return apiFetch<SkillAnalyzeResult>('/skills/analyze', { method: 'POST' });
 }
 
 /**
@@ -472,20 +515,32 @@ export function readSkillDeepLink(search: string): string | null {
 // ── The adoption seam + the CAS seam ──────────────────────────────────────────────────────────
 
 /**
- * True when this daemon cannot serve the skills catalog: a 501 (route present, no skills root
- * behind it) or Fastify's bare unknown-route 404 (crew predates the `/skills` routes). A NAMED
- * 404/4xx from a daemon WITH the routes ("unknown skill: …") is a real answer and surfaces as one.
+ * True when this daemon PREDATES the skills routes: Fastify's bare unknown-route 404. A NAMED
+ * 404 from a daemon WITH the routes ("unknown skill: …", "no such file") is a real answer and
+ * surfaces as one.
  */
 export function isSkillsUnsupported(e: unknown): boolean {
-  return (e instanceof ApiError && e.status === 501) || isRouteAbsent(e);
+  return isRouteAbsent(e);
 }
 
 /** The honest in-band copy for {@link isSkillsUnsupported} refusals. */
 export const SKILLS_UNSUPPORTED_COPY =
   'This daemon predates the skills catalog (crew’s /skills routes) — there is nothing to manage here yet. Upgrade wicked-crew to browse, edit, enable, publish, and reset the skills its workers run.';
 
-/** A stale `expectedRevision`: the catalog changed under this page (another session, a direct
- *  edit the daemon hashed, a refresh). The page reloads before anything else is written. */
+/**
+ * True when the route exists but there is NO catalog to serve — a **503** (0.27.0): the root is not
+ * seeded (no installed wicked-garden plugin was found), `current` exists but fails verification
+ * (a realpath outside `snapshots/`, malformed `snapshot.json`, a content-hash mismatch), the
+ * manifest is corrupt, or the daemon booted without the skills seam. The daemon's sentence says
+ * which; the page shows it as a LOUD named state — never an empty catalog.
+ */
+export function isSkillsUnavailable(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 503;
+}
+
+/** A stale `expectedRevision` (a CAS conflict — the ONLY thing that answers 409): the catalog
+ *  changed under this page (another session, a direct edit the daemon hashed, a refresh). The page
+ *  reloads before anything else is written. */
 export function isSkillsConflict(e: unknown): boolean {
   return e instanceof ApiError && e.status === 409;
 }

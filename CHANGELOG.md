@@ -12,6 +12,43 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **Skills section (#209).** `/skills` — the file manager over the daemon's one effective
+  garden-shaped plugin root (the skills keystone, crew#480): the KPI band and catalog with
+  kind / provenance / core / claude-only / upgrade / conflict / unpublished badges, the enabled
+  switch through the daemon's guards, the drawer with the skill's own files and the root support
+  files under tabs, a textarea editor (Save → `PUT` → the daemon's findings, CAS on the revision
+  the content was read at), the read-only **Baseline side** of the open file (`?side=baseline`;
+  for a held-back name collision it names the upstream file actually read), Reset (typed
+  confirmation), Replace / Add (a pasted files map), Refresh baseline, Analyze (dry run) and
+  Publish. A "Skills" rail section sits before Steering. Every mutation answers the contract's
+  2xx `{verdict, findings, revision}` envelope (a `blocked` verdict is a normal answer with
+  nothing written); a 409 — exclusively a stale `expectedRevision` — freezes the page behind the
+  reload prompt.
+- **Engine line on `/skills`.** `GET /diagnostics` → `skills` (api-types 0.27.0) rendered under the
+  snapshot line: the state vocabulary `published | fallback | blocked | config-error | disabled`
+  with its findings — whether the engine is actually being handed a verified snapshot, and why not.
+
+### Fixed
+- **The Skills API layer speaks the real crew#480 wire (`wicked-crew-api-types` 0.27.0) — fix
+  pass 4 of #209.** Against the integrated bundle `/skills` rendered an error: studio's hand-mirrored
+  types expected a `manifest.support` map, string `revision`/`expectedRevision`, hash-carrying file
+  entries and a `SkillFileContent.hash`, none of which exist in the contract. Every declaration
+  is now a byte-for-byte MIRROR of the contract's skills block (`src/api/skills-wire.ts`, pinned
+  by `tests/skillsWire.test.ts` against a vendored fixture of the same line ranges), and every
+  reader/writer consumes it: numeric revisions, `manifest.files` records (support files are the
+  records no skill owns; the DEEPEST registered skill dir owns a file), `SkillFileTree` rows
+  `{path, size, record}`, `SkillReadResult {content|null, size, truncated, binary}` (Save disabled
+  on either flag), the `provenance` field as the wire's (no longer derived), `upgradeAvailable` /
+  `upstreamDir`, the `published` record and `current` snapshot, `SkillPublishResult.snapshot` and
+  `SkillRefreshResult`'s merge tallies in the notes. Every finding kind renders generically with
+  its skill, the skill it is against (core-marked), `file:line`, evidence and explanation. A
+  **503** (unseeded root / corrupt `current` / no seam) renders the named unavailable state with
+  the daemon's sentence — never an empty catalog; the bare 404 stays the "predates" state.
+  The package pin stays `^0.25.0` (0.27.0 is unpublished); swap the mirror for
+  `export type { … } from 'wicked-crew-api-types'` when it — or its re-minted successor after the
+  #475/#480 collision — publishes.
+
 ## [0.5.1] — 2026-09-08
 
 ### Fixed

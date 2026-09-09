@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getDiagnostics } from '../api/diagnostics.js';
 import { apiWire } from '../api/errors.js';
 import {
   analyzeSkills,
+  currentBaseline,
   getSkillsCatalog,
   isSkillsConflict,
+  isSkillsUnavailable,
   isSkillsUnsupported,
-  isUnpublished,
   publishSkills,
   readSkillDeepLink,
   refreshSkillsBaseline,
@@ -13,9 +15,13 @@ import {
   skillCounts,
   skillRows,
   skillsPath,
+  SKILLS_ENGINE_STATE_COPY,
   SKILLS_UNSUPPORTED_COPY,
   supportFiles,
+  type DiagnosticsSkills,
+  type SkillAnalyzeResult,
   type SkillGuardResult,
+  type SkillMutationResult,
   type SkillRow,
   type SkillsCatalog,
 } from '../api/skills.js';
@@ -28,38 +34,50 @@ import type { SkillsWriter } from './skillsWriter.js';
 
 /**
  * The Skills surface (`/skills`, the skills keystone) — a FILE MANAGER over the daemon's one
- * effective garden-shaped plugin root, the skills every governed worker runs:
+ * effective garden-shaped plugin root, the skills every governed worker runs (api-types 0.27.0,
+ * crew#480):
  *
  *  - the KPI band (total · enabled · overridden · core · portable) over the manifest, each tile a
  *    door into the matching catalog filter;
  *  - the CATALOG (SkillsGrid): one row per skill with kind / provenance / flags and the enabled
  *    switch — the one inline write, through the daemon's guards;
  *  - the DRAWER (SkillDrawer) a row opens: skill files + support files under tabs, the textarea
- *    editor (Save → PUT → findings), reset / replace. `?skill=<name>` is the drawer's
- *    address — selecting a row is a real navigation (deep-linkable, back-button-correct);
+ *    editor (Save → PUT → findings), the baseline side, reset / replace. `?skill=<name>` is the
+ *    drawer's address — selecting a row is a real navigation (deep-linkable, back-button-correct);
  *  - the page verbs: Add (a pasted files map), Refresh baseline (the three-way upgrade), Analyze
- *    (the publish validation as a dry run) and PUBLISH — validate the whole tree and write the
- *    immutable snapshot generation workers spawn with. Nothing here is live until published.
+ *    (the publish validation as a pure dry run) and PUBLISH — validate the whole tree and write the
+ *    immutable snapshot generation workers spawn with. Nothing here is live until published;
+ *  - the ENGINE line (`GET /diagnostics` → `skills`, read-only): whether the engine is actually
+ *    being handed a verified snapshot (`published`), or why not (`fallback` / `blocked` /
+ *    `config-error` / `disabled`) — the one answer to "why do launches refuse the skills snapshot".
  *
- * CAS: the page holds the catalog `revision`; every write goes through {@link SkillsWriter}
- * (`expectedRevision` out, the answered `revision` adopted). A **409** freezes the page behind the
- * reload prompt — nothing else is written until the catalog is re-read (the Add/Replace modal
- * re-reads through the writer itself and keeps its files map for the retry). Every write also freezes
- * the others while it is in flight (they all share the one revision — overlapping writes could
- * only 409), and a catalog re-read that FAILS marks the page stale: the rows stay readable, every
- * write waits until a re-read succeeds. Each successful re-read bumps `catalogEpoch`, which the
- * drawer reconciles its open file against — a Refresh never advances the write revision past
- * content the editor read earlier.
+ * CAS: the page holds the catalog `revision` (a number, bumped by every mutation); every write
+ * goes through {@link SkillsWriter} (`expectedRevision` out, the answered `revision` adopted). A
+ * **409** — exclusively a stale `expectedRevision` — freezes the page behind the reload prompt;
+ * nothing else is written until the catalog is re-read (the Add/Replace modal re-reads through the
+ * writer itself and keeps its files map for the retry). Every write also freezes the others while
+ * it is in flight (they all share the one revision — overlapping writes could only 409), and a
+ * catalog re-read that FAILS marks the page stale: the rows stay readable, every write waits until
+ * a re-read succeeds. Each successful re-read bumps `catalogEpoch`, which the drawer reconciles its
+ * open file against — a Refresh never advances the write revision past content the editor read
+ * earlier.
  *
- * A daemon without the `/skills` routes renders the NAMED unsupported state — never a crash and
- * never an empty catalog pretending. Every write goes through crew's API (the guarded operator
- * path); nothing here touches the root directly.
+ * Every 2xx mutation answer is an envelope `{verdict, findings, revision}`: `blocked` = the daemon
+ * refused and wrote nothing (a normal answer, rendered as the findings — never an exception);
+ * `warnings` = it proceeded (a publish WROTE its snapshot) and the findings are worth reading.
+ *
+ * The honest non-catalog states: a daemon WITHOUT the `/skills` routes (bare 404) renders the
+ * named unsupported state; a daemon whose route answers **503** — an unseeded root (no installed
+ * plugin), a `current` that fails verification, no skills seam — renders the daemon's sentence as
+ * the named UNAVAILABLE state. Never a crash and never an empty catalog pretending. Every write
+ * goes through crew's API (the guarded operator path); nothing here touches the root directly.
  */
 
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'loaded' }
   | { kind: 'unsupported' }
+  | { kind: 'unavailable'; message: string }
   | { kind: 'failed'; message: string };
 
 type PageVerb = 'refresh' | 'analyze' | 'publish';
@@ -68,6 +86,15 @@ const PAGE_VERB_LABEL: Record<PageVerb, string> = {
   refresh: 'Refresh baseline',
   analyze: 'Analyze',
   publish: 'Publish',
+};
+
+/** The engine line's color by `diagnostics.skills.state`. */
+const ENGINE_STATE_COLOR: Record<DiagnosticsSkills['state'], string> = {
+  published: 'var(--status-done)',
+  fallback: 'var(--status-gate)',
+  blocked: 'var(--status-fail)',
+  'config-error': 'var(--status-fail)',
+  disabled: 'var(--ink-dim)',
 };
 
 export function SkillsPage({ navigate, search = '' }: {
@@ -82,7 +109,7 @@ export function SkillsPage({ navigate, search = '' }: {
   const [busyName, setBusyName] = useState<string | null>(null);
   /** The page verb in flight — its button waits. */
   const [verbBusy, setVerbBusy] = useState<PageVerb | null>(null);
-  /** The last page-level guard result worth reading (a toggle's warnings, a publish's findings). */
+  /** The last page-level envelope worth reading (a toggle's warnings, a publish's findings). */
   const [pageResult, setPageResult] = useState<{ verb: string; result: SkillGuardResult } | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -97,12 +124,26 @@ export function SkillsPage({ navigate, search = '' }: {
   /** Writes in flight through the CAS seam — while any is, every other write affordance waits. */
   const [inFlight, setInFlight] = useState(0);
   /** The revision every mutation is conditioned on — a ref so chained writes read the latest. */
-  const revisionRef = useRef<string | null>(null);
+  const revisionRef = useRef<number | null>(null);
+  /** `GET /diagnostics` → `skills`: what the engine is being handed. `null` until read, or when
+   *  this daemon's diagnostics predate the seam / could not be read (never blocks the page). */
+  const [engine, setEngine] = useState<DiagnosticsSkills | null>(null);
   /** The open drawer has unsaved edits (it reports every flip). A row click on ANOTHER skill then
    *  parks its name in `pendingSelect` and the drawer asks first — its `key` swaps only after the
    *  operator discards, never under a draft (review round 2). */
   const [drawerDirty, setDrawerDirty] = useState(false);
   const [pendingSelect, setPendingSelect] = useState<string | null>(null);
+
+  /** The engine line is read-only telemetry beside the catalog: a failure (an older daemon, a
+   *  transient error) leaves it blank — it never fails the page. */
+  const loadEngine = useCallback(async (): Promise<void> => {
+    try {
+      const d = await getDiagnostics();
+      setEngine(d.skills ?? null);
+    } catch {
+      setEngine(null);
+    }
+  }, []);
 
   const load = useCallback(async (): Promise<SkillsCatalog | null> => {
     try {
@@ -112,6 +153,7 @@ export function SkillsPage({ navigate, search = '' }: {
       setStale(null);
       setState({ kind: 'loaded' });
       setCatalogEpoch((n) => n + 1);
+      void loadEngine();
       return c;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -120,12 +162,15 @@ export function SkillsPage({ navigate, search = '' }: {
         setStale(isSkillsUnsupported(e) ? 'the daemon no longer serves the skills catalog' : message);
       } else if (isSkillsUnsupported(e)) {
         setState({ kind: 'unsupported' });
+      } else if (isSkillsUnavailable(e)) {
+        setState({ kind: 'unavailable', message: apiWire(e) ?? message });
+        void loadEngine();
       } else {
         setState({ kind: 'failed', message });
       }
       return null;
     }
-  }, []);
+  }, [loadEngine]);
 
   useEffect(() => {
     void load();
@@ -163,9 +208,9 @@ export function SkillsPage({ navigate, search = '' }: {
     [run, reloadAfterConflict],
   );
 
-  const rows: SkillRow[] = catalog === null ? [] : skillRows(catalog.manifest);
+  const rows: SkillRow[] = useMemo(() => (catalog === null ? [] : skillRows(catalog.manifest)), [catalog]);
   const counts = skillCounts(rows);
-  const unpublished = rows.filter(isUnpublished).length;
+  const unpublished = rows.filter((r) => r.unpublished).length;
   const support = useMemo(() => (catalog === null ? [] : supportFiles(catalog.manifest)), [catalog]);
 
   // The drawer's address: `?skill=<name>`. A name the manifest does not carry renders a note,
@@ -200,7 +245,7 @@ export function SkillsPage({ navigate, search = '' }: {
   };
 
   /** The ONE guarded flip: the catalog reloaded on anything but `blocked`, the verdict handed back. */
-  const toggle = useCallback(async (name: string, enabled: boolean): Promise<SkillGuardResult | null> => {
+  const toggle = useCallback(async (name: string, enabled: boolean): Promise<SkillMutationResult | null> => {
     setBusyName(name);
     try {
       const result = await run((rev) => setSkillEnabled(name, enabled, rev));
@@ -224,25 +269,38 @@ export function SkillsPage({ navigate, search = '' }: {
       .catch((e: unknown) => setPageError(e instanceof Error ? e.message : String(e)));
   };
 
-  /** The three page verbs share one shape: run, show the envelope, reload on an applied write. */
+  /** The three page verbs share one shape: run, show the envelope, reload on an applied write.
+   *  Each answers its own result type; the note reads the fields that type carries. */
   const pageVerb = async (verb: PageVerb): Promise<void> => {
     setVerbBusy(verb);
     setPageError(null);
     setPageResult(null);
     setNote(null);
     try {
-      const result = verb === 'analyze'
-        ? await analyzeSkills()
-        : await run((rev) => (verb === 'publish' ? publishSkills(rev) : refreshSkillsBaseline(rev)));
+      let result: SkillAnalyzeResult | null;
+      let applied: string | null = null;
+      if (verb === 'analyze') {
+        result = await analyzeSkills();
+      } else if (verb === 'publish') {
+        const r = await run((rev) => publishSkills(rev));
+        result = r;
+        // `snapshot` is null exactly when the publish was blocked (nothing written, revision unchanged).
+        if (r !== null && r.snapshot !== null) {
+          applied = `Published — snapshot generation ${r.snapshot.gen} is current (${r.snapshot.skills} skills, ${r.snapshot.contentHash.slice(0, 12)}); workers spawn with it from now on.`;
+        }
+      } else {
+        const r = await run((rev) => refreshSkillsBaseline(rev));
+        result = r;
+        if (r !== null && r.verdict !== 'blocked') {
+          applied = `Baseline refreshed — ${r.plugin_version} (${r.baseline.slice(0, 12)}): ${r.taken.length} taken · ${r.kept.length} kept · ${r.added.length} added · ${r.removed.length} removed · ${r.conflicts.length} ${r.conflicts.length === 1 ? 'conflict' : 'conflicts'}. Your edits were kept; conflicts are flagged.`;
+        }
+      }
       if (result === null) return;
       setPageResult({ verb: PAGE_VERB_LABEL[verb], result });
       if (verb === 'analyze' || result.verdict === 'blocked') return;
       const next = await load();
       if (next === null) return;
-      const m = next.manifest;
-      setNote(verb === 'publish'
-        ? `Published — snapshot generation ${m.currentGeneration ?? '?'} is current; workers spawn with it from now on.`
-        : `Baseline refreshed — ${m.baseline.source.plugin_version} (${m.baseline.contentHash.slice(0, 12)}), ${Object.keys(m.skills).length} skills. Your edits were kept; conflicts are flagged.`);
+      setNote(applied);
     } catch (e) {
       setPageError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -254,7 +312,7 @@ export function SkillsPage({ navigate, search = '' }: {
    *  skill's drawer (`?skill=<name>`) opens only once that re-read SUCCEEDS. A failed re-read has
    *  already raised the stale banner (the rows stay, writes wait); navigating anyway would render
    *  "No skill named … in this catalog" over a skill the daemon DID write (review round 3). */
-  const onAdded = (name: string, result: SkillGuardResult): void => {
+  const onAdded = (name: string, result: SkillMutationResult): void => {
     setAddOpen(false);
     setNote(`Added ${name} — publish to hand it to workers.`);
     setPageResult(result.findings.length > 0 ? { verb: `Add ${name}`, result } : null);
@@ -263,8 +321,9 @@ export function SkillsPage({ navigate, search = '' }: {
     });
   };
 
-  const baseline = catalog?.manifest.baseline ?? null;
-  const generation = catalog?.manifest.currentGeneration ?? null;
+  const baseline = catalog === null ? null : currentBaseline(catalog.manifest);
+  const current = catalog?.current ?? null;
+  const published = catalog?.manifest.published ?? null;
   /** Every write affordance waits while: a 409 is up, the catalog is stale, a write is in flight,
    *  or a page verb is running — they all share the one revision. */
   const frozen = conflict !== null || stale !== null || inFlight > 0 || verbBusy !== null;
@@ -296,17 +355,56 @@ export function SkillsPage({ navigate, search = '' }: {
               as immutable snapshots. Edit any file in place, enable or disable, reset to the baseline;
               the daemon guards every write, and nothing reaches a worker until you publish.
             </p>
+            {catalog !== null && (
+              <p data-testid="skills-root" className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }} title="the resolved skills root on the daemon host (<state home>/skills — not configurable)">
+                root {catalog.root}
+              </p>
+            )}
             {baseline !== null && (
-              <p data-testid="skills-source" className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-                baseline {baseline.source.plugin_version} · {baseline.source.kind} · {baseline.contentHash.slice(0, 12)}
-                {baseline.source.git_sha !== null && ` · ${baseline.source.git_sha.slice(0, 10)}`}
-                {` · captured ${baseline.source.captured_at}`}
+              <p
+                data-testid="skills-source"
+                data-venv={baseline.venv}
+                className="mt-0.5 font-mono text-[10px]"
+                style={{ color: 'var(--ink-dim)' }}
+                title={`captured from ${baseline.source.path}`}
+              >
+                baseline {baseline.plugin_version} · {baseline.source.kind} · {baseline.hash.slice(0, 12)}
+                {baseline.git_sha !== null && ` · ${baseline.git_sha.slice(0, 10)}`}
+                {` · venv ${baseline.venv}`}
+                {` · captured ${baseline.captured_at}`}
               </p>
             )}
             {catalog !== null && (
-              <p data-testid="skills-snapshot" data-generation={generation ?? 'none'} data-unpublished={unpublished} className="mt-0.5 font-mono text-[10px]" style={{ color: unpublished > 0 ? 'var(--status-run)' : 'var(--ink-dim)' }}>
-                {generation === null ? 'never published — workers fall back to the installed plugin' : `snapshot generation ${generation} is current`}
+              <p
+                data-testid="skills-snapshot"
+                data-generation={current?.gen ?? 'none'}
+                data-unpublished={unpublished}
+                className="mt-0.5 font-mono text-[10px]"
+                style={{ color: unpublished > 0 ? 'var(--status-run)' : 'var(--ink-dim)' }}
+                title={current === null ? undefined : current.path}
+              >
+                {current === null
+                  ? 'never published — no snapshot to hand to workers yet'
+                  : `snapshot generation ${current.gen} is current`}
+                {published !== null && ` · published ${published.at} · ${published.contentHash.slice(0, 12)}`}
                 {unpublished > 0 && ` · ${unpublished} unpublished ${unpublished === 1 ? 'skill' : 'skills'}`}
+              </p>
+            )}
+            {engine !== null && (
+              <p
+                data-testid="skills-engine"
+                data-state={engine.state}
+                className="mt-0.5 font-mono text-[10px]"
+                style={{ color: ENGINE_STATE_COLOR[engine.state] }}
+                title={engine.engineInput === null ? 'WICKED_SKILLS_SNAPSHOT is unset' : `WICKED_SKILLS_SNAPSHOT=${engine.engineInput}`}
+              >
+                engine {SKILLS_ENGINE_STATE_COPY[engine.state]}
+                {engine.current !== null && ` · gen ${engine.current.gen}`}
+                {engine.findings.map((f, i) => (
+                  <span key={`${f.kind}-${i}`} data-testid="skills-engine-finding" data-kind={f.kind} data-severity={f.severity} className="block">
+                    {f.kind} · {f.severity} · {f.message}
+                  </span>
+                ))}
               </p>
             )}
           </div>
@@ -324,8 +422,8 @@ export function SkillsPage({ navigate, search = '' }: {
                   Add skill…
                 </button>
                 {verbButton('refresh', 'skills-refresh', 'Capture the installed plugin as a new baseline and merge it three-way per file: untouched skills take the new version, your edits are kept and conflicts flagged — never clobbered', false)}
-                {verbButton('analyze', 'skills-analyze', 'Dry-run the publish validation over the whole tree — the same findings, nothing written', false)}
-                {verbButton('publish', 'skills-publish', 'Validate the whole tree and write the immutable snapshot generation workers spawn with (enabled skills only)', true)}
+                {verbButton('analyze', 'skills-analyze', 'Dry-run the publish validation over the whole tree — the same findings, nothing written, the revision unchanged', false)}
+                {verbButton('publish', 'skills-publish', 'Validate the whole tree and write the immutable snapshot generation workers spawn with (enabled skills only); a publish with only warnings still writes it', true)}
               </>
             )}
             <button
@@ -352,6 +450,21 @@ export function SkillsPage({ navigate, search = '' }: {
             <p className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>Skills are not served by this daemon.</p>
             <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{SKILLS_UNSUPPORTED_COPY}</p>
           </div>
+        ) : state.kind === 'unavailable' ? (
+          <div
+            data-testid="skills-unavailable"
+            role="alert"
+            className="flex flex-col gap-2 rounded p-4"
+            style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-fail)' }}
+          >
+            <p className="text-xs font-semibold" style={{ color: 'var(--status-fail)' }}>The daemon has no skills catalog to serve.</p>
+            <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+              The `/skills` routes are here but answered 503 — the root is not seeded (no installed wicked-garden plugin was found),
+              the published snapshot fails verification, or the daemon booted without the skills seam. Nothing is shown as an
+              empty catalog. The daemon says:
+            </p>
+            <p className="font-mono text-[11px]" style={{ color: 'var(--ink-high)' }}>{state.message}</p>
+          </div>
         ) : state.kind === 'failed' ? (
           <p data-testid="skills-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
             {state.message}
@@ -364,7 +477,7 @@ export function SkillsPage({ navigate, search = '' }: {
                   testId="skills-kpi-total"
                   label="Skills"
                   value={counts.total}
-                  context={baseline === null ? undefined : `baseline ${baseline.source.plugin_version}`}
+                  context={baseline === null ? undefined : `baseline ${baseline.plugin_version}`}
                   onOpen={() => setFacets({ ...facets, chip: 'all' })}
                 />
                 <StatTile

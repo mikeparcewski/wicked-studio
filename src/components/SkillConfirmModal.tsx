@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { resetSkill, type SkillGuardResult, type SkillRow } from '../api/skills.js';
+import { resetSkill, type SkillMutationResult, type SkillRow } from '../api/skills.js';
 import { useModalEscape } from './Modal.js';
 import { SkillFindings } from './SkillFindings.js';
 import type { SkillsWriter } from './skillsWriter.js';
@@ -11,9 +11,10 @@ import type { SkillsWriter } from './skillsWriter.js';
  * state and is never flipped by a reset. A user-added skill has no baseline, so the drawer never
  * offers this for one (disable is its off switch; there is no delete verb on the wire).
  *
- * Runs through the page's CAS writer and answers with the daemon's guard envelope: `blocked` keeps
- * the modal open with the findings (nothing changed); anything else closes it through `onDone`; a
- * revision conflict closes it plain — the page's reload prompt owns that moment.
+ * Runs through the page's CAS writer and answers with the daemon's envelope
+ * (`SkillMutationResult`): `blocked` keeps the modal open with the findings (nothing changed — a
+ * corrupt baseline refuses to restore, `baseline-corrupt`); anything else closes it through
+ * `onDone`; a revision conflict closes it plain — the page's reload prompt owns that moment.
  */
 
 const BODY =
@@ -24,12 +25,12 @@ export function SkillConfirmModal({ skill, writer, onClose, onDone }: {
   writer: SkillsWriter;
   onClose: () => void;
   /** Fires after the wire answered with anything but `blocked`. */
-  onDone: (result: SkillGuardResult) => void;
+  onDone: (result: SkillMutationResult) => void;
 }): React.ReactElement {
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [blocked, setBlocked] = useState<SkillGuardResult | null>(null);
+  const [blocked, setBlocked] = useState<SkillMutationResult | null>(null);
   useModalEscape(onClose);
 
   const title = `Reset ${skill.name}`;

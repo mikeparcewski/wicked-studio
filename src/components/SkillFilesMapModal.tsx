@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addSkill, parseFilesMap, replaceSkill, type SkillGuardResult } from '../api/skills.js';
+import { addSkill, parseFilesMap, replaceSkill, type SkillMutationResult } from '../api/skills.js';
 import { useModalEscape } from './Modal.js';
 import { SkillFindings } from './SkillFindings.js';
 import type { SkillsWriter } from './skillsWriter.js';
@@ -9,9 +9,11 @@ import type { SkillsWriter } from './skillsWriter.js';
  * skill's own files wholesale (`POST /skills/:name/replace`). v1 has no multi-file picker — the
  * operator pastes a JSON files map (`{"SKILL.md": "...", "refs/x.md": "..."}`), validated live
  * ({@link parseFilesMap}: an object of string contents, relative paths, `SKILL.md` present). The
- * write runs through the page's CAS writer; the daemon's guards answer: `blocked` keeps the modal
- * open with the findings (nothing changed); anything else closes it through `onDone`. A revision
- * conflict (409) keeps the modal MOUNTED — the name and the pasted files map are the operator's
+ * write runs through the page's CAS writer; the daemon's guards answer (`SkillMutationResult`,
+ * api-types 0.27.0): `blocked` keeps the modal open with the findings (nothing changed — a name
+ * collision, a core rename, an `outside-closure` path); anything else closes it through `onDone`.
+ * A revision conflict (409 — a stale `expectedRevision`, the only thing that answers 409) keeps the
+ * modal MOUNTED — the name and the pasted files map are the operator's
  * work and are never dropped for a stale revision: the banner names the conflict, the catalog is
  * re-read through the writer, and the same map is retried against the revision it adopts
  * (review round 2).
@@ -29,13 +31,13 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
   writer: SkillsWriter;
   onClose: () => void;
   /** Fires after the wire answered with anything but `blocked`, with the skill's name. */
-  onDone: (name: string, result: SkillGuardResult) => void;
+  onDone: (name: string, result: SkillMutationResult) => void;
 }): React.ReactElement {
   const [newName, setNewName] = useState('');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [blocked, setBlocked] = useState<SkillGuardResult | null>(null);
+  const [blocked, setBlocked] = useState<SkillMutationResult | null>(null);
   /** The last write hit a revision conflict: nothing was written, the draft is kept, the catalog
    *  is (being) re-read — the operator retries the same map against the new revision. */
   const [conflict, setConflict] = useState(false);

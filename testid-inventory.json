@@ -11,8 +11,8 @@
   "studioVersion": "0.5.1",
   "counts": {
     "files": 137,
-    "occurrences": 1116,
-    "static": 954,
+    "occurrences": 1134,
+    "static": 972,
     "dynamic": 57,
     "computed": 6
   },
@@ -3886,6 +3886,42 @@
       ]
     },
     {
+      "testId": "skills-baseline-content",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-baseline-error",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-baseline-loading",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-baseline-open",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-baseline-path",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-baseline-view",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
       "testId": "skills-claude-only-badge",
       "files": [
         "src/components/SkillChips.tsx"
@@ -3988,7 +4024,19 @@
       ]
     },
     {
+      "testId": "skills-drawer-edited",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
       "testId": "skills-drawer-error",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drawer-upstream",
       "files": [
         "src/components/SkillDrawer.tsx"
       ]
@@ -3997,6 +4045,18 @@
       "testId": "skills-editor",
       "files": [
         "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-engine",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-engine-finding",
+      "files": [
+        "src/components/SkillsPage.tsx"
       ]
     },
     {
@@ -4061,6 +4121,12 @@
     },
     {
       "testId": "skills-file-readonly",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-size",
       "files": [
         "src/components/SkillDrawer.tsx"
       ]
@@ -4145,7 +4211,31 @@
       ]
     },
     {
+      "testId": "skills-finding-against",
+      "files": [
+        "src/components/SkillFindings.tsx"
+      ]
+    },
+    {
+      "testId": "skills-finding-evidence",
+      "files": [
+        "src/components/SkillFindings.tsx"
+      ]
+    },
+    {
       "testId": "skills-finding-location",
+      "files": [
+        "src/components/SkillFindings.tsx"
+      ]
+    },
+    {
+      "testId": "skills-finding-skill",
+      "files": [
+        "src/components/SkillFindings.tsx"
+      ]
+    },
+    {
+      "testId": "skills-findings-tally",
       "files": [
         "src/components/SkillFindings.tsx"
       ]
@@ -4223,6 +4313,12 @@
       ]
     },
     {
+      "testId": "skills-root",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
       "testId": "skills-row",
       "files": [
         "src/components/SkillsGrid.tsx"
@@ -4271,6 +4367,12 @@
       ]
     },
     {
+      "testId": "skills-unavailable",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
       "testId": "skills-unpublished-badge",
       "files": [
         "src/components/SkillChips.tsx"
@@ -4280,6 +4382,12 @@
       "testId": "skills-unsupported",
       "files": [
         "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-upgrade-badge",
+      "files": [
+        "src/components/SkillChips.tsx"
       ]
     },
     {
