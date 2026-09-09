@@ -15,6 +15,15 @@ them (gitignored PNGs — regenerate with the harness).
 > brief's 85 %, and the plan-consistency measurement was corrected. Every number that changed is
 > annotated inline as *(was X — why)* and listed in `report.json → revisions[]`; the underlying
 > measurements are the originals.
+>
+> **Revised again after codex round 2 (same day, still offline).** `pass` now requires every
+> attributable sibling terminal with its own verdict; gates are decided by gate *kind* and fail
+> closed; the preflight is re-run at the submit click under a process-wide launch reservation;
+> sibling gates are decided on the UI while following; the brief-text attribution fallback is gone;
+> artifact writes are contained and symlink-safe; evidence-fetch failures are typed misses; plan
+> measurements exclude execution summaries. One number moved (LT-1's scenario count, 31 → 28 —
+> annotated below); the swap-ceiling item was adjudicated by the coordinator (see "Preflight
+> history"): recorded + acknowledged, not enforced.
 
 | Component | Version |
 |---|---|
@@ -27,12 +36,20 @@ them (gitignored PNGs — regenerate with the harness).
 preflight before every launch (zero executing/awaiting runs on `:7701`, 1-minute load < 20, and a
 swap gate — the brief's contract is **< 85 %**, which the harness now enforces by default; the three
 recorded launches ran under a coordinator-authorized **95 %** with swap reading 93 %, a contract
-deviation recorded in `report.json → preflight_policy` — see "Preflight history"; free memory was
-recorded but not gated on); every gate decided through the UI card only (never the API) under one
-deny-list policy (deliver/push/PR/merge/publish/release → reject, anything else → approve — applied
-to the intake gate too); no deliver gate approved (none arrived); no repo/project writes; read-only
-GETs for every assertion; a wedge (no events for 10 min) would have been reported, not killed (none
-occurred).
+deviation recorded in `report.json → contract_deviation` — see "Preflight history"; free memory was
+recorded but not gated on). *The harness as committed now also re-runs all three gates immediately
+before the submit click under a process-wide `flock` reservation held until the intake gate is
+decided (`preflights[].at: "submit"`) — the three recorded launches predate that check and had one
+preflight before browser start-up (`at_submit: "not performed"`).* Every gate decided through the
+UI card only (never the API) under one policy applied to the intake gate too — *now decided by gate
+kind and failing closed: a unit whose `stage`/`gate` is deliver/release/publish/merge, or a prompt
+whose imperative is deliver/push/open a PR/merge/publish/release → reject; an unreadable prompt with
+no unit info → reject; anything else → approve; the recorded intake gates (unit 1, stage `test`,
+gate `auto`) re-evaluate to approve — agreeing with what was clicked*; sibling gates are decided on
+`/runs/<sibling id>` while following (none arose); no deliver gate approved (none arrived); no
+repo/project writes; read-only GETs for every assertion, with a failed evidence fetch recorded as a
+typed miss rather than as absent evidence (none occurred); a wedge (no events for 10 min) would
+have been reported, not killed (none occurred).
 
 **The one-sentence brief** (identical for all three launches — core#393 splits on `.`/`;`/newline,
 so it contains none):
@@ -50,19 +67,21 @@ so it contains none):
 | LT-1 Run recon | **fail** — feature contract not met | **yes** | **3** (intent 1) | pre-execution: "Approve unit 1 before it runs: Recon: survey the target…" (180 chars, no plan) | 80 s | 564 s (total 651 s) | **0** attributable (0 unrelated) | **no** (label `recon-mttmyh2a-c635a60c` dangling) | none (`acceptance.required=false`) | yes — **31** canonical files *(was 25 = 9 paths + 16 basenames counted as separate identities; bare names now resolve to their repo path and lower-case source names count)* / yes |
 | LT-2 New test | **fail** — feature contract not met | **yes** | **3** (intent 1) | pre-execution: "Approve unit 1 before it runs: New test: plan the test…" (246 chars, no plan) | 67 s | 190 s (total 260 s) | **0** attributable (0 unrelated) | **no** (`recon-mttnf3s6-99e928c5` dangling) | none | yes — **14** canonical files *(was 14 with `App.tsx` double-counted against `src/App.tsx`; `useRoute.ts` now resolved)* / yes (`[TOOL]`/`[AGENT]` tags) |
 | LT-3 Run recon again (identical brief) | **fail** — feature contract not met | **yes** | **3** | pre-execution, same shape as LT-1 | 70 s | 210 s (total 287 s) | **0** attributable (0 unrelated) | **no** (`recon-mttnnicz-82c6bb65`) | none | yes — **30** canonical files *(was 32 = 24 paths + 8 basenames with five files counted twice; now 27 distinct + `interactive_wire_contract_test.py`, `uxfix_fixture.py`, `prepare-dist.mjs` resolved)* / yes |
-| LT-3 consistency vs LT-1 | **low** | — | — | — | — | — | — | — | — | files overlap **38.6 %** (17 common / 44 union) *(was 32.6 % = 14/43 when `App.tsx` and `src/App.tsx` counted as different files — identities are now canonical repo paths)*; scenario-id overlap **n/a** — neither plan carries scenario ids *(was reported 0 % on LT-1's R-01/R-02, which are RAID risk ids inside a survey bullet, not scenario ids; only LT-2 numbers its items, 1.1–4.2)*; scenario-title overlap **0 %** (31 vs 22 extracted scenario titles, none shared) *(was 0 % of 8 vs 4 when the extractor missed the plan tables and counted survey bullets; an earlier 25 % came from toolchain lines, elided since)* |
-| LT-4 surfaces coverage | **pass (breadth)** | — | — | — | — | — | — | — | — | all three plans propose tests for all four asked surfaces (WS events, /api/v1 routes, CLI, UI pages); no gap — see quality caveats below (unchanged by the re-analysis) |
+| LT-3 consistency vs LT-1 | **low** | — | — | — | — | — | — | — | — | files overlap **38.6 %** (17 common / 44 union) *(was 32.6 % = 14/43 when `App.tsx` and `src/App.tsx` counted as different files — identities are now canonical repo paths)*; scenario-id overlap **n/a** — neither plan carries scenario ids *(was reported 0 % on LT-1's R-01/R-02, which are RAID risk ids inside a survey bullet, not scenario ids; only LT-2 numbers its items, 1.1–4.2)*; scenario-title overlap **0 %** (**28** vs 22 extracted scenario titles, none shared) *(was 31 vs 22 — three LT-1 lines were execution summaries, not proposed scenarios: the `npm test` baseline bullet, the `npm test` row of unit 2's "Execution verdict" table and that section's "#10 …" gap bullet; results a worker reported are now excluded from the scenario set; before that, 0 % of 8 vs 4 when the extractor missed the plan tables and counted survey bullets, and an earlier 25 % came from toolchain lines, elided since)* |
+| LT-4 surfaces coverage | **pass (breadth)** | — | — | — | — | — | — | — | — | all three plans propose tests for all four asked surfaces (WS events, /api/v1 routes, CLI, UI pages); no gap — see quality caveats below. *Re-measured over the extracted scenario lines + plan-table rows only (a survey paragraph repeating the brief's surface names no longer counts): still four of four for every plan — LT-4 does not flip; `names_real_files` now also requires ≥ 1 scenario, still true for all three* |
 | LT-5 operator's view | **observed — stale and misleading** | — | — | — | — | — | — | — | — | Tests landing identical before/after every run; the finished run is nowhere on the page that launched it; scoreboard for the returned label says "No campaign is filed" (+ console 404); "All campaigns" rename leftover |
 
 Two verdicts, deliberately. **`harness_ok: yes`** is the honest *harness* status: each governed run was
 launched from the UI, its intake gate rendered on the card and was decided there, and it reached
 `completed` with 3/3 units done — no wedge, no extra gate, no deliver, no blocker. **`result: fail`**
 is the *feature* verdict: the contract ("run the approved plan as governed sibling runs under one
-test") requires attributable sibling runs that reach verdicts — none appeared (LT-2 additionally has
-no registered campaign). *(An earlier revision of this table said `pass` on "recon completed + the
-plan names real files + classifies"; codex's review called that out and the verdict was split —
-`fail_reasons[]` in `report.json` carries the exact reasons per scenario. The measurements did not
-change; the reading of them did.)*
+test") requires ≥ 1 attributable sibling run with **every** attributable sibling terminal and
+**every** one carrying its own acceptance verdict (`measured.sibling_verdicts`, per id) — none
+appeared (LT-2 additionally has no registered campaign). *(An earlier revision of this table said
+`pass` on "recon completed + the plan names real files + classifies"; codex's review called that out
+and the verdict was split; its round 2 showed that one truthy verdict among unfinished siblings
+still passed, so the rule is now per sibling — `fail_reasons[]` in `report.json` names the sibling.
+The measurements did not change; the reading of them did.)*
 
 ### Every run had the same event shape
 
@@ -162,7 +181,7 @@ Screenshots (regenerable): `LT-{1,2,3}-01-landing-before`, `02-panel-filled`, `0
 | F6 | **Dangling campaign label.** Single-repo launches answer `campaign: recon-…` + `campaignRegistered: false`; the panel ignores the flag, its resolved copy sends the operator to "Campaigns", and the scoreboard for that label 404s ("No campaign is filed under …"). | `launch_answer`, `scoreboard.notfound: true` ×3, console 404 ×3 | studio#216 (filed) |
 | F7 | **The Test landing does not reflect the runs launched from it.** Single-repo recon runs are not campaigns, so the landing (which lists `GET /campaigns`) never shows them; its KPIs stayed frozen on a stale Sept-8 cancelled fan (`partially_completed` with both nodes `cancelled`, "0 landed of 2 finished", "PASS RATE 0 %") through all three runs. | `landing_before` == `landing_after` ×3; `GET /campaigns` | studio#216 (filed) |
 | F8 | **Rename leftovers.** "All campaigns" link on the campaign-not-found view; the resolved copy's "Campaigns"; the not-found copy says "campaign" twice; the phase strip labels the middle unit `build`. | `08-scoreboard`, `TestingLaunchPanel.tsx` resolved copy | studio#216 (filed) |
-| F9 | **Two plans for the same brief do not agree.** LT-1 vs LT-3 (identical body): **38.6 %** file overlap over canonical repo paths (17 of 44 files named by either plan are named by both) *(was 32.6 % when `App.tsx` and `src/App.tsx` counted as two files)*; **no shared scenario ids** — neither plan carries any *(was "0 %" on LT-1's R-01/R-02, which are RAID risk ids in a survey bullet)*; **0 %** scenario-title overlap across 31 vs 22 extracted scenario rows/items *(was 0 % of 8 vs 4 before plan tables were counted)*; classification vocabularies differ. The feature has no stable plan schema to compare, approve, or execute against. | `consistency_vs_LT-1` | crew#473 (an executable plan needs a schema) |
+| F9 | **Two plans for the same brief do not agree.** LT-1 vs LT-3 (identical body): **38.6 %** file overlap over canonical repo paths (17 of 44 files named by either plan are named by both) *(was 32.6 % when `App.tsx` and `src/App.tsx` counted as two files)*; **no shared scenario ids** — neither plan carries any *(was "0 %" on LT-1's R-01/R-02, which are RAID risk ids in a survey bullet)*; **0 %** scenario-title overlap across **28** vs 22 extracted scenario rows/items *(was 31 vs 22 — three of LT-1's lines were execution summaries (`npm test` results, the "Execution verdict" section), now excluded; before that 0 % of 8 vs 4 before plan tables were counted)*; classification vocabularies differ. The feature has no stable plan schema to compare, approve, or execute against. | `consistency_vs_LT-1` | crew#473 (an executable plan needs a schema) |
 | F10 | One `councilSeatFailed` (claude, unit 2 council, "exceeded 40s dispatch budget") in LT-1 — the council proceeded on the remaining seats. Recorded, not a blocker. | event seq 895 on d293f4d7 | — |
 | F11 | **A captured unit output ends mid-word at the source.** LT-3 unit 2's `GET /runs/:id/units/2/output` is 5375 chars and stops at "a committed selector cont"; its streamed `unitOutputDelta` frames total 2587 chars over 3 events (units 1 and 3 stream exactly their captured length: 5336 and 7752). The committed plan file reproduces the daemon's output verbatim — the truncation is upstream of the harness, not an artifact-writing defect. | LT-3 plan unit 2; `GET /runs/d12adb6c…/events` vs `/units/2/output` | — (single occurrence; recorded) |
 
@@ -185,11 +204,24 @@ idles at ~93 % swap, so an 85 % gate would never have cleared; mid-run the coord
 relaxing it to 95 %, the harness was edited to a hard-coded 95, and every recorded reading is swap
 **93.0 %** — i.e. all three launches (LT-1 at 01:06, LT-2 at 01:19, LT-3 at 01:25) happened
 *above* the contract's ceiling and would not have launched under it. That is a contract deviation
-and is now recorded as one: `report.json → preflight_policy.contract_deviation`, and every
-`preflights[].readings[]` entry carries the `swap_max_pct` it was judged against (backfilled with 95
-for these three — the threshold was not recorded at the time). The harness now defaults to the
-contract's 85 %; the only way to move it is an explicit `SWAP_MAX_PCT` env var, which the report
-records as a deviation.
+and is now recorded as one: `report.json → contract_deviation` (top level, `{var, contract,
+effective, ack}`; mirrored in `preflight_policy`), and every `preflights[].readings[]` entry carries
+the `swap_max_pct` it was judged against (backfilled with 95 for these three — the threshold was not
+recorded at the time). The harness now defaults to the contract's 85 %; the only way to move it is
+an explicit `SWAP_MAX_PCT` env var **together with** `SWAP_MAX_PCT_ACK=contract-deviation` — without
+the acknowledgement the harness exits naming both variables — and the move is logged as
+`CONTRACT DEVIATION` at every preflight, stamped on every reading and recorded in that top-level
+object.
+
+**Adjudication (coordinator, after codex round 2).** Codex asked for the 85 % ceiling to be
+*enforced* and compliant live-run evidence obtained. The coordinator ruled that the 85 % default
+stays and `SWAP_MAX_PCT` stays an explicit operator override, because compliant live evidence is
+unobtainable on this host (it idles at ~93 % swap from unrelated long-lived processes) and
+re-running governed councils is out of scope; the deviation is made impossible to miss rather than
+impossible to do. Item 1 is therefore **recorded + acknowledged, not enforced; the three recorded
+runs remain deviation evidence.** The three launches also predate the pre-submit preflight: each had
+one preflight before browser start-up and none at the submit click (`preflights[].at_submit: "not
+performed"`).
 
 How it got there: three harness attempts. Attempt 1 gated on `vm_stat` "Pages free" ≥ 2 GB and never
 cleared in its first minutes (free swung 58 MB–2 GB while load was 9–14); attempt 2 lowered the floor
@@ -207,15 +239,23 @@ attempted by any run (`delivery: vacuous`).
 python3 e2e/test_feature_live.py                 # all of LT-1..LT-3 + LT-4/LT-5 analysis (~35 min)
 ONLY=LT-1 python3 e2e/test_feature_live.py       # one scenario
 STUDIO_URL=http://localhost:7701 TARGET_REPO=wicked-studio   # defaults
-SWAP_MAX_PCT=95 python3 e2e/test_feature_live.py # relax the swap gate — recorded as a contract deviation
+SWAP_MAX_PCT=95 SWAP_MAX_PCT_ACK=contract-deviation python3 e2e/test_feature_live.py
+                                                 # relax the swap gate — an acknowledged, recorded contract deviation
+                                                 # (SWAP_MAX_PCT alone exits naming both variables)
 
-python3 -m unittest e2e/test_feature_live_selftest.py -v   # offline self-test: thresholds, gate policy,
-python3 -m py_compile e2e/test_feature_live.py             # verdict split, attribution, scrub, analysis, atomic write
+python3 -m unittest e2e/test_feature_live_selftest.py -v   # offline self-test: thresholds + ack, pre-submit preflight +
+python3 -m py_compile e2e/test_feature_live.py             # launch lock, gate policy (fake page), sibling gates, verdict
+                                                           # split, attribution, typed fetch misses, scrub, plan analysis
+                                                           # (re-derived over the committed plans), contained atomic write
 ```
 
 Requires `pip install playwright && playwright install chromium`, a reachable crew daemon with the
 target repo registered, and nothing else executing on it — the harness refuses to launch otherwise
-(swap ≥ 85 % included, unless `SWAP_MAX_PCT` says otherwise). The self-test needs none of that;
-studio's CI runs no Python step, so run it by hand before pushing a harness change. `report.json` is
-written atomically after every scenario and on every exit path — an aborted run still leaves the
-finished scenarios' evidence on disk under `aborted: {scenario, error}`.
+(swap ≥ 85 % included, unless `SWAP_MAX_PCT` + `SWAP_MAX_PCT_ACK=contract-deviation` say otherwise),
+re-checks all three gates at the submit click, and holds `e2e/artifacts/test-feature-live/.launch.lock`
+(`flock`) until the intake gate is decided — a second harness process fails fast. The self-test needs
+none of that (it touches `git ls-files` of this worktree and a temp dir); studio's CI runs no Python
+step, so run it by hand before pushing a harness change. `report.json` is written atomically (unique
+temp file + rename, contained under the artifacts dir, never through a symlink) after every scenario
+and on every exit path — an aborted run still leaves the finished scenarios' evidence on disk under
+`aborted: {scenario, error}`.

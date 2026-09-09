@@ -16,5 +16,8 @@ tmp/
 __pycache__/
 dist-realhost/
 # Live Test-feature run screenshots (e2e/test_feature_live.py) — evidence, not source; the
-# captured plans + report.json beside them ARE committed.
+# captured plans + report.json beside them ARE committed. The launch reservation (flock) file and
+# in-flight report temp files are process state, never evidence.
 e2e/artifacts/**/*.png
+e2e/artifacts/**/.launch.lock
+e2e/artifacts/**/.report-*.tmp

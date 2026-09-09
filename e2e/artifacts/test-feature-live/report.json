@@ -22,7 +22,9 @@
     }
    ],
    "cleared": true,
-   "waited_s": 0
+   "waited_s": 0,
+   "at": "before-launch",
+   "at_submit": "not performed \u2014 the pre-submit preflight (preflight_at_submit) postdates these launches; the single recorded reading preceded browser start-up (item 4)"
   },
   {
    "scenario": "LT-2",
@@ -40,7 +42,9 @@
     }
    ],
    "cleared": true,
-   "waited_s": 0
+   "waited_s": 0,
+   "at": "before-launch",
+   "at_submit": "not performed \u2014 the pre-submit preflight (preflight_at_submit) postdates these launches; the single recorded reading preceded browser start-up (item 4)"
   },
   {
    "scenario": "LT-3",
@@ -58,7 +62,9 @@
     }
    ],
    "cleared": true,
-   "waited_s": 0
+   "waited_s": 0,
+   "at": "before-launch",
+   "at_submit": "not performed \u2014 the pre-submit preflight (preflight_at_submit) postdates these launches; the single recorded reading preceded browser start-up (item 4)"
   }
  ],
  "scenarios": {
@@ -276,11 +282,10 @@
      "nonexistent_paths": [],
      "names_real_files": true,
      "classifies": true,
-     "deterministic_mentions": 24,
+     "deterministic_mentions": 21,
      "governed_mentions": 7,
      "scenario_ids": [],
      "scenario_lines": [
-      "npm test \u2192 237 files / 2442 tests green",
       "Needs-you queue: severity order, dedupe (onboard-suppression, campaign-subtraction), windowing",
       "Contradiction guard: 21 failed runs \u21d2 calm copy cannot render",
       "KPI band folds/thresholds/deltas, essence-strip omission on absent wires, empty-portfolio state",
@@ -292,8 +297,6 @@
       "Wire-contract drift: studio's pinned wicked-crew-api-types vs the live daemon's actual response shapes",
       "Full standalone e2e golden path (launch \u2192 connect \u2192 list/open run \u2192 approve gate \u2192 live WS narration \u2192 evidence)",
       "Live governed-run observation: spawn a real run through the daemon, watch the Home board's queue re-sort on gate arrival",
-      "npm test",
-      "#10 e2e/studio_standalone_test.py (3151 lines) still asserts the pre-rebuild DES-MERGE-001 surface (project shell, orche",
       "WS reconnect/backoff, stale-socket guard, malformed-frame skip",
       "awaitingHuman opens a gate, sessionCompleted prunes it, cache reconciles with GET /runs",
       "unitPlanned records executor type for council UI; awaitingHuman/sessionCompleted runtime transitions",
@@ -312,6 +315,11 @@
       "End-to-end: connect \u2192 GET /runs reconcile \u2192 live awaitingHuman frame opens gate UI \u2192 approve \u2192 sessionCompleted frame cl",
       "A real governed run (multi-CLI council) producing genuine unitPlanned\u2192awaitingHuman\u2192sessionCompleted frames end to end, "
      ],
+     "excluded": {
+      "execution_section_lines": 28,
+      "execution_summary_items": 1
+     },
+     "measured_over": "scenario lines + plan-table rows only (execution summaries excluded)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -1533,11 +1541,19 @@
       "first": true,
       "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
       "decision": "approve",
-      "reason": "no deliver/push/PR/merge/publish/release keyword in the gate prompt",
-      "status": 200
+      "reason": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto",
+      "status": 200,
+      "unit": {
+       "stage": "test",
+       "gate": "auto"
+      },
+      "policy_reevaluated": "approve"
      }
     ],
-    "gates_seen": 1
+    "gates_seen": 1,
+    "missing_outputs": [],
+    "failed_fetches": [],
+    "fetch_errors": []
    },
    "notes": [
     "the recon produced a plan but launched no sibling runs \u2014 the feature's copy promises otherwise"
@@ -1734,8 +1750,8 @@
      "nonexistent_paths": [],
      "names_real_files": true,
      "classifies": true,
-     "deterministic_mentions": 2,
-     "governed_mentions": 12,
+     "deterministic_mentions": 9,
+     "governed_mentions": 10,
      "scenario_ids": [
       "1.1",
       "1.2",
@@ -1766,6 +1782,11 @@
       "Route-level unit coverage: /testing/campaigns \u2192 CampaignsPage.test.tsx, CampaignScoreboard.test.tsx, TestingLaunch.test.",
       "Cross-page live walkthrough of one governed run's lifecycle (home deck \u2192 /runs/:id mid-run \u2192 gate approve \u2192 rollup on /t"
      ],
+     "excluded": {
+      "execution_section_lines": 0,
+      "execution_summary_items": 0
+     },
+     "measured_over": "scenario lines + plan-table rows only (execution summaries excluded)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -2922,11 +2943,19 @@
       "first": true,
       "prompt": "Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs \u2014 and run the approved",
       "decision": "approve",
-      "reason": "no deliver/push/PR/merge/publish/release keyword in the gate prompt",
-      "status": 200
+      "reason": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto",
+      "status": 200,
+      "unit": {
+       "stage": "test",
+       "gate": "auto"
+      },
+      "policy_reevaluated": "approve"
      }
     ],
-    "gates_seen": 1
+    "gates_seen": 1,
+    "missing_outputs": [],
+    "failed_fetches": [],
+    "fetch_errors": []
    },
    "notes": [
     "the campaign produced a plan but launched no sibling runs \u2014 the feature's copy promises otherwise"
@@ -3160,8 +3189,8 @@
      "nonexistent_paths": [],
      "names_real_files": true,
      "classifies": true,
-     "deterministic_mentions": 21,
-     "governed_mentions": 5,
+     "deterministic_mentions": 35,
+     "governed_mentions": 9,
      "scenario_ids": [],
      "scenario_lines": [
       "tests/ \u2014 220+ Vitest specs (jsdom), covering zustand stores, API client parsing, and component behavior. Includes tests/",
@@ -3187,6 +3216,11 @@
       "Live-daemon full flow (list\u2192launch\u2192WS events\u2192gate\u2192evidence)",
       "New/changed testid or selector-drift repair for any of the above pages"
      ],
+     "excluded": {
+      "execution_section_lines": 0,
+      "execution_summary_items": 0
+     },
+     "measured_over": "scenario lines + plan-table rows only (execution summaries excluded)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -4317,11 +4351,19 @@
       "first": true,
       "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
       "decision": "approve",
-      "reason": "no deliver/push/PR/merge/publish/release keyword in the gate prompt",
-      "status": 200
+      "reason": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto",
+      "status": 200,
+      "unit": {
+       "stage": "test",
+       "gate": "auto"
+      },
+      "policy_reevaluated": "approve"
      }
     ],
-    "gates_seen": 1
+    "gates_seen": 1,
+    "missing_outputs": [],
+    "failed_fetches": [],
+    "fetch_errors": []
    },
    "notes": [
     "the recon produced a plan but launched no sibling runs \u2014 the feature's copy promises otherwise"
@@ -4391,7 +4433,7 @@
     "ids_a": [],
     "ids_b": [],
     "scenario_titles_overlap_pct": 0.0,
-    "titles_a": 31,
+    "titles_a": 28,
     "titles_b": 22,
     "units_planned": [
      3,
@@ -4450,7 +4492,8 @@
     "LT-2": [],
     "LT-3": []
    },
-   "result": "pass"
+   "result": "pass",
+   "measured_over": "scenario lines + plan-table rows only (execution summaries excluded)"
   },
   "LT-5": {
    "scenario": "LT-5",
@@ -4587,7 +4630,13 @@
   "load1_max": 20,
   "active_runs_max": 0,
   "source": "coordinator relaxation, hard-coded 95 % in the harness at launch time (predates SWAP_MAX_PCT)",
-  "contract_deviation": "swap gate was 95%, not the brief's 85% \u2014 the coordinator authorized the relaxation mid-run because this host idles at ~93% swap; all three recorded launches read 93.0% swap and cleared ONLY because of it; under the now-default 85% none of them would have launched"
+  "contract_deviation": {
+   "var": "SWAP_MAX_PCT",
+   "contract": 85,
+   "effective": 95,
+   "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; adjudicated after codex round 2: recorded + acknowledged, not enforced",
+   "note": "swap gate was 95%, not the brief's 85% \u2014 this host idles at ~93% swap; all three recorded launches read 93.0% and cleared ONLY because of the relaxation; under the default 85% none of them would have launched. The three recorded runs remain deviation evidence."
+  }
  },
  "revisions": [
   {
@@ -4744,6 +4793,179 @@
      "why": "LT-3 scenario items re-extracted"
     }
    ]
+  },
+  {
+   "date": "2026-09-09",
+   "reason": "codex round-2 REVISE on PR #215 (+ two Copilot threads) \u2014 offline re-derivation with the fixed harness over the committed plan files; no new runs, no daemon writes. Item 1 adjudicated by the coordinator: recorded + acknowledged, not enforced; the three recorded runs remain deviation evidence.",
+   "changes": [
+    {
+     "field": "preflight_policy.contract_deviation",
+     "old": "swap gate was 95%, not the brief's 85% \u2014 the coordinator authorized the relaxation mid-run because this host idles at ~93% swap; all three recorded launches read 93.0% swap and cleared ONLY because of it; under the now-default 85% none of them would have launched",
+     "new": "object {var, contract, effective, ack, note}",
+     "why": "the deviation is now a structured object (item 1, adjudicated): var/contract/effective/ack \u2014 same facts, machine-readable"
+    },
+    {
+     "field": "contract_deviation (top-level)",
+     "old": null,
+     "new": "object {var, contract, effective, ack, note}",
+     "why": "mirrored at the top level so a reader of the report cannot miss it"
+    },
+    {
+     "field": "preflights[].at / at_submit",
+     "old": null,
+     "new": "before-launch / not performed",
+     "why": "backfilled: the three launches had ONE preflight before browser start-up and none at the submit click (the gap codex named)"
+    },
+    {
+     "field": "LT-1.plan.scenario_lines",
+     "old": 31,
+     "new": 28,
+     "why": "execution summaries excluded: lines matching npm test/lint/typecheck, Tests: N passed/failed, \u2713/\u2714/PASS/FAIL, and every 'Execution verdict' section \u2014 results a worker reported, not scenarios a plan proposed (item 8)"
+    },
+    {
+     "field": "LT-1.plan.deterministic_mentions / governed_mentions",
+     "old": [
+      24,
+      7
+     ],
+     "new": [
+      21,
+      7
+     ],
+     "why": "counted over the scenario lines + plan-table rows only, across both vocabularies (deterministic|tool check|[TOOL] vs governed|agent run|[AGENT])"
+    },
+    {
+     "field": "LT-1.plan.excluded / measured_over",
+     "old": null,
+     "new": {
+      "execution_section_lines": 28,
+      "execution_summary_items": 1
+     },
+     "why": "new: what the measurement excluded and what it was measured over"
+    },
+    {
+     "field": "LT-1.gates[0].unit / reason",
+     "old": "no unit; reason = keyword deny-list",
+     "new": {
+      "unit": {
+       "stage": "test",
+       "gate": "auto"
+      },
+      "reason": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto"
+     },
+     "why": "backfilled from unit_statuses[ord 1] = (done, auto, test); the recorded intake prompt re-evaluated under the gate-KIND policy \u2192 approve, agreeing with what was clicked (item 3)"
+    },
+    {
+     "field": "LT-1.measured.missing_outputs / failed_fetches / fetch_errors",
+     "old": null,
+     "new": [
+      [],
+      [],
+      []
+     ],
+     "why": "backfilled, derivable: every evidence GET in the record returned its body (units_with_output = all 3 units with their chars, acceptance is a dict); a failing GET /runs/:id or /events raised and would have aborted the scenario (item 9)"
+    },
+    {
+     "field": "LT-2.plan.deterministic_mentions / governed_mentions",
+     "old": [
+      2,
+      12
+     ],
+     "new": [
+      9,
+      10
+     ],
+     "why": "counted over the scenario lines + plan-table rows only, across both vocabularies (deterministic|tool check|[TOOL] vs governed|agent run|[AGENT])"
+    },
+    {
+     "field": "LT-2.plan.excluded / measured_over",
+     "old": null,
+     "new": {
+      "execution_section_lines": 0,
+      "execution_summary_items": 0
+     },
+     "why": "new: what the measurement excluded and what it was measured over"
+    },
+    {
+     "field": "LT-2.gates[0].unit / reason",
+     "old": "no unit; reason = keyword deny-list",
+     "new": {
+      "unit": {
+       "stage": "test",
+       "gate": "auto"
+      },
+      "reason": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto"
+     },
+     "why": "backfilled from unit_statuses[ord 1] = (done, auto, test); the recorded intake prompt re-evaluated under the gate-KIND policy \u2192 approve, agreeing with what was clicked (item 3)"
+    },
+    {
+     "field": "LT-2.measured.missing_outputs / failed_fetches / fetch_errors",
+     "old": null,
+     "new": [
+      [],
+      [],
+      []
+     ],
+     "why": "backfilled, derivable: every evidence GET in the record returned its body (units_with_output = all 3 units with their chars, acceptance is a dict); a failing GET /runs/:id or /events raised and would have aborted the scenario (item 9)"
+    },
+    {
+     "field": "LT-3.plan.deterministic_mentions / governed_mentions",
+     "old": [
+      21,
+      5
+     ],
+     "new": [
+      35,
+      9
+     ],
+     "why": "counted over the scenario lines + plan-table rows only, across both vocabularies (deterministic|tool check|[TOOL] vs governed|agent run|[AGENT])"
+    },
+    {
+     "field": "LT-3.plan.excluded / measured_over",
+     "old": null,
+     "new": {
+      "execution_section_lines": 0,
+      "execution_summary_items": 0
+     },
+     "why": "new: what the measurement excluded and what it was measured over"
+    },
+    {
+     "field": "LT-3.gates[0].unit / reason",
+     "old": "no unit; reason = keyword deny-list",
+     "new": {
+      "unit": {
+       "stage": "test",
+       "gate": "auto"
+      },
+      "reason": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto"
+     },
+     "why": "backfilled from unit_statuses[ord 1] = (done, auto, test); the recorded intake prompt re-evaluated under the gate-KIND policy \u2192 approve, agreeing with what was clicked (item 3)"
+    },
+    {
+     "field": "LT-3.measured.missing_outputs / failed_fetches / fetch_errors",
+     "old": null,
+     "new": [
+      [],
+      [],
+      []
+     ],
+     "why": "backfilled, derivable: every evidence GET in the record returned its body (units_with_output = all 3 units with their chars, acceptance is a dict); a failing GET /runs/:id or /events raised and would have aborted the scenario (item 9)"
+    },
+    {
+     "field": "LT-3.consistency_vs_LT-1.titles_a",
+     "old": 31,
+     "new": 28,
+     "why": "re-derived over the scenario set with execution summaries excluded"
+    }
+   ]
   }
- ]
+ ],
+ "contract_deviation": {
+  "var": "SWAP_MAX_PCT",
+  "contract": 85,
+  "effective": 95,
+  "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; adjudicated after codex round 2: recorded + acknowledged, not enforced",
+  "note": "swap gate was 95%, not the brief's 85% \u2014 this host idles at ~93% swap; all three recorded launches read 93.0% and cleared ONLY because of the relaxation; under the default 85% none of them would have launched. The three recorded runs remain deviation evidence."
+ },
+ "fetch_errors": []
 }
