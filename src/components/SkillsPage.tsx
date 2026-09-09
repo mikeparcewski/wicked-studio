@@ -1,0 +1,438 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { apiWire } from '../api/errors.js';
+import {
+  analyzeSkills,
+  getSkillsCatalog,
+  isSkillsConflict,
+  isSkillsUnsupported,
+  isUnpublished,
+  publishSkills,
+  readSkillDeepLink,
+  refreshSkillsBaseline,
+  setSkillEnabled,
+  skillCounts,
+  skillRows,
+  skillsPath,
+  SKILLS_UNSUPPORTED_COPY,
+  supportFiles,
+  type SkillGuardResult,
+  type SkillRow,
+  type SkillsCatalog,
+} from '../api/skills.js';
+import { KpiBand, KpiGroup, StatTile } from './dashboardKit.js';
+import { SkillDrawer } from './SkillDrawer.js';
+import { SkillFilesMapModal } from './SkillFilesMapModal.js';
+import { SkillFindings } from './SkillFindings.js';
+import { SkillsGrid, SKILLS_FACETS_DEFAULT, type SkillsFacets } from './SkillsGrid.js';
+import type { SkillsWriter } from './skillsWriter.js';
+
+/**
+ * The Skills surface (`/skills`, the skills keystone) — a FILE MANAGER over the daemon's one
+ * effective garden-shaped plugin root, the skills every governed worker runs:
+ *
+ *  - the KPI band (total · enabled · overridden · core · portable) over the manifest, each tile a
+ *    door into the matching catalog filter;
+ *  - the CATALOG (SkillsGrid): one row per skill with kind / provenance / flags and the enabled
+ *    switch — the one inline write, through the daemon's guards;
+ *  - the DRAWER (SkillDrawer) a row opens: skill files + support files under tabs, the textarea
+ *    editor (Save → PUT → findings), reset / replace / delete. `?skill=<name>` is the drawer's
+ *    address — selecting a row is a real navigation (deep-linkable, back-button-correct);
+ *  - the page verbs: Add (a pasted files map), Refresh baseline (the three-way upgrade), Analyze
+ *    (the publish validation as a dry run) and PUBLISH — validate the whole tree and write the
+ *    immutable snapshot generation workers spawn with. Nothing here is live until published.
+ *
+ * CAS: the page holds the catalog `revision`; every write goes through {@link SkillsWriter}
+ * (`expectedRevision` out, the answered `revision` adopted). A **409** freezes the page behind the
+ * reload prompt — nothing else is written until the catalog is re-read.
+ *
+ * A daemon without the `/skills` routes renders the NAMED unsupported state — never a crash and
+ * never an empty catalog pretending. Every write goes through crew's API (the guarded operator
+ * path); nothing here touches the root directly.
+ */
+
+type LoadState =
+  | { kind: 'loading' }
+  | { kind: 'loaded' }
+  | { kind: 'unsupported' }
+  | { kind: 'failed'; message: string };
+
+type PageVerb = 'refresh' | 'analyze' | 'publish';
+
+const PAGE_VERB_LABEL: Record<PageVerb, string> = {
+  refresh: 'Refresh baseline',
+  analyze: 'Analyze',
+  publish: 'Publish',
+};
+
+export function SkillsPage({ navigate, search = '' }: {
+  navigate: (path: string) => void;
+  /** The URL search string — `?skill=<name>` addresses one skill's drawer. */
+  search?: string;
+}): React.ReactElement {
+  const [catalog, setCatalog] = useState<SkillsCatalog | null>(null);
+  const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const [facets, setFacets] = useState<SkillsFacets>(SKILLS_FACETS_DEFAULT);
+  /** The skill with a write in flight from this page (a row toggle) — its switch waits. */
+  const [busyName, setBusyName] = useState<string | null>(null);
+  /** The page verb in flight — its button waits. */
+  const [verbBusy, setVerbBusy] = useState<PageVerb | null>(null);
+  /** The last page-level guard result worth reading (a toggle's warnings, a publish's findings). */
+  const [pageResult, setPageResult] = useState<{ verb: string; result: SkillGuardResult } | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  /** A 409 — the catalog changed under this page. The daemon's sentence, for the prompt. */
+  const [conflict, setConflict] = useState<string | null>(null);
+  /** The revision every mutation is conditioned on — a ref so chained writes read the latest. */
+  const revisionRef = useRef<string | null>(null);
+
+  const load = useCallback(async (): Promise<SkillsCatalog | null> => {
+    try {
+      const c = await getSkillsCatalog();
+      revisionRef.current = c.revision;
+      setCatalog(c);
+      setState({ kind: 'loaded' });
+      return c;
+    } catch (e) {
+      if (isSkillsUnsupported(e)) setState({ kind: 'unsupported' });
+      else setState({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  /** The ONE CAS seam: expectedRevision out, the answered revision adopted, a 409 → the prompt. */
+  const run = useCallback(async (mutation: (expectedRevision: string) => Promise<SkillGuardResult>): Promise<SkillGuardResult | null> => {
+    const expected = revisionRef.current;
+    if (expected === null) throw new Error('the skills catalog has not loaded — nothing to write against');
+    try {
+      const result = await mutation(expected);
+      revisionRef.current = result.revision;
+      return result;
+    } catch (e) {
+      if (isSkillsConflict(e)) {
+        setConflict(apiWire(e) ?? '');
+        return null;
+      }
+      throw e;
+    }
+  }, []);
+  const writer = useMemo<SkillsWriter>(() => ({ run }), [run]);
+
+  const reloadAfterConflict = (): void => {
+    setConflict(null);
+    setPageResult(null);
+    void load();
+  };
+
+  const rows: SkillRow[] = catalog === null ? [] : skillRows(catalog.manifest);
+  const counts = skillCounts(rows);
+  const unpublished = rows.filter(isUnpublished).length;
+  const support = useMemo(() => (catalog === null ? [] : supportFiles(catalog.manifest)), [catalog]);
+
+  // The drawer's address: `?skill=<name>`. A name the manifest does not carry renders a note,
+  // never a silent swap onto the bare catalog (the dead-address contract, review #4).
+  const linked = readSkillDeepLink(search);
+  const selected = linked === null ? null : rows.find((r) => r.name === linked) ?? null;
+  const linkedMissing = linked !== null && catalog !== null && selected === null;
+
+  /** The ONE guarded flip: the catalog reloaded on anything but `blocked`, the verdict handed back. */
+  const toggle = useCallback(async (name: string, enabled: boolean): Promise<SkillGuardResult | null> => {
+    setBusyName(name);
+    try {
+      const result = await run((rev) => setSkillEnabled(name, enabled, rev));
+      if (result !== null && result.verdict !== 'blocked') await load();
+      return result;
+    } finally {
+      setBusyName(null);
+    }
+  }, [run, load]);
+
+  const onRowToggle = (row: SkillRow): void => {
+    setPageError(null);
+    setPageResult(null);
+    void toggle(row.name, !row.enabled)
+      .then((result) => {
+        // A clear flip needs no banner — the row's switch IS the answer; warnings and refusals do.
+        if (result !== null && (result.verdict !== 'clear' || result.findings.length > 0)) {
+          setPageResult({ verb: `${row.enabled ? 'Disable' : 'Enable'} ${row.name}`, result });
+        }
+      })
+      .catch((e: unknown) => setPageError(e instanceof Error ? e.message : String(e)));
+  };
+
+  /** The three page verbs share one shape: run, show the envelope, reload on an applied write. */
+  const pageVerb = async (verb: PageVerb): Promise<void> => {
+    setVerbBusy(verb);
+    setPageError(null);
+    setPageResult(null);
+    setNote(null);
+    try {
+      const result = verb === 'analyze'
+        ? await analyzeSkills()
+        : await run((rev) => (verb === 'publish' ? publishSkills(rev) : refreshSkillsBaseline(rev)));
+      if (result === null) return;
+      setPageResult({ verb: PAGE_VERB_LABEL[verb], result });
+      if (verb === 'analyze' || result.verdict === 'blocked') return;
+      const next = await load();
+      if (next === null) return;
+      const m = next.manifest;
+      setNote(verb === 'publish'
+        ? `Published — snapshot generation ${m.currentGeneration ?? '?'} is current; workers spawn with it from now on.`
+        : `Baseline refreshed — ${m.baseline.source.plugin_version} (${m.baseline.contentHash.slice(0, 12)}), ${Object.keys(m.skills).length} skills. Your edits were kept; conflicts are flagged.`);
+    } catch (e) {
+      setPageError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setVerbBusy(null);
+    }
+  };
+
+  const onAdded = (name: string, result: SkillGuardResult): void => {
+    setAddOpen(false);
+    setNote(`Added ${name} — publish to hand it to workers.`);
+    setPageResult(result.findings.length > 0 ? { verb: `Add ${name}`, result } : null);
+    void load().then(() => navigate(skillsPath(name)));
+  };
+
+  const onDeleted = (name: string, result: SkillGuardResult): void => {
+    setNote(`Deleted ${name} — removed from the effective root; the current snapshot keeps it until the next publish.`);
+    setPageResult(result.findings.length > 0 ? { verb: `Delete ${name}`, result } : null);
+    navigate(skillsPath());
+    void load();
+  };
+
+  const baseline = catalog?.manifest.baseline ?? null;
+  const generation = catalog?.manifest.currentGeneration ?? null;
+  const frozen = conflict !== null;
+
+  const verbButton = (verb: PageVerb, testId: string, title: string, primary: boolean): React.ReactElement => (
+    <button
+      type="button"
+      data-testid={testId}
+      disabled={frozen || verbBusy !== null}
+      title={title}
+      onClick={() => void pageVerb(verb)}
+      className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
+      style={primary
+        ? { background: 'var(--accent)', color: 'var(--accent-fg)' }
+        : { color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
+    >
+      {verbBusy === verb ? `${PAGE_VERB_LABEL[verb]}…` : PAGE_VERB_LABEL[verb]}
+    </button>
+  );
+
+  return (
+    <div data-testid="skills-page" className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Skills</h2>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+              The skills every governed worker runs — one effective plugin root the daemon publishes
+              as immutable snapshots. Edit any file in place, enable or disable, reset to the baseline;
+              the daemon guards every write, and nothing reaches a worker until you publish.
+            </p>
+            {baseline !== null && (
+              <p data-testid="skills-source" className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+                baseline {baseline.source.plugin_version} · {baseline.source.kind} · {baseline.contentHash.slice(0, 12)}
+                {baseline.source.git_sha !== null && ` · ${baseline.source.git_sha.slice(0, 10)}`}
+                {` · captured ${baseline.source.captured_at}`}
+              </p>
+            )}
+            {catalog !== null && (
+              <p data-testid="skills-snapshot" data-generation={generation ?? 'none'} data-unpublished={unpublished} className="mt-0.5 font-mono text-[10px]" style={{ color: unpublished > 0 ? 'var(--status-run)' : 'var(--ink-dim)' }}>
+                {generation === null ? 'never published — workers fall back to the installed plugin' : `snapshot generation ${generation} is current`}
+                {unpublished > 0 && ` · ${unpublished} unpublished ${unpublished === 1 ? 'skill' : 'skills'}`}
+              </p>
+            )}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {state.kind === 'loaded' && (
+              <>
+                <button
+                  type="button"
+                  data-testid="skills-add-open"
+                  disabled={frozen}
+                  onClick={() => setAddOpen(true)}
+                  className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
+                  style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
+                >
+                  Add skill…
+                </button>
+                {verbButton('refresh', 'skills-refresh', 'Capture the installed plugin as a new baseline and merge it three-way per file: untouched skills take the new version, your edits are kept and conflicts flagged — never clobbered', false)}
+                {verbButton('analyze', 'skills-analyze', 'Dry-run the publish validation over the whole tree — the same findings, nothing written', false)}
+                {verbButton('publish', 'skills-publish', 'Validate the whole tree and write the immutable snapshot generation workers spawn with (enabled skills only)', true)}
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="text-[10px] hover:underline"
+              style={{ color: 'var(--ink-dim)' }}
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {state.kind === 'loading' ? (
+          <p data-testid="skills-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading skills…</p>
+        ) : state.kind === 'unsupported' ? (
+          <div
+            data-testid="skills-unsupported"
+            className="flex flex-col gap-2 rounded p-4"
+            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
+          >
+            <p className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>Skills are not served by this daemon.</p>
+            <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{SKILLS_UNSUPPORTED_COPY}</p>
+          </div>
+        ) : state.kind === 'failed' ? (
+          <p data-testid="skills-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
+            {state.message}
+          </p>
+        ) : (
+          <>
+            <KpiBand testId="skills-kpis">
+              <KpiGroup label="Catalog" grow={2}>
+                <StatTile
+                  testId="skills-kpi-total"
+                  label="Skills"
+                  value={counts.total}
+                  context={baseline === null ? undefined : `baseline ${baseline.source.plugin_version}`}
+                  onOpen={() => setFacets({ ...facets, chip: 'all' })}
+                />
+                <StatTile
+                  testId="skills-kpi-enabled"
+                  label="Enabled"
+                  value={counts.enabled}
+                  context={`${counts.total - counts.enabled} disabled`}
+                  onOpen={() => setFacets({ ...facets, chip: 'enabled' })}
+                />
+              </KpiGroup>
+              <KpiGroup label="Provenance" grow={2}>
+                <StatTile
+                  testId="skills-kpi-overridden"
+                  label="Overridden"
+                  value={counts.overridden}
+                  context="edited from the baseline"
+                  valueColor={counts.overridden > 0 ? 'var(--status-gate)' : undefined}
+                  onOpen={() => setFacets({ ...facets, chip: 'overridden' })}
+                />
+                <StatTile
+                  testId="skills-kpi-core"
+                  label="Core"
+                  value={counts.core}
+                  context="in the workflow reference closure"
+                  onOpen={() => setFacets({ ...facets, chip: 'core' })}
+                />
+              </KpiGroup>
+              <KpiGroup label="Reach">
+                <StatTile
+                  testId="skills-kpi-portable"
+                  label="Portable"
+                  value={counts.portable}
+                  context={`${counts.total - counts.portable} claude-only`}
+                  onOpen={() => setFacets({ ...facets, chip: 'portable' })}
+                />
+              </KpiGroup>
+            </KpiBand>
+
+            {note !== null && (
+              <p
+                data-testid="skills-note"
+                className="rounded px-3 py-2 text-[11px]"
+                style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+              >
+                {note}
+              </p>
+            )}
+            {pageError !== null && (
+              <p data-testid="skills-page-error" className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
+                {pageError}
+              </p>
+            )}
+            {pageResult !== null && (
+              <SkillFindings verb={pageResult.verb} result={pageResult.result} testId="skills-page-findings" />
+            )}
+            {linkedMissing && (
+              <p
+                data-testid="skills-deep-link-missing"
+                className="rounded px-3 py-2 text-[11px]"
+                style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+              >
+                No skill named <span className="font-mono">{linked}</span> in this catalog — showing every skill.
+              </p>
+            )}
+
+            <SkillsGrid
+              rows={rows}
+              facets={facets}
+              onFacets={setFacets}
+              selectedName={selected?.name ?? null}
+              busyName={busyName}
+              frozen={frozen}
+              onSelect={(name) => navigate(skillsPath(name))}
+              onToggle={onRowToggle}
+            />
+          </>
+        )}
+      </div>
+
+      {selected !== null && (
+        <SkillDrawer
+          key={selected.name}
+          skill={selected}
+          support={support}
+          writer={writer}
+          busy={frozen || busyName === selected.name}
+          onClose={() => navigate(skillsPath())}
+          onToggle={toggle}
+          onChanged={() => void load()}
+          onDeleted={onDeleted}
+        />
+      )}
+
+      {addOpen && (
+        <SkillFilesMapModal
+          mode="add"
+          name={null}
+          writer={writer}
+          onClose={() => setAddOpen(false)}
+          onDone={onAdded}
+        />
+      )}
+
+      {/* The revision-conflict prompt: above every layer (the drawer is z-40, modals z-50) so the
+          operator sees it wherever the stale write came from. Reload is the only way forward —
+          nothing else is written while it shows. Drafts in the drawer are kept. */}
+      {conflict !== null && (
+        <div
+          data-testid="skills-conflict"
+          role="alertdialog"
+          aria-label="The skills catalog changed"
+          className="fixed inset-x-0 top-3 z-[60] mx-auto flex w-[36rem] max-w-[92vw] flex-wrap items-center gap-2 rounded-lg px-4 py-3 text-[11px] shadow-2xl"
+          style={{ background: 'var(--surface-card)', border: '1px solid var(--status-gate)', color: 'var(--ink-muted)' }}
+        >
+          <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>The skills catalog changed under this page.</span>
+          <span>
+            Nothing was written{conflict !== '' ? ` — ${conflict}` : ''}. Reload to pick up the current revision;
+            unsaved edits in the drawer are kept as drafts.
+          </span>
+          <span className="flex-1" />
+          <button
+            data-testid="skills-conflict-reload"
+            type="button"
+            onClick={reloadAfterConflict}
+            className="rounded px-3 py-1 text-[11px] font-semibold"
+            style={{ background: 'var(--status-gate)', color: 'var(--surface-base)' }}
+          >
+            Reload catalog
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

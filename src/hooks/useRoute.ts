@@ -35,9 +35,12 @@ import { isTestingSubPage } from '../api/testing.js';
 // surface): policy proposals live under `/steering/policies`, memory proposals under
 // `/steering/memories`. Its old `/proposals` address (and `?type=memory` deep link) fold into
 // those sub-sections via `useSteeringRedirect`.
-export type Panel = 'home' | 'runs' | 'workflows' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'not-found';
+// `skills` is the Skills file manager (`/skills`, the skills keystone) — the catalog of the
+// daemon's effective plugin root. A flat panel with no sub-routes: the one skill a deep link
+// opens rides `?skill=<name>` in `search` (read via `readSkillDeepLink`), never a path segment.
+export type Panel = 'home' | 'runs' | 'workflows' | 'skills' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'not-found';
 
-const PANELS: Panel[] = ['runs', 'workflows', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo'];
+const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not

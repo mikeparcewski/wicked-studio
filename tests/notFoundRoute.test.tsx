@@ -54,6 +54,7 @@ describe('useRoute — dead addresses parse to the not-found panel', () => {
     expect(routeAt('/demo').current.panel).toBe('demo');
     expect(routeAt('/steering').current.panel).toBe('steering');
     expect(routeAt('/steering/security').current.panel).toBe('steering');
+    expect(routeAt('/skills').current.panel).toBe('skills');
     expect(routeAt('/testing/harness').current.panel).toBe('testing');
     expect(routeAt('/runs/r-1').current).toMatchObject({ panel: 'runs', runId: 'r-1' });
     expect(routeAt('/runs/new').current).toMatchObject({ panel: 'runs', showLaunch: true });

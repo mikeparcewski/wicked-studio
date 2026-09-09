@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.5.1",
   "counts": {
-    "files": 130,
-    "occurrences": 1042,
-    "static": 886,
-    "dynamic": 56,
+    "files": 137,
+    "occurrences": 1108,
+    "static": 947,
+    "dynamic": 57,
     "computed": 6
   },
   "static": [
@@ -3462,6 +3462,12 @@
       ]
     },
     {
+      "testId": "rail-skills-browse",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
       "testId": "rail-steering-section",
       "files": [
         "src/components/LeftSidebar.tsx"
@@ -3871,6 +3877,367 @@
       "testId": "site-name-input",
       "files": [
         "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "skills-add-open",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-claude-only-badge",
+      "files": [
+        "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skills-confirm",
+      "files": [
+        "src/components/SkillConfirmModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-confirm-cancel",
+      "files": [
+        "src/components/SkillConfirmModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-confirm-error",
+      "files": [
+        "src/components/SkillConfirmModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-confirm-input",
+      "files": [
+        "src/components/SkillConfirmModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-confirm-modal",
+      "files": [
+        "src/components/SkillConfirmModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-conflict",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-conflict-badge",
+      "files": [
+        "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skills-conflict-reload",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-core-badge",
+      "files": [
+        "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skills-deep-link-missing",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-delete-open",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-discard",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-discard-edits",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-discard-prompt",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drawer",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drawer-close",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drawer-dir",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drawer-error",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-editor",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-error",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-dirty",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-error",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-loading",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-none",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-path",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-readonly",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-tree",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-cancel",
+      "files": [
+        "src/components/SkillFilesMapModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-empty",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-error",
+      "files": [
+        "src/components/SkillDrawer.tsx",
+        "src/components/SkillFilesMapModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-issue",
+      "files": [
+        "src/components/SkillFilesMapModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-loading",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-map",
+      "files": [
+        "src/components/SkillFilesMapModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-modal",
+      "files": [
+        "src/components/SkillFilesMapModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-name",
+      "files": [
+        "src/components/SkillFilesMapModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-save",
+      "files": [
+        "src/components/SkillFilesMapModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-finding",
+      "files": [
+        "src/components/SkillFindings.tsx"
+      ]
+    },
+    {
+      "testId": "skills-finding-location",
+      "files": [
+        "src/components/SkillFindings.tsx"
+      ]
+    },
+    {
+      "testId": "skills-grid",
+      "files": [
+        "src/components/SkillsGrid.tsx"
+      ]
+    },
+    {
+      "testId": "skills-grid-empty",
+      "files": [
+        "src/components/SkillsGrid.tsx"
+      ]
+    },
+    {
+      "testId": "skills-keep-editing",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-kind-chip",
+      "files": [
+        "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skills-loading",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-note",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-page",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-page-error",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-provenance-chip",
+      "files": [
+        "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skills-replace-open",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-reset-open",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-row",
+      "files": [
+        "src/components/SkillsGrid.tsx"
+      ]
+    },
+    {
+      "testId": "skills-row-name",
+      "files": [
+        "src/components/SkillsGrid.tsx"
+      ]
+    },
+    {
+      "testId": "skills-save",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-snapshot",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-source",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-support-note",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-unpublished-badge",
+      "files": [
+        "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skills-unsupported",
+      "files": [
+        "src/components/SkillsPage.tsx"
       ]
     },
     {
@@ -5675,6 +6042,12 @@
       ]
     },
     {
+      "pattern": "skills-tab-*",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
       "pattern": "stepper-phase-*",
       "files": [
         "src/components/ChatPanel.tsx"
@@ -5731,6 +6104,9 @@
         "src/components/ProvenanceLine.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/RunsBottomPanel.tsx",
+        "src/components/SkillChips.tsx",
+        "src/components/SkillFindings.tsx",
+        "src/components/SkillsPage.tsx",
         "src/components/dashboardKit.tsx"
       ]
     },

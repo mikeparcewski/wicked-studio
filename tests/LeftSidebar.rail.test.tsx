@@ -57,7 +57,8 @@ const W2_ORDERED = [
   bp('scratch', 'quiet', 0),
 ];
 
-const HEADING_KEYS = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'steering', 'testing', 'settings'] as const;
+// Skills (the skills keystone) joined the system block BEFORE Steering — eleven headings.
+const HEADING_KEYS = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'skills', 'steering', 'testing', 'settings'] as const;
 
 function rail(props: Partial<{ pathname: string; navigate: (p: string) => void; runs: ReturnType<typeof makeView>[] }> = {}): ReturnType<typeof render> {
   return render(
@@ -118,14 +119,19 @@ describe('the route→heading map (§3.2)', () => {
     for (const p of ['/testing', '/testing/harness', '/testing/evals']) {
       expect(headingForPath(p)).toBe('testing');
     }
+    // Skills owns `/skills` and any sub-address (the file manager is one flat page; a skill's
+    // drawer rides `?skill=`), and it is its OWN heading — never Steering's.
+    for (const p of ['/skills', '/skills/', '/skills/wicked-garden-repo-learn']) {
+      expect(headingForPath(p)).toBe('skills');
+    }
     expect(headingForPath('/')).toBeNull();
     expect(headingForPath('/runs')).toBeNull();
     expect(headingForPath('/runs/r-1')).toBeNull();
   });
 });
 
-describe('the ten heading rows (§3.1 + nav-reorg + usability wave)', () => {
-  it('renders all ten headings; Settings is icon-less, Steering carries ▦ only, the rest carry ▦ and ＋', async () => {
+describe('the eleven heading rows (§3.1 + nav-reorg + usability wave + skills)', () => {
+  it('renders all eleven headings; Settings is icon-less, Skills/Steering/Evals carry ▦ only, the rest carry ▦ and ＋', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
@@ -140,9 +146,10 @@ describe('the ten heading rows (§3.1 + nav-reorg + usability wave)', () => {
       expect(within(h).queryByTestId('heading-dashboard')).toBeNull();
       expect(within(h).queryByTestId('heading-new')).toBeNull();
     }
-    // Steering AND Evals carry ▦ (the Dashboard) but NO ＋ — system sections, not create surfaces
-    // (usability wave: Evals lost its ＋, it only opens its dashboard).
-    for (const k of ['steering', 'testing']) {
+    // Skills, Steering AND Evals carry ▦ (the Dashboard) but NO ＋ — system sections, not create
+    // surfaces (usability wave: Evals lost its ＋, it only opens its dashboard; Skills adds from its
+    // own page verb, behind the daemon's guards).
+    for (const k of ['skills', 'steering', 'testing']) {
       const h = screen.getByTestId(`rail-heading-${k}`);
       expect(within(h).getByTestId('heading-dashboard')).toBeInTheDocument();
       expect(within(h).queryByTestId('heading-new')).toBeNull();
@@ -155,22 +162,27 @@ describe('the ten heading rows (§3.1 + nav-reorg + usability wave)', () => {
     }
   });
 
-  it('order: Projects → Execute → Test → Vibe → Demo → Chat → Repos ┃ Steering → Evals ┃ Settings', async () => {
+  it('order: Projects → Execute → Test → Vibe → Demo → Chat → Repos ┃ Skills → Steering → Evals ┃ Settings', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     const el = (k: string): HTMLElement => screen.getByTestId(`rail-heading-${k}`);
-    // Dividers now sit between the work sections, Steering/Evals and Settings, so check DOCUMENT
-    // order (compareDocumentPosition) rather than nextElementSibling — Test below Execute, Evals
-    // beside Steering.
-    const order = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'steering', 'testing', 'settings'];
+    // Dividers now sit between the work sections, Skills/Steering/Evals and Settings, so check
+    // DOCUMENT order (compareDocumentPosition) rather than nextElementSibling — Test below
+    // Execute, Skills before Steering, Evals beside Steering.
+    const order = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'skills', 'steering', 'testing', 'settings'];
     for (let i = 0; i < order.length - 1; i += 1) {
       const rel = el(order[i]!).compareDocumentPosition(el(order[i + 1]!));
       expect(rel & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
-    // Evals sits AFTER Steering (moved there), and Test sits AFTER Execute.
+    // Skills sits BEFORE Steering (the keystone's placement), Evals AFTER Steering (moved there),
+    // and Test AFTER Execute.
+    expect(el('skills').compareDocumentPosition(el('steering')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(el('steering').compareDocumentPosition(el('testing')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(el('execute').compareDocumentPosition(el('test')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Skills is in the SYSTEM block: the first divider precedes it.
+    const [workDivider] = screen.getAllByTestId('rail-divider');
+    expect(workDivider!.compareDocumentPosition(el('skills')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('the promoted headings are labelled Execute / Vibe / Demo, and the Test section is labelled Evals', async () => {
@@ -201,6 +213,7 @@ describe('the ten heading rows (§3.1 + nav-reorg + usability wave)', () => {
     expect(hrefOf('testing')).toBe('/testing/evals');
     expect(hrefOf('chat')).toBe('/chats');
     expect(hrefOf('repos')).toBe('/repos');
+    expect(hrefOf('skills')).toBe('/skills');
     expect(hrefOf('steering')).toBe('/steering/dashboard');
 
     fireEvent.click(within(screen.getByTestId('rail-heading-execute')).getByTestId('heading-dashboard'));
@@ -466,6 +479,25 @@ describe('accordion contents (§3.3)', () => {
     expect(navigate).toHaveBeenCalledWith('/steering/memories');
   });
 
+  it('Skills expands to the one "Browse skills" shortcut row, navigating to the file manager; the route expands it', async () => {
+    const navigate = vi.fn();
+    rail({ pathname: '/skills', navigate });
+    await screen.findByRole('button', { name: 'wicked-studio' });
+
+    const skills = screen.getByTestId('rail-heading-skills');
+    expect(skills.getAttribute('aria-expanded')).toBe('true');
+    expect(within(skills).getByTestId('rail-title-skills')).toHaveTextContent('Skills');
+    // Exactly one row — the catalog is a dashboard, not a shortcut list — and no `+` inside.
+    expect(within(skills).getAllByRole('menuitem')).toHaveLength(1);
+    const browse = within(skills).getByTestId('rail-skills-browse');
+    expect(browse).toHaveTextContent('Browse skills');
+    expect(browse.textContent).not.toContain('+');
+    fireEvent.click(browse);
+    expect(navigate).toHaveBeenCalledWith('/skills');
+    // Opening Skills leaves Steering closed (the one-open accordion).
+    expect(expandedKeys()).toEqual(['skills']);
+  });
+
   it('Evals expands to the "Run evals" shortcut row, navigating to the runner; the route expands it', async () => {
     const navigate = vi.fn();
     rail({ pathname: '/testing/evals', navigate });
@@ -482,16 +514,20 @@ describe('accordion contents (§3.3)', () => {
 });
 
 describe('the collapsed rail (§3.2)', () => {
-  it('shows exactly ten glyph links (Evals → its runner, Steering → its Dashboard, Settings → /system)', async () => {
+  it('shows exactly eleven glyph links (Skills → /skills, Evals → its runner, Steering → its Dashboard, Settings → /system)', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
-    expect(glyphs).toHaveLength(10);
+    expect(glyphs).toHaveLength(11);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/execute', '/testing/campaigns', '/vibe', '/demo', '/chats', '/repos', '/steering/dashboard', '/testing/evals', '/system',
+      '/projects', '/execute', '/testing/campaigns', '/vibe', '/demo', '/chats', '/repos', '/skills', '/steering/dashboard', '/testing/evals', '/system',
     ]);
+    // The Skills glyph is ◆, labelled for the icon-only column.
+    const skillsGlyph = glyphs[7]!;
+    expect(skillsGlyph).toHaveAttribute('aria-label', 'Skills');
+    expect(skillsGlyph).toHaveTextContent('◆');
     expect(screen.queryByTestId('rail-heading-projects')).toBeNull();
   });
 });
