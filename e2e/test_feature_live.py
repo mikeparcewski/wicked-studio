@@ -55,26 +55,40 @@ HARD RULES this harness enforces on itself:
     to 20 min; if the gate never clears the harness STOPS and reports "preflight never cleared".
   * The preflight is RE-RUN (all four gates, one reading) immediately before the submit click; if
     it fails the launch is not submitted (`launch_aborted_by_preflight`, `harness_ok=false`,
-    reason `preflight-at-submit`). A process-wide reservation — `fcntl.flock` on
-    `e2e/artifacts/test-feature-live/.launch.lock`, created `O_NOFOLLOW` on the DESCRIPTOR of its
-    directory, which is reached by the same trusted descriptor walk as every artifact
-    (`open_artifact_root`: no pathname open anywhere under `e2e/artifacts`) — is held from that
+    reason `preflight-at-submit`). A launch reservation that protects the DAEMON, not a worktree
+    — `fcntl.flock` on `<system temp dir>/wicked-test-feature-live-<uid>/<sha256(daemon
+    origin)>.launch.lock`: a per-user directory OUTSIDE every worktree (never under the operator's
+    `~/.wicked-crew`), created 0700 and refused unless it is this user's and not writable by
+    anyone else, the file named by the sha256 of `scheme://host:port` of STUDIO_URL so every
+    worktree aiming at `:7701` contends for ONE lock and different daemons never contend (codex
+    round 7: a lock under each worktree's evidence dir let two worktrees both clear their
+    preflights on an idle daemon and both submit); the lock is created `O_NOFOLLOW` on the
+    DESCRIPTOR of that directory, which is reached by the same trusted descriptor walk as every
+    artifact (`open_artifact_root`: no pathname open on the way) — and is held from that
     pre-submit preflight until the launched run's intake gate has been decided; a second harness
-    process fails fast with a named message instead of racing the preflight.
+    process, in any worktree, fails fast with a named message instead of racing the preflight. The
+    (scrubbed) lock path, scope and origin are recorded in the report (`launch_lock`).
   * Exactly one governed run in flight at a time; the next launch waits for a terminal/gated state.
   * GATE IDENTITY before any click (`gate_state_conflict`). A POST to `/runs/:id/gate` carries no
     ord — it decides whatever the daemon's CURRENT gate is — so the card being clicked must BE that
     gate. Before EVERY click (intake, later gates, parent and siblings) `current_gate` reads the
-    daemon's current gate read-only: `GET /runs/:id/gate` (the cached open-gate record `GateInfo
-    {runId, ord, prompt}`, wicked-crew-api-types 0.25.0), else the LATEST `awaitingHuman` event —
-    its ord and its verbatim prompt, NEVER an older event's (an unreadable latest prompt is
-    unreadable, full stop). The card must match it: same run (`data-run-id`), same ord (the card's
-    `before unit #N` line, when rendered; and the ord the harness read from the events), same
-    headline (`cleanPrompt(current.prompt)` == the card's `steering-prompt` text). ANY conflict — a
-    card for ord 1 while the daemon's current gate is ord 4, a headline that is not the current
-    prompt's, a current prompt the daemon does not serve — means NO click at all: the decision is
-    recorded as `reject-by-abstention` with BOTH texts and both ords (`gates[].prompt` vs
-    `prompt_card`, `current_ord` vs `card_ord`), the finding is `gate-state-conflict`,
+    daemon's current gate read-only and FRESH: `GET /runs/:id/gate` (the cached open-gate record
+    `GateInfo {runId, ord, prompt}`, wicked-crew-api-types 0.25.0); on ANY other answer (404,
+    non-2xx, transport failure, malformed 2xx) the ONLY fallback is a FRESH `GET /runs/:id/events`
+    and the current UNRESOLVED gate in it — the LATEST `awaitingHuman` with no later
+    `gateDecided`/`resumed` for its ord and no terminal event after it — its ord and its verbatim
+    prompt, NEVER an older event's (an unreadable latest prompt is unreadable, full stop) and
+    NEVER events fetched before the card rendered (codex round 7: those approved a stale ord-1
+    card against a 503 / 404 / malformed daemon whose current gate was an ord-4 delivery). When the
+    fresh fetch fails too, or the log establishes no gate (none, already decided, ambiguous, run
+    over), the gate state is UNKNOWN. The card must match the current gate: same run
+    (`data-run-id`), same ord (the card's `before unit #N` line, when rendered; and the ord the
+    harness read from the events), same headline (`cleanPrompt(current.prompt)` == the card's
+    `steering-prompt` text). ANY conflict — a card for ord 1 while the daemon's current gate is
+    ord 4, a headline that is not the current prompt's, a current prompt the daemon does not serve
+    — means NO click at all: the decision is recorded as `reject-by-abstention` with BOTH texts
+    and both ords (`gates[].prompt` vs `prompt_card`, `current_ord` vs `card_ord`), the finding is
+    `gate-state-conflict` — or `gate-state-unknown` when no current gate could be established —
     `harness_ok=false`, and the run is left exactly as it is (a rejected legitimate gate would end
     the run; an approved stale card could deliver).
   * ONE gate policy for EVERY gate, the intake gate and every sibling's gates included
@@ -165,6 +179,7 @@ it by hand before pushing a harness change):
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -173,6 +188,7 @@ import shlex
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -182,9 +198,40 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ART = ROOT / "e2e" / "artifacts" / "test-feature-live"
-LOCK_PATH = ART / ".launch.lock"  # the process-wide launch reservation (fcntl.flock)
 BASE = os.environ.get("STUDIO_URL", "http://localhost:7701").rstrip("/")
 API = f"{BASE}/api/v1"
+
+
+def daemon_origin(base: str = BASE) -> str:
+    """The daemon the reservation protects, as an origin — `scheme://host:port` (lower-cased, the
+    default port filled in, path/query dropped) — so `http://localhost:7701` and
+    `http://localhost:7701/` are ONE daemon. (Distinct spellings of one host — `localhost` vs
+    `127.0.0.1` — stay distinct; set STUDIO_URL the same way in every worktree.)"""
+    u = urllib.parse.urlsplit(base if "://" in base else f"http://{base}")
+    scheme = (u.scheme or "http").lower()
+    port = u.port or {"https": 443}.get(scheme, 80)
+    return f"{scheme}://{(u.hostname or '').lower()}:{port}"
+
+
+def origin_key(base: str = BASE) -> str:
+    """sha256 of the daemon origin — the reservation's file name, the same in every worktree."""
+    return hashlib.sha256(daemon_origin(base).encode()).hexdigest()
+
+
+# The launch reservation (`LaunchLock`) protects the DAEMON, not a worktree: two harnesses in two
+# worktrees launching against the same `:7701` must contend for ONE lock (codex round 7 — a lock
+# under each worktree's `e2e/artifacts/…` let both clear their preflights on an idle daemon and
+# both submit). So the lock lives OUTSIDE any worktree, in a per-user directory under the system
+# temp dir — `wicked-test-feature-live-<uid>`, created 0700 (never under the operator's
+# `~/.wicked-crew`) — and is named by the sha256 of the daemon origin (`origin_key`).
+LOCK_DIR = Path(tempfile.gettempdir()) / f"wicked-test-feature-live-{os.getuid()}"
+
+
+def lock_path_for(base: str = BASE, lock_dir: Path | None = None) -> Path:
+    return (lock_dir or LOCK_DIR) / f"{origin_key(base)}.launch.lock"
+
+
+LOCK_PATH = lock_path_for()  # the launch reservation for THIS daemon (fcntl.flock), shared across worktrees
 TARGET_REPO = os.environ.get("TARGET_REPO", "wicked-studio")
 PREFLIGHT_MAX_S = int(float(os.environ.get("PREFLIGHT_MAX_MIN", "20")) * 60)
 GATE_TIMEOUT_S = int(float(os.environ.get("GATE_TIMEOUT_MIN", "25")) * 60)
@@ -801,27 +848,43 @@ def preflight_at_submit(tag: str) -> list[str]:
 
 
 class LaunchLock:
-    """The process-wide launch reservation: `fcntl.flock(LOCK_EX | LOCK_NB)` on
-    `ART/.launch.lock`, held from the pre-submit preflight until the launched run's intake gate has
-    been decided. A second harness process (or a second launch in this one) fails FAST with a
-    named message instead of clearing its own preflight in the same window."""
+    """The launch reservation for ONE DAEMON: `fcntl.flock(LOCK_EX | LOCK_NB)` on
+    `LOCK_DIR/<sha256(daemon origin)>.launch.lock` — a per-user directory under the system temp
+    dir, outside every worktree — held from the pre-submit preflight until the launched run's
+    intake gate has been decided. A second harness process, in THIS worktree or any other, aiming
+    at the same daemon fails FAST with a named message instead of clearing its own preflight in the
+    same window; harnesses aiming at different daemons never contend (codex round 7: a lock under
+    each worktree's evidence dir serialized nothing across worktrees)."""
 
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = path or LOCK_PATH
+    def __init__(self, path: Path | None = None, *, base: str | None = None, lock_dir: Path | None = None) -> None:
+        self.origin = daemon_origin(base or BASE)
+        self.path = path or lock_path_for(base or BASE, lock_dir)
         self._fd: int | None = None
+
+    def describe(self) -> dict:
+        """What the report records about the reservation: its (scrubbed) path, scope and origin."""
+        return {"path": scrub(str(self.path)), "dir": scrub(str(self.path.parent)), "scope": "daemon-origin",
+                "origin": self.origin, "key": self.path.name, "held": self.held, "pid": os.getpid()}
 
     def acquire(self) -> "LaunchLock":
         # Never write THROUGH a link: the lock's directory is reached by the same trusted descriptor
         # walk as every artifact (`open_artifact_root` — the anchor opened once, then every component
         # opened O_RDONLY|O_DIRECTORY|O_NOFOLLOW RELATIVE to the previous descriptor, created where
-        # missing) and the lock file itself is created O_NOFOLLOW RELATIVE to that descriptor — a
-        # symlink anywhere on the way, whenever planted, is refused by the kernel (ELOOP), never
-        # followed. No pathname under the evidence dir is opened or created (codex round 6).
-        dfd = open_artifact_root(self.path.parent, create=True)
+        # missing — 0700 here: the per-user lock dir is private) and the lock file itself is created
+        # O_NOFOLLOW RELATIVE to that descriptor — a symlink anywhere on the way, whenever planted, is
+        # refused by the kernel (ELOOP), never followed. No pathname under the evidence dir is opened
+        # or created (codex round 6). The directory reached must be THIS user's and not writable by
+        # anyone else: the system temp dir is shared, so a directory of that name planted by another
+        # user (or left group/world-writable) is refused, never locked in.
+        dfd = open_artifact_root(self.path.parent, create=True, mode=0o700)
         try:
+            st = os.fstat(dfd)
+            if st.st_uid != os.getuid() or st.st_mode & 0o022:
+                raise SystemExit(f"launch reservation directory {self.path.parent} is not a private directory of this user "
+                                 f"(uid {st.st_uid}, mode {stat.filemode(st.st_mode)}) — refusing to lock in it")
             flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
             try:
-                fd = os.open(self.path.name, flags, 0o644, dir_fd=dfd)
+                fd = os.open(self.path.name, flags, 0o600, dir_fd=dfd)
             except OSError as e:  # ELOOP: a symlink at the lock's name — or any other refusal
                 raise SystemExit(f"launch reservation {self.path} is a symlink or could not be opened without following a link "
                                  f"({type(e).__name__}: {e}) — refusing to write through it") from e
@@ -1387,28 +1450,70 @@ def latest_awaiting_human(events: list[dict]) -> dict | None:
     return aw[-1] if aw else None
 
 
-def _gate_state(run_id: str, *, record_run_id=None, ord_=None, prompt=None, source=None, why=None) -> dict:
+RESOLVES_GATE = {"gateDecided", "resumed"}  # what closes an `awaitingHuman` gate in the daemon's log (studio folds the same two)
+ENDS_RUN = {"sessionCompleted", "runCancelled", "sessionFailed"}  # a finished run has no gate
+
+
+def unresolved_gate(events: list[dict]) -> tuple[dict | None, str]:
+    """The run's current UNRESOLVED gate from a FRESH event log — `(event, "")` — or `(None, why)`.
+    The gate is the LATEST `awaitingHuman` event, provided nothing after it resolves it: no
+    `gateDecided` / `resumed` for ITS ord (`gateDecided` also fires for auto gates, so an unrelated
+    ord's decision resolves nothing) and no terminal event. An older `awaitingHuman` is superseded
+    by a later one (a run gates one unit at a time). AMBIGUOUS — no gate is established — when a
+    later `gateDecided` / `resumed` cannot be attributed (it, or the gate, carries no ord): whether
+    the gate the card shows is still open cannot be told, and the harness must not guess."""
+    latest = latest_awaiting_human(events)
+    if latest is None:
+        return None, "no awaitingHuman event in the fresh events"
+    ord_ = latest.get("ord")
+    tag = f"awaitingHuman event (ord {ord_}, seq {latest.get('seq')})"
+    start = next(i for i, e in enumerate(events) if e is latest) + 1
+    for e in events[start:]:
+        if not isinstance(e, dict):
+            continue
+        t = e.get("type")
+        if t in ENDS_RUN:
+            return None, f"the latest {tag} is followed by {t} (seq {e.get('seq')}) — the run has no open gate"
+        if t in RESOLVES_GATE:
+            r_ord = e.get("ord")
+            if isinstance(ord_, int) and isinstance(r_ord, int):
+                if r_ord == ord_:
+                    return None, f"the latest {tag} was already resolved by {t} (ord {r_ord}, seq {e.get('seq')}) — no unresolved gate"
+                continue  # another unit's gate deciding (an auto gate) — not this one
+            return None, (f"ambiguous: the latest {tag} is followed by {t} (ord {r_ord!r}, seq {e.get('seq')}) that can neither be "
+                          "attributed to it nor ruled out — whether the gate is still open cannot be established")
+    return latest, ""
+
+
+def _gate_state(run_id: str, *, record_run_id=None, ord_=None, prompt=None, source=None, why=None, known: bool = True) -> dict:
     ok = isinstance(prompt, str) and bool(prompt.strip())
     return {"run_id": run_id, "record_run_id": record_run_id if isinstance(record_run_id, str) and record_run_id else None,
-            "ord": ord_ if isinstance(ord_, int) else None, "prompt": prompt if ok else None, "readable": ok,
+            "ord": ord_ if isinstance(ord_, int) else None, "prompt": prompt if ok else None, "readable": ok, "known": bool(known),
             "source": source if ok else None, "why": None if ok else why}
 
 
-def current_gate(run_id: str, events: list[dict] | None = None) -> dict:
-    """The daemon's CURRENT gate for `run_id`, read read-only — `{run_id, record_run_id, ord,
-    prompt, readable, source, why}` — the ONLY gate a POST to `/runs/:id/gate` can decide (the POST
-    carries no ord). Never the card's `cleanPrompt()` headline, never an older gate's prompt:
+def current_gate(run_id: str) -> dict:
+    """The daemon's CURRENT gate for `run_id`, read read-only and FRESH — `{run_id, record_run_id,
+    ord, prompt, readable, known, source, why}` — the ONLY gate a POST to `/runs/:id/gate` can
+    decide (the POST carries no ord). Never the card's `cleanPrompt()` headline, never an older
+    gate's prompt, never events a caller fetched EARLIER (codex round 7):
       1. `GET /runs/:id/gate` — the daemon's cached open-gate record (`GateInfo {runId, ord, prompt,
          …}`, wicked-crew-api-types 0.25.0; studio's own late-join reconcile). When it answers 2xx
          with an object, THAT record is the current gate — its `ord` and its `prompt`; an empty /
          non-string prompt makes the current gate UNREADABLE (`readable: false`) and the events are
-         NOT consulted for a substitute (a 404 is the daemon's "nothing cached"; any other failure
-         is a recorded typed miss — then the events stand in);
-      2. else the LATEST `awaitingHuman` event (`events`, or `GET /runs/:id/events`), whatever its
-         ord — its `ord` and its verbatim `prompt` (the text SteeringGate was handed); an
-         unreadable latest prompt is UNREADABLE — an older event's readable prompt never stands in.
-    An unreadable current gate is a gate-state conflict for the caller (`gate_state_conflict`):
-    nothing is clicked."""
+         NOT consulted for a substitute;
+      2. on ANY other answer — a 404 (nothing cached), a non-2xx, a transport failure, a 2xx that is
+         not an object (the last three are recorded typed misses) — the ONLY permitted fallback: a
+         FRESH `GET /runs/:id/events` and the current UNRESOLVED gate in it (`unresolved_gate`: the
+         LATEST `awaitingHuman` with no later `gateDecided` / `resumed` for its ord and no terminal
+         event after it) — its `ord` and its verbatim `prompt`; an unreadable prompt there is
+         UNREADABLE (an older event's never stands in). When that fetch fails too, or the fresh log
+         establishes no gate (none / already decided / ambiguous / run over), the gate state is
+         UNKNOWN (`known: false`).
+    Codex round 7 (HIGH): the failure branches fell back to the events the CALLER had fetched before
+    the card rendered — a stale ord-1 log approved a 503 / 404 / malformed-200 daemon whose current
+    gate was an ord-4 delivery, and `/events` was never re-read. An unreadable or unknown current
+    gate is a gate-state conflict for the caller (`gate_state_conflict`): nothing is clicked."""
     path = f"/runs/{enc(run_id)}/gate"
     status, body = _fetch(path)
     if 200 <= status < 300 and isinstance(body, dict):
@@ -1425,16 +1530,17 @@ def current_gate(run_id: str, events: list[dict] | None = None) -> dict:
     else:
         record_fetch_error(path, status, f"unexpected body shape: {json.dumps(body, default=str)[:120]}")
         why_gate = "GET /runs/:id/gate answered a non-object body"
-    if events is None:
-        try:
-            events = run_events(run_id)
-        except FetchError as e:  # recorded by get()
-            return _gate_state(run_id, why=f"{why_gate}; {e}")
-    latest = latest_awaiting_human(events)
+    # The ONLY fallback: the events re-read NOW — never a log fetched before the card rendered.
+    try:
+        events = run_events(run_id)
+    except FetchError as e:  # recorded by get()
+        return _gate_state(run_id, known=False, why=f"{why_gate}; the fresh GET /runs/:id/events failed ({e}) — gate state unknown")
+    latest, why_none = unresolved_gate(events)
     if latest is None:
-        return _gate_state(run_id, why=f"{why_gate}; no awaitingHuman event")
+        return _gate_state(run_id, known=False, why=f"{why_gate}; fresh events: {why_none} — gate state unknown")
     src = f"awaitingHuman event (ord {latest.get('ord')}, seq {latest.get('seq')})"
-    return _gate_state(run_id, record_run_id=latest.get("session"), ord_=latest.get("ord"), prompt=latest.get("prompt"), source=src,
+    return _gate_state(run_id, record_run_id=latest.get("session"), ord_=latest.get("ord"), prompt=latest.get("prompt"),
+                       source=f"{src} — unresolved in the fresh GET /runs/:id/events",
                        why=f"{why_gate}; the latest {src} carries no readable prompt — an older event's prompt is never substituted")
 
 
@@ -1484,7 +1590,14 @@ def gate_state_conflict(cur: dict, *, run_id: str, ord_: int | None, card_run_id
       * the card's headline is not `cleanPrompt(current.prompt)` (`card-prompt-mismatch` — the click
         surface does not show the gate being decided).
     Absence of an identity (no ord on the card, `ord_` None) is not a match and not a conflict on
-    its own — the headline comparison always applies."""
+    its own — the headline comparison always applies. Codex round 7: when the current gate could not
+    be ESTABLISHED at all (`cur.known` false — the gate read failed and the FRESH events settle
+    nothing: fetch failed, no gate, already decided, ambiguous, run over) the conflict is
+    `unknown-gate` and the caller files it as `gate-state-unknown`; events fetched before the card
+    rendered never stand in."""
+    if cur.get("known") is False:
+        return (f"unknown-gate: the daemon's CURRENT gate could not be established ({cur.get('why')}) — a card headline alone "
+                "never decides, and events fetched before the card rendered never stand in")
     if not cur.get("readable"):
         return (f"unreadable-gate: the daemon's CURRENT gate prompt cannot be read ({cur.get('why')}) — a card headline alone "
                 "never decides, and an older prompt never stands in")
@@ -1506,19 +1619,30 @@ def gate_state_conflict(cur: dict, *, run_id: str, ord_: int | None, card_run_id
     return None
 
 
+def abstention_label(entry: dict) -> str:
+    """The finding a recorded abstention (`gates[]` entry, `decision: reject-by-abstention`) is
+    filed under: `gate-state-unknown` when the daemon's current gate could not be ESTABLISHED (the
+    reason says so — `current_gate` → `known: false`), else `gate-state-conflict` (a current gate
+    that is not the card's, or one whose prompt is unreadable)."""
+    return "gate-state-unknown" if str(entry.get("reason") or "").startswith("gate-state-unknown") else "gate-state-conflict"
+
+
 def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict | None, tag: str,
-                        first: bool, card_text: str | None = None, events: list[dict] | None = None) -> dict:
+                        first: bool, card_text: str | None = None) -> dict:
     """Decide a rendered SteeringGate card — or refuse to touch it. FIRST the gate's IDENTITY: the
-    daemon's CURRENT gate is read read-only (`current_gate` — `GET /runs/:id/gate`, else the LATEST
-    `awaitingHuman` event, never an older one) and must be the gate this card shows
-    (`gate_state_conflict`: same run, same ord — the card's `before unit #N` line and the ord the
-    caller read from the events — and the same headline, `cleanPrompt(current.prompt)` == the
-    card's `steering-prompt` text). Any conflict — a stale ord-1 card while the daemon's current
-    gate is ord 4, a current prompt the daemon does not serve, a headline that is not the current
-    prompt's — means NO CLICK: the entry is recorded as `reject-by-abstention` with both texts and
-    both ords, the finding is `gate-state-conflict` (`harness_ok=false`), the run is left as it is.
-    (Codex round 6: a POST to `/runs/:id/gate` carries no ord — approving off a stale card would
-    have approved the daemon's current delivery gate.) THEN, with the identity proven, the policy:
+    daemon's CURRENT gate is read read-only and FRESH, here and now (`current_gate` — `GET
+    /runs/:id/gate`, else a FRESH `GET /runs/:id/events` and its current UNRESOLVED gate; never
+    events the caller fetched earlier — there is no argument for them) and must be the gate this
+    card shows (`gate_state_conflict`: same run, same ord — the card's `before unit #N` line and
+    the ord the caller read from the events — and the same headline, `cleanPrompt(current.prompt)`
+    == the card's `steering-prompt` text). Any conflict — a stale ord-1 card while the daemon's
+    current gate is ord 4, a current prompt the daemon does not serve, a headline that is not the
+    current prompt's — means NO CLICK: the entry is recorded as `reject-by-abstention` with both
+    texts and both ords, the finding is `gate-state-conflict` (`harness_ok=false`), the run is left
+    as it is; a current gate that could not be ESTABLISHED at all (the gate read failed and the
+    fresh events settle nothing) is the same abstention filed as `gate-state-unknown` (codex round
+    7). (Codex round 6: a POST to `/runs/:id/gate` carries no ord — approving off a stale card
+    would have approved the daemon's current delivery gate.) THEN, with the identity proven, the policy:
     `gate_decision` over the COMPLETE current prompt with the unit's stage/gate — the card's text
     is only the CLICK SURFACE (recorded alongside as `prompt_card`, `card_consistent`); codex
     round 5: `Approve unit 4 before it runs: Finalize the test [gh pr create --fill]` rendered a
@@ -1535,7 +1659,7 @@ def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict
             card_text = ""
             log(f"{tag}: gate ord={ord_} on {run_id}: steering-prompt unreadable ({type(e).__name__}: {e})")
     card_run_id, card_ord = card_identity(card)
-    cur = current_gate(run_id, events)
+    cur = current_gate(run_id)
     prompt, source = cur["prompt"], cur["source"] or cur["why"]
     shown = re.sub(r"\s+", " ", card_text or "").strip()
     consistent: bool | None = (shown == card_headline(prompt)) if prompt is not None else None
@@ -1547,9 +1671,10 @@ def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict
              "status": None, "url": None, "body": None, "wire_ok": None, "wire_check": None}
     conflict = gate_state_conflict(cur, run_id=run_id, ord_=ord_, card_run_id=card_run_id, card_ord=card_ord, card_text=card_text)
     if conflict:
-        entry.update(decision="reject-by-abstention", reason=f"gate-state-conflict: {conflict}",
-                     wire_check="not clicked — gate-state-conflict (no POST was made; the run is left as it is)")
-        finding(f"{tag}: gate-state-conflict on run {run_id}: {conflict} — NO click (reject-by-abstention). The card showed "
+        label = "gate-state-unknown" if cur.get("known") is False else "gate-state-conflict"
+        entry.update(decision="reject-by-abstention", reason=f"{label}: {conflict}",
+                     wire_check=f"not clicked — {label} (no POST was made; the run is left as it is)")
+        finding(f"{tag}: {label} on run {run_id}: {conflict} — NO click (reject-by-abstention). The card showed "
                 f"{shown[:80]!r} (card ord {card_ord}, harness ord {ord_}); the daemon's current gate is ord {cur['ord']} reading "
                 f"{(prompt if prompt is not None else '<unreadable>')[:80]!r} ({source})")
         log(f"{tag}: gate on {run_id[:8]} → ABSTAINED ({conflict[:120]})")
@@ -1596,9 +1721,10 @@ def latest_gate_ord(events: list[dict]) -> int | None:
 def decide_sibling_gate(page, sid: str, *, tag: str, return_to: str) -> dict:
     """A sibling in `awaiting_human` gets its gate decided THROUGH THE UI: navigate to
     /runs/<sibling id>, wait for `[data-testid="steering-gate"][data-run-id="<id>"]`, decide on the
-    COMPLETE prompt from the daemon (`decide_gate_on_card` → `full_gate_prompt`; the events fetched
-    here are reused) with the gated unit's stage/gate (from GET /runs/:id — read-only), click —
-    then navigate back to the launch panel. Never the API."""
+    COMPLETE CURRENT prompt read from the daemon AFRESH (`decide_gate_on_card` → `current_gate`; the
+    events fetched here supply only the harness's own ord and the unit — codex round 7: they are
+    never the gate's source) with the gated unit's stage/gate (from GET /runs/:id — read-only),
+    click — then navigate back to the launch panel. Never the API."""
     ord_: int | None = None
     unit: dict | None = None
     events: list[dict] | None = None
@@ -1618,7 +1744,7 @@ def decide_sibling_gate(page, sid: str, *, tag: str, return_to: str) -> dict:
                  "reason": f"no SteeringGate card rendered on /runs/{sid} within 30s ({type(e).__name__})"}
         finding(f"{tag}: sibling {sid} is awaiting_human per REST but /runs/{sid} rendered no gate card within 30s — left undecided")
     else:
-        entry = decide_gate_on_card(page, card, run_id=sid, ord_=ord_, unit=unit, tag=tag, first=False, events=events)
+        entry = decide_gate_on_card(page, card, run_id=sid, ord_=ord_, unit=unit, tag=tag, first=False)
     if lookup_error:
         entry["unit_lookup_error"] = lookup_error
     page.goto(return_to, wait_until="networkidle")  # back to the launch panel
@@ -1787,7 +1913,7 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
     # harness failure all the same: the run was not brought to a decision the harness can vouch for.
     abstained = [g for g in gates if g.get("decision") == "reject-by-abstention"]
     if abstained:
-        hard.append("gate-state-conflict")
+        hard += sorted({abstention_label(g) for g in abstained})  # `gate-state-conflict` and/or `gate-state-unknown` (round 7)
         hard += [f"gate ord={g.get('ord')} (daemon current ord={g.get('current_ord')}): {g.get('reason')}" for g in abstained]
     # The wire check (`gate_wire_check`): a recorded gate whose POST did not go to THIS run's gate
     # endpoint with `approve` == the decision and a 2xx is not evidence the decision was taken.
@@ -1805,7 +1931,9 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
         hard += bad_sibling_wire
     sibling_conflicts = sibling_gate_conflicts(followed)
     if sibling_conflicts:
-        hard.append("sibling-gate-state-conflict")
+        labels = {abstention_label(g) for entries in (followed.get("gates") or {}).values() for g in entries or []
+                  if isinstance(g, dict) and g.get("decision") == "reject-by-abstention"}
+        hard += [f"sibling-{label}" for label in sorted(labels)]  # `sibling-gate-state-conflict` / `sibling-gate-state-unknown`
         hard += sibling_conflicts
     if x.get("wedged"):
         hard.append(f"run wedged (no events for {WEDGE_S // 60} min)")
@@ -1906,6 +2034,7 @@ def drive_intake(tag: str, intent: str) -> dict:
     REPORT["scenarios"][tag] = m
     set_fetch_sink(m["measured"].setdefault("fetch_errors", []))
     lock = LaunchLock()
+    REPORT["launch_lock"] = lock.describe()  # the reservation's (scrubbed) path, scope and daemon origin — codex round 7
     try:
         return _drive_intake(tag, intent, m, lock)
     finally:
@@ -1966,9 +2095,11 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
 
         # ── Reserve the launch, then re-run the preflight at the last possible moment ───────
         # The minutes spent starting the browser, picking the repo and taking screenshots are a
-        # window another run can start in; the flock stops a second harness process from clearing
-        # its own preflight in that window. Held until the intake gate has been decided.
+        # window another run can start in; the flock — keyed by the DAEMON origin, shared by every
+        # worktree aiming at it (round 7) — stops a second harness process from clearing its own
+        # preflight in that window. Held until the intake gate has been decided.
         lock.acquire()
+        m["measured"]["launch_lock"] = lock.describe()
         why = preflight_at_submit(tag)
         if why:
             m["measured"]["launch_aborted_by_preflight"] = why
@@ -2095,7 +2226,7 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
             unit = None
             m["notes"].append(f"could not read the gated unit's stage/gate: {e}")
         m["measured"]["gate"]["unit"] = unit
-        entry = decide_gate_on_card(page, card, run_id=run_id, ord_=gate_ord, unit=unit, tag=tag, first=True, card_text=prompt, events=events)
+        entry = decide_gate_on_card(page, card, run_id=run_id, ord_=gate_ord, unit=unit, tag=tag, first=True, card_text=prompt)
         gates.append(entry)
         decision = entry["decision"]
         abstained = decision == "reject-by-abstention"  # gate-state conflict: nothing was clicked; the run is not followed
@@ -2120,7 +2251,7 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
             # The card was not the daemon's current gate (or that gate could not be read): nothing was
             # clicked and nothing more is done to this run — it is reported, not followed to terminal.
             m["measured"]["gate_abstained"] = True
-            finding(f"{tag}: the intake gate on run {run_id} was left UNDECIDED (gate-state-conflict) — the harness does not follow a run it must not touch")
+            finding(f"{tag}: the intake gate on run {run_id} was left UNDECIDED ({abstention_label(entry)}) — the harness does not follow a run it must not touch")
             try:
                 final_status = run_detail(run_id)["session"]["status"]
             except Exception as e:
@@ -2159,12 +2290,12 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
                 # clause or on a clean headline. The capture is named by ord; `gates[]` carries the decision.
                 unit2 = gate_unit(d, g.get("ord"))
                 shot(page, f"05-gate-{g.get('ord', 'x')}")
-                later = decide_gate_on_card(page, c2, run_id=run_id, ord_=g.get("ord"), unit=unit2, tag=tag, first=False, card_text=ptxt, events=evs)
+                later = decide_gate_on_card(page, c2, run_id=run_id, ord_=g.get("ord"), unit=unit2, tag=tag, first=False, card_text=ptxt)
                 gates.append(later)
                 if later["decision"] == "reject-by-abstention":
                     m["measured"]["gate_abstained"] = True
                     finding(f"{tag}: run {run_id} left at its gate (daemon current ord {later.get('current_ord')}) UNDECIDED "
-                            "(gate-state-conflict) — the harness stops following it")
+                            f"({abstention_label(later)}) — the harness stops following it")
                     break
                 last_change = time.time()
                 continue
@@ -2367,13 +2498,14 @@ def open_dir_nofollow(name: str, dir_fd: int, shown: Path) -> int:
                          f"({type(e).__name__}: {e}); refusing to write through it") from e
 
 
-def walk_dir(anchor: Path, parts: tuple[str, ...] | list[str], *, create: bool) -> int:
+def walk_dir(anchor: Path, parts: tuple[str, ...] | list[str], *, create: bool, mode: int = 0o755) -> int:
     """Descend from the trusted `anchor` through `parts`, one no-follow relative open per component
-    (`open_dir_nofollow`), creating a missing component with `os.mkdir(name, dir_fd=parent_fd)` when
-    `create` and then re-opening it the same no-follow way (a link raced in between the ENOENT and
-    the mkdir makes the mkdir EEXIST and the re-open ELOOP — refused, never followed). Returns the
-    descriptor of the LAST component; every intermediate descriptor is closed. A refusal anywhere
-    closes what was opened and raises `SystemExit` naming the component."""
+    (`open_dir_nofollow`), creating a missing component with `os.mkdir(name, mode, dir_fd=parent_fd)`
+    when `create` (`mode` 0o755 for the evidence dir, 0o700 for the per-user lock dir) and then
+    re-opening it the same no-follow way (a link raced in between the ENOENT and the mkdir makes the
+    mkdir EEXIST and the re-open ELOOP — refused, never followed). Returns the descriptor of the
+    LAST component; every intermediate descriptor is closed. A refusal anywhere closes what was
+    opened and raises `SystemExit` naming the component."""
     fd = open_anchor(anchor)
     shown = anchor
     try:
@@ -2385,7 +2517,7 @@ def walk_dir(anchor: Path, parts: tuple[str, ...] | list[str], *, create: bool) 
                 if not create:
                     raise SystemExit(f"{shown} does not exist — refusing to write under it") from None
                 try:
-                    os.mkdir(part, 0o755, dir_fd=fd)
+                    os.mkdir(part, mode, dir_fd=fd)
                 except FileExistsError:
                     pass  # whatever appeared in between is judged by the no-follow re-open below
                 try:
@@ -2407,7 +2539,7 @@ def _rel_parts(root: Path, anchor: Path) -> tuple[str, ...]:
         raise SystemExit(f"{root} is not under {anchor} — refusing to write it") from None
 
 
-def open_artifact_root(root: Path | None = None, base: Path | None = None, *, create: bool = True) -> int:
+def open_artifact_root(root: Path | None = None, base: Path | None = None, *, create: bool = True, mode: int = 0o755) -> int:
     """THE trusted descriptor for the evidence dir: `base` (default `_anchor(root)` — the resolved
     repo root for the real ART) opened once, then every component of `root` below it opened
     no-follow RELATIVE to the previous descriptor (`walk_dir`; created where missing when
@@ -2419,7 +2551,7 @@ def open_artifact_root(root: Path | None = None, base: Path | None = None, *, cr
     passed and the write escaped)."""
     root = root or ART
     anchor = base or _anchor(root)
-    return walk_dir(anchor, _rel_parts(root, anchor), create=create)
+    return walk_dir(anchor, _rel_parts(root, anchor), create=create, mode=mode)
 
 
 def ensure_artifact_root(root: Path | None = None, base: Path | None = None) -> Path:

@@ -134,6 +134,33 @@ view" below).
 > recorded intake gates re-check their identity over the recorded evidence (one `awaitingHuman`
 > event, ord 1; headline == complete prompt; same run) with no conflict and re-decide `approve`
 > (`gates[0].current_ord`, `gate_identity`).
+>
+> **Revised a seventh time after codex round 7 (same day, still offline — read-only GETs only, no
+> launch).** (1) **A failed current-gate read abstains — it never decides on earlier events.** Every
+> live caller handed `decide_gate_on_card` the events it had fetched before the card rendered, and
+> when `GET /runs/:id/gate` failed (503, 404, a malformed 200, a transport error) `current_gate` fell
+> back to THAT log — so codex's stale unit-1 card over a newer unit-4 delivery event approved
+> (`wire_ok` true) on every failure branch and `/events` was never re-read. Now there is no argument
+> for earlier events: the only fallback is a FRESH `GET /runs/:id/events` and the current UNRESOLVED
+> gate in it — the latest `awaitingHuman` with no later `gateDecided`/`resumed` for its ord and no
+> terminal event after it (`unresolved_gate`); the unit-4 gate is identified there and the unit-1
+> card is a `gate-state-conflict` (no click). When the fresh fetch fails too, or the log settles
+> nothing (no gate, already decided, ambiguous, run over), the state is UNKNOWN:
+> `reject-by-abstention`, finding `gate-state-unknown`, `harness_ok=false` (a sibling's:
+> `sibling-gate-state-unknown`). A healthy gate read still approves as recorded. (2) **The launch
+> reservation protects the daemon, not the worktree.** `ART/.launch.lock` gave each worktree its own
+> lock — two harnesses in two worktrees both saw an idle `:7701` and both submitted. The lock now
+> lives outside every worktree in a per-user directory under the system temp dir
+> (`wicked-test-feature-live-<uid>`, created 0700 and refused unless it is this user's and not
+> writable by anyone else — never under `~/.wicked-crew`), named by the sha256 of the daemon origin,
+> still created `O_NOFOLLOW` on the descriptor of a directory reached by the trusted no-follow walk,
+> same `flock` semantics; its scrubbed path, scope and origin are recorded in `report.json →
+> launch_lock`. **No number moved**: the recorded intake gates re-check under the round-7 rule over
+> the recorded evidence — each run had a single `awaitingHuman` (ord 1) that closed its log at
+> decision time (`gate.events_before_gate[-1]`, `event_type_counts.awaitingHuman 1`) and the gate
+> POST was accepted (status 200: the gate was open at the click), so the fresh-events fallback would
+> establish the same ord-1 gate and re-decide `approve` (`gates[0].gate_identity_round7`); the three
+> recorded launches predate the shared reservation (`launch_lock.held_for_recorded_launches: false`).
 
 | Component | Version |
 |---|---|
@@ -149,9 +176,15 @@ recorded launches ran under a coordinator-authorized **95 %** with swap reading 
 deviation recorded in `report.json → contract_deviation` and accepted as deviation evidence under
 the contract's 2026-09-09 amendment — see "Preflight history"; free memory was
 recorded but not gated on). *The harness as committed now also re-runs the gates immediately
-before the submit click under a process-wide `flock` reservation held until the intake gate is
-decided (`preflights[].at: "submit"`) — the three recorded launches predate that check and had one
-preflight before browser start-up (`at_submit: "not performed"`) — and carries a fourth gate: no
+before the submit click under a `flock` reservation that protects the **daemon**, not the
+worktree — the lock lives outside every worktree in a per-user directory under the system temp
+dir (`wicked-test-feature-live-<uid>`, created 0700, never under `~/.wicked-crew`) and is named
+by the sha256 of the daemon origin (`scheme://host:port` of `STUDIO_URL`), so two harnesses in
+two worktrees aiming at the same `:7701` contend for one lock while different daemons never do;
+it is held until the intake gate is decided (`preflights[].at: "submit"`; the lock's scrubbed
+path, scope and origin are recorded in `report.json → launch_lock`) — the three recorded launches
+predate that check and had one preflight before browser start-up (`at_submit: "not performed"`)
+— and carries a fourth gate: no
 heavy worker/build fan-out on the host (`fanout_processes()` over `ps -axo pid=,command=`, each
 command line tokenized and matched on its **tokens in any order** — `codex … exec`, `claude … -p |
 --print`, `cargo [+toolchain] build | test | clippy | run`, `go build | test`, `npm|pnpm|yarn|bun`
@@ -169,16 +202,19 @@ that gate too (`readings[].fanout: "not measured"`); a live read-only `ps` on th
 time listed a second `wicked-crew serve --port 62432` daemon and codex council seats — the gate
 would have blocked.* Every gate decided through the UI card only (never the API) under one policy
 applied to the intake gate too — *an allow-list that fails closed, judged on the **complete,
-current prompt read from the daemon** (`GET /runs/:id/gate` — the cached open-gate record — else
-the LATEST `awaitingHuman` event's verbatim `prompt`, never an older one), never on the card's
+current prompt read from the daemon, afresh** (`GET /runs/:id/gate` — the cached open-gate record —
+else, on ANY failure of that read, a FRESH `GET /runs/:id/events` and its current unresolved gate:
+the LATEST `awaitingHuman` with no later `gateDecided`/`resumed` for its ord, its verbatim `prompt`,
+never an older one and never events fetched before the card rendered — round 7), never on the card's
 `cleanPrompt()` headline, which strips everything from the first `[` on; the card is the click
 surface, its headline is recorded alongside (`gates[].prompt_card`, `card_consistent`) — and,
 since round 6, the card must BE the daemon's current gate before anything is clicked: same run
 (`data-run-id`), same ord (its `before unit #N` line, and the ord the harness read from the
 events), same headline (`cleanPrompt(current.prompt)`); any conflict, or a current prompt the
 daemon does not serve, is `reject-by-abstention` — nothing clicked, both texts and both ords
-recorded, finding `gate-state-conflict`, `harness_ok=false` (a POST to `/runs/:id/gate` carries no
-ord: a stale card would decide the daemon's current gate). With the identity proven,
+recorded, finding `gate-state-conflict` — or `gate-state-unknown` when neither the record nor the
+fresh events establish a current gate at all — `harness_ok=false` (a POST to `/runs/:id/gate`
+carries no ord: a stale card would decide the daemon's current gate). With the identity proven,
 a gate is approved ONLY when
 (a) the prompt is an allow-listed shape — crew's pre-execution unit gate ("Approve unit N before it
 runs: …") or a plan approval ("Approve [the] [proposed] [test] plan…"), (b) the gated unit's
@@ -465,10 +501,13 @@ the amended contract's explicit, recorded override; any `codex … exec` / `clau
 basename / `python* -m pytest|unittest` / second
 `wicked-crew serve … --port ≠ 7701` process on the host included, matched on the command line's
 tokens in any order — `FANOUT_PATTERN` adds a regex, a failed `ps` blocks), re-checks all four gates
-at the submit click, and holds
-`e2e/artifacts/test-feature-live/.launch.lock` (`flock`; the lock file created `O_NOFOLLOW` on the
-descriptor of a directory reached by the same trusted descriptor walk as every artifact) until the
-intake gate is decided — a second harness process fails fast.
+at the submit click, and holds the daemon's launch reservation — `<system temp
+dir>/wicked-test-feature-live-<uid>/<sha256(daemon origin)>.launch.lock`, outside every worktree
+(`flock`; the per-user directory created 0700 and refused unless it is this user's and not writable
+by anyone else, the lock file created `O_NOFOLLOW` on the descriptor of a directory reached by the
+same trusted descriptor walk as every artifact) until the intake gate is decided — a second harness
+process aiming at the same daemon, from any worktree, fails fast; the lock's scrubbed path is
+recorded in `report.json → launch_lock`.
 The self-test needs none of that (it touches `git ls-files` of this worktree and a temp dir);
 studio's CI runs no Python step, so run it by hand before pushing a harness change. Every artifact
 — `report.json`, the plans, the screenshots — lands through one descriptor-anchored writer (the

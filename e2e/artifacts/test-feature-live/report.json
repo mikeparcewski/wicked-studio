@@ -1564,7 +1564,8 @@
       "current_ord": 1,
       "card_ord": null,
       "card_run_id": null,
-      "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)"
+      "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)",
+      "gate_identity_round7": "re-checked under the round-7 rule (a failed GET /runs/:id/gate falls back ONLY to a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it \u2014 the latest awaitingHuman with no later gateDecided/resumed for its ord; never to events fetched earlier; nothing established \u21d2 gate-state-unknown): the run had a single awaitingHuman (ord 1; event_type_counts.awaitingHuman 1) that closed the log at decision time (gate.events_before_gate[-1] == 'awaitingHuman', 18 events) and the gate POST was accepted (status 200 \u2014 the gate was open at the click), so unresolved_gate() over that log establishes the same ord-1 gate: the identity holds and the decision (approve) is unchanged. The gateDecided (3) and resumed (1) in the final counts follow the click \u2014 the harness's own approval and the run's later auto-gates"
      }
     ],
     "gates_seen": 1,
@@ -2980,7 +2981,8 @@
       "current_ord": 1,
       "card_ord": null,
       "card_run_id": null,
-      "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)"
+      "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)",
+      "gate_identity_round7": "re-checked under the round-7 rule (a failed GET /runs/:id/gate falls back ONLY to a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it \u2014 the latest awaitingHuman with no later gateDecided/resumed for its ord; never to events fetched earlier; nothing established \u21d2 gate-state-unknown): the run had a single awaitingHuman (ord 1; event_type_counts.awaitingHuman 1) that closed the log at decision time (gate.events_before_gate[-1] == 'awaitingHuman', 16 events) and the gate POST was accepted (status 200 \u2014 the gate was open at the click), so unresolved_gate() over that log establishes the same ord-1 gate: the identity holds and the decision (approve) is unchanged. The gateDecided (3) and resumed (1) in the final counts follow the click \u2014 the harness's own approval and the run's later auto-gates"
      }
     ],
     "gates_seen": 1,
@@ -4402,7 +4404,8 @@
       "current_ord": 1,
       "card_ord": null,
       "card_run_id": null,
-      "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)"
+      "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)",
+      "gate_identity_round7": "re-checked under the round-7 rule (a failed GET /runs/:id/gate falls back ONLY to a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it \u2014 the latest awaitingHuman with no later gateDecided/resumed for its ord; never to events fetched earlier; nothing established \u21d2 gate-state-unknown): the run had a single awaitingHuman (ord 1; event_type_counts.awaitingHuman 1) that closed the log at decision time (gate.events_before_gate[-1] == 'awaitingHuman', 16 events) and the gate POST was accepted (status 200 \u2014 the gate was open at the click), so unresolved_gate() over that log establishes the same ord-1 gate: the identity holds and the decision (approve) is unchanged. The gateDecided (3) and resumed (1) in the final counts follow the click \u2014 the harness's own approval and the run's later auto-gates"
      }
     ],
     "gates_seen": 1,
@@ -5232,6 +5235,24 @@
      "why": "re-derived with the round-6 derive_result (gate-state-conflict / sibling-gate-state-conflict are new hard reasons; none of the recorded gates was abstained on) over the recorded measurements"
     }
    ]
+  },
+  {
+   "date": "2026-09-09",
+   "reason": "codex round-7 REVISE on PR #215 \u2014 offline re-derivation over the committed plans and the recorded gates; no new runs, no daemon writes (read-only GETs only). Items: (1) a FAILED current-gate read (GET /runs/:id/gate \u2192 503 / 404 / malformed 200 / transport failure) never decides on events a caller fetched earlier \u2014 decide_gate_on_card and current_gate take no events argument; the ONLY fallback is a FRESH GET /runs/:id/events and the current UNRESOLVED gate in it (latest awaitingHuman with no later gateDecided/resumed for its ord and no terminal event after it); a fresh log that settles nothing (fetch failed, no gate, already decided, ambiguous, run over) \u21d2 reject-by-abstention, finding gate-state-unknown, harness_ok=false (siblings: sibling-gate-state-unknown); codex's stale unit-1 card over a newer unit-4 delivery event is identified as the ord-4 gate and abstained (gate-state-conflict) on every branch; (2) the launch reservation protects the DAEMON: <system temp dir>/wicked-test-feature-live-<uid>/<sha256(daemon origin)>.launch.lock (0700, this user's and private, O_NOFOLLOW on the walked descriptor, same flock semantics) \u2014 shared by every worktree aiming at one daemon, independent across daemons; recorded as launch_lock.",
+   "changes": [
+    {
+     "field": "launch_lock",
+     "old": "not recorded (the reservation was e2e/artifacts/test-feature-live/.launch.lock \u2014 one per worktree)",
+     "new": "{scope: daemon-origin, origin, key: <sha256(origin)>.launch.lock, path: <system temp dir>/wicked-test-feature-live-<uid>/<key>, held_for_recorded_launches: false}",
+     "why": "codex round 7 item 2 (MEDIUM): two harnesses in two worktrees acquired different locks and could both observe an idle daemon before either submitted \u2014 the lock must be keyed by the daemon, outside any worktree"
+    },
+    {
+     "field": "LT-{1,2,3}.gates[0].gate_identity_round7",
+     "old": "not recorded",
+     "new": "the recorded gate re-checked under the round-7 fallback rule: one awaitingHuman (ord 1) closing the log at decision time, gate POST accepted (200) \u2014 the fresh-events fallback establishes the same ord-1 gate; decision unchanged",
+     "why": "codex round 7 item 1 (HIGH): with the gate endpoint failing, the harness decided on the events the caller had fetched before the card rendered and never re-read /events \u2014 a stale unit-1 card approved a current unit-4 delivery gate; for the three recorded gates the run had exactly one gate, so the identity holds either way"
+    }
+   ]
   }
  ],
  "contract_deviation": {
@@ -5241,5 +5262,13 @@
   "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; accepted as deviation evidence under the contract AMENDMENT of 2026-09-09 (its author, the coordinator, after codex rounds 2-4: the 85% default stands; an EXPLICIT operator override \u2014 SWAP_MAX_PCT together with SWAP_MAX_PCT_ACK=contract-deviation \u2014 is permitted and MUST be recorded in the report as a contract deviation; the three recorded launches ran under an authorized 95% override at 93% swap and are accepted as deviation evidence)",
   "note": "swap gate was 95%, not the brief's 85% \u2014 this host idles at ~93% swap; all three recorded launches read 93.0% and cleared ONLY because of the relaxation; under the default 85% none of them would have launched. The three recorded runs remain deviation evidence."
  },
- "fetch_errors": []
+ "fetch_errors": [],
+ "launch_lock": {
+  "scope": "daemon-origin",
+  "origin": "http://localhost:7701",
+  "key": "a8dae472c5d31bb712a704d93ee93103ccc35d523ac4af5fc9718ecfdf68615c.launch.lock",
+  "path": "<system temp dir>/wicked-test-feature-live-<uid>/a8dae472c5d31bb712a704d93ee93103ccc35d523ac4af5fc9718ecfdf68615c.launch.lock",
+  "held_for_recorded_launches": false,
+  "note": "codex round 7: the reservation protects the DAEMON, not a worktree \u2014 it lives in a per-user directory under the system temp dir (tempfile.gettempdir()/wicked-test-feature-live-<uid>, created 0700, refused unless it is this user's and not writable by anyone else; never under ~/.wicked-crew), named by the sha256 of the daemon origin (scheme://host:port of STUDIO_URL), so every worktree aiming at one daemon contends for ONE lock and different daemons never contend; the live harness records the resolved (scrubbed) path here at launch time. The three recorded launches predate the shared reservation (they held the per-worktree ART/.launch.lock)."
+ }
 }
