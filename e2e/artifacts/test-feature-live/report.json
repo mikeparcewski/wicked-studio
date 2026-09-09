@@ -18,7 +18,8 @@
      "active_runs": [],
      "blocked_by": [],
      "swap_max_pct": 95,
-     "load1_max": 20
+     "load1_max": 20,
+     "fanout": "not measured \u2014 the fan-out gate (fanout_processes over `ps -axo pid=,command=`, codex round 3) postdates these launches; a live reading on this host at review time listed a second `wicked-crew serve --port 62432` daemon and codex council seats, i.e. the gate would have blocked"
     }
    ],
    "cleared": true,
@@ -38,7 +39,8 @@
      "active_runs": [],
      "blocked_by": [],
      "swap_max_pct": 95,
-     "load1_max": 20
+     "load1_max": 20,
+     "fanout": "not measured \u2014 the fan-out gate (fanout_processes over `ps -axo pid=,command=`, codex round 3) postdates these launches; a live reading on this host at review time listed a second `wicked-crew serve --port 62432` daemon and codex council seats, i.e. the gate would have blocked"
     }
    ],
    "cleared": true,
@@ -58,7 +60,8 @@
      "active_runs": [],
      "blocked_by": [],
      "swap_max_pct": 95,
-     "load1_max": 20
+     "load1_max": 20,
+     "fanout": "not measured \u2014 the fan-out gate (fanout_processes over `ps -axo pid=,command=`, codex round 3) postdates these launches; a live reading on this host at review time listed a second `wicked-crew serve --port 62432` daemon and codex council seats, i.e. the gate would have blocked"
     }
    ],
    "cleared": true,
@@ -319,7 +322,7 @@
       "execution_section_lines": 28,
       "execution_summary_items": 1
      },
-     "measured_over": "scenario lines + plan-table rows only (execution summaries excluded)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -1541,13 +1544,19 @@
       "first": true,
       "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
       "decision": "approve",
-      "reason": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto",
+      "reason": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
       "status": 200,
       "unit": {
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve"
+      "policy_reevaluated": "approve | codex round 3: re-evaluated again under the kind-first policy (unknown kind \u2192 reject unless the complete prompt is an unambiguous pre-execution gate; pre-execution prompts scanned completely for delivery verbs): approve \u2014 agrees with what was clicked",
+      "url": "/api/v1/runs/d293f4d7-1e45-4346-809a-d6f2107c6b18/gate",
+      "body": {
+       "approve": true
+      },
+      "wire_ok": true,
+      "wire_check": "POST /api/v1/runs/d293f4d7-1e45-4346-809a-d6f2107c6b18/gate for this run, body.approve == True, status 200 \u2014 re-checked offline (gate_wire_check) from the recorded url/body/status; the check itself postdates the launch"
      }
     ],
     "gates_seen": 1,
@@ -1786,7 +1795,7 @@
       "execution_section_lines": 0,
       "execution_summary_items": 0
      },
-     "measured_over": "scenario lines + plan-table rows only (execution summaries excluded)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -2943,13 +2952,19 @@
       "first": true,
       "prompt": "Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs \u2014 and run the approved",
       "decision": "approve",
-      "reason": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto",
+      "reason": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
       "status": 200,
       "unit": {
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve"
+      "policy_reevaluated": "approve | codex round 3: re-evaluated again under the kind-first policy (unknown kind \u2192 reject unless the complete prompt is an unambiguous pre-execution gate; pre-execution prompts scanned completely for delivery verbs): approve \u2014 agrees with what was clicked",
+      "url": "/api/v1/runs/f8bc2bad-47fc-4971-8961-bb49acb1dc6b/gate",
+      "body": {
+       "approve": true
+      },
+      "wire_ok": true,
+      "wire_check": "POST /api/v1/runs/f8bc2bad-47fc-4971-8961-bb49acb1dc6b/gate for this run, body.approve == True, status 200 \u2014 re-checked offline (gate_wire_check) from the recorded url/body/status; the check itself postdates the launch"
      }
     ],
     "gates_seen": 1,
@@ -3220,7 +3235,7 @@
       "execution_section_lines": 0,
       "execution_summary_items": 0
      },
-     "measured_over": "scenario lines + plan-table rows only (execution summaries excluded)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -4351,13 +4366,19 @@
       "first": true,
       "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
       "decision": "approve",
-      "reason": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto",
+      "reason": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
       "status": 200,
       "unit": {
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve"
+      "policy_reevaluated": "approve | codex round 3: re-evaluated again under the kind-first policy (unknown kind \u2192 reject unless the complete prompt is an unambiguous pre-execution gate; pre-execution prompts scanned completely for delivery verbs): approve \u2014 agrees with what was clicked",
+      "url": "/api/v1/runs/d12adb6c-e4be-430a-b0a7-666db5634112/gate",
+      "body": {
+       "approve": true
+      },
+      "wire_ok": true,
+      "wire_check": "POST /api/v1/runs/d12adb6c-e4be-430a-b0a7-666db5634112/gate for this run, body.approve == True, status 200 \u2014 re-checked offline (gate_wire_check) from the recorded url/body/status; the check itself postdates the launch"
      }
     ],
     "gates_seen": 1,
@@ -4493,7 +4514,7 @@
     "LT-3": []
    },
    "result": "pass",
-   "measured_over": "scenario lines + plan-table rows only (execution summaries excluded)"
+   "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)"
   },
   "LT-5": {
    "scenario": "LT-5",
@@ -4636,7 +4657,8 @@
    "effective": 95,
    "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; adjudicated after codex round 2: recorded + acknowledged, not enforced",
    "note": "swap gate was 95%, not the brief's 85% \u2014 this host idles at ~93% swap; all three recorded launches read 93.0% and cleared ONLY because of the relaxation; under the default 85% none of them would have launched. The three recorded runs remain deviation evidence."
-  }
+  },
+  "fanout_gate": "not in force \u2014 the fan-out gate (FANOUT_PATTERN_DEFAULT over `ps`) postdates these launches (codex round 3)"
  },
  "revisions": [
   {
@@ -4956,6 +4978,96 @@
      "old": 31,
      "new": 28,
      "why": "re-derived over the scenario set with execution summaries excluded"
+    }
+   ]
+  },
+  {
+   "date": "2026-09-09",
+   "reason": "codex round-3 REVISE on PR #215 (+ one Copilot thread) \u2014 offline re-derivation with the fixed harness over the committed plan files and recorded wire; no new runs, no daemon writes (read-only GETs only). Item 2 (85 % swap ceiling) adjudicated FINAL by the coordinator in round 2 \u2014 no change; the contract deviation is recorded, acknowledged and documented, not enforced.",
+   "changes": [
+    {
+     "field": "LT-1.gates[0].url / body / wire_ok / wire_check",
+     "old": "url/body only in gate_response; no wire verification",
+     "new": "url + body copied from gate_response; wire_ok=true (gate_wire_check: exact endpoint /api/v1/runs/d293f4d7\u2026/gate, body.approve == decision, 2xx)",
+     "why": "codex round 3 item 6: the response predicate accepted any POST containing /gate and the body was merely recorded; the recorded wire is re-verified offline and passes"
+    },
+    {
+     "field": "LT-1.gates[0].reason",
+     "old": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto",
+     "new": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
+     "why": "re-evaluated under the round-3 gate policy \u2014 same decision (approve), reason text reflects the pre-execution complete-prompt rule"
+    },
+    {
+     "field": "LT-1.plan.measured_over",
+     "old": "scenario lines + plan-table rows only (execution summaries excluded)",
+     "new": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
+     "why": "codex round 3 item 7: a line is excluded only on a RESULT marker, never for naming a command"
+    },
+    {
+     "field": "LT-2.gates[0].url / body / wire_ok / wire_check",
+     "old": "url/body only in gate_response; no wire verification",
+     "new": "url + body copied from gate_response; wire_ok=true (gate_wire_check: exact endpoint /api/v1/runs/f8bc2bad\u2026/gate, body.approve == decision, 2xx)",
+     "why": "codex round 3 item 6: the response predicate accepted any POST containing /gate and the body was merely recorded; the recorded wire is re-verified offline and passes"
+    },
+    {
+     "field": "LT-2.gates[0].reason",
+     "old": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto",
+     "new": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
+     "why": "re-evaluated under the round-3 gate policy \u2014 same decision (approve), reason text reflects the pre-execution complete-prompt rule"
+    },
+    {
+     "field": "LT-2.plan.measured_over",
+     "old": "scenario lines + plan-table rows only (execution summaries excluded)",
+     "new": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
+     "why": "codex round 3 item 7: a line is excluded only on a RESULT marker, never for naming a command"
+    },
+    {
+     "field": "LT-3.gates[0].url / body / wire_ok / wire_check",
+     "old": "url/body only in gate_response; no wire verification",
+     "new": "url + body copied from gate_response; wire_ok=true (gate_wire_check: exact endpoint /api/v1/runs/d12adb6c\u2026/gate, body.approve == decision, 2xx)",
+     "why": "codex round 3 item 6: the response predicate accepted any POST containing /gate and the body was merely recorded; the recorded wire is re-verified offline and passes"
+    },
+    {
+     "field": "LT-3.gates[0].reason",
+     "old": "imperative 'Approve unit 1 before it runs' is not deliver-class; unit stage/gate test/auto",
+     "new": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
+     "why": "re-evaluated under the round-3 gate policy \u2014 same decision (approve), reason text reflects the pre-execution complete-prompt rule"
+    },
+    {
+     "field": "LT-3.plan.measured_over",
+     "old": "scenario lines + plan-table rows only (execution summaries excluded)",
+     "new": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
+     "why": "codex round 3 item 7: a line is excluded only on a RESULT marker, never for naming a command"
+    },
+    {
+     "field": "LT-1.plan.scenario_lines / excluded / canonical_files / consistency",
+     "old": "28 lines, excluded {'execution_section_lines': 28, 'execution_summary_items': 1}, 31 files",
+     "new": "UNCHANGED under the result-marker rule (re-derived offline: LT-1 28/1, LT-2 13/0, LT-3 22/0; consistency 38.6 % / n/a / 0.0 %)",
+     "why": "the one LT-1 item excluded before (`npm test` \u2192 237 files / 2442 tests green) carries a result marker (green) and stays excluded; the command-only lines the old regex also matched (`npm run lint` / `npm run typecheck` \u2192 clean, LT-3's 'Standard gates: \u2026') were never scenario candidates (no checking verb + surface noun) or sit inside the dropped Execution-verdict section; the count marker is bounded to summary position so LT-1 unit 1 row 2 'Contradiction guard: 21 failed runs \u21d2 calm copy cannot render' (a proposed scenario with a fixture count) stays a scenario"
+    },
+    {
+     "field": "LT-2.plan.scenario_lines / excluded / canonical_files / consistency",
+     "old": "13 lines, excluded {'execution_section_lines': 0, 'execution_summary_items': 0}, 14 files",
+     "new": "UNCHANGED under the result-marker rule (re-derived offline: LT-1 28/1, LT-2 13/0, LT-3 22/0; consistency 38.6 % / n/a / 0.0 %)",
+     "why": "the one LT-1 item excluded before (`npm test` \u2192 237 files / 2442 tests green) carries a result marker (green) and stays excluded; the command-only lines the old regex also matched (`npm run lint` / `npm run typecheck` \u2192 clean, LT-3's 'Standard gates: \u2026') were never scenario candidates (no checking verb + surface noun) or sit inside the dropped Execution-verdict section; the count marker is bounded to summary position so LT-1 unit 1 row 2 'Contradiction guard: 21 failed runs \u21d2 calm copy cannot render' (a proposed scenario with a fixture count) stays a scenario"
+    },
+    {
+     "field": "LT-3.plan.scenario_lines / excluded / canonical_files / consistency",
+     "old": "22 lines, excluded {'execution_section_lines': 0, 'execution_summary_items': 0}, 30 files",
+     "new": "UNCHANGED under the result-marker rule (re-derived offline: LT-1 28/1, LT-2 13/0, LT-3 22/0; consistency 38.6 % / n/a / 0.0 %)",
+     "why": "the one LT-1 item excluded before (`npm test` \u2192 237 files / 2442 tests green) carries a result marker (green) and stays excluded; the command-only lines the old regex also matched (`npm run lint` / `npm run typecheck` \u2192 clean, LT-3's 'Standard gates: \u2026') were never scenario candidates (no checking verb + surface noun) or sit inside the dropped Execution-verdict section; the count marker is bounded to summary position so LT-1 unit 1 row 2 'Contradiction guard: 21 failed runs \u21d2 calm copy cannot render' (a proposed scenario with a fixture count) stays a scenario"
+    },
+    {
+     "field": "preflights[].readings[].fanout",
+     "old": null,
+     "new": "not measured \u2014 \u2026postdates these launches",
+     "why": "backfilled: gate (4), no heavy worker/build fan-out on the host, did not exist when the three launches were preflighted"
+    },
+    {
+     "field": "preflight_policy.fanout_gate",
+     "old": null,
+     "new": "not in force \u2014 postdates these launches",
+     "why": "as above"
     }
    ]
   }

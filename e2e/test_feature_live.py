@@ -22,9 +22,15 @@ Scenarios (see docs/testing/test-feature-live-report.md for the results):
         after each run; stale state, statuses, rename leftovers.
 
 HARD RULES this harness enforces on itself:
-  * SERIALIZATION PREFLIGHT before EVERY governed launch — exactly three gates: (1) zero runs in
+  * SERIALIZATION PREFLIGHT before EVERY governed launch — exactly four gates: (1) zero runs in
     running/executing/awaiting_human on the daemon, (2) 1-minute load average < 20, (3) swap used
-    < 85 % — the contract default (brief-test-feature-live.md: "refuse to run if … swap > 85%").
+    < 85 % — the contract default (brief-test-feature-live.md: "refuse to run if … swap > 85%"),
+    (4) NO heavy worker / build fan-out on the host — `fanout_processes()` reads
+    `ps -axo pid=,command=` and blocks on any command line matching `FANOUT_PATTERN` (default:
+    `codex exec`, `claude -p` / `claude --print`, `cargo build|test|clippy`, `vitest`,
+    `npm [run] test|build`, a second `wicked-crew serve --port` other than 7701); the matches are
+    recorded in the reading (`fanout: ["<pid> <cmd>", …]`) and a failed `ps` is itself a failed
+    preflight (fail closed) — a build outside the daemon's run list can no longer overlap a launch.
     ONLY an explicit `SWAP_MAX_PCT` env var moves the swap gate, and ONLY together with
     `SWAP_MAX_PCT_ACK=contract-deviation` (without the acknowledgement the harness exits naming both
     vars); the move is logged as `CONTRACT DEVIATION` at every preflight, stamped on every preflight
@@ -32,22 +38,31 @@ HARD RULES this harness enforces on itself:
     ack} — never a silent constant edit. (`vm_stat` free/available memory is recorded for the
     report but NOT gated on — macOS keeps free pages near zero by design.) Polls every 60 s for up
     to 20 min; if the gate never clears the harness STOPS and reports "preflight never cleared".
-  * The preflight is RE-RUN (all three gates, one reading) immediately before the submit click; if
+  * The preflight is RE-RUN (all four gates, one reading) immediately before the submit click; if
     it fails the launch is not submitted (`launch_aborted_by_preflight`, `harness_ok=false`,
     reason `preflight-at-submit`). A process-wide reservation — `fcntl.flock` on
-    `e2e/artifacts/test-feature-live/.launch.lock` — is held from that pre-submit preflight until
-    the launched run's intake gate has been decided; a second harness process fails fast with a
-    named message instead of racing the preflight.
+    `e2e/artifacts/test-feature-live/.launch.lock`, opened `O_NOFOLLOW` after an `lstat` walk of
+    every path component — is held from that pre-submit preflight until the launched run's intake
+    gate has been decided; a second harness process fails fast with a named message instead of
+    racing the preflight.
   * Exactly one governed run in flight at a time; the next launch waits for a terminal/gated state.
   * ONE gate policy for EVERY gate, the intake gate and every sibling's gates included
     (`gate_decision`), decided by gate KIND and failing CLOSED: a gate whose unit `stage`/`gate` is
-    deliver/release/publish/merge, or whose prompt's imperative (its first clause) is deliver /
-    delivery / push / open a PR / merge / publish / release, is REJECTED through the UI card; a gate
-    whose prompt is unreadable and whose unit is unknown is REJECTED (`unreadable-gate`); any other
-    gate (plan approval, pre-execution unit gate) is approved. A plan whose BODY mentions
-    `/runs/:id/deliver` is a plan, not a delivery — approved. Every decision is recorded in the
-    scenario's `measured.gates[]` (or the sibling's `gates[]`) with the prompt excerpt, the unit's
-    stage/gate and the reason. Sibling gates are decided on `/runs/<sibling id>` — never the API.
+    deliver/release/publish/merge is REJECTED whatever the prompt says; a PRE-EXECUTION prompt
+    (`Approve unit N before it runs: <the unit's instruction>`) is scanned COMPLETELY and rejected
+    on a delivery verb anywhere (deliver / delivery / push / open a PR / pull request / merge /
+    publish / release) — kind known or not — and approved otherwise (the one shape that may approve
+    without a known kind); any other gate whose KIND is UNKNOWN (unit lookup failed, `stage`/`gate`
+    missing or null) is REJECTED (`unknown-gate-kind`); any other gate with a known non-delivery
+    kind is rejected when its imperative (the first clause) is a delivery verb and approved
+    otherwise (a plan whose BODY lists `/runs/:id/deliver` among the routes to test is a plan, not
+    a delivery); an empty / unreadable prompt is ALWAYS rejected (`unreadable-gate`). Every decision is clicked on
+    the UI card and its WIRE is verified: the response must be a POST to exactly
+    `/api/v1/runs/<this run id>/gate`, its body's `approve` must equal the decision taken and its
+    status must be 2xx — anything else is a finding and `harness_ok=false` (`gate-wire-mismatch`).
+    Every decision is recorded in the scenario's `measured.gates[]` (or the sibling's `gates[]`)
+    with the prompt excerpt, the unit's stage/gate, the reason and the wire check. Sibling gates
+    are decided on `/runs/<sibling id>` — never the API.
   * Never registers/modifies/deletes repos or projects; read-only GETs for every assertion.
   * Never kills a wedged run (no events for 10 min while executing) — it is reported.
   * Evidence fetches that FAIL (non-2xx, transport error) are typed misses recorded in
@@ -61,18 +76,24 @@ carrying its own acceptance verdict (`measured.sibling_verdicts`), and, for "New
 registered campaign; otherwise `"fail"` with `fail_reasons[]` naming the sibling. Siblings are
 attributed by a daemon-visible relationship (`attribute_siblings`), never by "a run appeared" and
 never by the brief text (identical briefs are intentional); attributable siblings are followed to a
-terminal state (their gates decided on the UI on the way) before their acceptance is sampled.
+terminal state (their gates decided on the UI on the way) before their acceptance is sampled — and
+the attributable set is REDISCOVERED on every poll of `follow_siblings` (runs + campaigns re-listed,
+`attribute_siblings` re-run, newly attributable runs added and followed), finishing only when the
+set has been stable for two polls AND every member is terminal; `SIBLING_FOLLOW_MAX_S` elapsing
+first is recorded (`timed_out`) and the scenario cannot `pass`.
 report.json is written atomically (unique temp file + rename, contained under the artifacts dir,
-never through a symlink) after every scenario and on every exit path (an abort is recorded in
-`aborted`).
+never through a symlink — every path component from the repo root down is `lstat`-checked) after
+every scenario and on every exit path (an abort is recorded in `aborted`).
 
 Usage: python3 e2e/test_feature_live.py            (playwright + chromium must be installed)
 Env:   STUDIO_URL (default http://localhost:7701), TARGET_REPO (default wicked-studio),
        ONLY=LT-1,LT-2 (subset), PREFLIGHT_MAX_MIN (default 20), GATE_TIMEOUT_MIN (default 25),
        RUN_TIMEOUT_MIN (default 60), SIBLING_GRACE_S (default 120), SIBLING_FOLLOW_MAX_S
        (default 900), SWAP_MAX_PCT (default 85 — a contract deviation when moved; requires
-       SWAP_MAX_PCT_ACK=contract-deviation), TEST_PROBLEM_PREFIX (default "" — a marker a
-       sibling's `problem` must carry, together with our run id or campaign label, to be attributed).
+       SWAP_MAX_PCT_ACK=contract-deviation), FANOUT_PATTERN (a regex over `ps` command lines that
+       blocks the preflight; default `FANOUT_PATTERN_DEFAULT`), TEST_PROBLEM_PREFIX (default "" — a
+       marker a sibling's `problem` must carry, together with our run id or campaign label, to be
+       attributed).
 Prints a JSON report to stdout; artifacts land in e2e/artifacts/test-feature-live/.
 
 Offline self-test (no daemon, no Playwright, no network; studio's CI runs no Python step, so run
@@ -119,6 +140,13 @@ SWAP_MAX_PCT_CONTRACT = 85
 SWAP_ACK_VAR = "SWAP_MAX_PCT_ACK"
 SWAP_ACK_VALUE = "contract-deviation"
 LOAD1_MAX = 20
+# Preflight gate (4): heavy worker / build fan-out on the host. Any `ps` command line matching this
+# blocks a launch — a governed council or a build outside the daemon's run list overlapping a
+# launch is exactly the capacity spike the serialization rule exists to prevent. Documented
+# default; `FANOUT_PATTERN` (a regex) overrides it. The dogfood daemon itself (`wicked-crew serve`,
+# `--port 7701` or no port) never matches; a SECOND daemon on another port does.
+FANOUT_PATTERN_DEFAULT = (r"codex exec|claude -p|claude --print|cargo (build|test|clippy)|vitest"
+                          r"|npm (run )?(test|build)|wicked-crew serve --port (?!7701)")
 WEDGE_S = 10 * 60
 ACTIVE = {"running", "executing", "awaiting_human", "planning", "pending", "starting"}
 TERMINAL = {"completed", "failed", "cancelled", "canceled", "rejected"}
@@ -272,13 +300,22 @@ def enc(run_id: str) -> str:
     return urllib.parse.quote(run_id, safe="")
 
 
+def _typed_list(path: str, key: str) -> list[dict]:
+    """A 2xx whose body is not `{key: [...]}` is a TYPED miss (recorded, then raised) — never an
+    `AttributeError`/`TypeError` on `None` (204) or on an unexpected shape, and never an empty list
+    silently standing in for "the daemon listed nothing"."""
+    body = get(path)
+    if not isinstance(body, dict) or not isinstance(body.get(key), list):
+        raise FetchError(record_fetch_error(path, 200, f"no `{key}` list in the answer: {json.dumps(body, default=str)[:120]}"))
+    return body[key]
+
+
 def list_runs() -> list[dict]:
-    return get("/runs")["runs"]  # type: ignore[index]
+    return _typed_list("/runs", "runs")
 
 
 def list_campaigns() -> list[dict]:
-    body = get("/campaigns")
-    return body.get("campaigns", []) if isinstance(body, dict) else []  # type: ignore[union-attr]
+    return _typed_list("/campaigns", "campaigns")
 
 
 def run_detail(run_id: str) -> dict:
@@ -290,8 +327,16 @@ def run_detail(run_id: str) -> dict:
 
 
 def run_events(run_id: str) -> list[dict]:
-    body = get(f"/runs/{enc(run_id)}/events")
-    return body if isinstance(body, list) else body.get("events", [])  # type: ignore[union-attr]
+    """The run's events — a bare list or `{events: [...]}` (studio's client types the latter). Any
+    other 2xx shape (a 204 decoded as None, a dict without `events`) is a typed miss recorded and
+    raised like `run_detail`'s, never an `AttributeError` that crashes the harness unrecorded."""
+    path = f"/runs/{enc(run_id)}/events"
+    body = get(path)
+    if isinstance(body, list):
+        return body
+    if isinstance(body, dict) and isinstance(body.get("events"), list):
+        return body["events"]
+    raise FetchError(record_fetch_error(path, 200, f"no events list in the answer: {json.dumps(body, default=str)[:120]}"))
 
 
 def unit_output(run_id: str, ord_: int) -> str | None | FetchMiss:
@@ -350,6 +395,46 @@ def _field(pattern: str, text: str, what: str) -> str:
     return m.group(1)
 
 
+def fanout_pattern(env: Mapping[str, str] | None = None) -> re.Pattern:
+    """The fan-out gate's pattern: `FANOUT_PATTERN` from the environment when set (an invalid regex
+    is a named exit, never a silently disabled gate), else `FANOUT_PATTERN_DEFAULT`."""
+    env = os.environ if env is None else env
+    raw = (env.get("FANOUT_PATTERN") or "").strip()
+    if not raw:
+        return re.compile(FANOUT_PATTERN_DEFAULT)
+    try:
+        return re.compile(raw)
+    except re.error as e:
+        raise SystemExit(f"FANOUT_PATTERN={raw!r} is not a valid regex ({e})") from None
+
+
+FANOUT_RE = fanout_pattern()
+PS_ARGV = ["ps", "-axo", "pid=,command="]
+
+
+def fanout_processes(table: str | None = None, pattern: re.Pattern | None = None) -> list[str]:
+    """Every process on the host whose command line matches the fan-out pattern, as `"<pid> <cmd>"`
+    strings — [] means the gate is clear. `table` is the `ps -axo pid=,command=` output (injected by
+    the self-test); when None it is read live, and a `ps` that cannot be run or fails is returned as
+    a single `ERR …` entry so the gate BLOCKS (fail closed) rather than passing on no information."""
+    rx = pattern or FANOUT_RE
+    if table is None:
+        try:
+            table = subprocess.run(PS_ARGV, capture_output=True, text=True, check=True).stdout
+        except (FileNotFoundError, subprocess.CalledProcessError, OSError) as e:
+            return [f"ERR `{' '.join(PS_ARGV)}` failed ({type(e).__name__}: {e}) — the fan-out gate cannot be read; failing closed"]
+    hits: list[str] = []
+    for line in table.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        pid, _, cmd = line.partition(" ")
+        cmd = cmd.strip()
+        if rx.search(cmd):
+            hits.append(f"{pid} {cmd[:160]}")
+    return hits
+
+
 def readings() -> dict:
     if sys.platform != "darwin":
         raise SystemExit(f"the capacity gate is macOS-only (vm_stat / sysctl vm.*); this is {sys.platform} — "
@@ -378,6 +463,8 @@ def readings() -> dict:
         "load1": load,
         "swap_pct": round(100 * used / total, 1) if total else 0.0,
         "active_runs": active,
+        # Gate (4): heavy worker / build processes on the host — `[]` is the only clear reading.
+        "fanout": fanout_processes(),
     }
 
 
@@ -411,6 +498,9 @@ def preflight_policy(env: Mapping[str, str] | None = None) -> dict:
         "contract_swap_max_pct": SWAP_MAX_PCT_CONTRACT,
         "load1_max": LOAD1_MAX,
         "active_runs_max": 0,
+        "fanout_max": 0,
+        "fanout_pattern": fanout_pattern(env).pattern,
+        "fanout_source": "FANOUT_PATTERN env" if (env.get("FANOUT_PATTERN") or "").strip() else "default",
         "source": "SWAP_MAX_PCT env" if raw else "contract default",
     }
     if swap_max != SWAP_MAX_PCT_CONTRACT:
@@ -443,6 +533,11 @@ def preflight_ok(r: dict, policy: dict | None = None) -> list[str]:
         why.append(f"load1 {r['load1']} >= {policy['load1_max']}")
     if r["swap_pct"] >= policy["swap_max_pct"]:
         why.append(f"swap {r['swap_pct']}% >= {policy['swap_max_pct']}%")
+    # Gate (4): the fan-out reading must be an EMPTY list — a match list blocks, and so does a
+    # missing / `ERR` reading (fail closed: no information is not "clear").
+    fan = r.get("fanout")
+    if fan != []:
+        why.append(f"fanout: {fan if fan is not None else 'not measured'}")
     return why
 
 
@@ -454,7 +549,7 @@ def _policy() -> dict:
 
 
 def _judge(entry: dict, policy: dict) -> list[str]:
-    """One reading, judged against all three gates, appended to `entry.readings[]` with the
+    """One reading, judged against all four gates, appended to `entry.readings[]` with the
     thresholds it was judged against — a reader of the report must never have to guess whether
     93 % swap "cleared" under 85 or under a relaxed gate."""
     line = deviation_line(policy)
@@ -489,7 +584,7 @@ def preflight(tag: str) -> bool:
 
 
 def preflight_at_submit(tag: str) -> list[str]:
-    """The SAME three gates, ONE reading, immediately before the submit click — the minutes spent
+    """The SAME four gates, ONE reading, immediately before the submit click — the minutes spent
     starting the browser, picking the repo and taking screenshots are a window another run can
     start in. Returns the blocking reasons ([] = clear); never waits."""
     policy = _policy()
@@ -512,8 +607,19 @@ class LaunchLock:
         self._fd: int | None = None
 
     def acquire(self) -> "LaunchLock":
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(str(self.path), os.O_RDWR | os.O_CREAT, 0o644)
+        # Never write THROUGH a link: `lstat` every component of the lock's directory (from the repo
+        # root down, `_anchor`) and the lock file itself, then open with O_NOFOLLOW so a symlink
+        # raced in between the check and the open is refused by the kernel (ELOOP), not followed.
+        parent = self.path.parent
+        refuse_symlinked_components(parent, _anchor(parent))
+        parent.mkdir(parents=True, exist_ok=True)
+        refuse_symlinked_components(self.path, parent)
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            fd = os.open(str(self.path), flags, 0o644)
+        except OSError as e:  # ELOOP (a symlink appeared after the lstat) or any other refusal
+            raise SystemExit(f"launch reservation {self.path} could not be opened without following a link "
+                             f"({type(e).__name__}: {e}) — refusing to write through it") from e
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except (BlockingIOError, PermissionError) as e:
@@ -636,9 +742,17 @@ def _title(text: str) -> str:
     return re.sub(r"\s+", " ", _TAG_RE.sub("", text)).strip()[:120]
 
 
-# Execution summaries are RESULTS a worker reports, not scenarios a plan proposes: `npm test` green,
-# a ✓/✔/PASS/FAIL line, "Tests: 12 passed" — and everything under an "Execution verdict" heading.
-EXEC_SUMMARY_RE = re.compile(r"npm (run )?(test|lint|typecheck)|Tests?:\s*\d+ (passed|failed)|✓|✔|PASS|FAIL\b")
+# Execution summaries are RESULTS a worker reports, not scenarios a plan proposes. A line is a
+# result only when it carries a RESULT MARKER — a pass/fail count in summary position ("12 passed,
+# 0 failed", "2442 passed in 69s"), a ✓/✔/✗ tick, a PASS/PASSED/FAIL/FAILED verdict word, an exit
+# code, or a green/red verdict — never merely because it names a command: "Run npm run typecheck to
+# verify CLI behavior" PROPOSES a check and is a scenario. A count followed by a noun ("21 failed
+# runs ⇒ calm copy cannot render") is a fixture, not a result. Everything under an "Execution
+# verdict" heading is excluded wholesale (`plan_lines`).
+RESULT_MARKER_RE = re.compile(
+    r"\b\d+ (?:passed|failed|skipped)\b(?=\s*(?:$|[,;.)|\]*`—–-]|in\b|of\b))"  # a summary count, not "21 failed runs"
+    r"|[✓✔✗]|\bPASS(?:ED)?\b|\bFAIL(?:ED)?\b|\bexit (?:code )?\d+\b|\bgreen\b|\bred\b",
+    re.M)
 EXEC_SECTION_RE = re.compile(r"execution verdict", re.I)
 # The two classification vocabularies the plans use: prose (deterministic tool check vs governed
 # agent run) and tags (`[TOOL]` vs `[AGENT]`). A plan classifies when BOTH classes appear among its
@@ -689,14 +803,15 @@ def scenario_records(text: str) -> tuple[list[dict], dict]:
     * Bullet / numbered items: accepted with a leading id (`S-1`, `1.2` — a bare number is not an
       id) or a verb AND a noun in the item text.
     Headings, bold-label paragraphs, table headers/rules, table-of-contents lines, toolchain paths
-    and execution summaries (`EXEC_SUMMARY_RE`, "Execution verdict" sections) are none of these."""
+    and execution RESULTS (an item carrying a `RESULT_MARKER_RE` marker; "Execution verdict"
+    sections) are none of these — an item that merely names a command is a proposed check."""
     records: list[dict] = []
     lines, section_lines = plan_lines(text)
     excluded = {"execution_section_lines": section_lines, "execution_summary_items": 0}
     header: list[str] | None = None
 
     def accept(title: str, lead_id: str | None, raw: str) -> None:
-        if EXEC_SUMMARY_RE.search(raw):
+        if RESULT_MARKER_RE.search(raw):
             excluded["execution_summary_items"] += 1
             return
         records.append({"title": title, "id": lead_id, "raw": re.sub(r"\s+", " ", raw).strip()})
@@ -778,7 +893,7 @@ def analyze_plan(text: str, index: RepoIndex | None = None) -> dict:
         "scenario_ids": ids,
         "scenario_lines": scenario_lines,
         "excluded": excluded,
-        "measured_over": "scenario lines + plan-table rows only (execution summaries excluded)",
+        "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections — a proposed command is a scenario)",
         "surfaces": {k: bool(rx.search(low)) for k, rx in SURFACE_RES.items()},
     }
 
@@ -819,34 +934,64 @@ def gate_unit(detail: dict | None, ord_: int | None) -> dict | None:
     return None
 
 
+# For a gate whose KIND is unknown, ANY delivery verb ANYWHERE in the complete prompt rejects — the
+# first clause alone hid "Approve unit 4 before it runs: Push the branch and open a PR".
+DELIVERY_VERB_RE = re.compile(r"\b(?:deliver|delivery|push|open (?:a )?pr|pull request|merge|publish|release)\b", re.I)
+# The ONE prompt shape an unknown-kind gate may still approve: crew's pre-execution unit gate.
+PRE_EXECUTION_RE = re.compile(r"^Approve unit \d+ before it runs:")
+
+
+def gate_kinds(unit: dict | None) -> set[str]:
+    """The gated unit's non-empty `stage`/`gate` values, lower-cased. EMPTY means the kind is
+    UNKNOWN: the unit lookup failed (None), or `stage` and `gate` are both missing / null / blank."""
+    if not isinstance(unit, dict):
+        return set()
+    return {unit[k].strip().lower() for k in ("stage", "gate") if isinstance(unit.get(k), str) and unit[k].strip()}
+
+
 def gate_decision(prompt: str | None, unit: dict | None = None) -> tuple[str, str]:
     """THE gate policy, applied to every gate — the intake gate, every later gate, every sibling's
     gate — decided by gate KIND and failing CLOSED:
-      * reject iff the gated unit's `stage`/`gate` (from GET /runs/:id) is a delivery kind
-        (deliver / release / publish / merge), OR the prompt's IMPERATIVE — its first clause, not a
-        keyword anywhere in a plan body — asks to deliver / push / open a PR / merge / publish /
-        release;
-      * an unreadable prompt (empty / None) with NO unit information → reject, reason
-        `unreadable-gate`: never approve what cannot be read;
-      * anything else — the intake gate, a proposed-plan approval whose body lists
-        `/runs/:id/deliver` among the routes to test, a pre-execution unit gate — is approved.
+      * the gated unit's `stage`/`gate` (from GET /runs/:id) is a delivery kind (deliver / release /
+        publish / merge) → reject, whatever the prompt says;
+      * an empty / unreadable prompt → reject (`unreadable-gate`), ALWAYS — a known kind never
+        authorizes approving what cannot be read;
+      * a PRE-EXECUTION prompt (`Approve unit N before it runs: <the unit's own instruction>`) is
+        scanned COMPLETELY — the text after the colon is what the unit will DO, not a plan body —
+        and a delivery verb anywhere in it (`DELIVERY_VERB_RE`) rejects, whatever the kind says
+        ("…before it runs: Push the branch and open a PR" is a delivery even when the daemon labels
+        the stage `test`); with no delivery verb it approves — the ONE shape that may approve
+        without a known kind, because it is unambiguous on its own;
+      * any other prompt with an UNKNOWN kind (lookup failed, `stage`/`gate` missing or null) →
+        reject (`unknown-gate-kind`);
+      * any other prompt with a known, non-delivery kind → reject when its IMPERATIVE (the first
+        clause) asks to deliver / push / open a PR / merge / publish / release, approve otherwise —
+        a proposed-plan approval whose BODY lists `/runs/:id/deliver` among the routes to test is a
+        plan, not a delivery.
     Returns (decision, reason); the caller records both together with the unit's stage/gate."""
-    kinds = {str(unit.get(k) or "").strip().lower() for k in ("stage", "gate")} if unit else set()
+    kinds = gate_kinds(unit)
     hit_kind = sorted(kinds & DELIVER_KINDS)
     if hit_kind:
         return "reject", f"gate kind {hit_kind[0]!r} (the unit's stage/gate) authorizes delivery (never deliver)"
     text = (prompt or "").strip()
     if not text:
-        if not unit:
-            return "reject", "unreadable-gate"
-        return "approve", (f"empty prompt, but the unit's stage/gate ({unit.get('stage')}/{unit.get('gate')}) "
-                           "is not a delivery kind")
+        return "reject", "unreadable-gate"
+    kind_tail = f"; unit stage/gate {unit.get('stage')}/{unit.get('gate')}" if kinds else "; unit stage/gate unknown"  # type: ignore[union-attr]
+    if PRE_EXECUTION_RE.match(text):
+        verb = DELIVERY_VERB_RE.search(text)
+        if verb:
+            head = "unknown-gate-kind: the unit's stage/gate is unknown and " if not kinds else ""
+            return "reject", f"{head}the pre-execution prompt's unit instruction asks to {verb.group(0).lower()!r} (never deliver)" + kind_tail
+        return "approve", (f"pre-execution gate {imperative(text)!r} whose COMPLETE prompt carries no delivery verb" + kind_tail
+                           + ("" if kinds else " — approved on the complete prompt alone"))
+    if not kinds:
+        return "reject", (f"unknown-gate-kind: the unit's stage/gate is unknown and the prompt {imperative(text)!r} "
+                          "is not the pre-execution shape 'Approve unit N before it runs:'")
     imp = imperative(text)
     hit = IMPERATIVE_DELIVER_RE.match(imp)
     if hit:
-        return "reject", f"the prompt's imperative {imp!r} asks to {hit.group(3).lower()} (never deliver)"
-    tail = f"; unit stage/gate {unit.get('stage')}/{unit.get('gate')}" if unit else "; no unit info"
-    return "approve", f"imperative {imp!r} is not deliver-class" + tail
+        return "reject", f"the prompt's imperative {imp!r} asks to {hit.group(3).lower()} (never deliver)" + kind_tail
+    return "approve", f"imperative {imp!r} is not deliver-class" + kind_tail
 
 
 # Explicit parent pointers a sibling DTO may carry (wicked-crew-api-types `AgentSession` and its
@@ -904,11 +1049,43 @@ def attribute_siblings(runs: list[dict], campaigns: list[dict], *, before: set[s
 # ── Gates through the UI — the ONE click path for every gate ──────────────────────────────────
 
 
+def gate_url_matches(url: str, run_id: str) -> bool:
+    """True iff `url` is EXACTLY this run's gate endpoint — `/api/v1/runs/<run_id>/gate` (studio
+    posts `encodeURIComponent(id)`, so the path is compared decoded) — with or without the daemon
+    origin, query string ignored. `"/gate" in url` accepted any run's gate; this accepts one."""
+    path = urllib.parse.unquote(urllib.parse.urlsplit(url).path)
+    return path in {f"/api/v1/runs/{run_id}/gate", f"{urllib.parse.urlsplit(API).path}/runs/{run_id}/gate"}
+
+
+def gate_wire_check(entry: dict, run_id: str) -> str | None:
+    """None when the recorded wire proves THIS decision reached THIS run's gate: the POST went to
+    exactly `/api/v1/runs/<run_id>/gate`, the request body's `approve` equals the decision taken
+    (`{approve: true}` approve, `{approve: false}` reject — studio's client contract), and the
+    status is 2xx. Otherwise every mismatch, named — a REJECT that wired `{approve: true}` is a
+    dangerous UI regression, not evidence."""
+    problems: list[str] = []
+    url = entry.get("url") or ""
+    if not gate_url_matches(url, run_id):
+        problems.append(f"url {url!r} is not /api/v1/runs/{run_id}/gate")
+    want = entry.get("decision") == "approve"
+    body = entry.get("body")
+    got = body.get("approve") if isinstance(body, dict) else None
+    if got is not want:
+        problems.append(f"request body approve={got!r} but the decision {entry.get('decision')!r} requires approve={want}")
+    st = entry.get("status")
+    if not (isinstance(st, int) and 200 <= st < 300):
+        problems.append(f"status {st!r} is not 2xx")
+    return "; ".join(problems) or None
+
+
 def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict | None, tag: str,
                         first: bool, prompt: str | None = None) -> dict:
     """Read the prompt on a rendered SteeringGate card, decide (`gate_decision` with the unit's
-    stage/gate), click the matching button, wait for the POST …/gate and return the `gates[]`
-    entry. Every gate the harness answers — intake, later, sibling — goes through here."""
+    stage/gate), click the matching button, wait for the POST to EXACTLY this run's gate endpoint
+    and verify the wire (`gate_wire_check`: endpoint, body.approve == decision, 2xx) — a mismatch,
+    or no such POST within 60 s, is a finding and `wire_ok: false` (`harness_ok=false`,
+    `gate-wire-mismatch`). Returns the `gates[]` entry. Every gate the harness answers — intake,
+    later, sibling — goes through here."""
     if prompt is None:
         try:
             prompt = card.first.locator('[data-testid="steering-prompt"]').inner_text()
@@ -917,18 +1094,34 @@ def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict
             log(f"{tag}: gate ord={ord_} on {run_id}: steering-prompt unreadable ({type(e).__name__}: {e})")
     decision, reason = gate_decision(prompt, unit)
     if reason == "unreadable-gate":
-        finding(f"{tag}: gate ord={ord_} on run {run_id} had an unreadable prompt and no unit info — REJECTED (never approve what cannot be read)")
-    with page.expect_response(lambda r: "/gate" in r.url and r.request.method == "POST", timeout=60000) as gr:
-        card.first.locator(f'[data-testid="steering-{decision}"]').click()
-    resp = gr.value
+        finding(f"{tag}: gate ord={ord_} on run {run_id} had an unreadable prompt — REJECTED (never approve what cannot be read)")
+    elif reason.startswith("unknown-gate-kind"):
+        finding(f"{tag}: gate ord={ord_} on run {run_id}: the gated unit's stage/gate is unknown and the complete prompt "
+                f"('{(prompt or '')[:80]}…') is not an unambiguous pre-execution gate — REJECTED ({reason})")
+    entry = {"ord": ord_, "first": first, "prompt": (prompt or "")[:200], "decision": decision, "reason": reason,
+             "unit": {"stage": unit.get("stage"), "gate": unit.get("gate")} if unit else None,
+             "status": None, "url": None, "body": None, "wire_ok": False, "wire_check": None}
+    expected = f"POST {urllib.parse.urlsplit(API).path}/runs/{run_id}/gate"
+    try:
+        with page.expect_response(lambda r: r.request.method == "POST" and gate_url_matches(r.url, run_id), timeout=60000) as gr:
+            card.first.locator(f'[data-testid="steering-{decision}"]').click()
+        resp = gr.value
+    except Exception as e:  # the SPA posted nothing to THIS run's gate endpoint (or the click failed)
+        entry["wire_check"] = f"no {expected} observed within 60s of the {decision} click ({type(e).__name__}: {str(e)[:120]})"
+        finding(f"{tag}: gate ord={ord_} on run {run_id} → {decision.upper()} clicked but {entry['wire_check']} — gate-wire-mismatch")
+        return entry
     try:
         body = json.loads(resp.request.post_data or "{}")
     except Exception:
         body = {"raw": str(resp.request.post_data)[:200]}
-    entry = {"ord": ord_, "first": first, "prompt": (prompt or "")[:200], "decision": decision, "reason": reason,
-             "unit": {"stage": unit.get("stage"), "gate": unit.get("gate")} if unit else None,
-             "status": resp.status, "url": resp.url.replace(BASE, ""), "body": body}
-    log(f"{tag}: gate ord={ord_} on {run_id[:8]} → {decision.upper()} ({reason}) → POST {entry['url']} {resp.status}")
+    entry.update(status=resp.status, url=resp.url.replace(BASE, ""), body=body)
+    mismatch = gate_wire_check(entry, run_id)
+    entry["wire_ok"] = mismatch is None
+    entry["wire_check"] = mismatch or f"{expected} for this run, body.approve == {decision == 'approve'}, status {resp.status}"
+    log(f"{tag}: gate ord={ord_} on {run_id[:8]} → {decision.upper()} ({reason}) → POST {entry['url']} {resp.status}"
+        f"{'' if mismatch else ' (wire verified)'}")
+    if mismatch:
+        finding(f"{tag}: gate ord={ord_} on run {run_id} → {decision.upper()} clicked but the wire disagrees: {mismatch} — gate-wire-mismatch")
     if decision == "reject":
         finding(f"{tag}: gate ord={ord_} on run {run_id} ('{(prompt or '')[:80]}…') was REJECTED by policy ({reason})")
     return entry
@@ -969,21 +1162,51 @@ def decide_sibling_gate(page, sid: str, *, tag: str, return_to: str) -> dict:
 
 
 def follow_siblings(sibling_ids: list[str], max_s: int = SIBLING_FOLLOW_MAX_S, sleep=time.sleep, page=None, *,
-                    tag: str = "", return_to: str | None = None, decide=None) -> dict:
-    """Follow attributable siblings to a terminal state (or `max_s`), deciding any gate a sibling
-    raises THROUGH THE UI on the way (`decide_sibling_gate` — a sibling left in `awaiting_human`
-    would otherwise sit there until the timeout), THEN sample their acceptance — a verdict sampled
-    while a sibling is still executing proves nothing either way. Returns per-sibling statuses,
-    the gates decided (`gates[sid][]`) and verdicts (None = no verdict; a FetchMiss = the fetch
-    FAILED, which is not the same thing)."""
+                    tag: str = "", return_to: str | None = None, decide=None, rediscover=None,
+                    clock=time.time, poll_s: int = 15) -> dict:
+    """Follow the attributable siblings to a terminal state, REDISCOVERING the set on every poll:
+    `rediscover()` (the scenario's `siblings_now` — runs + campaigns re-listed, `attribute_siblings`
+    re-run) may surface a sibling that did not exist when the grace period ended (a sequential
+    campaign node launched after its predecessor completed); every newly attributable run joins the
+    followed set, has its gates decided THROUGH THE UI like the others (`decide_sibling_gate`) and
+    is sampled for its verdict. The follow finishes only when the set has been STABLE for two
+    consecutive polls AND every member is terminal; `max_s` elapsing first is recorded as
+    `timed_out` (the set is not proven complete — the scenario cannot `pass`). A rediscovery that
+    fails is a typed miss (recorded by `get()`) and resets the stability count: an unknown set is
+    not a stable set. Returns per-sibling statuses, the gates decided (`gates[sid][]`), which
+    siblings were discovered late (`discovered`), the poll/stability counters and the verdicts
+    (None = no verdict; a FetchMiss = the fetch FAILED, which is not the same thing)."""
     decide = decide or decide_sibling_gate
     return_to = return_to or f"{BASE}/testing/campaigns"
-    started = time.time()
+    started = clock()
+    followed: list[str] = list(dict.fromkeys(sibling_ids))
     statuses: dict[str, str] = {}
-    gates: dict[str, list[dict]] = {sid: [] for sid in sibling_ids}
+    gates: dict[str, list[dict]] = {sid: [] for sid in followed}
+    discovered: dict[str, dict] = {}
     warned: set[str] = set()
+    final_attribution: dict | None = None
+    stable = polls = rediscover_errors = 0
+    timed_out = False
     while True:
-        for sid in sibling_ids:
+        polls += 1
+        before = set(followed)
+        unknown_set = False
+        if rediscover is not None:
+            try:
+                final_attribution = rediscover()
+                for s in final_attribution.get("attributable_siblings") or []:
+                    sid = s.get("id")
+                    if sid and sid not in before and sid not in followed:
+                        followed.append(sid)
+                        gates[sid] = []
+                        discovered[sid] = {"poll": polls, "at_s": int(clock() - started), "attributed_by": s.get("attributed_by")}
+                        log(f"{tag}: sibling {sid} became attributable on poll {polls} ({s.get('attributed_by')}) — following it too")
+            except Exception as e:  # already recorded as a typed fetch miss by get(); the set is unknown this poll
+                rediscover_errors += 1
+                unknown_set = True
+                log(f"{tag}: sibling rediscovery failed on poll {polls}: {e}")
+        stable = 0 if unknown_set or set(followed) != before else stable + 1
+        for sid in followed:
             try:
                 statuses[sid] = run_detail(sid)["session"]["status"]
             except Exception as e:
@@ -999,16 +1222,27 @@ def follow_siblings(sibling_ids: list[str], max_s: int = SIBLING_FOLLOW_MAX_S, s
             if sum(1 for g in gates[sid] if g.get("status") is None) >= 2:
                 continue  # its card never rendered twice — stop re-navigating, let the timeout report it
             gates[sid].append(decide(page, sid, tag=tag, return_to=return_to))
-        done = all(st in TERMINAL or st.startswith("ERR") for st in statuses.values())
-        if done or time.time() - started >= max_s:
+        all_terminal = bool(statuses) and all(st in TERMINAL for st in statuses.values())
+        if all_terminal and stable >= 2:
             break
-        sleep(15)
+        if clock() - started >= max_s:
+            timed_out = True
+            finding(f"{tag}: sibling follow hit SIBLING_FOLLOW_MAX_S ({max_s}s) after {polls} polls with statuses {statuses} "
+                    f"(set stable for {stable} poll{'s' if stable != 1 else ''}) — the attributable set is not proven complete")
+            break
+        sleep(poll_s)
     return {
         "statuses": statuses,
         "gates": gates,
-        "followed_s": int(time.time() - started),
+        "discovered": discovered,
+        "polls": polls,
+        "stable_polls": stable,
+        "rediscover_errors": rediscover_errors,
+        "timed_out": timed_out,
+        "followed_s": int(clock() - started),
         "all_terminal": bool(statuses) and all(st in TERMINAL for st in statuses.values()),
-        "acceptance": {sid: acceptance_verdict(sid) for sid in sibling_ids},
+        "acceptance": {sid: acceptance_verdict(sid) for sid in followed},
+        "final_attribution": final_attribution,
     }
 
 
@@ -1043,6 +1277,13 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
         hard.append("no gate was answered")
     elif any(not isinstance(g.get("status"), int) or g["status"] >= 300 for g in gates):
         hard.append("a gate decision did not post")
+    # The wire check (`gate_wire_check`): a recorded gate whose POST did not go to THIS run's gate
+    # endpoint with `approve` == the decision and a 2xx is not evidence the decision was taken.
+    # Entries without the field predate the check (the three recorded runs are re-checked offline).
+    bad_wire = [g for g in gates if g.get("wire_ok") is False]
+    if bad_wire:
+        hard.append("gate-wire-mismatch")
+        hard += [f"gate ord={g.get('ord')} {g.get('decision')}: {g.get('wire_check')}" for g in bad_wire]
     if x.get("wedged"):
         hard.append(f"run wedged (no events for {WEDGE_S // 60} min)")
     if x.get("final_status") not in TERMINAL:
@@ -1064,25 +1305,32 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
         fail.append("plan does not classify deterministic tool checks vs governed agent runs")
     after = x.get("siblings_after_grace") or x.get("siblings_at_terminal") or {}
     sibs = after.get("attributable_siblings") or []
-    if not sibs:
+    followed = x.get("siblings_followed") or {}
+    statuses = followed.get("statuses") or {}
+    discovered = followed.get("discovered") or {}
+    # The attributable set is everything attributed after the grace period PLUS everything the
+    # follow rediscovered later — a sibling that appeared on poll 7 is judged like the others.
+    sib_ids = list(dict.fromkeys([s.get("id") for s in sibs if s.get("id")] + list(statuses)))
+    if not sib_ids:
         fail.append(f"no attributable sibling runs after the approved {intent} completed — the approved plan was never executed"
                     f" ({len(after.get('unrelated_new_runs') or [])} unrelated new runs ignored)")
     else:
-        followed = x.get("siblings_followed") or {}
-        statuses = followed.get("statuses") or {}
         verdicts = followed.get("acceptance") or {}
         sibling_verdicts: dict[str, dict] = {}
-        for s in sibs:
-            sid = s.get("id")
+        for sid in sib_ids:
             st_s = statuses.get(sid)
             v = verdicts.get(sid)
             ok_v = isinstance(v, str) and bool(v)
             sibling_verdicts[sid] = {"status": st_s, "verdict": v if ok_v else None,
-                                     "verdict_fetch_error": v if isinstance(v, dict) else None}
+                                     "verdict_fetch_error": v if isinstance(v, dict) else None,
+                                     "discovered_late": sid in discovered}
             if st_s not in TERMINAL:
                 fail.append(f"sibling {sid} did not reach a terminal state (status={st_s})")
             if not ok_v:
                 fail.append(f"sibling {sid} carries no acceptance verdict" + (f" (the fetch failed: {v.get('status')})" if isinstance(v, dict) else ""))
+        if followed.get("timed_out"):
+            fail.append(f"the sibling follow hit SIBLING_FOLLOW_MAX_S after {followed.get('followed_s')}s before the attributable set "
+                        f"was stable and terminal (stable_polls={followed.get('stable_polls')}) — the set is not proven complete")
         if not followed.get("all_terminal"):
             if not any(r.startswith("sibling ") and "terminal" in r for r in fail):
                 fail.append("not every attributable sibling reached a terminal state (all_terminal=false)")
@@ -1433,10 +1681,13 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
         sib = m["measured"]["siblings_after_grace"]
         if sib["attributable_siblings"]:
             ids = [s["id"] for s in sib["attributable_siblings"]]
-            log(f"{tag}: following {len(ids)} attributable sibling(s) to terminal (max {SIBLING_FOLLOW_MAX_S}s)")
+            log(f"{tag}: following {len(ids)} attributable sibling(s) to terminal (max {SIBLING_FOLLOW_MAX_S}s), rediscovering on every poll")
             # Followed WITH the page: a sibling that raises a gate gets it decided on /runs/<id>
-            # (never the API), and the browser returns to the launch panel afterwards.
-            m["measured"]["siblings_followed"] = follow_siblings(ids, page=page, tag=tag, return_to=f"{BASE}/testing/campaigns")
+            # (never the API), and the browser returns to the launch panel afterwards. The set is
+            # rediscovered on every poll (`siblings_now`) so a node launched after its predecessor
+            # completed is followed too; the follow ends only on a stable, all-terminal set.
+            m["measured"]["siblings_followed"] = follow_siblings(ids, page=page, tag=tag, return_to=f"{BASE}/testing/campaigns",
+                                                                 rediscover=siblings_now)
         else:
             finding(f"{tag}: NO attributable sibling runs were launched after the approved {intent} completed "
                     f"(attributable: 0, unrelated new runs: {len(sib['unrelated_new_runs'])}, campaigns for label {campaign_label}: "
@@ -1520,17 +1771,41 @@ def safe_name(run_id: str) -> str:
     return name
 
 
-def artifact_path(name: str, root: Path | None = None) -> Path:
-    """An artifact's path under the evidence dir: the target's realpath must stay under the root's
-    realpath, and the target itself must not be a symlink (lstat) — a daemon-provided id can never
-    redirect a write outside `e2e/artifacts/test-feature-live/` or through a planted link."""
+def refuse_symlinked_components(path: Path, base: Path) -> None:
+    """`lstat` EVERY component of `path` below `base` (`base` excluded, the final component
+    included) and refuse when any of them is a symlink — a link planted on an intermediate
+    directory (`e2e/artifacts -> /elsewhere`) would otherwise redirect a contained-looking write,
+    and checking only the final target (the old behaviour) trusted a symlinked root."""
+    try:
+        rel = path.relative_to(base)
+    except ValueError:
+        raise SystemExit(f"{path} is not under {base} — refusing to write it") from None
+    cur = base
+    for part in rel.parts:
+        cur = cur / part
+        if cur.is_symlink():
+            raise SystemExit(f"{cur} is a symlink — refusing to write through it (target {path})")
+
+
+def _anchor(root: Path) -> Path:
+    """Where the component walk starts: the repo root when `root` lives under it (so every component
+    of `e2e/artifacts/test-feature-live` is checked — ROOT itself is already resolved), else the
+    root's parent (a temp dir in the self-test: `/tmp` and `/var` are themselves symlinks on macOS)."""
+    return ROOT if root == ROOT or ROOT in root.parents else root.parent
+
+
+def artifact_path(name: str, root: Path | None = None, base: Path | None = None) -> Path:
+    """An artifact's path under the evidence dir, with every component `lstat`-checked: no component
+    of the root below `base` (default `_anchor(root)`: ROOT for the real ART) may be a symlink, no
+    component of the artifact below the root may be one (the target included), and the target's
+    realpath must stay under the root's realpath — a daemon-provided id, or a planted link anywhere
+    on the way, can never redirect a write outside `e2e/artifacts/test-feature-live/`."""
     root = root or ART
+    refuse_symlinked_components(root, base or _anchor(root))  # BEFORE mkdir: never create through a link
     root.mkdir(parents=True, exist_ok=True)
-    root_real = root.resolve()
     p = root / name
-    if p.is_symlink():  # lstat: never write THROUGH a symlink, wherever it points
-        raise SystemExit(f"artifact target {p} is a symlink — refusing to write through it")
-    real = p.resolve()
+    refuse_symlinked_components(p, root)
+    root_real, real = root.resolve(), p.resolve()
     if root_real not in real.parents:
         raise SystemExit(f"artifact path {p} resolves to {real}, outside {root_real} — refusing to write it")
     return p
