@@ -322,7 +322,7 @@
       "execution_section_lines": 28,
       "execution_summary_items": 1
      },
-     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -1554,13 +1554,17 @@
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked | codex round 5: re-decided over the COMPLETE prompt (the full 180-char awaitingHuman prompt, not the card's cleanPrompt() headline \u2014 identical here, no bracket): approve \u2014 agrees with what was clicked",
+      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked | codex round 5: re-decided over the COMPLETE prompt (the full 180-char awaitingHuman prompt, not the card's cleanPrompt() headline \u2014 identical here, no bracket): approve \u2014 agrees with what was clicked | codex round 6: gate identity re-checked over the recorded evidence \u2014 one awaitingHuman event (ord 1), headline == complete prompt, same run: no gate-state conflict; the same approve, clicked",
       "url": "/api/v1/runs/d293f4d7-1e45-4346-809a-d6f2107c6b18/gate",
       "body": {
        "approve": true
       },
       "wire_ok": true,
-      "wire_check": "POST /api/v1/runs/d293f4d7-1e45-4346-809a-d6f2107c6b18/gate for this run, body.approve == True, status 200 \u2014 re-checked offline (gate_wire_check) from the recorded url/body/status; the check itself postdates the launch"
+      "wire_check": "POST /api/v1/runs/d293f4d7-1e45-4346-809a-d6f2107c6b18/gate for this run, body.approve == True, status 200 \u2014 re-checked offline (gate_wire_check) from the recorded url/body/status; the check itself postdates the launch",
+      "current_ord": 1,
+      "card_ord": null,
+      "card_run_id": null,
+      "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)"
      }
     ],
     "gates_seen": 1,
@@ -1799,7 +1803,7 @@
       "execution_section_lines": 0,
       "execution_summary_items": 0
      },
-     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -2966,13 +2970,17 @@
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked | codex round 5: re-decided over the COMPLETE prompt (the full 246-char awaitingHuman prompt, not the card's cleanPrompt() headline \u2014 identical here, no bracket): approve \u2014 agrees with what was clicked",
+      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked | codex round 5: re-decided over the COMPLETE prompt (the full 246-char awaitingHuman prompt, not the card's cleanPrompt() headline \u2014 identical here, no bracket): approve \u2014 agrees with what was clicked | codex round 6: gate identity re-checked over the recorded evidence \u2014 one awaitingHuman event (ord 1), headline == complete prompt, same run: no gate-state conflict; the same approve, clicked",
       "url": "/api/v1/runs/f8bc2bad-47fc-4971-8961-bb49acb1dc6b/gate",
       "body": {
        "approve": true
       },
       "wire_ok": true,
-      "wire_check": "POST /api/v1/runs/f8bc2bad-47fc-4971-8961-bb49acb1dc6b/gate for this run, body.approve == True, status 200 \u2014 re-checked offline (gate_wire_check) from the recorded url/body/status; the check itself postdates the launch"
+      "wire_check": "POST /api/v1/runs/f8bc2bad-47fc-4971-8961-bb49acb1dc6b/gate for this run, body.approve == True, status 200 \u2014 re-checked offline (gate_wire_check) from the recorded url/body/status; the check itself postdates the launch",
+      "current_ord": 1,
+      "card_ord": null,
+      "card_run_id": null,
+      "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)"
      }
     ],
     "gates_seen": 1,
@@ -3243,7 +3251,7 @@
       "execution_section_lines": 0,
       "execution_summary_items": 0
      },
-     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -4384,13 +4392,17 @@
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked | codex round 5: re-decided over the COMPLETE prompt (the full 180-char awaitingHuman prompt, not the card's cleanPrompt() headline \u2014 identical here, no bracket): approve \u2014 agrees with what was clicked",
+      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked | codex round 5: re-decided over the COMPLETE prompt (the full 180-char awaitingHuman prompt, not the card's cleanPrompt() headline \u2014 identical here, no bracket): approve \u2014 agrees with what was clicked | codex round 6: gate identity re-checked over the recorded evidence \u2014 one awaitingHuman event (ord 1), headline == complete prompt, same run: no gate-state conflict; the same approve, clicked",
       "url": "/api/v1/runs/d12adb6c-e4be-430a-b0a7-666db5634112/gate",
       "body": {
        "approve": true
       },
       "wire_ok": true,
-      "wire_check": "POST /api/v1/runs/d12adb6c-e4be-430a-b0a7-666db5634112/gate for this run, body.approve == True, status 200 \u2014 re-checked offline (gate_wire_check) from the recorded url/body/status; the check itself postdates the launch"
+      "wire_check": "POST /api/v1/runs/d12adb6c-e4be-430a-b0a7-666db5634112/gate for this run, body.approve == True, status 200 \u2014 re-checked offline (gate_wire_check) from the recorded url/body/status; the check itself postdates the launch",
+      "current_ord": 1,
+      "card_ord": null,
+      "card_run_id": null,
+      "gate_identity": "backfilled (codex round 6): the daemon's current gate at decision time WAS this card's gate \u2014 the run had exactly one awaitingHuman event (ord 1; event_type_counts.awaitingHuman 1, awaitingHuman_over_ws 1) and the card's headline equals the complete prompt (card_consistent true), so gate_state_conflict re-run over the recorded evidence is None; the card's `before unit #N` line and data-run-id were not captured at the time (card_ord / card_run_id null) \u2014 the three recorded launches predate gate_state_conflict (current_ord = ord = 1)"
      }
     ],
     "gates_seen": 1,
@@ -4526,7 +4538,7 @@
     "LT-3": []
    },
    "result": "pass",
-   "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)"
+   "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins)"
   },
   "LT-5": {
    "scenario": "LT-5",
@@ -4670,7 +4682,7 @@
    "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; accepted as deviation evidence under the contract AMENDMENT of 2026-09-09 (its author, the coordinator, after codex rounds 2-4: the 85% default stands; an EXPLICIT operator override \u2014 SWAP_MAX_PCT together with SWAP_MAX_PCT_ACK=contract-deviation \u2014 is permitted and MUST be recorded in the report as a contract deviation; the three recorded launches ran under an authorized 95% override at 93% swap and are accepted as deviation evidence)",
    "note": "swap gate was 95%, not the brief's 85% \u2014 this host idles at ~93% swap; all three recorded launches read 93.0% and cleared ONLY because of the relaxation; under the default 85% none of them would have launched. The three recorded runs remain deviation evidence."
   },
-  "fanout_gate": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`) \u2014 round 5: the fence also matches build shorthand (`npm|pnpm|yarn|bun` with build|test|typecheck|lint|check anywhere, with or without `run`: `pnpm build`, `yarn build`, `bun test`) and direct build/test executables by basename after the launcher look-through (vite, tsc, esbuild, webpack, rollup, vitest, jest, playwright, rustc, make, ninja, gradle, mvn; `go build|test`; `node \u2026/vite/bin/vite.js build`); the dogfood daemon, an idle `node` and `npm view x` still never match"
+  "fanout_gate": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`) \u2014 round 5: the fence also matches build shorthand (`npm|pnpm|yarn|bun` with build|test|typecheck|lint|check anywhere, with or without `run`: `pnpm build`, `yarn build`, `bun test`) and direct build/test executables by basename after the launcher look-through (vite, tsc, esbuild, webpack, rollup, vitest, jest, playwright, rustc, make, ninja, gradle, mvn; `go build|test`; `node \u2026/vite/bin/vite.js build`); the dogfood daemon, an idle `node` and `npm view x` still never match \u2014 round 6: also pytest|py.test by basename and any python* (python, python3, python3.12) with `-m pytest` or `-m unittest` among its tokens, with or without `-n` (`pytest -n 8`, `python3 -m pytest -n 8`); `python3 -m json.tool` and the harness's own `python3 e2e/test_feature_live.py` never match"
  },
  "revisions": [
   {
@@ -5176,6 +5188,48 @@
      "old": "fail / true / (as recorded)",
      "new": "unchanged",
      "why": "re-derived with the round-5 derive_result over the recorded measurements"
+    }
+   ]
+  },
+  {
+   "date": "2026-09-09",
+   "reason": "codex round-6 REVISE on PR #215 \u2014 offline re-derivation with the fixed harness over the committed plan files and the recorded gates; no new runs, no daemon writes (read-only GETs only). Items: (1) gate IDENTITY before any click \u2014 the card must BE the daemon's CURRENT gate (GET /runs/:id/gate, else the LATEST awaitingHuman event; never an older prompt): any conflict \u21d2 no click, `reject-by-abstention`, finding `gate-state-conflict`, harness_ok=false; (2) descriptor-anchored traversal \u2014 the resolved repo root opened once, then every component under e2e/artifacts opened O_RDONLY|O_DIRECTORY|O_NOFOLLOW relative to the previous descriptor (created with os.mkdir(dir_fd=) where missing), the lock included; no pathname open/mkdir under the evidence dir remains; (3) fan-out fence: pytest / py.test / python* -m pytest|unittest; (4) scenario extraction: a result structure excludes only a cell/body WITHOUT a scenario verb \u2014 an expected outcome ('exit code 1', 'show \u2713') is a scenario.",
+   "changes": [
+    {
+     "field": "LT-{1,2,3}.gates[0].current_ord / card_ord / card_run_id / gate_identity / policy_reevaluated",
+     "old": "not recorded (the entry predates gate_state_conflict)",
+     "new": "current_ord = 1 (== ord); card_ord / card_run_id null (not captured at the time); gate_identity backfilled from the recorded evidence (one awaitingHuman event, ord 1; headline == complete prompt; same run) \u2014 gate_state_conflict re-run offline is None; policy_reevaluated appended",
+     "why": "codex round 6 item 1: a POST to /runs/:id/gate carries no ord \u2014 the card clicked must be the daemon's current gate; a stale ord-1 card over a current ord-4 delivery gate approved in codex's reproduction (the ord-mismatched record was discarded and the ord-1 event's prompt stood in). For the three recorded gates the run had exactly one gate (ord 1) when the card was clicked, so the identity holds and the decision is unchanged"
+    },
+    {
+     "field": "LT-{1,2,3}.plan.measured_over + LT-4.measured_over",
+     "old": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)",
+     "new": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command \u2014 in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed command or an expected outcome \u2014 'exit code 1', 'show \u2713', 'render red' \u2014 is a scenario: the verb wins)",
+     "why": "codex round 6 item 4: `S-1 Verify CLI returns exit code 1 for invalid input [TOOL]` and `S-2 Verify completed UI cards show \u2713 [TOOL]` extracted zero scenarios \u2014 the exit-code / tick structures excluded a proposed check; a structure now excludes only a cell/body without a scenario verb (verify / assert / check / should / expect / test \u2014 `N tests`, `Tests:` and `test results` are the tally noun / a label): the verb wins"
+    },
+    {
+     "field": "LT-{1,2,3}.plan.scenario_lines / excluded / canonical_files / classifies / surfaces, LT-3.consistency_vs_LT-1, LT-4",
+     "old": "28/13/22 scenario lines; excluded {28 section lines, 1 summary item} / {0, 0} / {0, 0}; 31/14/30 files; 38.6 % / n/a / 0.0 % (28 vs 22 titles); LT-4 four of four, pass",
+     "new": "UNCHANGED under the verb-wins rule (re-derived offline over the committed plan files, asserted field by field)",
+     "why": "no kept line of the three plans carries a tick or an exit code \u2014 the structures whose treatment changed for a verb-carrying line \u2014 and the one item ever excluded, LT-1's `npm test` \u2192 237 files / 2442 tests green, carries no scenario verb (`2442 tests` is the tally noun) and stays excluded; LT-2 and LT-3 exclude nothing before and after; so the scenario sets, the classification vocabularies, the four surfaces, LT-3 consistency and LT-4 are the same lines as in round 5"
+    },
+    {
+     "field": "preflight_policy.fanout_gate",
+     "old": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`) \u2014 round 5: the fence also matches build shorthand (`npm|pnpm|yarn|bun` with build|test|typecheck|lint|check anywhere, with or without `run`: `pnpm build`, `yarn build`, `bun test`) and direct build/test executables by basename after the launcher look-through (vite, tsc, esbuild, webpack, rollup, vitest, jest, playwright, rustc, make, ninja, gradle, mvn; `go build|test`; `node \u2026/vite/bin/vite.js build`); the dogfood daemon, an idle `node` and `npm view x` still never match",
+     "new": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`) \u2014 round 5: the fence also matches build shorthand (`npm|pnpm|yarn|bun` with build|test|typecheck|lint|check anywhere, with or without `run`: `pnpm build`, `yarn build`, `bun test`) and direct build/test executables by basename after the launcher look-through (vite, tsc, esbuild, webpack, rollup, vitest, jest, playwright, rustc, make, ninja, gradle, mvn; `go build|test`; `node \u2026/vite/bin/vite.js build`); the dogfood daemon, an idle `node` and `npm view x` still never match \u2014 round 6: also pytest|py.test by basename and any python* (python, python3, python3.12) with `-m pytest` or `-m unittest` among its tokens, with or without `-n` (`pytest -n 8`, `python3 -m pytest -n 8`); `python3 -m json.tool` and the harness's own `python3 e2e/test_feature_live.py` never match",
+     "why": "codex round 6 item 3: `pytest -n 8` and `python3 -m pytest -n 8` returned no fan-out match \u2014 the round-5 fence knew no pytest, so an active test fan-out left the default fence clear; the three recorded launches still predate the gate (readings[].fanout: not measured)"
+    },
+    {
+     "field": "artifact writes + launch lock (report.json, LT-*-plan-*.md, LT-*-*.png, .launch.lock)",
+     "old": "pathname lstat walk, then a pathname open O_RDONLY|O_DIRECTORY|O_NOFOLLOW of the final directory with an fstat==lstat identity check; the lock opened by pathname O_NOFOLLOW after the same lstat walk",
+     "new": "the resolved repo root opened once (the trusted anchor), then e2e, artifacts, test-feature-live each opened O_RDONLY|O_DIRECTORY|O_NOFOLLOW RELATIVE to the previous descriptor (a missing one created with os.mkdir(name, dir_fd=) and re-opened no-follow); file / temp / lock creation and the rename on the final descriptor; re-walked on every write; no pathname open, mkdir or resolve under e2e/artifacts remains (the self-test asserts it over the module source)",
+     "why": "codex round 6 item 2: O_NOFOLLOW on a pathname protects only the final component \u2014 replacing e2e/artifacts (an ancestor) after validation redirected both the open and the lstat to the same outside directory, so the identity check passed and writes escaped; the lock had the same hole. This report.json is itself rewritten through the new writer; the other committed artifacts are unchanged (no write happened to them in this revision)"
+    },
+    {
+     "field": "LT-{1,2,3}.result / harness_ok / fail_reasons",
+     "old": "fail / true / (as recorded)",
+     "new": "unchanged",
+     "why": "re-derived with the round-6 derive_result (gate-state-conflict / sibling-gate-state-conflict are new hard reasons; none of the recorded gates was abstained on) over the recorded measurements"
     }
    ]
   }

@@ -94,6 +94,46 @@ view" below).
 > under the result-structure rule (why: `report.json → revisions[4]`); the recorded intake gates
 > re-decide `approve` over their complete 180 / 246 / 180-char prompts — the cards showed all of
 > them, no bracket (`gates[0].prompt_len == gate.prompt_raw_len`, `card_consistent: true`).
+>
+> **Revised a sixth time after codex round 6 (same day, still offline — read-only GETs only, no
+> launch).** (1) **Gate identity before any click.** A POST to `/runs/:id/gate` carries no ord — it
+> decides whatever the daemon's *current* gate is — so codex's reproduction (a cached record serving
+> a delivery prompt for ord 4 while an old ord-1 event/card was still rendered) approved: the
+> ord-mismatched record was discarded and the ord-1 event's readable prompt stood in. The harness
+> now reads the daemon's CURRENT gate (`GET /runs/:id/gate`, else the LATEST `awaitingHuman` event —
+> never an older one; an unreadable latest prompt is unreadable, full stop) and requires the card to
+> BE that gate: same run (`data-run-id`), same ord (the card's `before unit #N` line, and the ord the
+> harness read from the events), same headline (`cleanPrompt(current.prompt)`). Any conflict — a
+> stale ord-1 card over a current ord-4 gate, an unreadable current prompt, a headline that is not
+> the current prompt's — means NO click: the decision is recorded as `reject-by-abstention` with both
+> texts and both ords (`gates[].prompt` / `prompt_card`, `current_ord` / `card_ord`), the finding is
+> `gate-state-conflict`, `harness_ok=false`, and the run is left exactly as it is (round 5 clicked
+> REJECT on an unreadable or mismatched card — an irreversible act on a gate the harness could not
+> identify). (2) **Descriptor-anchored traversal.** `O_NOFOLLOW` on a pathname open protects only
+> the final component: swapping `e2e/artifacts` (an ancestor) for a link after validation redirected
+> both the open and the `lstat` to the same outside directory, so the identity check passed. Now the
+> resolved repo root is opened once (the trusted descriptor) and every component — `e2e`,
+> `artifacts`, `test-feature-live` — is opened `O_RDONLY | O_DIRECTORY | O_NOFOLLOW` *relative to the
+> previous descriptor* (a missing one created with `os.mkdir(name, dir_fd=…)` and re-opened the same
+> way); file, temp and lock creation and the rename happen on the final descriptor; the walk is
+> repeated on every write; no pathname open, `mkdir` or `resolve` under the evidence dir remains
+> (the self-test asserts that over the module source, and swaps the ancestor between two walks,
+> during one, and as a missing component is being created — refused each time, nothing outside).
+> (3) The fan-out fence also matches `pytest`/`py.test` by basename and any `python*` (`python3.12`
+> included) with `-m pytest` or `-m unittest` among its tokens, with or without `-n` (`pytest -n 8`,
+> `python3 -m pytest -n 8`); `python3 -m json.tool` and the harness itself never match. (4) A result
+> structure excludes a plan line only when the cell/body carries NO scenario verb: `S-1 Verify CLI
+> returns exit code 1 for invalid input [TOOL]` and `S-2 Verify completed UI cards show ✓ [TOOL]` are
+> scenarios (round 5 dropped both on the exit code / the tick, and the self-test enshrined "verify
+> the CLI exits with exit code 0" as a result — fixed); `N tests`, `Tests:` and `test results` are
+> the tally noun / a label, not the verb, and a results table's verb-less Result cell still marks the
+> row. **No number moved**: the three plans re-derive to the same 28 / 13 / 22 scenario lines,
+> 31 / 14 / 30 files and 38.6 % / n/a / 0 % consistency under the verb-wins rule — no kept line of
+> any plan carries a tick or an exit code, and the one item ever excluded (LT-1's `` `npm test` →
+> 237 files / 2442 tests green ``) has no scenario verb (why: `report.json → revisions[5]`); the
+> recorded intake gates re-check their identity over the recorded evidence (one `awaitingHuman`
+> event, ord 1; headline == complete prompt; same run) with no conflict and re-decide `approve`
+> (`gates[0].current_ord`, `gate_identity`).
 
 | Component | Version |
 |---|---|
@@ -117,8 +157,10 @@ command line tokenized and matched on its **tokens in any order** — `codex …
 --print`, `cargo [+toolchain] build | test | clippy | run`, `go build | test`, `npm|pnpm|yarn|bun`
 with `build | test | typecheck | lint | check` anywhere (with or without `run` — `pnpm build`,
 `yarn build`, `bun test`), a direct build/test executable by basename (`vite`, `tsc`, `esbuild`,
-`webpack`, `rollup`, `vitest`, `jest`, `playwright`, `rustc`, `make`, `ninja`, `gradle`, `mvn` —
-`node …/vite/bin/vite.js build` included), a second `wicked-crew serve` whose `--port` value
+`webpack`, `rollup`, `vitest`, `jest`, `playwright`, `rustc`, `make`, `ninja`, `gradle`, `mvn`,
+`pytest`, `py.test` — `node …/vite/bin/vite.js build` included), any `python*` with `-m pytest` or
+`-m unittest` among its tokens (`python3 -m pytest -n 8`; `python3 -m json.tool` never), a second
+`wicked-crew serve` whose `--port` value
 (`--port N` / `--port=N`) is not 7701, runtime launchers such as `node …/.bin/codex` looked
 through; the dogfood daemon, an idle `node` and `npm view x` never match; `FANOUT_PATTERN` adds a
 regex, never replaces the rules; any match or a failed `ps` blocks; recorded in the reading as
@@ -128,10 +170,16 @@ time listed a second `wicked-crew serve --port 62432` daemon and codex council s
 would have blocked.* Every gate decided through the UI card only (never the API) under one policy
 applied to the intake gate too — *an allow-list that fails closed, judged on the **complete,
 current prompt read from the daemon** (`GET /runs/:id/gate` — the cached open-gate record — else
-the `awaitingHuman` event's verbatim `prompt`), never on the card's `cleanPrompt()` headline,
-which strips everything from the first `[` on; the card is the click surface, its headline is
-recorded alongside and must equal the full prompt's (`gates[].prompt_card`, `card_consistent`).
-A gate is approved ONLY when
+the LATEST `awaitingHuman` event's verbatim `prompt`, never an older one), never on the card's
+`cleanPrompt()` headline, which strips everything from the first `[` on; the card is the click
+surface, its headline is recorded alongside (`gates[].prompt_card`, `card_consistent`) — and,
+since round 6, the card must BE the daemon's current gate before anything is clicked: same run
+(`data-run-id`), same ord (its `before unit #N` line, and the ord the harness read from the
+events), same headline (`cleanPrompt(current.prompt)`); any conflict, or a current prompt the
+daemon does not serve, is `reject-by-abstention` — nothing clicked, both texts and both ords
+recorded, finding `gate-state-conflict`, `harness_ok=false` (a POST to `/runs/:id/gate` carries no
+ord: a stale card would decide the daemon's current gate). With the identity proven,
+a gate is approved ONLY when
 (a) the prompt is an allow-listed shape — crew's pre-execution unit gate ("Approve unit N before it
 runs: …") or a plan approval ("Approve [the] [proposed] [test] plan…"), (b) the gated unit's
 `stage`/`gate` is known and not deliver/release/publish/merge, and (c) no delivery verb or command
@@ -139,13 +187,14 @@ appears anywhere in the complete prompt (deliver(y) / push / `git push` / push t
 `gh pr create` / `pr create` / open a|the PR / pull request / merge / publish / `npm`|`cargo
 publish` / release / create a release — "Approve unit 4 before it runs: Finalize the test [gh pr
 create --fill]" is rejected on the bracketed command the card never shows). Everything else is
-rejected with a named reason: a delivery kind; a full prompt the daemon does not serve
-(`unreadable-gate` — a clean card headline alone never approves); a delivery verb anywhere
+rejected with a named reason: a delivery kind; a delivery verb anywhere
 (`delivery-verb` — a plan body listing `/runs/:id/deliver` among the routes to test is rejected
 too, and recorded as a finding); any other shape, SteeringGate's "Prompt unavailable (daemon
 restarted)…" fallback included (`unknown-prompt-shape`); an allow-listed shape whose unit kind is
-unknown — lookup failed, `stage`/`gate` null (`unknown-gate-kind`); a card whose headline is not
-the full prompt's (`card-prompt-mismatch`). The recorded intake gates (unit 1, stage `test`, gate
+unknown — lookup failed, `stage`/`gate` null (`unknown-gate-kind`). A current prompt the daemon
+does not serve (`unreadable-gate`) and a card whose headline is not the current prompt's
+(`card-prompt-mismatch`) never reach the policy: they are gate-state conflicts, and nothing is
+clicked. The recorded intake gates (unit 1, stage `test`, gate
 `auto`, "Approve unit 1 before it runs: …", no delivery verb, complete prompts of 180 / 246 / 180
 chars shown whole on the card) re-evaluate to approve — agreeing with what was clicked. Every
 click's wire is verified: the response must be a POST to
@@ -175,8 +224,8 @@ so it contains none):
 | LT-1 Run recon | **fail** — feature contract not met | **yes** | **3** (intent 1) | pre-execution: "Approve unit 1 before it runs: Recon: survey the target…" (180 chars, no plan) | 80 s | 564 s (total 651 s) | **0** attributable (0 unrelated) | **no** (label `recon-mttmyh2a-c635a60c` dangling) | none (`acceptance.required=false`) | yes — **31** canonical files *(was 25 = 9 paths + 16 basenames counted as separate identities; bare names now resolve to their repo path and lower-case source names count)* / yes |
 | LT-2 New test | **fail** — feature contract not met | **yes** | **3** (intent 1) | pre-execution: "Approve unit 1 before it runs: New test: plan the test…" (246 chars, no plan) | 67 s | 190 s (total 260 s) | **0** attributable (0 unrelated) | **no** (`recon-mttnf3s6-99e928c5` dangling) | none | yes — **14** canonical files *(was 14 with `App.tsx` double-counted against `src/App.tsx`; `useRoute.ts` now resolved)* / yes (`[TOOL]`/`[AGENT]` tags) |
 | LT-3 Run recon again (identical brief) | **fail** — feature contract not met | **yes** | **3** | pre-execution, same shape as LT-1 | 70 s | 210 s (total 287 s) | **0** attributable (0 unrelated) | **no** (`recon-mttnnicz-82c6bb65`) | none | yes — **30** canonical files *(was 32 = 24 paths + 8 basenames with five files counted twice; now 27 distinct + `interactive_wire_contract_test.py`, `uxfix_fixture.py`, `prepare-dist.mjs` resolved)* / yes |
-| LT-3 consistency vs LT-1 | **low** | — | — | — | — | — | — | — | — | files overlap **38.6 %** (17 common / 44 union) *(was 32.6 % = 14/43 when `App.tsx` and `src/App.tsx` counted as different files — identities are now canonical repo paths)*; scenario-id overlap **n/a** — neither plan carries scenario ids *(was reported 0 % on LT-1's R-01/R-02, which are RAID risk ids inside a survey bullet, not scenario ids; only LT-2 numbers its items, 1.1–4.2)*; scenario-title overlap **0 %** (**28** vs 22 extracted scenario titles, none shared) *(was 31 vs 22 — three LT-1 lines were execution summaries, not proposed scenarios: the `npm test` baseline bullet, the `npm test` row of unit 2's "Execution verdict" table and that section's "#10 …" gap bullet; results a worker reported are now excluded from the scenario set; before that, 0 % of 8 vs 4 when the extractor missed the plan tables and counted survey bullets, and an earlier 25 % came from toolchain lines, elided since)*. *Round 5 restated: unchanged — 38.6 % / n/a / 0 % over 28 vs 22 — under the result-**structure** rule (a bare `red`/`green`/`FAIL` no longer excludes a line): the only LT-1 item ever excluded, `` `npm test` → 237 files / 2442 tests green ``, carries a command, a tally and no scenario verb and stays excluded; no kept line of either plan carries a structure, and neither plan names an expected outcome with a colour or verdict word — `report.json → revisions[4]`* |
-| LT-4 surfaces coverage | **pass (breadth)** | — | — | — | — | — | — | — | — | all three plans propose tests for all four asked surfaces (WS events, /api/v1 routes, CLI, UI pages); no gap — see quality caveats below. *Re-measured over the extracted scenario lines + plan-table rows only (a survey paragraph repeating the brief's surface names no longer counts): still four of four for every plan — LT-4 does not flip; `names_real_files` now also requires ≥ 1 scenario, still true for all three. Round 5 restated: four of four for every plan, unchanged — the scenario sets are the same 28 / 13 / 22 lines under the result-structure rule (`measured_over` now names the structures)* |
+| LT-3 consistency vs LT-1 | **low** | — | — | — | — | — | — | — | — | files overlap **38.6 %** (17 common / 44 union) *(was 32.6 % = 14/43 when `App.tsx` and `src/App.tsx` counted as different files — identities are now canonical repo paths)*; scenario-id overlap **n/a** — neither plan carries scenario ids *(was reported 0 % on LT-1's R-01/R-02, which are RAID risk ids inside a survey bullet, not scenario ids; only LT-2 numbers its items, 1.1–4.2)*; scenario-title overlap **0 %** (**28** vs 22 extracted scenario titles, none shared) *(was 31 vs 22 — three LT-1 lines were execution summaries, not proposed scenarios: the `npm test` baseline bullet, the `npm test` row of unit 2's "Execution verdict" table and that section's "#10 …" gap bullet; results a worker reported are now excluded from the scenario set; before that, 0 % of 8 vs 4 when the extractor missed the plan tables and counted survey bullets, and an earlier 25 % came from toolchain lines, elided since)*. *Round 5 restated: unchanged — 38.6 % / n/a / 0 % over 28 vs 22 — under the result-**structure** rule (a bare `red`/`green`/`FAIL` no longer excludes a line): the only LT-1 item ever excluded, `` `npm test` → 237 files / 2442 tests green ``, carries a command, a tally and no scenario verb and stays excluded; no kept line of either plan carries a structure, and neither plan names an expected outcome with a colour or verdict word — `report.json → revisions[4]`. Round 6 restated: unchanged again — 38.6 % / n/a / 0 % over 28 vs 22 — under the verb-wins rule (a structure excludes only a verb-less cell): no kept line of either plan carries a tick or an exit code, and the one excluded LT-1 item has no scenario verb — `report.json → revisions[5]`* |
+| LT-4 surfaces coverage | **pass (breadth)** | — | — | — | — | — | — | — | — | all three plans propose tests for all four asked surfaces (WS events, /api/v1 routes, CLI, UI pages); no gap — see quality caveats below. *Re-measured over the extracted scenario lines + plan-table rows only (a survey paragraph repeating the brief's surface names no longer counts): still four of four for every plan — LT-4 does not flip; `names_real_files` now also requires ≥ 1 scenario, still true for all three. Round 5 restated: four of four for every plan, unchanged — the scenario sets are the same 28 / 13 / 22 lines under the result-structure rule (`measured_over` now names the structures). Round 6 restated: unchanged — the same lines under the verb-wins rule (`measured_over` now says so)* |
 | LT-5 operator's view | **observed — stale and misleading** | — | — | — | — | — | — | — | — | Tests landing identical before/after every run; the finished run is nowhere on the page that launched it; scoreboard for the returned label says "No campaign is filed" (+ console 404); "All campaigns" rename leftover |
 
 Two verdicts, deliberately. **`harness_ok: yes`** is the honest *harness* status: each governed run was
@@ -361,8 +410,9 @@ supersedes that wording.) The three launches also predate the pre-submit preflig
 preflight before browser start-up and none at the submit click (`preflights[].at_submit: "not
 performed"`).
 
-Round 3 added the **fan-out gate** (gate 4, above) and round 4 made it decide on the tokens of each
-command line rather than a positional regex: the three launches predate it (`readings[].fanout:
+Round 3 added the **fan-out gate** (gate 4, above), round 4 made it decide on the tokens of each
+command line rather than a positional regex, and rounds 5 and 6 widened the rules (build shorthand,
+direct build/test executables, `pytest` / `python* -m pytest|unittest`): the three launches predate it (`readings[].fanout:
 "not measured"`, `preflight_policy.fanout_gate: "not in force"`), and a read-only `ps` reading at
 round-3 review time showed this host running a second `wicked-crew serve --port 62432` daemon plus
 codex council seats — under the current harness none of the three launches would have cleared gate
@@ -387,18 +437,22 @@ STUDIO_URL=http://localhost:7701 TARGET_REPO=wicked-studio   # defaults
 SWAP_MAX_PCT=95 SWAP_MAX_PCT_ACK=contract-deviation python3 e2e/test_feature_live.py
                                                  # relax the swap gate — an acknowledged, recorded contract deviation
                                                  # (SWAP_MAX_PCT alone exits naming both variables)
-FANOUT_PATTERN='pytest|make -j' python3 e2e/test_feature_live.py
+FANOUT_PATTERN='sccache|bazel' python3 e2e/test_feature_live.py
                                                  # ADD an extra regex to the fan-out gate — the token rules (FANOUT_RULES) always apply
+                                                 # (pytest / make / cargo … are already rules)
 
 python3 -m unittest e2e/test_feature_live_selftest.py -v   # offline self-test: thresholds + ack (the amended contract), fan-out
 python3 -m py_compile e2e/test_feature_live.py             # rules on tokens (injected ps table, codex's probes, build shorthand +
-                                                           # direct executables), pre-submit preflight + O_NOFOLLOW launch lock,
-                                                           # the allow-list gate policy on the COMPLETE prompt from a fake read-only
-                                                           # daemon (fake page only clicked, wire verified), sibling gates +
-                                                           # rediscovery + wire, verdict split, attribution, typed fetch misses
-                                                           # (output type), raw launch body, scrub, plan analysis (result
-                                                           # STRUCTURES; re-derived over the committed plans), walked artifacts
-                                                           # root, the dir-fd-anchored writer under symlink substitution
+                                                           # direct executables, pytest / -m pytest|unittest), pre-submit preflight
+                                                           # + the descriptor-anchored launch lock, gate IDENTITY (a stale card or an
+                                                           # unreadable current prompt ⇒ no click) + the allow-list gate policy on
+                                                           # the COMPLETE prompt from a fake read-only daemon (fake page only
+                                                           # clicked, wire verified), sibling gates + rediscovery + wire, verdict
+                                                           # split, attribution, typed fetch misses (output type), raw launch body,
+                                                           # scrub, plan analysis (result structures in verb-less cells only;
+                                                           # re-derived over the committed plans), the descriptor-walked artifacts
+                                                           # root and writer under symlink substitution (target, parent, temp name,
+                                                           # ANCESTOR — between walks, mid-walk, at creation)
 ```
 
 Requires `pip install playwright && playwright install chromium`, a reachable crew daemon with the
@@ -407,17 +461,22 @@ target repo registered, and nothing else executing on it — the harness refuses
 the amended contract's explicit, recorded override; any `codex … exec` / `claude … -p|--print` /
 `cargo [+toolchain] build|test|clippy|run` / `go build|test` / `npm|pnpm|yarn|bun` with
 `build|test|typecheck|lint|check` anywhere / `vite`, `tsc`, `esbuild`, `webpack`, `rollup`,
-`vitest`, `jest`, `playwright`, `rustc`, `make`, `ninja`, `gradle`, `mvn` by basename / second
+`vitest`, `jest`, `playwright`, `rustc`, `make`, `ninja`, `gradle`, `mvn`, `pytest`, `py.test` by
+basename / `python* -m pytest|unittest` / second
 `wicked-crew serve … --port ≠ 7701` process on the host included, matched on the command line's
 tokens in any order — `FANOUT_PATTERN` adds a regex, a failed `ps` blocks), re-checks all four gates
 at the submit click, and holds
-`e2e/artifacts/test-feature-live/.launch.lock` (`flock`, opened `O_NOFOLLOW` after an `lstat` walk
-of every path component) until the intake gate is decided — a second harness process fails fast.
+`e2e/artifacts/test-feature-live/.launch.lock` (`flock`; the lock file created `O_NOFOLLOW` on the
+descriptor of a directory reached by the same trusted descriptor walk as every artifact) until the
+intake gate is decided — a second harness process fails fast.
 The self-test needs none of that (it touches `git ls-files` of this worktree and a temp dir);
 studio's CI runs no Python step, so run it by hand before pushing a harness change. Every artifact
-— `report.json`, the plans, the screenshots — lands through one dir-fd-anchored writer (every path
-component `lstat`-checked from the repo root down, the verified directory opened `O_DIRECTORY |
-O_NOFOLLOW`, a unique temp name created `O_EXCL | O_NOFOLLOW` on that descriptor, `fsync`, `rename`
-via `dir_fd` — a symlink swapped in after validation is refused or replaced, never followed);
+— `report.json`, the plans, the screenshots — lands through one descriptor-anchored writer (the
+resolved repo root opened once, then `e2e`, `artifacts`, `test-feature-live` each opened
+`O_RDONLY | O_DIRECTORY | O_NOFOLLOW` relative to the previous descriptor and created with
+`mkdir(dir_fd=)` where missing, a unique temp name created `O_EXCL | O_NOFOLLOW` on the final
+descriptor, `fsync`, `rename` via `dir_fd` — a symlink swapped in for ANY component, ancestors
+included, is refused at its own step, a link planted at the final name is replaced, never
+followed; no pathname under the evidence dir is ever opened);
 `report.json` is written after every scenario and on every exit path — an aborted run still leaves
 the finished scenarios' evidence on disk under `aborted: {scenario, error}`.

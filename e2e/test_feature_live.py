@@ -35,7 +35,10 @@ HARD RULES this harness enforces on itself:
     lint/check ANYWHERE among its tokens — with or without `run`, `test:*`/`build:*` scripts
     included (`pnpm build`, `yarn build`, `bun test`), a direct build/test executable by basename
     (`vite`, `tsc`, `esbuild`, `webpack`, `rollup`, `vitest`, `jest`, `playwright`, `rustc`,
-    `make`, `ninja`, `gradle`, `mvn` — `node …/vite/bin/vite.js build` included), or a
+    `make`, `ninja`, `gradle`, `mvn`, `pytest`, `py.test` — `node …/vite/bin/vite.js build`
+    included), a `python*` (`python`, `python3`, `python3.12` …) whose tokens carry `-m pytest` or
+    `-m unittest` (with or without `-n`; `python3 -m json.tool` and the harness's own
+    `python3 e2e/test_feature_live.py` never), or a
     `wicked-crew serve` whose `--port` VALUE (`--port N` / `--port=N`, any position) is not 7701 —
     the dogfood daemon itself (no port, or 7701), an idle `node` and `npm view x` never match.
     `FANOUT_PATTERN` (a regex) ADDS matches; it never replaces the rules. Matches are recorded in
@@ -53,20 +56,33 @@ HARD RULES this harness enforces on itself:
   * The preflight is RE-RUN (all four gates, one reading) immediately before the submit click; if
     it fails the launch is not submitted (`launch_aborted_by_preflight`, `harness_ok=false`,
     reason `preflight-at-submit`). A process-wide reservation — `fcntl.flock` on
-    `e2e/artifacts/test-feature-live/.launch.lock`, opened `O_NOFOLLOW` after an `lstat` walk of
-    every path component — is held from that pre-submit preflight until the launched run's intake
-    gate has been decided; a second harness process fails fast with a named message instead of
-    racing the preflight.
+    `e2e/artifacts/test-feature-live/.launch.lock`, created `O_NOFOLLOW` on the DESCRIPTOR of its
+    directory, which is reached by the same trusted descriptor walk as every artifact
+    (`open_artifact_root`: no pathname open anywhere under `e2e/artifacts`) — is held from that
+    pre-submit preflight until the launched run's intake gate has been decided; a second harness
+    process fails fast with a named message instead of racing the preflight.
   * Exactly one governed run in flight at a time; the next launch waits for a terminal/gated state.
+  * GATE IDENTITY before any click (`gate_state_conflict`). A POST to `/runs/:id/gate` carries no
+    ord — it decides whatever the daemon's CURRENT gate is — so the card being clicked must BE that
+    gate. Before EVERY click (intake, later gates, parent and siblings) `current_gate` reads the
+    daemon's current gate read-only: `GET /runs/:id/gate` (the cached open-gate record `GateInfo
+    {runId, ord, prompt}`, wicked-crew-api-types 0.25.0), else the LATEST `awaitingHuman` event —
+    its ord and its verbatim prompt, NEVER an older event's (an unreadable latest prompt is
+    unreadable, full stop). The card must match it: same run (`data-run-id`), same ord (the card's
+    `before unit #N` line, when rendered; and the ord the harness read from the events), same
+    headline (`cleanPrompt(current.prompt)` == the card's `steering-prompt` text). ANY conflict — a
+    card for ord 1 while the daemon's current gate is ord 4, a headline that is not the current
+    prompt's, a current prompt the daemon does not serve — means NO click at all: the decision is
+    recorded as `reject-by-abstention` with BOTH texts and both ords (`gates[].prompt` vs
+    `prompt_card`, `current_ord` vs `card_ord`), the finding is `gate-state-conflict`,
+    `harness_ok=false`, and the run is left exactly as it is (a rejected legitimate gate would end
+    the run; an approved stale card could deliver).
   * ONE gate policy for EVERY gate, the intake gate and every sibling's gates included
     (`gate_decision`) — an ALLOW-LIST that fails CLOSED, applied to the COMPLETE CURRENT PROMPT
-    read from the daemon, never to the card's text: SteeringGate renders `cleanPrompt()` (the text
-    before the first `[`, the bracketed remainder folded into a disclosure), so before EVERY click
-    (intake, later gates, parent and siblings) `full_gate_prompt` reads the verbatim prompt
-    read-only — the daemon's cached open-gate record `GET /runs/:id/gate` (`GateInfo.prompt`,
-    wicked-crew-api-types 0.25.0), else the latest `awaitingHuman` event for that ord (`prompt`,
-    verbatim) — and THAT is what `gate_decision` judges; the card's headline is recorded alongside
-    (`prompt_card`, `card_consistent`) and must equal the full prompt's headline. A gate is
+    read from the daemon (`current_gate`), never to the card's text: SteeringGate renders
+    `cleanPrompt()` (the text before the first `[`, the bracketed remainder folded into a
+    disclosure), so the verbatim prompt the daemon serves is what `gate_decision` judges; the card's
+    headline is recorded alongside (`prompt_card`, `card_consistent`). A gate is
     approved ONLY when ALL of:
     (a) the prompt is an allow-listed SHAPE — crew's pre-execution unit gate (`Approve unit N
     before it runs: …`) or a plan approval (`Approve [the] [proposed] [test] plan…`); (b) the gated
@@ -76,12 +92,12 @@ HARD RULES this harness enforces on itself:
     pull request, merge, publish, npm/cargo publish, release, create a release) — `Approve unit 4
     before it runs: Finalize the test [gh pr create --fill]` is rejected on the bracketed command
     the card never shows. EVERYTHING ELSE
-    is REJECTED with a named reason: a full prompt the daemon does not serve (`unreadable-gate` —
-    a clean card headline alone never approves), SteeringGate's `Prompt
+    is REJECTED with a named reason: SteeringGate's `Prompt
     unavailable (daemon restarted)…` fallback or any other shape (`unknown-prompt-shape`), an
     unknown unit kind — lookup failed, `stage`/`gate` null (`unknown-gate-kind`), a delivery verb
-    (`delivery-verb`), a delivery kind, a card whose headline is not the full prompt's
-    (`card-prompt-mismatch`). A plan whose body lists `/runs/:id/deliver` among the
+    (`delivery-verb`), a delivery kind. (A full prompt the daemon does not serve, or a card whose
+    headline is not the current prompt's, never reaches the policy — it is a gate-state conflict,
+    above, and nothing is clicked.) A plan whose body lists `/runs/:id/deliver` among the
     routes to test is therefore rejected too — a rejected legitimate plan is a recorded finding;
     an approved delivery is not recoverable. Every decision is clicked on
     the UI card and its WIRE is verified: the response must be a POST to exactly
@@ -110,18 +126,25 @@ the attributable set is REDISCOVERED on every poll of `follow_siblings` (runs + 
 set has been stable for two polls AND every member is terminal; `SIBLING_FOLLOW_MAX_S` elapsing
 first is recorded (`timed_out`) and the scenario cannot `pass`.
 EVERY artifact — report.json, the captured plans, the screenshots — lands through ONE writer
-(`write_artifact`) that is safe against a symlink swapped in AFTER validation: the target is
-component-walked (`lstat` from the repo root down) and contained, then the verified directory is
-opened `O_RDONLY | O_DIRECTORY | O_NOFOLLOW` and its identity checked (`fstat` == `lstat`), the
-data is written to a unique temp name created `O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW` via
-`dir_fd=`, `fsync`ed and `os.rename`d onto the final name with `src_dir_fd=dst_dir_fd=` that
-descriptor — a directory replaced by a link between the walk and the open is refused (ELOOP), a
-link planted at the final name is replaced by the rename, never followed. Screenshots are taken
-as bytes (`page.screenshot()` without `path`) and written the same way — Playwright never writes
-a path of its own. report.json is written after every scenario and on every exit path (an abort
-is recorded in `aborted`). The artifacts root itself is component-walked BEFORE anything is
-created (`ensure_artifact_root`, the first thing `main()` does) — a symlinked `e2e/artifacts`
-refuses startup instead of planting a directory outside the repository.
+(`write_artifact`) that never resolves a pathname under `e2e/artifacts`: the repo root (`ROOT`,
+already resolved) is opened ONCE as the trusted descriptor (`open_anchor`, `O_DIRECTORY`), then
+EVERY component of the artifacts directory — `e2e`, `artifacts`, `test-feature-live` — is opened
+RELATIVE to the previous descriptor with `os.open(name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW,
+dir_fd=parent_fd)` (`open_dir_nofollow`; a missing component is created with `os.mkdir(name,
+dir_fd=parent_fd)` and then re-opened the same no-follow way), so a symlink swapped in for ANY
+ancestor — `e2e/artifacts -> /elsewhere` planted after startup validated it — is refused by the
+kernel (ELOOP) at exactly that step, never followed (`walk_dir` → `open_artifact_root`; the walk
+is repeated on every write, so there is no window between a validation and a use). On the final
+trusted descriptor the data is written to a unique temp name created `O_WRONLY | O_CREAT | O_EXCL
+| O_NOFOLLOW` via `dir_fd=`, `fsync`ed and `os.rename`d onto the final name with
+`src_dir_fd=dst_dir_fd=` that descriptor — a link planted at the final name after the check is
+replaced by the rename, never written through. The launch lock is created on the same descriptor
+(`LaunchLock`). Screenshots are taken as bytes (`page.screenshot()` without `path`) and written
+the same way — Playwright never writes a path of its own. report.json is written after every
+scenario and on every exit path (an abort is recorded in `aborted`). The artifacts root is walked
+and created this way BEFORE anything else happens (`ensure_artifact_root`, the first thing
+`main()` does) — a symlinked `e2e/artifacts` refuses startup instead of planting a directory
+outside the repository.
 
 Usage: python3 e2e/test_feature_live.py            (playwright + chromium must be installed)
 Env:   STUDIO_URL (default http://localhost:7701), TARGET_REPO (default wicked-studio),
@@ -196,24 +219,32 @@ FANOUT_RULES = (
     "claude: -p|--print anywhere; codex: exec anywhere; "
     "npm|pnpm|yarn|bun: build|test|typecheck|lint|check ANYWHERE among the tokens, with or without `run` "
     "(test:*/build:* scripts included — `pnpm build`, `yarn build`, `bun test`); "
-    "direct build/test executables by basename, always: vite|tsc|esbuild|webpack|rollup|vitest|jest|playwright|rustc|make|ninja|gradle|mvn "
-    "(`node …/vite/bin/vite.js build` included — a .js/.mjs/.cjs extension is stripped); "
+    "direct build/test executables by basename, always: vite|tsc|esbuild|webpack|rollup|vitest|jest|playwright|rustc|make|ninja|gradle|mvn|pytest|py.test "
+    "(`node …/vite/bin/vite.js build` included — a .js/.mjs/.cjs extension is stripped; `pytest -n 8`); "
+    "python* (python, python3, python3.12 …): `-m pytest` or `-m unittest` among its tokens, with or without `-n` "
+    "(`python3 -m pytest -n 8`; `python3 -m json.tool` and `python3 e2e/test_feature_live.py` never); "
     "wicked-crew (also via `node …/wicked-crew`): `serve` with a --port VALUE (`--port N` or `--port=N`, any position) other than 7701; "
-    "the program is basename(argv[0]) or, under a runtime launcher (node, python3, sh, …), the script it runs"
+    "the program is basename(argv[0]) or, under a runtime launcher (node, python3, sh, …), the script or -m module it runs"
 )
 # argv[0]s that only launch the real program — under one of them the program is the first token whose
 # basename names a program the rules know (`node …/.bin/codex exec`, `nice -n 10 cargo clippy`).
 RUNTIME_LAUNCHERS = {"node", "nodejs", "bun", "deno", "npx", "python", "python3", "sh", "bash", "zsh", "env",
                      "nice", "caffeinate", "time", "arch"}
+# Any `python*` is a launcher too — `python3.12 -m pytest` must not hide behind a versioned basename.
+_PYTHON_LAUNCHER_RE = re.compile(r"python\d*(?:\.\d+)*")
 # Codex round 5: `pnpm build`, `yarn build` and `node …/vite/bin/vite.js build` all cleared the round-4
 # fence, which required a literal `run` token before a build script and knew no direct build executable.
 PACKAGE_RUNNERS = {"npm", "pnpm", "yarn", "bun"}
 BUILD_SCRIPT_TOKENS = {"build", "test", "typecheck", "lint", "check"}
 # Direct build/test executables — heavy by construction (a bundler, a compiler, a test runner, a build
-# system), matched by basename after the launcher look-through, whatever their arguments.
+# system), matched by basename after the launcher look-through, whatever their arguments. Codex round 6:
+# `pytest -n 8` and `python3 -m pytest -n 8` both cleared the round-5 fence (no pytest rule at all).
 BUILD_PROGRAMS = {"vite", "tsc", "esbuild", "webpack", "rollup", "vitest", "jest", "playwright", "rustc", "make", "ninja",
-                  "gradle", "mvn"}
-KNOWN_PROGRAMS = {"cargo", "go", "claude", "codex", "wicked-crew"} | PACKAGE_RUNNERS | BUILD_PROGRAMS
+                  "gradle", "mvn", "pytest", "py.test"}
+# Module-launched test runners: `python* -m pytest …` / `python* -m unittest …` — the `-m` form names no
+# executable, so the module token right after `-m` is the program (`json.tool`, `venv`, `http.server` are not).
+PY_TEST_MODULES = {"pytest", "unittest"}
+KNOWN_PROGRAMS = {"cargo", "go", "claude", "codex", "wicked-crew"} | PACKAGE_RUNNERS | BUILD_PROGRAMS | PY_TEST_MODULES
 _SCRIPT_EXT_RE = re.compile(r"\.(?:m?js|cjs|exe)$")
 DOGFOOD_PORT = "7701"
 WEDGE_S = 10 * 60
@@ -506,17 +537,24 @@ def _prog_name(token: str) -> str:
     return _SCRIPT_EXT_RE.sub("", os.path.basename(token))
 
 
+def _is_launcher(name: str) -> bool:
+    """argv[0] only launches the real program: one of `RUNTIME_LAUNCHERS`, or any `python*`
+    (`python`, `python3`, `python3.12`) — `python3.12 -m pytest` is a pytest run."""
+    return name in RUNTIME_LAUNCHERS or _PYTHON_LAUNCHER_RE.fullmatch(name) is not None
+
+
 def _program(tokens: list[str]) -> tuple[str, int]:
     """(name of the program, index of its token): argv[0] — or, when argv[0] is only a runtime
     launcher (`node …/.bin/codex exec`, `node …/vite/bin/vite.js build`, `env FOO=1 cargo build`,
-    `nice -n 10 cargo clippy`), the first later token whose name (`_prog_name`) is a program the
-    rules know (`KNOWN_PROGRAMS`); a launcher running something else (`node /x/app.js --port 62432`,
-    `python3 e2e/test_feature_live.py`, an idle `node`) stays the launcher, which no rule names —
-    except `bun`, a launcher that is also a package runner (`bun test`, `bun run build`)."""
+    `nice -n 10 cargo clippy`, `python3 -m pytest`), the first later token whose name (`_prog_name`)
+    is a program the rules know (`KNOWN_PROGRAMS` — the `-m` module token included); a launcher
+    running something else (`node /x/app.js --port 62432`, `python3 e2e/test_feature_live.py`,
+    `python3 -m json.tool`, an idle `node`) stays the launcher, which no rule names — except `bun`,
+    a launcher that is also a package runner (`bun test`, `bun run build`)."""
     if not tokens:
         return "", 0
     name = _prog_name(tokens[0])
-    if name in RUNTIME_LAUNCHERS:
+    if _is_launcher(name):
         for j in range(1, len(tokens)):
             if _prog_name(tokens[j]) in KNOWN_PROGRAMS:
                 return _prog_name(tokens[j]), j
@@ -539,9 +577,10 @@ def fanout_rule(cmd: str) -> str | None:
     `claude --model opus --print task` and `wicked-crew serve --db /tmp/x --port 62432` (codex
     round 4's probes, none of which the positional regex caught), `pnpm build`, `yarn build`,
     `bun test` and `node …/vite/bin/vite.js build` (codex round 5's, which the `run`-literal fence
-    let through) all trip a rule; `wicked-crew serve` without a port or on 7701 (the dogfood
-    daemon), the interactive `Claude` app, `npm run dev`, `npm view x`, an idle `node` REPL and an
-    unrelated `node` do not."""
+    let through), `pytest -n 8` and `python3 -m pytest -n 8` (codex round 6's, which knew no pytest
+    at all) all trip a rule; `wicked-crew serve` without a port or on 7701 (the dogfood
+    daemon), the interactive `Claude` app, `npm run dev`, `npm view x`, `python3 -m json.tool`, an
+    idle `node` REPL and an unrelated `node` do not."""
     tokens = _tokens(cmd)
     if not tokens:
         return None
@@ -556,6 +595,9 @@ def fanout_rule(cmd: str) -> str | None:
         return "claude -p|--print"
     if prog == "codex" and "exec" in argset:
         return "codex exec"
+    if prog in PY_TEST_MODULES and i >= 1 and tokens[i - 1] == "-m":
+        # `python* -m pytest …` / `python* -m unittest …`: the module right after `-m` is the runner.
+        return f"python -m {prog} (module-launched test runner)"
     if prog in BUILD_PROGRAMS:
         return f"{prog} (direct build/test executable)"
     if prog in PACKAGE_RUNNERS:
@@ -769,19 +811,22 @@ class LaunchLock:
         self._fd: int | None = None
 
     def acquire(self) -> "LaunchLock":
-        # Never write THROUGH a link: `lstat` every component of the lock's directory (from the repo
-        # root down, `_anchor`) and the lock file itself, then open with O_NOFOLLOW so a symlink
-        # raced in between the check and the open is refused by the kernel (ELOOP), not followed.
-        parent = self.path.parent
-        refuse_symlinked_components(parent, _anchor(parent))
-        parent.mkdir(parents=True, exist_ok=True)
-        refuse_symlinked_components(self.path, parent)
-        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+        # Never write THROUGH a link: the lock's directory is reached by the same trusted descriptor
+        # walk as every artifact (`open_artifact_root` — the anchor opened once, then every component
+        # opened O_RDONLY|O_DIRECTORY|O_NOFOLLOW RELATIVE to the previous descriptor, created where
+        # missing) and the lock file itself is created O_NOFOLLOW RELATIVE to that descriptor — a
+        # symlink anywhere on the way, whenever planted, is refused by the kernel (ELOOP), never
+        # followed. No pathname under the evidence dir is opened or created (codex round 6).
+        dfd = open_artifact_root(self.path.parent, create=True)
         try:
-            fd = os.open(str(self.path), flags, 0o644)
-        except OSError as e:  # ELOOP (a symlink appeared after the lstat) or any other refusal
-            raise SystemExit(f"launch reservation {self.path} could not be opened without following a link "
-                             f"({type(e).__name__}: {e}) — refusing to write through it") from e
+            flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
+            try:
+                fd = os.open(self.path.name, flags, 0o644, dir_fd=dfd)
+            except OSError as e:  # ELOOP: a symlink at the lock's name — or any other refusal
+                raise SystemExit(f"launch reservation {self.path} is a symlink or could not be opened without following a link "
+                                 f"({type(e).__name__}: {e}) — refusing to write through it") from e
+        finally:
+            os.close(dfd)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except (BlockingIOError, PermissionError) as e:
@@ -918,9 +963,15 @@ def _title(text: str) -> str:
 #     `→` / `=>` / `:` at the END of the cell/body ("PASS — verify /steering", "npm test → FAIL");
 #   * green|red ONLY in a cell/body that also carries a tally / duration / fraction or a COMMAND
 #     (a backticked or bare `npm|pnpm|yarn|bun|npx|cargo|go|make|pytest|vitest|jest|playwright|tsc
-#     …` invocation) AND no scenario verb outside those commands (verify / assert / check / should /
-#     expect / test — "2442 tests" is a tally noun, not the verb): "`npm test` → 237 files / 2442
-#     tests green" is a result, "Verify failed /runs cards render red" is a scenario.
+#     …` invocation): "`npm test` → 237 files / 2442 tests green" is a result.
+# AND — codex round 6 — a structure excludes ONLY a cell/body WITHOUT a scenario verb (verify /
+# assert / check / should / expect / test, outside its commands and code spans; "2442 tests",
+# "Tests:" and "test results" are the tally noun / a label, not the verb): a cell that PROPOSES a
+# check is a scenario whatever outcome it names — `S-1 Verify CLI returns exit code 1 for invalid
+# input [TOOL]`, `S-2 Verify completed UI cards show ✓ [TOOL]`, "Verify failed /runs cards render
+# red" — the verb wins (round 5 still dropped the first two as an exit code / a tick). Judged per
+# table CELL, so a results table (`| verify /ws fold | 12 passed, 0 failed |`) is still a result:
+# its Result cell carries a structure and no verb.
 # A line that merely names a command ("Run npm run typecheck to verify CLI behavior") PROPOSES a
 # check and is a scenario. Everything under an "Execution verdict" heading is excluded wholesale
 # (`plan_lines`).
@@ -938,9 +989,11 @@ RESULT_TALLY_RE = re.compile(
 _RUNNERS = r"(?:npm|pnpm|yarn|bun|npx|cargo|go|make|ninja|pytest|vitest|jest|playwright|tsc|vite|python3?|node|git|gh|curl)"
 RESULT_COMMAND_RE = re.compile(rf"`{_RUNNERS}\b[^`]*`|\b(?:npm|pnpm|yarn|bun|npx)\s+(?:run\s+)?[\w:.-]+|\b(?:cargo|go|make|pytest|vitest|jest|playwright|tsc|vite)\s+[\w:./-]+", re.I)
 _CODE_SPAN_RE = re.compile(r"`[^`]*`")
-# The scenario verbs, as VERBS: not inside a command / code span; `N tests` is the tally noun, not the verb.
+# The scenario verbs, as VERBS: not inside a command / code span; `N tests`, a `Tests:` label and a
+# `test results|summary|report` compound are the tally noun, not the verb.
 RESULT_SCENARIO_VERB_RE = re.compile(
-    r"\b(?:verif(?:y|ies|ied)|assert(?:s|ed|ing)?|check(?:s|ed|ing)?|should|expect(?:s|ed)?)\b|(?<!\d\s)\btests?(?:ed|ing)?\b", re.I)
+    r"\b(?:verif(?:y|ies|ied)|assert(?:s|ed|ing)?|check(?:s|ed|ing)?|should|expect(?:s|ed)?)\b"
+    r"|(?<!\d\s)\btests?(?:ed|ing)?\b(?!\s*:)(?!\s+(?:results?|summar(?:y|ies)|reports?)\b)", re.I)
 # A leading scenario id (`S-7`, `1.2`) is an id, not a count: stripped before the structures are judged
 # (`S-7 check …` is not the tally "7 checks"; `S-3 Expect …` keeps its verb).
 _LEAD_ID_RE = re.compile(rf"^\W*(?:{SCENARIO_ID_RE})\b\W*")
@@ -949,9 +1002,16 @@ _LEAD_ID_RE = re.compile(rf"^\W*(?:{SCENARIO_ID_RE})\b\W*")
 def result_marker(item: str) -> str | None:
     """The RESULT STRUCTURE this plan item carries, NAMED — or None when it proposes rather than
     reports. Judged per table cell (`raw` joins cells with ` | `) / bullet body — with a leading
-    scenario id stripped — so "starts with" means the cell, not the row's number column."""
+    scenario id stripped — so "starts with" means the cell, not the row's number column. A cell
+    with a scenario verb (`RESULT_SCENARIO_VERB_RE`, outside its commands / code spans) PROPOSES a
+    check and carries no marker whatever outcome it names (codex round 6: `Verify CLI returns exit
+    code 1 for invalid input` and `Verify completed UI cards show ✓` were dropped as an exit code /
+    a tick); only a verb-less cell is judged on its structures."""
     for seg in item.split(" | "):
         seg = _LEAD_ID_RE.sub("", seg.strip(), count=1)
+        plain = _CODE_SPAN_RE.sub(" ", RESULT_COMMAND_RE.sub(" ", seg))
+        if RESULT_SCENARIO_VERB_RE.search(plain):
+            continue  # the verb wins: an expected outcome, not a reported one
         if RESULT_COUNT_RE.search(seg):
             return "count"
         if RESULT_TICK_RE.search(seg):
@@ -960,12 +1020,8 @@ def result_marker(item: str) -> str | None:
             return "exit-code"
         if RESULT_VERDICT_START_RE.match(seg) or RESULT_VERDICT_END_RE.search(seg):
             return "verdict-word"
-        if RESULT_COLOR_RE.search(seg):
-            has_cmd = RESULT_COMMAND_RE.search(seg) is not None
-            has_tally = RESULT_TALLY_RE.search(seg) is not None
-            plain = _CODE_SPAN_RE.sub(" ", RESULT_COMMAND_RE.sub(" ", seg))
-            if (has_cmd or has_tally) and not RESULT_SCENARIO_VERB_RE.search(plain):
-                return "colour-verdict"
+        if RESULT_COLOR_RE.search(seg) and (RESULT_COMMAND_RE.search(seg) or RESULT_TALLY_RE.search(seg)):
+            return "colour-verdict"
     return None
 
 
@@ -985,8 +1041,8 @@ SURFACE_RES = {
 
 MEASURED_OVER = ("scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE — a "
                  "summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after →/=>/:, green/red with a "
-                 "tally or a command and no scenario verb — and 'Execution verdict' sections; a proposed command or an expected "
-                 "outcome is a scenario)")
+                 "tally or a command — in a cell/body WITHOUT a scenario verb, and 'Execution verdict' sections; a proposed "
+                 "command or an expected outcome — 'exit code 1', 'show ✓', 'render red' — is a scenario: the verb wins)")
 
 
 def plan_lines(text: str) -> tuple[list[str], int]:
@@ -1025,9 +1081,10 @@ def scenario_records(text: str) -> tuple[list[dict], dict]:
     * Bullet / numbered items: accepted with a leading id (`S-1`, `1.2` — a bare number is not an
       id) or a verb AND a noun in the item text.
     Headings, bold-label paragraphs, table headers/rules, table-of-contents lines, toolchain paths
-    and execution RESULTS (an item carrying a result STRUCTURE — `result_marker`; "Execution
-    verdict" sections) are none of these — an item that merely names a command, or an expected
-    outcome ("Verify failed /runs cards render red"), is a proposed check."""
+    and execution RESULTS (an item carrying a result STRUCTURE in a verb-less cell —
+    `result_marker`; "Execution verdict" sections) are none of these — an item that merely names a
+    command, or an expected outcome ("Verify failed /runs cards render red", "Verify CLI returns
+    exit code 1", "Verify completed UI cards show ✓"), is a proposed check."""
     records: list[dict] = []
     lines, section_lines = plan_lines(text)
     excluded = {"execution_section_lines": section_lines, "execution_summary_items": 0}
@@ -1322,36 +1379,45 @@ def card_headline(prompt: str | None) -> str:
     return re.sub(r"\s+", " ", text if i == -1 else text[:i]).strip()
 
 
-def gate_prompt_from_events(events: list[dict], ord_: int | None) -> tuple[str | None, str]:
-    """(the verbatim `prompt` of the LATEST `awaitingHuman` event for `ord_` — any ord when None —
-    or None, why)."""
-    aw = [e for e in events if isinstance(e, dict) and e.get("type") == "awaitingHuman" and (ord_ is None or e.get("ord") == ord_)]
-    for e in reversed(aw):
-        p = e.get("prompt")
-        if isinstance(p, str) and p.strip():
-            return p, f"awaitingHuman event (ord {e.get('ord')}, seq {e.get('seq')})"
-    return None, (f"no awaitingHuman event for ord {ord_} carries a prompt" if aw else f"no awaitingHuman event for ord {ord_}")
+def latest_awaiting_human(events: list[dict]) -> dict | None:
+    """The LATEST `awaitingHuman` event — the daemon's current gate while the run is
+    awaiting_human — or None. Never an older one: a later gate whose prompt cannot be read is an
+    unreadable CURRENT gate, not a reason to look further back (codex round 6)."""
+    aw = [e for e in events if isinstance(e, dict) and e.get("type") == "awaitingHuman"]
+    return aw[-1] if aw else None
 
 
-def full_gate_prompt(run_id: str, ord_: int | None, events: list[dict] | None = None) -> tuple[str | None, str]:
-    """The COMPLETE, CURRENT gate prompt for `run_id`, read from the daemon (read-only) — never the
-    card's `cleanPrompt()` headline: (prompt, source), or (None, why) when it cannot be read.
+def _gate_state(run_id: str, *, record_run_id=None, ord_=None, prompt=None, source=None, why=None) -> dict:
+    ok = isinstance(prompt, str) and bool(prompt.strip())
+    return {"run_id": run_id, "record_run_id": record_run_id if isinstance(record_run_id, str) and record_run_id else None,
+            "ord": ord_ if isinstance(ord_, int) else None, "prompt": prompt if ok else None, "readable": ok,
+            "source": source if ok else None, "why": None if ok else why}
+
+
+def current_gate(run_id: str, events: list[dict] | None = None) -> dict:
+    """The daemon's CURRENT gate for `run_id`, read read-only — `{run_id, record_run_id, ord,
+    prompt, readable, source, why}` — the ONLY gate a POST to `/runs/:id/gate` can decide (the POST
+    carries no ord). Never the card's `cleanPrompt()` headline, never an older gate's prompt:
       1. `GET /runs/:id/gate` — the daemon's cached open-gate record (`GateInfo {runId, ord, prompt,
-         …}`, wicked-crew-api-types 0.25.0; studio's own late-join reconcile) — accepted when its
-         `prompt` is a non-empty string and its `ord` is the gated ord (a 404 is the daemon's
-         "nothing pending", any other failure is a recorded typed miss);
-      2. else the latest `awaitingHuman` event for that ord (`events`, or `GET /runs/:id/events`) —
-         the CoreEvent's `prompt` is the verbatim text SteeringGate was handed.
-    A prompt neither source serves is UNREADABLE — `gate_decision` rejects it (`unreadable-gate`)
-    however clean the card looks."""
+         …}`, wicked-crew-api-types 0.25.0; studio's own late-join reconcile). When it answers 2xx
+         with an object, THAT record is the current gate — its `ord` and its `prompt`; an empty /
+         non-string prompt makes the current gate UNREADABLE (`readable: false`) and the events are
+         NOT consulted for a substitute (a 404 is the daemon's "nothing cached"; any other failure
+         is a recorded typed miss — then the events stand in);
+      2. else the LATEST `awaitingHuman` event (`events`, or `GET /runs/:id/events`), whatever its
+         ord — its `ord` and its verbatim `prompt` (the text SteeringGate was handed); an
+         unreadable latest prompt is UNREADABLE — an older event's readable prompt never stands in.
+    An unreadable current gate is a gate-state conflict for the caller (`gate_state_conflict`):
+    nothing is clicked."""
     path = f"/runs/{enc(run_id)}/gate"
     status, body = _fetch(path)
     if 200 <= status < 300 and isinstance(body, dict):
         p = body.get("prompt")
-        if isinstance(p, str) and p.strip() and (ord_ is None or body.get("ord") == ord_):
-            return p, "GET /runs/:id/gate (GateInfo.prompt, the daemon's cached open-gate record)"
-        why_gate = f"GET /runs/:id/gate answered ord {body.get('ord')!r} with {'an empty' if not (isinstance(p, str) and p.strip()) else 'a'} prompt"
-    elif status == 404:
+        return _gate_state(run_id, record_run_id=body.get("runId"), ord_=body.get("ord"), prompt=p,
+                           source="GET /runs/:id/gate (GateInfo.prompt, the daemon's cached open-gate record)",
+                           why=f"GET /runs/:id/gate answered ord {body.get('ord')!r} with an empty prompt — the current record is "
+                               "unreadable; an awaitingHuman event's prompt is never substituted for it")
+    if status == 404:
         why_gate = "GET /runs/:id/gate → 404 (no cached gate)"
     elif not 200 <= status < 300:
         record_fetch_error(path, status, body)
@@ -1363,24 +1429,100 @@ def full_gate_prompt(run_id: str, ord_: int | None, events: list[dict] | None = 
         try:
             events = run_events(run_id)
         except FetchError as e:  # recorded by get()
-            return None, f"{why_gate}; {e}"
-    prompt, why_events = gate_prompt_from_events(events, ord_)
-    if prompt is not None:
-        return prompt, why_events
-    return None, f"{why_gate}; {why_events}"
+            return _gate_state(run_id, why=f"{why_gate}; {e}")
+    latest = latest_awaiting_human(events)
+    if latest is None:
+        return _gate_state(run_id, why=f"{why_gate}; no awaitingHuman event")
+    src = f"awaitingHuman event (ord {latest.get('ord')}, seq {latest.get('seq')})"
+    return _gate_state(run_id, record_run_id=latest.get("session"), ord_=latest.get("ord"), prompt=latest.get("prompt"), source=src,
+                       why=f"{why_gate}; the latest {src} carries no readable prompt — an older event's prompt is never substituted")
+
+
+# What SteeringGate renders as the gate's identity: `run <id8> · before unit #N` (src/components/
+# SteeringGate.tsx) — the ord is exposed as TEXT, the run id as `data-run-id`.
+CARD_ORD_RE = re.compile(r"before unit #(\d+)")
+
+
+def card_ord_from_text(card_text: str | None) -> int | None:
+    """The ord SteeringGate renders on the card (`… · before unit #N`), or None when the card
+    carries no such line (the SPA had no numeric ord to show)."""
+    m = CARD_ORD_RE.search(card_text or "")
+    return int(m.group(1)) if m else None
+
+
+def card_identity(card) -> tuple[str | None, int | None]:
+    """Best-effort reads of the rendered card's own identity — its `data-run-id` attribute and the
+    ord in its text (`card_ord_from_text`); None for whatever the card does not expose. An
+    unexposed identity is not a match: the headline comparison in `gate_state_conflict` still
+    applies, and an exposed one that DISAGREES with the daemon's current gate is a conflict."""
+    run_id = ord_ = None
+    try:
+        v = card.first.get_attribute("data-run-id")
+        run_id = v if isinstance(v, str) and v else None
+    except Exception:
+        pass
+    try:
+        ord_ = card_ord_from_text(card.first.inner_text())
+    except Exception:
+        pass
+    return run_id, ord_
+
+
+def gate_state_conflict(cur: dict, *, run_id: str, ord_: int | None, card_run_id: str | None, card_ord: int | None,
+                        card_text: str | None) -> str | None:
+    """None when the card being clicked IS the daemon's current gate (`cur`, from `current_gate`);
+    otherwise the conflict, NAMED — and the caller clicks NOTHING (`reject-by-abstention`). Codex
+    round 6 (HIGH): a fake daemon serving a delivery prompt for ord 4 while an old ord-1 event/card
+    was still rendered produced `approve` — the ord-mismatched record was discarded and the ord-1
+    event's readable prompt stood in, and the POST (no ord on the wire) would have approved the
+    daemon's current delivery gate. A conflict is ANY of:
+      * the current gate's prompt is unreadable (`cur.readable` false — unserved, empty, or the
+        latest event has none; never replaced by an older readable prompt);
+      * the record / event names another run (`record_run_id`), or the card does (`data-run-id`);
+      * the card's rendered ord (`before unit #N`) differs from the current gate's ord;
+      * the ord the harness read from the events (`ord_`) differs from the current gate's ord;
+      * the card's headline is not `cleanPrompt(current.prompt)` (`card-prompt-mismatch` — the click
+        surface does not show the gate being decided).
+    Absence of an identity (no ord on the card, `ord_` None) is not a match and not a conflict on
+    its own — the headline comparison always applies."""
+    if not cur.get("readable"):
+        return (f"unreadable-gate: the daemon's CURRENT gate prompt cannot be read ({cur.get('why')}) — a card headline alone "
+                "never decides, and an older prompt never stands in")
+    rid = cur.get("record_run_id")
+    if rid is not None and rid != run_id:
+        return f"the daemon's current gate record names run {rid!r}, not {run_id!r}"
+    if card_run_id is not None and card_run_id != run_id:
+        return f"the card is run {card_run_id}'s (data-run-id), not {run_id}'s"
+    cur_ord = cur.get("ord")
+    if card_ord is not None and cur_ord is not None and card_ord != cur_ord:
+        return f"the card shows ord {card_ord} but the daemon's current gate is ord {cur_ord}"
+    if ord_ is not None and cur_ord is not None and ord_ != cur_ord:
+        return f"the harness read ord {ord_} from the events but the daemon's current gate is ord {cur_ord}"
+    shown = re.sub(r"\s+", " ", card_text or "").strip()
+    want = card_headline(cur.get("prompt"))
+    if shown != want:
+        return (f"card-prompt-mismatch: the card shows {shown[:80]!r} but the daemon's current prompt reads {want[:80]!r} "
+                f"(+{len(cur.get('prompt') or '') - len(want)} chars) — the click surface does not show the gate being decided")
+    return None
 
 
 def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict | None, tag: str,
                         first: bool, card_text: str | None = None, events: list[dict] | None = None) -> dict:
-    """Decide a rendered SteeringGate card on the COMPLETE CURRENT prompt read from the daemon
-    (`full_gate_prompt` — `GET /runs/:id/gate`, else the `awaitingHuman` event; read-only), with
-    `gate_decision` and the unit's stage/gate; the card's `steering-prompt` text (`cleanPrompt()`'s
-    headline — bracketed content stripped) is only the CLICK SURFACE: it is read (`card_text`, or
-    from the card), recorded alongside (`prompt_card`) and must equal the full prompt's headline
-    (`card_consistent`) — a full prompt the daemon does not serve is `unreadable-gate`, a card that
-    is not the full prompt's headline is `card-prompt-mismatch`; both REJECT. Codex round 5:
-    `Approve unit 4 before it runs: Finalize the test [gh pr create --fill]` rendered a clean
-    headline and was approved off the card; the full prompt rejects it on `gh pr create`.
+    """Decide a rendered SteeringGate card — or refuse to touch it. FIRST the gate's IDENTITY: the
+    daemon's CURRENT gate is read read-only (`current_gate` — `GET /runs/:id/gate`, else the LATEST
+    `awaitingHuman` event, never an older one) and must be the gate this card shows
+    (`gate_state_conflict`: same run, same ord — the card's `before unit #N` line and the ord the
+    caller read from the events — and the same headline, `cleanPrompt(current.prompt)` == the
+    card's `steering-prompt` text). Any conflict — a stale ord-1 card while the daemon's current
+    gate is ord 4, a current prompt the daemon does not serve, a headline that is not the current
+    prompt's — means NO CLICK: the entry is recorded as `reject-by-abstention` with both texts and
+    both ords, the finding is `gate-state-conflict` (`harness_ok=false`), the run is left as it is.
+    (Codex round 6: a POST to `/runs/:id/gate` carries no ord — approving off a stale card would
+    have approved the daemon's current delivery gate.) THEN, with the identity proven, the policy:
+    `gate_decision` over the COMPLETE current prompt with the unit's stage/gate — the card's text
+    is only the CLICK SURFACE (recorded alongside as `prompt_card`, `card_consistent`); codex
+    round 5: `Approve unit 4 before it runs: Finalize the test [gh pr create --fill]` rendered a
+    clean headline and was approved off the card; the full prompt rejects it on `gh pr create`.
     Then click the matching button, wait for the POST to EXACTLY this run's gate endpoint and
     verify the wire (`gate_wire_check`: endpoint, body.approve == decision, 2xx) — a mismatch, or
     no such POST within 60 s, is a finding and `wire_ok: false` (`harness_ok=false`,
@@ -1392,32 +1534,34 @@ def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict
         except Exception as e:  # no prompt element: the click surface has no headline — recorded, compared below
             card_text = ""
             log(f"{tag}: gate ord={ord_} on {run_id}: steering-prompt unreadable ({type(e).__name__}: {e})")
-    prompt, source = full_gate_prompt(run_id, ord_, events)
+    card_run_id, card_ord = card_identity(card)
+    cur = current_gate(run_id, events)
+    prompt, source = cur["prompt"], cur["source"] or cur["why"]
+    shown = re.sub(r"\s+", " ", card_text or "").strip()
+    consistent: bool | None = (shown == card_headline(prompt)) if prompt is not None else None
+    entry = {"ord": ord_, "current_ord": cur["ord"], "card_ord": card_ord, "card_run_id": card_run_id, "first": first,
+             "prompt": prompt[:400] if prompt is not None else None, "prompt_len": len(prompt) if prompt else None,
+             "prompt_source": source, "prompt_card": (card_text or "")[:400], "card_consistent": consistent,
+             "decision": None, "reason": None,
+             "unit": {"stage": unit.get("stage"), "gate": unit.get("gate")} if unit else None,
+             "status": None, "url": None, "body": None, "wire_ok": None, "wire_check": None}
+    conflict = gate_state_conflict(cur, run_id=run_id, ord_=ord_, card_run_id=card_run_id, card_ord=card_ord, card_text=card_text)
+    if conflict:
+        entry.update(decision="reject-by-abstention", reason=f"gate-state-conflict: {conflict}",
+                     wire_check="not clicked — gate-state-conflict (no POST was made; the run is left as it is)")
+        finding(f"{tag}: gate-state-conflict on run {run_id}: {conflict} — NO click (reject-by-abstention). The card showed "
+                f"{shown[:80]!r} (card ord {card_ord}, harness ord {ord_}); the daemon's current gate is ord {cur['ord']} reading "
+                f"{(prompt if prompt is not None else '<unreadable>')[:80]!r} ({source})")
+        log(f"{tag}: gate on {run_id[:8]} → ABSTAINED ({conflict[:120]})")
+        return entry
     decision, reason = gate_decision(prompt, unit)
-    consistent: bool | None = None
-    if prompt is not None:
-        consistent = re.sub(r"\s+", " ", card_text or "").strip() == card_headline(prompt)
-        if decision == "approve" and not consistent:
-            decision = "reject"
-            reason = (f"card-prompt-mismatch: the card shows {re.sub(r'\s+', ' ', card_text or '').strip()[:80]!r} but the daemon's "
-                      f"complete prompt reads {card_headline(prompt)[:80]!r} (+{len(prompt) - len(card_headline(prompt))} chars) — "
-                      "the click surface does not show the gate being decided (never approve what the operator cannot see)")
-    if reason == "unreadable-gate":
-        finding(f"{tag}: gate ord={ord_} on run {run_id}: the COMPLETE prompt could not be read from the daemon ({source}); the card "
-                f"showed {(card_text or '')[:80]!r} — REJECTED (never approve on a card headline alone)")
-    elif reason.startswith("card-prompt-mismatch"):
-        finding(f"{tag}: gate ord={ord_} on run {run_id}: {reason} — REJECTED")
-    elif reason.startswith("unknown-gate-kind"):
+    entry.update(decision=decision, reason=reason, wire_ok=False)
+    if reason.startswith("unknown-gate-kind"):
         finding(f"{tag}: gate ord={ord_} on run {run_id}: the gated unit's stage/gate is unknown — the allow-listed prompt "
                 f"('{(prompt or '')[:80]}…') alone does not authorize approving — REJECTED ({reason})")
     elif reason.startswith("unknown-prompt-shape"):
         finding(f"{tag}: gate ord={ord_} on run {run_id}: the prompt ('{(prompt or '')[:80]}…') is not an allow-listed "
                 f"shape (pre-execution unit gate / plan approval) — REJECTED ({reason})")
-    entry = {"ord": ord_, "first": first, "prompt": (prompt or "")[:400], "prompt_len": len(prompt) if prompt else None,
-             "prompt_source": source, "prompt_card": (card_text or "")[:400], "card_consistent": consistent,
-             "decision": decision, "reason": reason,
-             "unit": {"stage": unit.get("stage"), "gate": unit.get("gate")} if unit else None,
-             "status": None, "url": None, "body": None, "wire_ok": False, "wire_check": None}
     expected = f"POST {urllib.parse.urlsplit(API).path}/runs/{run_id}/gate"
     try:
         with page.expect_response(lambda r: r.request.method == "POST" and gate_url_matches(r.url, run_id), timeout=60000) as gr:
@@ -1539,6 +1683,8 @@ def follow_siblings(sibling_ids: list[str], max_s: int = SIBLING_FOLLOW_MAX_S, s
                     warned.add(sid)
                     finding(f"{tag}: sibling {sid} is awaiting_human but no page was supplied — its gate cannot be decided on the UI")
                 continue
+            if any(g.get("decision") == "reject-by-abstention" for g in gates[sid]):
+                continue  # a gate-state conflict was recorded — never re-decided; the timeout reports the sibling as non-terminal
             if sum(1 for g in gates[sid] if g.get("status") is None) >= 2:
                 continue  # its card never rendered twice — stop re-navigating, let the timeout report it
             gates[sid].append(decide(page, sid, tag=tag, return_to=return_to))
@@ -1577,8 +1723,8 @@ def sibling_gate_wire_failures(followed: dict | None) -> list[str]:
     out: list[str] = []
     for sid, entries in ((followed or {}).get("gates") or {}).items():
         for g in entries or []:
-            if not isinstance(g, dict) or g.get("decision") is None:
-                continue
+            if not isinstance(g, dict) or g.get("decision") in (None, "reject-by-abstention"):
+                continue  # undecided / abstained: no wire was attempted — `sibling_gate_conflicts` names the abstention
             if g.get("wire_ok") is False:
                 problem: str | None = g.get("wire_check") or "wire_ok=false"
             elif g.get("url") is not None:
@@ -1588,6 +1734,19 @@ def sibling_gate_wire_failures(followed: dict | None) -> list[str]:
                 problem = None if isinstance(st, int) and 200 <= st < 300 else f"status {st!r} is not 2xx"
             if problem:
                 out.append(f"sibling {sid} gate ord={g.get('ord')} {g.get('decision')}: {problem}")
+    return out
+
+
+def sibling_gate_conflicts(followed: dict | None) -> list[str]:
+    """Every followed sibling gate left UNDECIDED on a gate-state conflict (`reject-by-abstention`
+    — the card was not the daemon's current gate, or that gate could not be read; nothing was
+    clicked), named with both ords: the same harness failure as the parent's
+    (`sibling-gate-state-conflict`, codex round 6)."""
+    out: list[str] = []
+    for sid, entries in ((followed or {}).get("gates") or {}).items():
+        for g in entries or []:
+            if isinstance(g, dict) and g.get("decision") == "reject-by-abstention":
+                out.append(f"sibling {sid} gate ord={g.get('ord')} (daemon current ord={g.get('current_ord')}): {g.get('reason')}")
     return out
 
 
@@ -1621,8 +1780,15 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
     gates = x.get("gates") or []
     if not gates:
         hard.append("no gate was answered")
-    elif any(not isinstance(g.get("status"), int) or g["status"] >= 300 for g in gates):
+    elif any(g.get("decision") != "reject-by-abstention" and (not isinstance(g.get("status"), int) or g["status"] >= 300) for g in gates):
         hard.append("a gate decision did not post")
+    # A gate left UNDECIDED on a gate-state conflict (`reject-by-abstention`: the card was not the
+    # daemon's current gate, or that gate could not be read — nothing was clicked, by design) is a
+    # harness failure all the same: the run was not brought to a decision the harness can vouch for.
+    abstained = [g for g in gates if g.get("decision") == "reject-by-abstention"]
+    if abstained:
+        hard.append("gate-state-conflict")
+        hard += [f"gate ord={g.get('ord')} (daemon current ord={g.get('current_ord')}): {g.get('reason')}" for g in abstained]
     # The wire check (`gate_wire_check`): a recorded gate whose POST did not go to THIS run's gate
     # endpoint with `approve` == the decision and a 2xx is not evidence the decision was taken.
     # Entries without the field predate the check (the three recorded runs are re-checked offline).
@@ -1637,6 +1803,10 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
     if bad_sibling_wire:
         hard.append("sibling-gate-wire-mismatch")
         hard += bad_sibling_wire
+    sibling_conflicts = sibling_gate_conflicts(followed)
+    if sibling_conflicts:
+        hard.append("sibling-gate-state-conflict")
+        hard += sibling_conflicts
     if x.get("wedged"):
         hard.append(f"run wedged (no events for {WEDGE_S // 60} min)")
     if x.get("final_status") not in TERMINAL:
@@ -1928,10 +2098,11 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
         entry = decide_gate_on_card(page, card, run_id=run_id, ord_=gate_ord, unit=unit, tag=tag, first=True, card_text=prompt, events=events)
         gates.append(entry)
         decision = entry["decision"]
+        abstained = decision == "reject-by-abstention"  # gate-state conflict: nothing was clicked; the run is not followed
         m["measured"]["gate_response"] = {k: entry[k] for k in ("decision", "status", "body", "url")}
         t_approve = time.time()  # the first gate's decision time (approve in every recorded run)
-        lock.release()  # the intake gate is decided — the launch reservation ends here
-        if decision != "reject" and not fallback_run_page:
+        lock.release()  # the intake gate is decided (or deliberately left alone) — the launch reservation ends here
+        if decision == "approve" and not fallback_run_page:
             try:
                 panel.locator('[data-testid="testing-launch-resolved"]').wait_for(timeout=15000)
                 m["measured"]["panel_resolved_copy"] = panel.locator('[data-testid="testing-launch-resolved"]').inner_text()
@@ -1945,7 +2116,16 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
         wedged = False
         deadline = time.time() + RUN_TIMEOUT_S
         final_status = None
-        while time.time() < deadline:
+        if abstained:
+            # The card was not the daemon's current gate (or that gate could not be read): nothing was
+            # clicked and nothing more is done to this run — it is reported, not followed to terminal.
+            m["measured"]["gate_abstained"] = True
+            finding(f"{tag}: the intake gate on run {run_id} was left UNDECIDED (gate-state-conflict) — the harness does not follow a run it must not touch")
+            try:
+                final_status = run_detail(run_id)["session"]["status"]
+            except Exception as e:
+                m["notes"].append(f"status read after the abstention failed: {e}")
+        while not abstained and time.time() < deadline:
             page.wait_for_timeout(10000)
             try:
                 d = run_detail(run_id)
@@ -1979,7 +2159,13 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
                 # clause or on a clean headline. The capture is named by ord; `gates[]` carries the decision.
                 unit2 = gate_unit(d, g.get("ord"))
                 shot(page, f"05-gate-{g.get('ord', 'x')}")
-                gates.append(decide_gate_on_card(page, c2, run_id=run_id, ord_=g.get("ord"), unit=unit2, tag=tag, first=False, card_text=ptxt, events=evs))
+                later = decide_gate_on_card(page, c2, run_id=run_id, ord_=g.get("ord"), unit=unit2, tag=tag, first=False, card_text=ptxt, events=evs)
+                gates.append(later)
+                if later["decision"] == "reject-by-abstention":
+                    m["measured"]["gate_abstained"] = True
+                    finding(f"{tag}: run {run_id} left at its gate (daemon current ord {later.get('current_ord')}) UNDECIDED "
+                            "(gate-state-conflict) — the harness stops following it")
+                    break
                 last_change = time.time()
                 continue
             if time.time() - last_change > WEDGE_S:
@@ -2145,114 +2331,202 @@ def safe_name(run_id: str) -> str:
     return name
 
 
-def refuse_symlinked_components(path: Path, base: Path) -> None:
-    """`lstat` EVERY component of `path` below `base` (`base` excluded, the final component
-    included) and refuse when any of them is a symlink — a link planted on an intermediate
-    directory (`e2e/artifacts -> /elsewhere`) would otherwise redirect a contained-looking write,
-    and checking only the final target (the old behaviour) trusted a symlinked root."""
-    try:
-        rel = path.relative_to(base)
-    except ValueError:
-        raise SystemExit(f"{path} is not under {base} — refusing to write it") from None
-    cur = base
-    for part in rel.parts:
-        cur = cur / part
-        if cur.is_symlink():
-            raise SystemExit(f"{cur} is a symlink — refusing to write through it (target {path})")
-
-
 def _anchor(root: Path) -> Path:
-    """Where the component walk starts: the repo root when `root` lives under it (so every component
-    of `e2e/artifacts/test-feature-live` is checked — ROOT itself is already resolved), else the
-    root's parent (a temp dir in the self-test: `/tmp` and `/var` are themselves symlinks on macOS)."""
+    """Where the trusted descriptor walk starts: the repo root when `root` lives under it (so every
+    component of `e2e/artifacts/test-feature-live` is opened no-follow — ROOT itself is already
+    resolved), else the root's parent (a temp dir in the self-test: `/tmp` and `/var` are
+    themselves symlinks on macOS, and the anchor is the one path that IS trusted)."""
     return ROOT if root == ROOT or ROOT in root.parents else root.parent
 
 
-def ensure_artifact_root(root: Path | None = None, base: Path | None = None) -> Path:
-    """Create the evidence dir ONLY after `lstat`-walking every component of it below `base`
-    (default `_anchor(root)`: the resolved repo root for the real ART — `e2e`, `e2e/artifacts`,
-    `e2e/artifacts/test-feature-live` are each checked). A symlinked component refuses BEFORE
-    anything is created, so startup can never plant `test-feature-live/` outside the repository
-    (codex round 4: `main()` called `ART.mkdir(parents=True)` before any component walk)."""
-    root = root or ART
-    refuse_symlinked_components(root, base or _anchor(root))  # BEFORE mkdir: never create through a link
-    root.mkdir(parents=True, exist_ok=True)
-    return root
-
-
-def artifact_path(name: str, root: Path | None = None, base: Path | None = None) -> Path:
-    """An artifact's path under the evidence dir, with every component `lstat`-checked: no component
-    of the root below `base` (default `_anchor(root)`: ROOT for the real ART) may be a symlink, no
-    component of the artifact below the root may be one (the target included), and the target's
-    realpath must stay under the root's realpath — a daemon-provided id, or a planted link anywhere
-    on the way, can never redirect a write outside `e2e/artifacts/test-feature-live/`."""
-    root = ensure_artifact_root(root or ART, base)
-    p = root / name
-    refuse_symlinked_components(p, root)
-    root_real, real = root.resolve(), p.resolve()
-    if root_real not in real.parents:
-        raise SystemExit(f"artifact path {p} resolves to {real}, outside {root_real} — refusing to write it")
-    return p
-
-
-# An artifact is ONE plain file name directly under the evidence dir — never a path, never a dotfile.
-ARTIFACT_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
-
-
-def _open_verified_dir(directory: Path) -> int:
-    """Open the (already component-walked) `directory` itself — `O_RDONLY | O_DIRECTORY |
-    O_NOFOLLOW`, so a symlink swapped in after the walk is refused by the kernel (ELOOP / ENOTDIR),
-    never followed — and prove the descriptor IS that directory (`fstat` == `lstat` identity).
-    Every later create / write / rename is anchored on the returned fd (`dir_fd=`), so the path
-    can no longer be re-resolved underneath the harness."""
-    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+def open_anchor(anchor: Path) -> int:
+    """The TRUSTED starting descriptor — `anchor` opened `O_RDONLY | O_DIRECTORY` by pathname, the
+    only pathname open the artifact layer makes (the resolved repo root for the real ART). Every
+    component below it is reached RELATIVE to a descriptor, never by pathname."""
     try:
-        fd = os.open(str(directory), flags)
+        return os.open(str(anchor), os.O_RDONLY | os.O_DIRECTORY)
     except OSError as e:
-        raise SystemExit(f"{directory} could not be opened as a directory without following a link "
+        raise SystemExit(f"{anchor} (the trusted anchor of the artifact walk) could not be opened as a directory "
                          f"({type(e).__name__}: {e}) — refusing to write under it") from e
+
+
+def open_dir_nofollow(name: str, dir_fd: int, shown: Path) -> int:
+    """Open ONE directory component `name` RELATIVE to the trusted descriptor `dir_fd` —
+    `os.open(name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW, dir_fd=dir_fd)` — so the kernel refuses a
+    symlink (ELOOP) or a non-directory (ENOTDIR) at exactly this step, whenever it was planted:
+    nothing is resolved by pathname, so nothing can be swapped underneath a check. A missing
+    component raises `FileNotFoundError` (the walk decides whether to create it); any other failure
+    is a named refusal (`shown` is the component's path, for the message only)."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
-        got, want = os.fstat(fd), os.lstat(directory)
-        if not stat.S_ISDIR(want.st_mode) or (got.st_dev, got.st_ino) != (want.st_dev, want.st_ino):
-            raise SystemExit(f"{directory} changed identity between the walk and the open — refusing to write under it")
+        return os.open(name, flags, dir_fd=dir_fd)
+    except FileNotFoundError:
+        raise
+    except OSError as e:  # ELOOP: a symlink; ENOTDIR: a file; EACCES …
+        raise SystemExit(f"{shown} is a symlink or not a directory — it could not be opened without following a link "
+                         f"({type(e).__name__}: {e}); refusing to write through it") from e
+
+
+def walk_dir(anchor: Path, parts: tuple[str, ...] | list[str], *, create: bool) -> int:
+    """Descend from the trusted `anchor` through `parts`, one no-follow relative open per component
+    (`open_dir_nofollow`), creating a missing component with `os.mkdir(name, dir_fd=parent_fd)` when
+    `create` and then re-opening it the same no-follow way (a link raced in between the ENOENT and
+    the mkdir makes the mkdir EEXIST and the re-open ELOOP — refused, never followed). Returns the
+    descriptor of the LAST component; every intermediate descriptor is closed. A refusal anywhere
+    closes what was opened and raises `SystemExit` naming the component."""
+    fd = open_anchor(anchor)
+    shown = anchor
+    try:
+        for part in parts:
+            shown = shown / part
+            try:
+                nxt = open_dir_nofollow(part, fd, shown)
+            except FileNotFoundError:
+                if not create:
+                    raise SystemExit(f"{shown} does not exist — refusing to write under it") from None
+                try:
+                    os.mkdir(part, 0o755, dir_fd=fd)
+                except FileExistsError:
+                    pass  # whatever appeared in between is judged by the no-follow re-open below
+                try:
+                    nxt = open_dir_nofollow(part, fd, shown)
+                except FileNotFoundError:
+                    raise SystemExit(f"{shown} vanished between its creation and its open — refusing to write under it") from None
+            os.close(fd)
+            fd = nxt
     except BaseException:
         os.close(fd)
         raise
     return fd
 
 
+def _rel_parts(root: Path, anchor: Path) -> tuple[str, ...]:
+    try:
+        return root.relative_to(anchor).parts
+    except ValueError:
+        raise SystemExit(f"{root} is not under {anchor} — refusing to write it") from None
+
+
+def open_artifact_root(root: Path | None = None, base: Path | None = None, *, create: bool = True) -> int:
+    """THE trusted descriptor for the evidence dir: `base` (default `_anchor(root)` — the resolved
+    repo root for the real ART) opened once, then every component of `root` below it opened
+    no-follow RELATIVE to the previous descriptor (`walk_dir`; created where missing when
+    `create`). Returns the descriptor of `root` itself — the caller creates, writes and renames ON
+    it (`dir_fd=`) and closes it. Re-walked on every use: there is no pathname to re-resolve and no
+    window between a validation and a use (codex round 6: `O_NOFOLLOW` on a pathname open protects
+    only the final component; an ancestor — `e2e/artifacts` — swapped for a link after validation
+    redirected both the open and the `lstat` to the same outside directory, so the identity check
+    passed and the write escaped)."""
+    root = root or ART
+    anchor = base or _anchor(root)
+    return walk_dir(anchor, _rel_parts(root, anchor), create=create)
+
+
+def ensure_artifact_root(root: Path | None = None, base: Path | None = None) -> Path:
+    """Create the evidence dir through the descriptor walk (`open_artifact_root`, `create=True`) —
+    every component of it below `base` opened no-follow, created where missing — and close the
+    descriptor. A symlinked component refuses BEFORE anything is created, so startup can never
+    plant `test-feature-live/` outside the repository (codex round 4: `main()` called
+    `ART.mkdir(parents=True)` first; round 6: no pathname `mkdir` remains anywhere)."""
+    root = root or ART
+    os.close(open_artifact_root(root, base, create=True))
+    return root
+
+
+def _artifact_parts(name: str, root: Path) -> tuple[str, ...]:
+    """`name` as path components under `root`: relative, non-empty, no `.`/`..`/empty component."""
+    p = Path(name)
+    if p.is_absolute() or not p.parts or any(part in {"", ".", ".."} for part in p.parts):
+        raise SystemExit(f"artifact path {root / name} is not under {root} — refusing to write it")
+    return p.parts
+
+
+def artifact_path(name: str, root: Path | None = None, base: Path | None = None) -> Path:
+    """An artifact's path under the evidence dir, checked through descriptors only: the root is
+    reached by the trusted walk (`open_artifact_root`), each directory component of `name` is
+    opened no-follow RELATIVE to the previous descriptor (a missing one ends the check — nothing
+    exists there to follow), and the final component is `lstat`ed via `dir_fd` and refused when it
+    is a symlink. `..`, an absolute name or an empty component is refused up front — a
+    daemon-provided id, or a planted link anywhere on the way, can never redirect a write outside
+    `e2e/artifacts/test-feature-live/`. No pathname is resolved."""
+    root = root or ART
+    parts = _artifact_parts(name, root)
+    fd = open_artifact_root(root, base, create=True)
+    shown = root
+    try:
+        for part in parts[:-1]:
+            shown = shown / part
+            try:
+                nxt = open_dir_nofollow(part, fd, shown)
+            except FileNotFoundError:
+                break  # nothing exists below here to follow; a write creates on the descriptor
+            os.close(fd)
+            fd = nxt
+        else:
+            try:
+                st = os.stat(parts[-1], dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                st = None
+            if st is not None and stat.S_ISLNK(st.st_mode):
+                raise SystemExit(f"{root / name} is a symlink — refusing to write through it (target {root / name})")
+    finally:
+        os.close(fd)
+    return root / name
+
+
+# An artifact is ONE plain file name directly under the evidence dir — never a path, never a dotfile.
+ARTIFACT_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
+
+
+def _refuse_symlink_at(name: str, dfd: int, shown: Path) -> None:
+    """Refuse a PRE-EXISTING symlink at `name` (`lstat` RELATIVE to the trusted descriptor). A link
+    planted AFTER this check is replaced by the fd-anchored rename, never written through."""
+    try:
+        st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(st.st_mode):
+        raise SystemExit(f"{shown} is a symlink — refusing to write through it")
+
+
+def _create_exclusive(tmp: str, dfd: int, shown: Path, name: str) -> int:
+    """The temp file, created `O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW` RELATIVE to the trusted
+    descriptor — a link or a file pre-planted at the temp name fails the create."""
+    try:
+        return os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=dfd)
+    except OSError as e:
+        raise SystemExit(f"temp file {tmp} under {shown} could not be created exclusively "
+                         f"({type(e).__name__}: {e}) — refusing to write {name}") from e
+
+
 def write_artifact(name: str, payload: bytes | str, root: Path | None = None, base: Path | None = None) -> Path:
     """THE artifact writer — every file the harness lands (report.json, the captured plans, the
-    screenshots) goes through here. TOCTOU-safe (codex round 5: `artifact_path()` validated a
-    pathname that `write_text()` / `page.screenshot(path=…)` then re-resolved, so a symlink swapped
-    in between redirected the write):
+    screenshots) goes through here, and NOTHING under the evidence dir is ever opened, created or
+    renamed by pathname (codex round 5: a validated pathname was re-resolved by the write; round 6:
+    `O_NOFOLLOW` on the final component left every ancestor swappable):
       1. `name` must be a single plain file name (`ARTIFACT_NAME_RE`, no `/`, no leading `.`);
-      2. `artifact_path` walks every component from the repo root down (`lstat`), contains the
-         target under the root and refuses a symlink anywhere on the way — as before;
-      3. the verified directory is opened `O_RDONLY | O_DIRECTORY | O_NOFOLLOW` and its identity
-         checked (`_open_verified_dir`); everything below is anchored on that descriptor;
+      2. the evidence dir's descriptor is obtained by the trusted walk (`open_artifact_root`: the
+         resolved repo root opened once, then `e2e`, `artifacts`, `test-feature-live` each opened
+         `O_RDONLY | O_DIRECTORY | O_NOFOLLOW` RELATIVE to the previous descriptor, created where
+         missing) — an ancestor swapped for a link is refused (ELOOP) at exactly that step;
+      3. a PRE-EXISTING symlink at `name` is refused (`lstat` via `dir_fd`, `_refuse_symlink_at`);
       4. the data is written to a UNIQUE temp name (`.<name>.<pid>.<random>.tmp`) created
-         `O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW` via `dir_fd=` — a link planted at the temp name
-         fails the create — then `os.write` in full, `os.fsync`;
+         `O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW` via `dir_fd=` (`_create_exclusive`) — a link
+         planted at the temp name fails the create — then `os.write` in full, `os.fsync`;
       5. `os.rename(tmp, name, src_dir_fd=fd, dst_dir_fd=fd)`: atomic, and a link planted at the
-         FINAL name after the walk is REPLACED by the rename (rename never follows its destination),
+         FINAL name after step 3 is REPLACED by the rename (rename never follows its destination),
          never written through.
-    A directory swapped for a link between the walk and the open is refused (ELOOP) with nothing
-    written; a failure at any step unlinks the temp file through the same descriptor. Returns the
-    artifact's path (for the report)."""
+    A failure at any step unlinks the temp file through the same descriptor. Returns the artifact's
+    path (for the report) — a name under the root, never something that was resolved."""
     root = root or ART
     if name in {".", ".."} or not ARTIFACT_NAME_RE.fullmatch(name):
         raise SystemExit(f"artifact name {name!r} is not a single plain file name under {root} — refusing to write it")
-    target = artifact_path(name, root, base)  # lstat-walk root + target, contain — BEFORE anything is opened
     data = payload.encode("utf-8") if isinstance(payload, str) else bytes(payload)
-    dfd = _open_verified_dir(target.parent)
-    tmp = f".{name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"
+    dfd = open_artifact_root(root, base, create=True)  # the trusted walk: the anchor once, then every component no-follow
     try:
-        try:
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644, dir_fd=dfd)
-        except OSError as e:
-            raise SystemExit(f"temp file {tmp} under {target.parent} could not be created exclusively "
-                             f"({type(e).__name__}: {e}) — refusing to write {name}") from e
+        _refuse_symlink_at(name, dfd, root / name)
+        tmp = f".{name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"
+        fd = _create_exclusive(tmp, dfd, root, name)
         try:
             try:
                 view = memoryview(data)
@@ -2270,7 +2544,7 @@ def write_artifact(name: str, payload: bytes | str, root: Path | None = None, ba
             raise
     finally:
         os.close(dfd)
-    return target
+    return root / name
 
 
 def write_report(report: dict | None = None, path: Path | None = None, root: Path | None = None) -> Path:
