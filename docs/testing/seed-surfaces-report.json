@@ -6,22 +6,22 @@
       "real_home": "~",
       "live_state_home": "~/.wicked-crew",
       "targets": {
-        "tmp": "$TMPDIR/seed-surfaces-oswm_ks7",
-        "HOME": "$TMPDIR/seed-surfaces-oswm_ks7/home",
-        "TMPDIR": "$TMPDIR/seed-surfaces-oswm_ks7/tmp",
-        "state_home(--db)": "$TMPDIR/seed-surfaces-oswm_ks7/state",
-        "repo_clone": "$TMPDIR/seed-surfaces-oswm_ks7/repo",
-        "npm_config_cache": "$TMPDIR/seed-surfaces-oswm_ks7/npm-cache",
-        "WICKED_HOME": "$TMPDIR/seed-surfaces-oswm_ks7/wicked-home",
-        "WICKED_WORKER_HOME": "$TMPDIR/seed-surfaces-oswm_ks7/worker",
-        "WICKED_CREW_SYSTEM_SETTINGS": "$TMPDIR/seed-surfaces-oswm_ks7/state/system-settings.json",
-        "WICKED_WORKFLOWS_DIR": "$TMPDIR/seed-surfaces-oswm_ks7/workflows",
-        "WICKED_STEERING_INBOX_DIR": "$TMPDIR/seed-surfaces-oswm_ks7/steering-inbox",
-        "WICKED_INTERACTIVE_ROOT": "$TMPDIR/seed-surfaces-oswm_ks7/idocs",
-        "WICKED_BUS_DATA_DIR": "$TMPDIR/seed-surfaces-oswm_ks7/bus",
-        "WICKED_ESTATE_EMIT_DEADLETTER": "$TMPDIR/seed-surfaces-oswm_ks7/estate-emit-deadletter.ndjson",
-        "WICKED_APPS_EMIT_DEADLETTER": "$TMPDIR/seed-surfaces-oswm_ks7/apps-emit-outbox.ndjson",
-        "WICKED_ESTATE_REPO_GRAPH_ROOT": "$TMPDIR/seed-surfaces-oswm_ks7/repo-graphs"
+        "tmp": "$TMPDIR/seed-surfaces-rtf9y6x_",
+        "HOME": "$TMPDIR/seed-surfaces-rtf9y6x_/home",
+        "TMPDIR": "$TMPDIR/seed-surfaces-rtf9y6x_/tmp",
+        "state_home(--db)": "$TMPDIR/seed-surfaces-rtf9y6x_/state",
+        "repo_clone": "$TMPDIR/seed-surfaces-rtf9y6x_/repo",
+        "npm_config_cache": "$TMPDIR/seed-surfaces-rtf9y6x_/npm-cache",
+        "WICKED_HOME": "$TMPDIR/seed-surfaces-rtf9y6x_/wicked-home",
+        "WICKED_WORKER_HOME": "$TMPDIR/seed-surfaces-rtf9y6x_/worker",
+        "WICKED_CREW_SYSTEM_SETTINGS": "$TMPDIR/seed-surfaces-rtf9y6x_/state/system-settings.json",
+        "WICKED_WORKFLOWS_DIR": "$TMPDIR/seed-surfaces-rtf9y6x_/workflows",
+        "WICKED_STEERING_INBOX_DIR": "$TMPDIR/seed-surfaces-rtf9y6x_/steering-inbox",
+        "WICKED_INTERACTIVE_ROOT": "$TMPDIR/seed-surfaces-rtf9y6x_/idocs",
+        "WICKED_BUS_DATA_DIR": "$TMPDIR/seed-surfaces-rtf9y6x_/bus",
+        "WICKED_ESTATE_EMIT_DEADLETTER": "$TMPDIR/seed-surfaces-rtf9y6x_/estate-emit-deadletter.ndjson",
+        "WICKED_APPS_EMIT_DEADLETTER": "$TMPDIR/seed-surfaces-rtf9y6x_/apps-emit-outbox.ndjson",
+        "WICKED_ESTATE_REPO_GRAPH_ROOT": "$TMPDIR/seed-surfaces-rtf9y6x_/repo-graphs"
       },
       "env_passthrough": [
         "PATH",
@@ -68,7 +68,10 @@
           "version": "0.8.1",
           "lock_version": "0.8.1",
           "integrity": "sha512-QJUldyAMBLJrzSW/kfGI2OiZ2WfYfShvIlTAv6J1bMhLX5KVOJg7uaHR1YaO9+I29T6zWNsXiCdXMNK6hqvkJw==",
-          "resolved": "https://registry.npmjs.org/wicked-interactive/-/wicked-interactive-0.8.1.tgz"
+          "resolved": "https://registry.npmjs.org/wicked-interactive/-/wicked-interactive-0.8.1.tgz",
+          "hidden_lock": "ok",
+          "hidden_lock_version": "0.8.1",
+          "hidden_lock_integrity": "sha512-QJUldyAMBLJrzSW/kfGI2OiZ2WfYfShvIlTAv6J1bMhLX5KVOJg7uaHR1YaO9+I29T6zWNsXiCdXMNK6hqvkJw=="
         }
       ],
       "path": "~/.npm/_npx/f3c1d902516e713e",
@@ -77,8 +80,33 @@
       "lock_version": "0.8.1",
       "integrity": "sha512-QJUldyAMBLJrzSW/kfGI2OiZ2WfYfShvIlTAv6J1bMhLX5KVOJg7uaHR1YaO9+I29T6zWNsXiCdXMNK6hqvkJw==",
       "resolved": "https://registry.npmjs.org/wicked-interactive/-/wicked-interactive-0.8.1.tgz",
-      "scratch_path": "$TMPDIR/seed-surfaces-oswm_ks7/npm-cache/_npx/f3c1d902516e713e",
+      "hidden_lock": "ok",
+      "hidden_lock_version": "0.8.1",
+      "hidden_lock_integrity": "sha512-QJUldyAMBLJrzSW/kfGI2OiZ2WfYfShvIlTAv6J1bMhLX5KVOJg7uaHR1YaO9+I29T6zWNsXiCdXMNK6hqvkJw==",
+      "scratch_path": "$TMPDIR/seed-surfaces-rtf9y6x_/npm-cache/_npx/f3c1d902516e713e",
       "cloned_version": "0.8.1",
+      "clone_verification": {
+        "src": "~/.npm/_npx/f3c1d902516e713e",
+        "dst": "$TMPDIR/seed-surfaces-rtf9y6x_/npm-cache/_npx/f3c1d902516e713e",
+        "files_compared": 11316,
+        "symlinks": 19,
+        "escaping_symlinks": [],
+        "walk_errors": [],
+        "missing_in_clone": [],
+        "extra_in_clone": [],
+        "mismatched": [],
+        "missing_count": 0,
+        "extra_count": 0,
+        "mismatched_count": 0,
+        "package_files": 68,
+        "package_tree_sha256": "10c76c2eaa24571719d265c8727949057b61c503b310a088244041117a27805d",
+        "clone_tree_sha256": "797d74989cdb72095b3657efdd682153e0f4e767133d85dad61eb3d27faafaef",
+        "tarball": {
+          "present": false,
+          "path": "~/.npm/_cacache/content-v2/sha512/40/95/2577200c04b26bcd25bf91f188d8e899d967d87d286f2254c0bfa2756cc84b5f929538983bb9a1d1d5868ef7e236f53eb358db1788275730d2ba86abe427"
+        },
+        "bytes_verified_by": "hidden lockfile: the tarball is not retained in the operator's npm cacache on this host, so the tie to the integrity is npm's node_modules/.package-lock.json (it records the sha512 npm verified when it extracted this very tree \u2014 validated equal to the root lockfile by resolve_bridge_pin); the whole clone tree is byte-equal (sha256 per file) to that install, and no symlink escapes it"
+      },
       "registry_manifest": {
         "index_files": [
           "index-v5/fb/ae/fa2fa27911044f90535c8da68e72db1834a2e8185e8c076b76c587a1d6d8"
@@ -126,49 +154,49 @@
         "cached_at": "2026-09-09T08:42:55Z",
         "resolves_to": "0.8.1"
       },
-      "seconds": 22.1,
+      "seconds": 659.9,
       "cacache_blobs_seeded": 2
     },
     "repo_clone": {
       "ok": true,
-      "root": "$TMPDIR/seed-surfaces-oswm_ks7/repo",
-      "head": "514d311",
+      "root": "$TMPDIR/seed-surfaces-rtf9y6x_/repo",
+      "head": "281ee89",
       "source": "<repo>",
       "inherited_codegraph_removed": true
     },
     "daemon": {
       "ok": true,
-      "origin": "http://127.0.0.1:50210",
-      "pid": 3894,
-      "process_group": 3894,
+      "origin": "http://127.0.0.1:53018",
+      "pid": 84905,
+      "process_group": 84905,
       "stub": false,
       "ready": {
         "mode": "serve",
-        "port": 50210,
-        "db": "$TMPDIR/seed-surfaces-oswm_ks7/state/core.db",
+        "port": 53018,
+        "db": "$TMPDIR/seed-surfaces-rtf9y6x_/state/core.db",
         "stub": false,
         "auth": "off",
         "engineExec": false,
-        "startupMs": 6375
+        "startupMs": 7784
       },
       "isolation": {
-        "HOME": "$TMPDIR/seed-surfaces-oswm_ks7/home",
-        "TMPDIR": "$TMPDIR/seed-surfaces-oswm_ks7/tmp",
-        "npm_config_cache": "$TMPDIR/seed-surfaces-oswm_ks7/npm-cache",
+        "HOME": "$TMPDIR/seed-surfaces-rtf9y6x_/home",
+        "TMPDIR": "$TMPDIR/seed-surfaces-rtf9y6x_/tmp",
+        "npm_config_cache": "$TMPDIR/seed-surfaces-rtf9y6x_/npm-cache",
         "npm_config_offline": "true",
         "npm_config_update_notifier": "false",
-        "WICKED_HOME": "$TMPDIR/seed-surfaces-oswm_ks7/wicked-home",
-        "WICKED_WORKER_HOME": "$TMPDIR/seed-surfaces-oswm_ks7/worker",
-        "WICKED_CREW_SYSTEM_SETTINGS": "$TMPDIR/seed-surfaces-oswm_ks7/state/system-settings.json",
-        "WICKED_WORKFLOWS_DIR": "$TMPDIR/seed-surfaces-oswm_ks7/workflows",
-        "WICKED_STEERING_INBOX_DIR": "$TMPDIR/seed-surfaces-oswm_ks7/steering-inbox",
+        "WICKED_HOME": "$TMPDIR/seed-surfaces-rtf9y6x_/wicked-home",
+        "WICKED_WORKER_HOME": "$TMPDIR/seed-surfaces-rtf9y6x_/worker",
+        "WICKED_CREW_SYSTEM_SETTINGS": "$TMPDIR/seed-surfaces-rtf9y6x_/state/system-settings.json",
+        "WICKED_WORKFLOWS_DIR": "$TMPDIR/seed-surfaces-rtf9y6x_/workflows",
+        "WICKED_STEERING_INBOX_DIR": "$TMPDIR/seed-surfaces-rtf9y6x_/steering-inbox",
         "WICKED_MEMORY_EMBEDDER": "hash",
-        "WICKED_INTERACTIVE_ROOT": "$TMPDIR/seed-surfaces-oswm_ks7/idocs",
-        "WICKED_CREW_API": "http://127.0.0.1:50210",
-        "WICKED_BUS_DATA_DIR": "$TMPDIR/seed-surfaces-oswm_ks7/bus",
-        "WICKED_ESTATE_EMIT_DEADLETTER": "$TMPDIR/seed-surfaces-oswm_ks7/estate-emit-deadletter.ndjson",
-        "WICKED_APPS_EMIT_DEADLETTER": "$TMPDIR/seed-surfaces-oswm_ks7/apps-emit-outbox.ndjson",
-        "WICKED_ESTATE_REPO_GRAPH_ROOT": "$TMPDIR/seed-surfaces-oswm_ks7/repo-graphs",
+        "WICKED_INTERACTIVE_ROOT": "$TMPDIR/seed-surfaces-rtf9y6x_/idocs",
+        "WICKED_CREW_API": "http://127.0.0.1:53018",
+        "WICKED_BUS_DATA_DIR": "$TMPDIR/seed-surfaces-rtf9y6x_/bus",
+        "WICKED_ESTATE_EMIT_DEADLETTER": "$TMPDIR/seed-surfaces-rtf9y6x_/estate-emit-deadletter.ndjson",
+        "WICKED_APPS_EMIT_DEADLETTER": "$TMPDIR/seed-surfaces-rtf9y6x_/apps-emit-outbox.ndjson",
+        "WICKED_ESTATE_REPO_GRAPH_ROOT": "$TMPDIR/seed-surfaces-rtf9y6x_/repo-graphs",
         "interactive_agent_events": "disabled (--no-interactive-{draft,edit,chat,demo}-events)",
         "governed_scenario": "enabled"
       }
@@ -201,7 +229,7 @@
       "studio_repo_package": "0.5.1",
       "studio_bundle_served_label": "0.5.1",
       "label_matches": true,
-      "worktree_head": "514d311",
+      "worktree_head": "281ee89",
       "worktree_src_uncommitted_changes": null,
       "dist_present": true,
       "dist_built_at": "2026-09-09T00:10:30",
@@ -225,24 +253,24 @@
     "repo_register": {
       "ok": true,
       "substitute": "API \u2014 harness setup, not a certified journey",
-      "repo_id": "seed-surfaces-1788943400",
-      "onboard_run": "f1e94ec7-5027-43e4-9a10-4669178f7355",
+      "repo_id": "seed-surfaces-1788947231",
+      "onboard_run": "7a3a9c88-88d5-4f20-ae2f-4c4a092a9e24",
       "onboard_status": "completed",
       "onboard_workflow": "onboarding (tool phases only: estate index \u2192 clusters)"
     },
     "substitute_producer": {
       "exe": "~/.local/bin/wicked-estate-mcp",
-      "memory_db": "$TMPDIR/seed-surfaces-oswm_ks7/wicked-home/memory.db",
+      "memory_db": "$TMPDIR/seed-surfaces-rtf9y6x_/wicked-home/memory.db",
       "calls": [
         {
           "tool": "memory.capture",
           "args": {
-            "content": "seed-surfaces memory 1788943400 KEEP: the sibling scope must survive a subtree retire.",
-            "scope": "suite:seed-surfaces-1788943400/case:keep",
+            "content": "seed-surfaces memory 1788947231 KEEP: the sibling scope must survive a subtree retire.",
+            "scope": "suite:seed-surfaces-1788947231/case:keep",
             "tier": "semantic",
             "kind": "fact",
             "facets": {
-              "suite": "seed-surfaces-1788943400"
+              "suite": "seed-surfaces-1788947231"
             }
           },
           "exit": 0
@@ -250,12 +278,12 @@
         {
           "tool": "memory.capture",
           "args": {
-            "content": "seed-surfaces memory 1788943400 RETIRE: this scope is erased through the UI.",
-            "scope": "suite:seed-surfaces-1788943400/case:retire",
+            "content": "seed-surfaces memory 1788947231 RETIRE: this scope is erased through the UI.",
+            "scope": "suite:seed-surfaces-1788947231/case:retire",
             "tier": "semantic",
             "kind": "fact",
             "facets": {
-              "suite": "seed-surfaces-1788943400"
+              "suite": "seed-surfaces-1788947231"
             }
           },
           "exit": 0
@@ -265,11 +293,11 @@
           "args": {
             "kind_type": "memory",
             "payload": {
-              "content": "seed-surfaces-proposal-1788943400 APPROVE: approving promotes this line into the memory store.",
+              "content": "seed-surfaces-proposal-1788947231 APPROVE: approving promotes this line into the memory store.",
               "tier": "semantic"
             },
             "facets": {
-              "suite": "seed-surfaces-1788943400"
+              "suite": "seed-surfaces-1788947231"
             }
           },
           "exit": 0
@@ -279,11 +307,11 @@
           "args": {
             "kind_type": "memory",
             "payload": {
-              "content": "seed-surfaces-proposal-1788943400 REJECT: rejecting writes nothing to the memory store.",
+              "content": "seed-surfaces-proposal-1788947231 REJECT: rejecting writes nothing to the memory store.",
               "tier": "semantic"
             },
             "facets": {
-              "suite": "seed-surfaces-1788943400"
+              "suite": "seed-surfaces-1788947231"
             }
           },
           "exit": 0
@@ -296,8 +324,8 @@
     },
     "campaign_seed": {
       "method": "mirror of the daemon's own `project` node row in the scratch estate store",
-      "db": "$TMPDIR/seed-surfaces-oswm_ks7/state/core.db",
-      "campaign_id": "seed-campaign-1788943400",
+      "db": "$TMPDIR/seed-surfaces-rtf9y6x_/state/core.db",
+      "campaign_id": "seed-campaign-1788947231",
       "engine_writer": "wicked_core::campaign::persist \u2192 put_node \u2192 estate `nodes` + `symbols` (core-ts campaign_list reads via open_store_ro + find_symbols)",
       "nodes_columns": [
         "symbol",
@@ -316,17 +344,17 @@
       "has_symbols_table": true,
       "journal_mode": "wal",
       "sid": 82,
-      "symbol": "wicked-apps synthetic campaign/seed-campaign-1788943400:",
+      "symbol": "wicked-apps synthetic campaign/seed-campaign-1788947231:",
       "kind": "{\"other\":\"campaign\"}",
-      "file": "campaign/seed-campaign-1788943400",
+      "file": "campaign/seed-campaign-1788947231",
       "status": "cancelled",
-      "repo_ref": "seed-surfaces-1788943400",
+      "repo_ref": "seed-surfaces-1788947231",
       "written": true
     },
     "teardown": {
       "cancelled_runs": [],
       "daemon": {
-        "pid": 3894,
+        "pid": 84905,
         "forced": false,
         "exit_code": 0,
         "group_empty": true
@@ -334,52 +362,54 @@
       "daemon_stopped": true,
       "bridge": {
         "lock": "ok",
-        "lock_pid": 6467,
+        "lock_pid": 91323,
         "lock_pid_valid": true,
         "ps_ok": true,
         "ps_error": null,
         "identified": [
           {
-            "pid": 6111,
-            "pgid": 6111,
+            "pid": 89865,
+            "pgid": 89865,
             "ppid": 1,
-            "started_at": 1788943461.0,
-            "command": "npm exec wicked-interactive@^0.8.1 serve --root $TMPDIR/seed-surfaces-oswm_ks7/idocs      "
+            "started_at": 1788947952.0,
+            "command": "npm exec wicked-interactive@^0.8.1 serve --root $TMPDIR/seed-surfaces-rtf9y6x_/idocs      "
           },
           {
-            "pid": 6467,
-            "pgid": 6111,
-            "ppid": 6111,
-            "started_at": 1788943473.0,
-            "command": "node $TMPDIR/seed-surfaces-oswm_ks7/npm-cache/_npx/f3c1d902516e713e/node_modules/.bin/wicked-interactive serve --root $TMPDIR"
+            "pid": 91323,
+            "pgid": 89865,
+            "ppid": 89865,
+            "started_at": 1788947980.0,
+            "command": "node $TMPDIR/seed-surfaces-rtf9y6x_/npm-cache/_npx/f3c1d902516e713e/node_modules/.bin/wicked-interactive serve --root $TMPDIR"
           }
         ],
         "unverified": [],
         "lock_pid_matches_identified": true,
         "lock_version": "0.8.1",
         "ran_from_pinned_clone": [
-          6467
+          91323
         ],
         "pinned_clone_version_at_teardown": "0.8.1",
         "cacache_blobs_added_during_run": [],
         "terminated": {
           "signalled": [
-            6111,
-            6467
+            89865,
+            91323
           ],
-          "forced": [],
+          "forced": [
+            89865
+          ],
           "remaining": []
         }
       },
       "scratch_home_writes": [
         "home/.cache/opencode/models.json",
         "home/.claude.json",
-        "home/.claude/backups/.claude.json.backup.1788943509860",
-        "home/.claude/projects/-TMPDIR-seed-surfaces-oswm-ks7-tmp-wicked-council-017889435060810000000000000000-claude-1/27e89655-6fc0-4b4a-8290-7c6e8e0b0845.jsonl",
-        "home/.claude/projects/-TMPDIR-seed-surfaces-oswm-ks7-tmp-wicked-council-017889435060810000000000000000-claude-20/65dc353f-85c0-4e3b-a52f-6584746d55b1.jsonl",
-        "home/.claude/projects/-TMPDIR-seed-surfaces-oswm-ks7-tmp-wicked-council-017889435060840000000000000001-claude-5/a3dc471f-b0a2-4c9f-9ba3-aa9e34ac6e77.jsonl",
-        "home/.claude/projects/-TMPDIR-seed-surfaces-oswm-ks7-tmp-wicked-council-017889435060840000000000000002-claude-7/975bd5ab-4ef7-4104-8d9d-cedd0be2da10.jsonl",
-        "home/.claude/projects/-TMPDIR-seed-surfaces-oswm-ks7-tmp-wicked-council-017889435060850000000000000003-claude-17/829d68ca-e74f-4648-80d5-6b4b33a4c580.jsonl",
+        "home/.claude/backups/.claude.json.backup.1788948011656",
+        "home/.claude/projects/-TMPDIR-seed-surfaces-rtf9y6x--tmp-wicked-council-017889480005990000000000000000-claude-24/603c3863-3311-42c4-81a3-315320633edd.jsonl",
+        "home/.claude/projects/-TMPDIR-seed-surfaces-rtf9y6x--tmp-wicked-council-017889480005990000000000000000-claude-5/4bdf7aae-9411-4417-9626-d52677451526.jsonl",
+        "home/.claude/projects/-TMPDIR-seed-surfaces-rtf9y6x--tmp-wicked-council-017889480005990000000000000001-claude-0/84da9b9b-b901-4056-bdc3-8d9b01956fa6.jsonl",
+        "home/.claude/projects/-TMPDIR-seed-surfaces-rtf9y6x--tmp-wicked-council-017889480005990000000000000002-claude-12/84208f15-2837-400e-8892-4f4475ca6124.jsonl",
+        "home/.claude/projects/-TMPDIR-seed-surfaces-rtf9y6x--tmp-wicked-council-017889480006020000000000000003-claude-6/f3423bbd-2fbc-4b30-ad7c-6ca0fe1dd0a9.jsonl",
         "home/.codex/.sandbox_migration",
         "home/.codex/.tmp/plugins.sha",
         "home/.codex/.tmp/plugins.sync.lock",
@@ -411,9 +441,9 @@
         "home/.codex/.tmp/plugins/.git/info/exclude",
         "home/.codex/.tmp/plugins/.git/logs/HEAD",
         "home/.codex/.tmp/plugins/.git/logs/refs/heads/main",
-        "home/.codex/.tmp/plugins/.git/objects/pack/pack-50ed29dc8057ec5d55f02616594828676739a71f.idx",
-        "home/.codex/.tmp/plugins/.git/objects/pack/pack-50ed29dc8057ec5d55f02616594828676739a71f.pack",
-        "home/.codex/.tmp/plugins/.git/objects/pack/pack-50ed29dc8057ec5d55f02616594828676739a71f.rev",
+        "home/.codex/.tmp/plugins/.git/objects/pack/pack-0cc667372d14131717b063940f05c9747911a847.idx",
+        "home/.codex/.tmp/plugins/.git/objects/pack/pack-0cc667372d14131717b063940f05c9747911a847.pack",
+        "home/.codex/.tmp/plugins/.git/objects/pack/pack-0cc667372d14131717b063940f05c9747911a847.rev",
         "home/.codex/.tmp/plugins/.git/refs/codex/curated-sync",
         "home/.codex/.tmp/plugins/.git/refs/heads/main",
         "home/.codex/.tmp/plugins/.git/shallow",
@@ -778,11 +808,14 @@
         ".codex/.tmp": 5406,
         "Library/Caches": 227,
         ".codex/skills": 60,
-        ".copilot/session-state": 20,
+        ".copilot/session-state": 24,
+        ".codex/sessions": 6,
+        ".copilot/logs": 6,
         ".claude/projects": 5,
-        ".codex/sessions": 5,
-        ".copilot/logs": 5,
         ".local/share": 4,
+        ".codex/thread-writer-locks": 3,
+        ".codex/shell_snapshots": 2,
+        ".codex/tmp": 2,
         ".config/opencode": 2,
         ".pi/agent": 2,
         ".cache/opencode": 1,
@@ -806,11 +839,9 @@
         ".codex/state_5.sqlite": 1,
         ".codex/state_5.sqlite-shm": 1,
         ".codex/state_5.sqlite-wal": 1,
-        ".codex/thread-writer-locks": 1,
         ".codex/thread_history_1.sqlite": 1,
         ".codex/thread_history_1.sqlite-shm": 1,
         ".codex/thread_history_1.sqlite-wal": 1,
-        ".codex/tmp": 1,
         ".copilot/config.json": 1,
         ".copilot/session-store.db": 1,
         ".copilot/session-store.db-shm": 1,
@@ -822,13 +853,13 @@
         "Library/Application Support": 1
       },
       "scratch_tmpdir_writes": {
-        "count": 401,
+        "count": 194,
         "sample": [
-          "tmp/.b9dfbaa5e7fe3bea-00000000.dylib",
-          "tmp/.b9dfbaaffefeb78a-00000000.dylib",
-          "tmp/.b9dfbab5effea3f2-00000000.dylib",
-          "tmp/.b9dfbab5f2be278a-00000000.dylib",
-          "tmp/.b9dfbab5f7ff87aa-00000000.dylib"
+          "tmp/.b9dfbebff7fee38a-00000000.dylib",
+          "tmp/.b9dfbee5eebe4bca-00000000.dylib",
+          "tmp/.b9dfbee5f6ffeb92-00000000.dylib",
+          "tmp/.b9dfbeedfebf3bea-00000000.dylib",
+          "tmp/.b9dfbeefffbe5f8a-00000000.dylib"
         ]
       },
       "isolation_scan": {
@@ -844,27 +875,27 @@
           "~/.config/wicked-crew"
         ],
         "needles": [
-          "e2e-scope-1788943400",
-          "seed-surfaces-1788943400",
-          "seed-doc-a-1788943400",
-          "seed-doc-b-1788943400",
-          "seed-demo-a-1788943400",
-          "seed-demo-b-1788943400",
-          "Seed-surfaces rule 1788943400",
-          "seed-surfaces-tst1-1788943400",
-          "Seed-surfaces import 1788943400",
-          "evals:seed-surfaces-1788943400",
-          "suite:seed-surfaces-1788943400",
-          "seed-surfaces memory 1788943400",
-          "seed-surfaces-proposal-1788943400",
-          "seed-campaign-1788943400",
-          "seed-surfaces feedback 1788943400",
-          "seed-surfaces-oswm_ks7",
-          "proj_178894346109000000",
-          "proj_178894346121400001",
-          "01a08557-316f-7922-a850-bcda7a36b97c",
-          "01a08557-3209-7092-9891-d220a6fb9d51",
-          "2e04674f-c227-4d95-b08f-437224c2e589"
+          "e2e-scope-1788947231",
+          "seed-surfaces-1788947231",
+          "seed-doc-a-1788947231",
+          "seed-doc-b-1788947231",
+          "seed-demo-a-1788947231",
+          "seed-demo-b-1788947231",
+          "Seed-surfaces rule 1788947231",
+          "seed-surfaces-tst1-1788947231",
+          "Seed-surfaces import 1788947231",
+          "evals:seed-surfaces-1788947231",
+          "suite:seed-surfaces-1788947231",
+          "seed-surfaces memory 1788947231",
+          "seed-surfaces-proposal-1788947231",
+          "seed-campaign-1788947231",
+          "seed-surfaces feedback 1788947231",
+          "seed-surfaces-rtf9y6x_",
+          "proj_178894795276200000",
+          "proj_178894795289500001",
+          "01a0859b-baf7-7480-9343-98faacade369",
+          "01a0859b-bbba-7691-8bf3-064bdeefc333",
+          "36ead297-7863-49de-b9da-99cc6344b061"
         ],
         "files_modified_during_run": 5,
         "modified_sample": [
@@ -872,7 +903,7 @@
           "~/.wicked-crew/core.db.knowledge-wal",
           "~/.wicked-crew/core.db.mem-wal",
           "~/.wicked-crew/core.db-wal",
-          "~/.something-wicked/wicked-garden/projects/wicked-core-1e5e4b4a/wicked-mem/auto_memorize_hashes.json"
+          "~/.something-wicked/wicked-garden/projects/wicked-56bb8cd8/wicked-mem/auto_memorize_hashes.json"
         ],
         "scan_errors": [],
         "identifier_hits": [],
@@ -880,13 +911,17 @@
         "live_7701": {
           "reachable_before": true,
           "reachable_after": true,
+          "error_before": null,
+          "error_after": null,
           "runs_before": 46,
           "runs_after": 46,
           "new_run_ids": [],
-          "new_runs_carrying_our_identifiers": []
+          "new_runs_carrying_our_identifiers": [],
+          "observation_lost": false,
+          "observed": true
         }
       },
-      "tmp": "$TMPDIR/seed-surfaces-oswm_ks7",
+      "tmp": "$TMPDIR/seed-surfaces-rtf9y6x_",
       "tmp_kept": false,
       "tmp_removed": true,
       "step_errors": [],
@@ -898,20 +933,20 @@
       "id": "PRJ-1",
       "title": "Create Project A via the rail \uff0b \u2192 modal \u2192 Create",
       "status": "pass",
-      "detail": "Project A = proj_178894346109000000 (e2e-scope-1788943400-a); landed on /p/proj_178894346109000000/build with the shell header naming it",
+      "detail": "Project A = proj_178894795276200000 (e2e-scope-1788947231-a); landed on /p/proj_178894795276200000/build with the shell header naming it",
       "governed": false,
       "xfail": null,
-      "seconds": 0.7,
+      "seconds": 0.6,
       "shot": null
     },
     {
       "id": "PRJ-2",
       "title": "Create Project B (the scoping control) the same way",
       "status": "pass",
-      "detail": "Project B = proj_178894346121400001 (e2e-scope-1788943400-b)",
+      "detail": "Project B = proj_178894795289500001 (e2e-scope-1788947231-b)",
       "governed": false,
       "xfail": null,
-      "seconds": 0.1,
+      "seconds": 0.2,
       "shot": null
     },
     {
@@ -921,17 +956,17 @@
       "detail": "after a full reload both cards render their names as active; the ProjectShell switcher lists A and B and pivoting to B retains the mode verb and drops the artifact",
       "governed": false,
       "xfail": null,
-      "seconds": 0.2,
+      "seconds": 0.3,
       "shot": null
     },
     {
       "id": "ATT-1",
       "title": "Attach the repository to Project A (API substitute, UI-verified)",
       "status": "pass",
-      "detail": "[SUBSTITUTE] repo seed-surfaces-1788943400 attached to A over POST /projects/proj_178894346109000000/members (no UI attach control until studio#207); UI verifies: A's dashboard renders the repo tile, B's renders none",
+      "detail": "[SUBSTITUTE] repo seed-surfaces-1788947231 attached to A over POST /projects/proj_178894795276200000/members (no UI attach control until studio#207); UI verifies: A's dashboard renders the repo tile, B's renders none",
       "governed": false,
       "xfail": null,
-      "seconds": 0.8,
+      "seconds": 1.0,
       "shot": null
     },
     {
@@ -941,7 +976,7 @@
       "detail": "expected failure (studio#212): studio#212: 'Add row' produced no draft row while the UNSEEDED banner is showing \u2014 SteeringPage mounts the grid only when rules exist (`{!unseeded && <SteeringGrid/>}`), so the banner's own 'Add a row' path cannot author the first rule",
       "governed": false,
       "xfail": "studio#212",
-      "seconds": 5.4,
+      "seconds": 5.3,
       "shot": "e2e/shots/seed-surfaces/STR-1.png"
     },
     {
@@ -951,7 +986,7 @@
       "detail": "[SUBSTITUTE] PAT-100 seeded over POST /governance/rules (the exact body the draft row sends) so the grid mounts",
       "governed": false,
       "xfail": null,
-      "seconds": 2.1,
+      "seconds": 0.1,
       "shot": null
     },
     {
@@ -961,7 +996,7 @@
       "detail": "PAT-101 authored through the draft row (prefilled id kept; statement set; saved note names it)",
       "governed": false,
       "xfail": null,
-      "seconds": 0.5,
+      "seconds": 0.2,
       "shot": null
     },
     {
@@ -971,7 +1006,7 @@
       "detail": "PAT-101 survives a full reload with statement/type/severity intact; server row carries provenance.source=ui",
       "governed": false,
       "xfail": null,
-      "seconds": 0.3,
+      "seconds": 0.1,
       "shot": null
     },
     {
@@ -981,7 +1016,7 @@
       "detail": "PAT-101 edited through the drawer's Edit form (severity warn\u2192error, statement rewritten); both persist across a reload",
       "governed": false,
       "xfail": null,
-      "seconds": 0.5,
+      "seconds": 0.3,
       "shot": null
     },
     {
@@ -991,17 +1026,17 @@
       "detail": "PAT-101 retired with typed id + reason; the note echoes both; the row stays listed struck under the default 'retired shown' facet (before and after a reload) and leaves under 'retired hidden'; server row retired=true",
       "governed": false,
       "xfail": null,
-      "seconds": 1.3,
+      "seconds": 0.3,
       "shot": null
     },
     {
       "id": "STR-IMP",
       "title": "Import a .json rule batch via the assist-dock attachment (importDirect) and reload",
       "status": "pass",
-      "detail": "PAT-150, PAT-151 imported through the dock's attachment \u2192 'Import directly' (notes: '\u00b7 seed-surfaces-import-1788943400.json: 2 of 2 entries imported.'); after a full reload both rows render their statements/severity/type and the server rows agree",
+      "detail": "PAT-150, PAT-151 imported through the dock's attachment \u2192 'Import directly' (notes: '\u00b7 seed-surfaces-import-1788947231.json: 2 of 2 entries imported.'); after a full reload both rows render their statements/severity/type and the server rows agree",
       "governed": false,
       "xfail": null,
-      "seconds": 0.3,
+      "seconds": 0.2,
       "shot": null
     },
     {
@@ -1021,14 +1056,14 @@
       "detail": "the grid renders exactly the store's 4 rule ids regardless of the project context it was reached from (global corpus, no projectId on the wire)",
       "governed": false,
       "xfail": null,
-      "seconds": 0.1,
+      "seconds": 0.2,
       "shot": null
     },
     {
       "id": "EVL-1",
       "title": "Run evals; report \u21c4 history drilldown \u21c4 API agree",
       "status": "pass",
-      "detail": "eval run d664a163f0bc45658db7f260d0bfa8b3: 27 samples \u00b7 11 caught \u00b7 16 gaps \u00b7 0 fp \u2014 report, result rows, history drilldown and GET /testing/evals/:id all agree",
+      "detail": "eval run 0fd13e3e333c42e59156f43407a0e7df: 27 samples \u00b7 11 caught \u00b7 16 gaps \u00b7 0 fp \u2014 report, result rows, history drilldown and GET /testing/evals/:id all agree",
       "governed": false,
       "xfail": null,
       "seconds": 0.2,
@@ -1038,7 +1073,7 @@
       "id": "EVL-2",
       "title": "Eval history + drilldown persist across reload (identity + content)",
       "status": "pass",
-      "detail": "after a full reload the history still holds exactly d664a163f0bc45658db7f260d0bfa8b3 and its drilldown text is byte-identical",
+      "detail": "after a full reload the history still holds exactly 0fd13e3e333c42e59156f43407a0e7df and its drilldown text is byte-identical",
       "governed": false,
       "xfail": null,
       "seconds": 0.1,
@@ -1048,7 +1083,7 @@
       "id": "EVL-3",
       "title": "Corpus selection: import via the UI, run against it, history names it, persists on reload",
       "status": "pass",
-      "detail": "corpus seed-surfaces-1788943400 imported through the UI (2 samples \u2192 evals:seed-surfaces-1788943400, embedded); selected in `testing-evals-corpus` and run: provenance names it, run 695237451b0d4132b4d501b0fa16f374 recorded with corpus=evals:seed-surfaces-1788943400 (history row + GET /testing/evals + /:id agree, total 2); after a full reload the row still names the corpus and its drilldown is byte-identical (the corpus FIELD itself is session state: reads '' after reload \u2014 the recorded run carries the selection)",
+      "detail": "corpus seed-surfaces-1788947231 imported through the UI (2 samples \u2192 evals:seed-surfaces-1788947231, embedded); selected in `testing-evals-corpus` and run: provenance names it, run 4606708dc69946a7b51c79f4fa7219e1 recorded with corpus=evals:seed-surfaces-1788947231 (history row + GET /testing/evals + /:id agree, total 2); after a full reload the row still names the corpus and its drilldown is byte-identical (the corpus FIELD itself is session state: reads '' after reload \u2014 the recorded run carries the selection)",
       "governed": false,
       "xfail": null,
       "seconds": 0.4,
@@ -1061,74 +1096,74 @@
       "detail": "panel state 'memories-empty' (0 rows) on the isolated store; search round-trips to 'memories-empty' (0); identical when reached after Project B (memories-empty, 0)",
       "governed": false,
       "xfail": null,
-      "seconds": 1.5,
+      "seconds": 2.7,
       "shot": null
     },
     {
       "id": "MEM-S",
       "title": "Seed two exclusive-scope memories (substitute producer) \u2192 the browser lists both",
       "status": "pass",
-      "detail": "[SUBSTITUTE producer: ~/.local/bin/wicked-estate-mcp \u2192 memory.capture \u00d72 into the scratch store] the UI lists both rows with their content and scopes (suite:seed-surfaces-1788943400/case:keep, suite:seed-surfaces-1788943400/case:retire); coverage line '\u00b7 2 in store'; GET /memory agrees",
-      "governed": false,
-      "xfail": null,
-      "seconds": 0.9,
-      "shot": null
-    },
-    {
-      "id": "MEM-R",
-      "title": "Retire one exclusive scope through the UI; the sibling scope survives; reload + wire agree",
-      "status": "pass",
-      "detail": "suite:seed-surfaces-1788943400/case:retire retired through the UI (Retire\u2026 \u2192 subtree banner \u2192 confirm); note 'erased 1 memory'; the sibling suite:seed-surfaces-1788943400/case:keep survives in the UI and on the wire, before and after a full reload",
-      "governed": false,
-      "xfail": null,
-      "seconds": 2.8,
-      "shot": null
-    },
-    {
-      "id": "PRP-S",
-      "title": "Seed two memory proposals (substitute producer) \u2192 the dashboard inbox lists both",
-      "status": "pass",
-      "detail": "[SUBSTITUTE producer \u2192 proposal.submit \u00d72 (memory)] the dashboard's Memory proposals inbox lists 01a08557-316f-7922-a850-bcda7a36b97c and 01a08557-3209-7092-9891-d220a6fb9d51 with their content",
-      "governed": false,
-      "xfail": null,
-      "seconds": 0.9,
-      "shot": null
-    },
-    {
-      "id": "PRP-A",
-      "title": "Approve a memory proposal through the inbox \u2192 promoted memory; pending excludes it on reload",
-      "status": "pass",
-      "detail": "01a08557-316f-7922-a850-bcda7a36b97c approved through the inbox (note 'Approved \u2026'); it left pending, GET /proposals?state=approved lists it, the memory materialized in the store (scope '') and the memories browser lists it after a reload",
+      "detail": "[SUBSTITUTE producer: ~/.local/bin/wicked-estate-mcp \u2192 memory.capture \u00d72 into the scratch store] the UI lists both rows with their content and scopes (suite:seed-surfaces-1788947231/case:keep, suite:seed-surfaces-1788947231/case:retire); coverage line '\u00b7 2 in store'; GET /memory agrees",
       "governed": false,
       "xfail": null,
       "seconds": 2.9,
       "shot": null
     },
     {
+      "id": "MEM-R",
+      "title": "Retire one exclusive scope through the UI; the sibling scope survives; reload + wire agree",
+      "status": "pass",
+      "detail": "suite:seed-surfaces-1788947231/case:retire retired through the UI (Retire\u2026 \u2192 subtree banner \u2192 confirm); note 'erased 1 memory'; the sibling suite:seed-surfaces-1788947231/case:keep survives in the UI and on the wire, before and after a full reload",
+      "governed": false,
+      "xfail": null,
+      "seconds": 3.0,
+      "shot": null
+    },
+    {
+      "id": "PRP-S",
+      "title": "Seed two memory proposals (substitute producer) \u2192 the dashboard inbox lists both",
+      "status": "pass",
+      "detail": "[SUBSTITUTE producer \u2192 proposal.submit \u00d72 (memory)] the dashboard's Memory proposals inbox lists 01a0859b-baf7-7480-9343-98faacade369 and 01a0859b-bbba-7691-8bf3-064bdeefc333 with their content",
+      "governed": false,
+      "xfail": null,
+      "seconds": 1.1,
+      "shot": null
+    },
+    {
+      "id": "PRP-A",
+      "title": "Approve a memory proposal through the inbox \u2192 promoted memory; pending excludes it on reload",
+      "status": "pass",
+      "detail": "01a0859b-baf7-7480-9343-98faacade369 approved through the inbox (note 'Approved \u2026'); it left pending, GET /proposals?state=approved lists it, the memory materialized in the store (scope '') and the memories browser lists it after a reload",
+      "governed": false,
+      "xfail": null,
+      "seconds": 9.0,
+      "shot": null
+    },
+    {
       "id": "PRP-R",
       "title": "Reject a memory proposal through the inbox \u2192 nothing written; pending excludes it on reload",
       "status": "pass",
-      "detail": "01a08557-3209-7092-9891-d220a6fb9d51 rejected through the inbox (note 'Rejected \u2026'); it left pending, GET /proposals?state=rejected lists it, and no memory was written",
+      "detail": "01a0859b-bbba-7691-8bf3-064bdeefc333 rejected through the inbox (note 'Rejected \u2026'); it left pending, GET /proposals?state=rejected lists it, and no memory was written",
       "governed": false,
       "xfail": null,
-      "seconds": 2.4,
+      "seconds": 4.5,
       "shot": null
     },
     {
       "id": "VIB-1D",
       "title": "Seed a document in Project A via the composer (deterministic)",
       "status": "pass",
-      "detail": "doc 'seed-doc-a-1788943400' created under A through the composer (placeholder v0 \u2014 drafting agent disabled on this daemon); canvas frames it",
+      "detail": "doc 'seed-doc-a-1788947231' created under A through the composer (placeholder v0 \u2014 drafting agent disabled on this daemon); canvas frames it",
       "governed": false,
       "xfail": null,
-      "seconds": 4.2,
+      "seconds": 0.5,
       "shot": null
     },
     {
       "id": "VIB-2D",
       "title": "Seed a document in Project B via the composer (deterministic)",
       "status": "pass",
-      "detail": "doc 'seed-doc-b-1788943400' created under B",
+      "detail": "doc 'seed-doc-b-1788947231' created under B",
       "governed": false,
       "xfail": null,
       "seconds": 0.4,
@@ -1138,27 +1173,27 @@
       "id": "VIB-4",
       "title": "Document survives a reload (canvas identity + picker listing + versions head/lineage)",
       "status": "pass",
-      "detail": "after a full reload the canvas frames 'seed-doc-a-1788943400' with IDENTICAL rendered content (frame html sha256 df3fe9877120\u2026, text 220 chars), head=0 lineage=[0] and head-html sha256 27df58f6c95d\u2026 all equal before/after; A's picker lists it; docs listing agrees (1 versions); head html renders (200)",
+      "detail": "after a full reload the canvas frames 'seed-doc-a-1788947231' with IDENTICAL rendered content (frame html sha256 0289436a18e8\u2026, text 220 chars), head=0 lineage=[0] and head-html sha256 a8378e2386f1\u2026 all equal before/after; A's picker lists it; docs listing agrees (1 versions); head html renders (200)",
       "governed": false,
       "xfail": null,
-      "seconds": 0.7,
+      "seconds": 1.1,
       "shot": null
     },
     {
       "id": "FBK-1",
       "title": "Feedback journey: point-and-comment on A's doc \u2192 deterministic version + thread message; persists on reload; not on B's doc",
       "status": "pass",
-      "detail": "feedback on block slide-0-heading-1 of 'seed-doc-a-1788943400' (Change text \u2192 'seed-surfaces feedback 1788943400: this '\u2026) submitted as ONE batch (POST /api/events 200); the bridge landed v1 (parent v0) carrying the text, v0 untouched; the Chat tab shows the batch; after a full reload the canvas frames v1 with the text and the thread rehydrates the batch from GET /api/conversation (role user); B's own document (1 thread messages): none carry it, lineage and conversation unchanged",
+      "detail": "feedback on block slide-0-heading-1 of 'seed-doc-a-1788947231' (Change text \u2192 'seed-surfaces feedback 1788947231: this '\u2026) submitted as ONE batch (POST /api/events 200); the bridge landed v1 (parent v0) carrying the text, v0 untouched; the Chat tab shows the batch; after a full reload the canvas frames v1 with the text and the thread rehydrates the batch from GET /api/conversation (role user); B's own document (1 thread messages): none carry it, lineage and conversation unchanged",
       "governed": false,
       "xfail": null,
-      "seconds": 2.2,
+      "seconds": 2.8,
       "shot": null
     },
     {
       "id": "VIB-CMP",
       "title": "Document comparison: two versions of A's doc side by side + overlay; each pane renders its own version",
       "status": "pass",
-      "detail": "v1 \u2194 v0 of 'seed-doc-a-1788943400' compared side by side (each pane renders its own version: the head pane carries the FBK-1 text, the parent does not; served bytes agree), comparand options ['0'], overlay stacks under=v1/top=v0 with the opacity slider, exit returns to the solo canvas at v1 with no comparand in the URL \u2014 the product has no textual diff markers; the lens is split/overlay of the two real version frames",
+      "detail": "v1 \u2194 v0 of 'seed-doc-a-1788947231' compared side by side (each pane renders its own version: the head pane carries the FBK-1 text, the parent does not; served bytes agree), comparand options ['0'], overlay stacks under=v1/top=v0 with the opacity slider, exit returns to the solo canvas at v1 with no comparand in the URL \u2014 the product has no textual diff markers; the lens is split/overlay of the two real version frames",
       "governed": false,
       "xfail": null,
       "seconds": 0.3,
@@ -1168,7 +1203,7 @@
       "id": "VIB-3",
       "title": "Documents are disjoint per project (A \u220c B's doc, B \u220c A's doc)",
       "status": "xfail",
-      "detail": "expected failure (crew#472): crew#472: Project A's picker lists B's document 'seed-doc-b-1788943400': ['seed-doc-a-1788943400', 'seed-doc-b-1788943400']",
+      "detail": "expected failure (crew#472): crew#472: Project A's picker lists B's document 'seed-doc-b-1788947231': ['seed-doc-a-1788947231', 'seed-doc-b-1788947231']",
       "governed": false,
       "xfail": "crew#472",
       "seconds": 0.2,
@@ -1178,20 +1213,20 @@
       "id": "VIB-3F",
       "title": "Foreign deep link: /p/B/document/<A's doc> must not frame A's document",
       "status": "xfail",
-      "detail": "expected failure (crew#472): crew#472: Project B's shell frames A's document 'seed-doc-a-1788943400' through a deep link (/p/proj_178894346121400001/document/seed-doc-a-1788943400)",
+      "detail": "expected failure (crew#472): crew#472: Project B's shell frames A's document 'seed-doc-a-1788947231' through a deep link (/p/proj_178894795289500001/document/seed-doc-a-1788947231)",
       "governed": false,
       "xfail": "crew#472",
-      "seconds": 0.1,
+      "seconds": 0.2,
       "shot": "e2e/shots/seed-surfaces/VIB-3F.png"
     },
     {
       "id": "ISO-F",
       "title": "Foreign-context mutation (edit arm): fork A's doc from B's shell must be refused or unreachable; bilateral ownership after",
       "status": "xfail",
-      "detail": "expected failure (crew#472): crew#472: a fork issued from Project proj_178894346121400001's shell LANDED on Project proj_178894346109000000's document 'seed-doc-a-1788943400': versions 2 \u2192 3 (new head 2, url /p/proj_178894346121400001/document/seed-doc-a-1788943400?v=2) \u2014 the shared root accepts foreign mutations; bilateral checks held: owner frames v2 + lists ['0', '1', '2'] after reload, foreign project's own document untouched, crew membership still proj_178894346109000000\u220bseed-doc-a-1788943400 / proj_178894346121400001\u220cseed-doc-a-1788943400",
+      "detail": "expected failure (crew#472): crew#472: a fork issued from Project proj_178894795289500001's shell LANDED on Project proj_178894795276200000's document 'seed-doc-a-1788947231': versions 2 \u2192 3 (new head 2, url /p/proj_178894795289500001/document/seed-doc-a-1788947231?v=2) \u2014 the shared root accepts foreign mutations; bilateral checks held: owner frames v2 + lists ['0', '1', '2'] after reload, foreign project's own document untouched, crew membership still proj_178894795276200000\u220bseed-doc-a-1788947231 / proj_178894795289500001\u220cseed-doc-a-1788947231",
       "governed": false,
       "xfail": "crew#472",
-      "seconds": 1.1,
+      "seconds": 0.8,
       "shot": "e2e/shots/seed-surfaces/ISO-F.png"
     },
     {
@@ -1201,77 +1236,77 @@
       "detail": "expected failure (studio#213 (delete wire) / crew#472 (leak)): studio#213: the foreign delete cannot reach a scope check \u2014 the pinned bridge 0.8.1 predates DELETE /api/docs/:doc (the daemon refused this \u2014 wicked-interactive answered 404 without the retire wire's body \u2014 this bridge likely predates DELETE /api/docs/:doc (the doc may still be alive), so crew's handoff-ledger rows)",
       "governed": false,
       "xfail": "studio#213 (delete wire) / crew#472 (leak)",
-      "seconds": 5.4,
+      "seconds": 0.7,
       "shot": "e2e/shots/seed-surfaces/ISO-D.png"
     },
     {
       "id": "DEM-1D",
       "title": "Seed a demo in Project A via the wizard (deterministic)",
       "status": "pass",
-      "detail": "demo 'seed-demo-a-1788943400' created under A via the wizard (target http://127.0.0.1:50243/doc-fixture.html, one hand-pinned step; authoring agent disabled); A's picker lists it",
+      "detail": "demo 'seed-demo-a-1788947231' created under A via the wizard (target http://127.0.0.1:53425/doc-fixture.html, one hand-pinned step; authoring agent disabled); A's picker lists it",
       "governed": false,
       "xfail": null,
-      "seconds": 0.4,
+      "seconds": 0.6,
       "shot": null
     },
     {
       "id": "DEM-2D",
       "title": "Seed a demo in Project B via the wizard (deterministic)",
       "status": "pass",
-      "detail": "demo 'seed-demo-b-1788943400' created under B via the wizard (the scoping control for DEM-3/DEM-3F/ISO-DF/ISO-DD); B's picker lists it; crew files it under B",
+      "detail": "demo 'seed-demo-b-1788947231' created under B via the wizard (the scoping control for DEM-3/DEM-3F/ISO-DF/ISO-DD); B's picker lists it; crew files it under B",
       "governed": false,
       "xfail": null,
-      "seconds": 0.4,
+      "seconds": 0.7,
       "shot": null
     },
     {
       "id": "DEM-PLAY",
       "title": "Demo playback: player frames the storyboard head; identical after reload; no phantom recording",
       "status": "pass",
-      "detail": "demo 'seed-demo-a-1788943400' plays back at v0 (player frames the storyboard, frame html sha256 856ea19c75aa\u2026, identical after a full reload); storyboard html 200 (text/html); no recording offered for v0 (probe 404 text/html); record control idle",
+      "detail": "demo 'seed-demo-a-1788947231' plays back at v0 (player frames the storyboard, frame html sha256 e62c3ed3c348\u2026, identical after a full reload); storyboard html 200 (text/html); no recording offered for v0 (probe 404 text/html); record control idle",
       "governed": false,
       "xfail": null,
-      "seconds": 0.3,
+      "seconds": 0.4,
       "shot": null
     },
     {
       "id": "DEM-REC",
       "title": "Demo recording (\u23fa Re-record \u2192 new version \u2192 playback of the recording)",
       "status": "blocked",
-      "detail": "BLOCKED \u2014 demo RECORDING needs a second browser/recorder the rig cannot host. The record request was queued through the UI (\u23fa \u2192 data-state 'recording'; POST /api/events wicked.interactive.demo.requested acknowledged HTTP 200) and the bridge answered with the established prerequisite: 'Recording failed: no demo.spec.mjs authored yet \u2014 the agent must write the spec before recording'. The recorder is the bridge's OWN Playwright Chromium (`recordDemo`: `import('playwright')` \u2192 `chromium.launch`), resolved from the bridge's HOME/PLAYWRIGHT_BROWSERS_PATH \u2014 under the hermetic scratch HOME there is no browser cache, and the rig's Playwright is the test client, not the bridge's; it also replays `demo.spec.mjs`, which only the demo AUTHORING run writes (disabled here: `--no-interactive-demo-events`, no agent runs in the seed suite; the wizard's steps have no backend consumer \u2014 finding 10). Any OTHER recorder answer, a \u2265400 ack, a missing ack or no answer is a FAIL (`classify_recorder_answer`). Playback of the seeded storyboard IS certified (DEM-PLAY). Tracked in studio#217.",
+      "detail": "BLOCKED \u2014 demo RECORDING needs a second browser/recorder the rig cannot host. The record request was queued through the UI (\u23fa \u2192 data-state 'recording'; POST /api/events wicked.interactive.demo.requested acknowledged HTTP 200) and the bridge answered with the established prerequisite (no demo.spec.mjs authored yet): 'Recording failed: no demo.spec.mjs authored yet \u2014 the agent must write the spec before recording'. The recorder is the bridge's OWN Playwright Chromium (`recordDemo`: `import('playwright')` \u2192 `chromium.launch`), resolved from the bridge's HOME/PLAYWRIGHT_BROWSERS_PATH \u2014 under the hermetic scratch HOME there is no browser cache, and the rig's Playwright is the test client, not the bridge's; it also replays `demo.spec.mjs`, which only the demo AUTHORING run writes (disabled here: `--no-interactive-demo-events`, no agent runs in the seed suite; the wizard's steps have no backend consumer \u2014 finding 10). Any OTHER recorder answer, a \u2265400 ack, a missing ack or no answer is a FAIL (`classify_recorder_answer`). Playback of the seeded storyboard IS certified (DEM-PLAY). Tracked in studio#217.",
       "governed": false,
       "xfail": null,
-      "seconds": 1.2,
+      "seconds": 1.7,
       "shot": "e2e/shots/seed-surfaces/DEM-REC.png"
     },
     {
       "id": "DEM-3",
       "title": "Demos are disjoint per project (A \u220c B's demo, B \u220c A's demo)",
       "status": "xfail",
-      "detail": "expected failure (crew#472): crew#472: Project A's picker lists B's document 'seed-demo-b-1788943400': ['seed-demo-b-1788943400', 'seed-demo-a-1788943400']",
+      "detail": "expected failure (crew#472): crew#472: Project A's picker lists B's document 'seed-demo-b-1788947231': ['seed-demo-b-1788947231', 'seed-demo-a-1788947231']",
       "governed": false,
       "xfail": "crew#472",
-      "seconds": 0.3,
+      "seconds": 0.7,
       "shot": "e2e/shots/seed-surfaces/DEM-3.png"
     },
     {
       "id": "DEM-3F",
       "title": "Foreign deep link: /p/B/video/<A's demo> must not frame A's demo",
       "status": "xfail",
-      "detail": "expected failure (crew#472): crew#472: Project B's shell frames A's demo 'seed-demo-a-1788943400' through a deep link (/p/proj_178894346121400001/video/seed-demo-a-1788943400)",
+      "detail": "expected failure (crew#472): crew#472: Project B's shell frames A's demo 'seed-demo-a-1788947231' through a deep link (/p/proj_178894795289500001/video/seed-demo-a-1788947231)",
       "governed": false,
       "xfail": "crew#472",
-      "seconds": 0.2,
+      "seconds": 0.5,
       "shot": "e2e/shots/seed-surfaces/DEM-3F.png"
     },
     {
       "id": "ISO-DF",
       "title": "Foreign-context mutation (edit arm, demo): fork A's demo from B's shell must be refused or unreachable; bilateral ownership after",
       "status": "xfail",
-      "detail": "expected failure (crew#472): crew#472: a fork issued from Project proj_178894346121400001's shell LANDED on Project proj_178894346109000000's video 'seed-demo-a-1788943400': versions 1 \u2192 2 (new head 1, url /p/proj_178894346121400001/video/seed-demo-a-1788943400?v=1) \u2014 the shared root accepts foreign mutations; bilateral checks held: owner frames v1 + lists ['0', '1'] after reload, foreign project's own video untouched, crew membership still proj_178894346109000000\u220bseed-demo-a-1788943400 / proj_178894346121400001\u220cseed-demo-a-1788943400",
+      "detail": "expected failure (crew#472): crew#472: a fork issued from Project proj_178894795289500001's shell LANDED on Project proj_178894795276200000's video 'seed-demo-a-1788947231': versions 1 \u2192 2 (new head 1, url /p/proj_178894795289500001/video/seed-demo-a-1788947231?v=1) \u2014 the shared root accepts foreign mutations; bilateral checks held: owner frames v1 + lists ['0', '1'] after reload, foreign project's own video untouched, crew membership still proj_178894795276200000\u220bseed-demo-a-1788947231 / proj_178894795289500001\u220cseed-demo-a-1788947231",
       "governed": false,
       "xfail": "crew#472",
-      "seconds": 0.7,
+      "seconds": 1.3,
       "shot": "e2e/shots/seed-surfaces/ISO-DF.png"
     },
     {
@@ -1281,77 +1316,107 @@
       "detail": "expected failure (studio#213 (delete wire) / crew#472 (leak)): studio#213: the foreign delete cannot reach a scope check \u2014 the pinned bridge 0.8.1 predates DELETE /api/docs/:doc (the daemon refused this \u2014 wicked-interactive answered 404 without the retire wire's body \u2014 this bridge likely predates DELETE /api/docs/:doc (the doc may still be alive), so crew's handoff-ledger rows)",
       "governed": false,
       "xfail": "studio#213 (delete wire) / crew#472 (leak)",
-      "seconds": 0.7,
+      "seconds": 0.8,
       "shot": "e2e/shots/seed-surfaces/ISO-DD.png"
     },
     {
       "id": "TST-1",
       "title": "New test from Project A \u2192 intake gate arrives \u2192 REJECT (event log proves no execution)",
       "status": "pass",
-      "detail": "run 2e04674f-c227-4d95-b08f-437224c2e589 launched from A (project pre-bound, repo chip via project), parked at its intake gate after the distribution council ({'councilConvened': 4, 'councilSeatFailed': 44, 'councilDeliberated': 7, 'councilVoted': 4}), REJECTED in the panel \u2192 cancelled; event log proves no execution: 4 planned units ['distributed', 'distributed', 'distributed', 'distributed'], 70 events, none of ['acpSessionStarted', 'unitDispatched', 'unitDone', 'unitExecuting', 'unitOutputCaptured', 'unitOutputDelta'], awaitingHuman@68 \u2192 runCancelled@69; prompt: 'Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and w'",
+      "detail": "run 36ead297-7863-49de-b9da-99cc6344b061 launched from A (project pre-bound, repo chip via project), parked at its intake gate after the distribution council ({'councilConvened': 4, 'councilSeatFailed': 48, 'councilDeliberated': 8, 'councilVoted': 4}), REJECTED in the panel \u2192 cancelled; event log proves no execution: 4 planned units ['distributed', 'distributed', 'distributed', 'distributed'], 75 events, none of ['acpSessionStarted', 'unitDispatched', 'unitDone', 'unitExecuting', 'unitOutputCaptured', 'unitOutputDelta'], awaitingHuman@73 \u2192 runCancelled@74; prompt: 'Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and w'",
       "governed": true,
       "xfail": null,
-      "seconds": 117.1,
+      "seconds": 168.5,
       "shot": null
     },
     {
       "id": "TST-S",
       "title": "The test run is scoped: on A's dashboard, absent from B's",
       "status": "pass",
-      "detail": "A's dashboard lists run 2e04674f-c227-4d95-b08f-437224c2e589 (membership join, problem carries the brief); B's does not",
+      "detail": "A's dashboard lists run 36ead297-7863-49de-b9da-99cc6344b061 (membership join, problem carries the brief); B's does not",
       "governed": false,
       "xfail": null,
-      "seconds": 0.7,
+      "seconds": 1.9,
       "shot": null
     },
     {
       "id": "TST-2",
       "title": "Tests list is partitioned per project (campaign isolation over a seeded campaign scoped to A's repo)",
       "status": "xfail",
-      "detail": "expected failure (studio#216): studio#216: Project B's campaigns page renders Project A's campaign 'seed-campaign-1788943400' (B owns no repo and no campaign): ['seed-campaign-1788943400']",
+      "detail": "expected failure (studio#216): studio#216: Project B's campaigns page renders Project A's campaign 'seed-campaign-1788947231' (B owns no repo and no campaign): ['seed-campaign-1788947231']",
       "governed": false,
       "xfail": "studio#216",
-      "seconds": 1.2,
+      "seconds": 1.5,
       "shot": "e2e/shots/seed-surfaces/TST-2.png"
     },
     {
+      "id": "RUN-DET",
+      "title": "Run detail after reload: cancelled status, rejected gate narrated, raw events == API",
+      "status": "pass",
+      "detail": "/runs/36ead297-7863-49de-b9da-99cc6344b061 \u2192 /p/proj_178894795276200000/build/36ead297-7863-49de-b9da-99cc6344b061 (filed under A); header reads Cancelled; the narrated feed shows the intake gate ('\u25c6Gate: waiting on you \u2014 Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and which are determi') before '\u00b7Run cancelled'; no approval dock; raw view lists 75 events == GET /runs/:id/events (75 frames, 0 delta/heartbeat frames the store never renders); identical on a second full load",
+      "governed": false,
+      "xfail": null,
+      "seconds": 2.2,
+      "shot": null
+    },
+    {
+      "id": "RUN-ARC",
+      "title": "Archive the terminal run ([SUBSTITUTE] API \u2014 no UI control) \u2192 leaves active surfaces, listed under Archived; reload persists",
+      "status": "pass",
+      "detail": "[SUBSTITUTE] run 36ead297-7863-49de-b9da-99cc6344b061 archived over POST /runs/:id/archive (the studio mounts no archive control \u2014 WorkPage.tsx's only `archiveRun` call is Unarchive); wire: archived_at set, default GET /runs excludes it, ?include=archived carries it; UI after a full reload: A's dashboard no longer lists it, /work's active list does not (it was listed there before), the Archived toggle shows it (status cancelled) with its Unarchive control \u2014 again after a second full load",
+      "governed": false,
+      "xfail": null,
+      "seconds": 6.3,
+      "shot": null
+    },
+    {
+      "id": "RUN-UNARC",
+      "title": "Unarchive through WorkPage's control \u2192 back on active surfaces; reload persists",
+      "status": "pass",
+      "detail": "Unarchive clicked beside run 36ead297-7863-49de-b9da-99cc6344b061 in /work's Archived group (WorkPage.tsx, the mounted control) \u2192 POST /runs/:id/archive 200; the row left the group, archived_at is null on the wire, the default GET /runs lists it; after a full reload A's dashboard renders it again and Archived no longer holds it",
+      "governed": false,
+      "xfail": null,
+      "seconds": 3.2,
+      "shot": null
+    },
+    {
       "id": "CLN-1a",
-      "title": "Delete the seeded document seed-doc-a-1788943400 through the picker",
+      "title": "Delete the seeded document seed-doc-a-1788947231 through the picker",
+      "status": "xfail",
+      "detail": "expected failure (studio#213): studio#213: the pinned bridge predates DELETE /api/docs/:doc \u2014 the daemon refused this \u2014 wicked-interactive answered 404 without the retire wire's body \u2014 this bridge likely predates DELETE /api/docs/:doc (the doc may still be alive), so crew's handoff-ledger rows were deliberately left in place (nothing diverged). Upgrade the bridge (restart it so `npx wicked-i",
+      "governed": false,
+      "xfail": "studio#213",
+      "seconds": 7.1,
+      "shot": "e2e/shots/seed-surfaces/CLN-1a.png"
+    },
+    {
+      "id": "CLN-1b",
+      "title": "Delete the seeded document seed-doc-b-1788947231 through the picker",
       "status": "xfail",
       "detail": "expected failure (studio#213): studio#213: the pinned bridge predates DELETE /api/docs/:doc \u2014 the daemon refused this \u2014 wicked-interactive answered 404 without the retire wire's body \u2014 this bridge likely predates DELETE /api/docs/:doc (the doc may still be alive), so crew's handoff-ledger rows were deliberately left in place (nothing diverged). Upgrade the bridge (restart it so `npx wicked-i",
       "governed": false,
       "xfail": "studio#213",
       "seconds": 0.6,
-      "shot": "e2e/shots/seed-surfaces/CLN-1a.png"
-    },
-    {
-      "id": "CLN-1b",
-      "title": "Delete the seeded document seed-doc-b-1788943400 through the picker",
-      "status": "xfail",
-      "detail": "expected failure (studio#213): studio#213: the pinned bridge predates DELETE /api/docs/:doc \u2014 the daemon refused this \u2014 wicked-interactive answered 404 without the retire wire's body \u2014 this bridge likely predates DELETE /api/docs/:doc (the doc may still be alive), so crew's handoff-ledger rows were deliberately left in place (nothing diverged). Upgrade the bridge (restart it so `npx wicked-i",
-      "governed": false,
-      "xfail": "studio#213",
-      "seconds": 0.7,
       "shot": "e2e/shots/seed-surfaces/CLN-1b.png"
     },
     {
       "id": "CLN-1c",
-      "title": "Delete the seeded demo seed-demo-a-1788943400 through the picker",
+      "title": "Delete the seeded demo seed-demo-a-1788947231 through the picker",
       "status": "xfail",
       "detail": "expected failure (studio#213): studio#213: the pinned bridge predates DELETE /api/docs/:doc \u2014 the daemon refused this \u2014 wicked-interactive answered 404 without the retire wire's body \u2014 this bridge likely predates DELETE /api/docs/:doc (the doc may still be alive), so crew's handoff-ledger rows were deliberately left in place (nothing diverged). Upgrade the bridge (restart it so `npx wicked-i",
       "governed": false,
       "xfail": "studio#213",
-      "seconds": 0.7,
+      "seconds": 0.6,
       "shot": "e2e/shots/seed-surfaces/CLN-1c.png"
     },
     {
       "id": "CLN-1d",
-      "title": "Delete the seeded demo seed-demo-b-1788943400 through the picker",
+      "title": "Delete the seeded demo seed-demo-b-1788947231 through the picker",
       "status": "xfail",
       "detail": "expected failure (studio#213): studio#213: the pinned bridge predates DELETE /api/docs/:doc \u2014 the daemon refused this \u2014 wicked-interactive answered 404 without the retire wire's body \u2014 this bridge likely predates DELETE /api/docs/:doc (the doc may still be alive), so crew's handoff-ledger rows were deliberately left in place (nothing diverged). Upgrade the bridge (restart it so `npx wicked-i",
       "governed": false,
       "xfail": "studio#213",
-      "seconds": 0.7,
+      "seconds": 1.3,
       "shot": "e2e/shots/seed-surfaces/CLN-1d.png"
     },
     {
@@ -1361,17 +1426,17 @@
       "detail": "PAT-100 (the STR-1S substitute) retired through the grid's Retire modal; server row retired=true",
       "governed": false,
       "xfail": null,
-      "seconds": 0.2,
+      "seconds": 0.3,
       "shot": null
     },
     {
       "id": "CLN-2",
       "title": "Archive a project through the UI (ProjectDetailPage \u2192 Archive)",
       "status": "xfail",
-      "detail": "expected failure (studio#214): studio#214: ProjectDetailPage (the only Archive/Restore control, ProjectDetailPage.tsx) is unreachable: /projects/proj_178894346109000000 redirected to /p/proj_178894346109000000 (useLegacyRedirect) \u2014 no reachable UI affordance archives or restores a project",
+      "detail": "expected failure (studio#214): studio#214: ProjectDetailPage (the only Archive/Restore control, ProjectDetailPage.tsx) is unreachable: /projects/proj_178894795276200000 redirected to /p/proj_178894795276200000 (useLegacyRedirect) \u2014 no reachable UI affordance archives or restores a project",
       "governed": false,
       "xfail": "studio#214",
-      "seconds": 0.8,
+      "seconds": 3.7,
       "shot": "e2e/shots/seed-surfaces/CLN-2.png"
     },
     {
@@ -1388,11 +1453,11 @@
   "findings": [
     "STR-1 (studio#212): 'Add row' is inert on an unseeded store (grid not mounted) \u2014 the first rule needed an API substitute",
     "CLN-2 (studio#214): no reachable UI affordance archives/restores a project \u2014 /projects/:id (ProjectDetailPage) redirects to /p/:id",
-    "HOME-WRITES: the daemon/bridge/CLIs wrote 5771 entries under the scratch HOME (would have landed in the operator's home) \u2014 by directory: {'.codex/.tmp': 5406, 'Library/Caches': 227, '.codex/skills': 60, '.copilot/session-state': 20, '.claude/projects': 5, '.codex/sessions': 5, '.copilot/logs': 5, '.local/share': 4, '.config/opencode': 2, '.pi/agent': 2, '.cache/opencode': 1, 'home/.claude.json': 1, '.claude/backups': 1, '.codex/.sandbox_migration': 1, '.codex/config.toml': 1, '.codex/goals_1.sqlite': 1, '.codex/goals_1.sqlite-shm': 1, '.codex/goals_1.sqlite-wal': 1, '.codex/installation_id': 1, '.codex/logs_2.sqlite': 1, '.codex/logs_2.sqlite-shm': 1, '.codex/logs_2.sqlite-wal': 1, '.codex/memories_1.sqlite': 1, '.codex/memories_1.sqlite-shm': 1, '.codex/memories_1.sqlite-wal': 1, '.codex/queue_1.sqlite': 1, '.codex/queue_1.sqlite-shm': 1, '.codex/queue_1.sqlite-wal': 1, '.codex/state_5.sqlite': 1, '.codex/state_5.sqlite-shm': 1, '.codex/state_5.sqlite-wal': 1, '.codex/thread-writer-locks': 1, '.codex/thread_history_1.sqlite': 1, '.codex/thread_history_1.sqlite-shm': 1, '.codex/thread_history_1.sqlite-wal': 1, '.codex/tmp': 1, '.copilot/config.json': 1, '.copilot/session-store.db': 1, '.copilot/session-store.db-shm': 1, '.copilot/session-store.db-wal': 1, '.wicked-estate/knowledge.db': 1, '.wicked-estate/knowledge.db-shm': 1, '.wicked-estate/knowledge.db-wal': 1, '.wicked-interactive/instances.json': 1, 'Library/Application Support': 1}; plus 401 under the scratch TMPDIR"
+    "HOME-WRITES: the daemon/bridge/CLIs wrote 5782 entries under the scratch HOME (would have landed in the operator's home) \u2014 by directory: {'.codex/.tmp': 5406, 'Library/Caches': 227, '.codex/skills': 60, '.copilot/session-state': 24, '.codex/sessions': 6, '.copilot/logs': 6, '.claude/projects': 5, '.local/share': 4, '.codex/thread-writer-locks': 3, '.codex/shell_snapshots': 2, '.codex/tmp': 2, '.config/opencode': 2, '.pi/agent': 2, '.cache/opencode': 1, 'home/.claude.json': 1, '.claude/backups': 1, '.codex/.sandbox_migration': 1, '.codex/config.toml': 1, '.codex/goals_1.sqlite': 1, '.codex/goals_1.sqlite-shm': 1, '.codex/goals_1.sqlite-wal': 1, '.codex/installation_id': 1, '.codex/logs_2.sqlite': 1, '.codex/logs_2.sqlite-shm': 1, '.codex/logs_2.sqlite-wal': 1, '.codex/memories_1.sqlite': 1, '.codex/memories_1.sqlite-shm': 1, '.codex/memories_1.sqlite-wal': 1, '.codex/queue_1.sqlite': 1, '.codex/queue_1.sqlite-shm': 1, '.codex/queue_1.sqlite-wal': 1, '.codex/state_5.sqlite': 1, '.codex/state_5.sqlite-shm': 1, '.codex/state_5.sqlite-wal': 1, '.codex/thread_history_1.sqlite': 1, '.codex/thread_history_1.sqlite-shm': 1, '.codex/thread_history_1.sqlite-wal': 1, '.copilot/config.json': 1, '.copilot/session-store.db': 1, '.copilot/session-store.db-shm': 1, '.copilot/session-store.db-wal': 1, '.wicked-estate/knowledge.db': 1, '.wicked-estate/knowledge.db-shm': 1, '.wicked-estate/knowledge.db-wal': 1, '.wicked-interactive/instances.json': 1, 'Library/Application Support': 1}; plus 194 under the scratch TMPDIR"
   ],
   "live_touched": [],
   "counts": {
-    "pass": 33,
+    "pass": 36,
     "fail": 0,
     "xfail": 15,
     "xpass": 0,
