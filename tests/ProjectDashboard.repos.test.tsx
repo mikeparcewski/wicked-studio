@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { Project, ProjectMember, RepoEntry } from '../src/api/types.js';
 
 /**
@@ -54,6 +54,22 @@ function repo(id: string): RepoEntry {
   return { id, name: id, root_path: `/repos/${id}`, default_branch: 'main', registered_at: 1 };
 }
 
+/** A promise the test settles by hand — the request stays in flight exactly as long as the scenario needs. */
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => { resolve = r; });
+  return { promise, resolve };
+}
+
+/** Settle inside act and drain the continuations (one macrotask tick), so a "nothing
+ *  changed" assertion afterwards describes the settled state, not a race with it. */
+async function settle(fn: () => void): Promise<void> {
+  await act(async () => {
+    fn();
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+
 beforeEach(() => {
   clearRepoCache();
   for (const m of [listProjectMembers, listRepos, attachProjectMember, detachProjectMember]) m.mockReset();
@@ -104,6 +120,67 @@ describe('ProjectDashboard — Repositories section (studio#207)', () => {
     await waitFor(() => expect(detachProjectMember).toHaveBeenCalledWith('proj-1', 'proj-1:crew.repo:studio-api'));
     await waitFor(() => expect(within(section).queryByTestId('project-repo-row')).toBeNull());
     expect(screen.queryByTestId('dashboard-repos')).toBeNull();
+  });
+
+  it('the dashboard\'s own membership read landing mid-attach is built on, not overwritten', async () => {
+    const read = deferred<{ members: ProjectMember[] }>();
+    listProjectMembers.mockReturnValue(read.promise);
+    const attach = deferred<{ member: ProjectMember }>();
+    attachProjectMember.mockReturnValue(attach.promise);
+    render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
+    const section = await screen.findByTestId('project-repos');
+    expect(section).toHaveAttribute('data-count', '0'); // the read is still out
+
+    fireEvent.focus(within(section).getByTestId('project-repo-search'));
+    fireEvent.click((await within(section).findAllByTestId('project-repo-option')).find((o) => o.getAttribute('data-repo') === 'studio-web')!);
+    await waitFor(() => expect(attachProjectMember).toHaveBeenCalledTimes(1));
+
+    // The read lands first, carrying a repo the section had never seen when the attach began.
+    await settle(() => read.resolve({ members: [member('studio-api')] }));
+    expect(within(section).getByTestId('project-repo-row')).toHaveAttribute('data-repo', 'studio-api');
+
+    // The attach applies on top of it — one state, both renderings, nothing lost.
+    await settle(() => attach.resolve({ member: member('studio-web') }));
+    expect(within(section).getAllByTestId('project-repo-row').map((r) => r.getAttribute('data-repo'))).toEqual(['studio-api', 'studio-web']);
+    expect(screen.getAllByTestId('dashboard-repo').map((c) => c.getAttribute('data-repo-ref'))).toEqual(['studio-api', 'studio-web']);
+  });
+
+  it('a mutation that resolves after navigating to another project is dropped; the new project shows only its own read', async () => {
+    const readTwo = deferred<{ members: ProjectMember[] }>();
+    listProjectMembers.mockImplementation((id: string) => (id === 'proj-1'
+      ? Promise.resolve({ members: [member('studio-api')] })
+      : readTwo.promise));
+    const attach = deferred<{ member: ProjectMember }>();
+    attachProjectMember.mockReturnValue(attach.promise);
+    const view = render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
+    const section = await screen.findByTestId('project-repos');
+    await waitFor(() => expect(within(section).getByTestId('project-repo-row')).toHaveAttribute('data-repo', 'studio-api'));
+
+    const search = within(section).getByTestId('project-repo-search');
+    fireEvent.change(search, { target: { value: 'web' } });
+    fireEvent.click((await within(section).findAllByTestId('project-repo-option')).find((o) => o.getAttribute('data-repo') === 'studio-web')!);
+    await waitFor(() => expect(attachProjectMember).toHaveBeenCalledWith('proj-1', expect.objectContaining({ ref: 'studio-web' })));
+
+    // Navigate mid-request. The dashboard stays mounted (App.tsx keys it on nothing), so
+    // proj-1's chips, rows and picker query must not stand in for proj-2 while its read is out.
+    view.rerender(<ProjectDashboard projectId="proj-2" runs={[]} navigate={() => {}} />);
+    await waitFor(() => expect(listProjectMembers).toHaveBeenCalledWith('proj-2'));
+    expect(screen.getByTestId('project-repos')).toHaveAttribute('data-count', '0');
+    expect(screen.queryByTestId('dashboard-repos')).toBeNull();
+    expect(screen.getByTestId('project-repo-search')).toHaveValue('');
+
+    // proj-1's attach lands with proj-2 on screen: dropped, never applied to proj-2's state.
+    await settle(() => attach.resolve({ member: member('studio-web') }));
+    expect(screen.getByTestId('project-repos')).toHaveAttribute('data-count', '0');
+    expect(screen.queryByTestId('dashboard-repos')).toBeNull();
+    expect(screen.queryByTestId('project-repo-error')).toBeNull();
+
+    // Only proj-2's own read fills it — and the abandoned lock did not leak across.
+    await settle(() => readTwo.resolve({ members: [{ ...member('crew'), id: 'proj-2:crew.repo:crew', project_id: 'proj-2' }] }));
+    const after = screen.getByTestId('project-repos');
+    expect(within(after).getByTestId('project-repo-row')).toHaveAttribute('data-repo', 'crew');
+    expect(screen.getByTestId('dashboard-repo')).toHaveAttribute('data-repo-ref', 'crew');
+    expect(within(after).getByTestId('project-repo-detach')).toBeEnabled();
   });
 
   it('is omitted on the synthesized default project', async () => {

@@ -369,7 +369,14 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
         <ProjectRepositories
           projectId={projectId}
           members={members}
-          onMembersChange={(next) => setDetail((d) => d ? { ...d, members: next } : d)}
+          onMembersChange={(update) => setDetail((d) => (
+            // Applied to the members held NOW — a run member detached through the
+            // Members list while a repo attach was in flight must stay gone — and
+            // only while `detail` is still this project's: the page stays mounted
+            // across a navigation, so a mutation begun on the previous project can
+            // resolve after the next one loaded.
+            d !== null && d.project.id === projectId ? { ...d, members: update(d.members) } : d
+          ))}
         />
       </div>
 

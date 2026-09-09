@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { ProjectMember, RepoEntry } from '../api/types.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
@@ -23,9 +23,11 @@ import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
  * Membership state stays with the parent (the dashboard's / detail page's one
  * membership read): this section filters to `crew.repo` and reports every
  * change through `onMembersChange`, so the header chips and this list can never
- * disagree. The synthesized `default` project rejects attach on the wire
- * (routes.ts) and has no stored members to detach, so the section is omitted
- * there entirely.
+ * disagree. A change is reported as an UPDATER over the parent's current state,
+ * never as a replacement array, and only for the project the section still
+ * shows — see `Props.onMembersChange`. The synthesized `default` project rejects
+ * attach on the wire (routes.ts) and has no stored members to detach, so the
+ * section is omitted there entirely.
  */
 
 const DEFAULT_PROJECT_ID = 'default';
@@ -99,6 +101,17 @@ function isAttached(repo: RepoEntry, members: ProjectMember[]): boolean {
   return members.some((m) => m.member_ref === repo.id || m.member_ref === repo.name);
 }
 
+/**
+ * A membership change, expressed against whatever the parent holds at APPLY time
+ * — the parent runs it inside its own functional state update. The section
+ * never hands back a replacement array built from the snapshot it rendered with:
+ * that snapshot goes stale the moment anything else touches membership while a
+ * request is in flight (a non-repo member detached through the generic Members
+ * list, the dashboard's membership read landing), and applying it wholesale
+ * would silently undo that change.
+ */
+export type MembersUpdate = (current: ProjectMember[]) => ProjectMember[];
+
 interface Props {
   projectId: string;
   /**
@@ -108,11 +121,15 @@ interface Props {
    */
   members: ProjectMember[];
   /**
-   * The SAME array with only the repo change applied — attach appends the new
-   * member, detach filters the one member out — so whatever non-repo entries the
-   * parent handed in come back untouched.
+   * Reports one repo change as an updater the parent applies to its CURRENT
+   * membership: attach appends the new member (unless it is already there),
+   * detach filters the one member id out, and whatever non-repo entries the
+   * parent holds pass through untouched. Called only for the project this
+   * section is still showing — a result that lands after `projectId` changed
+   * (both parents stay mounted across a navigation) or after unmount is dropped,
+   * never applied to another project's state.
    */
-  onMembersChange: (members: ProjectMember[]) => void;
+  onMembersChange: (update: MembersUpdate) => void;
 }
 
 export function ProjectRepositories({ projectId, members, onMembersChange }: Props): React.ReactElement | null {
@@ -125,16 +142,42 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
   const [confirming, setConfirming] = useState<string | null>(null);
   /** The member id being detached, or null. */
   const [detaching, setDetaching] = useState<string | null>(null);
+  /** The last attach/detach failure, or null. */
   const [error, setError] = useState<string | null>(null);
+  /** The last registry (picker) fetch failure, kept apart from the mutation error
+   *  so the retry gesture clears exactly the one that just went stale. */
+  const [registryError, setRegistryError] = useState<string | null>(null);
 
   /**
-   * ONE mutation at a time. Both `attach` and `detach` derive the next membership
-   * from the `members` they closed over, so two in flight at once would each
-   * report from a stale base and the later one would silently drop the earlier
-   * one's result. The lock also keeps a second row's Detach from re-pointing
-   * `confirming` while a detach is mid-request.
+   * ONE mutation at a time. The lock keeps a second row's Detach from re-pointing
+   * `confirming` while a detach is mid-request, and keeps the picker from
+   * starting an attach on top of it.
    */
   const busy = attaching !== null || detaching !== null;
+
+  /**
+   * The project this section shows RIGHT NOW — `null` once unmounted. Neither
+   * parent is keyed on the project (App.tsx), so navigating `/p/A` → `/p/B`
+   * re-renders this same instance with a new `projectId` while an attach or
+   * detach begun on A may still be in flight; on the detail page the section
+   * unmounts for the loading tick instead. Either way that request's result
+   * belongs to A: each mutation pins the project it started for and reports
+   * only if this still matches. A project change also abandons the previous
+   * project's in-progress UI — its pending confirm, its errors, its picker
+   * query, and its mutation lock (the guarded-out request can no longer act).
+   */
+  const liveProjectId = useRef<string | null>(projectId);
+  useEffect(() => {
+    liveProjectId.current = projectId;
+    setConfirming(null);
+    setError(null);
+    setRegistryError(null);
+    setQuery('');
+    setPickerOpen(false);
+    setAttaching(null);
+    setDetaching(null);
+    return () => { liveProjectId.current = null; };
+  }, [projectId]);
 
   const repoMembers = useMemo(
     () => members.filter((m) => m.member_kind === REPO_KIND),
@@ -151,48 +194,61 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
 
   if (projectId === DEFAULT_PROJECT_ID) return null;
 
-  /** The first gesture that needs the registry warms the ONE session cache. */
+  /** The first gesture that needs the registry warms the ONE session cache. A
+   *  failed fetch caches nothing (repoCache), so every later gesture retries —
+   *  and the retry retires the failure it supersedes before it starts. */
   function openPicker(): void {
     setPickerOpen(true);
     if (repos !== null) return;
+    setRegistryError(null);
     fetchReposCached()
       .then(setRepos)
-      .catch((e: unknown) => setError(`registered repos unreadable: ${e instanceof Error ? e.message : String(e)}`));
+      .catch((e: unknown) => setRegistryError(`registered repos unreadable: ${e instanceof Error ? e.message : String(e)}`));
   }
 
   async function attach(repo: RepoEntry): Promise<void> {
     if (busy) return;
+    const forProject = projectId;
     setAttaching(repo.id);
     setError(null);
     try {
-      const { member } = await api.attachProjectMember(projectId, {
+      const { member } = await api.attachProjectMember(forProject, {
         kind: REPO_KIND,
         ref: repo.id,
         attachedBy: 'studio',
       });
-      onMembersChange([...members, member]);
+      if (liveProjectId.current !== forProject) return; // landed after a navigation — not this project's result
+      onMembersChange((current) => (current.some((m) => m.id === member.id) ? current : [...current, member]));
       setQuery('');
     } catch (e) {
+      if (liveProjectId.current !== forProject) return;
       setError(`attach failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      setAttaching(null);
+      // Release the lock only while it is still this request's: a project change
+      // released it already, and a mutation begun since then owns it now.
+      setAttaching((cur) => (cur === repo.id ? null : cur));
     }
   }
 
   async function detach(member: ProjectMember): Promise<void> {
     if (busy) return;
+    const forProject = projectId;
     setDetaching(member.id);
     setError(null);
     try {
-      await api.detachProjectMember(projectId, member.id);
-      onMembersChange(members.filter((m) => m.id !== member.id));
+      await api.detachProjectMember(forProject, member.id);
+      if (liveProjectId.current !== forProject) return; // landed after a navigation — not this project's result
+      onMembersChange((current) => current.filter((m) => m.id !== member.id));
       setConfirming(null);
     } catch (e) {
+      if (liveProjectId.current !== forProject) return;
       setError(`detach failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      setDetaching(null);
+      setDetaching((cur) => (cur === member.id ? null : cur));
     }
   }
+
+  const shownError = error ?? registryError;
 
   const shown = options.slice(0, MAX_OPTIONS);
   const overflow = options.length - shown.length;
@@ -306,8 +362,8 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
             </div>
           )
         )}
-        {error !== null && (
-          <p data-testid="project-repo-error" style={CSS.error}>{error}</p>
+        {shownError !== null && (
+          <p data-testid="project-repo-error" style={CSS.error}>{shownError}</p>
         )}
       </div>
     </section>

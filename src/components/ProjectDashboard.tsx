@@ -162,6 +162,13 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
   const [repoMembers, setRepoMembers] = useState<ProjectMember[]>([]);
   useEffect(() => {
     let cancelled = false;
+    // A project change starts from nothing: this component stays mounted across
+    // `/p/A` → `/p/B` (App.tsx keys it on nothing), and A's read must not stand in
+    // for B's while B's is out. (A's attach/detach resolving late is dropped by
+    // ProjectRepositories itself — see its `liveProjectId`.)
+    setMemberKinds({});
+    setAttachedAt({});
+    setRepoMembers([]);
     api.listProjectMembers(projectId)
       .then(({ members }) => {
         if (cancelled) return;
@@ -781,7 +788,10 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
       </section>
 
       {/* ── Repositories — the attach/detach surface for `crew.repo` members (studio#207):
-            a project-scoped test cannot launch until the project carries one. ── */}
+            a project-scoped test cannot launch until the project carries one. The section
+            reports each change as an UPDATER over the current `repoMembers` (so this
+            component's own read landing mid-request is built on, not overwritten) and only
+            for the project it still shows — `setRepoMembers` takes it as-is. ── */}
       <ProjectRepositories projectId={projectId} members={repoMembers} onMembersChange={setRepoMembers} />
     </div>
   );

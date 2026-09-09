@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { Project, ProjectDetail, ProjectMember, RepoEntry } from '../src/api/types.js';
 
 /**
@@ -53,6 +53,22 @@ function repo(id: string): RepoEntry {
 
 function detail(projectId: string, members: ProjectMember[]): ProjectDetail {
   return { project: project(projectId), members } as ProjectDetail;
+}
+
+/** A promise the test settles by hand — the request stays in flight exactly as long as the scenario needs. */
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => { resolve = r; });
+  return { promise, resolve };
+}
+
+/** Settle inside act and drain the continuations (one macrotask tick), so a "nothing
+ *  changed" assertion afterwards describes the settled state, not a race with it. */
+async function settle(fn: () => void): Promise<void> {
+  await act(async () => {
+    fn();
+    await new Promise((r) => setTimeout(r, 0));
+  });
 }
 
 beforeEach(() => {
@@ -213,6 +229,77 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     fireEvent.click(within(row).getByTestId('project-repo-detach-confirm'));
     await waitFor(() => expect(within(section).getAllByTestId('project-repo-row')).toHaveLength(1));
     expect(screen.getByText('Members (1)')).toBeInTheDocument(); // and the detach
+  });
+
+  it('a membership change made elsewhere mid-attach survives: a run member detached through the Members list stays gone', async () => {
+    getProject.mockResolvedValue(detail('proj-1', [member('proj-1', 'r-1', 'crew.run'), member('proj-1', 'studio-api')]));
+    const attach = deferred<{ member: ProjectMember }>();
+    attachProjectMember.mockReturnValue(attach.promise);
+    detachProjectMember.mockResolvedValue({ ok: true });
+    const section = await renderPage();
+    expect(screen.getByText('Members (1)')).toBeInTheDocument();
+
+    fireEvent.focus(within(section).getByTestId('project-repo-search'));
+    fireEvent.click((await within(section).findAllByTestId('project-repo-option')).find((o) => o.getAttribute('data-repo') === 'crew')!);
+    await waitFor(() => expect(attachProjectMember).toHaveBeenCalledTimes(1));
+
+    // While the attach is in flight, the generic Members list detaches the run member —
+    // a membership change the section's mutation lock does not (and should not) cover.
+    const runRow = screen.getByText('r-1').parentElement!;
+    fireEvent.mouseEnter(runRow);
+    fireEvent.click(within(runRow).getByRole('button', { name: 'Detach' }));
+    await waitFor(() => expect(detachProjectMember).toHaveBeenCalledWith('proj-1', 'proj-1:crew.run:r-1'));
+    expect(screen.getByText('Members (0)')).toBeInTheDocument();
+
+    // The attach applies to the membership held NOW: the repo joins, the run member does not come back.
+    await settle(() => attach.resolve({ member: member('proj-1', 'crew') }));
+    expect(within(section).getAllByTestId('project-repo-row').map((r) => r.getAttribute('data-repo'))).toEqual(['studio-api', 'crew']);
+    expect(screen.getByText('Members (0)')).toBeInTheDocument();
+  });
+
+  it('an attach that resolves after navigating to another project never touches that project\'s membership', async () => {
+    getProject.mockImplementation((id: string) => Promise.resolve(detail(id, id === 'proj-1'
+      ? [member('proj-1', 'studio-api')]
+      : [member('proj-2', 'r-2', 'crew.run'), member('proj-2', 'studio-web')])));
+    const attach = deferred<{ member: ProjectMember }>();
+    attachProjectMember.mockReturnValue(attach.promise);
+    const view = render(<ProjectDetailPage projectId="proj-1" navigate={() => {}} />);
+    const first = await screen.findByTestId('project-repos');
+
+    fireEvent.focus(within(first).getByTestId('project-repo-search'));
+    fireEvent.click((await within(first).findAllByTestId('project-repo-option')).find((o) => o.getAttribute('data-repo') === 'crew')!);
+    await waitFor(() => expect(attachProjectMember).toHaveBeenCalledWith('proj-1', expect.objectContaining({ ref: 'crew' })));
+
+    // Navigate before it lands. The page stays mounted (App.tsx keys neither project surface),
+    // so the same component instance loads proj-2 while proj-1's attach is still out.
+    view.rerender(<ProjectDetailPage projectId="proj-2" navigate={() => {}} />);
+    await waitFor(() => expect(getProject).toHaveBeenCalledWith('proj-2'));
+    const second = await screen.findByTestId('project-repos');
+    await waitFor(() => expect(within(second).getAllByTestId('project-repo-row').map((r) => r.getAttribute('data-repo'))).toEqual(['studio-web']));
+    expect(screen.getByText('Members (1)')).toBeInTheDocument();
+
+    // proj-1's attach lands with proj-2 on screen: dropped, and proj-2 keeps exactly its own members.
+    await settle(() => attach.resolve({ member: member('proj-1', 'crew') }));
+    const section = screen.getByTestId('project-repos');
+    expect(section).toHaveAttribute('data-count', '1');
+    expect(within(section).getByTestId('project-repo-row')).toHaveAttribute('data-repo', 'studio-web');
+    expect(screen.getByText('Members (1)')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-repo-error')).toBeNull();
+  });
+
+  it('a registry fetch failure clears on the retry gesture instead of outliving the load', async () => {
+    getProject.mockResolvedValue(detail('proj-1', []));
+    listRepos.mockRejectedValueOnce(new Error('daemon unreachable')).mockResolvedValue({ repos: [repo('crew')] });
+    const section = await renderPage();
+
+    const search = within(section).getByTestId('project-repo-search');
+    fireEvent.focus(search);
+    await waitFor(() => expect(within(section).getByTestId('project-repo-error')).toHaveTextContent('daemon unreachable'));
+
+    fireEvent.focus(search); // the retry gesture — a failed fetch caches nothing, so it refetches
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(section).getByTestId('project-repo-option')).toHaveAttribute('data-repo', 'crew'));
+    expect(within(section).queryByTestId('project-repo-error')).toBeNull();
   });
 
   it('is omitted for the synthesized default project (the wire rejects attach there)', async () => {
