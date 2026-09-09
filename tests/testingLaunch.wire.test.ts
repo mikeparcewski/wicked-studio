@@ -31,7 +31,10 @@ function bodySentTo(path: string): Record<string, unknown> {
   expect(calls).toHaveLength(1);
   const init = calls[0]![1] as { method?: string; body?: string };
   expect(init.method).toBe('POST');
-  return JSON.parse(init.body ?? 'null') as Record<string, unknown>;
+  // A POST without a body is a regression in its own right — name it here, rather than letting
+  // `JSON.parse(null)` surface later as an opaque TypeError on the parsed object.
+  expect(init.body, `${path} was POSTed without a body`).toBeTypeOf('string');
+  return JSON.parse(init.body!) as Record<string, unknown>;
 }
 
 /** An old-crew wire: `/testing/recon` is absent (spelled `wire`), `/runs` answers `runsAnswer`. */
