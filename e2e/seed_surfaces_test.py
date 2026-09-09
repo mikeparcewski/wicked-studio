@@ -4076,9 +4076,12 @@ def run_scenarios(rig: Rig, page) -> None:
             header.wait_for(timeout=30_000)
             assert tid(page, "run-pending").count() == 0, "the detail is stuck in its pending state (run not in the shell's index)"
             status_text = text_of(header)
-            # The header's status word must be the WIRE's status (identity, not a substring of anything).
-            words = {w.strip(" ·—-()").lower() for w in re.split(r"\s+", status_text)}
-            assert wire_status in words, f"the run header does not carry the wire status {wire_status!r} as a word: {status_text[:200]!r}"
+            # The status CHIP is an element of its own (ChatPanel.tsx `<span>{style.label}</span>`): compare the
+            # header's ELEMENT texts to the wire status — never its concatenated textContent (run 11's harness
+            # defect: `#1CancelledRetryInspect ▾…` split on whitespace never yields `Cancelled`).
+            header_texts = header.evaluate(RUN_HEADER_TEXTS_JS)
+            assert header_carries_status(header_texts, wire_status), (
+                f"no element of the run header reads the wire status {wire_status!r} (a STATUS_STYLE label): elements {header_texts[:12]}; textContent {status_text[:200]!r}")
             tid(page, "thread").wait_for(timeout=15_000)
             page.wait_for_function(
                 "() => { const t = Array.from(document.querySelectorAll('[data-testid=\"narration-line\"]')).map(e => e.textContent || '');"
@@ -4092,13 +4095,9 @@ def run_scenarios(rig: Rig, page) -> None:
             assert tid(page, "approval-dock").count() == 0 and tid(page, "steering-reject").count() == 0, "a cancelled run still offers an actionable gate"
             tid(page, "feed-view-raw").click()
             page.wait_for_function("n => document.querySelectorAll('[data-testid=\"raw-event\"]').length === n", arg=len(expected_rows), timeout=20_000)
-            # Per row, exactly what NarratorFeed.tsx paints as fields: children[0] = seq (blank when
-            # none), children[1] = type, then `u<ord>` when the frame has an ord, then the narration.
-            raw_rows = tid(page, "raw-event").evaluate_all(
-                "els => els.map(e => { const k = Array.from(e.children); const seq = (k[0] ? k[0].textContent : '').trim();"
-                " const ordEl = k.slice(2).find(x => !x.classList.contains('truncate') && /^u\\d+$/.test((x.textContent || '').trim()));"
-                " return { seq: seq === '' ? null : Number(seq), type: k[1] ? k[1].textContent : '',"
-                " ord: ordEl ? Number(ordEl.textContent.trim().slice(1)) : null }; })")
+            # Per row, exactly what NarratorFeed.tsx paints as fields (RAW_ROW_EXTRACT_JS — self-tested against a
+            # headless replica of the markup): seq column, type, `u<ord>` when present.
+            raw_rows = tid(page, "raw-event").evaluate_all(RAW_ROW_EXTRACT_JS)
             identity = assert_raw_view_matches_log(events, raw_rows, rid, RUN_STORE_IGNORED)
             stepper = tid(page, "process-stepper")
             stepper.wait_for(timeout=10_000)
@@ -4259,6 +4258,34 @@ def run_scenarios(rig: Rig, page) -> None:
     suite.run("CLN-2S", "Archive both projects (API substitute, UI-verified)", cln2s, requires=("PRJ-1", "PRJ-2"))
 
     rig.report["console_errors"] = console_errors[:20]
+
+
+# ── RUN-DET's DOM readers (shared by the scenario and the self-test) ──────────
+
+RUN_HEADER_TEXTS_JS = "h => Array.from(h.querySelectorAll('*')).map(e => (e.textContent || '').trim()).filter(t => t !== '')"
+"""Every ELEMENT's own text inside `run-header` — the status chip (`ChatPanel.tsx`: `<span …>{style.label}</span>`,
+labels from `RunCard.tsx STATUS_STYLE`) is one of them. Run 11 read the header's whole `textContent` and split it
+on whitespace; the row's children concatenate without separators (`←New test · 10a592 · #1CancelledRetryInspect ▾…`),
+so `Cancelled` never appeared as a word and RUN-DET failed on a HARNESS defect. Element identity, not string surgery."""
+
+RAW_ROW_EXTRACT_JS = (
+    "els => els.map(e => { const k = Array.from(e.children); const seq = (k[0] ? k[0].textContent : '').trim();"
+    " const ordEl = k.slice(2).find(x => !x.classList.contains('truncate') && /^u\\d+$/.test((x.textContent || '').trim()));"
+    " return { seq: seq === '' ? null : Number(seq), type: k[1] ? k[1].textContent : '',"
+    " ord: ordEl ? Number(ordEl.textContent.trim().slice(1)) : null }; })"
+)
+"""Per `raw-event` row, exactly the fields NarratorFeed.tsx paints: children[0] = the seq column (blank when the
+frame has none), children[1] = the type, then `u<ord>` when `ord` is a number, then the narration (`truncate`)."""
+
+
+def header_carries_status(element_texts: list[str], wire_status: str) -> bool:
+    """Does the run header carry the WIRE status as an element of its own? `STATUS_STYLE` labels are the status
+    capitalised with spaces for underscores (`awaiting_human` → `Awaiting human`), so an element's text normalised
+    (strip, lower, spaces → `_`) must EQUAL the status. A concatenation such as `#1CancelledRetry` is NOT a match —
+    the run-11 defect this replaces split that string on whitespace and found no word; a substring test would
+    have accepted it and any other stray occurrence. Pure; self-tested with run 11's exact header text."""
+    want = wire_status.strip().lower()
+    return any(t.strip().lower().replace(" ", "_") == want for t in element_texts if isinstance(t, str))
 
 
 # ── Self-test of the harness's own safety plumbing ────────────────────────────
@@ -5106,6 +5133,50 @@ def self_test() -> int:
         (10, "sessionStarted", None), (11, "unitPlanned", 1), (14, "councilConvened", 1), (15, "unitDistributed", 1), (16, "awaitingHuman", 1), (17, "runCancelled", None)]
     results["rundet_expectation_is_seq_ordered_like_the_feed"] = expected_raw_rows(list(reversed(log)), "r", ignored) == expected_raw_rows(log, "r", ignored)
     results["rundet_empty_log_fails"] = raw_raises(rows_ok, events=[])
+    # 32. RUN-DET's DOM readers (run 11's HARNESS defect, revision 10): the header's status is an ELEMENT — run 11
+    #     split the header's concatenated textContent on whitespace and never saw `Cancelled` inside
+    #     `#1CancelledRetryInspect ▾…`. The pure matcher rejects that exact string and accepts the element list;
+    #     a headless page built from ChatPanel's header markup and NarratorFeed's raw-row markup proves the two JS
+    #     readers feed the oracles correctly (blank seq column, a `u9` inside narration that is NOT an ord).
+    run11_header = "←New test · 10a592 · #1CancelledRetryInspect ▾AskBalancedAutonomous"
+    results["header_status_concatenated_textcontent_is_not_a_match"] = not header_carries_status([run11_header], "cancelled")
+    results["header_status_element_text_matches_wire"] = header_carries_status(["←", "New test · 10a592 · #1", "Cancelled", "Retry", "Inspect ▾"], "cancelled")
+    results["header_status_label_spaces_match_underscored_wire_and_other_labels_do_not"] = (
+        header_carries_status(["Awaiting human"], "awaiting_human") and not header_carries_status(["Completed", "Cancelled…"], "cancelled"))
+    try:
+        from playwright.sync_api import sync_playwright as _sync_pw
+    except ImportError:
+        results["dom_probe_available (pip install playwright && playwright install chromium)"] = False
+    else:
+        with _sync_pw() as _pw:
+            _browser = _pw.chromium.launch(headless=True)
+            try:
+                _page = _browser.new_page()
+                _page.set_content(
+                    '<div data-testid="run-header" class="flex items-center gap-3"><button type="button" aria-label="Back to run list">←</button>'
+                    '<span class="w-2.5 h-2.5 rounded-full shrink-0"></span><p class="flex-1 text-base font-semibold truncate">New test · 10a592 · #1</p>'
+                    '<span class="text-xs font-medium shrink-0 font-mono">Cancelled</span><button type="button" data-testid="run-retry">Retry</button>'
+                    '<button type="button">Inspect ▾</button><span>Ask</span><span>Balanced</span><span>Autonomous</span></div>'
+                    '<div data-testid="raw-event" class="flex items-baseline gap-2"><span class="shrink-0">   10</span><span class="shrink-0 font-semibold">sessionStarted</span><span class="truncate">Run started</span></div>'
+                    '<div data-testid="raw-event" class="flex items-baseline gap-2"><span class="shrink-0">   11</span><span class="shrink-0 font-semibold">unitPlanned</span><span class="shrink-0">u1</span><span class="truncate">Unit 1 planned</span></div>'
+                    '<div data-testid="raw-event" class="flex items-baseline gap-2"><span class="shrink-0">   16</span><span class="shrink-0 font-semibold">awaitingHuman</span><span class="shrink-0">u1</span><span class="truncate"></span></div>'
+                    '<div data-testid="raw-event" class="flex items-baseline gap-2"><span class="shrink-0">     </span><span class="shrink-0 font-semibold">noSeqFrame</span><span class="truncate">u9 here is narration, not an ord</span></div>'
+                )
+                header_texts = _page.locator('[data-testid="run-header"]').evaluate(RUN_HEADER_TEXTS_JS)
+                whole = _page.locator('[data-testid="run-header"]').evaluate("h => h.textContent")
+                results["header_js_reads_status_chip_as_its_own_element"] = (
+                    "Cancelled" in header_texts and header_carries_status(header_texts, "cancelled") and not header_carries_status(header_texts, "completed"))
+                results["header_replica_reproduces_run11_concatenation"] = "#1CancelledRetryInspect" in whole and not header_carries_status([whole], "cancelled")
+                rows = _page.locator('[data-testid="raw-event"]').evaluate_all(RAW_ROW_EXTRACT_JS)
+                results["raw_row_js_reads_seq_type_ord_incl_blank_seq_and_no_ord"] = rows == [
+                    {"seq": 10, "type": "sessionStarted", "ord": None}, {"seq": 11, "type": "unitPlanned", "ord": 1},
+                    {"seq": 16, "type": "awaitingHuman", "ord": 1}, {"seq": None, "type": "noSeqFrame", "ord": None}]
+                dom_log = [{"seq": 10, "ts": 1.0, "session": "r", "type": "sessionStarted"}, {"seq": 11, "ts": 1.0, "session": "r", "type": "unitPlanned", "ord": 1},
+                           {"seq": 16, "ts": 1.0, "session": "r", "type": "awaitingHuman", "ord": 1}, {"session": "r", "type": "noSeqFrame"}]
+                results["raw_rows_from_dom_satisfy_identity_oracle"] = assert_raw_view_matches_log(dom_log, rows, "r", ignored)["rows"] == 4
+                results["raw_rows_from_dom_fail_identity_oracle_on_wrong_log"] = raw_raises(rows, events=dom_log[:2] + [dict(dom_log[2], type="WRONG_EVENT")] + dom_log[3:])
+            finally:
+                _browser.close()
     ok = all(results.values())
     print(json.dumps({"self_test": results, "ok": ok}, indent=2))
     return 0 if ok else 1
