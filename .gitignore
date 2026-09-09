@@ -19,5 +19,9 @@ dist-realhost/
 # captured plans + report.json beside them ARE committed. The launch reservation (flock) file and
 # in-flight report temp files are process state, never evidence.
 e2e/artifacts/**/*.png
+# …except the 21 historical screenshots of the three recorded live runs (LT-1/2/3, 2026-09-09):
+# observations of runs that cannot be regenerated — committed as evidence and linked from
+# docs/testing/test-feature-live-report.md. Regenerated runs anywhere else stay ignored.
+!e2e/artifacts/test-feature-live/LT-*.png
 e2e/artifacts/**/.launch.lock
 e2e/artifacts/**/.report-*.tmp

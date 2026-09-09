@@ -6,8 +6,10 @@ operator's dogfood daemon, against wicked-studio itself. Not a dry run and not a
 governed runs, real councils, the intake gate approved on the real SteeringGate card, then an honest
 look at what the feature produced. Harness: [`e2e/test_feature_live.py`](../../e2e/test_feature_live.py);
 raw measurements: [`e2e/artifacts/test-feature-live/report.json`](../../e2e/artifacts/test-feature-live/report.json);
-captured plans: `e2e/artifacts/test-feature-live/LT-{1,2,3}-plan-<run>.md`. Screenshots live beside
-them (gitignored PNGs — regenerate with the harness).
+captured plans: `e2e/artifacts/test-feature-live/LT-{1,2,3}-plan-<run>.md`; screenshots: the 21
+PNGs beside them (`LT-{1,2,3}-*.png`, **committed** — the historical observations of the three
+recorded runs, which no later run can regenerate; every one is linked from "LT-5 — the operator's
+view" below).
 
 > **Revised 2026-09-09 after the codex review of PR #215.** No new runs were launched and no daemon
 > state was touched: the verdict was split into `harness_ok` vs `result`, the gate policy became one
@@ -22,8 +24,9 @@ them (gitignored PNGs — regenerate with the harness).
 > sibling gates are decided on the UI while following; the brief-text attribution fallback is gone;
 > artifact writes are contained and symlink-safe; evidence-fetch failures are typed misses; plan
 > measurements exclude execution summaries. One number moved (LT-1's scenario count, 31 → 28 —
-> annotated below); the swap-ceiling item was adjudicated by the coordinator (see "Preflight
-> history"): recorded + acknowledged, not enforced.
+> annotated below); the swap-ceiling item was adjudicated by the coordinator at the time: recorded +
+> acknowledged, not enforced *(superseded — the contract itself was amended after round 4; see
+> "Preflight history")*.
 >
 > **Revised a third time after codex round 3 (same day, still offline — read-only GETs only, no
 > launch).** The gate policy now fails closed on an *unknown* gate kind (unit lookup failed,
@@ -38,9 +41,30 @@ them (gitignored PNGs — regenerate with the harness).
 > `harness_ok=false`); and a plan line is excluded as an execution result only when it carries a
 > RESULT marker, never for naming a command. **No number moved**: the three plans re-derive to the
 > same 28 / 13 / 22 scenario lines, 31 / 14 / 30 files and 38.6 % / n/a / 0 % consistency — why is
-> recorded in `report.json → revisions[2]`. The swap-ceiling item was **adjudicated FINAL by the
-> coordinator in round 2 — no change; the contract deviation is recorded, acknowledged and
-> documented, not enforced.**
+> recorded in `report.json → revisions[2]`. The swap-ceiling item was re-adjudicated by the
+> coordinator, no change *(superseded by the contract amendment below)*.
+>
+> **Revised a fourth time after codex round 4 (same day, still offline — read-only GETs only, no
+> launch).** The gate policy is now an **allow-list** that fails closed: a gate is approved ONLY when
+> the prompt is an allow-listed shape (crew's pre-execution unit gate `Approve unit N before it
+> runs: …` or a plan approval `Approve [the] [proposed] [test] plan…`) **and** the gated unit's
+> `stage`/`gate` is known and not a delivery kind **and** no delivery verb or command appears
+> anywhere in the complete prompt (the list now includes `gh pr create`, `git push`, `push the
+> branch`, `open a/the PR / pull request`, `npm`/`cargo publish`, `create a release`); everything
+> else is rejected with a named reason — codex's probes "Approve unit 4 before it runs: gh pr create
+> --fill", "Please push the branch and open a PR" and SteeringGate's "Prompt unavailable (daemon
+> restarted)…" fallback all reject, and so does a plan approval whose body lists `/runs/:id/deliver`
+> among the routes to test (a recorded finding, by design: a rejected plan is recoverable, an
+> approved delivery is not). The fan-out gate is decided on the **tokens** of each `ps` command line,
+> not a positional regex (`cargo +stable build`, `claude --model opus --print task`, `wicked-crew
+> serve --db /tmp/x --port 62432` all block; `FANOUT_PATTERN` only adds matches). A followed
+> sibling's gate whose wire fails is `sibling-gate-wire-mismatch` → `harness_ok=false`. The
+> artifacts root is component-walked *before* startup creates anything (a symlinked `e2e/artifacts`
+> refuses `main()`). The 21 screenshots are committed and linked below. **No number moved**; the
+> recorded intake gates re-decide `approve` under the allow-list (`report.json → revisions[3]`). The
+> swap-ceiling item: **the contract itself was amended by its author (the coordinator) on 2026-09-09
+> to permit an explicit, acknowledged, recorded override; the harness matches the amended contract —
+> no code change** (see "Preflight history").
 
 | Component | Version |
 |---|---|
@@ -51,32 +75,41 @@ them (gitignored PNGs — regenerate with the harness).
 
 **Rules the harness held itself to.** One governed run in flight at a time; a serialization
 preflight before every launch (zero executing/awaiting runs on `:7701`, 1-minute load < 20, and a
-swap gate — the brief's contract is **< 85 %**, which the harness now enforces by default; the three
+swap gate — the brief's contract is **< 85 %**, which the harness enforces by default; the three
 recorded launches ran under a coordinator-authorized **95 %** with swap reading 93 %, a contract
-deviation recorded in `report.json → contract_deviation` — see "Preflight history"; free memory was
+deviation recorded in `report.json → contract_deviation` and accepted as deviation evidence under
+the contract's 2026-09-09 amendment — see "Preflight history"; free memory was
 recorded but not gated on). *The harness as committed now also re-runs the gates immediately
 before the submit click under a process-wide `flock` reservation held until the intake gate is
 decided (`preflights[].at: "submit"`) — the three recorded launches predate that check and had one
 preflight before browser start-up (`at_submit: "not performed"`) — and carries a fourth gate: no
-heavy worker/build fan-out on the host (`fanout_processes()` over `ps -axo pid=,command=`,
-default pattern `codex exec | claude -p/--print | cargo build/test/clippy | vitest | npm [run]
-test/build | a second wicked-crew serve --port ≠ 7701`, `FANOUT_PATTERN` overrides; any match or a
-failed `ps` blocks; recorded in the reading as `fanout: [pid cmd…]`). The three launches predate
+heavy worker/build fan-out on the host (`fanout_processes()` over `ps -axo pid=,command=`, each
+command line tokenized and matched on its **tokens in any order** — `codex … exec`, `claude … -p |
+--print`, `cargo [+toolchain] build | test | clippy | run`, `vitest`, `npm|pnpm|yarn test | run
+test|build`, a second `wicked-crew serve` whose `--port` value (`--port N` / `--port=N`) is not
+7701, runtime launchers such as `node …/.bin/codex` looked through; `FANOUT_PATTERN` adds a regex,
+never replaces the rules; any match or a failed `ps` blocks; recorded in the reading as
+`fanout: [pid cmd…]`). The three launches predate
 that gate too (`readings[].fanout: "not measured"`); a live read-only `ps` on this host at review
 time listed a second `wicked-crew serve --port 62432` daemon and codex council seats — the gate
 would have blocked.* Every gate decided through the UI card only (never the API) under one policy
-applied to the intake gate too — *decided by gate kind and failing closed: a unit whose
-`stage`/`gate` is deliver/release/publish/merge → reject whatever the prompt says; a pre-execution
-prompt ("Approve unit N before it runs: …") is scanned COMPLETELY and rejected on a delivery verb
-anywhere (deliver/push/open a PR/pull request/merge/publish/release), approved otherwise — the one
-shape that may approve when the unit's kind is UNKNOWN (lookup failed, `stage`/`gate` null); any
-other prompt with an unknown kind → reject (`unknown-gate-kind`); any other prompt with a known
-non-delivery kind → reject on a delivery imperative, approve otherwise (a plan body listing
-`/runs/:id/deliver` is a plan); an empty/unreadable prompt → always reject. The recorded intake
-gates (unit 1, stage `test`, gate `auto`, "Approve unit 1 before it runs: …") re-evaluate to
-approve — agreeing with what was clicked. Every click's wire is verified: the response must be a
-POST to exactly `/api/v1/runs/<this run>/gate` with `body.approve` equal to the decision and a 2xx
-status, else `gate-wire-mismatch` → `harness_ok=false`; the three recorded gates re-verify offline
+applied to the intake gate too — *an allow-list that fails closed: a gate is approved ONLY when
+(a) the prompt is an allow-listed shape — crew's pre-execution unit gate ("Approve unit N before it
+runs: …") or a plan approval ("Approve [the] [proposed] [test] plan…"), (b) the gated unit's
+`stage`/`gate` is known and not deliver/release/publish/merge, and (c) no delivery verb or command
+appears anywhere in the complete prompt (deliver(y) / push / `git push` / push the branch /
+`gh pr create` / `pr create` / open a|the PR / pull request / merge / publish / `npm`|`cargo
+publish` / release / create a release). Everything else is rejected with a named reason: a
+delivery kind; an empty prompt (`unreadable-gate`); a delivery verb anywhere (`delivery-verb` — a
+plan body listing `/runs/:id/deliver` among the routes to test is rejected too, and recorded as a
+finding); any other shape, SteeringGate's "Prompt unavailable (daemon restarted)…" fallback
+included (`unknown-prompt-shape`); an allow-listed shape whose unit kind is unknown — lookup
+failed, `stage`/`gate` null (`unknown-gate-kind`). The recorded intake gates (unit 1, stage
+`test`, gate `auto`, "Approve unit 1 before it runs: …", no delivery verb) re-evaluate to approve
+— agreeing with what was clicked. Every click's wire is verified: the response must be a POST to
+exactly `/api/v1/runs/<this run>/gate` with `body.approve` equal to the decision and a 2xx status,
+else `gate-wire-mismatch` → `harness_ok=false` (a followed sibling's gate: `sibling-gate-wire-
+mismatch`, same consequence); the three recorded gates re-verify offline
 (`gates[0].wire_ok: true`)*; sibling gates are decided on `/runs/<sibling id>` while following, and
 the attributable set is rediscovered on every poll (none arose); no deliver gate approved (none
 arrived); no repo/project writes; read-only GETs for every assertion, with a failed evidence fetch
@@ -170,15 +203,30 @@ the Results row)*.
 
 ## LT-5 — the operator's view
 
-Screenshots (regenerable): `LT-{1,2,3}-01-landing-before`, `02-panel-filled`, `03-gate-card`,
-`04-after-approve`, `06-run-page`, `07-landing-after`, `08-scoreboard`.
+Screenshots — the **historical observations of the three recorded runs** (d293f4d7 / f8bc2bad /
+d12adb6c on 2026-09-09 01:06–01:32), committed under `e2e/artifacts/test-feature-live/` and
+**not regenerable**: another live run would launch different runs against a different daemon state
+(the harness ignores regenerated PNGs everywhere else — `.gitignore` re-includes exactly these 21).
+Captured full-page at 1440×900; 21 files, 2,107,067 bytes, none over 250 KB (none downscaled).
 
-- **Gate card** (`03-gate-card`): renders inline in the "Run recon"/"New test" panel with "Awaiting
+| Capture (what it shows) | LT-1 Run recon | LT-2 New test | LT-3 Run recon again |
+|---|---|---|---|
+| `01-landing-before` — the Tests landing before the launch | [LT-1-01](../../e2e/artifacts/test-feature-live/LT-1-01-landing-before.png) (74 KB) | [LT-2-01](../../e2e/artifacts/test-feature-live/LT-2-01-landing-before.png) (74 KB) | [LT-3-01](../../e2e/artifacts/test-feature-live/LT-3-01-landing-before.png) (74 KB) |
+| `02-panel-filled` — verb opened, repo chip attached, one-sentence brief typed | [LT-1-02](../../e2e/artifacts/test-feature-live/LT-1-02-panel-filled.png) (107 KB) | [LT-2-02](../../e2e/artifacts/test-feature-live/LT-2-02-panel-filled.png) (107 KB) | [LT-3-02](../../e2e/artifacts/test-feature-live/LT-3-02-panel-filled.png) (107 KB) |
+| `03-gate-card` — the SteeringGate card inside the panel, before the click | [LT-1-03](../../e2e/artifacts/test-feature-live/LT-1-03-gate-card.png) (122 KB) | [LT-2-03](../../e2e/artifacts/test-feature-live/LT-2-03-gate-card.png) (124 KB) | [LT-3-03](../../e2e/artifacts/test-feature-live/LT-3-03-gate-card.png) (122 KB) |
+| `04-after-approve` — the panel's resolved copy after the approve | [LT-1-04](../../e2e/artifacts/test-feature-live/LT-1-04-after-approve.png) (84 KB) | [LT-2-04](../../e2e/artifacts/test-feature-live/LT-2-04-after-approve.png) (84 KB) | [LT-3-04](../../e2e/artifacts/test-feature-live/LT-3-04-after-approve.png) (84 KB) |
+| `06-run-page` — `/runs/:id` after completion | [LT-1-06](../../e2e/artifacts/test-feature-live/LT-1-06-run-page.png) (222 KB) | [LT-2-06](../../e2e/artifacts/test-feature-live/LT-2-06-run-page.png) (183 KB) | [LT-3-06](../../e2e/artifacts/test-feature-live/LT-3-06-run-page.png) (186 KB) |
+| `07-landing-after` — the Tests landing after the run | [LT-1-07](../../e2e/artifacts/test-feature-live/LT-1-07-landing-after.png) (74 KB) | [LT-2-07](../../e2e/artifacts/test-feature-live/LT-2-07-landing-after.png) (74 KB) | [LT-3-07](../../e2e/artifacts/test-feature-live/LT-3-07-landing-after.png) (74 KB) |
+| `08-scoreboard` — `/testing/campaigns/<returned label>` | [LT-1-08](../../e2e/artifacts/test-feature-live/LT-1-08-scoreboard.png) (44 KB) | [LT-2-08](../../e2e/artifacts/test-feature-live/LT-2-08-scoreboard.png) (44 KB) | [LT-3-08](../../e2e/artifacts/test-feature-live/LT-3-08-scoreboard.png) (44 KB) |
+
+(No `05-gate-*` capture exists: that name is reserved for a later gate, and none arrived in any run.)
+
+- **Gate card** ([`03-gate-card`](../../e2e/artifacts/test-feature-live/LT-1-03-gate-card.png)): renders inline in the "Run recon"/"New test" panel with "Awaiting
   human decision · run d293f4d7 · before unit #1" and the prompt "Approve unit 1 before it runs:
   Recon: survey the target and propose a test plan…". Four buttons; a "Run awaiting human" toast
   bottom-right; the rail gains a "Run recon" sub-item under Test. Works as designed — but what it
   asks the operator to approve is the survey, not a plan.
-- **Tests landing after each run** (`07-landing-after`) is pixel-identical to before: PERFORMANCE
+- **Tests landing after each run** ([`07-landing-after`](../../e2e/artifacts/test-feature-live/LT-1-07-landing-after.png) vs [`01-landing-before`](../../e2e/artifacts/test-feature-live/LT-1-01-landing-before.png)) is pixel-identical to before: PERFORMANCE
   "TESTS 1 · TEST RUNS 2", PIPELINE "0 running · 0 needs you", RISK "PASS RATE 0 % — 0 landed of 2
   finished". Every one of those numbers comes from the **Sept-8 cancelled fan**
   `recon-mttdwnhf-e3e3c5f4` (both nodes `cancelled`, campaign status `partially_completed`), whose
@@ -186,14 +234,14 @@ Screenshots (regenerable): `LT-{1,2,3}-01-landing-before`, `02-panel-filled`, `0
   runs carry. The three runs launched *from this page* never appear on it: they are single-repo
   recons, which crew files on the per-run path without registering a campaign, and the landing
   lists campaigns (`GET /campaigns` returned that one stale campaign and `groups: []` throughout).
-- **Scoreboard** (`08-scoreboard`): the launch answer carried `campaign: recon-mttmyh2a-c635a60c`
+- **Scoreboard** ([`08-scoreboard`](../../e2e/artifacts/test-feature-live/LT-1-08-scoreboard.png)): the launch answer carried `campaign: recon-mttmyh2a-c635a60c`
   (with `campaignRegistered: false`, which the panel ignores); the panel's resolved copy points the
   operator at "Campaigns"; `/testing/campaigns/recon-mttmyh2a-c635a60c` renders "No campaign is
   filed under **recon-mttmyh2a-c635a60c** on this daemon — a campaign appears with its first run, so
   this label either never launched one or lives on another daemon." with an "**All campaigns**"
   link (rename leftover — the section is "Test"), and the browser console logs the 404 for
   `GET /campaigns/<label>`. Same for all three labels.
-- **Run page** (`06-run-page`): "Recon · d293f4 · #1 · Completed", phase strip **test › build ›
+- **Run page** ([`06-run-page`](../../e2e/artifacts/test-feature-live/LT-1-06-run-page.png)): "Recon · d293f4 · #1 · Completed", phase strip **test › build ›
   test** (the middle unit — "Present the proposed plan…" — was classified as a `build` stage),
   "3 of 3 phases done", "took 10m 38s", intent = the full concatenated problem, roster of five
   CLIs, the plan readable only as the thread's output bubbles. "This run is finished — steering is
@@ -246,25 +294,37 @@ the acknowledgement the harness exits naming both variables — and the move is 
 `CONTRACT DEVIATION` at every preflight, stamped on every reading and recorded in that top-level
 object.
 
-**Adjudication (coordinator, after codex round 2).** Codex asked for the 85 % ceiling to be
-*enforced* and compliant live-run evidence obtained. The coordinator ruled that the 85 % default
-stays and `SWAP_MAX_PCT` stays an explicit operator override, because compliant live evidence is
-unobtainable on this host (it idles at ~93 % swap from unrelated long-lived processes) and
-re-running governed councils is out of scope; the deviation is made impossible to miss rather than
-impossible to do. Item 1 is therefore **recorded + acknowledged, not enforced; the three recorded
-runs remain deviation evidence.** The three launches also predate the pre-submit preflight: each had
-one preflight before browser start-up and none at the submit click (`preflights[].at_submit: "not
+**The contract was amended (its author — the coordinator — 2026-09-09, after codex rounds 2–4).**
+Codex asked, in each of rounds 2, 3 and 4, for the 85 % ceiling to be *enforced* and compliant
+live-run evidence obtained, or for an explicit amendment to the supplied contract. The contract
+(`brief-test-feature-live.md`, the "Outputs" paragraph) now carries that amendment, quoted in full:
+
+> CONTRACT AMENDMENT (coordinator, 2026-09-09, after codex rounds 2-4 of PR #215): the 85% default
+> stands; an EXPLICIT operator override (SWAP_MAX_PCT together with SWAP_MAX_PCT_ACK=contract-deviation)
+> is permitted and MUST be recorded in the report as a contract deviation (threshold, reading,
+> acknowledgement) and stated in the report doc. The three recorded launches (d293f4d7, f8bc2bad,
+> d12adb6c) ran under an authorized 95% override at 93% swap because this host idles above 85%; they
+> are accepted as deviation evidence.
+
+The harness implements exactly the amended contract, so **no code change** followed it: the default
+is the contract's 85 % (`SWAP_MAX_PCT_CONTRACT`); `SWAP_MAX_PCT` moves the gate only together with
+`SWAP_MAX_PCT_ACK=contract-deviation` (alone, the harness exits naming both variables); the
+deviation is recorded as `contract_deviation` {var, contract 85, effective, ack} at the top of
+`report.json` (mirrored in `preflight_policy`), logged as `CONTRACT DEVIATION` at every preflight
+and stamped on every reading with the threshold it was judged against (`swap_max_pct`); and the
+three recorded launches — 95 % threshold, 93.0 % reading, coordinator authorization as the
+acknowledgement — are the deviation evidence the amendment accepts, stated here as it requires.
+(Earlier revisions of this section called this a "coordinator adjudication"; the amended contract
+supersedes that wording.) The three launches also predate the pre-submit preflight: each had one
+preflight before browser start-up and none at the submit click (`preflights[].at_submit: "not
 performed"`).
 
-**Codex round 3 raised the same item again; the adjudication is FINAL** (coordinator): default 85,
-explicit override only with `SWAP_MAX_PCT_ACK=contract-deviation`, deviation recorded and logged —
-no change; the contract deviation is recorded, acknowledged and documented, not enforced, and
-compliant live evidence is not obtainable on this host. Round 3 did add the **fan-out gate** (gate
-4, above): the three launches predate it (`readings[].fanout: "not measured"`, `preflight_policy.
-fanout_gate: "not in force"`), and a read-only `ps` reading at review time showed this host running
-a second `wicked-crew serve --port 62432` daemon plus codex council seats — under the current
-harness none of the three launches would have cleared gate 4 either. Recorded as such; no launch
-was attempted to find out.
+Round 3 added the **fan-out gate** (gate 4, above) and round 4 made it decide on the tokens of each
+command line rather than a positional regex: the three launches predate it (`readings[].fanout:
+"not measured"`, `preflight_policy.fanout_gate: "not in force"`), and a read-only `ps` reading at
+round-3 review time showed this host running a second `wicked-crew serve --port 62432` daemon plus
+codex council seats — under the current harness none of the three launches would have cleared gate
+4 either. Recorded as such; no launch was attempted to find out.
 
 How it got there: three harness attempts. Attempt 1 gated on `vm_stat` "Pages free" ≥ 2 GB and never
 cleared in its first minutes (free swung 58 MB–2 GB while load was 9–14); attempt 2 lowered the floor
@@ -285,23 +345,26 @@ STUDIO_URL=http://localhost:7701 TARGET_REPO=wicked-studio   # defaults
 SWAP_MAX_PCT=95 SWAP_MAX_PCT_ACK=contract-deviation python3 e2e/test_feature_live.py
                                                  # relax the swap gate — an acknowledged, recorded contract deviation
                                                  # (SWAP_MAX_PCT alone exits naming both variables)
-FANOUT_PATTERN='codex exec|cargo build' python3 e2e/test_feature_live.py
-                                                 # override the fan-out gate's process pattern (default: FANOUT_PATTERN_DEFAULT)
+FANOUT_PATTERN='pytest|make -j' python3 e2e/test_feature_live.py
+                                                 # ADD an extra regex to the fan-out gate — the token rules (FANOUT_RULES) always apply
 
-python3 -m unittest e2e/test_feature_live_selftest.py -v   # offline self-test: thresholds + ack, fan-out gate (injected ps
-python3 -m py_compile e2e/test_feature_live.py             # table), pre-submit preflight + O_NOFOLLOW launch lock, gate
-                                                           # policy (fake page, wire verified), sibling gates + rediscovery,
-                                                           # verdict split, attribution, typed fetch misses, scrub, plan
-                                                           # analysis (result markers; re-derived over the committed plans),
-                                                           # contained component-walked atomic write
+python3 -m unittest e2e/test_feature_live_selftest.py -v   # offline self-test: thresholds + ack (the amended contract), fan-out
+python3 -m py_compile e2e/test_feature_live.py             # rules on tokens (injected ps table, codex's probes), pre-submit
+                                                           # preflight + O_NOFOLLOW launch lock, the allow-list gate policy
+                                                           # (fake page, wire verified), sibling gates + rediscovery + wire,
+                                                           # verdict split, attribution, typed fetch misses (output type),
+                                                           # raw launch body, scrub, plan analysis (re-derived over the
+                                                           # committed plans), walked artifacts root, atomic write
 ```
 
 Requires `pip install playwright && playwright install chromium`, a reachable crew daemon with the
 target repo registered, and nothing else executing on it — the harness refuses to launch otherwise
-(swap ≥ 85 % included, unless `SWAP_MAX_PCT` + `SWAP_MAX_PCT_ACK=contract-deviation` say otherwise;
-any `codex exec` / `claude -p` / `cargo build|test|clippy` / `vitest` / `npm test|build` / second
-`wicked-crew serve --port` process on the host included — `FANOUT_PATTERN` overrides the pattern, a
-failed `ps` blocks), re-checks all four gates at the submit click, and holds
+(swap ≥ 85 % included, unless `SWAP_MAX_PCT` + `SWAP_MAX_PCT_ACK=contract-deviation` say otherwise —
+the amended contract's explicit, recorded override; any `codex … exec` / `claude … -p|--print` /
+`cargo [+toolchain] build|test|clippy|run` / `vitest` / `npm test|build` / second
+`wicked-crew serve … --port ≠ 7701` process on the host included, matched on the command line's
+tokens in any order — `FANOUT_PATTERN` adds a regex, a failed `ps` blocks), re-checks all four gates
+at the submit click, and holds
 `e2e/artifacts/test-feature-live/.launch.lock` (`flock`, opened `O_NOFOLLOW` after an `lstat` walk
 of every path component) until the intake gate is decided — a second harness process fails fast.
 The self-test needs none of that (it touches `git ls-files` of this worktree and a temp dir);

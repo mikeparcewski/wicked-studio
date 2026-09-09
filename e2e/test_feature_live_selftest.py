@@ -4,20 +4,24 @@ Offline regression tests for the live Test-feature harness (`e2e/test_feature_li
 
 Deterministic, stdlib `unittest` only: no network, no Playwright, no daemon, no macOS probes —
 the harness module is imported via `importlib` (its `main()` is `__main__`-guarded) and its pure
-pieces are exercised with fakes: the preflight thresholds + the acknowledged contract deviation,
-the fan-out gate over an injected process table (and a failed `ps`), the pre-submit preflight and
-the flock launch reservation (O_NOFOLLOW, symlinked lock / directory refused), the gate policy (by
-gate KIND, failing closed: unknown kind → reject unless the complete prompt is an unambiguous
-pre-execution gate) and the UI click path with a fake page whose wire is verified (exact endpoint
+pieces are exercised with fakes: the preflight thresholds + the acknowledged contract deviation
+(the amended contract), the fan-out gate decided on TOKENS over an injected process table (codex's
+three argument-order probes; a failed `ps`), the pre-submit preflight and the flock launch
+reservation (O_NOFOLLOW, symlinked lock / directory refused), the gate policy (an ALLOW-LIST that
+fails closed: approve only on an allow-listed shape + a known non-delivery kind + no delivery verb
+anywhere in the complete prompt — codex's `gh pr create`, `push the branch`, `Prompt unavailable`
+probes all reject) and the UI click path with a fake page whose wire is verified (exact endpoint
 for THIS run, body.approve == the decision, 2xx — a contradictory wire is a mismatch), sibling
 gates through the UI while following with per-poll REDISCOVERY (a late sibling is followed; a late
-sibling still gated at the timeout fails), the verdict split (every sibling terminal with its own
-verdict), sibling attribution without the brief fallback, typed evidence-fetch misses (events and
-listings included), `scrub()`, plan analysis (scenario rows only, execution RESULTS excluded by
-result marker — a proposed command is a scenario — canonical file identity; re-derived over the
-three committed plans) and the contained, component-walked, symlink-safe, unique-temp-file report
-write. The only local resource touched is `git ls-files` of this worktree (for the committed-plan
-re-derivation) and a temp dir.
+sibling still gated at the timeout fails; a sibling gate's wire mismatch fails the harness), the
+verdict split (every sibling terminal with its own verdict), sibling attribution without the brief
+fallback, typed evidence-fetch misses (events, listings, and a unit `output` of the wrong type),
+the launch body recorded raw when it is not JSON, `scrub()`, plan analysis (scenario rows only,
+execution RESULTS excluded by result marker — a proposed command is a scenario — canonical file
+identity; re-derived over the three committed plans), the artifacts root walked BEFORE startup
+creates it (a symlinked `e2e/artifacts` refuses `main()`), and the contained, component-walked,
+symlink-safe, unique-temp-file report write. The only local resource touched is `git ls-files` of
+this worktree (for the committed-plan re-derivation) and a temp dir.
 
 Run:  python3 -m unittest e2e/test_feature_live_selftest.py -v
 (studio's CI has no Python step — run this by hand before pushing a harness change.)
@@ -103,7 +107,10 @@ class Isolated(unittest.TestCase):
         tfl.set_fetch_sink(None)
 
 
-# ── Item 1 (adjudicated): the 85 % default, the acknowledged override ─────────────────────────
+# ── Item 1 (the contract as AMENDED 2026-09-09): the 85 % default, the acknowledged override ───
+# "the 85% default stands; an EXPLICIT operator override (SWAP_MAX_PCT together with
+# SWAP_MAX_PCT_ACK=contract-deviation) is permitted and MUST be recorded in the report as a contract
+# deviation" — the harness implements exactly that; these tests are its statement.
 
 
 class PreflightThresholds(Isolated):
@@ -239,32 +246,88 @@ PS_TABLE = """  123 /usr/bin/python3 e2e/test_feature_live.py
   810 node /opt/homebrew/bin/wicked-crew serve --port 62432 --db /tmp/x/core.db
   811 ps -axo pid=,command=
   812 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --type=renderer
+  813 cargo +stable build
+  814 claude --model opus --print task
+  815 wicked-crew serve --db /tmp/x --port 62432
+  816 node /x/app.js --port 62432
+  817 node /opt/homebrew/bin/wicked-crew serve --port=62432
+  818 node /opt/homebrew/bin/wicked-crew serve --port=7701
 """
+# Codex round 4's three probes — the positional regex returned no match for any of them.
+CODEX_FANOUT_PROBES = ("cargo +stable build", "claude --model opus --print task", "wicked-crew serve --db /tmp/x --port 62432")
 
 
 class FanoutGate(Isolated):
-    def test_default_pattern_matches_the_documented_fanout_and_nothing_else(self):
+    def test_the_rules_match_the_documented_fanout_and_nothing_else(self):
         hits = tfl.fanout_processes(PS_TABLE)
-        self.assertEqual([h.split(" ", 1)[0] for h in hits], ["456", "789", "790", "800", "801", "802", "803", "804", "805", "806", "810"])
+        self.assertEqual([h.split(" ", 1)[0] for h in hits],
+                         ["456", "789", "790", "800", "801", "802", "803", "804", "805", "806", "810", "813", "814", "815", "817"])
         self.assertTrue(hits[0].startswith("456 node "), hits[0])          # `pid cmd`
         self.assertTrue(all(len(h) <= 170 for h in hits))                  # command lines are clipped
-        # The dogfood daemon (:7701, or no port), the harness, the interactive Claude app, `ps`
-        # itself and a Chrome renderer are not fan-out.
+        # The dogfood daemon (:7701 — `--port 7701` or `--port=7701` — or no port), the harness, the
+        # interactive Claude app, `npm run dev`, an unrelated `node … --port 62432`, `ps` itself and
+        # a Chrome renderer are not fan-out.
         self.assertEqual(tfl.fanout_processes(""), [])
-        self.assertEqual(tfl.fanout_processes("  808 wicked-crew serve --port 7701\n  809 wicked-crew serve\n"), [])
+        self.assertEqual(tfl.fanout_processes("  808 wicked-crew serve --port 7701\n  809 wicked-crew serve\n  816 node /x/app.js --port 62432\n"), [])
 
-    def test_pattern_override_and_invalid_regex(self):
+    def test_rules_are_decided_on_tokens_not_argument_order(self):
+        """Codex round 4: `fanout_processes()` returned no matches for `cargo +stable build`,
+        `claude --model opus --print task` and `wicked-crew serve --db /tmp/x --port 62432` — the
+        default was a positional regex. Every rule is now a predicate over the tokenized argv."""
+        for probe in CODEX_FANOUT_PROBES:
+            self.assertIsNotNone(tfl.fanout_rule(probe), probe)
+            self.assertEqual(tfl.fanout_processes(f"  1 {probe}\n"), [f"1 {probe}"], probe)
+        self.assertEqual(tfl.fanout_rule("cargo +stable build"), "cargo build|test|clippy|run")
+        self.assertEqual(tfl.fanout_rule("claude --model opus --print task"), "claude -p|--print")
+        self.assertEqual(tfl.fanout_rule("wicked-crew serve --db /tmp/x --port 62432"), "second wicked-crew serve --port 62432")
+        self.assertEqual(tfl.fanout_rule("wicked-crew serve --port=62432"), "second wicked-crew serve --port 62432")   # --port=NNNN
+        self.assertEqual(tfl.fanout_rule("node /opt/homebrew/bin/wicked-crew --db x serve --port 62432"), "second wicked-crew serve --port 62432")
+        for clear in ("wicked-crew serve", "wicked-crew serve --port 7701", "node /opt/homebrew/bin/wicked-crew serve --port=7701",
+                      "node /x/app.js --port 62432", "wicked-crew --port 62432", "/Applications/Claude.app/Contents/MacOS/Claude",
+                      "claude", "claude --model opus", "cargo fmt", "cargo metadata --format-version 1", "npm run dev", "npm install",
+                      "codex", "codex login", "vim /tmp/cargo", "python3 e2e/test_feature_live.py", "", "   "):
+            self.assertIsNone(tfl.fanout_rule(clear), clear)
+        # runtime launchers are looked through; `+toolchain` / options / VAR=value never hide the program
+        self.assertEqual(tfl.fanout_rule("node /opt/homebrew/lib/node_modules/wicked-crew/node_modules/.bin/codex exec --skip-git-repo-check You"), "codex exec")
+        self.assertEqual(tfl.fanout_rule("node /x/node_modules/.bin/vitest run"), "vitest")
+        self.assertEqual(tfl.fanout_rule("npx vitest"), "vitest")
+        self.assertEqual(tfl.fanout_rule("env RUST_LOG=debug cargo test -p wicked-core"), "cargo build|test|clippy|run")
+        self.assertEqual(tfl.fanout_rule("/usr/bin/nice -n 10 cargo clippy --all-targets"), "cargo build|test|clippy|run")
+        self.assertEqual(tfl.fanout_rule("cargo +nightly-2026-01-01 run --bin x"), "cargo build|test|clippy|run")
+        self.assertEqual(tfl.fanout_rule('claude -p "do a thing" --model opus'), "claude -p|--print")
+        self.assertEqual(tfl.fanout_rule("claude --print"), "claude -p|--print")
+        self.assertEqual(tfl.fanout_rule("codex --model o3 exec 'x'"), "codex exec")
+        self.assertEqual(tfl.fanout_rule("npm test -- --watch"), "npm test|build")
+        self.assertEqual(tfl.fanout_rule("npm run build:with-studio"), "npm test|build")
+        self.assertEqual(tfl.fanout_rule("pnpm run test:unit"), "pnpm test|build")
+        self.assertEqual(tfl.fanout_rule('claude -p "an unbalanced \' quote'), "claude -p|--print")   # shlex fails → whitespace split
+        self.assertEqual(tfl._program(["node", "--max-old-space-size=4096", "/x/.bin/vitest", "run"]), ("vitest", 2))
+        self.assertEqual(tfl._program(["node"]), ("node", 0))
+        self.assertEqual(tfl._program(["node", "/x/app.js", "--port", "62432"]), ("node", 0))   # a launcher running something else
+        self.assertEqual(tfl._program(["vim", "/tmp/cargo"]), ("vim", 0))                       # not a launcher: argv[0] is the program
+        self.assertEqual(tfl._program(["/usr/bin/nice", "-n", "10", "cargo", "clippy"]), ("cargo", 3))
+        self.assertEqual(tfl._program([]), ("", 0))
+        self.assertEqual(tfl._port_value(["serve", "--port", "62432"]), "62432")
+        self.assertEqual(tfl._port_value(["serve", "--port=62432"]), "62432")
+        self.assertEqual(tfl._port_value(["serve", "--port"]), None)
+        self.assertEqual(tfl._port_value(["serve"]), None)
+        self.assertFalse(hasattr(tfl, "FANOUT_PATTERN_DEFAULT"))   # the positional regex is gone
+        self.assertIn("shlex.split", inspect.getsource(tfl._tokens))
+
+    def test_the_extra_pattern_adds_matches_and_an_invalid_regex_refuses(self):
         rx = tfl.fanout_pattern({"FANOUT_PATTERN": r"npm run dev"})
-        self.assertEqual(tfl.fanout_processes(PS_TABLE, rx), ["807 npm run dev"])
-        self.assertEqual(tfl.fanout_pattern({}).pattern, tfl.FANOUT_PATTERN_DEFAULT)
-        self.assertEqual(tfl.fanout_pattern({"FANOUT_PATTERN": "  "}).pattern, tfl.FANOUT_PATTERN_DEFAULT)
+        hits = tfl.fanout_processes(PS_TABLE, rx)
+        self.assertIn("807 npm run dev", hits)                                       # the extra pattern ADDS …
+        self.assertTrue(set(tfl.fanout_processes(PS_TABLE)) <= set(hits))            # … it never replaces the token rules
+        self.assertIsNone(tfl.fanout_pattern({}))
+        self.assertIsNone(tfl.fanout_pattern({"FANOUT_PATTERN": "  "}))
         with self.assertRaises(SystemExit) as cm:
             tfl.fanout_pattern({"FANOUT_PATTERN": "("})
         self.assertIn("FANOUT_PATTERN", str(cm.exception))
         p = tfl.preflight_policy({})
-        self.assertEqual((p["fanout_max"], p["fanout_pattern"], p["fanout_source"]), (0, tfl.FANOUT_PATTERN_DEFAULT, "default"))
+        self.assertEqual((p["fanout_max"], p["fanout_pattern"], p["fanout_source"], p["fanout_rules"]), (0, None, "token rules", tfl.FANOUT_RULES))
         p = tfl.preflight_policy({"FANOUT_PATTERN": "foo"})
-        self.assertEqual((p["fanout_pattern"], p["fanout_source"]), ("foo", "FANOUT_PATTERN env"))
+        self.assertEqual((p["fanout_pattern"], p["fanout_source"]), ("foo", "token rules + FANOUT_PATTERN env (extra matches)"))
 
     def test_a_failed_ps_is_a_failed_preflight(self):
         saved = tfl.subprocess.run
@@ -367,10 +430,12 @@ class LaunchReservation(unittest.TestCase):
         self.assertEqual(tfl.LOCK_PATH, tfl.ART / ".launch.lock")
 
 
-# ── Item 3: gate policy by gate KIND, failing closed ──────────────────────────────────────────
+# ── Item 3 (round 4): the gate policy is an ALLOW-LIST that fails closed ───────────────────────
 
 LT1_PLAN_ROUTES = ("`/runs/:id/{events,acceptance,archive,gate,cancel,guidance,resume,units/:ord/output,elicitation,"
                    "files,diff,inject,deliver}` (client.ts)")
+KNOWN = {"stage": "test", "gate": "auto"}
+UNKNOWN_UNITS = (None, {}, {"stage": None, "gate": None}, {"stage": "", "gate": " "}, {"ord": 4})
 
 
 class GateDecision(unittest.TestCase):
@@ -382,74 +447,112 @@ class GateDecision(unittest.TestCase):
                 self.assertIn("gate kind", reason)
                 self.assertIn("never deliver", reason)
 
-    def test_deliver_imperatives_are_rejected(self):
-        for p in ("Deliver: open a PR against main", "Delivery of the branch to origin", "Push the branch to origin",
-                  "Open a PR with the results", "Open PR #12 now", "Merge into main", "Publish the package", "Release 0.5.2",
-                  "Approve the delivery of the branch", "Approve deliver: push and open a PR", "approve the merge into main"):
-            decision, reason = tfl.gate_decision(p, {"stage": "test", "gate": "human"})
-            self.assertEqual(decision, "reject", p)
-            self.assertIn("imperative", reason)
-
     PRE_RECON = ("Approve unit 1 before it runs: Recon: survey the target and propose a test plan — the scenarios, their "
                  "dependencies, and which are deterministic tool checks vs governed agent runs.")
-    PRE_NEWTEST = ("Approve unit 1 before it runs: New test: plan the test for the attached scope — … and run the approved "
+    PRE_NEWTEST = ("Approve unit 1 before it runs: New test: plan the test for the attached scope — the scenarios, their "
+                   "dependencies, and which are deterministic tool checks vs governed agent runs — and run the approved "
                    "plan as governed sibling runs under one test.")
-    PLAN_BODIES = ("verify /runs/:id/deliver rejects unauthorized requests",
-                   f"Approve proposed test plan for wicked-studio:\n**REST routes**: `/runs`, `/runs/:id`, {LT1_PLAN_ROUTES}",
-                   "Approve proposed test plan:\n| 5 | GET/POST /runs + subresources (archive, gate, cancel, guidance, resume, deliver, inject) | api/client.ts |",
-                   "Approve proposed test plan for wicked-studio before the siblings launch",
-                   "Amend the plan?")
-    CODEX_PROBE = "Approve unit 4 before it runs: Push the branch and open a PR"
+    PLAN_CLEAN = ("Approve proposed test plan for wicked-studio before the siblings launch",
+                  "Approve the proposed test plan:\n| 1 | WS reconnect/backoff in `useEventStream.ts` | Deterministic |",
+                  "Approve test plan for wicked-studio", "Approve plan", "Approve the plan for the attached scope")
+    # Plan bodies that NAME a delivery route/verb — legitimate plans, and rejected all the same (c).
+    PLAN_WITH_DELIVER = (f"Approve proposed test plan for wicked-studio:\n**REST routes**: `/runs`, `/runs/:id`, {LT1_PLAN_ROUTES}",
+                         "Approve proposed test plan:\n| 5 | GET/POST /runs + subresources (archive, gate, cancel, guidance, resume, deliver, inject) | api/client.ts |")
+    # Codex round 4's three probes — all `approve` at 5ca59f0.
+    CODEX_R4 = (("Approve unit 4 before it runs: gh pr create --fill", KNOWN, "delivery-verb", "'gh pr create'"),
+                ("Please push the branch and open a PR", {"stage": "test", "gate": "human"}, "delivery-verb", "'push the branch'"),
+                ("Prompt unavailable (daemon restarted). Decide from the run page.", {"stage": "test", "gate": "human"}, "unknown-prompt-shape", "not on the allow-list"))
+    CODEX_R3 = "Approve unit 4 before it runs: Push the branch and open a PR"
 
-    def test_plan_bodies_that_mention_deliver_routes_are_approved_when_the_kind_is_known(self):
-        for p in (*self.PLAN_BODIES, self.PRE_RECON, self.PRE_NEWTEST):
-            decision, reason = tfl.gate_decision(p, {"stage": "test", "gate": "auto"})
-            self.assertEqual(decision, "approve", (p, reason))
-            self.assertIn("unit stage/gate test/auto", reason)
+    def test_codex_round4_probes_reject_and_the_recorded_prompts_approve(self):
+        """Offline probes at 5ca59f0 returned `approve` for all three: `gh pr create` was not in the
+        verb list, "Please push…" had a known kind and a first clause the imperative regex missed,
+        and SteeringGate's `Prompt unavailable` fallback was readable text with a known kind."""
+        for p, unit, head, detail in self.CODEX_R4:
+            d, r = tfl.gate_decision(p, unit)
+            self.assertEqual(d, "reject", (p, r))
+            self.assertTrue(r.startswith(head), (p, r))
+            self.assertIn(detail, r)
+        for p in (self.PRE_RECON, self.PRE_NEWTEST):   # the recorded LT-1/LT-3 and LT-2 intake prompts, unit 1 stage test / gate auto
+            d, r = tfl.gate_decision(p, KNOWN)
+            self.assertEqual(d, "approve", (p, r))
+            self.assertTrue(r.startswith("pre-execution gate 'Approve unit 1 before it runs'"), r)
+            self.assertIn("allow-listed shape, known non-delivery kind, no delivery verb anywhere", r)
+            self.assertIn("unit stage/gate test/auto", r)
 
-    def test_unknown_kind_rejects_unless_the_complete_prompt_is_an_unambiguous_pre_execution_gate(self):
-        """Codex round 3: `gate_decision("Approve unit 4 before it runs: Push the branch and open a PR", None)`
-        approved because the first clause hid the delivery instruction — the lookup-failed fallback
-        failed open. Now an unknown kind approves ONLY the complete pre-execution shape with no
-        delivery verb anywhere; an empty prompt is always a reject."""
-        for unit in (None, {}, {"stage": None, "gate": None}, {"stage": "", "gate": " "}, {"ord": 4}):
-            d, r = tfl.gate_decision(self.CODEX_PROBE, unit)
-            self.assertEqual(d, "reject", unit)
-            self.assertTrue(r.startswith("unknown-gate-kind"), r)
-            self.assertIn("'push'", r)
-            self.assertEqual(tfl.gate_decision("", unit), ("reject", "unreadable-gate"), unit)   # empty: always reject
-            self.assertEqual(tfl.gate_decision("  \n", unit), ("reject", "unreadable-gate"), unit)
-            for p in (self.PRE_RECON, self.PRE_NEWTEST):
+    def test_approve_requires_all_three_conditions(self):
+        # (a) shape + (b) known non-delivery kind + (c) no delivery verb → approve
+        for p in (*self.PLAN_CLEAN, self.PRE_RECON, self.PRE_NEWTEST):
+            for unit in (KNOWN, {"stage": "test", "gate": None}, {"stage": None, "gate": "human"}):   # a partially known unit is known
                 d, r = tfl.gate_decision(p, unit)
-                self.assertEqual(d, "approve", (unit, r))                                        # unambiguous
-                self.assertIn("COMPLETE prompt carries no delivery verb", r)
-                self.assertIn("approved on the complete prompt alone", r)
-            # the pre-execution shape with a delivery verb ANYWHERE — not only in the first clause
-            for tail in ("Deliver the report", "survey, then merge into main", "publish the package", "cut release 0.5.2",
-                         "open PR #12", "open a pull request", "Open a PR with the results", "and push"):
-                d, r = tfl.gate_decision(f"Approve unit 2 before it runs: Recon: {tail}", unit)
-                self.assertEqual(d, "reject", (tail, unit))
-                self.assertTrue(r.startswith("unknown-gate-kind"), r)
-            # a readable prompt that is NOT the pre-execution shape approves only with a known kind
-            for p in self.PLAN_BODIES:
+                self.assertEqual(d, "approve", (p, unit, r))
+        self.assertTrue(tfl.gate_decision(self.PLAN_CLEAN[0], KNOWN)[1].startswith("plan-approval gate"))
+        # (a) fails: any other shape → unknown-prompt-shape, kind known or not
+        for p in ("Amend the plan?", "Approve?", "verify /runs/:id/gate answers 200", "approve unit 1 before it runs: x",   # case matters: crew's exact shape
+                  "Please approve unit 1 before it runs: Recon", "Approved plan", "Approve the planned survey", "Prompt unavailable"):
+            for unit in (KNOWN, None):
+                d, r = tfl.gate_decision(p, unit)
+                self.assertEqual(d, "reject", (p, unit))
+                self.assertTrue(r.startswith("unknown-prompt-shape"), (p, r))
+        # (b) fails: an allow-listed shape with an UNKNOWN kind → unknown-gate-kind (the shape alone no longer approves)
+        for p in (self.PRE_RECON, self.PRE_NEWTEST, *self.PLAN_CLEAN):
+            for unit in UNKNOWN_UNITS:
                 d, r = tfl.gate_decision(p, unit)
                 self.assertEqual(d, "reject", (p, unit))
                 self.assertTrue(r.startswith("unknown-gate-kind"), r)
-                self.assertIn("not the pre-execution shape", r)
-        # "Push …" inside a pre-execution prompt is the UNIT's instruction: rejected even when the
-        # daemon labels the stage `test` (the kind and the prompt disagree about delivery → closed).
-        d, r = tfl.gate_decision(self.CODEX_PROBE, {"stage": "test", "gate": "auto"})
-        self.assertEqual(d, "reject")
-        self.assertFalse(r.startswith("unknown-gate-kind"), r)
-        self.assertIn("'push'", r)
-        self.assertIn("unit stage/gate test/auto", r)
-        # known kinds: a partially known unit is known
-        self.assertEqual(tfl.gate_decision("Amend the plan?", {"stage": "test", "gate": None})[0], "approve")
-        self.assertEqual(tfl.gate_decision("Amend the plan?", {"stage": None, "gate": "human"})[0], "approve")
+                self.assertIn("alone does not authorize", r)
+        # (c) fails: a delivery verb anywhere — even in a plan body listing /runs/:id/deliver among the routes to test
+        for p in self.PLAN_WITH_DELIVER:
+            d, r = tfl.gate_decision(p, KNOWN)
+            self.assertEqual(d, "reject", p)
+            self.assertTrue(r.startswith("delivery-verb"), r)
+            self.assertIn("'deliver'", r)
+        self.assertEqual(tfl.gate_shape("Approve unit 12 before it runs: x"), "pre-execution")
+        self.assertEqual(tfl.gate_shape("Approve proposed test plan"), "plan-approval")
+        self.assertEqual(tfl.gate_shape("Approve the test plan"), "plan-approval")
+        self.assertIsNone(tfl.gate_shape("Approve the planned survey"))
+        self.assertIsNone(tfl.gate_shape("Approve unit before it runs:"))
         self.assertEqual(tfl.gate_kinds({"stage": " Test", "gate": None}), {"test"})
         self.assertEqual(tfl.gate_kinds({"stage": None, "gate": None}), set())
         self.assertEqual(tfl.gate_kinds(None), set())
         self.assertEqual(tfl.gate_kinds("deliver"), set())  # not a unit dict
+
+    def test_delivery_verbs_and_commands_reject_wherever_they_appear(self):
+        """The complete prompt is scanned, whatever the shape or the kind: the brief's extended list
+        (`gh pr create`, `git push`, `push the branch`, `open a/the PR / pull request`, merge,
+        deliver(y), publish, `npm/cargo publish`, release, `create a release`)."""
+        for p in ("Deliver: open a PR against main", "Delivery of the branch to origin", "Push the branch to origin",
+                  "Open a PR with the results", "Open PR #12 now", "Merge into main", "Publish the package", "Release 0.5.2",
+                  "Approve the delivery of the branch", "Approve deliver: push and open a PR", "approve the merge into main",
+                  "Approve unit 4 before it runs: gh pr create --fill", "Approve unit 4 before it runs: run `pr create` when green",
+                  "Approve unit 4 before it runs: git push origin HEAD", "Approve unit 4 before it runs: then push branch",
+                  "Approve unit 4 before it runs: open the pull request", "Approve unit 4 before it runs: npm publish --access public",
+                  "Approve unit 4 before it runs: cargo publish -p wicked-core", "Approve unit 4 before it runs: create a release from the tag",
+                  "Approve unit 4 before it runs: create release notes", "Approve proposed test plan, then merge",
+                  self.CODEX_R3, "Please push the branch and open a PR"):
+            for unit in (KNOWN, {"stage": "test", "gate": "human"}, None):
+                d, r = tfl.gate_decision(p, unit)
+                self.assertEqual(d, "reject", (p, unit))
+                self.assertTrue(r.startswith("delivery-verb"), (p, r))
+                self.assertIn("never deliver", r)
+        # the pre-execution shape with a delivery verb ANYWHERE — not only in the first clause
+        for tail in ("Deliver the report", "survey, then merge into main", "publish the package", "cut release 0.5.2",
+                     "open PR #12", "open a pull request", "Open a PR with the results", "and push"):
+            d, r = tfl.gate_decision(f"Approve unit 2 before it runs: Recon: {tail}", KNOWN)
+            self.assertEqual(d, "reject", tail)
+            self.assertTrue(r.startswith("delivery-verb"), r)
+        # the reason names the whole command asked for
+        self.assertIn("'gh pr create'", tfl.gate_decision("Approve unit 4 before it runs: gh pr create --fill", KNOWN)[1])
+        self.assertIn("'push the branch'", tfl.gate_decision("Please push the branch and open a PR", KNOWN)[1])
+        self.assertIn("'create a release'", tfl.gate_decision("Approve unit 4 before it runs: create a release", KNOWN)[1])
+        rx = tfl.DELIVERY_VERB_RE
+        for s in ("gh pr create", "pr create", "git push", "push the branch", "push branch", "open a PR", "open the pull request",
+                  "open PR", "pull request", "merge", "deliver", "delivery", "publish", "release", "npm publish", "cargo publish",
+                  "create a release", "create release", "Push", "MERGE"):
+            self.assertTrue(rx.search(s), s)
+        for s in ("proposed", "pushed", "merged", "deliverable", "released", "premerge", "the approved plan", "gate", "unit"):
+            self.assertFalse(rx.search(s), s)   # word-bounded: no suffix wildcards — the list is the brief's, exactly
+        self.assertFalse(hasattr(tfl, "IMPERATIVE_DELIVER_RE"))   # the first-clause rule is gone; the imperative only names prompts
 
     def test_unreadable_gate_fails_closed(self):
         for p in ("", None, "   \n"):
@@ -458,6 +561,12 @@ class GateDecision(unittest.TestCase):
             self.assertEqual(tfl.gate_decision(p, {"stage": "deliver", "gate": "human"})[0], "reject", repr(p))
             # a KNOWN non-delivery kind never authorizes approving what cannot be read (round 3)
             self.assertEqual(tfl.gate_decision(p, {"stage": "test", "gate": "auto"}), ("reject", "unreadable-gate"), repr(p))
+        # SteeringGate's fallback TEXT for a missing prompt is readable — and still not an allow-listed shape (round 4)
+        for p in ("Prompt unavailable (daemon restarted)", "Prompt unavailable (daemon restarted). The run is awaiting a decision; open /runs/:id.",
+                  "Prompt unavailable"):
+            d, r = tfl.gate_decision(p, {"stage": "test", "gate": "human"})
+            self.assertEqual(d, "reject", p)
+            self.assertTrue(r.startswith("unknown-prompt-shape"), r)
 
     def test_imperative_is_the_first_clause(self):
         self.assertEqual(tfl.imperative("Approve unit 1 before it runs: Recon: survey the target"), "Approve unit 1 before it runs")
@@ -484,8 +593,10 @@ class GateDecision(unittest.TestCase):
         self.assertEqual(drive.count("decide_gate_on_card("), 2, "first gate + later gates")
         self.assertIn("decide_gate_on_card(", inspect.getsource(tfl.decide_sibling_gate))
         self.assertEqual(inspect.getsource(tfl.decide_gate_on_card).count("steering-{decision}"), 1)
-        # No allow-list left anywhere.
+        # No ad-hoc prompt test at a call site — the ONE allow-list lives in gate_decision.
         self.assertNotIn('re.match(r"Approve unit \\d+ before it runs", ptxt)', drive)
+        self.assertNotIn("PRE_EXECUTION_RE", drive)
+        self.assertNotIn("PLAN_APPROVAL_RE", drive)
         # The intake gate's decision reads the gated unit's stage/gate from the run detail first.
         self.assertLess(drive.index("gate_unit(run_detail(run_id), gate_ord)"), drive.index("decide_gate_on_card(page, card"))
 
@@ -655,11 +766,32 @@ class GateClickPath(Isolated):
         self.assertIn("status None is not 2xx", tfl.gate_wire_check({**ok, "status": None}, rid))
         self.assertIn("status 300 is not 2xx", tfl.gate_wire_check({**ok, "status": 300}, rid))
 
-    def test_plan_approval_clicks_approve(self):
-        page = FakePage(f"Approve proposed test plan for wicked-studio:\n{LT1_PLAN_ROUTES}")
+    def test_plan_approval_clicks_approve_only_without_a_delivery_verb_in_the_body(self):
+        page = FakePage("Approve proposed test plan for wicked-studio:\n| 1 | WS reconnect/backoff in `useEventStream.ts` | Deterministic |")
         entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=2, unit={"stage": "test", "gate": "human"}, tag="T", first=False)
         self.assertEqual(entry["decision"], "approve")
         self.assertIn('steering-approve"]', page.clicks[0])
+        # Round 4: a plan body listing /runs/:id/deliver among the routes to test is REJECTED (a
+        # recorded finding), never approved on its first clause — (c) scans the complete prompt.
+        page = FakePage(f"Approve proposed test plan for wicked-studio:\n{LT1_PLAN_ROUTES}")
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=2, unit={"stage": "test", "gate": "human"}, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertTrue(entry["reason"].startswith("delivery-verb"), entry["reason"])
+        self.assertIn('steering-reject"]', page.clicks[0])
+        self.assertTrue(entry["wire_ok"])
+        self.assertTrue(any("REJECTED by policy" in f and "delivery-verb" in f for f in tfl.REPORT["findings"]))
+
+    def test_codex_round4_probes_click_reject_on_the_card(self):
+        for prompt, unit in (("Approve unit 4 before it runs: gh pr create --fill", {"stage": "test", "gate": "auto"}),
+                             ("Please push the branch and open a PR", {"stage": "test", "gate": "human"}),
+                             ("Prompt unavailable (daemon restarted). Decide from the run page.", {"stage": "test", "gate": "human"})):
+            page = FakePage(prompt)
+            entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit=unit, tag="T", first=False)
+            self.assertEqual(entry["decision"], "reject", prompt)
+            self.assertIn('steering-reject"]', page.clicks[0])
+            self.assertEqual(entry["body"], {"approve": False})
+            self.assertTrue(entry["wire_ok"])
+        self.assertTrue(any("not an allow-listed shape" in f and "Prompt unavailable" in f for f in tfl.REPORT["findings"]))
 
     def test_delivery_kind_unit_clicks_reject_even_for_a_benign_prompt(self):
         page = FakePage("Approve unit 4 before it runs: land the branch")
@@ -736,30 +868,36 @@ class SiblingGatesThroughTheUI(Isolated):
         self.assertEqual((entry["decision"], entry["reason"]), ("reject", "unreadable-gate"))
         self.assertIn("FetchError", entry["unit_lookup_error"])
 
-    def test_unit_lookup_failure_with_a_delivery_instruction_is_rejected_as_unknown_kind(self):
+    def test_unit_lookup_failure_with_a_delivery_instruction_is_rejected_on_the_verb(self):
         """Codex's round-3 probe, on the real click path: the unit lookup fails (no stage/gate), the
-        card reads "Approve unit 4 before it runs: Push the branch and open a PR" → REJECT."""
+        card reads "Approve unit 4 before it runs: Push the branch and open a PR" → REJECT — on the
+        delivery verb (the most severe reason), before the unknown kind is even considered."""
         tfl.run_events = self.boom
         tfl.run_detail = self.boom
         page = FakePage("Approve unit 4 before it runs: Push the branch and open a PR", run_id="sib-5")
         entry = tfl.decide_sibling_gate(page, "sib-5", tag="LT-2", return_to="http://studio/testing/campaigns")
         self.assertEqual(entry["decision"], "reject")
-        self.assertTrue(entry["reason"].startswith("unknown-gate-kind"), entry["reason"])
+        self.assertTrue(entry["reason"].startswith("delivery-verb"), entry["reason"])
+        self.assertIn("'push the branch'", entry["reason"])
+        self.assertIn("unit stage/gate unknown", entry["reason"])
         self.assertIn('steering-reject"]', page.clicks[0])
         self.assertIsNone(entry["unit"])
         self.assertIn("FetchError", entry["unit_lookup_error"])
         self.assertTrue(entry["wire_ok"])  # the reject reached THIS run's gate with {approve: false}
-        self.assertTrue(any("stage/gate is unknown" in f and "REJECTED" in f for f in tfl.REPORT["findings"]))
+        self.assertTrue(any("REJECTED by policy" in f and "delivery-verb" in f for f in tfl.REPORT["findings"]))
 
-    def test_unit_lookup_failure_with_an_unambiguous_pre_execution_prompt_is_approved(self):
+    def test_unit_lookup_failure_rejects_even_an_allow_listed_prompt(self):
+        """Round 4: the pre-execution shape no longer approves on its own — (b) requires a KNOWN
+        non-delivery kind, and a failed GET /runs/:id leaves it unknown → `unknown-gate-kind`."""
         tfl.run_events = self.boom
         tfl.run_detail = self.boom
         page = FakePage("Approve unit 1 before it runs: Recon: survey the target and propose a test plan", run_id="sib-6")
         entry = tfl.decide_sibling_gate(page, "sib-6", tag="LT-2", return_to="http://studio/testing/campaigns")
-        self.assertEqual(entry["decision"], "approve")
-        self.assertIn("approved on the complete prompt alone", entry["reason"])
-        self.assertIn('steering-approve"]', page.clicks[0])
+        self.assertEqual(entry["decision"], "reject")
+        self.assertTrue(entry["reason"].startswith("unknown-gate-kind"), entry["reason"])
+        self.assertIn('steering-reject"]', page.clicks[0])
         self.assertTrue(entry["wire_ok"])
+        self.assertTrue(any("stage/gate is unknown" in f and "REJECTED" in f for f in tfl.REPORT["findings"]))
 
     def test_follow_siblings_decides_awaiting_gates_then_samples_verdicts(self):
         timeline = {"s1": iter(["awaiting_human", "executing", "completed", "completed"]), "s2": iter(["executing", "completed", "completed", "completed"])}
@@ -941,6 +1079,47 @@ class ResultSplit(Isolated):
         self.assertEqual(v["result"], "fail")
         self.assertTrue(any("evidence fetch error" in r and "/runs/run-1/units/2/output → 500" in r for r in v["fail_reasons"]), v["fail_reasons"])
 
+    def test_a_sibling_gate_wire_mismatch_fails_the_harness_and_the_verdict(self):
+        """Codex round 4's reproduction: a completed sibling WITH a verdict whose REJECT was wired
+        as `{approve: true}` (`wire_ok: false`) returned `{harness_ok: true, result: "pass",
+        fail_reasons: []}` — `derive_result` read only the parent's `measured.gates`."""
+        bad = {"ord": 2, "first": False, "prompt": "Deliver: open a PR against main", "decision": "reject", "status": 200,
+               "url": "/api/v1/runs/s1/gate", "body": {"approve": True}, "wire_ok": False,
+               "wire_check": "request body approve=True but the decision 'reject' requires approve=False"}
+        followed = {"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}, "gates": {"s1": [bad]}}
+        m = with_siblings("s1", siblings_followed=followed)
+        v = tfl.derive_result(m, [])
+        self.assertFalse(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertIn("sibling-gate-wire-mismatch", v["fail_reasons"])
+        self.assertTrue(any(r.startswith("sibling s1 gate ord=2 reject: request body approve=True") for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertNotIn("gate-wire-mismatch", v["fail_reasons"])  # the PARENT's gate was fine — the reason names the sibling
+        # the honest wire for the same reject → pass again (everything else about the sibling is in order)
+        good = {**bad, "body": {"approve": False}, "wire_ok": True, "wire_check": "POST /api/v1/runs/s1/gate for this run, body.approve == False, status 200"}
+        m = with_siblings("s1", siblings_followed={**followed, "gates": {"s1": [good]}})
+        self.assertEqual(tfl.derive_result(m, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        # sibling_gate_wire_failures, as a pure function: wire_ok=false; a recorded url that re-checks
+        # as another run's gate (even with wire_ok wrongly true); a non-2xx; and NOT an undecided card
+        self.assertEqual(tfl.sibling_gate_wire_failures(None), [])
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s1": [good]}}), [])
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s1": [{"ord": 1, "decision": "approve", "status": 200}]}}), [])  # fake_decide's minimal entry
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s1": [{"ord": 1, "decision": None, "status": None, "reason": "no SteeringGate card rendered"}]}}), [])
+        other = tfl.sibling_gate_wire_failures({"gates": {"s1": [{**good, "url": "/api/v1/runs/s9/gate"}]}})
+        self.assertEqual(len(other), 1)
+        self.assertIn("is not /api/v1/runs/s1/gate", other[0])
+        self.assertIn("sibling s1 gate ord=2 reject", other[0])
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s2": [{"ord": 1, "decision": "approve", "status": 409}]}}),
+                         ["sibling s2 gate ord=1 approve: status 409 is not 2xx"])
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s2": [{"ord": 1, "decision": "approve", "status": None}]}}),
+                         ["sibling s2 gate ord=1 approve: status None is not 2xx"])
+        # two siblings, one bad: harness_ok false, the good one is not named
+        m = with_siblings("s1", "s2", siblings_followed={"statuses": {"s1": "completed", "s2": "completed"}, "all_terminal": True,
+                                                          "acceptance": {"s1": "pass", "s2": "pass"}, "gates": {"s1": [good], "s2": [{**bad, "url": "/api/v1/runs/s2/gate"}]}})
+        v = tfl.derive_result(m, [])
+        self.assertFalse(v["harness_ok"])
+        self.assertTrue(any(r.startswith("sibling s2 gate") for r in v["fail_reasons"]))
+        self.assertFalse(any(r.startswith("sibling s1 gate") for r in v["fail_reasons"]))
+
     def test_a_gate_wire_mismatch_is_a_harness_failure_but_older_entries_are_not_retroactively_failed(self):
         g = {"ord": 1, "first": True, "decision": "reject", "status": 200, "wire_ok": False,
              "wire_check": "request body approve=True but the decision 'reject' requires approve=False"}
@@ -1063,6 +1242,32 @@ class EvidenceFetch(Isolated):
         self.assertEqual(self.sink, [miss])
         self.assertTrue(any("evidence fetch failed: GET /runs/r/units/2/output → 500" in f for f in tfl.REPORT["findings"]))
         self.assertEqual(json.loads(json.dumps(miss))["status"], 500)  # serializes as plain JSON
+
+    def test_unit_output_present_but_not_a_string_is_a_typed_miss_not_absence(self):
+        """Copilot on 5ca59f0 (`unit_output`, :349-353): a 2xx `{output: <number|object>}` was
+        folded into "absent" (None) — schema drift or corruption masked as a normal no-output case,
+        unlike `run_events`/`acceptance`, which record an unexpected 2xx shape as a typed miss."""
+        for out, tname in ((7, "int"), ({"a": 1}, "dict"), ([1, 2], "list"), (True, "bool"), (1.5, "float")):
+            self.answer(200, {"output": out})
+            miss = tfl.unit_output("r", 3)
+            self.assertIsInstance(miss, tfl.FetchMiss, repr(out))
+            self.assertEqual((miss["endpoint"], miss["status"]), ("/runs/r/units/3/output", 200))
+            self.assertIn(f"unexpected output type: {tname}", miss["error"])
+        self.assertEqual(len(self.sink), 5)
+        self.assertTrue(any("unexpected output type: int" in f for f in tfl.REPORT["findings"]))
+        # absent stays absent — and records nothing
+        del self.sink[:]
+        for body in ({"output": None}, {"output": ""}, {}, None):
+            self.answer(200, body)
+            self.assertIsNone(tfl.unit_output("r", 3), repr(body))
+        self.answer(204, None)
+        self.assertIsNone(tfl.unit_output("r", 3))
+        self.assertEqual(self.sink, [])
+        self.answer(200, {"output": "the plan"})
+        self.assertEqual(tfl.unit_output("r", 3), "the plan")
+        self.answer(200, "a bare string body")   # not the contract's shape either
+        self.assertIsInstance(tfl.unit_output("r", 3), tfl.FetchMiss)
+        self.assertIn("unexpected body shape", self.sink[-1]["error"])
 
     def test_acceptance_and_verdict(self):
         self.answer(200, {"acceptance": {"verdict": "pass"}})
@@ -1390,7 +1595,8 @@ class RecordedPlansRederive(unittest.TestCase):
     def test_recorded_gates_re_verify_on_the_wire_and_re_decide_approve(self):
         """The three recorded intake gates, re-checked offline with `gate_wire_check` over the
         recorded url/body/status (backfilled into gates[0] from `gate_response`, round 3) and
-        re-decided under the round-3 policy: approve, wire verified — agreeing with what was clicked."""
+        re-decided under the round-4 ALLOW-LIST policy (pre-execution shape, unit 1 stage test /
+        gate auto, no delivery verb): approve, wire verified — agreeing with what was clicked."""
         if not (tfl.ART / "report.json").exists():
             self.skipTest("no committed report.json beside the harness")
         report = json.loads((tfl.ART / "report.json").read_text())
@@ -1473,9 +1679,56 @@ class ArtifactWrites(unittest.TestCase):
         # The real evidence dir is walked from the (resolved) repo root: e2e, e2e/artifacts, e2e/artifacts/test-feature-live.
         self.assertEqual(tfl._anchor(tfl.ART), tfl.ROOT)
         self.assertEqual(tfl._anchor(Path("/x/y/art")), Path("/x/y"))
+        root_src = inspect.getsource(tfl.ensure_artifact_root)
+        self.assertLess(root_src.index("refuse_symlinked_components(root"), root_src.index("root.mkdir("))  # walk the root BEFORE creating it
         src = inspect.getsource(tfl.artifact_path)
-        self.assertLess(src.index("refuse_symlinked_components(root"), src.index("mkdir("))       # walk the root BEFORE creating it
+        self.assertIn("ensure_artifact_root(root or ART, base)", src)
+        self.assertNotIn("mkdir(", src)                                                              # the ONLY mkdir is the walked one
         self.assertLess(src.index("refuse_symlinked_components(p, root)"), src.index("resolve()"))  # lstat every component, then contain
+
+    def test_startup_refuses_a_symlinked_artifacts_dir_before_creating_anything(self):
+        """Codex round 4: `main()` called `ART.mkdir(parents=True)` before any component walk — with
+        `e2e/artifacts -> /elsewhere`, startup created `test-feature-live/` outside the repository
+        before a later check rejected it. Now the walk comes first and nothing is created."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            repo, elsewhere = d / "repo", d / "elsewhere"
+            (repo / "e2e").mkdir(parents=True)
+            elsewhere.mkdir()
+            (repo / "e2e" / "artifacts").symlink_to(elsewhere)                          # the planted link
+            art = repo / "e2e" / "artifacts" / "test-feature-live"
+            with self.assertRaises(SystemExit) as cm:
+                tfl.ensure_artifact_root(art, base=repo)
+            self.assertIn(str(repo / "e2e" / "artifacts"), str(cm.exception))
+            self.assertIn("symlink", str(cm.exception))
+            self.assertEqual(list(elsewhere.iterdir()), [])                            # NOTHING created through the link
+            self.assertFalse(art.exists())
+            # the real entry point, with the module's ROOT/ART pointed at this repo: refused before
+            # the policy, the testid check or any HTTP — no daemon is contacted
+            saved = tfl.ROOT, tfl.ART, tfl.http_json
+            tfl.ROOT, tfl.ART = repo, art
+            tfl.http_json = lambda *a, **k: (_ for _ in ()).throw(AssertionError("main() must refuse before any HTTP"))
+            try:
+                with self.assertRaises(SystemExit) as cm:
+                    tfl.main()
+                self.assertIn("symlink", str(cm.exception))
+                self.assertEqual(list(elsewhere.iterdir()), [])
+            finally:
+                tfl.ROOT, tfl.ART, tfl.http_json = saved
+            # a real directory chain is created — and only then
+            (repo / "e2e" / "artifacts").unlink()
+            self.assertEqual(tfl.ensure_artifact_root(art, base=repo), art)
+            self.assertTrue(art.is_dir())
+            # a link on the LAST component (the dir itself) is refused too
+            (repo / "e2e" / "artifacts" / "linked").symlink_to(elsewhere)
+            with self.assertRaises(SystemExit):
+                tfl.ensure_artifact_root(repo / "e2e" / "artifacts" / "linked", base=repo)
+        src = inspect.getsource(tfl.main)
+        self.assertNotIn("ART.mkdir", src)
+        self.assertTrue(src.lstrip().startswith("def main() -> None:\n    ensure_artifact_root()"), src[:120])  # the FIRST statement
+        self.assertLess(src.index("ensure_artifact_root()"), src.index("_policy()"))
+        self.assertLess(src.index("ensure_artifact_root()"), src.index("verify_testids()"))
+        self.assertLess(src.index("ensure_artifact_root()"), src.index("http_json("))
 
     def test_plan_and_screenshot_paths_go_through_artifact_path(self):
         src = inspect.getsource(tfl._drive_intake)
@@ -1611,6 +1864,41 @@ class RepoFilesAndLaunchAnswer(unittest.TestCase):
         self.assertIn('m["measured"]["launch_answer_unexpected"] = True', src)
         self.assertIn('shot(page, "03-launch-answer-unexpected")', src)
         self.assertNotIn('answer.get("runIds") or ([answer["runId"]]', src)
+
+
+class LaunchPostBody(Isolated):
+    """Copilot on 5ca59f0 (`post_body`, :1446): `json.loads(resp.request.post_data or "{}")` raised
+    `JSONDecodeError` on an empty / non-JSON body and crashed the scenario unrecorded — the body is
+    evidence for the report, so a parse failure is recorded raw and the harness continues."""
+
+    def test_valid_json_object_is_parsed(self):
+        self.assertEqual(tfl.parse_post_body('{"problem": "x", "repoRefs": ["wicked-studio"]}', "T"), {"problem": "x", "repoRefs": ["wicked-studio"]})
+        self.assertEqual(tfl.parse_post_body(None, "T"), {})
+        self.assertEqual(tfl.parse_post_body("", "T"), {})
+        self.assertEqual(tfl.parse_post_body(b'{"problem": "bytes"}', "T"), {"problem": "bytes"})
+        self.assertEqual(tfl.REPORT["findings"], self._saved["findings"])   # nothing to report
+
+    def test_non_json_body_is_recorded_raw_with_the_parse_error_and_a_finding(self):
+        n = len(tfl.REPORT["findings"])
+        out = tfl.parse_post_body("problem=x&repoRefs=wicked-studio", "LT-1")
+        self.assertEqual(set(out), {"raw", "parse_error"})
+        self.assertEqual(out["raw"], "problem=x&repoRefs=wicked-studio")
+        self.assertIn("Expecting value", out["parse_error"])
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 1)
+        self.assertIn("LT-1: the launch POST body was not JSON", tfl.REPORT["findings"][-1])
+        long = "x" * 2000
+        self.assertEqual(len(tfl.parse_post_body(long, "T")["raw"]), 500)          # clipped to 500 chars
+        self.assertEqual(tfl.parse_post_body('{"a": ', "T")["raw"], '{"a": ')       # truncated JSON
+        # a JSON value that is not an object is not the wire contract either — recorded raw, finding
+        out = tfl.parse_post_body("[1, 2]", "T")
+        self.assertEqual(out["raw"], "[1, 2]")
+        self.assertIn("not a JSON object (list)", out["parse_error"])
+        json.dumps(out)                                                              # serializes into report.json as-is
+
+    def test_the_launch_uses_the_guarded_parser(self):
+        src = inspect.getsource(tfl._drive_intake)
+        self.assertIn("post_body = parse_post_body(resp.request.post_data, tag)", src)
+        self.assertNotIn('post_body = json.loads(resp.request.post_data or "{}")', src)
 
 
 if __name__ == "__main__":

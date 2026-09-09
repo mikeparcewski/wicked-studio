@@ -1544,13 +1544,13 @@
       "first": true,
       "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
       "decision": "approve",
-      "reason": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
+      "reason": "pre-execution gate 'Approve unit 1 before it runs': allow-listed shape, known non-delivery kind, no delivery verb anywhere in the complete prompt; unit stage/gate test/auto",
       "status": 200,
       "unit": {
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve | codex round 3: re-evaluated again under the kind-first policy (unknown kind \u2192 reject unless the complete prompt is an unambiguous pre-execution gate; pre-execution prompts scanned completely for delivery verbs): approve \u2014 agrees with what was clicked",
+      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked",
       "url": "/api/v1/runs/d293f4d7-1e45-4346-809a-d6f2107c6b18/gate",
       "body": {
        "approve": true
@@ -2952,13 +2952,13 @@
       "first": true,
       "prompt": "Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs \u2014 and run the approved",
       "decision": "approve",
-      "reason": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
+      "reason": "pre-execution gate 'Approve unit 1 before it runs': allow-listed shape, known non-delivery kind, no delivery verb anywhere in the complete prompt; unit stage/gate test/auto",
       "status": 200,
       "unit": {
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve | codex round 3: re-evaluated again under the kind-first policy (unknown kind \u2192 reject unless the complete prompt is an unambiguous pre-execution gate; pre-execution prompts scanned completely for delivery verbs): approve \u2014 agrees with what was clicked",
+      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked",
       "url": "/api/v1/runs/f8bc2bad-47fc-4971-8961-bb49acb1dc6b/gate",
       "body": {
        "approve": true
@@ -4366,13 +4366,13 @@
       "first": true,
       "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
       "decision": "approve",
-      "reason": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
+      "reason": "pre-execution gate 'Approve unit 1 before it runs': allow-listed shape, known non-delivery kind, no delivery verb anywhere in the complete prompt; unit stage/gate test/auto",
       "status": 200,
       "unit": {
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve | codex round 3: re-evaluated again under the kind-first policy (unknown kind \u2192 reject unless the complete prompt is an unambiguous pre-execution gate; pre-execution prompts scanned completely for delivery verbs): approve \u2014 agrees with what was clicked",
+      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked",
       "url": "/api/v1/runs/d12adb6c-e4be-430a-b0a7-666db5634112/gate",
       "body": {
        "approve": true
@@ -4655,10 +4655,10 @@
    "var": "SWAP_MAX_PCT",
    "contract": 85,
    "effective": 95,
-   "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; adjudicated after codex round 2: recorded + acknowledged, not enforced",
+   "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; accepted as deviation evidence under the contract AMENDMENT of 2026-09-09 (its author, the coordinator, after codex rounds 2-4: the 85% default stands; an EXPLICIT operator override \u2014 SWAP_MAX_PCT together with SWAP_MAX_PCT_ACK=contract-deviation \u2014 is permitted and MUST be recorded in the report as a contract deviation; the three recorded launches ran under an authorized 95% override at 93% swap and are accepted as deviation evidence)",
    "note": "swap gate was 95%, not the brief's 85% \u2014 this host idles at ~93% swap; all three recorded launches read 93.0% and cleared ONLY because of the relaxation; under the default 85% none of them would have launched. The three recorded runs remain deviation evidence."
   },
-  "fanout_gate": "not in force \u2014 the fan-out gate (FANOUT_PATTERN_DEFAULT over `ps`) postdates these launches (codex round 3)"
+  "fanout_gate": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`)"
  },
  "revisions": [
   {
@@ -5070,13 +5070,55 @@
      "why": "as above"
     }
    ]
+  },
+  {
+   "date": "2026-09-09",
+   "reason": "codex round-4 REVISE on PR #215 (+ two Copilot threads) \u2014 offline re-derivation with the fixed harness over the committed plan files and recorded wire; no new runs, no daemon writes (read-only GETs only). Item 2 (85 % swap ceiling): the CONTRACT ITSELF was amended by its author (the coordinator) on 2026-09-09 \u2014 the 85 % default stands, an explicit acknowledged override is permitted and must be recorded as a deviation, the three recorded launches are accepted as deviation evidence; the harness matches the amended contract, no code change.",
+   "changes": [
+    {
+     "field": "LT-{1,2,3}.gates[0].reason / policy_reevaluated",
+     "old": "pre-execution gate 'Approve unit 1 before it runs' whose COMPLETE prompt carries no delivery verb; unit stage/gate test/auto",
+     "new": "pre-execution gate 'Approve unit 1 before it runs': allow-listed shape, known non-delivery kind, no delivery verb anywhere in the complete prompt; unit stage/gate test/auto",
+     "why": "re-evaluated under the round-4 ALLOW-LIST policy (approve only when the prompt is an allow-listed shape AND the unit's kind is known and not a delivery kind AND no delivery verb/command appears anywhere in the complete prompt): approve \u2014 agrees with what was clicked"
+    },
+    {
+     "field": "contract_deviation.ack (top-level + preflight_policy.contract_deviation.ack)",
+     "old": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; adjudicated after codex round 2: recorded + acknowledged, not enforced",
+     "new": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; accepted as deviation evidence under the contract AMENDMENT of 2026-09-09 (its author, the coordinator, after codex rounds 2-4: the 85% default stands; an EXPLICIT operator override \u2014 SWAP_MAX_PCT together with SWAP_MAX_PCT_ACK=contract-deviation \u2014 is permitted and MUST be recorded in the report as a contract deviation; the three recorded launches ran under an authorized 95% override at 93% swap and are accepted as deviation evidence)",
+     "why": "the contract was amended by its author; the wording follows the amendment, not a coordinator adjudication"
+    },
+    {
+     "field": "preflight_policy.fanout_gate",
+     "old": "not in force \u2014 the fan-out gate (FANOUT_PATTERN_DEFAULT over `ps`) postdates these launches (codex round 3)",
+     "new": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`)",
+     "why": "the round-3 positional regex missed ordinary argument orderings (`cargo +stable build`, `claude --model opus --print task`, `wicked-crew serve --db /tmp/x --port 62432`); the gate is now decided on tokens"
+    },
+    {
+     "field": "scenarios[LT-{1,2,3}].screenshots (21 files)",
+     "old": "present beside the plans, gitignored \u2014 not in the PR",
+     "new": "the same 21 PNGs committed (2,107,067 bytes total; none over 250 KB, none downscaled) and linked from docs/testing/test-feature-live-report.md",
+     "why": "codex round 4 item 6: the historical observations of the recorded runs cannot be regenerated by another live run"
+    },
+    {
+     "field": "LT-{1,2,3}.result / harness_ok / fail_reasons",
+     "old": "fail / true / (as recorded)",
+     "new": "unchanged",
+     "why": "re-derived with the round-4 derive_result (sibling gate wire failures now fail the harness \u2014 siblings_followed is null for all three: none arose)"
+    },
+    {
+     "field": "LT-{1,2,3}.plan.* and LT-3.consistency_vs_LT-1",
+     "old": "28/13/22 scenario lines, 31/14/30 files, 38.6 % / n/a / 0 %",
+     "new": "unchanged",
+     "why": "plan analysis did not change in round 4"
+    }
+   ]
   }
  ],
  "contract_deviation": {
   "var": "SWAP_MAX_PCT",
   "contract": 85,
   "effective": 95,
-  "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; adjudicated after codex round 2: recorded + acknowledged, not enforced",
+  "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; accepted as deviation evidence under the contract AMENDMENT of 2026-09-09 (its author, the coordinator, after codex rounds 2-4: the 85% default stands; an EXPLICIT operator override \u2014 SWAP_MAX_PCT together with SWAP_MAX_PCT_ACK=contract-deviation \u2014 is permitted and MUST be recorded in the report as a contract deviation; the three recorded launches ran under an authorized 95% override at 93% swap and are accepted as deviation evidence)",
   "note": "swap gate was 95%, not the brief's 85% \u2014 this host idles at ~93% swap; all three recorded launches read 93.0% and cleared ONLY because of the relaxation; under the default 85% none of them would have launched. The three recorded runs remain deviation evidence."
  },
  "fetch_errors": []

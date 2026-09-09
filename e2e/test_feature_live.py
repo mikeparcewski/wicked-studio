@@ -26,16 +26,23 @@ HARD RULES this harness enforces on itself:
     running/executing/awaiting_human on the daemon, (2) 1-minute load average < 20, (3) swap used
     < 85 % — the contract default (brief-test-feature-live.md: "refuse to run if … swap > 85%"),
     (4) NO heavy worker / build fan-out on the host — `fanout_processes()` reads
-    `ps -axo pid=,command=` and blocks on any command line matching `FANOUT_PATTERN` (default:
-    `codex exec`, `claude -p` / `claude --print`, `cargo build|test|clippy`, `vitest`,
-    `npm [run] test|build`, a second `wicked-crew serve --port` other than 7701); the matches are
-    recorded in the reading (`fanout: ["<pid> <cmd>", …]`) and a failed `ps` is itself a failed
-    preflight (fail closed) — a build outside the daemon's run list can no longer overlap a launch.
+    `ps -axo pid=,command=`, tokenizes every command line (`shlex.split`, whitespace fallback) and
+    matches on TOKENS, never on argument order (`fanout_rule`, documented in `FANOUT_RULES`): the
+    program (basename of argv[0], or of the script a runtime launcher such as `node` runs) is
+    `cargo` with build/test/clippy/run among its tokens (`cargo +stable build` included), `claude`
+    with `-p`/`--print` anywhere, `codex` with `exec`, `vitest`, `npm`/`pnpm`/`yarn` with `test` or
+    `run` + test/build, or a `wicked-crew serve` whose `--port` VALUE (`--port N` / `--port=N`, any
+    position) is not 7701 — the dogfood daemon itself (no port, or 7701) never matches.
+    `FANOUT_PATTERN` (a regex) ADDS matches; it never replaces the rules. Matches are recorded in
+    the reading (`fanout: ["<pid> <cmd>", …]`) and a failed `ps` is itself a failed preflight (fail
+    closed) — a build outside the daemon's run list can no longer overlap a launch.
     ONLY an explicit `SWAP_MAX_PCT` env var moves the swap gate, and ONLY together with
     `SWAP_MAX_PCT_ACK=contract-deviation` (without the acknowledgement the harness exits naming both
-    vars); the move is logged as `CONTRACT DEVIATION` at every preflight, stamped on every preflight
-    reading and recorded in the report's top-level `contract_deviation` {var, contract, effective,
-    ack} — never a silent constant edit. (`vm_stat` free/available memory is recorded for the
+    vars) — exactly what the contract's 2026-09-09 AMENDMENT permits ("an EXPLICIT operator override
+    … is permitted and MUST be recorded in the report as a contract deviation"); the move is logged
+    as `CONTRACT DEVIATION` at every preflight, stamped on every preflight reading and recorded in
+    the report's top-level `contract_deviation` {var, contract, effective, ack} — never a silent
+    constant edit. (`vm_stat` free/available memory is recorded for the
     report but NOT gated on — macOS keeps free pages near zero by design.) Polls every 60 s for up
     to 20 min; if the gate never clears the harness STOPS and reports "preflight never cleared".
   * The preflight is RE-RUN (all four gates, one reading) immediately before the submit click; if
@@ -47,19 +54,23 @@ HARD RULES this harness enforces on itself:
     racing the preflight.
   * Exactly one governed run in flight at a time; the next launch waits for a terminal/gated state.
   * ONE gate policy for EVERY gate, the intake gate and every sibling's gates included
-    (`gate_decision`), decided by gate KIND and failing CLOSED: a gate whose unit `stage`/`gate` is
-    deliver/release/publish/merge is REJECTED whatever the prompt says; a PRE-EXECUTION prompt
-    (`Approve unit N before it runs: <the unit's instruction>`) is scanned COMPLETELY and rejected
-    on a delivery verb anywhere (deliver / delivery / push / open a PR / pull request / merge /
-    publish / release) — kind known or not — and approved otherwise (the one shape that may approve
-    without a known kind); any other gate whose KIND is UNKNOWN (unit lookup failed, `stage`/`gate`
-    missing or null) is REJECTED (`unknown-gate-kind`); any other gate with a known non-delivery
-    kind is rejected when its imperative (the first clause) is a delivery verb and approved
-    otherwise (a plan whose BODY lists `/runs/:id/deliver` among the routes to test is a plan, not
-    a delivery); an empty / unreadable prompt is ALWAYS rejected (`unreadable-gate`). Every decision is clicked on
+    (`gate_decision`) — an ALLOW-LIST that fails CLOSED. A gate is approved ONLY when ALL of:
+    (a) the prompt is an allow-listed SHAPE — crew's pre-execution unit gate (`Approve unit N
+    before it runs: …`) or a plan approval (`Approve [the] [proposed] [test] plan…`); (b) the gated
+    unit's `stage`/`gate` (GET /runs/:id) is KNOWN and not a delivery kind (deliver / release /
+    publish / merge); (c) NO delivery verb or command appears ANYWHERE in the complete prompt
+    (`DELIVERY_VERB_RE`: deliver(y), push, git push, push the branch, gh pr create, open a PR /
+    pull request, merge, publish, npm/cargo publish, release, create a release). EVERYTHING ELSE
+    is REJECTED with a named reason: an empty prompt (`unreadable-gate`), SteeringGate's `Prompt
+    unavailable (daemon restarted)…` fallback or any other shape (`unknown-prompt-shape`), an
+    unknown unit kind — lookup failed, `stage`/`gate` null (`unknown-gate-kind`), a delivery verb
+    (`delivery-verb`), a delivery kind. A plan whose body lists `/runs/:id/deliver` among the
+    routes to test is therefore rejected too — a rejected legitimate plan is a recorded finding;
+    an approved delivery is not recoverable. Every decision is clicked on
     the UI card and its WIRE is verified: the response must be a POST to exactly
     `/api/v1/runs/<this run id>/gate`, its body's `approve` must equal the decision taken and its
-    status must be 2xx — anything else is a finding and `harness_ok=false` (`gate-wire-mismatch`).
+    status must be 2xx — anything else is a finding and `harness_ok=false` (`gate-wire-mismatch`;
+    a SIBLING gate's wire failure is `sibling-gate-wire-mismatch`, judged the same way).
     Every decision is recorded in the scenario's `measured.gates[]` (or the sibling's `gates[]`)
     with the prompt excerpt, the unit's stage/gate, the reason and the wire check. Sibling gates
     are decided on `/runs/<sibling id>` — never the API.
@@ -83,17 +94,20 @@ set has been stable for two polls AND every member is terminal; `SIBLING_FOLLOW_
 first is recorded (`timed_out`) and the scenario cannot `pass`.
 report.json is written atomically (unique temp file + rename, contained under the artifacts dir,
 never through a symlink — every path component from the repo root down is `lstat`-checked) after
-every scenario and on every exit path (an abort is recorded in `aborted`).
+every scenario and on every exit path (an abort is recorded in `aborted`). The artifacts root
+itself is component-walked BEFORE anything is created (`ensure_artifact_root`, the first thing
+`main()` does) — a symlinked `e2e/artifacts` refuses startup instead of planting a directory
+outside the repository.
 
 Usage: python3 e2e/test_feature_live.py            (playwright + chromium must be installed)
 Env:   STUDIO_URL (default http://localhost:7701), TARGET_REPO (default wicked-studio),
        ONLY=LT-1,LT-2 (subset), PREFLIGHT_MAX_MIN (default 20), GATE_TIMEOUT_MIN (default 25),
        RUN_TIMEOUT_MIN (default 60), SIBLING_GRACE_S (default 120), SIBLING_FOLLOW_MAX_S
        (default 900), SWAP_MAX_PCT (default 85 — a contract deviation when moved; requires
-       SWAP_MAX_PCT_ACK=contract-deviation), FANOUT_PATTERN (a regex over `ps` command lines that
-       blocks the preflight; default `FANOUT_PATTERN_DEFAULT`), TEST_PROBLEM_PREFIX (default "" — a
-       marker a sibling's `problem` must carry, together with our run id or campaign label, to be
-       attributed).
+       SWAP_MAX_PCT_ACK=contract-deviation), FANOUT_PATTERN (an EXTRA regex over `ps` command
+       lines that also blocks the preflight — the token rules in `FANOUT_RULES` always apply),
+       TEST_PROBLEM_PREFIX (default "" — a marker a sibling's `problem` must carry, together with
+       our run id or campaign label, to be attributed).
 Prints a JSON report to stdout; artifacts land in e2e/artifacts/test-feature-live/.
 
 Offline self-test (no daemon, no Playwright, no network; studio's CI runs no Python step, so run
@@ -107,6 +121,7 @@ import fcntl
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -129,10 +144,14 @@ RUN_TIMEOUT_S = int(float(os.environ.get("RUN_TIMEOUT_MIN", "60")) * 60)
 SIBLING_GRACE_S = int(os.environ.get("SIBLING_GRACE_S", "120"))
 SIBLING_FOLLOW_MAX_S = int(os.environ.get("SIBLING_FOLLOW_MAX_S", "900"))
 TEST_PROBLEM_PREFIX = os.environ.get("TEST_PROBLEM_PREFIX", "")
-# The contract (brief-test-feature-live.md): "the harness must refuse to run if … swap > 85%".
-# The three recorded launches (d293f4d7…, f8bc2bad…, d12adb6c…) cleared under a 95 % threshold the
-# coordinator authorized mid-run because this host idles at ~93 % swap — that relaxation is a
-# recorded contract deviation (see `preflight_policy`), not the default.
+# The contract (brief-test-feature-live.md): "the harness must refuse to run if … swap > 85%" —
+# AMENDED by its author (the coordinator) on 2026-09-09, after codex rounds 2-4 of PR #215: "the 85%
+# default stands; an EXPLICIT operator override (SWAP_MAX_PCT together with
+# SWAP_MAX_PCT_ACK=contract-deviation) is permitted and MUST be recorded in the report as a contract
+# deviation (threshold, reading, acknowledgement)". The three recorded launches (d293f4d7…,
+# f8bc2bad…, d12adb6c…) ran under an authorized 95 % override at 93 % swap because this host idles
+# above 85 %; the amendment accepts them as deviation evidence. `preflight_policy` implements exactly
+# that: 85 by default, the override honoured only with the acknowledgement, the deviation recorded.
 SWAP_MAX_PCT_CONTRACT = 85
 # Moving the swap gate is honoured ONLY with this acknowledgement set — the deviation is meant to be
 # impossible to miss (logged at every preflight, stamped on every reading, a top-level report
@@ -140,13 +159,26 @@ SWAP_MAX_PCT_CONTRACT = 85
 SWAP_ACK_VAR = "SWAP_MAX_PCT_ACK"
 SWAP_ACK_VALUE = "contract-deviation"
 LOAD1_MAX = 20
-# Preflight gate (4): heavy worker / build fan-out on the host. Any `ps` command line matching this
-# blocks a launch — a governed council or a build outside the daemon's run list overlapping a
-# launch is exactly the capacity spike the serialization rule exists to prevent. Documented
-# default; `FANOUT_PATTERN` (a regex) overrides it. The dogfood daemon itself (`wicked-crew serve`,
-# `--port 7701` or no port) never matches; a SECOND daemon on another port does.
-FANOUT_PATTERN_DEFAULT = (r"codex exec|claude -p|claude --print|cargo (build|test|clippy)|vitest"
-                          r"|npm (run )?(test|build)|wicked-crew serve --port (?!7701)")
+# Preflight gate (4): heavy worker / build fan-out on the host — a governed council or a build
+# outside the daemon's run list overlapping a launch is exactly the capacity spike the serialization
+# rule exists to prevent. Decided on the TOKENS of each `ps` command line (`fanout_rule`), never on
+# a positional regex: `cargo +stable build`, `claude --model opus --print task` and
+# `wicked-crew serve --db /tmp/x --port 62432` (codex round 4's three probes) all block; the dogfood
+# daemon itself (`wicked-crew serve`, no port or `--port 7701`) and an unrelated `node` never do.
+# `FANOUT_PATTERN` (a regex) only ADDS matches. Recorded in `preflight_policy.fanout_rules`.
+FANOUT_RULES = (
+    "cargo: build|test|clippy|run among its tokens (a `+toolchain` token is just another token); "
+    "claude: -p|--print anywhere; codex: exec anywhere; vitest: always; "
+    "npm|pnpm|yarn: `test`, or `run` + test|build (test:*/build:* scripts included); "
+    "wicked-crew (also via `node …/wicked-crew`): `serve` with a --port VALUE (`--port N` or `--port=N`, any position) other than 7701; "
+    "the program is basename(argv[0]) or, under a runtime launcher (node, python3, sh, …), the script it runs"
+)
+# argv[0]s that only launch the real program — under one of them the program is the first token whose
+# basename names a program the rules know (`node …/.bin/codex exec`, `nice -n 10 cargo clippy`).
+RUNTIME_LAUNCHERS = {"node", "nodejs", "bun", "deno", "npx", "python", "python3", "sh", "bash", "zsh", "env",
+                     "nice", "caffeinate", "time", "arch"}
+KNOWN_PROGRAMS = {"cargo", "claude", "codex", "vitest", "npm", "pnpm", "yarn", "wicked-crew"}
+DOGFOOD_PORT = "7701"
 WEDGE_S = 10 * 60
 ACTIVE = {"running", "executing", "awaiting_human", "planning", "pending", "starting"}
 TERMINAL = {"completed", "failed", "cancelled", "canceled", "rejected"}
@@ -341,16 +373,25 @@ def run_events(run_id: str) -> list[dict]:
 
 def unit_output(run_id: str, ord_: int) -> str | None | FetchMiss:
     """The unit's captured output: a string; None when the daemon answers 2xx with no output (204,
-    `output: null`, empty) — evidence that is ABSENT; a `FetchMiss` when the fetch FAILED."""
+    `output` absent / null / "") — evidence that is ABSENT; a `FetchMiss` when the fetch FAILED or
+    the 2xx body is not the contract's shape — a non-dict body, or an `output` that is present but
+    not a string (a number, an object: schema drift or corruption, recorded as
+    `unexpected output type: <type>` like `run_events`/`acceptance` record theirs, never folded
+    into "absent")."""
     path = f"/runs/{enc(run_id)}/units/{ord_}/output"
     status, body = _fetch(path)
     if not 200 <= status < 300:
         return record_fetch_error(path, status, body)
-    if body is None or (isinstance(body, dict) and not isinstance(body.get("output"), str)):
+    if body is None:
         return None
     if not isinstance(body, dict):
         return record_fetch_error(path, status, f"unexpected body shape: {json.dumps(body)[:120]}")
-    return body["output"] or None
+    out = body.get("output")
+    if out is None or out == "":
+        return None
+    if not isinstance(out, str):
+        return record_fetch_error(path, status, f"unexpected output type: {type(out).__name__} ({json.dumps(out, default=str)[:80]})")
+    return out
 
 
 def acceptance(run_id: str) -> dict | None | FetchMiss:
@@ -395,13 +436,14 @@ def _field(pattern: str, text: str, what: str) -> str:
     return m.group(1)
 
 
-def fanout_pattern(env: Mapping[str, str] | None = None) -> re.Pattern:
-    """The fan-out gate's pattern: `FANOUT_PATTERN` from the environment when set (an invalid regex
-    is a named exit, never a silently disabled gate), else `FANOUT_PATTERN_DEFAULT`."""
+def fanout_pattern(env: Mapping[str, str] | None = None) -> re.Pattern | None:
+    """The OPTIONAL extra fan-out regex: `FANOUT_PATTERN` from the environment when set (an invalid
+    regex is a named exit, never a silently disabled gate), else None. It ADDS matches to the token
+    rules (`fanout_rule`) — an operator can widen the gate, never narrow or replace it."""
     env = os.environ if env is None else env
     raw = (env.get("FANOUT_PATTERN") or "").strip()
     if not raw:
-        return re.compile(FANOUT_PATTERN_DEFAULT)
+        return None
     try:
         return re.compile(raw)
     except re.error as e:
@@ -412,12 +454,80 @@ FANOUT_RE = fanout_pattern()
 PS_ARGV = ["ps", "-axo", "pid=,command="]
 
 
+def _tokens(cmd: str) -> list[str]:
+    """The command line's argv: `shlex.split` (quotes respected), plain whitespace when the line is
+    not shell-parsable (an unbalanced quote in a worker's prompt argument)."""
+    try:
+        return shlex.split(cmd)
+    except ValueError:
+        return cmd.split()
+
+
+def _program(tokens: list[str]) -> tuple[str, int]:
+    """(basename of the program, index of its token): argv[0] — or, when argv[0] is only a runtime
+    launcher (`node …/.bin/codex exec`, `env FOO=1 cargo build`, `nice -n 10 cargo clippy`), the
+    first later token whose basename is a program the rules know (`KNOWN_PROGRAMS`); a launcher
+    running something else (`node /x/app.js --port 62432`, `python3 e2e/test_feature_live.py`)
+    stays the launcher, which no rule names."""
+    if not tokens:
+        return "", 0
+    name = os.path.basename(tokens[0])
+    if name in RUNTIME_LAUNCHERS:
+        for j in range(1, len(tokens)):
+            if os.path.basename(tokens[j]) in KNOWN_PROGRAMS:
+                return os.path.basename(tokens[j]), j
+    return name, 0
+
+
+def _port_value(tokens: list[str]) -> str | None:
+    """The VALUE of a `--port N` / `--port=N` token anywhere in the argv, else None."""
+    for k, t in enumerate(tokens):
+        if t == "--port" and k + 1 < len(tokens):
+            return tokens[k + 1]
+        if t.startswith("--port="):
+            return t[len("--port="):]
+    return None
+
+
+def fanout_rule(cmd: str) -> str | None:
+    """The fan-out rule this `ps` command line trips, NAMED — or None. Decided on TOKENS (see
+    `FANOUT_RULES`), so argument order never matters: `cargo +stable build`,
+    `claude --model opus --print task` and `wicked-crew serve --db /tmp/x --port 62432` (codex
+    round 4's probes, none of which the positional regex caught) all trip a rule; `wicked-crew
+    serve` without a port or on 7701 (the dogfood daemon), the interactive `Claude` app, `npm run
+    dev` and an unrelated `node` do not."""
+    tokens = _tokens(cmd)
+    if not tokens:
+        return None
+    prog, i = _program(tokens)
+    args = tokens[i + 1:]
+    argset = set(args)
+    if prog == "cargo" and argset & {"build", "test", "clippy", "run"}:
+        return "cargo build|test|clippy|run"
+    if prog == "claude" and argset & {"-p", "--print"}:
+        return "claude -p|--print"
+    if prog == "codex" and "exec" in argset:
+        return "codex exec"
+    if prog == "vitest":
+        return "vitest"
+    if prog in {"npm", "pnpm", "yarn"}:
+        scripts = {a.split(":", 1)[0] for a in args}
+        if "test" in argset or ("run" in argset and scripts & {"test", "build"}):
+            return f"{prog} test|build"
+    if "wicked-crew" in {os.path.basename(t) for t in tokens} and "serve" in argset:
+        port = _port_value(tokens)
+        if port is not None and port != DOGFOOD_PORT:
+            return f"second wicked-crew serve --port {port}"
+    return None
+
+
 def fanout_processes(table: str | None = None, pattern: re.Pattern | None = None) -> list[str]:
-    """Every process on the host whose command line matches the fan-out pattern, as `"<pid> <cmd>"`
-    strings — [] means the gate is clear. `table` is the `ps -axo pid=,command=` output (injected by
-    the self-test); when None it is read live, and a `ps` that cannot be run or fails is returned as
-    a single `ERR …` entry so the gate BLOCKS (fail closed) rather than passing on no information."""
-    rx = pattern or FANOUT_RE
+    """Every process on the host whose command line trips a fan-out rule (`fanout_rule`, on tokens)
+    or the optional extra regex (`FANOUT_PATTERN`), as `"<pid> <cmd>"` strings — [] means the gate
+    is clear. `table` is the `ps -axo pid=,command=` output (injected by the self-test); when None
+    it is read live, and a `ps` that cannot be run or fails is returned as a single `ERR …` entry so
+    the gate BLOCKS (fail closed) rather than passing on no information."""
+    rx = FANOUT_RE if pattern is None else pattern
     if table is None:
         try:
             table = subprocess.run(PS_ARGV, capture_output=True, text=True, check=True).stdout
@@ -430,7 +540,7 @@ def fanout_processes(table: str | None = None, pattern: re.Pattern | None = None
             continue
         pid, _, cmd = line.partition(" ")
         cmd = cmd.strip()
-        if rx.search(cmd):
+        if fanout_rule(cmd) or (rx is not None and rx.search(cmd)):
             hits.append(f"{pid} {cmd[:160]}")
     return hits
 
@@ -493,14 +603,16 @@ def preflight_policy(env: Mapping[str, str] | None = None) -> dict:
                 f"SWAP_MAX_PCT={raw} moves the swap gate off the contract's {SWAP_MAX_PCT_CONTRACT}% — a contract "
                 f"deviation. It is honoured only when {SWAP_ACK_VAR}={SWAP_ACK_VALUE} is ALSO set "
                 f"(got {SWAP_ACK_VAR}={ack!r}); unset SWAP_MAX_PCT or acknowledge the deviation explicitly")
+    extra = fanout_pattern(env)
     policy: dict = {
         "swap_max_pct": swap_max,
         "contract_swap_max_pct": SWAP_MAX_PCT_CONTRACT,
         "load1_max": LOAD1_MAX,
         "active_runs_max": 0,
         "fanout_max": 0,
-        "fanout_pattern": fanout_pattern(env).pattern,
-        "fanout_source": "FANOUT_PATTERN env" if (env.get("FANOUT_PATTERN") or "").strip() else "default",
+        "fanout_rules": FANOUT_RULES,
+        "fanout_pattern": extra.pattern if extra else None,
+        "fanout_source": "token rules + FANOUT_PATTERN env (extra matches)" if extra else "token rules",
         "source": "SWAP_MAX_PCT env" if raw else "contract default",
     }
     if swap_max != SWAP_MAX_PCT_CONTRACT:
@@ -912,9 +1024,8 @@ def norm_title(s: str) -> str:
 
 # The IMPERATIVE of a gate prompt is its first clause — up to the first ":" or newline, ≤ 80 chars:
 # "Approve unit 1 before it runs: Recon: survey…" → "Approve unit 1 before it runs";
-# "Deliver: open a PR against main" → "Deliver". A route listed in a plan's BODY
-# (`/runs/:id/deliver` among the endpoints to test) is never an imperative.
-IMPERATIVE_DELIVER_RE = re.compile(r"^(approve )?(the )?(deliver|delivery|push|open (a )?pr|merge|publish|release)\b", re.I)
+# "Deliver: open a PR against main" → "Deliver". Since round 4 it only NAMES a prompt in reasons and
+# findings — it decides nothing (the allow-list and the complete-prompt scan in `gate_decision` do).
 
 
 def imperative(prompt: str | None) -> str:
@@ -934,11 +1045,24 @@ def gate_unit(detail: dict | None, ord_: int | None) -> dict | None:
     return None
 
 
-# For a gate whose KIND is unknown, ANY delivery verb ANYWHERE in the complete prompt rejects — the
-# first clause alone hid "Approve unit 4 before it runs: Push the branch and open a PR".
-DELIVERY_VERB_RE = re.compile(r"\b(?:deliver|delivery|push|open (?:a )?pr|pull request|merge|publish|release)\b", re.I)
-# The ONE prompt shape an unknown-kind gate may still approve: crew's pre-execution unit gate.
+# (c) NO delivery verb or COMMAND anywhere in the complete prompt. The first clause alone hid
+# "Approve unit 4 before it runs: Push the branch and open a PR" (round 3), and a verb list that only
+# knew `push` approved "Approve unit 4 before it runs: gh pr create --fill" (round 4). Longer
+# alternatives first, so the reason names the whole command that was asked for.
+DELIVERY_VERB_RE = re.compile(
+    r"\b(?:gh pr create|pr create|git push|push (?:the )?branch|push|open (?:a |the )?(?:pr|pull request)|pull request"
+    r"|npm publish|cargo publish|publish|create (?:a )?release|release|delivery|deliver|merge)\b", re.I)
+# (a) The allow-listed prompt SHAPES — the only two a gate may be approved on: crew's pre-execution
+# unit gate and a plan approval. Anything else — SteeringGate's `Prompt unavailable (daemon
+# restarted)…` fallback, "Please push the branch…", "Amend the plan?" — is `unknown-prompt-shape`.
 PRE_EXECUTION_RE = re.compile(r"^Approve unit \d+ before it runs:")
+PLAN_APPROVAL_RE = re.compile(r"^Approve (?:the )?(?:proposed )?(?:test )?plan\b")
+GATE_SHAPES = (("pre-execution", PRE_EXECUTION_RE), ("plan-approval", PLAN_APPROVAL_RE))
+
+
+def gate_shape(text: str) -> str | None:
+    """The allow-listed shape `text` has — "pre-execution" / "plan-approval" — or None."""
+    return next((name for name, rx in GATE_SHAPES if rx.match(text)), None)
 
 
 def gate_kinds(unit: dict | None) -> set[str]:
@@ -951,23 +1075,25 @@ def gate_kinds(unit: dict | None) -> set[str]:
 
 def gate_decision(prompt: str | None, unit: dict | None = None) -> tuple[str, str]:
     """THE gate policy, applied to every gate — the intake gate, every later gate, every sibling's
-    gate — decided by gate KIND and failing CLOSED:
-      * the gated unit's `stage`/`gate` (from GET /runs/:id) is a delivery kind (deliver / release /
-        publish / merge) → reject, whatever the prompt says;
-      * an empty / unreadable prompt → reject (`unreadable-gate`), ALWAYS — a known kind never
-        authorizes approving what cannot be read;
-      * a PRE-EXECUTION prompt (`Approve unit N before it runs: <the unit's own instruction>`) is
-        scanned COMPLETELY — the text after the colon is what the unit will DO, not a plan body —
-        and a delivery verb anywhere in it (`DELIVERY_VERB_RE`) rejects, whatever the kind says
-        ("…before it runs: Push the branch and open a PR" is a delivery even when the daemon labels
-        the stage `test`); with no delivery verb it approves — the ONE shape that may approve
-        without a known kind, because it is unambiguous on its own;
-      * any other prompt with an UNKNOWN kind (lookup failed, `stage`/`gate` missing or null) →
-        reject (`unknown-gate-kind`);
-      * any other prompt with a known, non-delivery kind → reject when its IMPERATIVE (the first
-        clause) asks to deliver / push / open a PR / merge / publish / release, approve otherwise —
-        a proposed-plan approval whose BODY lists `/runs/:id/deliver` among the routes to test is a
-        plan, not a delivery.
+    gate — an ALLOW-LIST that fails CLOSED. A gate is APPROVED only when ALL of these hold:
+      (a) the prompt is an allow-listed SHAPE (`gate_shape`): crew's pre-execution unit gate
+          (`Approve unit N before it runs: …`) or a plan approval
+          (`Approve [the] [proposed] [test] plan…`);
+      (b) the gated unit's `stage`/`gate` (from GET /runs/:id) is KNOWN and is not a delivery kind
+          (deliver / release / publish / merge);
+      (c) NO delivery verb or command appears ANYWHERE in the complete prompt (`DELIVERY_VERB_RE`).
+    EVERYTHING ELSE is rejected with a named reason — absence of a recognized delivery keyword is
+    not authorization (codex round 4):
+      * a delivery KIND → reject, whatever the prompt says;
+      * an empty / unreadable prompt → `unreadable-gate`, ALWAYS;
+      * a delivery verb / command anywhere → `delivery-verb` ("…before it runs: gh pr create --fill",
+        "Please push the branch and open a PR", a plan body that lists `/runs/:id/deliver` among the
+        routes to test — rejecting a legitimate plan is a recorded finding, approving a delivery is
+        not recoverable);
+      * any other shape — SteeringGate's `Prompt unavailable (daemon restarted)…` fallback included,
+        whatever the kind says → `unknown-prompt-shape`;
+      * an allow-listed shape whose unit KIND is unknown (lookup failed, `stage`/`gate` null) →
+        `unknown-gate-kind` — the shape alone no longer approves.
     Returns (decision, reason); the caller records both together with the unit's stage/gate."""
     kinds = gate_kinds(unit)
     hit_kind = sorted(kinds & DELIVER_KINDS)
@@ -977,21 +1103,19 @@ def gate_decision(prompt: str | None, unit: dict | None = None) -> tuple[str, st
     if not text:
         return "reject", "unreadable-gate"
     kind_tail = f"; unit stage/gate {unit.get('stage')}/{unit.get('gate')}" if kinds else "; unit stage/gate unknown"  # type: ignore[union-attr]
-    if PRE_EXECUTION_RE.match(text):
-        verb = DELIVERY_VERB_RE.search(text)
-        if verb:
-            head = "unknown-gate-kind: the unit's stage/gate is unknown and " if not kinds else ""
-            return "reject", f"{head}the pre-execution prompt's unit instruction asks to {verb.group(0).lower()!r} (never deliver)" + kind_tail
-        return "approve", (f"pre-execution gate {imperative(text)!r} whose COMPLETE prompt carries no delivery verb" + kind_tail
-                           + ("" if kinds else " — approved on the complete prompt alone"))
+    verb = DELIVERY_VERB_RE.search(text)
+    if verb:
+        return "reject", f"delivery-verb: the complete prompt asks to {verb.group(0).lower()!r} (never deliver)" + kind_tail
+    shape = gate_shape(text)
+    if shape is None:
+        return "reject", (f"unknown-prompt-shape: {imperative(text)!r} is neither crew's pre-execution gate "
+                          "('Approve unit N before it runs:') nor a plan approval ('Approve [the] [proposed] [test] plan') "
+                          "— not on the allow-list" + kind_tail)
     if not kinds:
-        return "reject", (f"unknown-gate-kind: the unit's stage/gate is unknown and the prompt {imperative(text)!r} "
-                          "is not the pre-execution shape 'Approve unit N before it runs:'")
-    imp = imperative(text)
-    hit = IMPERATIVE_DELIVER_RE.match(imp)
-    if hit:
-        return "reject", f"the prompt's imperative {imp!r} asks to {hit.group(3).lower()} (never deliver)" + kind_tail
-    return "approve", f"imperative {imp!r} is not deliver-class" + kind_tail
+        return "reject", (f"unknown-gate-kind: the unit's stage/gate is unknown (lookup failed or null) — the {shape} prompt "
+                          f"{imperative(text)!r} alone does not authorize approving")
+    return "approve", (f"{shape} gate {imperative(text)!r}: allow-listed shape, known non-delivery kind, "
+                       "no delivery verb anywhere in the complete prompt" + kind_tail)
 
 
 # Explicit parent pointers a sibling DTO may carry (wicked-crew-api-types `AgentSession` and its
@@ -1096,8 +1220,11 @@ def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict
     if reason == "unreadable-gate":
         finding(f"{tag}: gate ord={ord_} on run {run_id} had an unreadable prompt — REJECTED (never approve what cannot be read)")
     elif reason.startswith("unknown-gate-kind"):
-        finding(f"{tag}: gate ord={ord_} on run {run_id}: the gated unit's stage/gate is unknown and the complete prompt "
-                f"('{(prompt or '')[:80]}…') is not an unambiguous pre-execution gate — REJECTED ({reason})")
+        finding(f"{tag}: gate ord={ord_} on run {run_id}: the gated unit's stage/gate is unknown — the allow-listed prompt "
+                f"('{(prompt or '')[:80]}…') alone does not authorize approving — REJECTED ({reason})")
+    elif reason.startswith("unknown-prompt-shape"):
+        finding(f"{tag}: gate ord={ord_} on run {run_id}: the prompt ('{(prompt or '')[:80]}…') is not an allow-listed "
+                f"shape (pre-execution unit gate / plan approval) — REJECTED ({reason})")
     entry = {"ord": ord_, "first": first, "prompt": (prompt or "")[:200], "decision": decision, "reason": reason,
              "unit": {"stage": unit.get("stage"), "gate": unit.get("gate")} if unit else None,
              "status": None, "url": None, "body": None, "wire_ok": False, "wire_check": None}
@@ -1246,11 +1373,37 @@ def follow_siblings(sibling_ids: list[str], max_s: int = SIBLING_FOLLOW_MAX_S, s
     }
 
 
+def sibling_gate_wire_failures(followed: dict | None) -> list[str]:
+    """Every DECIDED sibling gate (`siblings_followed.gates[sid][]`, clicked on `/runs/<sid>` by
+    `decide_sibling_gate`) whose wire does not prove the decision, named: `wire_ok` false, a recorded
+    url/body/status that fails `gate_wire_check` when re-run offline, or no 2xx status. Undecided
+    entries (`decision: None` — the card never rendered) are not wire failures; they keep the sibling
+    from `pass` through its non-terminal status. Codex round 4: `derive_result` looked only at the
+    parent's `measured.gates`, so a completed, verdict-carrying sibling whose REJECT was wired as
+    `{approve: true}` still spelled `{harness_ok: true, result: "pass"}`."""
+    out: list[str] = []
+    for sid, entries in ((followed or {}).get("gates") or {}).items():
+        for g in entries or []:
+            if not isinstance(g, dict) or g.get("decision") is None:
+                continue
+            if g.get("wire_ok") is False:
+                problem: str | None = g.get("wire_check") or "wire_ok=false"
+            elif g.get("url") is not None:
+                problem = gate_wire_check(g, sid)
+            else:
+                st = g.get("status")
+                problem = None if isinstance(st, int) and 200 <= st < 300 else f"status {st!r} is not 2xx"
+            if problem:
+                out.append(f"sibling {sid} gate ord={g.get('ord')} {g.get('decision')}: {problem}")
+    return out
+
+
 def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
     """The verdict split, as a pure function of the measurements (so the committed report can be
     re-derived offline). `harness_ok`: the harness did its job — launch submitted (after the
     pre-submit preflight) and accepted with run ids, gate rendered on the UI, every gate decision
-    posted, terminal state, no wedge, no blocker. `result`: the FEATURE contract — "pass" REQUIRES
+    posted and wire-verified (the parent's AND every followed sibling's — `gate-wire-mismatch` /
+    `sibling-gate-wire-mismatch`), terminal state, no wedge, no blocker. `result`: the FEATURE contract — "pass" REQUIRES
     a completed run whose plan names real files and classifies, PLUS ≥ 1 attributable sibling run
     with EVERY attributable sibling terminal and EVERY one carrying its own acceptance verdict
     (recorded per id in `measured.sibling_verdicts`), PLUS (for the "campaign" intent) a registered
@@ -1284,6 +1437,13 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
     if bad_wire:
         hard.append("gate-wire-mismatch")
         hard += [f"gate ord={g.get('ord')} {g.get('decision')}: {g.get('wire_check')}" for g in bad_wire]
+    # The siblings' gates are decided on the UI and wire-checked exactly like the parent's — a sibling
+    # gate whose POST did not prove the decision is the same harness failure (round 4).
+    followed = x.get("siblings_followed") or {}
+    bad_sibling_wire = sibling_gate_wire_failures(followed)
+    if bad_sibling_wire:
+        hard.append("sibling-gate-wire-mismatch")
+        hard += bad_sibling_wire
     if x.get("wedged"):
         hard.append(f"run wedged (no events for {WEDGE_S // 60} min)")
     if x.get("final_status") not in TERMINAL:
@@ -1305,7 +1465,6 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
         fail.append("plan does not classify deterministic tool checks vs governed agent runs")
     after = x.get("siblings_after_grace") or x.get("siblings_at_terminal") or {}
     sibs = after.get("attributable_siblings") or []
-    followed = x.get("siblings_followed") or {}
     statuses = followed.get("statuses") or {}
     discovered = followed.get("discovered") or {}
     # The attributable set is everything attributed after the grace period PLUS everything the
@@ -1345,6 +1504,23 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
 
 
 # ── The UI-driven governed intake ─────────────────────────────────────────────────────────────
+
+
+def parse_post_body(post_data: str | bytes | None, tag: str) -> dict:
+    """The launch request's body, for the report: the parsed JSON object — or, when Playwright hands
+    back an empty / non-JSON body or a JSON value that is not an object (Copilot, round 4),
+    `{"raw": <first 500 chars>, "parse_error": …}` plus a finding. The harness CONTINUES: the body is
+    evidence to record, not control flow (`json.loads` raising here crashed the scenario unrecorded)."""
+    raw = post_data.decode("utf-8", "replace") if isinstance(post_data, bytes) else (post_data or "")
+    try:
+        body = json.loads(raw or "{}")
+    except json.JSONDecodeError as e:
+        finding(f"{tag}: the launch POST body was not JSON ({e}) — recorded raw (first 500 chars), not parsed")
+        return {"raw": raw[:500], "parse_error": str(e)}
+    if not isinstance(body, dict):
+        finding(f"{tag}: the launch POST body parsed as {type(body).__name__}, not a JSON object — recorded raw")
+        return {"raw": raw[:500], "parse_error": f"not a JSON object ({type(body).__name__})"}
+    return body
 
 
 def launched_run_ids(answer: object) -> list[str]:
@@ -1443,7 +1619,7 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
         with page.expect_response(lambda r: "/testing/recon" in r.url and r.request.method == "POST", timeout=120000) as resp_info:
             panel.locator('[data-testid="testing-launch-submit"]').click()
         resp = resp_info.value
-        post_body = json.loads(resp.request.post_data or "{}")
+        post_body = parse_post_body(resp.request.post_data, tag)  # a non-JSON body is recorded raw, never a crash
         answer = resp.json() if resp.ok else {"status": resp.status, "text": resp.text()[:500]}
         t_launch = time.time()
         m["measured"]["post_body"] = post_body
@@ -1600,9 +1776,10 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
                 except Exception:
                     m["notes"].append("later gate present per REST but no card on the run page")
                     continue
-                # Same policy as the first gate — the gated unit's stage/gate + the prompt's
-                # imperative, failing closed (an "Approve proposed test plan…" gate whose body
-                # lists /runs/:id/deliver among the routes to test is legitimate and goes through).
+                # Same policy as the first gate — the allow-list (shape + known non-delivery kind +
+                # no delivery verb anywhere in the complete prompt), failing closed: an "Approve
+                # proposed test plan…" gate whose body lists /runs/:id/deliver among the routes to
+                # test is REJECTED and recorded as a finding, never approved on its first clause.
                 unit2 = gate_unit(d, g.get("ord"))
                 shot(page, f"05-gate-{g.get('ord', 'x')}-{gate_decision(ptxt, unit2)[0]}")
                 gates.append(decide_gate_on_card(page, c2, run_id=run_id, ord_=g.get("ord"), unit=unit2, tag=tag, first=False, prompt=ptxt))
@@ -1794,15 +1971,25 @@ def _anchor(root: Path) -> Path:
     return ROOT if root == ROOT or ROOT in root.parents else root.parent
 
 
+def ensure_artifact_root(root: Path | None = None, base: Path | None = None) -> Path:
+    """Create the evidence dir ONLY after `lstat`-walking every component of it below `base`
+    (default `_anchor(root)`: the resolved repo root for the real ART — `e2e`, `e2e/artifacts`,
+    `e2e/artifacts/test-feature-live` are each checked). A symlinked component refuses BEFORE
+    anything is created, so startup can never plant `test-feature-live/` outside the repository
+    (codex round 4: `main()` called `ART.mkdir(parents=True)` before any component walk)."""
+    root = root or ART
+    refuse_symlinked_components(root, base or _anchor(root))  # BEFORE mkdir: never create through a link
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def artifact_path(name: str, root: Path | None = None, base: Path | None = None) -> Path:
     """An artifact's path under the evidence dir, with every component `lstat`-checked: no component
     of the root below `base` (default `_anchor(root)`: ROOT for the real ART) may be a symlink, no
     component of the artifact below the root may be one (the target included), and the target's
     realpath must stay under the root's realpath — a daemon-provided id, or a planted link anywhere
     on the way, can never redirect a write outside `e2e/artifacts/test-feature-live/`."""
-    root = root or ART
-    refuse_symlinked_components(root, base or _anchor(root))  # BEFORE mkdir: never create through a link
-    root.mkdir(parents=True, exist_ok=True)
+    root = ensure_artifact_root(root or ART, base)
     p = root / name
     refuse_symlinked_components(p, root)
     root_real, real = root.resolve(), p.resolve()
@@ -1866,7 +2053,7 @@ def analyze(results: dict[str, dict]) -> None:
 
 
 def main() -> None:
-    ART.mkdir(parents=True, exist_ok=True)
+    ensure_artifact_root()  # FIRST: every component of e2e/artifacts/test-feature-live lstat-walked from the repo root, THEN created
     policy = _policy()  # also stamps the top-level `contract_deviation` object when the gate is moved
     line = deviation_line(policy)
     if line:
