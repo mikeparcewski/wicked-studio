@@ -4,50 +4,82 @@ seed_surfaces_test.py — the SEED SUITE: seed and exercise the studio's surface
 UI against a DISPOSABLE, REAL-MODE wicked-crew daemon, then assert project scoping and reload
 persistence with content / identity / lineage assertions — never presence-only checks.
 
-Companion plan: docs/testing/seed-surfaces-plan.md (the revised plan this suite executes).
+Companion plan: docs/testing/seed-surfaces-plan.md (the revised plan this suite executes; §4b is
+the binding coverage matrix).
 
 What this rig is, and what it is not:
 
-  - The daemon is spawned HERE (the studio_standalone_test.py mechanism: an installed
-    `wicked-crew` CLI, a temp state dir, a free port) — but WITHOUT `--stub`: the seeds are real
-    rows in a real engine store. It never touches the live :7701 daemon or ~/.wicked-crew
-    (guarded below, and re-checked at teardown), and every durable store is pinned into the temp
-    dir: `--db` (state home), WICKED_BUS_DATA_DIR (the wicked-bus the daemon AND the bridge it
-    spawns share — an explicit `--bus-db` would pin only the daemon's half), WICKED_HOME (memory
-    store), WICKED_WORKER_HOME (worker config home), WICKED_CREW_SYSTEM_SETTINGS,
-    WICKED_INTERACTIVE_ROOT (the docs root), WICKED_CREW_API (the bridge's crew origin).
+  - The daemon is spawned HERE (an installed `wicked-crew` CLI, a temp state dir, a free port) —
+    WITHOUT `--stub`: the seeds are real rows in a real engine store.
+  - HERMETIC ENVIRONMENT. The daemon does NOT inherit this process's environment or HOME. It gets
+    a minimal env built from scratch (`Rig.build_env`): `PATH` (pass-through — node, npx, git,
+    wicked-estate and the CLI seats resolve from it; documented), a SCRATCH `HOME`, a scratch
+    `TMPDIR`, and every `WICKED_*` / npm knob pointed INTO the temp dir: `--db` (state home),
+    `WICKED_BUS_DATA_DIR` (the bus the daemon AND the bridge it spawns share), `WICKED_HOME`
+    (memory store), `WICKED_WORKER_HOME`, `WICKED_CREW_SYSTEM_SETTINGS`, `WICKED_INTERACTIVE_ROOT`,
+    `WICKED_WORKFLOWS_DIR`, `WICKED_STEERING_INBOX_DIR`, the estate / apps-core dead-letter spools,
+    `npm_config_cache` (the bridge is `npx wicked-interactive@^0.8.1 serve`; the operator's cached
+    `_npx` install is CLONED into the scratch cache so no network is needed), and
+    `WICKED_CREW_API=<bound origin>` (the bridge resolves the crew daemon from it and defaults to
+    :7701 — crew#476). Every child of the daemon (bridge, workers, estate-mcp) inherits this env.
+    Before anything starts, every write target is resolved and asserted NOT to be under the
+    operator's real home or `~/.wicked-crew` (`setup.write_targets`).
+  - ISOLATION IS RE-DERIVED, NOT ASSERTED. At teardown the suite (a) scans the real `~/.wicked-crew`
+    for entries stamped by this run, (b) byte-scans every operator-global wicked store
+    (`~/.wicked-crew`, `~/.something-wicked`, `~/.wicked`, `~/wicked-interactive`, `~/.config/wicked-*`)
+    modified DURING the run for this run's identifiers (stamp, temp-dir name, project/repo/run ids),
+    and (c) diffs the live `:7701` daemon's run ids before/after (read-only GETs). Any hit is
+    `live_touched` and FAILS THE PROCESS regardless of the scenario table. What the daemon wrote
+    into the scratch HOME is listed as the `HOME-WRITES` finding — those are the writes that would
+    have landed in the operator's home without the scratch.
+  - TEARDOWN ON EVERY EXIT PATH. The daemon runs in its own process group; Chromium is launched
+    inside the same try/finally that owns it. On any exception or interruption: live runs on the
+    disposable daemon are cancelled (responses verified, terminal state polled), the browser is
+    closed, the group is SIGTERMed → polled → SIGKILLed, the detached bridge is found by IDENTITY
+    (its command line names `wicked-interactive` AND our unique docs root, started after our daemon)
+    — never by trusting a daemon-written pid blindly (symlinked `.wi-serve.json` refused, positive
+    integer pid required, lock pid cross-checked against the identified processes) — and the temp
+    dir is removed.
   - Interactive AGENT answering is disabled on the daemon (`--no-interactive-{draft,edit,chat,
     demo}-events`): a document or demo created through the UI is a real doc in the real
     interactive registry (placeholder v0), but no drafting/authoring agent is launched for it.
-    Chats and demo/doc GENERATION spawn agents (codex review, RC 2) and are therefore OUT of this
-    deterministic suite; the plan lists them as governed scenarios.
   - Exactly ONE governed scenario runs, serialized: TST-1 launches a project-scoped "New test"
     from Project A's dashboard, waits for the INTAKE GATE, asserts it arrives in the launch
-    panel, and REJECTS it — so no council ever executes. A daemon whose workers cannot run
-    (no CLI login under the hermetic worker home) records a SKIP with the reason, never a pass.
+    panel, and REJECTS it. The oracle reads the run's EVENT LOG: no `unitDispatched` /
+    `unitExecuting` / `unitOutputDelta` / `unitOutputCaptured` / `unitDone` / `acpSessionStarted`
+    anywhere, a `runCancelled` after the `awaitingHuman`, every planned unit still un-executed
+    (`pending|distributed|rejected`), and a non-empty units array.
   - Steps the UI cannot yet perform are performed over the daemon API and LABELLED
-    `[SUBSTITUTE]` in the report (certify the journey, not the proxy): repository
-    registration (setup) and attaching the repo to Project A (no attach control until #207).
-  - Known isolation gaps are UNMET REQUIREMENTS: the tests assert the CORRECT behaviour and
-    carry an xfail marker naming the issue (crew#472 for docs/demos, App.tsx:466 for the
-    campaign store). An xfail that PASSES is reported as `xpass` and fails the suite — the
-    marker is stale and must be removed.
+    `[SUBSTITUTE]` in the report (certify the journey, not the proxy).
+  - Known product gaps are UNMET REQUIREMENTS with an issue marker. `expect_gap(...)` marks the
+    ONE assertion tied to the issue; every other assertion in an xfail scenario fails normally.
+    An xfail that PASSES is `xpass` and fails the suite (stale marker). A scenario the rig cannot
+    make observable is `blocked` — explicit, with the reason and issue — never a silent skip.
+  - Skips are restricted to ESTABLISHED environmental causes: a run failing before its gate is a
+    skip only when the roster shows no signed-in seat; a bridge error is a skip only when the
+    daemon itself reports `bridge_unavailable` (503); an unsupported eval surface only when the
+    route answers 501.
 
 Prereqs: an installed `wicked-crew` (0.7.x; `CREW_CLI=<path to dist/cli/index.js>` overrides),
 Python Playwright (`pip install playwright && playwright install chromium`), `git`.
 
 Env knobs: CREW_CLI, SEED_GOVERNED_TIMEOUT_S (default 600), SEED_ONBOARD_TIMEOUT_S (default
-240), SEED_GOVERNED=0 (skip the ONE governed scenario — it convenes a real distribution council
-before its gate; see TST-1), SEED_KEEP_TMP=1 (keep the temp dir), SEED_HEADED=1 (headed chromium).
+240), SEED_GOVERNED=0 (skip the ONE governed scenario), SEED_KEEP_TMP=1, SEED_HEADED=1.
 
-Prints a per-scenario table and a JSON report to stdout. Exit 0 only when no scenario is
-`fail` or `xpass`. Screenshots of non-passing scenarios land in e2e/shots/seed-surfaces/.
+`python3 e2e/seed_surfaces_test.py --self-test` runs the in-process checks of the harness's own
+safety plumbing (exit semantics, xfail hygiene, pid identity, gate oracle) — no daemon.
+
+Prints a per-scenario table and a JSON report to stdout. Exit 0 ONLY when `report.ok`: no
+scenario is `fail`/`xpass`, nothing was contaminated, setup did not fail, nothing aborted.
+Screenshots of non-passing scenarios land in e2e/shots/seed-surfaces/.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import queue
 import re
 import shutil
 import signal
@@ -73,8 +105,25 @@ FIXTURES = REPO / "e2e" / "fixtures"
 PLAN = "docs/testing/seed-surfaces-plan.md"
 
 LIVE_DAEMON_PORT = 7701
-LIVE_STATE_HOME = Path.home() / ".wicked-crew"
+LIVE_ORIGIN = f"http://127.0.0.1:{LIVE_DAEMON_PORT}"
+REAL_HOME = Path(os.environ.get("HOME") or Path.home()).resolve()
+LIVE_STATE_HOME = REAL_HOME / ".wicked-crew"
+# Every operator-global store a wicked-* process is known to write (crew state home, wicked-bus +
+# wicked-apps-core + wicked-estate spools under .something-wicked, the memory store, interactive's
+# default docs root + instance registry, core/crew config). Scanned at teardown for this run's marks.
+OPERATOR_STATE_ROOTS = (
+    REAL_HOME / ".wicked-crew",
+    REAL_HOME / ".something-wicked",
+    REAL_HOME / ".wicked",
+    REAL_HOME / ".wicked-estate",  # graph.db + repo-graphs/<repo>/estate.db (run 5 caught the daemon writing here under the scratch HOME)
+    REAL_HOME / "wicked-interactive",
+    REAL_HOME / ".wicked-interactive",
+    REAL_HOME / ".wicked-worker",
+    REAL_HOME / ".config" / "wicked-core",
+    REAL_HOME / ".config" / "wicked-crew",
+)
 
+STARTUP_TIMEOUT_S = 90
 GOVERNED_TIMEOUT_S = int(os.environ.get("SEED_GOVERNED_TIMEOUT_S", "600"))
 ONBOARD_TIMEOUT_S = int(os.environ.get("SEED_ONBOARD_TIMEOUT_S", "240"))
 # A cold interactive bridge is `npx wicked-interactive serve` — the pool's own start budget is 60 s.
@@ -83,8 +132,16 @@ EVALS_TIMEOUT_MS = 180_000
 KEEP_TMP = os.environ.get("SEED_KEEP_TMP") == "1"
 HEADED = os.environ.get("SEED_HEADED") == "1"
 GOVERNED_ENABLED = os.environ.get("SEED_GOVERNED", "1") != "0"
+# crew 0.7.25 `bridge-pool.ts INTERACTIVE_SPEC` — the exact spec npx resolves, and therefore the
+# `_npx/<hash>` cache key we clone into the scratch npm cache.
+INTERACTIVE_SPEC = "wicked-interactive@^0.8.1"
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+# wicked-core domain.rs `UnitStatus`: pending → distributed → done | rejected. Only `done` means a
+# worker executed the unit; `distributed` is the planning council's assignment.
+UNIT_STATUSES_UNEXECUTED = {"pending", "distributed", "rejected"}
+# wicked-core event.rs — every event that can only exist once a worker was dispatched for a unit.
+EXECUTION_EVENT_TYPES = {"unitDispatched", "unitExecuting", "unitOutputDelta", "unitOutputCaptured", "unitDone", "acpSessionStarted"}
 
 # The gate toasts (bottom-right cards) overlap composers; hiding them is display-only and the
 # same suppression studio_standalone_test.py applies — the gate card asserted here is the one
@@ -99,15 +156,43 @@ RULE_STATEMENT_EDITED = f"Seed-surfaces rule {STAMP} (edited): every wire body m
 RETIRE_REASON = f"seed-surfaces suite {STAMP}: retiring the rule it authored"
 TEST_BRIEF_TOKEN = f"seed-surfaces-tst1-{STAMP}"
 
+ORIGIN = ""  # the disposable daemon's origin — set by Rig
+API = ""
+
 
 # ── Report plumbing ───────────────────────────────────────────────────────────
 
 
 class Skip(Exception):
-    """A scenario that cannot be exercised on this rig — recorded with its reason, never a pass."""
+    """A scenario that cannot be exercised on this rig for an ESTABLISHED environmental cause —
+    recorded with its reason, never a pass."""
+
+
+class Blocked(Exception):
+    """A scenario the rig cannot make observable within its budget — recorded explicitly with the
+    reason and the issue it waits on, never a silent skip."""
+
+
+class ExpectedGap(AssertionError):
+    """The ONE assertion an xfail scenario ties to its issue. Any other AssertionError in an xfail
+    scenario is an unrelated regression and fails normally."""
+
+
+class SetupFailure(Exception):
+    def __init__(self, step: str, why: str) -> None:
+        super().__init__(f"{step}: {why}")
+        self.step, self.why = step, why
+
+
+def expect_gap(condition: bool, issue: str, message: str) -> None:
+    """Assert the CORRECT behaviour; when it does not hold, raise the expected gap named by `issue`."""
+    if not condition:
+        raise ExpectedGap(f"{issue}: {message}")
 
 
 class Suite:
+    STATUSES = ("pass", "fail", "xfail", "xpass", "skip", "blocked")
+
     def __init__(self) -> None:
         self.rows: list[dict] = []
         self.passed: set[str] = set()
@@ -137,11 +222,17 @@ class Suite:
                     detail = f"UNEXPECTED PASS — the gap tracked by {xfail} appears closed; remove the marker. {out}"
             except Skip as e:
                 status, detail = "skip", str(e)
-            except AssertionError as e:
+            except Blocked as e:
+                status, detail = "blocked", str(e)
+            except ExpectedGap as e:
                 if xfail is None:
-                    status, detail = "fail", f"assertion: {e}"
+                    status, detail = "fail", f"expected-gap assertion fired in a scenario with NO xfail marker: {e}"
                 else:
                     status, detail = "xfail", f"expected failure ({xfail}): {e}"
+            except AssertionError as e:
+                # A plain assertion fails even inside an xfail scenario — only the ExpectedGap tied to
+                # the issue is excused (unrelated regressions must never become "expected").
+                status, detail = "fail", f"assertion: {e}"
             except Exception as e:  # noqa: BLE001 — a scenario error is a finding, not a crash
                 status = "fail"
                 detail = f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=4)}"
@@ -160,21 +251,201 @@ class Suite:
             "governed": governed, "xfail": xfail, "seconds": round(time.time() - t0, 1), "shot": shot,
         }
         self.rows.append(row)
-        print(f"[{status.upper():5}] {sid:7} {title} — {detail.splitlines()[0] if detail else ''}", file=sys.stderr)
+        print(f"[{status.upper():7}] {sid:7} {title} — {detail.splitlines()[0] if detail else ''}", file=sys.stderr)
 
     @property
     def ok(self) -> bool:
         return all(r["status"] not in ("fail", "xpass") for r in self.rows)
 
+    def counts(self) -> dict[str, int]:
+        return {s: sum(1 for r in self.rows if r["status"] == s) for s in self.STATUSES}
 
-suite = Suite()
-report: dict = {"ok": False, "setup": {}, "scenarios": suite.rows}
+
+def finalize(rep: dict, suite_ok: bool) -> dict:
+    """`report.ok` is the ONLY thing the exit code reads: the scenario table AND the isolation proof
+    AND a clean setup/teardown must all hold."""
+    rep["ok"] = (
+        bool(suite_ok)
+        and not rep.get("live_touched")
+        and rep.get("setup_failure") is None
+        and rep.get("aborted") is None
+    )
+    return rep
 
 
-def die(step: str, why: str) -> None:
-    report["setup"][step] = {"ok": False, "error": why}
-    print(json.dumps(report, indent=2))
-    sys.exit(1)
+def exit_code(rep: dict) -> int:
+    return 0 if rep.get("ok") is True else 1
+
+
+# ── Pure oracles (self-tested) ────────────────────────────────────────────────
+
+
+def disjoint_pickers_oracle(a_ids: list[str], b_ids: list[str], doc_a: str, doc_b: str, issue: str) -> None:
+    """VIB-3's oracle. OWNERSHIP is a plain assertion (an empty picker is a FAIL, never an expected
+    gap); only the leak itself is the expected gap tied to `issue`."""
+    assert a_ids, f"Project A's picker is empty — it must list at least its own document {doc_a!r}"
+    assert b_ids, f"Project B's picker is empty — it must list at least its own document {doc_b!r}"
+    assert doc_a in a_ids, f"Project A's picker does not list A's own document {doc_a!r}: {a_ids}"
+    assert doc_b in b_ids, f"Project B's picker does not list B's own document {doc_b!r}: {b_ids}"
+    expect_gap(doc_b not in a_ids, issue, f"Project A's picker lists B's document {doc_b!r}: {a_ids}")
+    expect_gap(doc_a not in b_ids, issue, f"Project B's picker lists A's document {doc_a!r}: {b_ids}")
+
+
+def assert_execution_prevented(units: object, events: object) -> dict:
+    """TST-1's gate oracle: prove no unit EXECUTED, from the run view AND the run's event log."""
+    assert isinstance(units, list) and units, (
+        f"the run view carries no planned units (units={units!r}) — cannot prove nothing executed")
+    statuses = [u.get("status") if isinstance(u, dict) else None for u in units]
+    executed = [(i, s) for i, s in enumerate(statuses) if s not in UNIT_STATUSES_UNEXECUTED]
+    assert not executed, f"units left the un-executed states {sorted(UNIT_STATUSES_UNEXECUTED)}: {executed}"
+    assert isinstance(events, list) and events, "the run's event log is empty or unavailable — cannot prove execution was prevented"
+    types = [str(e.get("type")) if isinstance(e, dict) else "?" for e in events]
+    hits = [(i, t) for i, t in enumerate(types) if t in EXECUTION_EVENT_TYPES]
+    assert not hits, f"execution events recorded despite the rejected intake gate: {hits[:8]}"
+    gate_at = [i for i, t in enumerate(types) if t == "awaitingHuman"]
+    cancelled_at = [i for i, t in enumerate(types) if t == "runCancelled"]
+    assert gate_at, f"no awaitingHuman event — the intake gate never parked the run; types: {types[-10:]}"
+    assert cancelled_at, f"no runCancelled event after the rejection; types: {types[-10:]}"
+    assert cancelled_at[-1] > gate_at[-1], f"runCancelled (#{cancelled_at[-1]}) precedes awaitingHuman (#{gate_at[-1]})"
+    return {
+        "units": len(units), "unit_statuses": statuses, "events": len(events),
+        "awaiting_human_at": gate_at[-1], "run_cancelled_at": cancelled_at[-1],
+        "types_between": types[gate_at[-1] + 1: cancelled_at[-1]],
+    }
+
+
+# ── Process identity + termination helpers (self-tested) ──────────────────────
+
+
+def valid_pid(value: object) -> bool:
+    """A pid we may ever signal: a positive integer above 1 — never 0 (our own group), never
+    negative (a group), never a bool/str the JSON could smuggle in."""
+    return isinstance(value, int) and not isinstance(value, bool) and value > 1
+
+
+def pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def ps_rows() -> list[dict]:
+    out = subprocess.run(["ps", "-axo", "pid=,pgid=,ppid=,command="], capture_output=True, text=True).stdout
+    rows = []
+    for line in out.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) < 4:
+            continue
+        try:
+            rows.append({"pid": int(parts[0]), "pgid": int(parts[1]), "ppid": int(parts[2]), "command": parts[3]})
+        except ValueError:
+            continue
+    return rows
+
+
+def ps_started_at(pid: int) -> float | None:
+    out = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    try:
+        return time.mktime(time.strptime(out, "%a %b %d %H:%M:%S %Y"))
+    except ValueError:
+        return None
+
+
+def read_bridge_lock(root: Path) -> tuple[dict | None, str]:
+    """`<root>/.wi-serve.json` — advisory only. A symlink is refused outright."""
+    lock = root / ".wi-serve.json"
+    if lock.is_symlink():
+        return None, "refused: .wi-serve.json is a symlink"
+    if not lock.is_file():
+        return None, "absent"
+    try:
+        data = json.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        return None, f"unreadable: {e}"
+    if not isinstance(data, dict):
+        return None, "refused: lock is not a JSON object"
+    return data, "ok"
+
+
+def bridge_processes(root: Path, not_before: float) -> list[dict]:
+    """The processes serving OUR docs root — identified by COMMAND LINE (`wicked-interactive` AND
+    the unique temp root), started no earlier than our daemon. Both the detached `npx` wrapper and
+    the node bridge it execs match; an older process merely mentioning the path does not."""
+    mine = []
+    for r in ps_rows():
+        cmd = r["command"]
+        if "wicked-interactive" not in cmd or str(root) not in cmd:
+            continue
+        started = ps_started_at(r["pid"])
+        if started is not None and started < not_before - 5:
+            continue
+        mine.append({**r, "started_at": started})
+    return mine
+
+
+def terminate_pids(pids: list[int], grace_s: float = 10) -> dict:
+    """SIGTERM → poll until gone → SIGKILL the rest → poll. Returns what happened, not a claim."""
+    pids = [p for p in pids if valid_pid(p)]
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.time() + grace_s
+    while time.time() < deadline and any(pid_alive(p) for p in pids):
+        time.sleep(0.2)
+    forced = [p for p in pids if pid_alive(p)]
+    for pid in forced:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    deadline = time.time() + 5
+    while time.time() < deadline and any(pid_alive(p) for p in forced):
+        time.sleep(0.2)
+    return {"signalled": pids, "forced": forced, "remaining": [p for p in pids if pid_alive(p)]}
+
+
+def stop_process_group(proc: subprocess.Popen, grace_s: float = 15) -> dict:
+    """The daemon was started with `start_new_session=True`, so its pid is the group id and every
+    non-detached child (workers, estate-mcp) is in the group. SIGTERM the group, poll for BOTH the
+    leader's exit and an empty group, SIGKILL if not, poll again."""
+    pgid = proc.pid
+    result: dict = {"pid": proc.pid, "forced": False}
+    if proc.poll() is None or group_alive(pgid):
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.time() + grace_s
+    while time.time() < deadline and (proc.poll() is None or group_alive(pgid)):
+        time.sleep(0.2)
+    if proc.poll() is None or group_alive(pgid):
+        result["forced"] = True
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        deadline = time.time() + 5
+        while time.time() < deadline and (proc.poll() is None or group_alive(pgid)):
+            time.sleep(0.2)
+    result["exit_code"] = proc.returncode
+    result["group_empty"] = not group_alive(pgid)
+    return result
 
 
 # ── Daemon + API ──────────────────────────────────────────────────────────────
@@ -192,17 +463,22 @@ def crew_command() -> list[str]:
         return ["node", cli]
     binary = shutil.which("wicked-crew")
     if binary is None:
-        die("daemon", "no `wicked-crew` on PATH and CREW_CLI unset — install wicked-crew or point CREW_CLI at dist/cli/index.js")
+        raise SetupFailure("daemon", "no `wicked-crew` on PATH and CREW_CLI unset — install wicked-crew or point CREW_CLI at dist/cli/index.js")
     return [binary]
 
 
-PORT = free_port()
-ORIGIN = f"http://127.0.0.1:{PORT}"
-API = f"{ORIGIN}/api/v1"
+def fetch(path: str, base: str | None = None, timeout: int = 30) -> tuple[int, bytes]:
+    """A raw GET (HTML, JS, anything) → (status, bytes)."""
+    req = urllib.request.Request(f"{base or ORIGIN}{path}", method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            return res.status, res.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
 
 
-def api(method: str, path: str, body: dict | None = None, timeout: int = 60) -> tuple[int, object]:
-    req = urllib.request.Request(f"{API}{path}", method=method)
+def api(method: str, path: str, body: dict | None = None, timeout: int = 60, base: str | None = None) -> tuple[int, object]:
+    req = urllib.request.Request(f"{base or API}{path}", method=method)
     data = None
     if body is not None:
         data = json.dumps(body).encode()
@@ -246,187 +522,525 @@ def wait_terminal(run_id: str, timeout_s: int) -> str:
     return last
 
 
-def run_events(run_id: str) -> list[dict]:
+def run_events(run_id: str) -> list[dict] | None:
+    """The run's durable event log, or None when the daemon cannot serve it (503: no read binding)."""
     status, body = api("GET", f"/runs/{quote(run_id)}/events")
-    return body.get("events", []) if status == 200 and isinstance(body, dict) else []
+    return body.get("events", []) if status == 200 and isinstance(body, dict) else None
 
 
 def last_events(run_id: str, n: int = 4) -> list[dict]:
-    return run_events(run_id)[-n:]
+    return (run_events(run_id) or [])[-n:]
 
 
 def council_activity(run_id: str) -> dict[str, int]:
     """How much council work the engine did on a run — `council*` event types by count. The recon
     intake gate is `before:1` (crew campaigns/plan.ts RECON_INTAKE_GATE_TOKEN): it parks EXECUTION
-    of unit 1, and the DISTRIBUTION council (plan consensus per unit) runs before it. Run 3 of this
-    suite watched 5 seats deliberate and vote on ords 1–4 while the run read `distributing`, then
-    the gate arrived. Rejecting therefore stops the execution councils, not the planning one."""
+    of unit 1, and the DISTRIBUTION council (plan consensus per unit) runs before it (crew#473)."""
     counts: dict[str, int] = {}
-    for e in run_events(run_id):
+    for e in run_events(run_id) or []:
         t = str(e.get("type", ""))
         if t.startswith("council"):
             counts[t] = counts.get(t, 0) + 1
     return counts
 
 
-# ── Setup ─────────────────────────────────────────────────────────────────────
-
-if PORT == LIVE_DAEMON_PORT:
-    die("guard", "the free port resolved to :7701 — refusing to collide with the live daemon; rerun")
-
-TMP = Path(mkdtemp(prefix="seed-surfaces-"))
-STATE = TMP / "state"
-IDOCS = TMP / "idocs"
-BUS = TMP / "bus"
-for d in (STATE, TMP / "home", TMP / "worker", IDOCS, BUS):
-    d.mkdir(parents=True)
-if LIVE_STATE_HOME in STATE.parents or STATE == LIVE_STATE_HOME:
-    die("guard", f"state home {STATE} resolves under the live ~/.wicked-crew — refusing")
-
-# The registered repository: a LOCAL CLONE of this checkout at HEAD, inside the temp dir. This
-# checkout is a linked worktree; a run's own `git worktree add` from inside it would register
-# under the MAIN checkout's .git/worktrees — which must stay untouched. The clone is a real,
-# standalone git repo carrying the same tree.
-REPO_ROOT = TMP / "repo"
-clone = subprocess.run(
-    ["git", "clone", "--quiet", "--local", str(REPO), str(REPO_ROOT)],
-    capture_output=True, text=True, timeout=120,
-)
-if clone.returncode != 0:
-    die("repo_clone", f"git clone failed: {clone.stderr[-800:]}")
-head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
-# wicked-studio TRACKS `.codegraph/estate.db` (a 4 MB code graph of the main checkout), so the
-# clone carries a graph whose provenance names another root. Onboarding indexes into exactly
-# that path (`wicked-estate index <root> --db <root>/.codegraph/estate.db`) and its collision
-# guard refuses ("REPO COLLISION: this graph already holds … wicked-studio.git"). Start clean —
-# inside the temp clone only — so the project gets a graph of its own.
-inherited_graph = REPO_ROOT / ".codegraph"
-shutil.rmtree(inherited_graph, ignore_errors=True)
-report["setup"]["repo_clone"] = {
-    "ok": True, "root": str(REPO_ROOT), "head": head, "source": str(REPO),
-    "inherited_codegraph_removed": not inherited_graph.exists(),
-}
-
-daemon_env = dict(
-    os.environ,
-    WICKED_HOME=str(TMP / "home"),
-    WICKED_WORKER_HOME=str(TMP / "worker"),
-    WICKED_CREW_SYSTEM_SETTINGS=str(STATE / "system-settings.json"),
-    WICKED_INTERACTIVE_ROOT=str(IDOCS),
-    WICKED_MEMORY_EMBEDDER="hash",
-    # The bridge the pool spawns for our root resolves the crew daemon from WICKED_CREW_API and
-    # DEFAULTS TO :7701 (wicked-interactive service/project.js:27) — run 2 of this suite watched
-    # a doc create fail with "project … not found on the crew daemon at http://127.0.0.1:7701":
-    # the bridge asked the LIVE daemon about a project that exists only here. The child inherits
-    # this env, so the disposable daemon names itself.
-    WICKED_CREW_API=ORIGIN,
-    # The bus is shared by the daemon AND the bridge it spawns, and the bridge only knows
-    # wicked-bus's default location (`WICKED_BUS_DATA_DIR` › the platform home). Run 3 of this
-    # suite pinned the daemon's half with `--bus-db` and left the bridge on the default — the same
-    # default bus the LIVE daemon consumes, which then received this suite's `doc.created` events
-    # and created `~/.wicked-crew/interactive-{drafts,demos}/<our doc>` handoff dirs in the real
-    # state home (empty dirs; removed by hand, disclosed in the plan). Pinning the DATA DIR moves
-    # both halves into the temp dir; no `--bus-db` so the daemon resolves the same default.
-    WICKED_BUS_DATA_DIR=str(BUS),
-)
-daemon_args = [
-    *crew_command(), "serve",
-    "--port", str(PORT),
-    "--db", str(STATE / "core.db"),
-    "--no-interactive-draft-events",
-    "--no-interactive-edit-events",
-    "--no-interactive-chat-events",
-    "--no-interactive-demo-events",
-]
-daemon_log = open(TMP / "daemon.log", "w", encoding="utf-8")  # noqa: SIM115 — lives as long as the daemon
-daemon = subprocess.Popen(daemon_args, cwd=TMP, env=daemon_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-ready_line = None
-deadline = time.time() + 90
-assert daemon.stdout is not None
-while time.time() < deadline:
-    line = daemon.stdout.readline()
-    if not line:
-        break
-    daemon_log.write(line)
-    if "WICKED_CREW_READY" in line:
-        ready_line = line
-        break
-if ready_line is None:
-    daemon.kill()
-    die("daemon", f"daemon never printed WICKED_CREW_READY within 90s — see {TMP / 'daemon.log'}")
-ready = json.loads(ready_line.split("WICKED_CREW_READY", 1)[1])
-if ready.get("stub") is not False:
-    daemon.kill()
-    die("daemon", f"daemon reports stub={ready.get('stub')!r} — the seed suite requires a REAL engine")
+def snapshot_live_runs() -> dict:
+    """READ-ONLY look at the live :7701 daemon — its run ids, so teardown can prove nothing new
+    appeared there. Never a POST."""
+    try:
+        st, body = api("GET", "/runs", timeout=5, base=f"{LIVE_ORIGIN}/api/v1")
+    except (urllib.error.URLError, OSError, TimeoutError) as e:
+        return {"reachable": False, "error": str(e)[:200], "run_ids": []}
+    if st != 200 or not isinstance(body, dict):
+        return {"reachable": False, "error": f"GET /runs → {st}", "run_ids": []}
+    runs = body.get("runs", [])
+    return {
+        "reachable": True, "run_ids": sorted(r["session"]["id"] for r in runs),
+        "problems": {r["session"]["id"]: str(r["session"].get("problem", ""))[:200] for r in runs},
+    }
 
 
-def _drain(stream) -> None:
-    for line in stream:
-        daemon_log.write(line)
-        daemon_log.flush()  # a killed run must still leave a readable daemon log behind
+# ── The rig ───────────────────────────────────────────────────────────────────
 
 
-threading.Thread(target=_drain, args=(daemon.stdout,), daemon=True).start()
+def under(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
 
-_, health = api("GET", "/health")
-_, diagnostics = api("GET", "/diagnostics")
-_, roster = api("GET", "/roster")
-studio_pkg_version = json.loads((REPO / "package.json").read_text())["version"]
-report["setup"]["daemon"] = {
-    "ok": True, "origin": ORIGIN, "stub": False, "ready": ready,
-    "isolation": {
-        "state_home": str(STATE), "WICKED_BUS_DATA_DIR": str(BUS), "WICKED_HOME": str(TMP / "home"),
-        "WICKED_WORKER_HOME": str(TMP / "worker"), "WICKED_INTERACTIVE_ROOT": str(IDOCS),
-        "WICKED_CREW_API": ORIGIN,
-        "interactive_agent_events": "disabled (--no-interactive-{draft,edit,chat,demo}-events)",
-        "governed_scenario": "enabled" if GOVERNED_ENABLED else "disabled (SEED_GOVERNED=0)",
-    },
-}
-report["setup"]["versions"] = {
-    "crew": health.get("version") if isinstance(health, dict) else None,
-    "components": diagnostics.get("components") if isinstance(diagnostics, dict) else None,
-    "studio_repo_package": studio_pkg_version,
-    "studio_bundle_matches_repo": isinstance(diagnostics, dict) and diagnostics.get("components", {}).get("studioBundle") == studio_pkg_version,
-    "python_playwright": metadata.version("playwright"),
-    "node": subprocess.run(["node", "--version"], capture_output=True, text=True).stdout.strip(),
-}
-report["setup"]["roster_signed_in"] = (
-    {seat["key"]: seat.get("signed_in") for seat in roster.get("roster", [])} if isinstance(roster, dict) else None
-)
 
-# Register the repository (setup, over the API — labelled). Registration launches the built-in
-# `onboarding` workflow: two TOOL phases (`wicked-estate index`, `wicked-estate clusters`), no
-# agent, no council — a deterministic index of the clone, waited on so the project has a graph.
-status, registered = api("POST", "/repos", {"name": f"seed-surfaces-{STAMP}", "rootPath": str(REPO_ROOT)})
-if status != 201 or not isinstance(registered, dict):
-    daemon.kill()
-    die("repo_register", f"POST /repos → {status} {registered}")
-REPO_ID = registered["repo"]["id"]
-onboard_run = registered.get("onboardRunId")
-onboard_status = wait_terminal(onboard_run, ONBOARD_TIMEOUT_S) if isinstance(onboard_run, str) else None
-report["setup"]["repo_register"] = {
-    "ok": True, "substitute": "API — harness setup, not a certified journey",
-    "repo_id": REPO_ID, "onboard_run": onboard_run,
-    "onboard_status": onboard_status, "onboard_workflow": "onboarding (tool phases only: estate index → clusters)",
-}
-
-# A local fixture page for the demo wizard's target URL (the wizard requires http(s); the page is
-# never fetched by anything in this suite because demo authoring is disabled on the daemon).
-class _Quiet(SimpleHTTPRequestHandler):
-    def log_message(self, *_args) -> None:  # keep stdout JSON-clean
+def scan_file_for(path: Path, needles: list[bytes]) -> list[bytes]:
+    """Which needles occur in the file's bytes (chunked; overlap keeps a needle spanning chunks)."""
+    found: list[bytes] = []
+    overlap = max((len(n) for n in needles), default=0)
+    tail = b""
+    try:
+        with path.open("rb") as fh:
+            while True:
+                chunk = fh.read(8 * 1024 * 1024)
+                if not chunk:
+                    break
+                buf = tail + chunk
+                for n in needles:
+                    if n not in found and n in buf:
+                        found.append(n)
+                if len(found) == len(needles):
+                    break
+                tail = buf[-overlap:] if overlap else b""
+    except OSError:
         pass
+    return found
 
 
-FIXTURE_PORT = free_port()
-fixture_httpd = ThreadingHTTPServer(("127.0.0.1", FIXTURE_PORT), partial(_Quiet, directory=str(FIXTURES)))
-threading.Thread(target=fixture_httpd.serve_forever, daemon=True).start()
-FIXTURE_URL = f"http://127.0.0.1:{FIXTURE_PORT}/doc-fixture.html"
+class Rig:
+    """Everything the suite owns on this machine: the temp tree, the hermetic env, the daemon (a
+    process group), the fixture server — and their teardown."""
 
-try:
-    from playwright.sync_api import sync_playwright
-except ImportError:
-    daemon.kill()
-    die("playwright", "pip install playwright && playwright install chromium")
+    def __init__(self, report: dict) -> None:
+        self.report = report
+        self.run_started_at = time.time()
+        self.daemon: subprocess.Popen | None = None
+        self.daemon_log = None
+        self.daemon_started_at: float | None = None
+        self.fixture_httpd: ThreadingHTTPServer | None = None
+        self.fixture_url = ""
+        self.repo_id = ""
+        # This run's identifiers, as they appear on any wire or disk: COMPOSITE forms only — the bare
+        # 10-digit stamp is a substring of every millisecond timestamp written in that same second,
+        # which would turn the live daemon's own housekeeping into a false contamination hit.
+        self.needles: list[str] = [
+            f"e2e-scope-{STAMP}", f"seed-surfaces-{STAMP}", f"seed-doc-a-{STAMP}", f"seed-doc-b-{STAMP}",
+            f"seed-demo-a-{STAMP}", f"Seed-surfaces rule {STAMP}", TEST_BRIEF_TOKEN,
+        ]
+        self.live_before = snapshot_live_runs()
+        self.tmp = Path(mkdtemp(prefix="seed-surfaces-")).resolve()
+        self.needles.append(self.tmp.name)
+        self.state = self.tmp / "state"
+        self.idocs = self.tmp / "idocs"
+        self.bus = self.tmp / "bus"
+        self.home = self.tmp / "home"
+        self.tmpdir = self.tmp / "tmp"
+        self.worker = self.tmp / "worker"
+        self.wicked_home = self.tmp / "wicked-home"
+        self.npm_cache = self.tmp / "npm-cache"
+        self.workflows = self.tmp / "workflows"
+        self.inbox = self.tmp / "steering-inbox"
+        self.repo_root = self.tmp / "repo"
+        for d in (self.state, self.idocs, self.bus, self.home, self.tmpdir, self.worker, self.wicked_home,
+                  self.npm_cache / "_npx", self.workflows, self.inbox):
+            d.mkdir(parents=True, exist_ok=True)
+        self.port = free_port()
+        global ORIGIN, API
+        ORIGIN = f"http://127.0.0.1:{self.port}"
+        API = f"{ORIGIN}/api/v1"
+        self.env = self.build_env()
+
+    # ── environment ───────────────────────────────────────────────────────────
+    def build_env(self) -> dict[str, str]:
+        """A MINIMAL env from scratch — never `dict(os.environ)`. `PATH` is the one pass-through
+        (node/npx/git/wicked-estate/the CLI seats resolve from it) and is recorded as such."""
+        return {
+            "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+            "HOME": str(self.home),
+            "TMPDIR": str(self.tmpdir), "TMP": str(self.tmpdir), "TEMP": str(self.tmpdir),
+            "LANG": os.environ.get("LANG", "en_US.UTF-8"),
+            # identity, not paths — git/npm/node `os.userInfo()` fallbacks read these
+            "USER": os.environ.get("USER", "seed-surfaces"),
+            "LOGNAME": os.environ.get("LOGNAME", os.environ.get("USER", "seed-surfaces")),
+            # npm/npx (the bridge spawn): cache pinned into the temp dir, update chatter off.
+            "npm_config_cache": str(self.npm_cache),
+            "npm_config_update_notifier": "false",
+            "NO_UPDATE_NOTIFIER": "1",
+            # crew + the engine
+            "WICKED_HOME": str(self.wicked_home),  # memory store (`${WICKED_HOME}/memory.db`)
+            "WICKED_WORKER_HOME": str(self.worker),  # hermetic worker config home (crew#396 idiom)
+            "WICKED_CREW_SYSTEM_SETTINGS": str(self.state / "system-settings.json"),
+            "WICKED_WORKFLOWS_DIR": str(self.workflows),  # else ~/.config/wicked-core/workflows
+            "WICKED_STEERING_INBOX_DIR": str(self.inbox),  # else ~/.wicked/steering-inbox
+            "WICKED_MEMORY_EMBEDDER": "hash",
+            # the interactive bridge the pool spawns for our root (crew#476: it resolves the crew
+            # daemon from WICKED_CREW_API and DEFAULTS TO :7701; it emits on the bus resolved from
+            # WICKED_BUS_DATA_DIR — the same default the live daemon consumes when unset)
+            "WICKED_INTERACTIVE_ROOT": str(self.idocs),
+            "WICKED_CREW_API": ORIGIN,
+            "WICKED_BUS_DATA_DIR": str(self.bus),
+            # the Rust spools that otherwise append to ~/.something-wicked/{wicked-estate,wicked-apps}
+            "WICKED_ESTATE_EMIT_DEADLETTER": str(self.tmp / "estate-emit-deadletter.ndjson"),
+            "WICKED_APPS_EMIT_DEADLETTER": str(self.tmp / "apps-emit-outbox.ndjson"),
+            # the per-repo code graph the engine hangs off `~/.wicked-estate/repo-graphs` (wicked-core
+            # code_graph.rs `repo_graph_root`) — run 5 caught it under the scratch HOME
+            "WICKED_ESTATE_REPO_GRAPH_ROOT": str(self.tmp / "repo-graphs"),
+        }
+
+    def prepare(self) -> None:
+        self.assert_write_targets()
+        self.seed_bridge_cache()
+        self.clone_repo()
+
+    def assert_write_targets(self) -> None:
+        """Every path the daemon (or a child) may write, resolved, must be outside the operator's
+        real home and outside ~/.wicked-crew — asserted BEFORE anything starts."""
+        if self.port == LIVE_DAEMON_PORT:
+            raise SetupFailure("guard", "the free port resolved to :7701 — refusing to collide with the live daemon; rerun")
+        targets = {
+            "tmp": self.tmp, "HOME": self.home, "TMPDIR": self.tmpdir, "state_home(--db)": self.state,
+            "repo_clone": self.repo_root, "npm_config_cache": self.npm_cache,
+        }
+        for key, value in self.env.items():
+            if key.startswith("WICKED_") and value.startswith("/"):
+                targets[key] = Path(value)
+        resolved = {k: str(Path(p).resolve()) for k, p in targets.items()}
+        bad = {k: p for k, p in resolved.items() if under(Path(p), REAL_HOME) or under(Path(p), LIVE_STATE_HOME)}
+        self.report["setup"]["write_targets"] = {
+            "ok": not bad, "real_home": str(REAL_HOME), "live_state_home": str(LIVE_STATE_HOME),
+            "targets": resolved, "env_passthrough": ["PATH", "LANG", "USER", "LOGNAME"],
+            "env_keys": sorted(self.env.keys()), "violations": bad,
+        }
+        if bad:
+            raise SetupFailure("guard", f"write targets resolve under the operator's home: {bad}")
+
+    def seed_bridge_cache(self) -> None:
+        """The bridge is `npx --yes wicked-interactive@^0.8.1 serve` under the SCRATCH HOME, so npx
+        would otherwise fetch 200 MB into a cold cache. Clone the operator's already-resolved
+        `_npx/<hash>` install (read-only on the source; APFS clonefile when available) into the
+        scratch npm cache under the same key, so the bridge starts offline in seconds."""
+        info: dict = {"seeded": False, "spec": INTERACTIVE_SPEC}
+        t0 = time.time()
+        for pkg in sorted((REAL_HOME / ".npm" / "_npx").glob("*/package.json")):
+            try:
+                meta = json.loads(pkg.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            if meta.get("_npx", {}).get("packages") != [INTERACTIVE_SPEC]:
+                continue
+            src = pkg.parent
+            dst = self.npm_cache / "_npx" / src.name
+            try:
+                if sys.platform == "darwin":
+                    subprocess.run(["cp", "-Rc", str(src), str(dst)], check=True, capture_output=True, timeout=300)
+                else:
+                    shutil.copytree(src, dst, symlinks=True)
+                info.update(seeded=True, source=str(src), key=src.name, seconds=round(time.time() - t0, 1))
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+                info["error"] = str(e)[:300]
+            break
+        if not info["seeded"]:
+            info["note"] = "no cached install found — the bridge's npx will resolve the spec from the registry (slower; needs network)"
+        self.report["setup"]["bridge_cache"] = info
+
+    def clone_repo(self) -> None:
+        """The registered repository: a LOCAL CLONE of this checkout at HEAD, inside the temp dir.
+        This checkout is a linked worktree; a run's own `git worktree add` from inside it would
+        register under the MAIN checkout's .git/worktrees — which must stay untouched."""
+        clone = subprocess.run(
+            ["git", "clone", "--quiet", "--local", str(REPO), str(self.repo_root)],
+            capture_output=True, text=True, timeout=120,
+        )
+        if clone.returncode != 0:
+            raise SetupFailure("repo_clone", f"git clone failed: {clone.stderr[-800:]}")
+        head = subprocess.run(["git", "-C", str(self.repo_root), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+        # wicked-studio TRACKS `.codegraph/estate.db` (a code graph of the main checkout); onboarding
+        # indexes into exactly that path and its collision guard refuses a graph naming another root.
+        inherited_graph = self.repo_root / ".codegraph"
+        shutil.rmtree(inherited_graph, ignore_errors=True)
+        self.report["setup"]["repo_clone"] = {
+            "ok": True, "root": str(self.repo_root), "head": head, "source": str(REPO),
+            "inherited_codegraph_removed": not inherited_graph.exists(),
+        }
+
+    # ── daemon ────────────────────────────────────────────────────────────────
+    def _pump(self, stream, q: queue.Queue, startup: list[bool]) -> None:
+        """Reader thread: every line to the log file; during startup a copy onto the queue. The
+        main thread never blocks on the pipe, so a silent daemon cannot hang the deadline."""
+        for line in stream:
+            self.daemon_log.write(line)
+            self.daemon_log.flush()  # a killed run must still leave a readable daemon log behind
+            if startup[0]:
+                q.put(line)
+        q.put(None)
+
+    def start_daemon(self) -> None:
+        args = [
+            *crew_command(), "serve",
+            "--port", str(self.port),
+            "--db", str(self.state / "core.db"),
+            "--no-interactive-draft-events",
+            "--no-interactive-edit-events",
+            "--no-interactive-chat-events",
+            "--no-interactive-demo-events",
+        ]
+        self.daemon_log = open(self.tmp / "daemon.log", "w", encoding="utf-8")  # noqa: SIM115 — lives as long as the daemon
+        self.daemon_started_at = time.time()
+        self.daemon = subprocess.Popen(
+            args, cwd=self.tmp, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            start_new_session=True,  # its own process group: the leader's pid is the group we tear down
+        )
+        q: queue.Queue = queue.Queue()
+        startup = [True]
+        threading.Thread(target=self._pump, args=(self.daemon.stdout, q, startup), daemon=True).start()
+        ready_line = None
+        eof = False
+        deadline = time.monotonic() + STARTUP_TIMEOUT_S
+        while ready_line is None and not eof:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                line = q.get(timeout=remaining)
+            except queue.Empty:
+                break
+            if line is None:
+                eof = True
+            elif "WICKED_CREW_READY" in line:
+                ready_line = line
+        startup[0] = False
+        if ready_line is None:
+            stopped = stop_process_group(self.daemon)
+            tail = self._log_tail()
+            raise SetupFailure("daemon", f"no WICKED_CREW_READY within {STARTUP_TIMEOUT_S}s "
+                               f"({'daemon exited' if eof else 'deadline'}; stop={stopped}); daemon.log tail: {tail}")
+        ready = json.loads(ready_line.split("WICKED_CREW_READY", 1)[1])
+        if ready.get("stub") is not False:
+            raise SetupFailure("daemon", f"daemon reports stub={ready.get('stub')!r} — the seed suite requires a REAL engine")
+        _, health = api("GET", "/health")
+        _, diagnostics = api("GET", "/diagnostics")
+        _, roster = api("GET", "/roster")
+        self.report["setup"]["daemon"] = {
+            "ok": True, "origin": ORIGIN, "pid": self.daemon.pid, "process_group": self.daemon.pid, "stub": False, "ready": ready,
+            "isolation": {
+                **{k: v for k, v in self.env.items() if k.startswith("WICKED_") or k.startswith("npm_") or k in ("HOME", "TMPDIR")},
+                "interactive_agent_events": "disabled (--no-interactive-{draft,edit,chat,demo}-events)",
+                "governed_scenario": "enabled" if GOVERNED_ENABLED else "disabled (SEED_GOVERNED=0)",
+            },
+        }
+        self.report["setup"]["versions"] = {
+            "crew": health.get("version") if isinstance(health, dict) else None,
+            "components": diagnostics.get("components") if isinstance(diagnostics, dict) else None,
+            "python_playwright": metadata.version("playwright"),
+            "node": subprocess.run(["node", "--version"], capture_output=True, text=True).stdout.strip(),
+        }
+        self.report["setup"]["roster_signed_in"] = (
+            {seat["key"]: seat.get("signed_in") for seat in roster.get("roster", [])} if isinstance(roster, dict) else None
+        )
+        self._diagnostics = diagnostics
+
+    def _log_tail(self, n: int = 3000) -> str:
+        try:
+            return (self.tmp / "daemon.log").read_text(encoding="utf-8", errors="replace")[-n:]
+        except OSError:
+            return "(no daemon.log)"
+
+    def build_identity(self) -> None:
+        """The served studio bundle must BE this repo's version (else the results describe some
+        other revision) — enforced, not observed. The served index + every asset it references are
+        hashed into the report so the bytes the scenarios ran against are pinned."""
+        pkg = json.loads((REPO / "package.json").read_text())["version"]
+        served = None
+        if isinstance(self._diagnostics, dict):
+            served = (self._diagnostics.get("components") or {}).get("studioBundle")
+        st, html = fetch("/")
+        text = html.decode(errors="replace")
+        assets = sorted(set(re.findall(r'(?:src|href)="(/assets/[^"]+)"', text)))
+        hashes: dict[str, str] = {}
+        for a in assets:
+            ast, body = fetch(a)
+            hashes[a] = hashlib.sha256(body).hexdigest() if ast == 200 else f"HTTP {ast}"
+        info = {
+            "ok": served == pkg, "studio_repo_package": pkg, "studio_bundle_served": served,
+            "index_status": st, "index_sha256": hashlib.sha256(html).hexdigest(), "served_assets_sha256": hashes,
+        }
+        self.report["setup"]["build_identity"] = info
+        if served != pkg:
+            raise SetupFailure("build_identity", f"served studioBundle {served!r} ≠ this repo's package.json {pkg!r} — "
+                               "the results would not describe this revision")
+
+    def register_repo(self) -> None:
+        """Setup, over the API — labelled. Registration launches the built-in `onboarding` workflow:
+        two TOOL phases (`wicked-estate index`, `wicked-estate clusters`), no agent, no council."""
+        status, registered = api("POST", "/repos", {"name": f"seed-surfaces-{STAMP}", "rootPath": str(self.repo_root)})
+        if status != 201 or not isinstance(registered, dict):
+            raise SetupFailure("repo_register", f"POST /repos → {status} {registered}")
+        self.repo_id = registered["repo"]["id"]
+        self.needles.append(self.repo_id)
+        onboard_run = registered.get("onboardRunId")
+        onboard_status = wait_terminal(onboard_run, ONBOARD_TIMEOUT_S) if isinstance(onboard_run, str) else None
+        self.report["setup"]["repo_register"] = {
+            "ok": True, "substitute": "API — harness setup, not a certified journey",
+            "repo_id": self.repo_id, "onboard_run": onboard_run,
+            "onboard_status": onboard_status, "onboard_workflow": "onboarding (tool phases only: estate index → clusters)",
+        }
+
+    def start_fixture_server(self) -> None:
+        """A local fixture page for the demo wizard's target URL (the wizard requires http(s); the
+        page is never fetched by anything in this suite because demo authoring is disabled)."""
+        class _Quiet(SimpleHTTPRequestHandler):
+            def log_message(self, *_args) -> None:  # keep stdout JSON-clean
+                pass
+
+        port = free_port()
+        self.fixture_httpd = ThreadingHTTPServer(("127.0.0.1", port), partial(_Quiet, directory=str(FIXTURES)))
+        threading.Thread(target=self.fixture_httpd.serve_forever, daemon=True).start()
+        self.fixture_url = f"http://127.0.0.1:{port}/doc-fixture.html"
+
+    # ── teardown ──────────────────────────────────────────────────────────────
+    def daemon_alive(self) -> bool:
+        return self.daemon is not None and self.daemon.poll() is None
+
+    def cancel_live_runs(self) -> list[dict]:
+        """Cancel anything still live on the DISPOSABLE daemon, verifying each response and waiting
+        for the terminal state — so the group stop below is a stop, not an interruption."""
+        cancelled: list[dict] = []
+        if not self.daemon_alive():
+            return cancelled
+        try:
+            views = list_runs()
+        except Exception as e:  # noqa: BLE001 — a dead daemon has nothing to cancel
+            return [{"error": f"GET /runs failed: {e}"}]
+        for view in views:
+            rid = view["session"]["id"]
+            if view["session"]["status"] in TERMINAL_STATUSES:
+                continue
+            entry: dict = {"run": rid, "before": view["session"]["status"]}
+            try:
+                st, body = api("POST", f"/runs/{quote(rid)}/cancel", timeout=30)
+                entry.update(status_code=st, response=body)
+                entry["accepted"] = st == 200
+                entry["final"] = wait_terminal(rid, 30)
+                entry["verified_terminal"] = entry["final"] in TERMINAL_STATUSES
+            except Exception as e:  # noqa: BLE001
+                entry["error"] = str(e)[:300]
+            cancelled.append(entry)
+        return cancelled
+
+    def stop_bridge(self) -> dict:
+        """The pool spawns the bridge DETACHED (its own group), so the daemon's group stop does not
+        reach it. Identify it by command line + start time, cross-check the advisory lock, then
+        terminate — never signal a pid the identity check did not produce."""
+        info: dict = {}
+        procs = bridge_processes(self.idocs, self.daemon_started_at or self.run_started_at)
+        lock, lock_state = read_bridge_lock(self.idocs)
+        lock_pid = lock.get("pid") if lock else None
+        identified = {p["pid"] for p in procs}
+        info.update(
+            lock=lock_state, lock_pid=lock_pid, lock_pid_valid=valid_pid(lock_pid),
+            identified=[{"pid": p["pid"], "pgid": p["pgid"], "ppid": p["ppid"], "started_at": p["started_at"], "command": p["command"][:200]} for p in procs],
+            lock_pid_matches_identified=lock_pid in identified,
+        )
+        if procs:
+            info["terminated"] = terminate_pids(sorted(identified))
+        elif valid_pid(lock_pid) and pid_alive(lock_pid):
+            info["refused"] = f"lock pid {lock_pid} is alive but no process serving {self.idocs} was identified — NOT signalled"
+        return info
+
+    def scratch_writes(self, base: Path, cap: int = 400) -> list[str]:
+        out: list[str] = []
+        if not base.exists():
+            return out
+        for p in sorted(base.rglob("*")):
+            if p.is_file() or p.is_symlink():
+                out.append(str(p.relative_to(self.tmp)))
+            if len(out) >= cap:
+                out.append("… (truncated)")
+                break
+        return out
+
+    def scan_operator_state(self) -> dict:
+        """Re-derive isolation: every file under the operator-global wicked stores that was modified
+        DURING this run is byte-scanned for this run's identifiers; entries stamped by this run under
+        ~/.wicked-crew are listed; the live :7701 run ids are diffed."""
+        needles = [n.encode() for n in dict.fromkeys(self.needles) if n]
+        since = self.run_started_at
+        modified: list[str] = []
+        hits: list[dict] = []
+        for root in OPERATOR_STATE_ROOTS:
+            if not root.exists():
+                continue
+            for p in root.rglob("*"):
+                try:
+                    if p.is_symlink() or not p.is_file():
+                        continue
+                    st = p.stat()
+                except OSError:
+                    continue
+                if st.st_mtime < since - 2 and st.st_ctime < since - 2:
+                    continue
+                modified.append(str(p))
+                if st.st_size > 512 * 1024 * 1024:
+                    hits.append({"file": str(p), "needle": None, "note": "too large to scan — treated as a hit"})
+                    continue
+                for n in scan_file_for(p, needles):
+                    hits.append({"file": str(p), "needle": n.decode()})
+        stamped = sorted(
+            str(p.relative_to(LIVE_STATE_HOME))
+            for p in LIVE_STATE_HOME.rglob("*")
+            if any(n in p.name for n in self.needles)
+        ) if LIVE_STATE_HOME.is_dir() else []
+        live_after = snapshot_live_runs()
+        new_live = sorted(set(live_after["run_ids"]) - set(self.live_before["run_ids"]))
+        ours_on_live = [
+            rid for rid in new_live
+            if any(n in live_after.get("problems", {}).get(rid, "") for n in self.needles)
+        ]
+        return {
+            "roots": [str(r) for r in OPERATOR_STATE_ROOTS], "needles": list(dict.fromkeys(self.needles)),
+            "files_modified_during_run": len(modified), "modified_sample": modified[:20],
+            "identifier_hits": hits, "stamped_entries_in_live_state_home": stamped,
+            "live_7701": {
+                "reachable_before": self.live_before.get("reachable"), "reachable_after": live_after.get("reachable"),
+                "runs_before": len(self.live_before["run_ids"]), "runs_after": len(live_after["run_ids"]),
+                "new_run_ids": new_live, "new_runs_carrying_our_identifiers": ours_on_live,
+            },
+        }
+
+    def teardown(self, findings: list[str]) -> list[str]:
+        """Runs on EVERY exit path. Returns the contamination findings (`live_touched`)."""
+        t: dict = self.report["setup"].setdefault("teardown", {})
+        t["cancelled_runs"] = self.cancel_live_runs()
+        if self.daemon is not None:
+            t["daemon"] = stop_process_group(self.daemon)
+            t["daemon_stopped"] = self.daemon.returncode is not None and t["daemon"]["group_empty"]
+        if self.daemon_log is not None:
+            try:
+                self.daemon_log.close()
+            except OSError:
+                pass
+        t["bridge"] = self.stop_bridge()
+        if self.fixture_httpd is not None:
+            self.fixture_httpd.shutdown()
+        home_writes = self.scratch_writes(self.home, cap=100_000)
+        tmp_writes = self.scratch_writes(self.tmpdir)
+        # Per-directory counts survive the list cap: run 6 wrote 391 codex plugin-clone files that
+        # pushed the bridge's `.wicked-interactive/instances.json` past a 400-entry list.
+        by_dir: dict[str, int] = {}
+        for p in home_writes:
+            parts = p.split("/")
+            key = "/".join(parts[1:3]) if len(parts) > 2 else p
+            by_dir[key] = by_dir.get(key, 0) + 1
+        t["scratch_home_writes"] = home_writes[:400] + (["… (truncated)"] if len(home_writes) > 400 else [])
+        t["scratch_home_writes_by_dir"] = dict(sorted(by_dir.items(), key=lambda kv: -kv[1]))
+        t["scratch_tmpdir_writes"] = {"count": len(tmp_writes), "sample": tmp_writes[:5]}
+        if home_writes:
+            # The writes no WICKED_* knob pins today — they would have landed in the operator's real
+            # home without the scratch HOME (TMPDIR writes are expected and counted separately).
+            findings.append(f"HOME-WRITES: the daemon/bridge/CLIs wrote {len(home_writes)} entries under the scratch HOME "
+                            f"(would have landed in the operator's home) — by directory: {t['scratch_home_writes_by_dir']}; "
+                            f"plus {len(tmp_writes)} under the scratch TMPDIR")
+        scan = self.scan_operator_state()
+        t["isolation_scan"] = scan
+        live_touched: list[str] = []
+        for e in scan["stamped_entries_in_live_state_home"]:
+            live_touched.append(f"~/.wicked-crew/{e} carries this run's stamp")
+        for h in scan["identifier_hits"]:
+            live_touched.append(f"{h['file']} contains {h.get('needle') or h.get('note')}")
+        for rid in scan["live_7701"]["new_runs_carrying_our_identifiers"]:
+            live_touched.append(f"live :7701 gained run {rid} carrying this run's identifiers")
+        if scan["live_7701"]["new_run_ids"] and not scan["live_7701"]["new_runs_carrying_our_identifiers"]:
+            findings.append(f"LIVE-7701: {len(scan['live_7701']['new_run_ids'])} run(s) appeared on the live daemon during this run "
+                            f"without this run's identifiers (operator activity, not ours): {scan['live_7701']['new_run_ids']}")
+        t["tmp"] = str(self.tmp)
+        t["tmp_kept"] = KEEP_TMP
+        if not KEEP_TMP:
+            shutil.rmtree(self.tmp, ignore_errors=True)
+            t["tmp_removed"] = not self.tmp.exists()
+        return live_touched
 
 
 # ── Playwright helpers ────────────────────────────────────────────────────────
@@ -471,6 +1085,15 @@ def text_of(locator) -> str:
     return (locator.text_content() or "").strip()
 
 
+def bridge_unavailable_reason(pid: str) -> str | None:
+    """The ESTABLISHED environmental cause for a bridge skip: the daemon itself answers 503
+    `bridge_unavailable` for the project's interactive proxy. Anything else is a product failure."""
+    st, body = api("GET", f"/projects/{quote(pid)}/interactive/api/docs", timeout=90)
+    if st == 503 and isinstance(body, dict) and body.get("code") == "bridge_unavailable":
+        return str(body.get("hint") or body)
+    return None
+
+
 # ── UI journeys ───────────────────────────────────────────────────────────────
 
 
@@ -487,8 +1110,8 @@ def ui_create_project(page, name: str) -> str:
     tid(page, "new-project-modal").wait_for(state="detached", timeout=20_000)
 
     # Create lands on the NEW project's Build mode. A bare `/p/<id>/build` pattern is already
-    # satisfied when the modal was opened from another project's shell (run 1's PRJ-2 read
-    # Project A's URL as B's), so the landing is a project id OTHER than the one we stood in.
+    # satisfied when the modal was opened from another project's shell, so the landing is a
+    # project id OTHER than the one we stood in.
     def landed(url: str) -> bool:
         m = re.search(r"/p/([^/]+)/build$", url)
         return m is not None and unquote(m.group(1)) != standing_pid
@@ -504,8 +1127,9 @@ def ui_create_project(page, name: str) -> str:
     return pid
 
 
-def ui_add_rule(page, statement: str) -> str:
-    """The grid's draft row: Add ▾ → Add row → (prefilled PAT-nnn id) → statement → Save."""
+def ui_add_rule(page, statement: str, unseeded_gap_issue: str | None = None) -> str:
+    """The grid's draft row: Add ▾ → Add row → (prefilled PAT-nnn id) → statement → Save.
+    `unseeded_gap_issue`: the ONE expected gap — no draft row WHILE the unseeded banner shows."""
     tid(page, "steering-add-menu").click()
     tid(page, "steering-add-open").click()
     draft = tid(page, "steering-grid-draft")
@@ -513,12 +1137,15 @@ def ui_add_rule(page, statement: str) -> str:
         draft.wait_for(timeout=5_000)
     except Exception as e:  # noqa: BLE001 — turn the timeout into the finding it is
         unseeded = tid(page, "steering-unseeded").count() > 0
-        raise AssertionError(
+        message = (
             "'Add row' produced no draft row"
             + (" while the UNSEEDED banner is showing" if unseeded else "")
             + " — SteeringPage mounts the grid only when rules exist (`{!unseeded && <SteeringGrid/>}`), "
             "so the banner's own 'Add a row' path cannot author the first rule"
-        ) from e
+        )
+        if unseeded and unseeded_gap_issue:
+            raise ExpectedGap(f"{unseeded_gap_issue}: {message}") from e
+        raise AssertionError(message) from e
     rid = tid(page, "steering-draft-id").input_value()
     assert re.fullmatch(r"PAT-\d{3,6}", rid), f"draft id prefill {rid!r} is not a PAT-nnn id"
     assert tid(page, "steering-draft-type").input_value() == "architecture"
@@ -541,9 +1168,21 @@ def steering_rows_loaded(page) -> None:
     assert tid(page, "steering-rules-error").count() == 0, text_of(tid(page, "steering-rules-error"))
 
 
+def surface_error(page, pid: str, mode: str) -> None:
+    """A `*-canvas-error` on a mode surface: a Skip only when the DAEMON reports the bridge
+    unavailable (established cause); otherwise a product failure."""
+    surface = "doc" if mode == "document" else "video"
+    hint = text_of(tid(page, f"{surface}-bridge-hint")) or text_of(tid(page, f"{surface}-error-detail"))
+    reason = bridge_unavailable_reason(pid)
+    if reason is not None:
+        raise Skip(f"the interactive bridge is unavailable on this rig (daemon 503 bridge_unavailable: {reason[:200]}); "
+                   f"{mode} surface shows: {hint[:200]}")
+    raise AssertionError(f"{mode} surface shows an error while the daemon serves the bridge: {hint[:300]}")
+
+
 def enter_mode(page, pid: str, mode: str) -> dict:
     """Project dashboard → the mode's door → the mode surface, waiting THROUGH the bridge's cold
-    start. Returns what rendered; raises Skip when the bridge never came up."""
+    start. Returns what rendered."""
     surface = "doc" if mode == "document" else "video"
     picker = "doc-picker" if mode == "document" else "demo-picker"
     goto(page, f"/p/{quote(pid)}")
@@ -558,8 +1197,7 @@ def enter_mode(page, pid: str, mode: str) -> dict:
         tid(page, "install-gate-continue").click()
         seen = wait_any(page, [picker, f"{picker}-empty", f"{surface}-canvas-error", f"{surface}-canvas-loading"], BRIDGE_TIMEOUT_MS)
     if seen == f"{surface}-canvas-error":
-        hint = text_of(tid(page, f"{surface}-bridge-hint")) or text_of(tid(page, f"{surface}-error-detail"))
-        raise Skip(f"the interactive bridge is unavailable on this rig — {mode} surface shows: {hint[:300]}")
+        surface_error(page, pid, mode)
     outcome["rendered"] = seen
     return outcome
 
@@ -579,7 +1217,7 @@ def picker_ids(page, pid: str, mode: str) -> list[str]:
     goto(page, f"/p/{quote(pid)}/{mode}")
     seen = wait_any(page, [picker, f"{picker}-empty", f"{surface}-canvas-error", f"{surface}-canvas-loading"], BRIDGE_TIMEOUT_MS)
     if seen == f"{surface}-canvas-error":
-        raise Skip(f"{mode} picker unavailable: {text_of(tid(page, f'{surface}-bridge-hint'))[:300]}")
+        surface_error(page, pid, mode)
     if seen == f"{picker}-empty":
         return []
     return attr_values(page, f"{picker}-row", "data-doc-id" if mode == "document" else "data-demo-id")
@@ -600,13 +1238,13 @@ def ui_seed_doc(page, pid: str, doc_name: str) -> str:
     return name
 
 
-def ui_seed_demo(page, pid: str, demo_name: str) -> str:
+def ui_seed_demo(page, pid: str, demo_name: str, fixture_url: str) -> str:
     enter_mode(page, pid, "video")
     box = composer(page)
     box.fill(demo_name)
     tid(page, "doc-composer-submit").click()
     tid(page, "demo-wizard").wait_for(timeout=15_000)
-    tid(page, "wizard-target").fill(FIXTURE_URL)
+    tid(page, "wizard-target").fill(fixture_url)
     tid(page, "wizard-step-subject").fill("the fixture heading")
     tid(page, "wizard-step-action").fill("read it and pause")
     tid(page, "wizard-step-add").click()
@@ -620,7 +1258,14 @@ def ui_seed_demo(page, pid: str, demo_name: str) -> str:
     return unquote(re.search(r"/video/([^/?]+)", page.url).group(1))
 
 
-def ui_delete_doc(page, pid: str, mode: str, name: str) -> None:
+PREDATES_DELETE_RE = re.compile(r"predates\s+DELETE\s+/api/docs|answered 404 without the retire wire", re.I)
+
+
+def ui_delete_doc(page, pid: str, mode: str, name: str, bridge_gap_issue: str) -> None:
+    """Picker 🗑 → confirm → Delete → absent after a REAL reload. The ONE expected gap: crew's own
+    sentence that the pinned bridge predates `DELETE /api/docs/:doc` (a `wire` failure rendered in
+    `doc-delete-error`, studio#213). A bridge-unavailable hint is a skip only when the daemon
+    confirms it; a partial delete or any other wire error is a plain failure."""
     before = picker_ids(page, pid, mode)
     assert name in before, f"{name} not listed under {pid}/{mode} before delete: {before}"
     tid(page, "doc-delete-trigger", doc_id=name).click()
@@ -628,9 +1273,19 @@ def ui_delete_doc(page, pid: str, mode: str, name: str) -> None:
     tid(page, "doc-delete-go").click()
     deadline = time.time() + 30
     while time.time() < deadline:
-        for err in ("doc-delete-error", "doc-delete-bridge-hint"):
-            if tid(page, err).count() > 0:
-                raise AssertionError(f"delete refused: {text_of(tid(page, err))}")
+        if tid(page, "doc-delete-error").count() > 0:
+            wire = text_of(tid(page, "doc-delete-error"))
+            if PREDATES_DELETE_RE.search(wire):
+                raise ExpectedGap(f"{bridge_gap_issue}: the pinned bridge predates DELETE /api/docs/:doc — {wire[:300]}")
+            raise AssertionError(f"delete failed on the wire: {wire[:400]}")
+        if tid(page, "doc-delete-partial").count() > 0:
+            raise AssertionError(f"PARTIAL delete: {text_of(tid(page, 'doc-delete-partial'))[:400]}")
+        if tid(page, "doc-delete-bridge-hint").count() > 0:
+            hint = text_of(tid(page, "doc-delete-bridge-hint"))
+            reason = bridge_unavailable_reason(pid)
+            if reason is not None:
+                raise Skip(f"bridge unavailable during delete (daemon 503 bridge_unavailable: {reason[:200]}); UI: {hint[:200]}")
+            raise AssertionError(f"delete shows a bridge hint while the daemon serves the bridge: {hint[:300]}")
         if tid(page, "doc-delete-confirm").count() == 0:
             break
         page.wait_for_timeout(200)
@@ -638,30 +1293,31 @@ def ui_delete_doc(page, pid: str, mode: str, name: str) -> None:
     assert name not in after, f"{name} still listed under {pid}/{mode} after delete + reload: {after}"
 
 
-# ── The run ───────────────────────────────────────────────────────────────────
+# ── The scenarios ─────────────────────────────────────────────────────────────
 
-ctx: dict = {"docs": [], "demos": []}
+suite = Suite()
 findings: list[str] = []
-bridge_pid: int | None = None
 
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=not HEADED)
-    page = browser.new_page(viewport={"width": 1440, "height": 800})
-    suite.page = page
-    report["setup"]["versions"]["chromium"] = browser.version
+
+def run_scenarios(rig: Rig, page) -> None:
+    ctx: dict = {"docs": [], "demos": []}
+    REPO_ID = rig.repo_id
     console_errors: list[str] = []
     page.on("console", lambda m: console_errors.append(m.text) if m.type == "error" else None)
+    rig.report["console_errors"] = console_errors
 
     # ── Projects ──────────────────────────────────────────────────────────────
     def prj1() -> str:
         goto(page, "/")
         ctx["A"] = ui_create_project(page, NAME_A)
+        rig.needles.append(ctx["A"])
         return f"Project A = {ctx['A']} ({NAME_A}); landed on /p/{ctx['A']}/build with the shell header naming it"
 
     suite.run("PRJ-1", "Create Project A via the rail ＋ → modal → Create", prj1)
 
     def prj2() -> str:
         ctx["B"] = ui_create_project(page, NAME_B)
+        rig.needles.append(ctx["B"])
         return f"Project B = {ctx['B']} ({NAME_B})"
 
     suite.run("PRJ-2", "Create Project B (the scoping control) the same way", prj2, requires=("PRJ-1",))
@@ -710,7 +1366,7 @@ with sync_playwright() as p:
         tid(page, "project-dashboard", project_id=B).wait_for(timeout=20_000)
         page.wait_for_load_state("networkidle")
         assert tid(page, "dashboard-repos").count() == 0, "Project B's dashboard lists repos it never received"
-        return (f"[SUBSTITUTE] repo {REPO_ID} attached to A over POST /projects/{A}/members (no UI attach control until #207); "
+        return (f"[SUBSTITUTE] repo {REPO_ID} attached to A over POST /projects/{A}/members (no UI attach control until studio#207); "
                 "UI verifies: A's dashboard renders the repo tile, B's renders none")
 
     suite.run("ATT-1", "Attach the repository to Project A (API substitute, UI-verified)", att1, requires=("PRJ-1", "PRJ-2"))
@@ -719,11 +1375,11 @@ with sync_playwright() as p:
     def str1() -> str:
         goto(page, "/steering/policies")
         steering_rows_loaded(page)
-        rid = ui_add_rule(page, RULE_STATEMENT)
+        rid = ui_add_rule(page, RULE_STATEMENT, unseeded_gap_issue="studio#212")
         ctx["rule_first_ui"] = rid
         return f"first rule {rid} authored through the draft row on the unseeded store"
 
-    suite.run("STR-1", "Author the FIRST rule via Add row on the unseeded store", str1)
+    suite.run("STR-1", "Author the FIRST rule via Add row on the unseeded store", str1, xfail="studio#212")
 
     def str1s() -> str:
         if "rule_first_ui" in ctx:
@@ -740,7 +1396,7 @@ with sync_playwright() as p:
         steering_rows_loaded(page)
         tid(page, "steering-grid-row", rule_id="PAT-100").wait_for(timeout=15_000)
         ctx["rule_seed_api"] = "PAT-100"
-        findings.append("STR-1: 'Add row' is inert on an unseeded store (grid not mounted) — the first rule needed an API substitute")
+        findings.append("STR-1 (studio#212): 'Add row' is inert on an unseeded store (grid not mounted) — the first rule needed an API substitute")
         return "[SUBSTITUTE] PAT-100 seeded over POST /governance/rules (the exact body the draft row sends) so the grid mounts"
 
     suite.run("STR-1S", "Seed the store so the grid mounts (API substitute, only if STR-1 failed)", str1s)
@@ -781,8 +1437,7 @@ with sync_playwright() as p:
         row.locator('[data-testid="steering-grid-id"]').click()
         drawer = tid(page, "steering-rule-drawer")
         drawer.wait_for(timeout=10_000)
-        # The id is the drawer's HEADER (SteeringRuleDrawer.tsx:89); `steering-rule-detail` is the
-        # field list under it — run 1 asserted the id inside the field list and failed for it.
+        # The id is the drawer's HEADER (SteeringRuleDrawer.tsx); `steering-rule-detail` is the field list under it.
         assert drawer.get_attribute("aria-label") == f"Rule {rid}", f"drawer aria-label {drawer.get_attribute('aria-label')!r}"
         statement_row = text_of(tid(page, "steering-rule-statement"))
         assert RULE_STATEMENT in statement_row, f"drawer Statement row {statement_row!r} lacks the authored statement"
@@ -821,7 +1476,7 @@ with sync_playwright() as p:
         "?.getAttribute('data-retired') === want"
     )
 
-    def ui_retire_rule(page, rid: str, reason: str) -> None:
+    def ui_retire_rule(rid: str, reason: str) -> None:
         """Row ⋯ Retire → modal: confirm is disarmed until the EXACT id is typed AND a reason is
         given (SteeringRetireModal.tsx) → the retired note echoes both → the row turns struck."""
         row = tid(page, "steering-grid-row", rule_id=rid)
@@ -848,11 +1503,10 @@ with sync_playwright() as p:
         goto(page, "/steering/policies")
         steering_rows_loaded(page)
         # Retire never deletes, and the grid's default facet LISTS retired rows
-        # (SteeringGrid.tsx GRID_FACETS_DEFAULT.includeRetired = true; the chip reads
-        # "retired shown"). The run-3 plan asserted hidden-by-default — that was wrong.
+        # (SteeringGrid.tsx GRID_FACETS_DEFAULT.includeRetired = true; the chip reads "retired shown").
         toggle = tid(page, "steering-filter-retired")
         assert toggle.get_attribute("aria-pressed") == "true", f"retired facet default: {text_of(toggle)!r}"
-        ui_retire_rule(page, rid, RETIRE_REASON)
+        ui_retire_rule(rid, RETIRE_REASON)
         row = tid(page, "steering-grid-row", rule_id=rid)
         assert row.locator('[data-testid="steering-rule-retired-chip"]').count() == 1, "retired row lacks its chip"
         # The operator's facet hides it …
@@ -901,7 +1555,10 @@ with sync_playwright() as p:
         tid(page, "testing-evals-run").click()
         seen = wait_any(page, ["testing-evals-summary", "testing-evals-error", "testing-evals-unsupported"], EVALS_TIMEOUT_MS)
         if seen == "testing-evals-unsupported":
-            raise Skip("this daemon's engine predates the eval bindings (501)")
+            st, _ = api("GET", "/testing/evals")
+            if st == 501:
+                raise Skip("this daemon's engine predates the eval bindings (GET /testing/evals → 501)")
+            raise AssertionError(f"the UI shows evals as unsupported but GET /testing/evals answers {st}")
         assert seen == "testing-evals-summary", f"evals failed: {text_of(tid(page, 'testing-evals-error'))}"
         summary = text_of(tid(page, "testing-evals-summary"))
         m = re.search(r"(\d+) samples", summary)
@@ -950,7 +1607,7 @@ with sync_playwright() as p:
 
     suite.run("EVL-2", "Eval history + drilldown persist across reload (identity + content)", evl2, requires=("EVL-1",))
 
-    # ── Memories (read-only browse; retire is a scope-subtree erasure — never exercised) ──
+    # ── Memories (read-only browse; retire is a scope-subtree erasure — never exercised, studio#206) ──
     def memories_state() -> tuple[str, int]:
         tid(page, "memories-panel").wait_for(timeout=20_000)
         tid(page, "memories-loading").wait_for(state="detached", timeout=30_000)
@@ -973,7 +1630,7 @@ with sync_playwright() as p:
 
     suite.run("MEM-2", "Memories browse is read-only, settled, and context-independent", mem2, requires=("PRJ-2",))
 
-    # ── Documents / demos — deterministic seeds (agent answering disabled) + the #472 xfail ──
+    # ── Documents / demos — deterministic seeds (agent answering disabled) + the crew#472 xfails ──
     def vib1d() -> str:
         name = ui_seed_doc(page, ctx["A"], f"seed-doc-a-{STAMP}")
         ctx["docs"].append((ctx["A"], name))
@@ -995,35 +1652,68 @@ with sync_playwright() as p:
         canvas.wait_for(timeout=BRIDGE_TIMEOUT_MS)
         ids = picker_ids(page, pid, "document")
         assert name in ids, f"{name} missing from A's picker after reload: {ids}"
-        st, versions = api("GET", f"/projects/{quote(pid)}/interactive/d/{quote(name)}/api/versions")
-        return f"after a full reload the canvas frames '{name}' and A's picker lists it; versions wire → {st} head={versions.get('head') if isinstance(versions, dict) else versions}"
+        # The versions wire: 200, a head, a lineage consistent with itself and with the docs listing.
+        st, manifest = api("GET", f"/projects/{quote(pid)}/interactive/d/{quote(name)}/api/versions")
+        assert st == 200 and isinstance(manifest, dict), f"versions wire → {st} {str(manifest)[:300]}"
+        head, versions = manifest.get("head"), manifest.get("versions")
+        assert isinstance(head, int) and isinstance(versions, list) and versions, f"manifest lacks an int head / non-empty versions: {manifest}"
+        numbers = [v.get("version") for v in versions]
+        assert head in numbers, f"head {head} is not one of the lineage's versions {numbers}"
+        assert numbers == sorted(numbers) and len(set(numbers)) == len(numbers), f"lineage is not a strictly increasing chain: {numbers}"
+        for v in versions:
+            parent = v.get("parent")
+            if v.get("version") == 0:
+                assert parent is None, f"v0 has a parent: {v}"
+            else:
+                assert parent in numbers and parent < v["version"], f"version {v.get('version')} names a parent outside the chain: {v}"
+            assert v.get("html_file"), f"version {v.get('version')} names no html file: {v}"
+        st2, listing = api("GET", f"/projects/{quote(pid)}/interactive/api/docs")
+        assert st2 == 200 and isinstance(listing, list), f"docs listing → {st2} {str(listing)[:200]}"
+        mine = [d for d in listing if d.get("name") == name]
+        assert len(mine) == 1, f"docs listing carries {len(mine)} entries named {name!r}"
+        assert mine[0].get("head") == head and mine[0].get("versions") == len(versions), f"listing {mine[0]} disagrees with the manifest (head {head}, {len(versions)} versions)"
+        st3, html = fetch(f"/api/v1/projects/{quote(pid)}/interactive/d/{quote(name)}/doc")
+        assert st3 == 200 and html, f"the head's rendered document → {st3}"
+        return (f"after a full reload the canvas frames '{name}' and A's picker lists it; versions wire → 200 head={head} "
+                f"lineage={numbers} (parents consistent); docs listing agrees (head, {len(versions)} versions); head html renders (200)")
 
-    suite.run("VIB-4", "Document survives a reload (canvas identity + picker listing)", vib4, requires=("VIB-1D",))
+    suite.run("VIB-4", "Document survives a reload (canvas identity + picker listing + versions head/lineage)", vib4, requires=("VIB-1D",))
 
     def vib3() -> str:
         (A, doc_a), (B, doc_b) = ctx["docs"][0], ctx["docs"][1]
         a_ids = picker_ids(page, A, "document")
         b_ids = picker_ids(page, B, "document")
-        assert doc_a in a_ids and doc_b in b_ids, f"ownership broken: A={a_ids} B={b_ids}"
-        assert doc_b not in a_ids, f"Project A's picker lists B's document {doc_b!r}: {a_ids}"
-        assert doc_a not in b_ids, f"Project B's picker lists A's document {doc_a!r}: {b_ids}"
+        disjoint_pickers_oracle(a_ids, b_ids, doc_a, doc_b, "crew#472")
         return "A and B list only their own documents"
 
     suite.run("VIB-3", "Documents are disjoint per project (A ∌ B's doc, B ∌ A's doc)", vib3, xfail="crew#472", requires=("VIB-1D", "VIB-2D"))
 
+    def vib3f() -> str:
+        """A foreign deep link: B's shell asked for A's document by URL must not frame it."""
+        (A, doc_a), (B, _doc_b) = ctx["docs"][0], ctx["docs"][1]
+        goto(page, f"/p/{quote(B)}/document/{quote(doc_a)}")
+        seen = wait_any(page, ["doc-canvas", "doc-canvas-error", "doc-picker-empty", "doc-canvas-loading"], BRIDGE_TIMEOUT_MS)
+        framed = seen == "doc-canvas" and tid(page, "doc-canvas", doc_id=doc_a).count() > 0
+        expect_gap(not framed, "crew#472", f"Project B's shell frames A's document {doc_a!r} through a deep link (/p/{B}/document/{doc_a})")
+        return f"B's shell refuses A's document by deep link (rendered: {seen})"
+
+    suite.run("VIB-3F", "Foreign deep link: /p/B/document/<A's doc> must not frame A's document", vib3f, xfail="crew#472", requires=("VIB-1D", "VIB-2D"))
+
     def dem1d() -> str:
-        name = ui_seed_demo(page, ctx["A"], f"seed-demo-a-{STAMP}")
+        name = ui_seed_demo(page, ctx["A"], f"seed-demo-a-{STAMP}", rig.fixture_url)
         ctx["demos"].append((ctx["A"], name))
         ids = picker_ids(page, ctx["A"], "video")
         assert name in ids, f"{name} missing from A's demo picker: {ids}"
-        return f"demo '{name}' created under A via the wizard (target {FIXTURE_URL}, one hand-pinned step; authoring agent disabled); A's picker lists it"
+        return f"demo '{name}' created under A via the wizard (target {rig.fixture_url}, one hand-pinned step; authoring agent disabled); A's picker lists it"
 
     suite.run("DEM-1D", "Seed a demo in Project A via the wizard (deterministic)", dem1d, requires=("PRJ-1",))
 
     def dem3() -> str:
         A, demo_a = ctx["demos"][0]
+        a_ids = picker_ids(page, A, "video")
+        assert a_ids and demo_a in a_ids, f"ownership broken: A's demo picker does not list its own demo {demo_a!r}: {a_ids}"
         b_ids = picker_ids(page, ctx["B"], "video")
-        assert demo_a not in b_ids, f"Project B's demo picker lists A's demo {demo_a!r}: {b_ids}"
+        expect_gap(demo_a not in b_ids, "crew#472", f"Project B's demo picker lists A's demo {demo_a!r}: {b_ids}")
         return "B lists none of A's demos"
 
     suite.run("DEM-3", "Demos are disjoint per project (B ∌ A's demo)", dem3, xfail="crew#472", requires=("DEM-1D", "PRJ-2"))
@@ -1032,7 +1722,7 @@ with sync_playwright() as p:
     def tst1() -> str:
         if not GOVERNED_ENABLED:
             raise Skip("governed scenario disabled by SEED_GOVERNED=0 — a recon launch convenes the engine's "
-                       "distribution council (real CLI seats) BEFORE its intake gate; run with SEED_GOVERNED=1 "
+                       "distribution council (real CLI seats) BEFORE its intake gate (crew#473); run with SEED_GOVERNED=1 "
                        "to exercise the gate, serialized, once")
         A = ctx["A"]
         goto(page, f"/p/{quote(A)}")
@@ -1043,7 +1733,19 @@ with sync_playwright() as p:
         tid(page, "testing-campaign-open").click()
         panel = tid(page, "testing-launch-panel", intent="campaign")
         panel.wait_for(timeout=10_000)
-        assert tid(page, "testing-launch-project").input_value() == A, "the project selector is not pre-bound to A"
+        # The panel seeds `projectId` from `initialProjectId` at mount, but the <select>'s OPTIONS
+        # come from an async `listProjects()` — until it resolves, a controlled select whose value
+        # matches no option reports "" (and the zero-repo hint flashes). Wait for the bound value
+        # to become readable, then assert it (run 5 of this suite read it at mount and raced).
+        try:
+            page.wait_for_function(
+                "pid => document.querySelector('[data-testid=\"testing-launch-project\"]')?.value === pid",
+                arg=A, timeout=15_000,
+            )
+        except Exception:  # noqa: BLE001 — report the value the select settled on, not a timeout
+            pass
+        bound = tid(page, "testing-launch-project").input_value()
+        assert bound == A, f"the project selector is not pre-bound to A after the projects list loaded (reads {bound!r})"
         tid(page, "testing-launch-chip", source="project", repo=REPO_ID).wait_for(timeout=15_000)
         tid(page, "testing-launch-instructions").fill(
             f"{TEST_BRIEF_TOKEN}: propose a plan for the e2e seed surfaces — do not execute; this gate will be rejected.")
@@ -1055,6 +1757,7 @@ with sync_playwright() as p:
         assert len(mine) == 1, f"{len(mine)} runs carry the brief token"
         run_id = mine[0]["session"]["id"]
         ctx["test_run"] = run_id
+        rig.needles.append(run_id)
         gate = panel.locator('[data-testid="steering-gate"]')
         deadline = time.time() + GOVERNED_TIMEOUT_S
         status = run_status(run_id)
@@ -1067,12 +1770,14 @@ with sync_playwright() as p:
             page.wait_for_timeout(2_000)
         if gate.count() == 0:
             if status == "failed":
-                tail = last_events(run_id)
-                text = json.dumps(tail)[-1200:]
-                if re.search(r"login|sign|auth|credential|worker|spawn|ENOENT|acp|seat|not found", text, re.I):
-                    raise Skip(f"run {run_id} failed before its intake gate — the hermetic worker home has no CLI login "
-                               f"(roster signed_in={report['setup']['roster_signed_in']}); last events: {text}")
-                raise AssertionError(f"run {run_id} failed before its intake gate: {text}")
+                tail = json.dumps(last_events(run_id))[-1200:]
+                roster = rig.report["setup"].get("roster_signed_in") or {}
+                nobody_signed_in = bool(roster) and not any(roster.values())
+                if nobody_signed_in:
+                    # The ESTABLISHED cause: under the hermetic HOME no council seat has credentials.
+                    raise Skip(f"run {run_id} failed before its intake gate and the roster shows NO signed-in seat under the "
+                               f"hermetic HOME (roster signed_in={roster}); last events: {tail}")
+                raise AssertionError(f"run {run_id} failed before its intake gate with signed-in seats {roster}: {tail}")
             if status == "awaiting_human":
                 raise AssertionError(f"run {run_id} is awaiting_human on the wire but the launch panel never rendered the gate card")
             raise AssertionError(f"run {run_id} never reached its intake gate within {GOVERNED_TIMEOUT_S}s (status {status})")
@@ -1084,14 +1789,16 @@ with sync_playwright() as p:
         tid(page, "testing-launch-resolved").wait_for(timeout=30_000)
         final = wait_terminal(run_id, 60)
         assert final == "cancelled", f"rejected run ended {final!r}, expected cancelled"
-        units = run_view(run_id).get("units", [])
-        executed = [u for u in units if u.get("status") in ("running", "completed")]
-        assert not executed, f"units executed despite the rejected intake gate: {executed}"
+        view = run_view(run_id)
+        proof = assert_execution_prevented(view.get("units"), run_events(run_id))
+        ctx["gate_proof"] = proof
         return (f"run {run_id} launched from A (project pre-bound, repo chip via project), parked at its intake gate "
                 f"after the distribution council ({before_gate or 'no council events'}), REJECTED in the panel → cancelled; "
-                f"{len(units)} planned units, none executed; prompt: {prompt[:120]!r}")
+                f"event log proves no execution: {proof['units']} planned units {proof['unit_statuses']}, {proof['events']} events, "
+                f"none of {sorted(EXECUTION_EVENT_TYPES)}, awaitingHuman@{proof['awaiting_human_at']} → runCancelled@{proof['run_cancelled_at']}; "
+                f"prompt: {prompt[:120]!r}")
 
-    suite.run("TST-1", "New test from Project A → intake gate arrives → REJECT (no council runs)", tst1,
+    suite.run("TST-1", "New test from Project A → intake gate arrives → REJECT (event log proves no execution)", tst1,
               requires=("ATT-1",), governed=True)
 
     def tsts() -> str:
@@ -1112,40 +1819,41 @@ with sync_playwright() as p:
     suite.run("TST-S", "The test run is scoped: on A's dashboard, absent from B's", tsts, requires=("PRJ-2",))
 
     def tst2() -> str:
-        A, B = ctx["A"], ctx["B"]
+        A = ctx["A"]
         goto(page, f"/p/{quote(A)}/campaigns")
         tid(page, "project-campaigns", project_id=A).wait_for(timeout=15_000)
         wait_any(page, ["campaigns-page", "campaigns-unsupported"], 30_000)
         page.wait_for_load_state("networkidle")
         a_cards = attr_values(page, "campaign-card", "data-campaign-id")
-        if not a_cards:
-            raise Skip("no campaign card to partition: a single-repo test registers no engine campaign (campaignRegistered:false), "
-                       "so the App.tsx:466 gap is not observable on this rig")
-        goto(page, f"/p/{quote(B)}/campaigns")
-        tid(page, "project-campaigns", project_id=B).wait_for(timeout=15_000)
-        wait_any(page, ["campaigns-page", "campaigns-unsupported"], 30_000)
-        page.wait_for_load_state("networkidle")
-        b_cards = attr_values(page, "campaign-card", "data-campaign-id")
-        leaked = [c for c in a_cards if c in b_cards]
-        assert not leaked, f"Project B's Tests list shows A's campaigns {leaked}"
-        return "B's Tests list excludes A's campaigns"
+        st, body = api("GET", "/campaigns")
+        engine_campaigns = body.get("campaigns", []) if isinstance(body, dict) else body
+        if a_cards:
+            raise AssertionError(f"a campaign card rendered on a single-repo project ({a_cards}) — the BLOCKED premise no longer holds; "
+                                 f"implement the partition assertion (App.tsx:466)")
+        raise Blocked(
+            "BLOCKED — the campaign store partition (App.tsx:466) is not observable on this rig: a single-repo test registers no "
+            f"engine campaign (`campaignRegistered:false`; GET /campaigns → {len(engine_campaigns) if isinstance(engine_campaigns, list) else engine_campaigns} campaigns, "
+            f"A renders {len(a_cards)} cards). Observing it needs a ≥2-repo project — a FAN (crew#390 shape) of ≥2 governed runs, which "
+            "exceeds the one-governed-scenario budget. Fixture path when a fan is affordable: attach a second repo to A, launch once, "
+            "assert /p/B/campaigns excludes A's campaign-card. Tracked with the Test-surface findings in studio#216."
+        )
 
-    suite.run("TST-2", "Tests list is partitioned per project", tst2, xfail="App.tsx:466 (campaign store not project-partitioned)", requires=("PRJ-2",))
+    suite.run("TST-2", "Tests list is partitioned per project", tst2, requires=("PRJ-2",))
 
     # ── Cleanup — only after every consumer ───────────────────────────────────
     def cln1() -> str:
         done = []
         for pid, name in ctx["docs"]:
-            ui_delete_doc(page, pid, "document", name)
+            ui_delete_doc(page, pid, "document", name, bridge_gap_issue="studio#213")
             done.append(f"doc {name}")
         for pid, name in ctx["demos"]:
-            ui_delete_doc(page, pid, "video", name)
+            ui_delete_doc(page, pid, "video", name, bridge_gap_issue="studio#213")
             done.append(f"demo {name}")
         if not done:
             raise Skip("nothing was seeded to delete")
         return "deleted via the picker's 🗑 → confirm → Delete, verified absent after a reload: " + ", ".join(done)
 
-    suite.run("CLN-1", "Delete every seeded document/demo through the UI", cln1)
+    suite.run("CLN-1", "Delete every seeded document/demo through the UI", cln1, xfail="studio#213")
 
     def clnstr() -> str:
         seed = ctx.get("rule_seed_api")
@@ -1153,7 +1861,7 @@ with sync_playwright() as p:
             raise Skip("no API-seeded rule to retire — STR-1 authored the first rule through the UI")
         goto(page, "/steering/policies")
         steering_rows_loaded(page)
-        ui_retire_rule(page, seed, f"seed-surfaces suite {STAMP}: retiring the STR-1S substitute seed")
+        ui_retire_rule(seed, f"seed-surfaces suite {STAMP}: retiring the STR-1S substitute seed")
         st, body = api("GET", "/governance/rules")
         mine = [r for r in body["rules"] if r["id"] == seed]
         assert mine and mine[0].get("retired") is True, f"server row for {seed}: {mine}"
@@ -1166,18 +1874,25 @@ with sync_playwright() as p:
         goto(page, f"/projects/{quote(A)}")
         page.wait_for_load_state("networkidle")
         archive = page.get_by_role("button", name=re.compile(r"^Archive$"))
-        assert f"/projects/{quote(A)}" in page.url and archive.count() > 0, (
-            f"ProjectDetailPage (the only Archive control, ProjectDetailPage.tsx) is unreachable: /projects/{A} "
-            f"redirected to {page.url.replace(ORIGIN, '')} (useLegacyRedirect) — no reachable UI affordance archives a project")
+        expect_gap(
+            f"/projects/{quote(A)}" in page.url and archive.count() > 0, "studio#214",
+            f"ProjectDetailPage (the only Archive/Restore control, ProjectDetailPage.tsx) is unreachable: /projects/{A} "
+            f"redirected to {page.url.replace(ORIGIN, '')} (useLegacyRedirect) — no reachable UI affordance archives or restores a project",
+        )
         archive.click()
         page.wait_for_function("() => document.body.textContent.includes('archived')", timeout=10_000)
-        return "archived through ProjectDetailPage"
+        st, detail = api("GET", f"/projects/{quote(A)}")
+        assert st == 200 and detail["project"]["status"] == "archived", f"archive did not persist: {detail.get('project')}"
+        return "archived through ProjectDetailPage; server row status=archived"
 
-    suite.run("CLN-2", "Archive a project through the UI (ProjectDetailPage → Archive)", cln2, requires=("PRJ-1",))
+    suite.run("CLN-2", "Archive a project through the UI (ProjectDetailPage → Archive)", cln2, xfail="studio#214", requires=("PRJ-1",))
 
     def cln2s() -> str:
         A, B = ctx["A"], ctx["B"]
         for pid in (A, B):
+            st, detail = api("GET", f"/projects/{quote(pid)}")
+            if st == 200 and detail["project"]["status"] == "archived":
+                continue  # CLN-2 archived it through the UI
             st, body = api("PATCH", f"/projects/{quote(pid)}", {"status": "archived"})
             assert st == 200 and body["project"]["status"] == "archived", f"PATCH {pid} → {st} {body}"
         goto(page, "/projects")
@@ -1192,60 +1907,168 @@ with sync_playwright() as p:
         for pid in (A, B):
             assert tid(page, "project-card", project_id=pid, status="archived").count() == 1, f"{pid} missing from the archived grid"
         if "CLN-2" not in suite.passed:
-            findings.append("CLN-2: no reachable UI affordance archives a project — /projects/:id (ProjectDetailPage, the only Archive button) redirects to /p/:id")
+            findings.append("CLN-2 (studio#214): no reachable UI affordance archives/restores a project — /projects/:id (ProjectDetailPage) redirects to /p/:id")
         return "[SUBSTITUTE] both projects archived over PATCH /projects/:id; UI verifies: no active card, both listed under the archived toggle"
 
     suite.run("CLN-2S", "Archive both projects (API substitute, UI-verified)", cln2s, requires=("PRJ-1", "PRJ-2"))
 
-    # Housekeeping so the daemon can stop cleanly: cancel anything still live (labelled).
-    for view in list_runs():
-        if view["session"]["status"] not in TERMINAL_STATUSES:
-            api("POST", f"/runs/{quote(view['session']['id'])}/cancel")
-            report["setup"].setdefault("cleanup_cancelled_runs", []).append(view["session"]["id"])
+    rig.report["console_errors"] = console_errors[:20]
 
-    report["console_errors"] = console_errors[:20]
-    browser.close()
 
-# ── Teardown: daemon, the bridge the pool started for OUR root, the temp dir ─────
-daemon.terminate()
-try:
-    daemon.wait(timeout=15)
-except subprocess.TimeoutExpired:
-    daemon.kill()
-daemon_log.close()
-lock = IDOCS / ".wi-serve.json"
-if lock.is_file():
+# ── Self-test of the harness's own safety plumbing ────────────────────────────
+
+
+def self_test() -> int:
+    results: dict[str, bool] = {}
+    # 1. exit semantics: report.ok is the ONLY thing the exit code reads
+    results["exit_nonzero_when_report_not_ok"] = exit_code({"ok": False}) != 0
+    results["exit_zero_when_report_ok"] = exit_code({"ok": True}) == 0
+    rep = finalize({"live_touched": ["~/.wicked-crew/interactive-drafts/seed-doc-a-0"]}, suite_ok=True)
+    results["live_touched_forces_nonzero_even_when_suite_ok"] = rep["ok"] is False and exit_code(rep) != 0
+    results["setup_failure_forces_nonzero"] = exit_code(finalize({"setup_failure": {"step": "guard"}}, suite_ok=True)) != 0
+    results["abort_forces_nonzero"] = exit_code(finalize({"aborted": "interrupted"}, suite_ok=True)) != 0
+    results["clean_run_exits_zero"] = exit_code(finalize({"live_touched": []}, suite_ok=True)) == 0
+    results["failed_scenario_exits_nonzero"] = exit_code(finalize({"live_touched": []}, suite_ok=False)) != 0
+    # 2. xfail hygiene: only the ExpectedGap tied to the issue is excused
+    s = Suite()
+
+    def plain_failure() -> str:
+        raise AssertionError("unrelated regression")
+
+    def blocked() -> str:
+        raise Blocked("needs a fan")
+
+    s.run("T-plain", "plain assertion inside an xfail scenario", plain_failure, xfail="issue#0")
+    s.run("T-gap", "expected gap inside an xfail scenario", lambda: expect_gap(False, "issue#0", "leak"), xfail="issue#0")
+    s.run("T-xpass", "xfail scenario that passes", lambda: "fine", xfail="issue#0")
+    s.run("T-gap-nomarker", "expected gap WITHOUT an xfail marker", lambda: expect_gap(False, "issue#0", "leak"))
+    s.run("T-blocked", "explicitly blocked", blocked)
+    by_id = {r["id"]: r["status"] for r in s.rows}
+    results["plain_assertion_in_xfail_is_fail"] = by_id["T-plain"] == "fail"
+    results["expected_gap_in_xfail_is_xfail"] = by_id["T-gap"] == "xfail"
+    results["passing_xfail_is_xpass"] = by_id["T-xpass"] == "xpass"
+    results["expected_gap_without_marker_is_fail"] = by_id["T-gap-nomarker"] == "fail"
+    results["blocked_is_blocked_not_skip"] = by_id["T-blocked"] == "blocked"
+    results["suite_ok_false_with_fail_or_xpass"] = s.ok is False
+    # 3. the VIB-3 oracle: empty/ownership states are FAILs, only the leak is the gap
+    def oracle_raises(a, b, cls) -> bool:
+        try:
+            disjoint_pickers_oracle(a, b, "doc-a", "doc-b", "issue#0")
+        except cls as e:
+            return type(e) is cls
+        except AssertionError:
+            return False
+        return False
+    results["vib3_empty_lists_is_plain_fail"] = oracle_raises([], [], AssertionError)
+    results["vib3_missing_own_doc_is_plain_fail"] = oracle_raises(["doc-b"], ["doc-b"], AssertionError)
+    results["vib3_leak_is_expected_gap"] = oracle_raises(["doc-a", "doc-b"], ["doc-b", "doc-a"], ExpectedGap)
     try:
-        bridge_pid = int(json.loads(lock.read_text()).get("pid"))
-        os.kill(bridge_pid, signal.SIGTERM)
-    except (ValueError, TypeError, ProcessLookupError, PermissionError, json.JSONDecodeError):
-        bridge_pid = None
-fixture_httpd.shutdown()
-# The isolation claim, re-derived: nothing carrying this run's stamp may exist under the REAL
-# ~/.wicked-crew (this process's HOME is the operator's; only the daemon env was pinned). Run 3
-# found three such dirs there — the bus leak described at `daemon_env` — so this is asserted.
-live_touched = sorted(
-    str(p.relative_to(LIVE_STATE_HOME))
-    for p in LIVE_STATE_HOME.rglob(f"*{STAMP}*")
-) if LIVE_STATE_HOME.is_dir() else []
-report["setup"]["teardown"] = {
-    "daemon_stopped": daemon.returncode is not None, "bridge_pid_terminated": bridge_pid,
-    "tmp": str(TMP), "tmp_kept": KEEP_TMP, "live_state_home_touched": live_touched,
-}
-if live_touched:
-    findings.append(f"ISOLATION: the live {LIVE_STATE_HOME} gained entries stamped by this run: {live_touched}")
-if not KEEP_TMP:
-    shutil.rmtree(TMP, ignore_errors=True)
+        disjoint_pickers_oracle(["doc-a"], ["doc-b"], "doc-a", "doc-b", "issue#0")
+        results["vib3_disjoint_passes"] = True
+    except AssertionError:
+        results["vib3_disjoint_passes"] = False
+    # 4. the gate oracle: missing units / any execution event / no cancellation are failures
+    good_events = [{"type": "sessionStarted"}, {"type": "unitPlanned"}, {"type": "councilConvened"}, {"type": "unitDistributed"},
+                   {"type": "awaitingHuman", "ord": 1}, {"type": "runCancelled"}]
+    good_units = [{"ord": 1, "status": "distributed"}, {"ord": 2, "status": "pending"}]
 
-report["findings"] = findings
-report["ok"] = suite.ok and not live_touched
+    def gate_raises(units, events) -> bool:
+        try:
+            assert_execution_prevented(units, events)
+        except AssertionError:
+            return True
+        return False
+    results["gate_missing_units_fails"] = gate_raises(None, good_events) and gate_raises([], good_events)
+    results["gate_execution_event_fails"] = gate_raises(good_units, good_events[:5] + [{"type": "unitExecuting", "ord": 1}, {"type": "runCancelled"}])
+    results["gate_done_unit_fails"] = gate_raises([{"ord": 1, "status": "done"}], good_events)
+    results["gate_no_cancel_fails"] = gate_raises(good_units, good_events[:5])
+    results["gate_clean_passes"] = not gate_raises(good_units, good_events)
+    # 5. pid identity: never trust a daemon-written pid blindly
+    results["valid_pid_rejects_zero_negative_one_bool_str_none"] = not any(valid_pid(v) for v in (0, -1, 1, True, "12", None, 3.0))
+    results["valid_pid_accepts_ordinary_pid"] = valid_pid(os.getpid())
+    scratch = Path(mkdtemp(prefix="seed-selftest-"))
+    try:
+        (scratch / ".wi-serve.json").symlink_to("/etc/hosts")
+        lock, state = read_bridge_lock(scratch)
+        results["symlinked_lock_refused"] = lock is None and state.startswith("refused")
+        (scratch / ".wi-serve.json").unlink()
+        (scratch / ".wi-serve.json").write_text(json.dumps({"pid": 0, "port": 1}))
+        lock, state = read_bridge_lock(scratch)
+        results["lock_pid_zero_is_not_signallable"] = lock is not None and not valid_pid(lock.get("pid"))
+        results["own_process_never_identified_as_bridge"] = os.getpid() not in {p["pid"] for p in bridge_processes(scratch, 0)}
+        results["stale_older_process_excluded"] = all(p["started_at"] is None or p["started_at"] >= time.time() - 5
+                                                     for p in bridge_processes(scratch, time.time()))
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    ok = all(results.values())
+    print(json.dumps({"self_test": results, "ok": ok}, indent=2))
+    return 0 if ok else 1
 
-counts = {s: sum(1 for r in suite.rows if r["status"] == s) for s in ("pass", "fail", "xfail", "xpass", "skip")}
-report["counts"] = counts
-print("\n| id | scenario | status | seconds | detail |\n|---|---|---|---|---|")
-for r in suite.rows:
-    first = r["detail"].splitlines()[0] if r["detail"] else ""
-    print(f"| {r['id']} | {r['title']} | {r['status'].upper()} | {r['seconds']} | {first.replace('|', '/')} |")
-print(f"\ncounts: {counts}\n")
-print(json.dumps(report, indent=2))
-sys.exit(0 if suite.ok else 1)
+
+# ── main ──────────────────────────────────────────────────────────────────────
+
+
+def _on_sigterm(*_args) -> None:
+    raise KeyboardInterrupt("SIGTERM")
+
+
+def main(argv: list[str]) -> int:
+    if "--self-test" in argv:
+        return self_test()
+    signal.signal(signal.SIGTERM, _on_sigterm)
+    report: dict = {"ok": False, "setup": {}, "scenarios": suite.rows, "findings": findings, "live_touched": [], "counts": {}}
+    rig: Rig | None = None
+    try:
+        rig = Rig(report)
+        rig.prepare()
+        rig.start_daemon()
+        rig.build_identity()
+        rig.register_repo()
+        rig.start_fixture_server()
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as e:
+            raise SetupFailure("playwright", "pip install playwright && playwright install chromium") from e
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=not HEADED)
+            try:
+                page = browser.new_page(viewport={"width": 1440, "height": 800})
+                suite.page = page
+                report["setup"]["versions"]["chromium"] = browser.version
+                run_scenarios(rig, page)
+            finally:
+                suite.page = None
+                try:
+                    browser.close()
+                except Exception as e:  # noqa: BLE001 — a close failure must not skip the daemon teardown
+                    report["setup"]["browser_close_error"] = str(e)[:300]
+    except SetupFailure as e:
+        report["setup"][e.step] = {"ok": False, "error": e.why}
+        report["setup_failure"] = {"step": e.step, "error": e.why}
+        print(f"[SETUP  ] {e.step}: {e.why.splitlines()[0][:200]}", file=sys.stderr)
+    except KeyboardInterrupt as e:
+        report["aborted"] = f"interrupted ({e or 'SIGINT'}) — teardown still ran"
+    except BaseException as e:  # noqa: BLE001 — a harness bug is a failed run, never a leaked daemon
+        report["aborted"] = f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=6)}"
+    finally:
+        if rig is not None:
+            try:
+                report["live_touched"] = rig.teardown(findings)
+            except BaseException as e:  # noqa: BLE001
+                report["setup"]["teardown_error"] = f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=4)}"
+                report["aborted"] = report.get("aborted") or f"teardown raised: {e}"
+    for touched in report["live_touched"]:
+        findings.append(f"ISOLATION: {touched}")
+    finalize(report, suite.ok)
+    report["counts"] = suite.counts()
+    print("\n| id | scenario | status | seconds | detail |\n|---|---|---|---|---|")
+    for r in suite.rows:
+        first = r["detail"].splitlines()[0] if r["detail"] else ""
+        print(f"| {r['id']} | {r['title']} | {r['status'].upper()} | {r['seconds']} | {first.replace('|', '/')} |")
+    print(f"\ncounts: {report['counts']}  live_touched: {len(report['live_touched'])}  ok: {report['ok']}\n")
+    print(json.dumps(report, indent=2, default=str))
+    return exit_code(report)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
