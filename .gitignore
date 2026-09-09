@@ -15,3 +15,6 @@ e2e/shots/
 tmp/
 __pycache__/
 dist-realhost/
+# Live Test-feature run screenshots (e2e/test_feature_live.py) — evidence, not source; the
+# captured plans + report.json beside them ARE committed.
+e2e/artifacts/**/*.png
