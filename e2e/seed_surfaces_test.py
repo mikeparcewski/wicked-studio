@@ -148,7 +148,9 @@ included); the isolation scan's ambient `modified_sample` paths get stable place
 operator-specific segments (`scrub_operator_path`: `wicked-<8 hex>` → `wicked-<project>`, UUIDs →
 `<uuid>`, `proj_<digits>` → `<proj>`) and the scan carries its `attribution` note. `--rescrub-report
 <path>` re-applies the current scrub to an existing report offline — a deterministic re-derivation
-(text scrub, then the JSON-aware pass, re-serialized as `--report-out` writes); a second pass is a no-op.
+(text scrub, then the JSON-aware pass, re-serialized as `--report-out` writes); a second pass is a no-op;
+its residue guard (`scrub_residue`) fails closed — raises, writes nothing — if any spelling the scrub masks
+survives (plain, `/private`-prefixed or dashed) or the degraded `/private~` appears.
 
 `python3 e2e/seed_surfaces_test.py --self-test` runs the in-process checks of the harness's own
 safety plumbing (exit semantics, xfail hygiene, pid identity, gate oracle, fail-closed teardown,
@@ -5265,6 +5267,51 @@ def self_test() -> int:
         sc["attribution"] == MODIFIED_ATTRIBUTION and list(sc)[list(sc).index("modified_sample") + 1] == "attribution")
     results["rescrub_json_second_pass_is_noop"] = scrub_report_json(scan_doc) is False and sc["attribution"] == MODIFIED_ATTRIBUTION
     results["rescrub_json_ignores_documents_without_a_scan"] = scrub_report_json({"setup": {}, "scenarios": [{"detail": ambient}]}) is False
+    # 25c. the residue guard (Copilot on #211): every needle the scrub masks — the DASHED temp-root and
+    #      repo-root spellings included, derived from `scrub_literals()` rather than typed here — plus the
+    #      two temp-root shapes and the degraded `/private~` are residue; planted in a report with the scrub
+    #      BYPASSED, each one makes `rescrub_report_file` raise before writing (the file is byte-identical
+    #      afterwards). Unpatched, `/private~` still raises (the scrub neither produces nor removes it) while a
+    #      planted dashed temp root is SCRUBBED to `-TMPDIR`, not refused — the guard is belt and braces.
+    needles = [n for n, _ in scrub_literals()]
+    results["residue_needles_include_dashed_tmp_and_repo_spellings"] = (
+        any(n.startswith("-") and n.endswith(repo_s.replace("/", "-")[-12:]) for n in needles)
+        and (_tmp_root == "/tmp" or any(n == _tmp_root.replace("/", "-") for n in needles))
+        and all(len(n) > 8 for n in needles) and scrub_residue(scrubbed) == [])
+    planted = needles + list(RESIDUE_SHAPES)
+    # (`in`, not `==`: a `/private`-prefixed or dashed spelling legitimately contains its shorter siblings too)
+    results["residue_detector_finds_each_planted_spelling"] = all(n in scrub_residue(json.dumps({"x": f"a{n}b"})) for n in planted)
+    guard_dir = Path(mkdtemp(prefix="seed-selftest-residue-"))
+    identity_scrub = globals()["scrub_report_text"]
+    try:
+        globals()["scrub_report_text"] = lambda text: text  # bypass the scrub: what survives is the GUARD's call
+        closed: list[bool] = []
+        for n in planted:
+            target = guard_dir / "report.json"
+            raw = json.dumps({"setup": {"p": f"a{n}b"}}, indent=2) + "\n"
+            target.write_text(raw, encoding="utf-8")
+            try:
+                rescrub_report_file(target)
+                closed.append(False)
+            except RuntimeError as e:
+                closed.append(n in str(e) and "scrub left residue" in str(e) and target.read_text(encoding="utf-8") == raw)
+        results["residue_guard_fails_closed_on_each_planted_spelling_and_writes_nothing"] = bool(closed) and all(closed)
+    finally:
+        globals()["scrub_report_text"] = identity_scrub
+        shutil.rmtree(guard_dir, ignore_errors=True)
+    guard_dir = Path(mkdtemp(prefix="seed-selftest-residue2-"))
+    try:
+        target = guard_dir / "report.json"
+        target.write_text(json.dumps({"home": "/private~/.wicked-crew/x"}), encoding="utf-8")
+        try:
+            rescrub_report_file(target)
+            results["degraded_private_tilde_is_refused_end_to_end"] = False
+        except RuntimeError as e:
+            results["degraded_private_tilde_is_refused_end_to_end"] = "/private~" in str(e)
+        target.write_text(json.dumps({"cwd": ".claude/projects/-private-var-folders-zz-zz00000000000000000000000000gn-T-seed-x"}), encoding="utf-8")
+        results["planted_dashed_tmp_root_is_scrubbed_not_refused"] = rescrub_report_file(target)["changed"] is True and json.loads(target.read_text())["cwd"] == ".claude/projects/-TMPDIR-seed-x"
+    finally:
+        shutil.rmtree(guard_dir, ignore_errors=True)
     # 26. bridge termination is INDEPENDENT of metadata (codex r5 #1): the REAL `stop_bridge` with a scratch
     #     clone whose package.json is JSON `null` (the codex probe), a list, or garbage — and with the
     #     inspection itself raising — must STILL call terminate([4242]), never raise, and record the
@@ -5545,7 +5592,22 @@ def scrub_report_text(text: str) -> str:
         spelling, AND — by shape — any `/private/var/folders/<x>/<y>[/T]` or `/var/folders/<x>/<y>[/T]`
         prefix however long, truncated included (`TMP_ROOT_RE`), plus the dashed shape.
     Longer literals are replaced first so a `/private`-prefixed path never degrades to `/private~`.
-    Idempotent (masks are never re-matched); self-tested."""
+    Idempotent (masks are never re-matched); self-tested. The literal list is `scrub_literals()` —
+    shared with `scrub_residue`, so the guard checks exactly the spellings the scrub masks."""
+    for needle, mask in scrub_literals():
+        text = text.replace(needle, mask)
+    text = TMP_ROOT_RE.sub("$TMPDIR", text)
+    text = TMP_ROOT_DASHED_RE.sub("-TMPDIR", text)
+    text = re.sub(r'("shot": ")<repo>/', r"\1", text)
+    return text
+
+
+def scrub_literals() -> list[tuple[str, str]]:
+    """The exact (needle, mask) literals `scrub_report_text` replaces, longest first: the operator's
+    home (plain, `/private`-prefixed, `Path.home()`), this checkout's root (both spellings and their
+    dashed forms), the per-user temp root (both spellings and the dashed CLI-seat spelling of each).
+    Filtered here — never a bare `/`, `/tmp` or their dashed forms, never a needle of ≤ 8 chars — so
+    the scrub and the residue guard agree on what counts. Derived from the constants, never typed."""
     import tempfile
     tmp_root = tempfile.gettempdir().rstrip("/")
     dashed = tmp_root.replace("/", "-")  # the CLI seats' project-dir spelling of a cwd (`-private-var-folders-…-T-…`)
@@ -5557,13 +5619,22 @@ def scrub_report_text(text: str) -> str:
         (f"/private{tmp_root}", "$TMPDIR"), (tmp_root, "$TMPDIR"),
         (f"-private{dashed}", "-TMPDIR"), (dashed, "-TMPDIR"),
     ]
-    for needle, mask in sorted(dict.fromkeys(literals), key=lambda kv: -len(kv[0])):
-        if needle and needle not in ("/", "/tmp", "/private/tmp", "-tmp", "-private-tmp") and len(needle) > 8:
-            text = text.replace(needle, mask)
-    text = TMP_ROOT_RE.sub("$TMPDIR", text)
-    text = TMP_ROOT_DASHED_RE.sub("-TMPDIR", text)
-    text = re.sub(r'("shot": ")<repo>/', r"\1", text)
-    return text
+    return [
+        (needle, mask) for needle, mask in sorted(dict.fromkeys(literals), key=lambda kv: -len(kv[0]))
+        if needle and needle not in ("/", "/tmp", "/private/tmp", "-tmp", "-private-tmp") and len(needle) > 8
+    ]
+
+
+# The two macOS temp-root SHAPES (`TMP_ROOT_RE` / `TMP_ROOT_DASHED_RE`) as residue substrings, and the one
+# degraded form the scrub must never produce (a `/private`-prefixed home masked AFTER its plain spelling).
+RESIDUE_SHAPES = ("/var/folders/", "-var-folders-", "/private~")
+
+
+def scrub_residue(text: str) -> list[str]:
+    """Every spelling that must NOT survive in a scrubbed artifact, found in `text` (Copilot on #211):
+    each needle of `scrub_literals()` — so the dashed temp-root and repo-root spellings are checked with
+    the same constants the scrub uses, never hand-typed — plus `RESIDUE_SHAPES`. Empty means clean."""
+    return [n for n, _ in scrub_literals() if n in text] + [s for s in RESIDUE_SHAPES if s in text]
 
 
 # What the isolation scan's `files_modified_during_run` / `modified_sample` ARE (Copilot on #211): the
@@ -5636,14 +5707,16 @@ def scrub_report_json(report: object) -> bool:
 def rescrub_report_file(path: Path) -> dict:
     """Apply the current scrub to an EXISTING report file in place (no re-run): `scrub_report_text`
     over the text, then `scrub_report_json` over the parsed document, re-serialized exactly as
-    `--report-out` writes it (`json.dumps(indent=2)` + newline). The JSON must still parse and no raw
-    temp-root / repo-root / home spelling may survive. A deterministic re-derivation — a second pass
-    is a no-op. Returns what changed."""
+    `--report-out` writes it (`json.dumps(indent=2)` + newline). The JSON must still parse and NO
+    spelling the scrub masks may survive — plain, `/private`-prefixed or dashed temp root / repo root /
+    home (`scrub_residue`, the scrub's own literal list) — nor the two temp-root shapes or the degraded
+    `/private~`; residue raises BEFORE anything is written (fail closed). A deterministic
+    re-derivation — a second pass is a no-op. Returns what changed."""
     before = path.read_text(encoding="utf-8")
     report = json.loads(scrub_report_text(before))  # a scrub must never corrupt the artifact
     scrub_report_json(report)
     after = json.dumps(report, indent=2, default=str) + "\n"
-    residue = [n for n in (str(REPO), "/var/folders/", str(REAL_HOME)) if n in after]
+    residue = scrub_residue(after)
     if residue:
         raise RuntimeError(f"scrub left residue: {residue}")
     if after != before:
