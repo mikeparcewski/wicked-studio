@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.1",
   "counts": {
-    "files": 129,
-    "occurrences": 1041,
-    "static": 885,
+    "files": 130,
+    "occurrences": 1042,
+    "static": 886,
     "dynamic": 56,
     "computed": 6
   },
@@ -3018,13 +3018,19 @@
     {
       "testId": "project-campaigns",
       "files": [
-        "src/App.tsx"
+        "src/components/ProjectCampaignsView.tsx"
       ]
     },
     {
       "testId": "project-campaigns-back",
       "files": [
-        "src/App.tsx"
+        "src/components/ProjectCampaignsView.tsx"
+      ]
+    },
+    {
+      "testId": "project-campaigns-crumb",
+      "files": [
+        "src/components/ProjectCampaignsView.tsx"
       ]
     },
     {

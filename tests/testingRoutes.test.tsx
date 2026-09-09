@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useRoute } from '../src/hooks/useRoute.js';
 import { useTestingRedirect } from '../src/hooks/useLegacyRedirect.js';
-import { TESTING_PAGES } from '../src/api/testing.js';
+import { readLaunchIntent, TESTING_PAGES, testingLaunchPath, testingPath } from '../src/api/testing.js';
 
 /**
  * The Testing routes (the testing wave; landing re-aimed by the testing-UX wave):
@@ -108,5 +108,26 @@ describe('useTestingRedirect', () => {
     renderHook(() => useTestingRedirect('testing', 'campaigns', '/testing/campaigns/c-42', navigate));
     renderHook(() => useTestingRedirect('steering', null, '/steering', navigate));
     expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('the landing\'s ?new= arrival intent (#203) — testingLaunchPath / readLaunchIntent', () => {
+  it('spells the two intents in USER words on the landing\'s route: ?new=test and ?new=recon', () => {
+    expect(testingLaunchPath('campaign')).toBe(`${testingPath('campaigns')}?new=test`);
+    expect(testingLaunchPath('recon')).toBe(`${testingPath('campaigns')}?new=recon`);
+  });
+
+  it('reads back exactly what it spells — and the route parse still lands on the landing', () => {
+    for (const intent of ['campaign', 'recon'] as const) {
+      const url = new URL(testingLaunchPath(intent), 'http://studio.test');
+      expect(readLaunchIntent(url.search)).toBe(intent);
+      expect(routeAt(url.pathname).current).toMatchObject({ panel: 'testing', testingPage: 'campaigns', campaignId: null });
+    }
+  });
+
+  it('an absent, bare, foreign or backend-worded ?new= opens NOTHING — a mangled bookmark shows the landing', () => {
+    for (const search of ['', '?v=2', '?new=', '?new=bogus', '?new=campaign', '?new=Test']) {
+      expect(readLaunchIntent(search)).toBeNull();
+    }
   });
 });

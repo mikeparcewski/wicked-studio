@@ -11,8 +11,10 @@ import {
   type EvalReport,
   type EvalResult,
   type EvalSample,
+  type LaunchIntent,
   type TestingSubPage,
 } from '../api/testing.js';
+import type { Navigate } from '../hooks/useRoute.js';
 import { useEvalReportStore } from '../store/evalReport.js';
 import { CampaignScoreboard } from './CampaignScoreboard.js';
 import { CampaignsPage } from './CampaignsPage.js';
@@ -473,13 +475,15 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
 
 // ── The page ──────────────────────────────────────────────────────────────────────────────────
 
-export function TestingPage({ page, campaignId, runs, navigate }: {
+export function TestingPage({ page, campaignId, runs, navigate, launchIntent = null }: {
   page: TestingSubPage;
   /** Non-null only on `/testing/campaigns/:id` — renders that campaign's scoreboard. */
   campaignId: string | null;
   /** The board's live run list — the campaign landing + scoreboard read live status from it. */
   runs: SessionView[];
-  navigate: (path: string) => void;
+  navigate: Navigate;
+  /** The landing's `?new=` arrival intent (`readLaunchIntent(search)`) — opens that launch panel. */
+  launchIntent?: LaunchIntent | null;
 }): React.ReactElement {
   return (
     <div data-testid="testing-page" data-testing-page={page} className="flex flex-col">
@@ -497,7 +501,7 @@ export function TestingPage({ page, campaignId, runs, navigate }: {
         campaignId !== null ? (
           <CampaignScoreboard campaignId={campaignId} runs={runs} navigate={navigate} />
         ) : (
-          <CampaignsPage runs={runs} navigate={navigate} />
+          <CampaignsPage runs={runs} navigate={navigate} launchIntent={launchIntent} />
         )
       ) : (
         <div className="max-w-5xl px-6 py-4">

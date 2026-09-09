@@ -14,7 +14,7 @@ import { humanTitle } from './runIdentity.js';
  *   gate         → Open gate › (the run's approval dock — `…#gate`)
  *   failed run   → Retry › (Retry-as-prefill: deposits, navigates, POSTS NOTHING)
  *   repo graph   → Re-index › (the same prefill idiom) / Open repo ›
- *   campaign     → Open campaign ›
+ *   campaign     → Open test › (the engine campaign, rendered in Test vocabulary — #203)
  *   stalled chat → Open chat ›
  *
  * THE CONTRADICTION GUARD IS STRUCTURAL: this component receives the fold's

@@ -191,8 +191,8 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
     return (
       <div data-testid="campaign-notfound" style={{ padding: '32px', color: 'var(--ink-muted)' }}>
         <p style={{ marginBottom: '12px' }}>
-          No campaign is filed under <b style={{ color: 'var(--ink-high)' }}>{campaignId}</b> on
-          this daemon — a campaign appears with its first run, so this label either never
+          No test is filed under <b style={{ color: 'var(--ink-high)' }}>{campaignId}</b> on
+          this daemon — a test appears with its first run, so this label either never
           launched one or lives on another daemon.
         </p>
         <button
@@ -200,7 +200,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
           onClick={() => navigate(testingPath('campaigns'))}
           style={{ color: 'var(--status-run)', textDecoration: 'underline' }}
         >
-          All campaigns
+          All tests
         </button>
       </div>
     );
@@ -215,7 +215,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
   if (campaign === null) {
     return (
       <div data-testid="campaign-loading" style={{ padding: '32px', color: 'var(--ink-muted)' }}>
-        Loading campaign {campaignId}…
+        Loading test {campaignId}…
       </div>
     );
   }
@@ -409,7 +409,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                     {row.kind === 'attached' && (
                       <span
                         style={{ marginLeft: '8px', color: 'var(--ink-dim)', fontSize: 'var(--text-xs)' }}
-                        title="Filed onto this campaign at launch — not a DAG node; the campaign never schedules, gates or cancels it."
+                        title="Filed onto this test at launch — not a DAG node; the test never schedules, gates or cancels it."
                       >
                         attached
                       </span>

@@ -59,6 +59,36 @@ export function campaignPath(id: string): string {
   return `${testingPath('campaigns')}/${encodeURIComponent(id)}`;
 }
 
+// ── The landing's arrival intent (client route vocabulary, not a wire) ────────────────────────
+
+/** The two launch panels the Test landing serves — `recon` ("Run recon") and `campaign` ("New
+ *  test"; the key stays the backend's grouping noun, the display is Test). */
+export type LaunchIntent = 'recon' | 'campaign';
+
+/**
+ * `?new=<word>` on the Test landing opens that intent's launch panel on arrival — the rail's ＋
+ * ("New Test") and its "Run recon" row ride it, so a create affordance actually creates instead
+ * of landing on a page with nothing open (wicked-studio#203). The words are the USER-facing
+ * vocabulary (`test`, never the backend's `campaign`); the landing consumes the query once it
+ * has opened the panel, so a second click from the landing itself re-fires.
+ */
+const LAUNCH_INTENT_PARAM = 'new';
+const LAUNCH_INTENT_WORD: Record<LaunchIntent, string> = { campaign: 'test', recon: 'recon' };
+
+/** The Test landing's address with `intent`'s launch panel pre-opened. */
+export function testingLaunchPath(intent: LaunchIntent): string {
+  return `${testingPath('campaigns')}?${LAUNCH_INTENT_PARAM}=${LAUNCH_INTENT_WORD[intent]}`;
+}
+
+/** The launch intent a `location.search` string carries, or `null` — an absent, bare or
+ *  foreign `?new=` opens nothing (a mangled bookmark shows the landing, not a panel). */
+export function readLaunchIntent(search: string): LaunchIntent | null {
+  const raw = new URLSearchParams(search).get(LAUNCH_INTENT_PARAM);
+  if (raw === null) return null;
+  const hit = (Object.keys(LAUNCH_INTENT_WORD) as LaunchIntent[]).find((k) => LAUNCH_INTENT_WORD[k] === raw);
+  return hit ?? null;
+}
+
 // ── The testing/campaign LAUNCH wire (the multi-codebase pin) ─────────────────────────────────
 
 /**
@@ -314,4 +344,4 @@ export function isTestingUnsupported(e: unknown): boolean {
 
 /** The honest in-band copy for {@link isTestingUnsupported} refusals. */
 export const TESTING_UNSUPPORTED_COPY =
-  'This daemon cannot run steering evals — the embedded engine predates the eval bindings (requires core-ts 0.7.5). The Campaigns surface still works.';
+  'This daemon cannot run steering evals — the embedded engine predates the eval bindings (requires core-ts 0.7.5). The Test surface still works.';

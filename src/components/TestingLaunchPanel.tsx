@@ -6,6 +6,7 @@ import {
   launchedRunIds,
   MULTI_SCOPE_UNSUPPORTED_COPY,
   testingPath,
+  type LaunchIntent,
   type TestingLaunchBody,
   type TestingLaunchResult,
 } from '../api/testing.js';
@@ -51,7 +52,9 @@ export const TEST_PROBLEM_PREFIX =
   'approved plan as governed sibling runs under one test. Present the plan at the ' +
   'intake gate and launch nothing until it is approved.';
 
-export type LaunchIntent = 'recon' | 'campaign';
+// The intent vocabulary lives with the route helpers (`testingLaunchPath` / `readLaunchIntent`
+// in `../api/testing.ts`); re-exported here so the panel's callers read one name.
+export type { LaunchIntent };
 
 const INTENT_COPY: Record<LaunchIntent, { title: string; blurb: string; cta: string; prefix: string }> = {
   recon: {
@@ -423,12 +426,12 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
           </div>
           <p className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>
             Each sibling stops at its own intake gate — gates surface everywhere gates do, and
-            the campaign&rsquo;s progress lands on this page.
+            the test&rsquo;s progress lands on this page.
           </p>
         </div>
       ) : resolved ? (
         <p data-testid="testing-launch-resolved" className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-          Intake gate answered — the campaign&rsquo;s progress lands on{' '}
+          Intake gate answered — the test&rsquo;s progress lands on{' '}
           <button
             type="button"
             data-testid="testing-launch-to-campaigns"
@@ -436,7 +439,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
             className="underline"
             style={{ color: 'var(--accent)' }}
           >
-            Campaigns
+            Tests
           </button>
           , and the run itself is at{' '}
           <button
@@ -456,7 +459,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
         </p>
       ) : (
         // The intake gate — the EXISTING gate card, reused verbatim. Approving (optionally
-        // with steer text) is what launches the proposed campaign; rejecting launches nothing.
+        // with steer text) is what launches the proposed test; rejecting launches nothing.
         <SteeringGate
           runId={gateRunId!}
           ord={gate.ord}

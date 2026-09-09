@@ -274,7 +274,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       kind: 'campaign',
       severity: SEVERITY.campaign,
       subject: c.def.name !== '' ? c.def.name : c.id,
-      text: `Campaign gaps — ${bits.join(' · ')} (${surplus} beyond the list below)`,
+      text: `Test gaps — ${bits.join(' · ')} (${surplus} beyond the list below)`,
       tone: n.awaitingHuman > 0 ? 'gate' : 'fail',
       // The engine campaign carries no clocks — age unknown, said honestly.
       at: null,
@@ -282,7 +282,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       action: {
         kind: 'open',
         path: `/testing/campaigns/${encodeURIComponent(c.id)}`,
-        label: 'Open campaign ›',
+        label: 'Open test ›',
       },
     });
   }

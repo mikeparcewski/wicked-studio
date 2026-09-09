@@ -6,7 +6,7 @@ import { ChatsPage } from './components/ChatsPage.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { HomeBoard } from './components/HomeBoard.js';
 import { MadeDashboard } from './components/MadeDashboard.js';
-import { CampaignsPage } from './components/CampaignsPage.js';
+import { ProjectCampaignsView } from './components/ProjectCampaignsView.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
@@ -50,7 +50,7 @@ import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
-import { isTestingSubPage } from './api/testing.js';
+import { isTestingSubPage, readLaunchIntent } from './api/testing.js';
 import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
 import { useNotifPrefsStore } from './store/notifPrefs.js';
@@ -460,41 +460,11 @@ export function App(): React.ReactElement {
         </ProjectShell>
       );
     }
-    // `/p/:projectId/campaigns` (nav-reorg): the project-scoped Campaigns surface — the
-    // campaign scoreboard/list re-homed under the project shell. A campaign is a DAG workload,
-    // not a project, so this is a project-scoped VIEW (mode stays null — the ModeSwitcher's
-    // four verbs are untouched), reached from the project dashboard. The campaign store is not
-    // project-partitioned on the wire yet, so the surface renders the full campaign command
-    // surface framed by the project context; true per-project scoping is a data-layer follow-up.
+    // `/p/:projectId/campaigns` (nav-reorg): the project-scoped Test surface — the test landing
+    // re-homed under the project shell as a project-scoped VIEW (mode stays null), reached from
+    // the project dashboard. See `ProjectCampaignsView` for the scoping caveats.
     if (projectId !== null && campaignsView) {
-      return (
-        <div className="flex-1 overflow-y-auto" data-testid="project-campaigns" data-project-id={projectId}>
-          <div
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '10px 24px 0', flexShrink: 0,
-            }}
-          >
-            <button
-              type="button"
-              data-testid="project-campaigns-back"
-              onClick={() => navigate(`/p/${encodeURIComponent(projectId)}`)}
-              title="Back to the project dashboard"
-              style={{
-                background: 'transparent', border: 'none', color: 'var(--ink-dim)', cursor: 'pointer',
-                fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)', padding: 0,
-              }}
-            >
-              ‹ Project
-            </button>
-            <span aria-hidden style={{ color: 'var(--ink-dim)', fontSize: 'var(--text-xs)' }}>›</span>
-            <span style={{ color: 'var(--ink-high)', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)' }}>
-              Campaigns
-            </span>
-          </div>
-          <CampaignsPage runs={runs} navigate={navigate} projectId={projectId} />
-        </div>
-      );
+      return <ProjectCampaignsView projectId={projectId} runs={runs} navigate={navigate} />;
     }
     // `/p/:projectId` with NO mode segment is the PROJECT DASHBOARD (DES-FEEDBACK-001
     // §4.1, slice D) — context before actions, replacing the last-used-mode redirect.
@@ -629,6 +599,8 @@ export function App(): React.ReactElement {
             campaignId={campaignId}
             runs={runs}
             navigate={navigate}
+            // The landing's `?new=` arrival intent (the rail's ＋ / Run recon row — #203).
+            launchIntent={readLaunchIntent(search)}
           />
         </div>
       );
