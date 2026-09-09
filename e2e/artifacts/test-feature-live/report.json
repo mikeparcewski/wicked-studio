@@ -202,7 +202,7 @@
      3
     ],
     "plan": {
-     "chars": 20862,
+     "chars": 16347,
      "real_files": [
       "e2e/studio_standalone_test.py",
       "src/api/campaigns.ts",
@@ -246,10 +246,6 @@
       "CI (`ci.yml`) = lint \u00b7 typecheck \u00b7 test \u00b7 build, no daemon, no crew checkout \u2014 deliberately decoupled (RAID R-01/R-02)",
       "A live `wicked-crew` daemon **is** reachable right now at `:7701` (v0.7.25) \u2014 and it's tracking this very session as a r",
       "*Key gap found**: `e2e/studio_standalone_test.py` (the one operator-run functional gate, per TEST-001 \u00a74) still asserts ",
-      "~/.pi/agent/skills/wicked-vault-verify-evidence/SKILL.md",
-      "~/.pi/agent/skills/wicked-vault-cross-check-evidence/SKILL.md",
-      "~/.pi/agent/skills/wicked-testing-scenario-executor/SKILL.md",
-      "~/.pi/agent/skills/wicked-testing-incident-to-scenario-synthesizer/SKILL.md",
       "**#8** 1440\u00d7700 layout budget \u2014 needs Playwright viewport assertion; not jsdom-testable.",
       "**#10** `e2e/studio_standalone_test.py` (3151 lines) still asserts the **pre-rebuild** DES-MERGE-001 surface (project sh",
       "*No CLI bin** \u2014 `package.json` has no `bin` field (studio is a pure SPA). \"Entry points\" here means npm scripts (`dev`/`",
@@ -1619,7 +1615,7 @@
      3
     ],
     "plan": {
-     "chars": 8070,
+     "chars": 8252,
      "real_files": [
       "e2e/studio_standalone_test.py",
       "src/App.tsx",
@@ -2952,7 +2948,7 @@
      3
     ],
     "plan": {
-     "chars": 18500,
+     "chars": 13985,
      "real_files": [
       "e2e/studio_standalone_test.py",
       "e2e/ux_sliceR_test.py",
@@ -2999,10 +2995,6 @@
       "**`tests/`** \u2014 220+ Vitest specs (jsdom), covering zustand stores, API client parsing, and component behavior. Includes ",
       "`interactive_wire_contract_test.py` \u2014 spawns a real `wicked-interactive` bridge from a sibling checkout; asserts studio'",
       "Standard gates: `npm run lint`, `npm run typecheck`, `npm run build` \u2014 all deterministic, all required to merge per CI m",
-      "~/.pi/agent/skills/wicked-vault-verify-evidence/SKILL.md",
-      "~/.pi/agent/skills/wicked-vault-cross-check-evidence/SKILL.md",
-      "~/.pi/agent/skills/wicked-testing-scenario-executor/SKILL.md",
-      "~/.pi/agent/skills/wicked-testing-incident-to-scenario-synthesizer/SKILL.md",
       "*Gaps to decide on before launch**: (1) `useEventStream.ts` has no direct unit test \u2014 recommend adding one; (2) confirm "
      ],
      "surfaces": {
@@ -4191,9 +4183,9 @@
      "R-02"
     ],
     "ids_b": [],
-    "scenario_titles_overlap_pct": 25.0,
-    "titles_a": 12,
-    "titles_b": 8,
+    "scenario_titles_overlap_pct": 0.0,
+    "titles_a": 8,
+    "titles_b": 4,
     "units_planned": [
      3,
      3

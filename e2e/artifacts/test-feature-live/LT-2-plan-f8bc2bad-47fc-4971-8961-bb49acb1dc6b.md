@@ -12,6 +12,8 @@ POST body:
 
 ## unit 1
 
+_verbatim from `GET /runs/:id/units/1/output` — 653 chars_
+
 I don't see an actual scope attached to this message — I only have the worktree layout and the external-transform convention note, but no description of the feature/change/PR that needs test scenarios planned.
 
 Could you point me to the actual scope? For example:
@@ -22,6 +24,8 @@ Could you point me to the actual scope? For example:
 Once I know what's being tested, I can break it into scenarios, mark dependencies, classify each as a deterministic tool check vs. a governed agent run, and then execute the approved plan as governed sibling runs under one test.
 
 ## unit 2
+
+_verbatim from `GET /runs/:id/units/2/output` — 1872 chars_
 
 I confirmed the prior phase's finding independently. There is no scope to plan against.
 
@@ -48,6 +52,8 @@ Once I have a subject, I'll break it into scenarios, mark inter-scenario depende
 No `ASSUMPTION[external-transform]` lines apply — there is no work being reasoned about yet.
 
 ## unit 3
+
+_verbatim from `GET /runs/:id/units/3/output` — 5508 chars_
 
 I'll survey the actual source tree to find the real files behind each area before drafting the plan.## Survey result
 

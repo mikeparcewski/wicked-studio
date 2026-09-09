@@ -101,10 +101,29 @@ def log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", file=sys.stderr, flush=True)
 
 
+# A worker listing its own toolchain: `- ~/.pi/agent/skills/x/SKILL.md`, `- ~/.claude/skills/y`…
+# Environment-specific, not evidence — runs of them collapse to one elision marker.
+TOOLCHAIN_LINE = re.compile(r"^\s*(?:[-*]\s*)?`?~/\.[A-Za-z0-9_-]+/\S*`?\s*$")
+
+
 def scrub(text: str) -> str:
     """Worker output and daemon DTOs carry absolute paths under the operator's home — the
-    committed artifacts must not (privacy): fold them onto `~`."""
-    return text.replace(os.path.expanduser("~"), "~")
+    committed artifacts must not (privacy): fold them onto `~`, then elide any run of lines that
+    is nothing but a home-relative toolchain path (a seat enumerating its installed skills)."""
+    folded = text.replace(os.path.expanduser("~"), "~")
+    out: list[str] = []
+    run = 0
+    for line in folded.split("\n"):
+        if TOOLCHAIN_LINE.match(line):
+            run += 1
+            continue
+        if run:
+            out.append(f"- … ({run} local toolchain path{'s' if run != 1 else ''} elided)")
+            run = 0
+        out.append(line)
+    if run:
+        out.append(f"- … ({run} local toolchain path{'s' if run != 1 else ''} elided)")
+    return "\n".join(out)
 
 
 def finding(text: str) -> None:
@@ -180,19 +199,38 @@ def acceptance(run_id: str) -> dict | None:
 # ── Preflight (the serialization + capacity gate) ─────────────────────────────────────────────
 
 
+def _probe(argv: list[str]) -> str:
+    """Run a preflight probe; a missing command is a failed preflight with a named cause, not a
+    traceback."""
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, check=True).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        raise SystemExit(f"preflight probe `{' '.join(argv)}` unavailable ({e}) — the capacity gate "
+                         "reads macOS vm_stat/sysctl; run this harness on the macOS dogfood host") from e
+
+
+def _field(pattern: str, text: str, what: str) -> str:
+    m = re.search(pattern, text)
+    if not m:
+        raise SystemExit(f"preflight could not read {what}: /{pattern}/ did not match:\n{text[:300]}")
+    return m.group(1)
+
+
 def readings() -> dict:
-    out = subprocess.run(["vm_stat"], capture_output=True, text=True).stdout
-    pg = int(re.search(r"page size of (\d+)", out).group(1))  # type: ignore[union-attr]
+    if sys.platform != "darwin":
+        raise SystemExit(f"the capacity gate is macOS-only (vm_stat / sysctl vm.*); this is {sys.platform} — "
+                         "run the harness on the dogfood host, or port readings() before running here")
+    out = _probe(["vm_stat"])
+    pg = int(_field(r"page size of (\d+)", out, "the vm_stat page size"))
 
     def pages(k: str) -> int:
         m = re.search(rf"{k}:\s+(\d+)", out)
         return int(m.group(1)) * pg if m else 0
 
-    load = float(subprocess.run(["sysctl", "-n", "vm.loadavg"], capture_output=True, text=True)
-                 .stdout.strip("{} \n").split()[0])
-    sw = subprocess.run(["sysctl", "-n", "vm.swapusage"], capture_output=True, text=True).stdout
-    total = float(re.search(r"total = ([\d.]+)M", sw).group(1))  # type: ignore[union-attr]
-    used = float(re.search(r"used = ([\d.]+)M", sw).group(1))  # type: ignore[union-attr]
+    load = float(_probe(["sysctl", "-n", "vm.loadavg"]).strip("{} \n").split()[0])
+    sw = _probe(["sysctl", "-n", "vm.swapusage"])
+    total = float(_field(r"total = ([\d.]+)M", sw, "swap total"))
+    used = float(_field(r"used = ([\d.]+)M", sw, "swap used"))
     try:
         active = [r["session"]["id"] for r in list_runs() if r["session"]["status"] in ACTIVE]
     except Exception as e:  # the daemon being unreachable is itself a failed preflight
@@ -563,7 +601,15 @@ def drive_intake(tag: str, intent: str) -> dict:
             o = unit_output(run_id, u["ord"])
             if o:
                 outputs[u["ord"]] = o
-        plan_text = "\n\n".join(f"## unit {k}\n\n{v}" for k, v in sorted(outputs.items()))
+        # Each unit's output is committed VERBATIM from GET /runs/:id/units/:ord/output (after
+        # scrub) with its length, so a truncated or mid-sentence ending is attributable to the
+        # daemon's captured output, not to this harness.
+        # Scrubbed BEFORE analysis so a seat's toolchain listing is neither committed nor counted as
+        # plan content (`…/wicked-testing-scenario-executor/SKILL.md` would read as a scenario line).
+        plan_text = scrub("\n\n".join(
+            f"## unit {k}\n\n_verbatim from `GET /runs/:id/units/{k}/output` — {len(v)} chars_\n\n{v}"
+            for k, v in sorted(outputs.items())
+        ))
         plan_path = ART / f"{tag}-plan-{run_id.replace(':', '_')}.md"
         plan_path.write_text(scrub(f"# {tag} — run {run_id} ({intent})\n\nPOST body:\n```json\n{json.dumps(post_body, indent=1)}\n```\n\n{plan_text}\n"))
         m["measured"]["plan_file"] = str(plan_path.relative_to(ROOT))
