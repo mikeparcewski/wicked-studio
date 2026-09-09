@@ -28,11 +28,16 @@ HARD RULES this harness enforces on itself:
     (4) NO heavy worker / build fan-out on the host — `fanout_processes()` reads
     `ps -axo pid=,command=`, tokenizes every command line (`shlex.split`, whitespace fallback) and
     matches on TOKENS, never on argument order (`fanout_rule`, documented in `FANOUT_RULES`): the
-    program (basename of argv[0], or of the script a runtime launcher such as `node` runs) is
-    `cargo` with build/test/clippy/run among its tokens (`cargo +stable build` included), `claude`
-    with `-p`/`--print` anywhere, `codex` with `exec`, `vitest`, `npm`/`pnpm`/`yarn` with `test` or
-    `run` + test/build, or a `wicked-crew serve` whose `--port` VALUE (`--port N` / `--port=N`, any
-    position) is not 7701 — the dogfood daemon itself (no port, or 7701) never matches.
+    program (basename of argv[0] — a `.js`/`.mjs`/`.cjs` extension stripped — or of the script a
+    runtime launcher such as `node` runs) is `cargo` with build/test/clippy/run among its tokens
+    (`cargo +stable build` included), `go` with build/test, `claude` with `-p`/`--print` anywhere,
+    `codex` with `exec`, a package runner (`npm`/`pnpm`/`yarn`/`bun`) with build/test/typecheck/
+    lint/check ANYWHERE among its tokens — with or without `run`, `test:*`/`build:*` scripts
+    included (`pnpm build`, `yarn build`, `bun test`), a direct build/test executable by basename
+    (`vite`, `tsc`, `esbuild`, `webpack`, `rollup`, `vitest`, `jest`, `playwright`, `rustc`,
+    `make`, `ninja`, `gradle`, `mvn` — `node …/vite/bin/vite.js build` included), or a
+    `wicked-crew serve` whose `--port` VALUE (`--port N` / `--port=N`, any position) is not 7701 —
+    the dogfood daemon itself (no port, or 7701), an idle `node` and `npm view x` never match.
     `FANOUT_PATTERN` (a regex) ADDS matches; it never replaces the rules. Matches are recorded in
     the reading (`fanout: ["<pid> <cmd>", …]`) and a failed `ps` is itself a failed preflight (fail
     closed) — a build outside the daemon's run list can no longer overlap a launch.
@@ -54,17 +59,29 @@ HARD RULES this harness enforces on itself:
     racing the preflight.
   * Exactly one governed run in flight at a time; the next launch waits for a terminal/gated state.
   * ONE gate policy for EVERY gate, the intake gate and every sibling's gates included
-    (`gate_decision`) — an ALLOW-LIST that fails CLOSED. A gate is approved ONLY when ALL of:
+    (`gate_decision`) — an ALLOW-LIST that fails CLOSED, applied to the COMPLETE CURRENT PROMPT
+    read from the daemon, never to the card's text: SteeringGate renders `cleanPrompt()` (the text
+    before the first `[`, the bracketed remainder folded into a disclosure), so before EVERY click
+    (intake, later gates, parent and siblings) `full_gate_prompt` reads the verbatim prompt
+    read-only — the daemon's cached open-gate record `GET /runs/:id/gate` (`GateInfo.prompt`,
+    wicked-crew-api-types 0.25.0), else the latest `awaitingHuman` event for that ord (`prompt`,
+    verbatim) — and THAT is what `gate_decision` judges; the card's headline is recorded alongside
+    (`prompt_card`, `card_consistent`) and must equal the full prompt's headline. A gate is
+    approved ONLY when ALL of:
     (a) the prompt is an allow-listed SHAPE — crew's pre-execution unit gate (`Approve unit N
     before it runs: …`) or a plan approval (`Approve [the] [proposed] [test] plan…`); (b) the gated
     unit's `stage`/`gate` (GET /runs/:id) is KNOWN and not a delivery kind (deliver / release /
     publish / merge); (c) NO delivery verb or command appears ANYWHERE in the complete prompt
     (`DELIVERY_VERB_RE`: deliver(y), push, git push, push the branch, gh pr create, open a PR /
-    pull request, merge, publish, npm/cargo publish, release, create a release). EVERYTHING ELSE
-    is REJECTED with a named reason: an empty prompt (`unreadable-gate`), SteeringGate's `Prompt
+    pull request, merge, publish, npm/cargo publish, release, create a release) — `Approve unit 4
+    before it runs: Finalize the test [gh pr create --fill]` is rejected on the bracketed command
+    the card never shows. EVERYTHING ELSE
+    is REJECTED with a named reason: a full prompt the daemon does not serve (`unreadable-gate` —
+    a clean card headline alone never approves), SteeringGate's `Prompt
     unavailable (daemon restarted)…` fallback or any other shape (`unknown-prompt-shape`), an
     unknown unit kind — lookup failed, `stage`/`gate` null (`unknown-gate-kind`), a delivery verb
-    (`delivery-verb`), a delivery kind. A plan whose body lists `/runs/:id/deliver` among the
+    (`delivery-verb`), a delivery kind, a card whose headline is not the full prompt's
+    (`card-prompt-mismatch`). A plan whose body lists `/runs/:id/deliver` among the
     routes to test is therefore rejected too — a rejected legitimate plan is a recorded finding;
     an approved delivery is not recoverable. Every decision is clicked on
     the UI card and its WIRE is verified: the response must be a POST to exactly
@@ -72,8 +89,8 @@ HARD RULES this harness enforces on itself:
     status must be 2xx — anything else is a finding and `harness_ok=false` (`gate-wire-mismatch`;
     a SIBLING gate's wire failure is `sibling-gate-wire-mismatch`, judged the same way).
     Every decision is recorded in the scenario's `measured.gates[]` (or the sibling's `gates[]`)
-    with the prompt excerpt, the unit's stage/gate, the reason and the wire check. Sibling gates
-    are decided on `/runs/<sibling id>` — never the API.
+    with the complete prompt (excerpt), its source, the card's headline, the unit's stage/gate,
+    the reason and the wire check. Sibling gates are decided on `/runs/<sibling id>` — never the API.
   * Never registers/modifies/deletes repos or projects; read-only GETs for every assertion.
   * Never kills a wedged run (no events for 10 min while executing) — it is reported.
   * Evidence fetches that FAIL (non-2xx, transport error) are typed misses recorded in
@@ -92,12 +109,19 @@ the attributable set is REDISCOVERED on every poll of `follow_siblings` (runs + 
 `attribute_siblings` re-run, newly attributable runs added and followed), finishing only when the
 set has been stable for two polls AND every member is terminal; `SIBLING_FOLLOW_MAX_S` elapsing
 first is recorded (`timed_out`) and the scenario cannot `pass`.
-report.json is written atomically (unique temp file + rename, contained under the artifacts dir,
-never through a symlink — every path component from the repo root down is `lstat`-checked) after
-every scenario and on every exit path (an abort is recorded in `aborted`). The artifacts root
-itself is component-walked BEFORE anything is created (`ensure_artifact_root`, the first thing
-`main()` does) — a symlinked `e2e/artifacts` refuses startup instead of planting a directory
-outside the repository.
+EVERY artifact — report.json, the captured plans, the screenshots — lands through ONE writer
+(`write_artifact`) that is safe against a symlink swapped in AFTER validation: the target is
+component-walked (`lstat` from the repo root down) and contained, then the verified directory is
+opened `O_RDONLY | O_DIRECTORY | O_NOFOLLOW` and its identity checked (`fstat` == `lstat`), the
+data is written to a unique temp name created `O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW` via
+`dir_fd=`, `fsync`ed and `os.rename`d onto the final name with `src_dir_fd=dst_dir_fd=` that
+descriptor — a directory replaced by a link between the walk and the open is refused (ELOOP), a
+link planted at the final name is replaced by the rename, never followed. Screenshots are taken
+as bytes (`page.screenshot()` without `path`) and written the same way — Playwright never writes
+a path of its own. report.json is written after every scenario and on every exit path (an abort
+is recorded in `aborted`). The artifacts root itself is component-walked BEFORE anything is
+created (`ensure_artifact_root`, the first thing `main()` does) — a symlinked `e2e/artifacts`
+refuses startup instead of planting a directory outside the repository.
 
 Usage: python3 e2e/test_feature_live.py            (playwright + chromium must be installed)
 Env:   STUDIO_URL (default http://localhost:7701), TARGET_REPO (default wicked-studio),
@@ -121,10 +145,11 @@ import fcntl
 import json
 import os
 import re
+import secrets
 import shlex
+import stat
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -167,9 +192,12 @@ LOAD1_MAX = 20
 # daemon itself (`wicked-crew serve`, no port or `--port 7701`) and an unrelated `node` never do.
 # `FANOUT_PATTERN` (a regex) only ADDS matches. Recorded in `preflight_policy.fanout_rules`.
 FANOUT_RULES = (
-    "cargo: build|test|clippy|run among its tokens (a `+toolchain` token is just another token); "
-    "claude: -p|--print anywhere; codex: exec anywhere; vitest: always; "
-    "npm|pnpm|yarn: `test`, or `run` + test|build (test:*/build:* scripts included); "
+    "cargo: build|test|clippy|run among its tokens (a `+toolchain` token is just another token); go: build|test; "
+    "claude: -p|--print anywhere; codex: exec anywhere; "
+    "npm|pnpm|yarn|bun: build|test|typecheck|lint|check ANYWHERE among the tokens, with or without `run` "
+    "(test:*/build:* scripts included — `pnpm build`, `yarn build`, `bun test`); "
+    "direct build/test executables by basename, always: vite|tsc|esbuild|webpack|rollup|vitest|jest|playwright|rustc|make|ninja|gradle|mvn "
+    "(`node …/vite/bin/vite.js build` included — a .js/.mjs/.cjs extension is stripped); "
     "wicked-crew (also via `node …/wicked-crew`): `serve` with a --port VALUE (`--port N` or `--port=N`, any position) other than 7701; "
     "the program is basename(argv[0]) or, under a runtime launcher (node, python3, sh, …), the script it runs"
 )
@@ -177,7 +205,16 @@ FANOUT_RULES = (
 # basename names a program the rules know (`node …/.bin/codex exec`, `nice -n 10 cargo clippy`).
 RUNTIME_LAUNCHERS = {"node", "nodejs", "bun", "deno", "npx", "python", "python3", "sh", "bash", "zsh", "env",
                      "nice", "caffeinate", "time", "arch"}
-KNOWN_PROGRAMS = {"cargo", "claude", "codex", "vitest", "npm", "pnpm", "yarn", "wicked-crew"}
+# Codex round 5: `pnpm build`, `yarn build` and `node …/vite/bin/vite.js build` all cleared the round-4
+# fence, which required a literal `run` token before a build script and knew no direct build executable.
+PACKAGE_RUNNERS = {"npm", "pnpm", "yarn", "bun"}
+BUILD_SCRIPT_TOKENS = {"build", "test", "typecheck", "lint", "check"}
+# Direct build/test executables — heavy by construction (a bundler, a compiler, a test runner, a build
+# system), matched by basename after the launcher look-through, whatever their arguments.
+BUILD_PROGRAMS = {"vite", "tsc", "esbuild", "webpack", "rollup", "vitest", "jest", "playwright", "rustc", "make", "ninja",
+                  "gradle", "mvn"}
+KNOWN_PROGRAMS = {"cargo", "go", "claude", "codex", "wicked-crew"} | PACKAGE_RUNNERS | BUILD_PROGRAMS
+_SCRIPT_EXT_RE = re.compile(r"\.(?:m?js|cjs|exe)$")
 DOGFOOD_PORT = "7701"
 WEDGE_S = 10 * 60
 ACTIVE = {"running", "executing", "awaiting_human", "planning", "pending", "starting"}
@@ -463,19 +500,26 @@ def _tokens(cmd: str) -> list[str]:
         return cmd.split()
 
 
+def _prog_name(token: str) -> str:
+    """A token as a program name: its basename with a `.js`/`.mjs`/`.cjs`/`.exe` extension stripped
+    (`…/vite/bin/vite.js` → `vite`, `…/.bin/codex` → `codex`)."""
+    return _SCRIPT_EXT_RE.sub("", os.path.basename(token))
+
+
 def _program(tokens: list[str]) -> tuple[str, int]:
-    """(basename of the program, index of its token): argv[0] — or, when argv[0] is only a runtime
-    launcher (`node …/.bin/codex exec`, `env FOO=1 cargo build`, `nice -n 10 cargo clippy`), the
-    first later token whose basename is a program the rules know (`KNOWN_PROGRAMS`); a launcher
-    running something else (`node /x/app.js --port 62432`, `python3 e2e/test_feature_live.py`)
-    stays the launcher, which no rule names."""
+    """(name of the program, index of its token): argv[0] — or, when argv[0] is only a runtime
+    launcher (`node …/.bin/codex exec`, `node …/vite/bin/vite.js build`, `env FOO=1 cargo build`,
+    `nice -n 10 cargo clippy`), the first later token whose name (`_prog_name`) is a program the
+    rules know (`KNOWN_PROGRAMS`); a launcher running something else (`node /x/app.js --port 62432`,
+    `python3 e2e/test_feature_live.py`, an idle `node`) stays the launcher, which no rule names —
+    except `bun`, a launcher that is also a package runner (`bun test`, `bun run build`)."""
     if not tokens:
         return "", 0
-    name = os.path.basename(tokens[0])
+    name = _prog_name(tokens[0])
     if name in RUNTIME_LAUNCHERS:
         for j in range(1, len(tokens)):
-            if os.path.basename(tokens[j]) in KNOWN_PROGRAMS:
-                return os.path.basename(tokens[j]), j
+            if _prog_name(tokens[j]) in KNOWN_PROGRAMS:
+                return _prog_name(tokens[j]), j
     return name, 0
 
 
@@ -493,9 +537,11 @@ def fanout_rule(cmd: str) -> str | None:
     """The fan-out rule this `ps` command line trips, NAMED — or None. Decided on TOKENS (see
     `FANOUT_RULES`), so argument order never matters: `cargo +stable build`,
     `claude --model opus --print task` and `wicked-crew serve --db /tmp/x --port 62432` (codex
-    round 4's probes, none of which the positional regex caught) all trip a rule; `wicked-crew
-    serve` without a port or on 7701 (the dogfood daemon), the interactive `Claude` app, `npm run
-    dev` and an unrelated `node` do not."""
+    round 4's probes, none of which the positional regex caught), `pnpm build`, `yarn build`,
+    `bun test` and `node …/vite/bin/vite.js build` (codex round 5's, which the `run`-literal fence
+    let through) all trip a rule; `wicked-crew serve` without a port or on 7701 (the dogfood
+    daemon), the interactive `Claude` app, `npm run dev`, `npm view x`, an idle `node` REPL and an
+    unrelated `node` do not."""
     tokens = _tokens(cmd)
     if not tokens:
         return None
@@ -504,16 +550,20 @@ def fanout_rule(cmd: str) -> str | None:
     argset = set(args)
     if prog == "cargo" and argset & {"build", "test", "clippy", "run"}:
         return "cargo build|test|clippy|run"
+    if prog == "go" and argset & {"build", "test"}:
+        return "go build|test"
     if prog == "claude" and argset & {"-p", "--print"}:
         return "claude -p|--print"
     if prog == "codex" and "exec" in argset:
         return "codex exec"
-    if prog == "vitest":
-        return "vitest"
-    if prog in {"npm", "pnpm", "yarn"}:
+    if prog in BUILD_PROGRAMS:
+        return f"{prog} (direct build/test executable)"
+    if prog in PACKAGE_RUNNERS:
+        # build|test|typecheck|lint|check ANYWHERE — `pnpm build` (no `run`), `npm run build:with-studio`,
+        # `bun test`, `yarn lint`; `npm view x` / `npm install` / `npm run dev` name no such script.
         scripts = {a.split(":", 1)[0] for a in args}
-        if "test" in argset or ("run" in argset and scripts & {"test", "build"}):
-            return f"{prog} test|build"
+        if scripts & BUILD_SCRIPT_TOKENS:
+            return f"{prog} build|test|typecheck|lint|check"
     if "wicked-crew" in {os.path.basename(t) for t in tokens} and "serve" in argset:
         port = _port_value(tokens)
         if port is not None and port != DOGFOOD_PORT:
@@ -855,16 +905,70 @@ def _title(text: str) -> str:
 
 
 # Execution summaries are RESULTS a worker reports, not scenarios a plan proposes. A line is a
-# result only when it carries a RESULT MARKER — a pass/fail count in summary position ("12 passed,
-# 0 failed", "2442 passed in 69s"), a ✓/✔/✗ tick, a PASS/PASSED/FAIL/FAILED verdict word, an exit
-# code, or a green/red verdict — never merely because it names a command: "Run npm run typecheck to
-# verify CLI behavior" PROPOSES a check and is a scenario. A count followed by a noun ("21 failed
-# runs ⇒ calm copy cannot render") is a fixture, not a result. Everything under an "Execution
-# verdict" heading is excluded wholesale (`plan_lines`).
-RESULT_MARKER_RE = re.compile(
-    r"\b\d+ (?:passed|failed|skipped)\b(?=\s*(?:$|[,;.)|\]*`—–-]|in\b|of\b))"  # a summary count, not "21 failed runs"
-    r"|[✓✔✗]|\bPASS(?:ED)?\b|\bFAIL(?:ED)?\b|\bexit (?:code )?\d+\b|\bgreen\b|\bred\b",
-    re.M)
+# result only when it carries a RESULT STRUCTURE, never a bare word (codex round 5: `- S-1 Verify
+# failed /runs cards render red [TOOL]` and `- S-2 Verify /runs returns a FAIL verdict [AGENT]` are
+# proposed scenarios that NAME an expected outcome; an unqualified `red`/`FAIL` match discarded
+# them). The structures (`result_marker`, per table cell / bullet body):
+#   * a tally in summary position — `N passed|failed|skipped|error(s)` followed by the end, a
+#     separator, `in` or `of` ("12 passed, 0 failed", "2442 passed in 69s"; NOT "21 failed runs ⇒ …",
+#     a fixture count);
+#   * a ✓ ✔ ✗ ✘ tick;
+#   * an exit code (`exit 1`, `exit code 0`);
+#   * PASS|PASSED|FAIL|FAILED (case-sensitive) ONLY when the cell/body STARTS with it or it follows
+#     `→` / `=>` / `:` at the END of the cell/body ("PASS — verify /steering", "npm test → FAIL");
+#   * green|red ONLY in a cell/body that also carries a tally / duration / fraction or a COMMAND
+#     (a backticked or bare `npm|pnpm|yarn|bun|npx|cargo|go|make|pytest|vitest|jest|playwright|tsc
+#     …` invocation) AND no scenario verb outside those commands (verify / assert / check / should /
+#     expect / test — "2442 tests" is a tally noun, not the verb): "`npm test` → 237 files / 2442
+#     tests green" is a result, "Verify failed /runs cards render red" is a scenario.
+# A line that merely names a command ("Run npm run typecheck to verify CLI behavior") PROPOSES a
+# check and is a scenario. Everything under an "Execution verdict" heading is excluded wholesale
+# (`plan_lines`).
+RESULT_COUNT_RE = re.compile(r"\b\d+ (?:passed|failed|skipped|errors?)\b(?=\s*(?:$|[,;.)|\]*`—–-]|in\b|of\b))")
+RESULT_TICK_RE = re.compile(r"[✓✔✗✘]")
+RESULT_EXIT_RE = re.compile(r"\bexit (?:code )?\d+\b")
+_VERDICT = r"(?:PASS|FAIL)(?:ED)?"
+RESULT_VERDICT_START_RE = re.compile(rf"^\W*{_VERDICT}\b")
+RESULT_VERDICT_END_RE = re.compile(rf"(?:→|=>|:)\s*\**{_VERDICT}\**\W*$")
+RESULT_COLOR_RE = re.compile(r"\b(?:green|red)\b", re.I)
+# What makes green/red a verdict: a tally / duration / fraction, or a command the colour reports on.
+RESULT_TALLY_RE = re.compile(
+    r"\b\d+\s+(?:tests?|files?|specs?|cases?|checks?|suites?|assertions?|passed|failed|skipped|errors?|warnings?)\b"
+    r"|\b\d+\s*/\s*\d+\b|\b\d+(?:\.\d+)?\s*(?:ms|s|sec|m|min)\b", re.I)
+_RUNNERS = r"(?:npm|pnpm|yarn|bun|npx|cargo|go|make|ninja|pytest|vitest|jest|playwright|tsc|vite|python3?|node|git|gh|curl)"
+RESULT_COMMAND_RE = re.compile(rf"`{_RUNNERS}\b[^`]*`|\b(?:npm|pnpm|yarn|bun|npx)\s+(?:run\s+)?[\w:.-]+|\b(?:cargo|go|make|pytest|vitest|jest|playwright|tsc|vite)\s+[\w:./-]+", re.I)
+_CODE_SPAN_RE = re.compile(r"`[^`]*`")
+# The scenario verbs, as VERBS: not inside a command / code span; `N tests` is the tally noun, not the verb.
+RESULT_SCENARIO_VERB_RE = re.compile(
+    r"\b(?:verif(?:y|ies|ied)|assert(?:s|ed|ing)?|check(?:s|ed|ing)?|should|expect(?:s|ed)?)\b|(?<!\d\s)\btests?(?:ed|ing)?\b", re.I)
+# A leading scenario id (`S-7`, `1.2`) is an id, not a count: stripped before the structures are judged
+# (`S-7 check …` is not the tally "7 checks"; `S-3 Expect …` keeps its verb).
+_LEAD_ID_RE = re.compile(rf"^\W*(?:{SCENARIO_ID_RE})\b\W*")
+
+
+def result_marker(item: str) -> str | None:
+    """The RESULT STRUCTURE this plan item carries, NAMED — or None when it proposes rather than
+    reports. Judged per table cell (`raw` joins cells with ` | `) / bullet body — with a leading
+    scenario id stripped — so "starts with" means the cell, not the row's number column."""
+    for seg in item.split(" | "):
+        seg = _LEAD_ID_RE.sub("", seg.strip(), count=1)
+        if RESULT_COUNT_RE.search(seg):
+            return "count"
+        if RESULT_TICK_RE.search(seg):
+            return "tick"
+        if RESULT_EXIT_RE.search(seg):
+            return "exit-code"
+        if RESULT_VERDICT_START_RE.match(seg) or RESULT_VERDICT_END_RE.search(seg):
+            return "verdict-word"
+        if RESULT_COLOR_RE.search(seg):
+            has_cmd = RESULT_COMMAND_RE.search(seg) is not None
+            has_tally = RESULT_TALLY_RE.search(seg) is not None
+            plain = _CODE_SPAN_RE.sub(" ", RESULT_COMMAND_RE.sub(" ", seg))
+            if (has_cmd or has_tally) and not RESULT_SCENARIO_VERB_RE.search(plain):
+                return "colour-verdict"
+    return None
+
+
 EXEC_SECTION_RE = re.compile(r"execution verdict", re.I)
 # The two classification vocabularies the plans use: prose (deterministic tool check vs governed
 # agent run) and tags (`[TOOL]` vs `[AGENT]`). A plan classifies when BOTH classes appear among its
@@ -877,6 +981,12 @@ SURFACE_RES = {
     "cli": re.compile(r"\bcli\b|npx |npm run|\bbin/|wicked-crew serve|command[- ]line|vite build"),
     "ui_pages": re.compile(r"/testing/campaigns|/runs/|/steering|playwright|data-testid|home deck|homecommand|leftsidebar"),
 }
+
+
+MEASURED_OVER = ("scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE — a "
+                 "summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after →/=>/:, green/red with a "
+                 "tally or a command and no scenario verb — and 'Execution verdict' sections; a proposed command or an expected "
+                 "outcome is a scenario)")
 
 
 def plan_lines(text: str) -> tuple[list[str], int]:
@@ -915,15 +1025,16 @@ def scenario_records(text: str) -> tuple[list[dict], dict]:
     * Bullet / numbered items: accepted with a leading id (`S-1`, `1.2` — a bare number is not an
       id) or a verb AND a noun in the item text.
     Headings, bold-label paragraphs, table headers/rules, table-of-contents lines, toolchain paths
-    and execution RESULTS (an item carrying a `RESULT_MARKER_RE` marker; "Execution verdict"
-    sections) are none of these — an item that merely names a command is a proposed check."""
+    and execution RESULTS (an item carrying a result STRUCTURE — `result_marker`; "Execution
+    verdict" sections) are none of these — an item that merely names a command, or an expected
+    outcome ("Verify failed /runs cards render red"), is a proposed check."""
     records: list[dict] = []
     lines, section_lines = plan_lines(text)
     excluded = {"execution_section_lines": section_lines, "execution_summary_items": 0}
     header: list[str] | None = None
 
     def accept(title: str, lead_id: str | None, raw: str) -> None:
-        if RESULT_MARKER_RE.search(raw):
+        if result_marker(raw):
             excluded["execution_summary_items"] += 1
             return
         records.append({"title": title, "id": lead_id, "raw": re.sub(r"\s+", " ", raw).strip()})
@@ -1005,7 +1116,7 @@ def analyze_plan(text: str, index: RepoIndex | None = None) -> dict:
         "scenario_ids": ids,
         "scenario_lines": scenario_lines,
         "excluded": excluded,
-        "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections — a proposed command is a scenario)",
+        "measured_over": MEASURED_OVER,
         "surfaces": {k: bool(rx.search(low)) for k, rx in SURFACE_RES.items()},
     }
 
@@ -1202,30 +1313,109 @@ def gate_wire_check(entry: dict, run_id: str) -> str | None:
     return "; ".join(problems) or None
 
 
-def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict | None, tag: str,
-                        first: bool, prompt: str | None = None) -> dict:
-    """Read the prompt on a rendered SteeringGate card, decide (`gate_decision` with the unit's
-    stage/gate), click the matching button, wait for the POST to EXACTLY this run's gate endpoint
-    and verify the wire (`gate_wire_check`: endpoint, body.approve == decision, 2xx) — a mismatch,
-    or no such POST within 60 s, is a finding and `wire_ok: false` (`harness_ok=false`,
-    `gate-wire-mismatch`). Returns the `gates[]` entry. Every gate the harness answers — intake,
-    later, sibling — goes through here."""
-    if prompt is None:
+def card_headline(prompt: str | None) -> str:
+    """What SteeringGate shows for `prompt`: `cleanPrompt()` — the text before the first `[`,
+    trimmed (the bracketed remainder is folded into a "why this gate fired" disclosure the
+    `steering-prompt` element never carries) — whitespace-normalized like `inner_text()`."""
+    text = prompt or ""
+    i = text.find("[")
+    return re.sub(r"\s+", " ", text if i == -1 else text[:i]).strip()
+
+
+def gate_prompt_from_events(events: list[dict], ord_: int | None) -> tuple[str | None, str]:
+    """(the verbatim `prompt` of the LATEST `awaitingHuman` event for `ord_` — any ord when None —
+    or None, why)."""
+    aw = [e for e in events if isinstance(e, dict) and e.get("type") == "awaitingHuman" and (ord_ is None or e.get("ord") == ord_)]
+    for e in reversed(aw):
+        p = e.get("prompt")
+        if isinstance(p, str) and p.strip():
+            return p, f"awaitingHuman event (ord {e.get('ord')}, seq {e.get('seq')})"
+    return None, (f"no awaitingHuman event for ord {ord_} carries a prompt" if aw else f"no awaitingHuman event for ord {ord_}")
+
+
+def full_gate_prompt(run_id: str, ord_: int | None, events: list[dict] | None = None) -> tuple[str | None, str]:
+    """The COMPLETE, CURRENT gate prompt for `run_id`, read from the daemon (read-only) — never the
+    card's `cleanPrompt()` headline: (prompt, source), or (None, why) when it cannot be read.
+      1. `GET /runs/:id/gate` — the daemon's cached open-gate record (`GateInfo {runId, ord, prompt,
+         …}`, wicked-crew-api-types 0.25.0; studio's own late-join reconcile) — accepted when its
+         `prompt` is a non-empty string and its `ord` is the gated ord (a 404 is the daemon's
+         "nothing pending", any other failure is a recorded typed miss);
+      2. else the latest `awaitingHuman` event for that ord (`events`, or `GET /runs/:id/events`) —
+         the CoreEvent's `prompt` is the verbatim text SteeringGate was handed.
+    A prompt neither source serves is UNREADABLE — `gate_decision` rejects it (`unreadable-gate`)
+    however clean the card looks."""
+    path = f"/runs/{enc(run_id)}/gate"
+    status, body = _fetch(path)
+    if 200 <= status < 300 and isinstance(body, dict):
+        p = body.get("prompt")
+        if isinstance(p, str) and p.strip() and (ord_ is None or body.get("ord") == ord_):
+            return p, "GET /runs/:id/gate (GateInfo.prompt, the daemon's cached open-gate record)"
+        why_gate = f"GET /runs/:id/gate answered ord {body.get('ord')!r} with {'an empty' if not (isinstance(p, str) and p.strip()) else 'a'} prompt"
+    elif status == 404:
+        why_gate = "GET /runs/:id/gate → 404 (no cached gate)"
+    elif not 200 <= status < 300:
+        record_fetch_error(path, status, body)
+        why_gate = f"GET /runs/:id/gate → {status}"
+    else:
+        record_fetch_error(path, status, f"unexpected body shape: {json.dumps(body, default=str)[:120]}")
+        why_gate = "GET /runs/:id/gate answered a non-object body"
+    if events is None:
         try:
-            prompt = card.first.locator('[data-testid="steering-prompt"]').inner_text()
-        except Exception as e:  # no prompt element: unreadable → gate_decision fails closed
-            prompt = ""
+            events = run_events(run_id)
+        except FetchError as e:  # recorded by get()
+            return None, f"{why_gate}; {e}"
+    prompt, why_events = gate_prompt_from_events(events, ord_)
+    if prompt is not None:
+        return prompt, why_events
+    return None, f"{why_gate}; {why_events}"
+
+
+def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict | None, tag: str,
+                        first: bool, card_text: str | None = None, events: list[dict] | None = None) -> dict:
+    """Decide a rendered SteeringGate card on the COMPLETE CURRENT prompt read from the daemon
+    (`full_gate_prompt` — `GET /runs/:id/gate`, else the `awaitingHuman` event; read-only), with
+    `gate_decision` and the unit's stage/gate; the card's `steering-prompt` text (`cleanPrompt()`'s
+    headline — bracketed content stripped) is only the CLICK SURFACE: it is read (`card_text`, or
+    from the card), recorded alongside (`prompt_card`) and must equal the full prompt's headline
+    (`card_consistent`) — a full prompt the daemon does not serve is `unreadable-gate`, a card that
+    is not the full prompt's headline is `card-prompt-mismatch`; both REJECT. Codex round 5:
+    `Approve unit 4 before it runs: Finalize the test [gh pr create --fill]` rendered a clean
+    headline and was approved off the card; the full prompt rejects it on `gh pr create`.
+    Then click the matching button, wait for the POST to EXACTLY this run's gate endpoint and
+    verify the wire (`gate_wire_check`: endpoint, body.approve == decision, 2xx) — a mismatch, or
+    no such POST within 60 s, is a finding and `wire_ok: false` (`harness_ok=false`,
+    `gate-wire-mismatch`). Returns the `gates[]` entry. Every gate the harness answers — intake,
+    later, sibling — goes through here; the decision is executed ONLY through the UI card."""
+    if card_text is None:
+        try:
+            card_text = card.first.locator('[data-testid="steering-prompt"]').inner_text()
+        except Exception as e:  # no prompt element: the click surface has no headline — recorded, compared below
+            card_text = ""
             log(f"{tag}: gate ord={ord_} on {run_id}: steering-prompt unreadable ({type(e).__name__}: {e})")
+    prompt, source = full_gate_prompt(run_id, ord_, events)
     decision, reason = gate_decision(prompt, unit)
+    consistent: bool | None = None
+    if prompt is not None:
+        consistent = re.sub(r"\s+", " ", card_text or "").strip() == card_headline(prompt)
+        if decision == "approve" and not consistent:
+            decision = "reject"
+            reason = (f"card-prompt-mismatch: the card shows {re.sub(r'\s+', ' ', card_text or '').strip()[:80]!r} but the daemon's "
+                      f"complete prompt reads {card_headline(prompt)[:80]!r} (+{len(prompt) - len(card_headline(prompt))} chars) — "
+                      "the click surface does not show the gate being decided (never approve what the operator cannot see)")
     if reason == "unreadable-gate":
-        finding(f"{tag}: gate ord={ord_} on run {run_id} had an unreadable prompt — REJECTED (never approve what cannot be read)")
+        finding(f"{tag}: gate ord={ord_} on run {run_id}: the COMPLETE prompt could not be read from the daemon ({source}); the card "
+                f"showed {(card_text or '')[:80]!r} — REJECTED (never approve on a card headline alone)")
+    elif reason.startswith("card-prompt-mismatch"):
+        finding(f"{tag}: gate ord={ord_} on run {run_id}: {reason} — REJECTED")
     elif reason.startswith("unknown-gate-kind"):
         finding(f"{tag}: gate ord={ord_} on run {run_id}: the gated unit's stage/gate is unknown — the allow-listed prompt "
                 f"('{(prompt or '')[:80]}…') alone does not authorize approving — REJECTED ({reason})")
     elif reason.startswith("unknown-prompt-shape"):
         finding(f"{tag}: gate ord={ord_} on run {run_id}: the prompt ('{(prompt or '')[:80]}…') is not an allow-listed "
                 f"shape (pre-execution unit gate / plan approval) — REJECTED ({reason})")
-    entry = {"ord": ord_, "first": first, "prompt": (prompt or "")[:200], "decision": decision, "reason": reason,
+    entry = {"ord": ord_, "first": first, "prompt": (prompt or "")[:400], "prompt_len": len(prompt) if prompt else None,
+             "prompt_source": source, "prompt_card": (card_text or "")[:400], "card_consistent": consistent,
+             "decision": decision, "reason": reason,
              "unit": {"stage": unit.get("stage"), "gate": unit.get("gate")} if unit else None,
              "status": None, "url": None, "body": None, "wire_ok": False, "wire_check": None}
     expected = f"POST {urllib.parse.urlsplit(API).path}/runs/{run_id}/gate"
@@ -1250,7 +1440,7 @@ def decide_gate_on_card(page, card, *, run_id: str, ord_: int | None, unit: dict
     if mismatch:
         finding(f"{tag}: gate ord={ord_} on run {run_id} → {decision.upper()} clicked but the wire disagrees: {mismatch} — gate-wire-mismatch")
     if decision == "reject":
-        finding(f"{tag}: gate ord={ord_} on run {run_id} ('{(prompt or '')[:80]}…') was REJECTED by policy ({reason})")
+        finding(f"{tag}: gate ord={ord_} on run {run_id} ('{(prompt if prompt is not None else card_text or '')[:80]}…') was REJECTED by policy ({reason})")
     return entry
 
 
@@ -1261,16 +1451,19 @@ def latest_gate_ord(events: list[dict]) -> int | None:
 
 def decide_sibling_gate(page, sid: str, *, tag: str, return_to: str) -> dict:
     """A sibling in `awaiting_human` gets its gate decided THROUGH THE UI: navigate to
-    /runs/<sibling id>, wait for `[data-testid="steering-gate"][data-run-id="<id>"]`, read the
-    prompt, decide with the gated unit's stage/gate (from GET /runs/:id — read-only), click — then
-    navigate back to the launch panel. Never the API."""
+    /runs/<sibling id>, wait for `[data-testid="steering-gate"][data-run-id="<id>"]`, decide on the
+    COMPLETE prompt from the daemon (`decide_gate_on_card` → `full_gate_prompt`; the events fetched
+    here are reused) with the gated unit's stage/gate (from GET /runs/:id — read-only), click —
+    then navigate back to the launch panel. Never the API."""
     ord_: int | None = None
     unit: dict | None = None
+    events: list[dict] | None = None
     lookup_error: str | None = None
     try:
-        ord_ = latest_gate_ord(run_events(sid))
+        events = run_events(sid)
+        ord_ = latest_gate_ord(events)
         unit = gate_unit(run_detail(sid), ord_)
-    except Exception as e:  # a FetchError is already recorded by get(); decide from the card, failing closed
+    except Exception as e:  # a FetchError is already recorded by get(); decide_gate_on_card fails closed on what is missing
         lookup_error = f"{type(e).__name__}: {e}"
     page.goto(f"{BASE}/runs/{enc(sid)}", wait_until="networkidle")
     card = page.locator(f'[data-testid="steering-gate"][data-run-id="{sid}"]')
@@ -1281,7 +1474,7 @@ def decide_sibling_gate(page, sid: str, *, tag: str, return_to: str) -> dict:
                  "reason": f"no SteeringGate card rendered on /runs/{sid} within 30s ({type(e).__name__})"}
         finding(f"{tag}: sibling {sid} is awaiting_human per REST but /runs/{sid} rendered no gate card within 30s — left undecided")
     else:
-        entry = decide_gate_on_card(page, card, run_id=sid, ord_=ord_, unit=unit, tag=tag, first=False)
+        entry = decide_gate_on_card(page, card, run_id=sid, ord_=ord_, unit=unit, tag=tag, first=False, events=events)
     if lookup_error:
         entry["unit_lookup_error"] = lookup_error
     page.goto(return_to, wait_until="networkidle")  # back to the launch panel
@@ -1566,8 +1759,9 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
     shots: list[str] = []
 
     def shot(page, name: str) -> None:
-        p = artifact_path(f"{tag}-{name}.png")
-        page.screenshot(path=str(p), full_page=True)
+        # Playwright hands back the PNG bytes when no `path` is given — the file lands through the
+        # dir-fd-anchored writer like every other artifact; Playwright never writes a path itself.
+        p = write_artifact(f"{tag}-{name}.png", page.screenshot(full_page=True))
         shots.append(str(p.relative_to(ROOT)))
 
     def on_ws(ws):
@@ -1706,31 +1900,32 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
             m.update(derive_result(m, REPORT["blockers"]))
             return m
 
-        prompt = card.first.locator('[data-testid="steering-prompt"]').inner_text()
-        raw_prompt = awaiting[0].get("prompt") if awaiting else None
+        prompt = card.first.locator('[data-testid="steering-prompt"]').inner_text()  # the card's headline (cleanPrompt) — the click surface
+        raw_prompt = awaiting[0].get("prompt") if awaiting else None  # the awaitingHuman event's verbatim prompt
         m["measured"]["gate"] = {
             "ord": awaiting[0].get("ord") if awaiting else None,
             "prompt_ui": prompt,
             "prompt_raw_len": len(raw_prompt) if raw_prompt else None,
-            "pre_execution": bool(re.match(r"Approve unit \d+ before it runs", prompt)),
-            "contains_plan": bool(re.search(r"scenario\s*\d|S-\d|\bplan:\s", prompt, re.I)) and "before it runs" not in prompt,
+            "pre_execution": bool(re.match(r"Approve unit \d+ before it runs", raw_prompt or prompt)),
+            "contains_plan": bool(re.search(r"scenario\s*\d|S-\d|\bplan:\s", raw_prompt or prompt, re.I)) and "before it runs" not in (raw_prompt or prompt),
             "events_before_gate": [e.get("type") for e in events if e.get("seq", 0) <= (awaiting[0].get("seq", 0) if awaiting else 0)],
         }
         if m["measured"]["gate"]["pre_execution"]:
             finding(f"{tag}: the ONLY human gate is pre-execution ('{prompt[:60]}…') — the operator approves the survey, not a plan (crew#473)")
         shot(page, "03-gate-card")
 
-        # ── Decide the FIRST gate through the UI card — same policy as every later gate ──────
+        # ── Decide the FIRST gate through the UI card — same policy as every later gate, on the
+        # COMPLETE prompt from the daemon (decide_gate_on_card → full_gate_prompt), never the card ──
         gates: list[dict] = []
         m["measured"]["gates"] = gates
         gate_ord = awaiting[0].get("ord") if awaiting else None
         try:
             unit = gate_unit(run_detail(run_id), gate_ord)
-        except Exception as e:  # recorded as a fetch error; the decision falls back to the prompt (fails closed if unreadable)
+        except Exception as e:  # recorded as a fetch error; an unknown kind fails closed in gate_decision
             unit = None
             m["notes"].append(f"could not read the gated unit's stage/gate: {e}")
         m["measured"]["gate"]["unit"] = unit
-        entry = decide_gate_on_card(page, card, run_id=run_id, ord_=gate_ord, unit=unit, tag=tag, first=True, prompt=prompt)
+        entry = decide_gate_on_card(page, card, run_id=run_id, ord_=gate_ord, unit=unit, tag=tag, first=True, card_text=prompt, events=events)
         gates.append(entry)
         decision = entry["decision"]
         m["measured"]["gate_response"] = {k: entry[k] for k in ("decision", "status", "body", "url")}
@@ -1777,12 +1972,14 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
                     m["notes"].append("later gate present per REST but no card on the run page")
                     continue
                 # Same policy as the first gate — the allow-list (shape + known non-delivery kind +
-                # no delivery verb anywhere in the complete prompt), failing closed: an "Approve
-                # proposed test plan…" gate whose body lists /runs/:id/deliver among the routes to
-                # test is REJECTED and recorded as a finding, never approved on its first clause.
+                # no delivery verb anywhere in the COMPLETE prompt, read from the daemon inside
+                # decide_gate_on_card; `ptxt` is only the card's headline), failing closed: an
+                # "Approve proposed test plan…" gate whose body lists /runs/:id/deliver among the
+                # routes to test is REJECTED and recorded as a finding, never approved on its first
+                # clause or on a clean headline. The capture is named by ord; `gates[]` carries the decision.
                 unit2 = gate_unit(d, g.get("ord"))
-                shot(page, f"05-gate-{g.get('ord', 'x')}-{gate_decision(ptxt, unit2)[0]}")
-                gates.append(decide_gate_on_card(page, c2, run_id=run_id, ord_=g.get("ord"), unit=unit2, tag=tag, first=False, prompt=ptxt))
+                shot(page, f"05-gate-{g.get('ord', 'x')}")
+                gates.append(decide_gate_on_card(page, c2, run_id=run_id, ord_=g.get("ord"), unit=unit2, tag=tag, first=False, card_text=ptxt, events=evs))
                 last_change = time.time()
                 continue
             if time.time() - last_change > WEDGE_S:
@@ -1824,8 +2021,8 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
             f"## unit {k}\n\n_verbatim from `GET /runs/:id/units/{k}/output` — {len(v)} chars_\n\n{v}"
             for k, v in sorted(outputs.items())
         ))
-        plan_path = artifact_path(f"{tag}-plan-{safe_name(run_id)}.md")
-        plan_path.write_text(scrub(f"# {tag} — run {run_id} ({intent})\n\nPOST body:\n```json\n{json.dumps(post_body, indent=1)}\n```\n\n{plan_text}\n"))
+        plan_path = write_artifact(f"{tag}-plan-{safe_name(run_id)}.md",
+                                   scrub(f"# {tag} — run {run_id} ({intent})\n\nPOST body:\n```json\n{json.dumps(post_body, indent=1)}\n```\n\n{plan_text}\n"))
         m["measured"]["plan_file"] = str(plan_path.relative_to(ROOT))
         m["measured"]["units_with_output"] = sorted(outputs)
         m["measured"]["missing_outputs"] = missing_outputs
@@ -1998,28 +2195,98 @@ def artifact_path(name: str, root: Path | None = None, base: Path | None = None)
     return p
 
 
+# An artifact is ONE plain file name directly under the evidence dir — never a path, never a dotfile.
+ARTIFACT_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
+
+
+def _open_verified_dir(directory: Path) -> int:
+    """Open the (already component-walked) `directory` itself — `O_RDONLY | O_DIRECTORY |
+    O_NOFOLLOW`, so a symlink swapped in after the walk is refused by the kernel (ELOOP / ENOTDIR),
+    never followed — and prove the descriptor IS that directory (`fstat` == `lstat` identity).
+    Every later create / write / rename is anchored on the returned fd (`dir_fd=`), so the path
+    can no longer be re-resolved underneath the harness."""
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(str(directory), flags)
+    except OSError as e:
+        raise SystemExit(f"{directory} could not be opened as a directory without following a link "
+                         f"({type(e).__name__}: {e}) — refusing to write under it") from e
+    try:
+        got, want = os.fstat(fd), os.lstat(directory)
+        if not stat.S_ISDIR(want.st_mode) or (got.st_dev, got.st_ino) != (want.st_dev, want.st_ino):
+            raise SystemExit(f"{directory} changed identity between the walk and the open — refusing to write under it")
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+def write_artifact(name: str, payload: bytes | str, root: Path | None = None, base: Path | None = None) -> Path:
+    """THE artifact writer — every file the harness lands (report.json, the captured plans, the
+    screenshots) goes through here. TOCTOU-safe (codex round 5: `artifact_path()` validated a
+    pathname that `write_text()` / `page.screenshot(path=…)` then re-resolved, so a symlink swapped
+    in between redirected the write):
+      1. `name` must be a single plain file name (`ARTIFACT_NAME_RE`, no `/`, no leading `.`);
+      2. `artifact_path` walks every component from the repo root down (`lstat`), contains the
+         target under the root and refuses a symlink anywhere on the way — as before;
+      3. the verified directory is opened `O_RDONLY | O_DIRECTORY | O_NOFOLLOW` and its identity
+         checked (`_open_verified_dir`); everything below is anchored on that descriptor;
+      4. the data is written to a UNIQUE temp name (`.<name>.<pid>.<random>.tmp`) created
+         `O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW` via `dir_fd=` — a link planted at the temp name
+         fails the create — then `os.write` in full, `os.fsync`;
+      5. `os.rename(tmp, name, src_dir_fd=fd, dst_dir_fd=fd)`: atomic, and a link planted at the
+         FINAL name after the walk is REPLACED by the rename (rename never follows its destination),
+         never written through.
+    A directory swapped for a link between the walk and the open is refused (ELOOP) with nothing
+    written; a failure at any step unlinks the temp file through the same descriptor. Returns the
+    artifact's path (for the report)."""
+    root = root or ART
+    if name in {".", ".."} or not ARTIFACT_NAME_RE.fullmatch(name):
+        raise SystemExit(f"artifact name {name!r} is not a single plain file name under {root} — refusing to write it")
+    target = artifact_path(name, root, base)  # lstat-walk root + target, contain — BEFORE anything is opened
+    data = payload.encode("utf-8") if isinstance(payload, str) else bytes(payload)
+    dfd = _open_verified_dir(target.parent)
+    tmp = f".{name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"
+    try:
+        try:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644, dir_fd=dfd)
+        except OSError as e:
+            raise SystemExit(f"temp file {tmp} under {target.parent} could not be created exclusively "
+                             f"({type(e).__name__}: {e}) — refusing to write {name}") from e
+        try:
+            try:
+                view = memoryview(data)
+                while view:
+                    view = view[os.write(fd, view):]
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.rename(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
+        except BaseException:
+            try:
+                os.unlink(tmp, dir_fd=dfd)
+            except OSError:
+                pass
+            raise
+    finally:
+        os.close(dfd)
+    return target
+
+
 def write_report(report: dict | None = None, path: Path | None = None, root: Path | None = None) -> Path:
-    """Persist the evidence ATOMICALLY: a UNIQUE temp file per writer (`tempfile.mkstemp`, so two
-    concurrent writers can neither overwrite nor rename each other's temp file) + `os.replace`. A
-    reader never sees partial JSON and a crash never leaves a half-written report.json or a stray
-    temp file behind. The target is contained under `root` (default ART) and is never a symlink.
-    Called after every scenario and on every exit path — a 30-minute run that dies at minute 29
-    still leaves the first two scenarios' measurements on disk."""
+    """Persist the evidence ATOMICALLY through `write_artifact` (unique temp name created
+    exclusively on the verified directory's descriptor, `fsync`, `rename` via `dir_fd`) — a reader
+    never sees partial JSON, a crash never leaves a half-written report.json or a stray temp file,
+    two concurrent writers cannot clobber each other's temp file, and a symlink swapped in after
+    validation is refused or replaced, never followed. The target is `report.json` directly under
+    `root` (default ART). Called after every scenario and on every exit path — a 30-minute run that
+    dies at minute 29 still leaves the first two scenarios' measurements on disk."""
     report = REPORT if report is None else report
     if path is None:
         root = root or ART
         path = root / "report.json"
     root = root or path.parent
-    target = artifact_path(os.path.relpath(path, root), root)
-    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=".report-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
-            f.write(scrub(json.dumps(report, indent=1, default=str)))
-        os.replace(tmp, target)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
-    return target
+    return write_artifact(os.path.relpath(path, root), scrub(json.dumps(report, indent=1, default=str)), root)
 
 
 SCENARIO_PLAN = (("LT-1", "recon"), ("LT-2", "campaign"), ("LT-3", "recon"))

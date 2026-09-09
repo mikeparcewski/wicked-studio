@@ -24,4 +24,4 @@ e2e/artifacts/**/*.png
 # docs/testing/test-feature-live-report.md. Regenerated runs anywhere else stay ignored.
 !e2e/artifacts/test-feature-live/LT-*.png
 e2e/artifacts/**/.launch.lock
-e2e/artifacts/**/.report-*.tmp
+e2e/artifacts/**/.*.tmp

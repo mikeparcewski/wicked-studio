@@ -322,7 +322,7 @@
       "execution_section_lines": 28,
       "execution_summary_items": 1
      },
-     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -1543,6 +1543,10 @@
       "ord": 1,
       "first": true,
       "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
+      "prompt_len": 180,
+      "prompt_source": "backfilled: the awaitingHuman event's verbatim prompt (prompt_raw_len 180 == len(prompt_ui) 180; no `[` \u2014 the card showed the complete prompt) \u2014 the three recorded launches predate full_gate_prompt (GET /runs/:id/gate, else the awaitingHuman event), codex round 5",
+      "prompt_card": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
+      "card_consistent": true,
       "decision": "approve",
       "reason": "pre-execution gate 'Approve unit 1 before it runs': allow-listed shape, known non-delivery kind, no delivery verb anywhere in the complete prompt; unit stage/gate test/auto",
       "status": 200,
@@ -1550,7 +1554,7 @@
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked",
+      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked | codex round 5: re-decided over the COMPLETE prompt (the full 180-char awaitingHuman prompt, not the card's cleanPrompt() headline \u2014 identical here, no bracket): approve \u2014 agrees with what was clicked",
       "url": "/api/v1/runs/d293f4d7-1e45-4346-809a-d6f2107c6b18/gate",
       "body": {
        "approve": true
@@ -1795,7 +1799,7 @@
       "execution_section_lines": 0,
       "execution_summary_items": 0
      },
-     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -2950,7 +2954,11 @@
      {
       "ord": 1,
       "first": true,
-      "prompt": "Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs \u2014 and run the approved",
+      "prompt": "Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs \u2014 and run the approved plan as governed sibling runs under one test.",
+      "prompt_len": 246,
+      "prompt_source": "backfilled: the awaitingHuman event's verbatim prompt (prompt_raw_len 246 == len(prompt_ui) 246; no `[` \u2014 the card showed the complete prompt) \u2014 the three recorded launches predate full_gate_prompt (GET /runs/:id/gate, else the awaitingHuman event), codex round 5",
+      "prompt_card": "Approve unit 1 before it runs: New test: plan the test for the attached scope \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs \u2014 and run the approved plan as governed sibling runs under one test.",
+      "card_consistent": true,
       "decision": "approve",
       "reason": "pre-execution gate 'Approve unit 1 before it runs': allow-listed shape, known non-delivery kind, no delivery verb anywhere in the complete prompt; unit stage/gate test/auto",
       "status": 200,
@@ -2958,7 +2966,7 @@
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked",
+      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked | codex round 5: re-decided over the COMPLETE prompt (the full 246-char awaitingHuman prompt, not the card's cleanPrompt() headline \u2014 identical here, no bracket): approve \u2014 agrees with what was clicked",
       "url": "/api/v1/runs/f8bc2bad-47fc-4971-8961-bb49acb1dc6b/gate",
       "body": {
        "approve": true
@@ -3235,7 +3243,7 @@
       "execution_section_lines": 0,
       "execution_summary_items": 0
      },
-     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
+     "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)",
      "surfaces": {
       "ws_events": true,
       "api_routes": true,
@@ -4365,6 +4373,10 @@
       "ord": 1,
       "first": true,
       "prompt": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
+      "prompt_len": 180,
+      "prompt_source": "backfilled: the awaitingHuman event's verbatim prompt (prompt_raw_len 180 == len(prompt_ui) 180; no `[` \u2014 the card showed the complete prompt) \u2014 the three recorded launches predate full_gate_prompt (GET /runs/:id/gate, else the awaitingHuman event), codex round 5",
+      "prompt_card": "Approve unit 1 before it runs: Recon: survey the target and propose a test plan \u2014 the scenarios, their dependencies, and which are deterministic tool checks vs governed agent runs.",
+      "card_consistent": true,
       "decision": "approve",
       "reason": "pre-execution gate 'Approve unit 1 before it runs': allow-listed shape, known non-delivery kind, no delivery verb anywhere in the complete prompt; unit stage/gate test/auto",
       "status": 200,
@@ -4372,7 +4384,7 @@
        "stage": "test",
        "gate": "auto"
       },
-      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked",
+      "policy_reevaluated": "approve | codex round 4: re-evaluated again under the ALLOW-LIST policy (approve only on an allow-listed shape + a known non-delivery kind + no delivery verb anywhere in the complete prompt; everything else rejects): approve \u2014 agrees with what was clicked | codex round 5: re-decided over the COMPLETE prompt (the full 180-char awaitingHuman prompt, not the card's cleanPrompt() headline \u2014 identical here, no bracket): approve \u2014 agrees with what was clicked",
       "url": "/api/v1/runs/d12adb6c-e4be-430a-b0a7-666db5634112/gate",
       "body": {
        "approve": true
@@ -4514,7 +4526,7 @@
     "LT-3": []
    },
    "result": "pass",
-   "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)"
+   "measured_over": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)"
   },
   "LT-5": {
    "scenario": "LT-5",
@@ -4658,7 +4670,7 @@
    "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; accepted as deviation evidence under the contract AMENDMENT of 2026-09-09 (its author, the coordinator, after codex rounds 2-4: the 85% default stands; an EXPLICIT operator override \u2014 SWAP_MAX_PCT together with SWAP_MAX_PCT_ACK=contract-deviation \u2014 is permitted and MUST be recorded in the report as a contract deviation; the three recorded launches ran under an authorized 95% override at 93% swap and are accepted as deviation evidence)",
    "note": "swap gate was 95%, not the brief's 85% \u2014 this host idles at ~93% swap; all three recorded launches read 93.0% and cleared ONLY because of the relaxation; under the default 85% none of them would have launched. The three recorded runs remain deviation evidence."
   },
-  "fanout_gate": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`)"
+  "fanout_gate": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`) \u2014 round 5: the fence also matches build shorthand (`npm|pnpm|yarn|bun` with build|test|typecheck|lint|check anywhere, with or without `run`: `pnpm build`, `yarn build`, `bun test`) and direct build/test executables by basename after the launcher look-through (vite, tsc, esbuild, webpack, rollup, vitest, jest, playwright, rustc, make, ninja, gradle, mvn; `go build|test`; `node \u2026/vite/bin/vite.js build`); the dogfood daemon, an idle `node` and `npm view x` still never match"
  },
  "revisions": [
   {
@@ -5110,6 +5122,60 @@
      "old": "28/13/22 scenario lines, 31/14/30 files, 38.6 % / n/a / 0 %",
      "new": "unchanged",
      "why": "plan analysis did not change in round 4"
+    }
+   ]
+  },
+  {
+   "date": "2026-09-09",
+   "reason": "codex round-5 REVISE on PR #215 \u2014 offline re-derivation with the fixed harness over the committed plan files and the recorded gates; no new runs, no daemon writes (read-only GETs only). Items: (1) gate decisions on the COMPLETE current prompt from the daemon (GET /runs/:id/gate, else the awaitingHuman event), the card only clicked; (2) fan-out fence: build shorthand + direct build executables; (3) execution results excluded only on a result STRUCTURE; (4) TOCTOU-safe dir-fd-anchored artifact writes.",
+   "changes": [
+    {
+     "field": "LT-1.gates[0].prompt / prompt_len / prompt_source / prompt_card / card_consistent",
+     "old": "prompt = the card's steering-prompt text, clipped to 200 chars (180 chars recorded)",
+     "new": "prompt = the COMPLETE awaitingHuman prompt (180 chars, == prompt_raw_len), prompt_card = the card's text (identical: no bracket), card_consistent = true, prompt_source = backfilled (see text)",
+     "why": "codex round 5 item 1: the decision must be taken on the complete, current prompt read from the daemon (GET /runs/:id/gate, else the awaitingHuman event), never on SteeringGate's cleanPrompt() headline; for the three recorded gates the card showed the whole prompt (no `[`), so the re-decision over the complete prompt is the same approve"
+    },
+    {
+     "field": "LT-2.gates[0].prompt / prompt_len / prompt_source / prompt_card / card_consistent",
+     "old": "prompt = the card's steering-prompt text, clipped to 200 chars (200 chars recorded)",
+     "new": "prompt = the COMPLETE awaitingHuman prompt (246 chars, == prompt_raw_len), prompt_card = the card's text (identical: no bracket), card_consistent = true, prompt_source = backfilled (see text)",
+     "why": "codex round 5 item 1: the decision must be taken on the complete, current prompt read from the daemon (GET /runs/:id/gate, else the awaitingHuman event), never on SteeringGate's cleanPrompt() headline; for the three recorded gates the card showed the whole prompt (no `[`), so the re-decision over the complete prompt is the same approve"
+    },
+    {
+     "field": "LT-3.gates[0].prompt / prompt_len / prompt_source / prompt_card / card_consistent",
+     "old": "prompt = the card's steering-prompt text, clipped to 200 chars (180 chars recorded)",
+     "new": "prompt = the COMPLETE awaitingHuman prompt (180 chars, == prompt_raw_len), prompt_card = the card's text (identical: no bracket), card_consistent = true, prompt_source = backfilled (see text)",
+     "why": "codex round 5 item 1: the decision must be taken on the complete, current prompt read from the daemon (GET /runs/:id/gate, else the awaitingHuman event), never on SteeringGate's cleanPrompt() headline; for the three recorded gates the card showed the whole prompt (no `[`), so the re-decision over the complete prompt is the same approve"
+    },
+    {
+     "field": "LT-{1,2,3}.plan.measured_over + LT-4.measured_over",
+     "old": "scenario lines + plan-table rows only (execution results excluded: items carrying a result marker, and 'Execution verdict' sections \u2014 a proposed command is a scenario)",
+     "new": "scenario lines + plan-table rows only (execution results excluded: items carrying a result STRUCTURE \u2014 a summary tally, a tick, an exit code, PASS/FAIL starting the cell or ending it after \u2192/=>/:, green/red with a tally or a command and no scenario verb \u2014 and 'Execution verdict' sections; a proposed command or an expected outcome is a scenario)",
+     "why": "codex round 5 item 3: an execution summary needs a result STRUCTURE (summary tally / tick / exit code / PASS|FAIL starting the cell or ending it after \u2192|=>|: / green|red with a tally or a command and no scenario verb), never a bare word \u2014 `- S-1 Verify failed /runs cards render red [TOOL]` and `- S-2 Verify /runs returns a FAIL verdict [AGENT]` are proposed scenarios"
+    },
+    {
+     "field": "LT-{1,2,3}.plan.scenario_lines / excluded / canonical_files / classifies / surfaces, LT-3.consistency_vs_LT-1, LT-4",
+     "old": "28/13/22 scenario lines; excluded {28 section lines, 1 summary item} / {0, 0} / {0, 0}; 31/14/30 files; 38.6 % / n/a / 0.0 % (28 vs 22 titles); LT-4 four of four, pass",
+     "new": "UNCHANGED under the result-structure rule (re-derived offline over the committed plan files)",
+     "why": "the one item ever excluded as a summary, LT-1's `npm test` \u2192 237 files / 2442 tests green, carries a structure \u2014 a command (`npm test`), a tally (237 files / 2442 tests) and no scenario verb (`tests` after a number is the tally noun) \u2014 and stays excluded; no kept line of the three plans carries PASS/FAIL (case-sensitive) at a cell start or after \u2192/=>/: at its end, a tick, an exit code or a qualified colour, and no plan item names an expected outcome with red/green/FAIL, so the scenario sets, the classification vocabularies and the four surfaces are the same lines as in round 4; LT-3 consistency and LT-4 restated unchanged"
+    },
+    {
+     "field": "preflight_policy.fanout_gate",
+     "old": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`)",
+     "new": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`) \u2014 round 5: the fence also matches build shorthand (`npm|pnpm|yarn|bun` with build|test|typecheck|lint|check anywhere, with or without `run`: `pnpm build`, `yarn build`, `bun test`) and direct build/test executables by basename after the launcher look-through (vite, tsc, esbuild, webpack, rollup, vitest, jest, playwright, rustc, make, ninja, gradle, mvn; `go build|test`; `node \u2026/vite/bin/vite.js build`); the dogfood daemon, an idle `node` and `npm view x` still never match",
+     "why": "codex round 5 item 2: `pnpm build`, `yarn build` and `node \u2026/vite/bin/vite.js build` returned no fan-out match and no preflight blocker \u2014 the round-4 predicate required a literal `run` token before a build script and knew no direct build executable; the three recorded launches still predate the gate (readings[].fanout: not measured)"
+    },
+    {
+     "field": "artifact writes (report.json, LT-*-plan-*.md, LT-*-*.png)",
+     "old": "validated pathname, then Path.write_text / page.screenshot(path=\u2026) / tempfile.mkstemp + os.replace re-resolved the path",
+     "new": "one dir-fd-anchored writer: verified directory opened O_RDONLY|O_DIRECTORY|O_NOFOLLOW (fstat == lstat), temp name created O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW via dir_fd, os.write + os.fsync, os.rename(src_dir_fd=dst_dir_fd=fd); screenshots taken as bytes and written the same way",
+     "why": "codex round 5 item 4: a symlink swapped in between validation and use redirected the write; the committed artifacts are unchanged (no write happened in this revision \u2014 the report itself is rewritten by the offline backfill through the same writer)"
+    },
+    {
+     "field": "LT-{1,2,3}.result / harness_ok / fail_reasons",
+     "old": "fail / true / (as recorded)",
+     "new": "unchanged",
+     "why": "re-derived with the round-5 derive_result over the recorded measurements"
     }
    ]
   }
