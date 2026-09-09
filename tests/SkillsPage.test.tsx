@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { SkillsPage } from '../src/components/SkillsPage.js';
 import { ApiError } from '../src/api/errors.js';
-import type { SkillGuardResult, SkillManifestEntry, SkillsCatalog } from '../src/api/skills.js';
+import type { SkillFileEntry, SkillGuardResult, SkillManifestEntry, SkillsCatalog } from '../src/api/skills.js';
 
 /**
  * The Skills file manager (`/skills`, the skills keystone — design v3) over a MOCKED `/skills`
@@ -25,7 +25,13 @@ import type { SkillGuardResult, SkillManifestEntry, SkillsCatalog } from '../src
  *  - the page verbs: Publish (`POST /skills/publish`, findings shown, the snapshot line moves),
  *    Analyze (`POST /skills/analyze`, a dry run — no body, no reload), Refresh baseline;
  *  - a daemon WITHOUT the routes (bare 404 / 501) renders the NAMED unsupported state — never a
- *    crash, never an empty catalog pretending; a mis-shaped answer is a named error.
+ *    crash, never an empty catalog pretending; a mis-shaped answer is a named error;
+ *  - the editor's honesty (review round 1): Save is conditioned on the revision its CONTENT was
+ *    read at and every catalog re-read re-reads the open file — an intervening change under
+ *    unsaved edits surfaces as the file conflict, never a silent overwrite; Save's endpoint
+ *    follows the file's scope + requested path (never the tab, never the daemon's echoed `path`);
+ *    a file list answering after a tab switch is ignored; the active file locks while dirty;
+ *    a failed re-read marks the page stale and freezes writes; a write in flight freezes the rest.
  */
 
 const apiFetch = vi.fn();
@@ -413,10 +419,20 @@ describe('SkillsPage — the drawer: files, the textarea editor, Save → findin
       revision: REV_2,
       findings: [{ kind: 'frontmatter-description', severity: 'warning', skill: REPO_LEARN, file: null, line: null, explanation: 'description is empty' }],
     };
+    // The daemon keeps what it was handed — the post-save re-read must find the saved text.
+    let content = SKILL_MD;
+    let revision = REV_1;
     wire({
-      'GET /skills': () => Promise.resolve(catalog()),
+      'GET /skills': () => Promise.resolve(catalog({ revision })),
       ...fileHandlers(REPO_LEARN),
-      [`PUT /skills/${REPO_LEARN}/files/SKILL.md`]: (init) => { puts.push(body(init)); return Promise.resolve(warnings); },
+      [`GET /skills/${REPO_LEARN}/files/SKILL.md`]: () => Promise.resolve(fileRead('SKILL.md', content)),
+      [`PUT /skills/${REPO_LEARN}/files/SKILL.md`]: (init) => {
+        const b = body(init) as { content: string };
+        puts.push(b);
+        content = b.content;
+        revision = REV_2;
+        return Promise.resolve(warnings);
+      },
     });
     render(<Harness />);
     const drawer = await openDrawer(REPO_LEARN);
@@ -550,6 +566,51 @@ describe('SkillsPage — the drawer: files, the textarea editor, Save → findin
     expect(within(drawer).getByTestId('skills-save')).toBeDisabled();
   });
 
+  it('Save binds to the REQUESTED identity — a daemon echoing a different `path` in the read cannot redirect the write', async () => {
+    const puts: string[] = [];
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      [`GET /skills/${REPO_LEARN}/files`]: () => Promise.resolve({ files: [{ path: 'SKILL.md', hash: 'h', size: 4 }] }),
+      // The body claims a path that would normalize onto the support route.
+      [`GET /skills/${REPO_LEARN}/files/SKILL.md`]: () => Promise.resolve(fileRead('../../support/scripts/a.sh', 'body')),
+      [`PUT /skills/${REPO_LEARN}/files/SKILL.md`]: () => { puts.push('skill'); return Promise.resolve(clear()); },
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    const editor = await within(drawer).findByTestId('skills-editor');
+    // The editor names the file it was ASKED for, not the one the daemon claims.
+    expect(within(drawer).getByTestId('skills-file-path')).toHaveTextContent('SKILL.md');
+    expect(within(drawer).getByTestId('skills-file-path').dataset.scope).toBe('skill');
+    fireEvent.change(editor, { target: { value: 'body edited' } });
+    fireEvent.click(within(drawer).getByTestId('skills-save'));
+    await waitFor(() => expect(puts).toEqual(['skill']));
+    expect(apiFetch.mock.calls.some(([p, init]) => (init as Init)?.method === 'PUT' && String(p).includes('..'))).toBe(false);
+  });
+
+  it('clicking the ACTIVE file with unsaved edits never reloads it — the whole tree locks while dirty, the draft stays', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog()), ...fileHandlers(REPO_LEARN) });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    const editor = await within(drawer).findByTestId('skills-editor');
+    const [active, other] = within(drawer).getAllByTestId('skills-file');
+    expect(active).toHaveAttribute('aria-current', 'true');
+    expect(active).toBeEnabled();
+
+    fireEvent.change(editor, { target: { value: 'UNSAVED' } });
+    expect(active).toBeDisabled();
+    expect(other).toBeDisabled();
+    expect(active).toHaveAttribute('title', 'save or discard your edits first');
+    fireEvent.click(active!);
+    // Nothing re-read, nothing discarded.
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(1);
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('UNSAVED');
+    expect(within(drawer).getByTestId('skills-file-dirty')).toBeInTheDocument();
+
+    // Discarding unlocks the tree again.
+    fireEvent.click(within(drawer).getByTestId('skills-discard-edits'));
+    expect(within(drawer).getAllByTestId('skills-file')[0]).toBeEnabled();
+  });
+
   it('closing with unsaved edits asks first; Escape does not eat the draft', async () => {
     wire({ 'GET /skills': () => Promise.resolve(catalog()), ...fileHandlers(REPO_LEARN) });
     render(<Harness />);
@@ -570,6 +631,281 @@ describe('SkillsPage — the drawer: files, the textarea editor, Save → findin
   });
 });
 
+describe('SkillsPage — the editor’s CAS: Save is conditioned on the revision its content was read at', () => {
+  /** A daemon whose one skill file can change under the editor: `content`/`hash` are what the
+   *  file read answers, `revision` what the catalog answers. */
+  function movingDaemon() {
+    const d = { content: SKILL_MD, hash: 'h-1', revision: REV_1, puts: [] as unknown[] };
+    wire({
+      'GET /skills': () => Promise.resolve(catalog({ revision: d.revision })),
+      [`GET /skills/${REPO_LEARN}/files`]: () => Promise.resolve({ files: [{ path: 'SKILL.md', hash: d.hash, size: d.content.length }] }),
+      [`GET /skills/${REPO_LEARN}/files/SKILL.md`]: () => Promise.resolve({ ...fileRead('SKILL.md', d.content), hash: d.hash }),
+      [`PUT /skills/${REPO_LEARN}/files/SKILL.md`]: (init) => { d.puts.push(body(init)); return Promise.resolve(clear(REV_3)); },
+    });
+    return d;
+  }
+
+  const externalChange = (d: ReturnType<typeof movingDaemon>): void => {
+    d.content = `${SKILL_MD}\n\nChanged by another session.`;
+    d.hash = 'h-2';
+    d.revision = REV_2;
+  };
+
+  it('load at r1 → external change to r2 → Refresh → Save: the file is RE-READ, the draft kept, the intervening change surfaces, nothing is written', async () => {
+    const d = movingDaemon();
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    const editor = await within(drawer).findByTestId('skills-editor');
+    expect(editor).toHaveValue(SKILL_MD);
+    fireEvent.change(editor, { target: { value: 'mine' } });
+    expect(within(drawer).getByTestId('skills-save')).toBeEnabled();
+
+    externalChange(d);
+    fireEvent.click(screen.getByTestId('skills-reload'));
+    await waitFor(() => expect(calls('GET', '/skills')).toBe(2));
+
+    // The refresh re-read the open file and found it changed under a dirty editor.
+    const conflict = await within(drawer).findByTestId('skills-file-conflict');
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(2);
+    expect(conflict).toHaveTextContent('This file changed on the daemon while you were editing.');
+    expect(conflict).toHaveTextContent('is now h-2');
+    expect(conflict).toHaveTextContent('you started from h-1');
+    // The draft is preserved and Save waits — the codex probe's silent `expectedRevision: r2` overwrite cannot happen.
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('mine');
+    expect(within(drawer).getByTestId('skills-file-dirty')).toBeInTheDocument();
+    const save = within(drawer).getByTestId('skills-save');
+    expect(save).toBeDisabled();
+    expect(save).toHaveAttribute('title', expect.stringMatching(/changed on the daemon/));
+    fireEvent.click(save);
+    expect(d.puts).toEqual([]);
+    expect(screen.queryByTestId('skills-conflict')).toBeNull();
+
+    // Loading the daemon's version discards the draft: the editor shows r2's bytes, pristine.
+    fireEvent.click(within(conflict).getByTestId('skills-file-conflict-take'));
+    expect(within(drawer).queryByTestId('skills-file-conflict')).toBeNull();
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue(d.content);
+    expect(within(drawer).queryByTestId('skills-file-dirty')).toBeNull();
+    expect(within(drawer).getByTestId('skills-save')).toBeDisabled();
+    expect(d.puts).toEqual([]);
+  });
+
+  it('…or the operator keeps the draft: Save then sends the revision the daemon’s version was read at — an explicit replace, never a silent one', async () => {
+    const d = movingDaemon();
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    const editor = await within(drawer).findByTestId('skills-editor');
+    fireEvent.change(editor, { target: { value: 'mine' } });
+
+    externalChange(d);
+    fireEvent.click(screen.getByTestId('skills-reload'));
+    const conflict = await within(drawer).findByTestId('skills-file-conflict');
+    fireEvent.click(within(conflict).getByTestId('skills-file-conflict-keep'));
+    expect(within(drawer).queryByTestId('skills-file-conflict')).toBeNull();
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('mine');
+    expect(within(drawer).getByTestId('skills-file-dirty')).toBeInTheDocument();
+    const save = within(drawer).getByTestId('skills-save');
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(() => expect(d.puts).toHaveLength(1));
+    expect(d.puts).toEqual([{ content: 'mine', expectedRevision: REV_2 }]);
+  });
+
+  it('a PRISTINE editor adopts the daemon’s version on Refresh, and a later Save is conditioned on the revision that content was read at (r2, not r1)', async () => {
+    const d = movingDaemon();
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    await within(drawer).findByTestId('skills-editor');
+
+    externalChange(d);
+    fireEvent.click(screen.getByTestId('skills-reload'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue(d.content));
+    expect(within(drawer).queryByTestId('skills-file-conflict')).toBeNull();
+    expect(within(drawer).queryByTestId('skills-file-dirty')).toBeNull();
+
+    fireEvent.change(within(drawer).getByTestId('skills-editor'), { target: { value: `${d.content}\nmine` } });
+    fireEvent.click(within(drawer).getByTestId('skills-save'));
+    await waitFor(() => expect(d.puts).toHaveLength(1));
+    expect((d.puts[0] as { expectedRevision: string }).expectedRevision).toBe(REV_2);
+  });
+
+  it('a row toggle that advances the revision re-reads the open file, so the drawer’s Save rides the revision its (unchanged) content now stands at', async () => {
+    const d = movingDaemon();
+    apiFetch.mockImplementation((path: unknown, init?: Init) => {
+      if (String(path) === `/skills/${A11Y}/enable` && init?.method === 'POST') { d.revision = REV_2; return Promise.resolve(clear(REV_2)); }
+      const key = `${init?.method ?? 'GET'} ${String(path)}`;
+      if (key === 'GET /skills') return Promise.resolve(catalog({ revision: d.revision }));
+      if (key === `GET /skills/${REPO_LEARN}/files`) return Promise.resolve({ files: [{ path: 'SKILL.md', hash: d.hash, size: 1 }] });
+      if (key === `GET /skills/${REPO_LEARN}/files/SKILL.md`) return Promise.resolve({ ...fileRead('SKILL.md', d.content), hash: d.hash });
+      if (key === `PUT /skills/${REPO_LEARN}/files/SKILL.md`) { d.puts.push(body(init)); return Promise.resolve(clear(REV_3)); }
+      return Promise.reject(new ApiError(404, 'Not Found'));
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    await within(drawer).findByTestId('skills-editor');
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(1);
+
+    fireEvent.click(within(row(A11Y)).getByTestId('skills-toggle'));
+    await waitFor(() => expect(calls('GET', '/skills')).toBe(2));
+    await waitFor(() => expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(2));
+    expect(within(drawer).queryByTestId('skills-file-conflict')).toBeNull();
+
+    fireEvent.change(within(drawer).getByTestId('skills-editor'), { target: { value: 'after the toggle' } });
+    fireEvent.click(within(drawer).getByTestId('skills-save'));
+    await waitFor(() => expect(d.puts).toHaveLength(1));
+    expect(d.puts).toEqual([{ content: 'after the toggle', expectedRevision: REV_2 }]);
+  });
+});
+
+describe('SkillsPage — late answers are ignored; the file’s scope travels with it', () => {
+  it('a file list that answers AFTER the operator switched to Support does not swap the editor onto SKILL.md; Save follows the support file', async () => {
+    let resolveList: (v: { files: SkillFileEntry[] }) => void = () => {};
+    const deferred = new Promise<{ files: SkillFileEntry[] }>((r) => { resolveList = r; });
+    const puts: string[] = [];
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      [`GET /skills/${REPO_LEARN}/files`]: () => deferred,
+      [`GET /skills/${REPO_LEARN}/files/SKILL.md`]: () => Promise.resolve(fileRead('SKILL.md', SKILL_MD)),
+      'GET /skills/support/.claude-plugin/plugin.json': () => Promise.resolve(fileRead('.claude-plugin/plugin.json', '{"name":"wicked-garden"}')),
+      'GET /skills/support/scripts/_python.sh': () => Promise.resolve(fileRead('scripts/_python.sh', '#!/bin/sh')),
+      'PUT /skills/support/.claude-plugin/plugin.json': () => { puts.push('support'); return Promise.resolve(clear()); },
+      'PUT /skills/support/SKILL.md': () => { puts.push('WRONG: support route for a skill file'); return Promise.resolve(clear()); },
+      [`PUT /skills/${REPO_LEARN}/files/SKILL.md`]: () => { puts.push('WRONG: skill route'); return Promise.resolve(clear()); },
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    expect(within(drawer).getByTestId('skills-files-loading')).toBeInTheDocument();
+
+    // The operator moves to Support before the skill list answers.
+    fireEvent.click(within(drawer).getByTestId('skills-tab-support'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue('{"name":"wicked-garden"}'));
+    expect(within(drawer).getByTestId('skills-file-path').dataset.scope).toBe('support');
+
+    // The list lands late: data for the skill tree, NOT an instruction to open SKILL.md.
+    await act(async () => {
+      resolveList({ files: [{ path: 'refs/notes.md', hash: 'h1', size: 5 }, { path: 'SKILL.md', hash: 'h2', size: SKILL_MD.length }] });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('{"name":"wicked-garden"}');
+    expect(within(drawer).getByTestId('skills-file-path')).toHaveTextContent('.claude-plugin/plugin.json');
+    expect(within(drawer).getByTestId('skills-file-tree').dataset.tab).toBe('support');
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(0);
+
+    fireEvent.change(within(drawer).getByTestId('skills-editor'), { target: { value: '{"name":"wicked-garden","v":2}' } });
+    fireEvent.click(within(drawer).getByTestId('skills-save'));
+    await waitFor(() => expect(puts).toEqual(['support']));
+    // The save settled (the file is the saved text again) before the tree is touched.
+    await waitFor(() => expect(within(drawer).queryByTestId('skills-file-dirty')).toBeNull());
+    await waitFor(() => expect(calls('GET', '/skills')).toBe(2));
+
+    // Back on the skill tree the late list is there, and SKILL.md opens through the skill route.
+    fireEvent.click(within(drawer).getByTestId('skills-tab-skill'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue(SKILL_MD));
+    expect(within(drawer).getAllByTestId('skills-file').map((f) => f.dataset.path)).toEqual(['SKILL.md', 'refs/notes.md']);
+    expect(within(drawer).getByTestId('skills-file-path').dataset.scope).toBe('skill');
+  });
+});
+
+describe('SkillsPage — stale catalog and in-flight writes freeze every write affordance', () => {
+  it('a FAILED catalog re-read marks the page stale: the rows stay readable, every write (rows, verbs, Add, the drawer’s Save) waits until a re-read succeeds', async () => {
+    let fail = false;
+    wire({
+      'GET /skills': () => (fail ? Promise.reject(new ApiError(500, 'store busy')) : Promise.resolve(catalog())),
+      ...fileHandlers(REPO_LEARN),
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    const editor = await within(drawer).findByTestId('skills-editor');
+    fireEvent.change(editor, { target: { value: 'draft' } });
+    expect(within(drawer).getByTestId('skills-save')).toBeEnabled();
+
+    fail = true;
+    fireEvent.click(screen.getByTestId('skills-reload'));
+    const stale = await screen.findByTestId('skills-stale');
+    expect(stale).toHaveTextContent('The catalog could not be re-read.');
+    expect(stale).toHaveTextContent('store busy');
+    // Not the first-load failure state: the catalog on screen stays.
+    expect(screen.queryByTestId('skills-error')).toBeNull();
+    expect(screen.getAllByTestId('skills-row')).toHaveLength(4);
+    for (const r of screen.getAllByTestId('skills-row')) expect(within(r).getByTestId('skills-toggle')).toBeDisabled();
+    expect(screen.getByTestId('skills-publish')).toBeDisabled();
+    expect(screen.getByTestId('skills-refresh')).toBeDisabled();
+    expect(screen.getByTestId('skills-add-open')).toBeDisabled();
+    expect(within(drawer).getByTestId('skills-save')).toBeDisabled();
+    expect(within(drawer).getByTestId('skills-drawer-toggle')).toBeDisabled();
+    expect(within(drawer).getByTestId('skills-reset-open')).toBeDisabled();
+    // The draft is untouched.
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('draft');
+
+    fail = false;
+    fireEvent.click(within(stale).getByTestId('skills-stale-retry'));
+    await waitFor(() => expect(screen.queryByTestId('skills-stale')).toBeNull());
+    expect(within(row(MINE)).getByTestId('skills-toggle')).toBeEnabled();
+    expect(screen.getByTestId('skills-publish')).toBeEnabled();
+    expect(within(drawer).getByTestId('skills-save')).toBeEnabled();
+  });
+
+  it('a page verb in flight (Publish) freezes the row switches, Add, the other verbs and the drawer’s Save until it answers', async () => {
+    let resolvePublish: (v: SkillGuardResult) => void = () => {};
+    const deferred = new Promise<SkillGuardResult>((r) => { resolvePublish = r; });
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      ...fileHandlers(REPO_LEARN),
+      'POST /skills/publish': () => deferred,
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    const editor = await within(drawer).findByTestId('skills-editor');
+    fireEvent.change(editor, { target: { value: 'draft' } });
+    expect(within(drawer).getByTestId('skills-save')).toBeEnabled();
+    expect(within(row(MINE)).getByTestId('skills-toggle')).toBeEnabled();
+
+    fireEvent.click(screen.getByTestId('skills-publish'));
+    expect(screen.getByTestId('skills-publish')).toHaveTextContent('Publish…');
+    for (const r of screen.getAllByTestId('skills-row')) expect(within(r).getByTestId('skills-toggle')).toBeDisabled();
+    expect(screen.getByTestId('skills-add-open')).toBeDisabled();
+    expect(screen.getByTestId('skills-refresh')).toBeDisabled();
+    expect(screen.getByTestId('skills-analyze')).toBeDisabled();
+    expect(within(drawer).getByTestId('skills-save')).toBeDisabled();
+    expect(within(drawer).getByTestId('skills-drawer-toggle')).toBeDisabled();
+
+    await act(async () => {
+      resolvePublish(clear(REV_2));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await screen.findByTestId('skills-page-findings');
+    await waitFor(() => expect(within(row(MINE)).getByTestId('skills-toggle')).toBeEnabled());
+    expect(screen.getByTestId('skills-add-open')).toBeEnabled();
+    expect(within(drawer).getByTestId('skills-save')).toBeEnabled();
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('draft');
+  });
+
+  it('a row switch in flight freezes the other rows and the drawer too — writes share one revision', async () => {
+    let resolveFlip: (v: SkillGuardResult) => void = () => {};
+    const deferred = new Promise<SkillGuardResult>((r) => { resolveFlip = r; });
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      ...fileHandlers(REPO_LEARN),
+      [`POST /skills/${MINE}/disable`]: () => deferred,
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    const editor = await within(drawer).findByTestId('skills-editor');
+    fireEvent.change(editor, { target: { value: 'draft' } });
+
+    fireEvent.click(within(row(MINE)).getByTestId('skills-toggle'));
+    for (const r of screen.getAllByTestId('skills-row')) expect(within(r).getByTestId('skills-toggle')).toBeDisabled();
+    expect(within(drawer).getByTestId('skills-save')).toBeDisabled();
+    expect(screen.getByTestId('skills-publish')).toBeDisabled();
+
+    await act(async () => {
+      resolveFlip(clear(REV_2));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await waitFor(() => expect(within(row(A11Y)).getByTestId('skills-toggle')).toBeEnabled());
+    expect(within(drawer).getByTestId('skills-save')).toBeEnabled();
+  });
+});
+
 describe('SkillsPage — the Support tab (root support files)', () => {
   it('lists the manifest’s support files path-sorted, opens the first, and Save PUTs /skills/support/*path with {content, expectedRevision}', async () => {
     const puts: unknown[] = [];
@@ -578,12 +914,18 @@ describe('SkillsPage — the Support tab (root support files)', () => {
       revision: REV_2,
       findings: [{ kind: 'support-edit', severity: 'warning', skill: null, file: '.claude-plugin/plugin.json', line: null, explanation: 'a support file is shared by every skill' }],
     };
+    let pluginJson = '{"name":"wicked-garden"}';
     wire({
       'GET /skills': () => Promise.resolve(catalog()),
       ...fileHandlers(REPO_LEARN),
-      'GET /skills/support/.claude-plugin/plugin.json': () => Promise.resolve(fileRead('.claude-plugin/plugin.json', '{"name":"wicked-garden"}')),
+      'GET /skills/support/.claude-plugin/plugin.json': () => Promise.resolve(fileRead('.claude-plugin/plugin.json', pluginJson)),
       'GET /skills/support/scripts/_python.sh': () => Promise.resolve(fileRead('scripts/_python.sh', '#!/bin/sh')),
-      'PUT /skills/support/.claude-plugin/plugin.json': (init) => { puts.push(body(init)); return Promise.resolve(supportWarning); },
+      'PUT /skills/support/.claude-plugin/plugin.json': (init) => {
+        const b = body(init) as { content: string };
+        puts.push(b);
+        pluginJson = b.content;
+        return Promise.resolve(supportWarning);
+      },
     });
     render(<Harness />);
     const drawer = await openDrawer(REPO_LEARN);

@@ -1,27 +1,43 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../src/api/errors.js';
+import { apiFetch } from '../src/api/client.js';
 import {
   isSkillsConflict,
   isSkillsUnsupported,
   isUnpublished,
+  listSkillFiles,
   parseFilesMap,
   provenanceOf,
   readCatalogBody,
+  readSkillFile,
+  readSupportFile,
+  setSkillEnabled,
   skillCounts,
+  skillRouteName,
+  skillRoutePath,
+  skillRouteSegment,
   skillRows,
   sortSkillFiles,
   supportFiles,
+  writeSkillFile,
+  writeSupportFile,
   type SkillManifestEntry,
   type SkillsManifest,
 } from '../src/api/skills.js';
 import { findingLocation } from '../src/components/SkillFindings.js';
 import { filterSkills, SKILL_CHIPS, SKILLS_FACETS_DEFAULT } from '../src/components/SkillsGrid.js';
 
+vi.mock('../src/api/client.js', () => ({ apiFetch: vi.fn() }));
+
 /**
  * The skills wire's pure folds (src/api/skills.ts, design v3) — the seams the page's numbers,
  * filters and honest states hang on, pinned so they cannot drift:
- *  - `readCatalogBody` accepts exactly `{manifest: {skills}, revision}`; anything else throws a
- *    NAMED error (never a silent empty catalog against a daemon that answered something);
+ *  - `readCatalogBody` accepts exactly `{manifest: {skills: {…}, support: {…}}, revision}` with
+ *    PLAIN objects for the two maps; anything else (an array, a missing map) throws a NAMED error
+ *    (never a silent empty catalog against a daemon that answered something);
+ *  - route identity: every name / path segment is decoded, refused when empty, dot-only or
+ *    separator-bearing, then encoded — a daemon-supplied `..` can never normalize a skill-file
+ *    request onto `/skills/support/…` or a support PUT onto `/settings` (the codex probes);
  *  - `provenanceOf` DERIVES shipped / override / user-added from the hashes — no wire field;
  *  - `isUnpublished` compares the effective hash with what the current snapshot carries;
  *  - `sortSkillFiles` puts SKILL.md first; `supportFiles` folds the manifest's support map;
@@ -73,10 +89,106 @@ describe('readCatalogBody — exactly {manifest, revision}, never a silent empty
     expect(() => readCatalogBody(MANIFEST)).toThrow(/no catalog/);
     expect(() => readCatalogBody({ manifest: MANIFEST })).toThrow(/no catalog/);
     expect(() => readCatalogBody({ manifest: { support: {} }, revision: 'r' })).toThrow(/no catalog/);
-    expect(() => readCatalogBody({ manifest: { skills: null }, revision: 'r' })).toThrow(/no catalog/);
+    expect(() => readCatalogBody({ manifest: { skills: null, support: {} }, revision: 'r' })).toThrow(/no catalog/);
     expect(() => readCatalogBody({ nonsense: true })).toThrow(/no catalog/);
     expect(() => readCatalogBody(null)).toThrow(/no catalog/);
     expect(() => readCatalogBody('catalog')).toThrow(/no catalog/);
+  });
+
+  it('requires PLAIN objects for `skills` and `support` — an array or a missing map is a mis-shaped answer, not weird rows', () => {
+    expect(() => readCatalogBody({ manifest: { ...MANIFEST, skills: [] }, revision: 'r' })).toThrow(/no catalog/);
+    expect(() => readCatalogBody({ manifest: { ...MANIFEST, skills: [MANIFEST.skills['my-team-skill']] }, revision: 'r' })).toThrow(/no catalog/);
+    expect(() => readCatalogBody({ manifest: { ...MANIFEST, support: [] }, revision: 'r' })).toThrow(/no catalog/);
+    expect(() => readCatalogBody({ manifest: { ...MANIFEST, support: null }, revision: 'r' })).toThrow(/no catalog/);
+    const { support: _dropped, ...noSupport } = MANIFEST;
+    void _dropped;
+    expect(() => readCatalogBody({ manifest: noSupport, revision: 'r' })).toThrow(/no catalog/);
+    expect(() => readCatalogBody([MANIFEST])).toThrow(/no catalog/);
+    // Empty maps are plain objects — a daemon with no skills yet is a real (empty) catalog.
+    expect(readCatalogBody({ manifest: { ...MANIFEST, skills: {}, support: {} }, revision: 'r' }).revision).toBe('r');
+  });
+});
+
+describe('route identity — every name and path is validated before it becomes a route', () => {
+  const fetchMock = vi.mocked(apiFetch);
+  beforeEach(() => {
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue({ files: [], verdict: 'clear', findings: [], revision: 'r' });
+  });
+
+  it('segments: decoded, then refused when empty, dot-only, or carrying a separator; encoded otherwise', () => {
+    expect(skillRouteSegment('SKILL.md', 'x')).toBe('SKILL.md');
+    expect(skillRouteSegment('.claude-plugin', 'x')).toBe('.claude-plugin');
+    expect(skillRouteSegment('a b#c', 'x')).toBe('a%20b%23c');
+    // A literal `%` that is not an escape is the segment's own text.
+    expect(skillRouteSegment('100%.md', 'x')).toBe('100%25.md');
+    expect(() => skillRouteSegment('', 'x')).toThrow(/refusing x: an empty segment/);
+    expect(() => skillRouteSegment('.', 'x')).toThrow(/dot-only/);
+    expect(() => skillRouteSegment('..', 'x')).toThrow(/dot-only/);
+    expect(() => skillRouteSegment('...', 'x')).toThrow(/dot-only/);
+    // Percent-encoded dots are still dots once the route layer decodes them.
+    expect(() => skillRouteSegment('%2e%2e', 'x')).toThrow(/dot-only/);
+    expect(() => skillRouteSegment('%2E.', 'x')).toThrow(/dot-only/);
+    expect(() => skillRouteSegment('a%2Fb', 'x')).toThrow(/path separator/);
+    expect(() => skillRouteSegment('a\\b', 'x')).toThrow(/path separator/);
+    expect(() => skillRouteSegment('a%00b', 'x')).toThrow(/path separator/);
+  });
+
+  it('paths: relative, no empty / dot-only / separator-smuggling segment; each segment encoded, slashes kept', () => {
+    expect(skillRoutePath('SKILL.md')).toBe('SKILL.md');
+    expect(skillRoutePath('refs/notes.md')).toBe('refs/notes.md');
+    expect(skillRoutePath('.claude-plugin/plugin.json')).toBe('.claude-plugin/plugin.json');
+    expect(skillRoutePath('docs/a b#c.md')).toBe('docs/a%20b%23c.md');
+    expect(() => skillRoutePath('')).toThrow(/empty file path/);
+    expect(() => skillRoutePath('/etc/passwd')).toThrow(/absolute/);
+    expect(() => skillRoutePath('a//b')).toThrow(/empty segment/);
+    expect(() => skillRoutePath('a/')).toThrow(/empty segment/);
+    expect(() => skillRoutePath('a/./b')).toThrow(/dot-only/);
+    expect(() => skillRoutePath('../../support/scripts/a.sh')).toThrow(/dot-only/);
+    expect(() => skillRoutePath('%2e%2e/%2e%2e/settings')).toThrow(/dot-only/);
+    expect(() => skillRoutePath('a\\..\\b')).toThrow(/path separator/);
+  });
+
+  it('names: one segment — a traversal or a slash in a manifest key is refused', () => {
+    expect(skillRouteName('wicked-garden-repo-learn')).toBe('wicked-garden-repo-learn');
+    expect(skillRouteName('my team')).toBe('my%20team');
+    expect(() => skillRouteName('..')).toThrow(/skill name/);
+    expect(() => skillRouteName('../support')).toThrow(/path separator/);
+    expect(() => skillRouteName('')).toThrow(/empty segment/);
+  });
+
+  it('codex probe 1: a skill-file path that would normalize onto /skills/support/… is refused client-side — no request is built', async () => {
+    await expect(readSkillFile('wicked-garden-repo-learn', '../../support/scripts/a.sh')).rejects.toThrow(/refusing file path/);
+    await expect(writeSkillFile('wicked-garden-repo-learn', '../../support/scripts/a.sh', 'x', 'r-1')).rejects.toThrow(/refusing file path/);
+    await expect(readSkillFile('wicked-garden-repo-learn', '%2e%2e/%2e%2e/support/scripts/a.sh')).rejects.toThrow(/refusing file path/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('codex probe 2: a support PUT that would normalize onto /settings is refused client-side — no request is built', async () => {
+    await expect(writeSupportFile('../../settings', '{}', 'r-1')).rejects.toThrow(/refusing file path/);
+    await expect(readSupportFile('../../settings')).rejects.toThrow(/refusing file path/);
+    await expect(writeSupportFile('/settings', '{}', 'r-1')).rejects.toThrow(/absolute/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('a traversal in the skill NAME is refused on every name-bearing route', async () => {
+    await expect(listSkillFiles('../support')).rejects.toThrow(/refusing skill name/);
+    await expect(setSkillEnabled('..', true, 'r-1')).rejects.toThrow(/refusing skill name/);
+    await expect(readSkillFile('a/b', 'SKILL.md')).rejects.toThrow(/refusing skill name/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('legitimate identities build the expected routes, segment-encoded', async () => {
+    await readSkillFile('wicked-garden-repo-learn', 'refs/notes.md');
+    expect(fetchMock).toHaveBeenLastCalledWith('/skills/wicked-garden-repo-learn/files/refs/notes.md');
+    await writeSkillFile('my team', 'docs/a b.md', 'x', 'r-1');
+    expect(fetchMock).toHaveBeenLastCalledWith('/skills/my%20team/files/docs/a%20b.md', { method: 'PUT', body: JSON.stringify({ content: 'x', expectedRevision: 'r-1' }) });
+    await readSupportFile('.claude-plugin/plugin.json');
+    expect(fetchMock).toHaveBeenLastCalledWith('/skills/support/.claude-plugin/plugin.json');
+    await writeSupportFile('scripts/_python.sh', '#!/bin/sh', 'r-1');
+    expect(fetchMock).toHaveBeenLastCalledWith('/skills/support/scripts/_python.sh', { method: 'PUT', body: JSON.stringify({ content: '#!/bin/sh', expectedRevision: 'r-1' }) });
+    await listSkillFiles('wicked-garden-repo-learn');
+    expect(fetchMock).toHaveBeenLastCalledWith('/skills/wicked-garden-repo-learn/files');
   });
 });
 

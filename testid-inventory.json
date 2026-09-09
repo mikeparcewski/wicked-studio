@@ -11,8 +11,8 @@
   "studioVersion": "0.5.1",
   "counts": {
     "files": 137,
-    "occurrences": 1107,
-    "static": 946,
+    "occurrences": 1113,
+    "static": 952,
     "dynamic": 57,
     "computed": 6
   },
@@ -4012,6 +4012,24 @@
       ]
     },
     {
+      "testId": "skills-file-conflict",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-conflict-keep",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-file-conflict-take",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
       "testId": "skills-file-dirty",
       "files": [
         "src/components/SkillDrawer.tsx"
@@ -4175,6 +4193,12 @@
       ]
     },
     {
+      "testId": "skills-reload",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
       "testId": "skills-replace-open",
       "files": [
         "src/components/SkillDrawer.tsx"
@@ -4212,6 +4236,18 @@
     },
     {
       "testId": "skills-source",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-stale",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-stale-retry",
       "files": [
         "src/components/SkillsPage.tsx"
       ]

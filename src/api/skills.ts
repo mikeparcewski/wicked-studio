@@ -126,24 +126,32 @@ export interface SkillsCatalog {
   revision: string;
 }
 
+/** A plain object — the only shape a keyed map (`skills`, `support`) may arrive as. Arrays are
+ *  objects to `typeof` but `Object.entries` over one yields index keys, not skill names. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 /**
  * The catalog read, shape-checked at the seam: a daemon that answers `/skills` with anything but
- * `{manifest: {skills: …}, revision}` gets a NAMED error — never a page rendering zero skills
- * against a daemon that answered something.
+ * `{manifest: {skills: {…}, support: {…}}, revision}` gets a NAMED error — never a page rendering
+ * zero skills (or index-named rows, or a crash in `supportFiles`) against a daemon that answered
+ * something. `skills` and `support` must be PLAIN objects: an array, `null`, or a missing map is
+ * a mis-shaped answer.
  */
 export function readCatalogBody(body: unknown): SkillsCatalog {
-  if (typeof body === 'object' && body !== null) {
-    const { manifest, revision } = body as { manifest?: unknown; revision?: unknown };
+  if (isPlainObject(body)) {
+    const { manifest, revision } = body;
     if (
-      typeof manifest === 'object' && manifest !== null
-      && typeof (manifest as { skills?: unknown }).skills === 'object'
-      && (manifest as { skills?: unknown }).skills !== null
+      isPlainObject(manifest)
+      && isPlainObject(manifest.skills)
+      && isPlainObject(manifest.support)
       && typeof revision === 'string'
     ) {
-      return { manifest: manifest as SkillsManifest, revision };
+      return { manifest: manifest as unknown as SkillsManifest, revision };
     }
   }
-  throw new Error('the daemon answered /skills with no catalog (expected {manifest: {skills}, revision})');
+  throw new Error('the daemon answered /skills with no catalog (expected {manifest: {skills, support}, revision})');
 }
 
 export async function getSkillsCatalog(): Promise<SkillsCatalog> {
@@ -217,7 +225,7 @@ export function sortSkillFiles(files: readonly SkillFileEntry[]): SkillFileEntry
 /** `GET /skills/:name/files` — the files the skill OWNS (a nested child skill's files belong to
  *  the child; the daemon refuses to serve them through the parent). */
 export async function listSkillFiles(name: string): Promise<SkillFileEntry[]> {
-  const body = await apiFetch<{ files: SkillFileEntry[] }>(`/skills/${encodeURIComponent(name)}/files`);
+  const body = await apiFetch<{ files: SkillFileEntry[] }>(`/skills/${skillRouteName(name)}/files`);
   return sortSkillFiles(body.files);
 }
 
@@ -240,24 +248,60 @@ export interface SkillFileContent {
   binary: boolean;
 }
 
-/** `*path` segments are encoded one by one so the slashes stay route separators. */
-function encodePath(path: string): string {
-  return path.split('/').map((s) => encodeURIComponent(s)).join('/');
+// ── Route identity: every name and path is VALIDATED before it becomes a route ─────────────────
+//
+// Names and file paths reach this module from the daemon (manifest keys, `GET /skills/:name/files`
+// rows, the support map) — untrusted until checked. `encodeURIComponent` preserves `.` and `..`,
+// and URL normalization collapses `/skills/<name>/files/../../support/x` into
+// `/skills/support/x` (or `/skills/support/../../settings` into `/settings`) BEFORE crew's
+// skill-scoped containment ever sees the request. So every segment is decoded (a percent-encoded
+// `..` is still `..`), refused when empty, dot-only (`.`, `..`, `…`), separator-bearing (`/`, `\`)
+// or NUL-bearing, and only then encoded. A refusal is a NAMED error and no request is built —
+// the callers below are `async` so it arrives as a rejection, like any other wire failure.
+
+/** One validated, encoded route segment; `what` names it in the refusal. */
+export function skillRouteSegment(raw: string, what: string): string {
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // Not percent-encoded (a literal `%` in a name) — the raw text IS the segment.
+  }
+  if (decoded === '') throw new Error(`refusing ${what}: an empty segment`);
+  if (/^\.+$/.test(decoded)) throw new Error(`refusing ${what}: the dot-only segment "${raw}" would escape its route`);
+  if (/[/\\\0]/.test(decoded)) throw new Error(`refusing ${what}: the segment "${raw}" carries a path separator or NUL`);
+  return encodeURIComponent(decoded);
+}
+
+/** A skill name as the ONE `:name` route segment. */
+export function skillRouteName(name: string): string {
+  return skillRouteSegment(name, `skill name "${name}"`);
+}
+
+/**
+ * A file path (relative to the skill dir, or to the root for a support file) as validated `*path`
+ * segments joined by `/`. Empty, absolute (`/x`), empty-segment (`a//b`, a trailing `/`), dot-only
+ * and separator-smuggling paths are refused before any request is built.
+ */
+export function skillRoutePath(path: string): string {
+  if (path === '') throw new Error('refusing an empty file path');
+  if (path.startsWith('/')) throw new Error(`refusing the absolute file path "${path}"`);
+  return path.split('/').map((s) => skillRouteSegment(s, `file path "${path}"`)).join('/');
 }
 
 function skillFileRoute(name: string, path: string): string {
-  return `/skills/${encodeURIComponent(name)}/files/${encodePath(path)}`;
+  return `/skills/${skillRouteName(name)}/files/${skillRoutePath(path)}`;
 }
 
 function supportFileRoute(path: string): string {
-  return `/skills/support/${encodePath(path)}`;
+  return `/skills/support/${skillRoutePath(path)}`;
 }
 
-export function readSkillFile(name: string, path: string): Promise<SkillFileContent> {
+export async function readSkillFile(name: string, path: string): Promise<SkillFileContent> {
   return apiFetch<SkillFileContent>(skillFileRoute(name, path));
 }
 
-export function readSupportFile(path: string): Promise<SkillFileContent> {
+export async function readSupportFile(path: string): Promise<SkillFileContent> {
   return apiFetch<SkillFileContent>(supportFileRoute(path));
 }
 
@@ -291,8 +335,10 @@ function post(path: string, body: Record<string, unknown>): Promise<SkillGuardRe
   return apiFetch<SkillGuardResult>(path, { method: 'POST', body: JSON.stringify(body) });
 }
 
-/** `PUT /skills/:name/files/*path` — one file, atomic tmp+rename daemon-side. */
-export function writeSkillFile(name: string, path: string, content: string, expectedRevision: string): Promise<SkillGuardResult> {
+/** `PUT /skills/:name/files/*path` — one file, atomic tmp+rename daemon-side. The route is built
+ *  from the REQUESTED identity (the validated skill + path the caller opened), never from a path
+ *  the daemon echoed back. */
+export async function writeSkillFile(name: string, path: string, content: string, expectedRevision: string): Promise<SkillGuardResult> {
   return apiFetch<SkillGuardResult>(skillFileRoute(name, path), {
     method: 'PUT',
     body: JSON.stringify({ content, expectedRevision }),
@@ -301,7 +347,7 @@ export function writeSkillFile(name: string, path: string, content: string, expe
 
 /** `PUT /skills/support/*path` — a root support file; the guards flag every such edit as a
  *  warning (it is shared by every skill). */
-export function writeSupportFile(path: string, content: string, expectedRevision: string): Promise<SkillGuardResult> {
+export async function writeSupportFile(path: string, content: string, expectedRevision: string): Promise<SkillGuardResult> {
   return apiFetch<SkillGuardResult>(supportFileRoute(path), {
     method: 'PUT',
     body: JSON.stringify({ content, expectedRevision }),
@@ -310,14 +356,14 @@ export function writeSupportFile(path: string, content: string, expectedRevision
 
 /** `POST /skills/:name/{enable,disable}` — enablement is manifest state; the guards run on every
  *  flip (disabling a core skill is blocking). */
-export function setSkillEnabled(name: string, enabled: boolean, expectedRevision: string): Promise<SkillGuardResult> {
-  return post(`/skills/${encodeURIComponent(name)}/${enabled ? 'enable' : 'disable'}`, { expectedRevision });
+export async function setSkillEnabled(name: string, enabled: boolean, expectedRevision: string): Promise<SkillGuardResult> {
+  return post(`/skills/${skillRouteName(name)}/${enabled ? 'enable' : 'disable'}`, { expectedRevision });
 }
 
 /** `POST /skills/:name/reset` — restore the skill's OWN files from the baseline (a nested child's
  *  overrides survive); never flips `enabled`. Refused for a user-added skill (no baseline). */
-export function resetSkill(name: string, expectedRevision: string): Promise<SkillGuardResult> {
-  return post(`/skills/${encodeURIComponent(name)}/reset`, { expectedRevision });
+export async function resetSkill(name: string, expectedRevision: string): Promise<SkillGuardResult> {
+  return post(`/skills/${skillRouteName(name)}/reset`, { expectedRevision });
 }
 
 /** A whole skill dir as a files map — relative path → content. */
@@ -329,8 +375,8 @@ export function addSkill(name: string, files: SkillFilesMap, expectedRevision: s
 }
 
 /** `POST /skills/:name/replace` — replace the skill's own files wholesale from a files map. */
-export function replaceSkill(name: string, files: SkillFilesMap, expectedRevision: string): Promise<SkillGuardResult> {
-  return post(`/skills/${encodeURIComponent(name)}/replace`, { files, expectedRevision });
+export async function replaceSkill(name: string, files: SkillFilesMap, expectedRevision: string): Promise<SkillGuardResult> {
+  return post(`/skills/${skillRouteName(name)}/replace`, { files, expectedRevision });
 }
 
 /** `POST /skills/refresh-baseline` — capture the installed plugin as a new baseline and merge it

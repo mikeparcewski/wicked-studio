@@ -59,7 +59,8 @@ export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, fro
   selectedName: string | null;
   /** The skill with a write in flight — its switch waits. */
   busyName: string | null;
-  /** The catalog changed under the page (a revision conflict) — every switch waits for the reload. */
+  /** Writes are frozen page-wide (a revision conflict, a stale catalog, a write or page verb in
+   *  flight) — every switch waits. */
   frozen: boolean;
   onSelect: (name: string) => void;
   onToggle: (row: SkillRow) => void;

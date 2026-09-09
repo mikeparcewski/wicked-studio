@@ -43,7 +43,12 @@ import type { SkillsWriter } from './skillsWriter.js';
  *
  * CAS: the page holds the catalog `revision`; every write goes through {@link SkillsWriter}
  * (`expectedRevision` out, the answered `revision` adopted). A **409** freezes the page behind the
- * reload prompt — nothing else is written until the catalog is re-read.
+ * reload prompt — nothing else is written until the catalog is re-read. Every write also freezes
+ * the others while it is in flight (they all share the one revision — overlapping writes could
+ * only 409), and a catalog re-read that FAILS marks the page stale: the rows stay readable, every
+ * write waits until a re-read succeeds. Each successful re-read bumps `catalogEpoch`, which the
+ * drawer reconciles its open file against — a Refresh never advances the write revision past
+ * content the editor read earlier.
  *
  * A daemon without the `/skills` routes renders the NAMED unsupported state — never a crash and
  * never an empty catalog pretending. Every write goes through crew's API (the guarded operator
@@ -83,6 +88,13 @@ export function SkillsPage({ navigate, search = '' }: {
   const [addOpen, setAddOpen] = useState(false);
   /** A 409 — the catalog changed under this page. The daemon's sentence, for the prompt. */
   const [conflict, setConflict] = useState<string | null>(null);
+  /** A catalog RE-READ failed after a successful load — the rows on screen may be behind the
+   *  daemon, so every write waits until a re-read succeeds. The failure's sentence, for the banner. */
+  const [stale, setStale] = useState<string | null>(null);
+  /** Bumped on every SUCCESSFUL catalog read — the drawer re-reads its open file on each. */
+  const [catalogEpoch, setCatalogEpoch] = useState(0);
+  /** Writes in flight through the CAS seam — while any is, every other write affordance waits. */
+  const [inFlight, setInFlight] = useState(0);
   /** The revision every mutation is conditioned on — a ref so chained writes read the latest. */
   const revisionRef = useRef<string | null>(null);
 
@@ -91,11 +103,20 @@ export function SkillsPage({ navigate, search = '' }: {
       const c = await getSkillsCatalog();
       revisionRef.current = c.revision;
       setCatalog(c);
+      setStale(null);
       setState({ kind: 'loaded' });
+      setCatalogEpoch((n) => n + 1);
       return c;
     } catch (e) {
-      if (isSkillsUnsupported(e)) setState({ kind: 'unsupported' });
-      else setState({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
+      const message = e instanceof Error ? e.message : String(e);
+      if (revisionRef.current !== null) {
+        // A re-read after a successful load: keep the rows readable, mark them stale, freeze writes.
+        setStale(isSkillsUnsupported(e) ? 'the daemon no longer serves the skills catalog' : message);
+      } else if (isSkillsUnsupported(e)) {
+        setState({ kind: 'unsupported' });
+      } else {
+        setState({ kind: 'failed', message });
+      }
       return null;
     }
   }, []);
@@ -104,10 +125,12 @@ export function SkillsPage({ navigate, search = '' }: {
     void load();
   }, [load]);
 
-  /** The ONE CAS seam: expectedRevision out, the answered revision adopted, a 409 → the prompt. */
-  const run = useCallback(async (mutation: (expectedRevision: string) => Promise<SkillGuardResult>): Promise<SkillGuardResult | null> => {
-    const expected = revisionRef.current;
+  /** The ONE CAS seam: expectedRevision out (the page's latest, or the revision the caller's
+   *  content was read at), the answered revision adopted, a 409 → the prompt. */
+  const run = useCallback<SkillsWriter['run']>(async (mutation, opts) => {
+    const expected = opts?.expectedRevision ?? revisionRef.current;
     if (expected === null) throw new Error('the skills catalog has not loaded — nothing to write against');
+    setInFlight((n) => n + 1);
     try {
       const result = await mutation(expected);
       revisionRef.current = result.revision;
@@ -118,9 +141,11 @@ export function SkillsPage({ navigate, search = '' }: {
         return null;
       }
       throw e;
+    } finally {
+      setInFlight((n) => n - 1);
     }
   }, []);
-  const writer = useMemo<SkillsWriter>(() => ({ run }), [run]);
+  const writer = useMemo<SkillsWriter>(() => ({ run, revision: () => revisionRef.current }), [run]);
 
   const reloadAfterConflict = (): void => {
     setConflict(null);
@@ -199,7 +224,9 @@ export function SkillsPage({ navigate, search = '' }: {
 
   const baseline = catalog?.manifest.baseline ?? null;
   const generation = catalog?.manifest.currentGeneration ?? null;
-  const frozen = conflict !== null;
+  /** Every write affordance waits while: a 409 is up, the catalog is stale, a write is in flight,
+   *  or a page verb is running — they all share the one revision. */
+  const frozen = conflict !== null || stale !== null || inFlight > 0 || verbBusy !== null;
 
   const verbButton = (verb: PageVerb, testId: string, title: string, primary: boolean): React.ReactElement => (
     <button
@@ -262,6 +289,8 @@ export function SkillsPage({ navigate, search = '' }: {
             )}
             <button
               type="button"
+              data-testid="skills-reload"
+              title="Re-read the catalog (the drawer re-reads its open file against it)"
               onClick={() => void load()}
               className="text-[10px] hover:underline"
               style={{ color: 'var(--ink-dim)' }}
@@ -333,6 +362,27 @@ export function SkillsPage({ navigate, search = '' }: {
               </KpiGroup>
             </KpiBand>
 
+            {stale !== null && (
+              <div
+                data-testid="skills-stale"
+                role="alert"
+                className="flex flex-wrap items-center gap-2 rounded px-3 py-2 text-[11px]"
+                style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)', color: 'var(--ink-muted)' }}
+              >
+                <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>The catalog could not be re-read.</span>
+                <span>{stale} — what is shown may be behind the daemon; writes wait until a re-read succeeds.</span>
+                <span className="flex-1" />
+                <button
+                  data-testid="skills-stale-retry"
+                  type="button"
+                  onClick={() => void load()}
+                  className="rounded px-2 py-0.5 text-[10px] font-semibold"
+                  style={{ color: 'var(--status-gate)', border: '1px solid var(--status-gate)' }}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
             {note !== null && (
               <p
                 data-testid="skills-note"
@@ -380,6 +430,7 @@ export function SkillsPage({ navigate, search = '' }: {
           skill={selected}
           support={support}
           writer={writer}
+          catalogEpoch={catalogEpoch}
           busy={frozen || busyName === selected.name}
           onClose={() => navigate(skillsPath())}
           onToggle={toggle}
