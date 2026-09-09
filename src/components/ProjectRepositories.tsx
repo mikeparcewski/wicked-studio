@@ -167,8 +167,22 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
    * query, and its mutation lock (the guarded-out request can no longer act).
    */
   const liveProjectId = useRef<string | null>(projectId);
+  /**
+   * Which mutation is the CURRENT one. `busy` admits one request at a time, but a
+   * project change releases the lock while the request is still out, so a second
+   * mutation can begin before the first settles — for the SAME repo id, when the
+   * operator attaches the same repo on the next project (or navigates back). The
+   * repo id alone cannot tell the two requests apart: the first one's `finally`
+   * would release the lock the second one holds, re-enabling the controls while
+   * its request is still in flight (Copilot on #208). So every mutation, and
+   * every project change, takes the next token; a request applies its result —
+   * the membership update, the error, the lock release — only while it still
+   * holds the token it started with.
+   */
+  const mutationToken = useRef(0);
   useEffect(() => {
     liveProjectId.current = projectId;
+    mutationToken.current += 1;
     setConfirming(null);
     setError(null);
     setRegistryError(null);
@@ -206,9 +220,24 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
       .catch((e: unknown) => setRegistryError(`registered repos unreadable: ${e instanceof Error ? e.message : String(e)}`));
   }
 
+  /**
+   * Begin a mutation: pin the project it is for and take the next token. The
+   * returned predicate is true only while this request is still the current one
+   * — same project shown (a navigation away and back bumps the token too, so a
+   * result from before the round trip is stale even though the id matches), no
+   * project change since, no newer mutation begun since. Everything a request does
+   * after its `await` is gated on it, the lock release included.
+   */
+  function beginMutation(): () => boolean {
+    const forProject = projectId;
+    const token = ++mutationToken.current;
+    return () => liveProjectId.current === forProject && mutationToken.current === token;
+  }
+
   async function attach(repo: RepoEntry): Promise<void> {
     if (busy) return;
     const forProject = projectId;
+    const stillMine = beginMutation();
     setAttaching(repo.id);
     setError(null);
     try {
@@ -217,34 +246,36 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
         ref: repo.id,
         attachedBy: 'studio',
       });
-      if (liveProjectId.current !== forProject) return; // landed after a navigation — not this project's result
+      if (!stillMine()) return; // landed after a navigation or behind a newer mutation — not this request's result to apply
       onMembersChange((current) => (current.some((m) => m.id === member.id) ? current : [...current, member]));
       setQuery('');
     } catch (e) {
-      if (liveProjectId.current !== forProject) return;
+      if (!stillMine()) return;
       setError(`attach failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       // Release the lock only while it is still this request's: a project change
-      // released it already, and a mutation begun since then owns it now.
-      setAttaching((cur) => (cur === repo.id ? null : cur));
+      // released it already, and a mutation begun since then — for this same repo
+      // id included — owns it now. The token, not the repo id, decides.
+      if (stillMine()) setAttaching(null);
     }
   }
 
   async function detach(member: ProjectMember): Promise<void> {
     if (busy) return;
     const forProject = projectId;
+    const stillMine = beginMutation();
     setDetaching(member.id);
     setError(null);
     try {
       await api.detachProjectMember(forProject, member.id);
-      if (liveProjectId.current !== forProject) return; // landed after a navigation — not this project's result
+      if (!stillMine()) return; // landed after a navigation or behind a newer mutation — not this request's result to apply
       onMembersChange((current) => current.filter((m) => m.id !== member.id));
       setConfirming(null);
     } catch (e) {
-      if (liveProjectId.current !== forProject) return;
+      if (!stillMine()) return;
       setError(`detach failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      setDetaching((cur) => (cur === member.id ? null : cur));
+      if (stillMine()) setDetaching(null);
     }
   }
 
