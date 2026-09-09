@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { campaignPath } from '../api/testing.js';
+import { campaignPath, testingPath, type LaunchIntent } from '../api/testing.js';
 import type { SessionView } from '../api/types.js';
 import {
   campaignCards, campaignTotals, deliveryRollupWord, matchesCampaignChip, memberRunIdSet,
@@ -9,6 +9,7 @@ import {
 import { recentActivity } from '../board/homeActivity.js';
 import { outcomeOf } from '../board/metrics.js';
 import { healthColor, windowBuckets, windowDelta, deltaWord } from '../board/windowStats.js';
+import type { Navigate } from '../hooks/useRoute.js';
 import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { useCampaignsStore } from '../store/campaigns.js';
 import { useRunEventStore } from '../store/events.js';
@@ -25,7 +26,8 @@ import { TestingLaunchPanel } from './TestingLaunchPanel.js';
  * `/testing/campaigns` — THE Testing landing (the testing-UX wave), a COMMAND SURFACE with
  * the section-dashboard kit (`dashboardKit`, zero forks — the /projects //make grammar): a
  * KPI band under the three operator questions, the creation verbs in the header (Run recon /
- * New campaign / Add with chat — one panel open at a time), then a filterable grid where
+ * New test / Add with chat — one panel open at a time; a `?new=` arrival intent pre-opens one,
+ * see `readLaunchIntent`), then a filterable grid where
  * engine campaigns AND ad-hoc label groups (wicked-studio#27, api-types 0.19.0) render as one
  * sorted set of cards — needs-you first, attention routing before navigation.
  *
@@ -300,12 +302,15 @@ function CampaignCard({ m, narration, navigate }: {
 interface Props {
   /** The board's live run list — KPI windows, gate jumps and narration read it, zero extra fetches. */
   runs: SessionView[];
-  navigate: (path: string) => void;
+  navigate: Navigate;
   /** When rendered inside a project shell (`/p/:id/campaigns`), the project a new test auto-scopes to. */
   projectId?: string | null;
+  /** The `?new=` arrival intent (`readLaunchIntent`) — the rail's ＋ / "Run recon" row land here
+   *  with that launch panel OPEN. `null` = a plain arrival, nothing opens. */
+  launchIntent?: LaunchIntent | null;
 }
 
-export function CampaignsPage({ runs, navigate, projectId = null }: Props): React.ReactElement {
+export function CampaignsPage({ runs, navigate, projectId = null, launchIntent = null }: Props): React.ReactElement {
   const support = useCampaignsStore((s) => s.support);
   const campaigns = useCampaignsStore((s) => s.campaigns);
   const groups = useCampaignsStore((s) => s.groups);
@@ -315,6 +320,11 @@ export function CampaignsPage({ runs, navigate, projectId = null }: Props): Reac
 
   const [panel, setPanel] = useState<PanelKind>(null);
   const openPanel = (p: Exclude<PanelKind, null>): void => setPanel((cur) => (cur === p ? null : p));
+  // Counts `?new=` ARRIVALS (not intents): part of the launch panel's `key`, so a re-arrival on
+  // an already-open panel remounts a FRESH launch instance instead of `setPanel(same)` no-op-ing
+  // onto one that has already launched (or errored) — the rail's ＋ after a successful launch
+  // must start a second test, not re-show the first one's "launched" state (#210 review).
+  const [arrival, setArrival] = useState(0);
 
   const [query, setQuery] = useState('');
   const [chip, setChip] = useState<CampaignChip>('all');
@@ -323,6 +333,18 @@ export function CampaignsPage({ runs, navigate, projectId = null }: Props): Reac
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // The arrival intent (wicked-studio#203): a create affordance that lands here must land with
+  // its panel OPEN. Open it, then CONSUME the query — replace, so Back never re-opens the panel
+  // and a second ＋ click from this very page changes the address again and re-fires.
+  // Consuming is also what makes EVERY ＋ click a distinct arrival (`null → intent → null`), so
+  // repeated same-intent arrivals each bump `arrival` and each get a fresh panel.
+  useEffect(() => {
+    if (launchIntent === null) return;
+    setPanel(launchIntent);
+    setArrival((n) => n + 1);
+    navigate(testingPath('campaigns'), { replace: true });
+  }, [launchIntent, navigate]);
 
   // ── The window (Work page idiom, over the CAMPAIGN/GROUP-member runs) ────────
   const runsById = useMemo(() => {
@@ -447,8 +469,11 @@ export function CampaignsPage({ runs, navigate, projectId = null }: Props): Reac
         </button>
       </div>
 
+      {/* Keyed by intent AND arrival: a new `?new=` arrival, or switching the verb (recon ⇄ test),
+          is a NEW launch instance — a launched/errored panel never carries over into the next ask. */}
       {(panel === 'recon' || panel === 'campaign') && (
         <TestingLaunchPanel
+          key={`${panel}:${arrival}`}
           intent={panel}
           navigate={navigate}
           onClose={() => setPanel(null)}
@@ -465,7 +490,7 @@ export function CampaignsPage({ runs, navigate, projectId = null }: Props): Reac
   if (support === 'unknown') {
     return (
       <div data-testid="campaigns-probing" style={{ padding: '24px', color: 'var(--ink-muted)' }}>
-        Checking this daemon for campaigns…
+        Checking this daemon for tests…
       </div>
     );
   }
@@ -477,9 +502,9 @@ export function CampaignsPage({ runs, navigate, projectId = null }: Props): Reac
       <div data-testid="campaigns-page" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         {header}
         <div data-testid="campaigns-unsupported" style={{ color: 'var(--ink-muted)', maxWidth: '640px' }}>
-          This daemon has no campaign surface — `GET /campaigns` is not served, which means the
-          connected wicked-crew predates campaign grouping. Launches still work; upgrade the
-          daemon to group a multi-run effort&rsquo;s sibling runs here.
+          This daemon has no test surface — `GET /campaigns` is not served, which means the
+          connected wicked-crew predates test grouping. Launches still work; upgrade the
+          daemon to group a multi-run test&rsquo;s sibling runs here.
         </div>
       </div>
     );
@@ -580,7 +605,7 @@ export function CampaignsPage({ runs, navigate, projectId = null }: Props): Reac
             type="button"
             data-testid="campaigns-show-older"
             onClick={() => setRange('all')}
-            title={`${hiddenByWindow} campaign${hiddenByWindow === 1 ? '' : 's'} with no run in the ${rangeWord(range)} window`}
+            title={`${hiddenByWindow} test${hiddenByWindow === 1 ? '' : 's'} with no run in the ${rangeWord(range)} window`}
             style={{
               borderRadius: 'var(--radius-full)', padding: '3px 10px',
               fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', cursor: 'pointer',
@@ -620,7 +645,7 @@ export function CampaignsPage({ runs, navigate, projectId = null }: Props): Reac
         </div>
       ) : visible.length === 0 ? (
         <p data-testid="campaigns-empty-filter" style={{ fontSize: '13px', color: S.faint, margin: 0 }}>
-          No campaigns match —{' '}
+          No tests match —{' '}
           <button
             type="button"
             onClick={() => { setChip('all'); setQuery(''); setRange('all'); }}

@@ -903,7 +903,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   if (groupAttach.campaignId !== undefined || groupAttach.groupLabel !== undefined) {
     activePills.push({
       label: groupAttach.campaignId !== undefined
-        ? `Campaign: ${groupAttach.campaignId}`
+        ? `Test: ${groupAttach.campaignId}`
         : `Group: ${groupAttach.groupLabel!}`,
       onClear: () => { setGroupChoice(''); setNewGroupLabel(''); },
       attrs: { 'data-testid': 'group-pill' },

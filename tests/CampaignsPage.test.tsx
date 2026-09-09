@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { SessionView } from '../src/api/types.js';
 import { attachedRun, makeCampaign, makeGroup } from './campaignFactories.js';
+import { deferred } from './deferred.js';
 import { makeView } from './factories.js';
 
 /**
@@ -61,24 +62,117 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-describe('the §1.5 probe states', () => {
-  it('404 renders the honest "daemon predates campaigns" copy — and the creation verbs STAY usable', async () => {
+describe('T24 — the §1.5 probe states', () => {
+  it('T24 — while probing: the probing line ALONE (no verbs, no grid), ONE GET /campaigns on mount; the answer swaps it for the page', async () => {
+    const probe = deferred<unknown>();
+    listCampaigns.mockReturnValue(probe.promise);
+    page();
+    expect(screen.getByTestId('campaigns-probing')).toBeInTheDocument();
+    expect(screen.queryByTestId('campaigns-page')).toBeNull();
+    expect(screen.queryByTestId('testing-campaign-open')).toBeNull();
+    expect(listCampaigns).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      probe.resolve({ campaigns: [], groups: [] });
+      await probe.promise;
+    });
+    await screen.findByTestId('campaigns-page');
+    expect(screen.queryByTestId('campaigns-probing')).toBeNull();
+    expect(screen.getByTestId('campaigns-empty')).toBeInTheDocument();
+    // Mount probes once — the store's in-flight guard, not a second fetch.
+    expect(listCampaigns).toHaveBeenCalledTimes(1);
+  });
+
+  it('T24 — 404 renders the honest "daemon predates tests" copy — and the creation verbs STAY usable', async () => {
     listCampaigns.mockRejectedValue(new ApiError(404, 'Not Found'));
     page();
     await waitFor(() => expect(screen.getByTestId('campaigns-unsupported')).toBeInTheDocument());
-    expect(screen.getByTestId('campaigns-unsupported').textContent).toContain('predates campaign grouping');
+    expect(screen.getByTestId('campaigns-unsupported').textContent).toContain('predates test grouping');
     expect(screen.getByTestId('testing-recon-open')).toBeInTheDocument();
     expect(screen.getByTestId('testing-campaign-open')).toBeInTheDocument();
     expect(screen.getByTestId('testing-author-open')).toBeInTheDocument();
   });
 
-  it('200 with empty lists is the "no tests yet" answer, with a CTA that opens the New test flow', async () => {
+  it('T24 — 200 with empty lists is the "no tests yet" answer, with a CTA that opens the New test flow', async () => {
     listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
     page();
     await waitFor(() => expect(screen.getByTestId('campaigns-empty')).toBeInTheDocument());
     expect(screen.getByTestId('campaigns-empty').textContent).toContain('run recon over a codebase');
     fireEvent.click(screen.getByTestId('campaigns-empty-cta'));
     expect(await screen.findByTestId('testing-launch-panel')).toHaveAttribute('data-intent', 'campaign');
+  });
+
+  it('T24 — 200 with tests renders the full command surface: the KPI band, the filter strip and the grid', async () => {
+    listCampaigns.mockResolvedValue({
+      campaigns: [makeCampaign('alpha', [{ status: 'completed', runId: 'run-1' }])],
+      groups: [],
+    });
+    page(() => {}, [view('run-1', 'completed')]);
+    await screen.findByTestId('campaigns-kpis');
+    expect(screen.getByTestId('stat-campaigns')).toHaveAttribute('data-value', '1');
+    expect(screen.getAllByTestId('campaigns-filter-chip').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('campaign-card')).toHaveLength(1);
+    expect(screen.queryByTestId('campaigns-empty')).toBeNull();
+    expect(screen.queryByTestId('campaigns-unsupported')).toBeNull();
+  });
+});
+
+describe('the ?new= arrival intent (#203) — a create affordance lands with its panel OPEN', () => {
+  it.each(['campaign', 'recon'] as const)('launchIntent=%s opens that launch panel on arrival and CONSUMES the query with ONE replace navigation', async (intent) => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
+    const navigate = vi.fn();
+    render(<CampaignsPage runs={[]} navigate={navigate} launchIntent={intent} />);
+    expect(await screen.findByTestId('testing-launch-panel')).toHaveAttribute('data-intent', intent);
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns', { replace: true });
+  });
+
+  it('a plain arrival (no intent) opens nothing and navigates nowhere', async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
+    const navigate = vi.fn();
+    render(<CampaignsPage runs={[]} navigate={navigate} />);
+    await screen.findByTestId('campaigns-page');
+    expect(screen.queryByTestId('testing-launch-panel')).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('the intent is honored on a daemon WITHOUT the campaign surface too — the creation verbs stay usable there (§1.5)', async () => {
+    listCampaigns.mockRejectedValue(new ApiError(404, 'Not Found'));
+    render(<CampaignsPage runs={[]} navigate={vi.fn()} launchIntent="campaign" />);
+    await screen.findByTestId('campaigns-unsupported');
+    expect(screen.getByTestId('testing-launch-panel')).toHaveAttribute('data-intent', 'campaign');
+  });
+
+  it('a REPEATED same-intent arrival remounts a fresh panel (typed text gone, query consumed again) — while consuming the query alone keeps the open instance', async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
+    const navigate = vi.fn();
+    const { rerender } = render(<CampaignsPage runs={[]} navigate={navigate} launchIntent="campaign" />);
+    const first = await screen.findByTestId('testing-launch-panel');
+    expect(navigate).toHaveBeenCalledTimes(1);
+
+    // The App re-renders with the consumed (null) intent — same instance, the operator's typing survives.
+    rerender(<CampaignsPage runs={[]} navigate={navigate} launchIntent={null} />);
+    expect(screen.getByTestId('testing-launch-panel')).toBe(first);
+    fireEvent.change(within(first).getByTestId('testing-launch-instructions'), { target: { value: 'half-typed' } });
+    expect(within(first).getByTestId('testing-launch-instructions')).toHaveValue('half-typed');
+
+    // The rail ＋ again (`null → campaign`): a NEW arrival = a NEW launch instance, consumed once more.
+    rerender(<CampaignsPage runs={[]} navigate={navigate} launchIntent="campaign" />);
+    const fresh = await screen.findByTestId('testing-launch-panel');
+    expect(fresh).not.toBe(first);
+    expect(fresh).toHaveAttribute('data-intent', 'campaign');
+    expect(within(fresh).getByTestId('testing-launch-instructions')).toHaveValue('');
+    expect(navigate).toHaveBeenCalledTimes(2);
+    expect(navigate).toHaveBeenLastCalledWith('/testing/campaigns', { replace: true });
+  });
+
+  it('the intent-opened panel is the same one the verb toggles — clicking "New test" again closes it', async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
+    render(<CampaignsPage runs={[]} navigate={vi.fn()} launchIntent="campaign" />);
+    await screen.findByTestId('testing-launch-panel');
+    expect(screen.getByTestId('testing-campaign-open')).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByTestId('testing-campaign-open'));
+    expect(screen.queryByTestId('testing-launch-panel')).toBeNull();
   });
 });
 

@@ -168,7 +168,7 @@ describe('needsYouRows — dedupe', () => {
     expect(rows.map((r) => r.key)).toEqual(['fail:r-member']);
   });
 
-  it('campaign counts the live list cannot see produce ONE campaign row', () => {
+  it('campaign counts the live list cannot see produce ONE campaign row — spoken in Test words (T30, #203)', () => {
     const rows = needsYouRows(inputs({
       runs: [makeView({ id: 'r-member', status: 'failed' })],
       // 3 failed on the server; only one member is in the live list.
@@ -176,8 +176,12 @@ describe('needsYouRows — dedupe', () => {
     }));
     expect(rows.map((r) => r.key)).toEqual(['fail:r-member', 'campaign:camp-1']);
     expect(rows[1]!.text).toContain('3 runs failed');
+    // The row's rendered line and verb are product copy: Test vocabulary, never "Campaign".
+    expect(rows[1]!.text).toMatch(/^Test gaps — /);
+    expect(rows[1]!.text).not.toMatch(/campaign/i);
+    expect(rows[1]!.action.label).not.toMatch(/campaign/i);
     expect(rows[1]!.action).toEqual({
-      kind: 'open', path: '/testing/campaigns/camp-1', label: 'Open campaign ›',
+      kind: 'open', path: '/testing/campaigns/camp-1', label: 'Open test ›',
     });
   });
 

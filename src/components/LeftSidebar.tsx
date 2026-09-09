@@ -8,7 +8,7 @@ import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
 import { memoriesPath, policiesPath, steeringDashboardPath, STEERING_SECTIONS, STEERING_SECTION_LABELS, type SteeringSection } from '../api/steering.js';
-import { testingPath } from '../api/testing.js';
+import { testingLaunchPath, testingPath } from '../api/testing.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
 import { HealthRailSection } from './HealthRailSection.js';
@@ -98,7 +98,8 @@ const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Re
 // Test — the campaign/recon testing capability as a standalone WORK section (usability wave):
 // project-optional (recon takes an optional project), placed right below Execute. Routes to the
 // existing `/testing/campaigns` page; the rail split (headingForPath) keeps it distinct from Evals.
-const P_TEST: PathSpec      = { key: 'test',     title: 'Test',         noun: 'Campaign',   glyph: '✓', dash: testingPath('campaigns'), collapsedHref: testingPath('campaigns') };
+// The noun is the DISPLAY word (＋ = "New Test", #203) — the route keeps the backend's `campaigns`.
+const P_TEST: PathSpec      = { key: 'test',     title: 'Test',         noun: 'Test',       glyph: '✓', dash: testingPath('campaigns'), collapsedHref: testingPath('campaigns') };
 // Evals — steering-rule evals, moved beside Steering (a SYSTEM concept, not a work one). Glyph ◈.
 const P_TESTING: PathSpec  = { key: 'testing',  title: 'Evals',        noun: 'Eval',       glyph: '◈', dash: testingPath('evals'), collapsedHref: testingPath('evals') };
 // Steering (DES-MEM-FACETED-001, unified surface): the governed-knowledge home, a PRIMARY path
@@ -495,10 +496,11 @@ function EvalsRailRows({ navigate }: { navigate: (p: string) => void }): React.R
   );
 }
 
-/** The Test accordion's shortcut row (usability wave): a "Run recon" launcher into the campaigns
- *  landing — Test works WITHOUT a project (recon takes an optional one), so it lives here as a
- *  standalone work section. The ▦ links the campaigns dashboard; this row is the create verb's
- *  sibling. Same grammar as {@link EvalsRailRows}. */
+/** The Test accordion's shortcut row (usability wave): a "Run recon" launcher into the test
+ *  landing WITH the recon panel open (`?new=recon` — a launcher launches, #203) — Test works
+ *  WITHOUT a project (recon takes an optional one), so it lives here as a standalone work
+ *  section. The ▦ links the test dashboard; this row is the create verb's sibling. Same grammar
+ *  as {@link EvalsRailRows}. */
 function TestRailRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
   return (
     <div role="menu" className="flex flex-col pt-0.5">
@@ -506,7 +508,7 @@ function TestRailRows({ navigate }: { navigate: (p: string) => void }): React.Re
         type="button"
         role="menuitem"
         data-testid="rail-test-recon"
-        onClick={() => navigate(testingPath('campaigns'))}
+        onClick={() => navigate(testingLaunchPath('recon'))}
         className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
         style={{ color: 'var(--ink-muted)' }}
       >
@@ -719,13 +721,14 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             <ViewAll href="/execute" navigate={navigate} />
           </RailHeading>
 
-          {/* ── Test — campaigns/recon as a standalone work section (usability wave): below Execute,
-                 works with or without a project. ＋ launches a recon into the campaigns landing. ── */}
+          {/* ── Test — tests/recon as a standalone work section (usability wave): below Execute,
+                 works with or without a project. ＋ ("New Test") lands on the test landing with the
+                 New-test panel OPEN (`?new=test`, #203) — a create affordance creates. ── */}
           <RailHeading
             path={P_TEST}
             open={openHeading === 'test'}
             onToggle={() => toggle('test')}
-            onNew={() => navigate(testingPath('campaigns'))}
+            onNew={() => navigate(testingLaunchPath('campaign'))}
             navigate={navigate}
           >
             <TestRailRows navigate={navigate} />

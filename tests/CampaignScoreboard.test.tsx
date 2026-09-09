@@ -242,7 +242,7 @@ describe('honest degradation', () => {
     const navigate = vi.fn();
     board([], navigate);
     await waitFor(() => expect(screen.getByTestId('campaign-notfound')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('All campaigns'));
+    fireEvent.click(screen.getByText('All tests'));
     expect(navigate).toHaveBeenCalledWith('/testing/campaigns');
   });
 

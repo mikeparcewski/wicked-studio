@@ -73,7 +73,8 @@ describe('ChatInput launch form — ad-hoc grouping (#27)', () => {
     const user = userEvent.setup();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     await user.selectOptions(screen.getByTestId('group-attach'), 'c:camp-1');
-    expect(screen.getByTestId('group-pill').textContent).toContain('Campaign: camp-1');
+    // The pill speaks the Test vocabulary (#203) — the wire key stays `campaignId`.
+    expect(screen.getByTestId('group-pill').textContent).toContain('Test: camp-1');
     const body = await typeAndLaunch(user);
     expect(body.campaignId).toBe('camp-1');
     expect('groupLabel' in body).toBe(false);

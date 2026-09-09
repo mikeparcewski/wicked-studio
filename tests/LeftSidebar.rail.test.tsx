@@ -298,11 +298,30 @@ describe('the ＋ create actions (§2.1/§3.4)', () => {
     expect(navigate).toHaveBeenCalledWith('/chat/new');
     fireEvent.click(within(screen.getByTestId('rail-heading-repos')).getByTestId('heading-new'));
     expect(navigate).toHaveBeenCalledWith('/repos/new');
-    // Test ＋ → the campaigns/recon landing (project-optional).
+    // Test ＋ → the test landing WITH the New-test panel open (`?new=test`, #203) — a create
+    // affordance creates; it never lands on a page with nothing open.
     fireEvent.click(within(screen.getByTestId('rail-heading-test')).getByTestId('heading-new'));
-    expect(navigate).toHaveBeenCalledWith('/testing/campaigns');
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns?new=test');
     // Evals is a system section now — dashboard only, no ＋.
     expect(within(screen.getByTestId('rail-heading-testing')).queryByTestId('heading-new')).toBeNull();
+  });
+
+  it('T30 — the Test ＋ is labelled "New Test" (aria-label + title), never "New Campaign" (#203)', async () => {
+    rail();
+    await screen.findByRole('button', { name: 'wicked-studio' });
+    const plus = within(screen.getByTestId('rail-heading-test')).getByTestId('heading-new');
+    expect(plus).toHaveAttribute('aria-label', 'New Test');
+    expect(plus).toHaveAttribute('title', 'New Test');
+  });
+
+  it('the Test accordion\'s "Run recon" row lands on the test landing with the recon panel open (`?new=recon`)', async () => {
+    const navigate = vi.fn();
+    rail({ pathname: '/testing/campaigns', navigate });
+    await screen.findByRole('button', { name: 'wicked-studio' });
+    const test = screen.getByTestId('rail-heading-test');
+    expect(test.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(within(test).getByTestId('rail-test-recon'));
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns?new=recon');
   });
 
   it('Vibe ＋ opens a project-picker locked to Document; Demo ＋ one locked to Video', async () => {
