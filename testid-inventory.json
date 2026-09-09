@@ -11,8 +11,8 @@
   "studioVersion": "0.5.1",
   "counts": {
     "files": 137,
-    "occurrences": 1113,
-    "static": 952,
+    "occurrences": 1116,
+    "static": 954,
     "dynamic": 57,
     "computed": 6
   },
@@ -4066,6 +4066,12 @@
       ]
     },
     {
+      "testId": "skills-file-stale-read",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
       "testId": "skills-file-tree",
       "files": [
         "src/components/SkillDrawer.tsx"
@@ -4073,6 +4079,12 @@
     },
     {
       "testId": "skills-files-cancel",
+      "files": [
+        "src/components/SkillFilesMapModal.tsx"
+      ]
+    },
+    {
+      "testId": "skills-files-conflict",
       "files": [
         "src/components/SkillFilesMapModal.tsx"
       ]

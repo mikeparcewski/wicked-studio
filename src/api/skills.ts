@@ -254,23 +254,24 @@ export interface SkillFileContent {
 // rows, the support map) — untrusted until checked. `encodeURIComponent` preserves `.` and `..`,
 // and URL normalization collapses `/skills/<name>/files/../../support/x` into
 // `/skills/support/x` (or `/skills/support/../../settings` into `/settings`) BEFORE crew's
-// skill-scoped containment ever sees the request. So every segment is decoded (a percent-encoded
-// `..` is still `..`), refused when empty, dot-only (`.`, `..`, `…`), separator-bearing (`/`, `\`)
-// or NUL-bearing, and only then encoded. A refusal is a NAMED error and no request is built —
-// the callers below are `async` so it arrives as a rejection, like any other wire failure.
+// skill-scoped containment ever sees the request. So every segment is validated on its LITERAL
+// text — refused when empty, dot-only (`.`, `..`, `…`), separator-bearing (`/`, `\`) or
+// NUL-bearing — and then percent-encoded exactly once. A refusal is a NAMED error and no request
+// is built — the callers below are `async` so it arrives as a rejection, like any other wire
+// failure.
+//
+// The daemon's text IS the identity — it is never decoded first. A file literally named
+// `a%41.md` travels as `a%2541.md` and the daemon's one decode hands back `a%41.md`; decoding it
+// here would retarget every read and write onto `aA.md` while the drawer showed the requested name
+// (review round 2). A literal `%2e%2e` is by the same rule a file named `%2e%2e`, encoded to
+// `%252e%252e` — the route layer's single decode never turns it into `..`.
 
 /** One validated, encoded route segment; `what` names it in the refusal. */
 export function skillRouteSegment(raw: string, what: string): string {
-  let decoded = raw;
-  try {
-    decoded = decodeURIComponent(raw);
-  } catch {
-    // Not percent-encoded (a literal `%` in a name) — the raw text IS the segment.
-  }
-  if (decoded === '') throw new Error(`refusing ${what}: an empty segment`);
-  if (/^\.+$/.test(decoded)) throw new Error(`refusing ${what}: the dot-only segment "${raw}" would escape its route`);
-  if (/[/\\\0]/.test(decoded)) throw new Error(`refusing ${what}: the segment "${raw}" carries a path separator or NUL`);
-  return encodeURIComponent(decoded);
+  if (raw === '') throw new Error(`refusing ${what}: an empty segment`);
+  if (/^\.+$/.test(raw)) throw new Error(`refusing ${what}: the dot-only segment "${raw}" would escape its route`);
+  if (/[/\\\0]/.test(raw)) throw new Error(`refusing ${what}: the segment "${raw}" carries a path separator or NUL`);
+  return encodeURIComponent(raw);
 }
 
 /** A skill name as the ONE `:name` route segment. */

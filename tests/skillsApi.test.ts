@@ -35,9 +35,11 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: vi.fn() }));
  *  - `readCatalogBody` accepts exactly `{manifest: {skills: {…}, support: {…}}, revision}` with
  *    PLAIN objects for the two maps; anything else (an array, a missing map) throws a NAMED error
  *    (never a silent empty catalog against a daemon that answered something);
- *  - route identity: every name / path segment is decoded, refused when empty, dot-only or
- *    separator-bearing, then encoded — a daemon-supplied `..` can never normalize a skill-file
- *    request onto `/skills/support/…` or a support PUT onto `/settings` (the codex probes);
+ *  - route identity: every name / path segment is validated on its LITERAL text (refused when
+ *    empty, dot-only or separator/NUL-bearing) and then encoded exactly once — a daemon-supplied
+ *    `..` can never normalize a skill-file request onto `/skills/support/…` or a support PUT onto
+ *    `/settings` (the round-1 probes), and a literal `%` filename keeps its identity on the wire
+ *    (`refs/a%41.md` → `refs/a%2541.md`, never `refs/aA.md` — the round-2 probe);
  *  - `provenanceOf` DERIVES shipped / override / user-added from the hashes — no wire field;
  *  - `isUnpublished` compares the effective hash with what the current snapshot carries;
  *  - `sortSkillFiles` puts SKILL.md first; `supportFiles` folds the manifest's support map;
@@ -116,36 +118,45 @@ describe('route identity — every name and path is validated before it becomes 
     fetchMock.mockResolvedValue({ files: [], verdict: 'clear', findings: [], revision: 'r' });
   });
 
-  it('segments: decoded, then refused when empty, dot-only, or carrying a separator; encoded otherwise', () => {
+  it('segments: validated on the LITERAL text — refused when empty, dot-only, or carrying a separator / NUL; encoded exactly once otherwise', () => {
     expect(skillRouteSegment('SKILL.md', 'x')).toBe('SKILL.md');
     expect(skillRouteSegment('.claude-plugin', 'x')).toBe('.claude-plugin');
     expect(skillRouteSegment('a b#c', 'x')).toBe('a%20b%23c');
-    // A literal `%` that is not an escape is the segment's own text.
+    // A `%` is the segment's own text, never an escape to resolve here: the daemon's ONE decode
+    // hands the literal back. (Round 2: decoding `a%41.md` first retargeted every read and write
+    // onto `aA.md` while the drawer showed the requested name.)
     expect(skillRouteSegment('100%.md', 'x')).toBe('100%25.md');
+    expect(skillRouteSegment('a%41.md', 'x')).toBe('a%2541.md');
+    expect(decodeURIComponent(skillRouteSegment('a%41.md', 'x'))).toBe('a%41.md');
+    // Percent-encoded dots are a file literally NAMED `%2e%2e`: encoded once, the route layer's
+    // single decode yields `%2e%2e` again — never `..`. Same for an encoded slash or NUL.
+    expect(skillRouteSegment('%2e%2e', 'x')).toBe('%252e%252e');
+    expect(skillRouteSegment('a%2Fb', 'x')).toBe('a%252Fb');
+    expect(skillRouteSegment('a%00b', 'x')).toBe('a%2500b');
     expect(() => skillRouteSegment('', 'x')).toThrow(/refusing x: an empty segment/);
     expect(() => skillRouteSegment('.', 'x')).toThrow(/dot-only/);
     expect(() => skillRouteSegment('..', 'x')).toThrow(/dot-only/);
     expect(() => skillRouteSegment('...', 'x')).toThrow(/dot-only/);
-    // Percent-encoded dots are still dots once the route layer decodes them.
-    expect(() => skillRouteSegment('%2e%2e', 'x')).toThrow(/dot-only/);
-    expect(() => skillRouteSegment('%2E.', 'x')).toThrow(/dot-only/);
-    expect(() => skillRouteSegment('a%2Fb', 'x')).toThrow(/path separator/);
+    expect(() => skillRouteSegment('a/b', 'x')).toThrow(/path separator/);
     expect(() => skillRouteSegment('a\\b', 'x')).toThrow(/path separator/);
-    expect(() => skillRouteSegment('a%00b', 'x')).toThrow(/path separator/);
+    expect(() => skillRouteSegment('a\0b', 'x')).toThrow(/path separator/);
   });
 
-  it('paths: relative, no empty / dot-only / separator-smuggling segment; each segment encoded, slashes kept', () => {
+  it('paths: relative, no empty / dot-only / separator-smuggling segment; each segment encoded once, slashes kept', () => {
     expect(skillRoutePath('SKILL.md')).toBe('SKILL.md');
     expect(skillRoutePath('refs/notes.md')).toBe('refs/notes.md');
     expect(skillRoutePath('.claude-plugin/plugin.json')).toBe('.claude-plugin/plugin.json');
     expect(skillRoutePath('docs/a b#c.md')).toBe('docs/a%20b%23c.md');
+    expect(skillRoutePath('refs/a%41.md')).toBe('refs/a%2541.md');
+    // A literal `%2e%2e` dir is not a traversal once encoded exactly once — nothing normalizes.
+    expect(skillRoutePath('%2e%2e/%2e%2e/settings')).toBe('%252e%252e/%252e%252e/settings');
     expect(() => skillRoutePath('')).toThrow(/empty file path/);
     expect(() => skillRoutePath('/etc/passwd')).toThrow(/absolute/);
     expect(() => skillRoutePath('a//b')).toThrow(/empty segment/);
     expect(() => skillRoutePath('a/')).toThrow(/empty segment/);
     expect(() => skillRoutePath('a/./b')).toThrow(/dot-only/);
     expect(() => skillRoutePath('../../support/scripts/a.sh')).toThrow(/dot-only/);
-    expect(() => skillRoutePath('%2e%2e/%2e%2e/settings')).toThrow(/dot-only/);
+    expect(() => skillRoutePath('refs/../SKILL.md')).toThrow(/dot-only/);
     expect(() => skillRoutePath('a\\..\\b')).toThrow(/path separator/);
   });
 
@@ -160,7 +171,27 @@ describe('route identity — every name and path is validated before it becomes 
   it('codex probe 1: a skill-file path that would normalize onto /skills/support/… is refused client-side — no request is built', async () => {
     await expect(readSkillFile('wicked-garden-repo-learn', '../../support/scripts/a.sh')).rejects.toThrow(/refusing file path/);
     await expect(writeSkillFile('wicked-garden-repo-learn', '../../support/scripts/a.sh', 'x', 'r-1')).rejects.toThrow(/refusing file path/);
-    await expect(readSkillFile('wicked-garden-repo-learn', '%2e%2e/%2e%2e/support/scripts/a.sh')).rejects.toThrow(/refusing file path/);
+    await expect(readSkillFile('wicked-garden-repo-learn', 'refs/../SKILL.md')).rejects.toThrow(/refusing file path/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    // A LITERAL `%2e%2e` dir is a file identity, not a traversal: encoded once it cannot normalize —
+    // the request names `%252e%252e`, which the daemon's single decode returns as `%2e%2e`.
+    await readSkillFile('wicked-garden-repo-learn', '%2e%2e/%2e%2e/support/scripts/a.sh');
+    expect(fetchMock).toHaveBeenLastCalledWith('/skills/wicked-garden-repo-learn/files/%252e%252e/%252e%252e/support/scripts/a.sh');
+  });
+
+  it('codex round 2: a literal `%` filename keeps its identity — `refs/a%41.md` travels as `refs/a%2541.md` (never `refs/aA.md`) on GET and PUT; a `..` segment is refused with no request', async () => {
+    await readSkillFile('wicked-garden-repo-learn', 'refs/a%41.md');
+    expect(fetchMock).toHaveBeenLastCalledWith('/skills/wicked-garden-repo-learn/files/refs/a%2541.md');
+    await writeSkillFile('wicked-garden-repo-learn', 'refs/a%41.md', 'x', 'r-1');
+    expect(fetchMock).toHaveBeenLastCalledWith('/skills/wicked-garden-repo-learn/files/refs/a%2541.md', { method: 'PUT', body: JSON.stringify({ content: 'x', expectedRevision: 'r-1' }) });
+    await readSupportFile('scripts/a%41.sh');
+    expect(fetchMock).toHaveBeenLastCalledWith('/skills/support/scripts/a%2541.sh');
+    // The round trip: the daemon decodes once and gets the literal name back; nothing was retargeted.
+    expect(decodeURIComponent('/skills/wicked-garden-repo-learn/files/refs/a%2541.md')).toBe('/skills/wicked-garden-repo-learn/files/refs/a%41.md');
+    expect(fetchMock.mock.calls.some(([p]) => String(p).includes('aA.md'))).toBe(false);
+    fetchMock.mockClear();
+    await expect(readSkillFile('wicked-garden-repo-learn', 'refs/../a%41.md')).rejects.toThrow(/dot-only/);
+    await expect(writeSkillFile('wicked-garden-repo-learn', '../a%41.md', 'x', 'r-1')).rejects.toThrow(/dot-only/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

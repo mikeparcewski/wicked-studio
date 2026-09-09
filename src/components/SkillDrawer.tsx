@@ -43,10 +43,15 @@ import type { SkillsWriter } from './skillsWriter.js';
  *    CAS stays the backstop for whatever the re-read did not see.
  *  - **Late answers are ignored.** Every read carries an intent token; a file list or a file that
  *    answers after the operator switched tabs, picked another file, or saved is dropped — the
- *    Support editor is never swapped for a skill file by a slow list.
+ *    Support editor is never swapped for a skill file by a slow list. And a read never lands over
+ *    typing: the editor is read-only while a file is loading, and if text reached the draft after
+ *    the request left anyway, the answer is set aside as a STALE read (the draft stays, named).
  *
  * The page owns the catalog: the drawer reports every applied content write through `onChanged`
- * so the page reloads (provenance flips, hashes move, `unpublished` lights up).
+ * so the page reloads (provenance flips, hashes move, `unpublished` lights up) — and every dirty
+ * flip through `onDirtyChange`, so a row click on another skill comes back as `leaveTo` and goes
+ * through the same discard confirmation a close does; the page swaps the drawer only on
+ * `onLeave(true)`.
  */
 
 /** The two file trees the drawer edits. */
@@ -61,7 +66,7 @@ interface OpenFile extends SkillFileContent {
   readAt: string | null;
 }
 
-export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClose, onToggle, onChanged }: {
+export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveTo, onClose, onLeave, onDirtyChange, onToggle, onChanged }: {
   skill: SkillRow;
   /** The root support files (from the manifest), path-sorted. */
   support: readonly SkillFileEntry[];
@@ -71,7 +76,16 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
   /** The page has a write in flight (or the catalog is frozen on a conflict / stale) — the
    *  drawer's verbs wait. */
   busy: boolean;
+  /** The page was asked to open ANOTHER skill while this drawer is dirty: its name. The drawer
+   *  raises its discard confirmation and answers through `onLeave`; the page swaps the drawer
+   *  (its `key`) only after the operator discards. */
+  leaveTo: string | null;
   onClose: () => void;
+  /** The answer to `leaveTo`: `true` discards the draft and opens it, `false` keeps editing. */
+  onLeave: (proceed: boolean) => void;
+  /** Every dirty flip (and a clean slate when the drawer unmounts) — the page routes a row click
+   *  through the confirmation instead of unmounting a draft. */
+  onDirtyChange: (dirty: boolean) => void;
   /** The page's guarded flip — it reloads the catalog and hands back the daemon's verdict
    *  (`null` on a revision conflict: the page's prompt owns that moment). */
   onToggle: (name: string, enabled: boolean) => Promise<SkillGuardResult | null>;
@@ -90,6 +104,9 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
   const [intervening, setIntervening] = useState<OpenFile | null>(null);
   /** The exact draft the daemon last BLOCKED — Save stays disabled until the text changes. */
   const [blockedDraft, setBlockedDraft] = useState<string | null>(null);
+  /** A file whose read answered AFTER text reached the draft — set aside, never applied over the
+   *  typing; names the path so the operator knows what did not open. */
+  const [staleRead, setStaleRead] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [lastResult, setLastResult] = useState<{ verb: string; result: SkillGuardResult } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -106,12 +123,32 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
 
   const dirty = file !== null && draft !== file.content;
 
+  // The page hears every dirty flip — and a clean slate when this drawer goes — so a row click on
+  // another skill is routed through the discard confirmation instead of unmounting the draft.
+  useEffect(() => {
+    onDirtyChange(dirty);
+    return () => onDirtyChange(false);
+  }, [dirty, onDirtyChange]);
+
   // Closing with unsaved edits asks first — an Escape must never eat a draft silently.
   const requestClose = useCallback((): void => {
     if (dirty) setDiscardPrompt(true);
     else onClose();
   }, [dirty, onClose]);
   useModalEscape(requestClose);
+
+  // ONE discard confirmation for both ways out: a close (Escape / ✕) and the page's request to
+  // open another skill (`leaveTo`). Keep editing answers the page `false`; Discard closes, or
+  // answers `true` and the page navigates — the drawer's key never changes under a draft.
+  const leavePrompt = discardPrompt || leaveTo !== null;
+  const keepEditing = (): void => {
+    setDiscardPrompt(false);
+    if (leaveTo !== null) onLeave(false);
+  };
+  const discardAndLeave = (): void => {
+    if (leaveTo !== null) onLeave(true);
+    else onClose();
+  };
 
   const loadSkillFiles = useCallback(async (): Promise<SkillFileEntry[]> => {
     setFilesError(null);
@@ -134,16 +171,28 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
     return { ...f, path, scope, readAt };
   }, [skill.name, writer]);
 
-  /** The operator opens a file: a new intent; a late answer to an older one is dropped. */
+  /** The operator opens a file: a new intent; a late answer to an older one is dropped, and an
+   *  answer that would land over text typed since the request left is set aside as stale. */
   const openFile = useCallback(async (scope: SkillDrawerTab, path: string): Promise<void> => {
     const seq = ++intent.current;
+    const draftAtRequest = draftRef.current;
     setFileLoading(true);
     setFileError(null);
     setBlockedDraft(null);
     setIntervening(null);
+    setStaleRead(null);
     try {
       const f = await readFile(scope, path);
       if (seq !== intent.current) return;
+      // The editor is read-only while this read is in flight, but nothing upstream is trusted: text
+      // that reached the draft after the request left is never overwritten by its answer. The read
+      // is set aside — the draft stays, dirty against the file it was typed into, and the tree
+      // stays locked until it is saved or discarded.
+      const typed = draftRef.current;
+      if (typed !== draftAtRequest && typed !== '') {
+        setStaleRead(path);
+        return;
+      }
       setFile(f);
       setDraft(f.content);
     } catch (e) {
@@ -218,6 +267,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
       setFile(null);
       setDraft('');
       setIntervening(null);
+      setStaleRead(null);
       setFileLoading(false);
     }
   };
@@ -295,6 +345,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
     }
     setDraft(file.content);
     setBlockedDraft(null);
+    setStaleRead(null);
   };
 
   const flip = (): void => {
@@ -398,9 +449,10 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
         </button>
       </div>
 
-      {discardPrompt && (
+      {leavePrompt && (
         <div
           data-testid="skills-discard-prompt"
+          data-leave-to={leaveTo ?? undefined}
           role="alertdialog"
           aria-label="Unsaved changes"
           className="flex flex-wrap items-center gap-2 rounded px-3 py-2 text-[11px]"
@@ -411,7 +463,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
           <button
             data-testid="skills-keep-editing"
             type="button"
-            onClick={() => setDiscardPrompt(false)}
+            onClick={keepEditing}
             className="rounded px-2 py-0.5 text-[10px]"
             style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
           >
@@ -420,11 +472,11 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
           <button
             data-testid="skills-discard"
             type="button"
-            onClick={onClose}
+            onClick={discardAndLeave}
             className="rounded px-2 py-0.5 text-[10px] font-semibold"
             style={{ background: 'var(--status-gate)', color: 'var(--surface-base)' }}
           >
-            Discard and close
+            {leaveTo !== null ? <>Discard and open <span className="font-mono">{leaveTo}</span></> : 'Discard and close'}
           </button>
         </div>
       )}
@@ -514,9 +566,15 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
                 <span data-testid="skills-file-path" data-scope={file.scope} style={{ color: 'var(--ink-muted)' }}>{file.path}</span>
                 <span>{file.size} B</span>
                 {dirty && <span data-testid="skills-file-dirty" style={{ color: 'var(--status-gate)' }}>unsaved</span>}
+                {fileLoading && <span data-testid="skills-file-loading">loading…</span>}
               </div>
               {readOnlyReason !== null && (
                 <p data-testid="skills-file-readonly" className="text-[10px]" style={{ color: 'var(--status-gate)' }}>{readOnlyReason}</p>
+              )}
+              {staleRead !== null && (
+                <p data-testid="skills-file-stale-read" data-path={staleRead} role="status" className="text-[10px]" style={{ color: 'var(--status-gate)' }}>
+                  <span className="font-mono">{staleRead}</span> finished loading while you were typing — its content was not applied over your text. Save or discard your edits, then open it again.
+                </p>
               )}
               {intervening !== null && (
                 <div
@@ -555,7 +613,8 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, onClos
                 data-testid="skills-editor"
                 aria-label={`${file.path} content`}
                 value={draft}
-                readOnly={readOnlyReason !== null}
+                readOnly={readOnlyReason !== null || fileLoading}
+                aria-busy={fileLoading}
                 spellCheck={false}
                 onChange={(e) => setDraft(e.target.value)}
                 className="min-h-[18rem] flex-1 resize-y rounded p-2 font-mono text-[11px] focus:outline-none"

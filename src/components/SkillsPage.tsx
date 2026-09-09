@@ -43,7 +43,8 @@ import type { SkillsWriter } from './skillsWriter.js';
  *
  * CAS: the page holds the catalog `revision`; every write goes through {@link SkillsWriter}
  * (`expectedRevision` out, the answered `revision` adopted). A **409** freezes the page behind the
- * reload prompt — nothing else is written until the catalog is re-read. Every write also freezes
+ * reload prompt — nothing else is written until the catalog is re-read (the Add/Replace modal
+ * re-reads through the writer itself and keeps its files map for the retry). Every write also freezes
  * the others while it is in flight (they all share the one revision — overlapping writes could
  * only 409), and a catalog re-read that FAILS marks the page stale: the rows stay readable, every
  * write waits until a re-read succeeds. Each successful re-read bumps `catalogEpoch`, which the
@@ -97,6 +98,11 @@ export function SkillsPage({ navigate, search = '' }: {
   const [inFlight, setInFlight] = useState(0);
   /** The revision every mutation is conditioned on — a ref so chained writes read the latest. */
   const revisionRef = useRef<string | null>(null);
+  /** The open drawer has unsaved edits (it reports every flip). A row click on ANOTHER skill then
+   *  parks its name in `pendingSelect` and the drawer asks first — its `key` swaps only after the
+   *  operator discards, never under a draft (review round 2). */
+  const [drawerDirty, setDrawerDirty] = useState(false);
+  const [pendingSelect, setPendingSelect] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<SkillsCatalog | null> => {
     try {
@@ -145,13 +151,17 @@ export function SkillsPage({ navigate, search = '' }: {
       setInFlight((n) => n - 1);
     }
   }, []);
-  const writer = useMemo<SkillsWriter>(() => ({ run, revision: () => revisionRef.current }), [run]);
-
-  const reloadAfterConflict = (): void => {
+  /** After a 409: the prompt clears and the catalog is re-read. Also the writer's `reload` — the
+   *  Add/Replace modal calls it with its files map intact and retries against the revision it adopts. */
+  const reloadAfterConflict = useCallback(async (): Promise<void> => {
     setConflict(null);
     setPageResult(null);
-    void load();
-  };
+    await load();
+  }, [load]);
+  const writer = useMemo<SkillsWriter>(
+    () => ({ run, revision: () => revisionRef.current, reload: reloadAfterConflict }),
+    [run, reloadAfterConflict],
+  );
 
   const rows: SkillRow[] = catalog === null ? [] : skillRows(catalog.manifest);
   const counts = skillCounts(rows);
@@ -163,6 +173,31 @@ export function SkillsPage({ navigate, search = '' }: {
   const linked = readSkillDeepLink(search);
   const selected = linked === null ? null : rows.find((r) => r.name === linked) ?? null;
   const linkedMissing = linked !== null && catalog !== null && selected === null;
+  const selectedName = selected?.name ?? null;
+
+  // A parked selection belongs to the drawer it was asked from: when that drawer goes (a close, a
+  // discard, a skill that left the catalog) the request goes with it — a later drawer never
+  // inherits a stale "open X?" prompt.
+  useEffect(() => {
+    setPendingSelect(null);
+  }, [selectedName]);
+
+  /** A row click is a navigation to `?skill=<name>` — unless the open drawer is dirty and the click
+   *  names another skill: then the drawer's discard confirmation asks first, and the navigation
+   *  runs only when the operator answers `onLeave(true)`. */
+  const selectSkill = (name: string): void => {
+    if (selectedName !== null && name !== selectedName && drawerDirty) {
+      setPendingSelect(name);
+      return;
+    }
+    navigate(skillsPath(name));
+  };
+
+  const onLeave = (proceed: boolean): void => {
+    const to = pendingSelect;
+    setPendingSelect(null);
+    if (proceed && to !== null) navigate(skillsPath(to));
+  };
 
   /** The ONE guarded flip: the catalog reloaded on anything but `blocked`, the verdict handed back. */
   const toggle = useCallback(async (name: string, enabled: boolean): Promise<SkillGuardResult | null> => {
@@ -417,7 +452,7 @@ export function SkillsPage({ navigate, search = '' }: {
               selectedName={selected?.name ?? null}
               busyName={busyName}
               frozen={frozen}
-              onSelect={(name) => navigate(skillsPath(name))}
+              onSelect={selectSkill}
               onToggle={onRowToggle}
             />
           </>
@@ -432,7 +467,10 @@ export function SkillsPage({ navigate, search = '' }: {
           writer={writer}
           catalogEpoch={catalogEpoch}
           busy={frozen || busyName === selected.name}
+          leaveTo={pendingSelect}
           onClose={() => navigate(skillsPath())}
+          onLeave={onLeave}
+          onDirtyChange={setDrawerDirty}
           onToggle={toggle}
           onChanged={() => void load()}
         />
@@ -468,7 +506,7 @@ export function SkillsPage({ navigate, search = '' }: {
           <button
             data-testid="skills-conflict-reload"
             type="button"
-            onClick={reloadAfterConflict}
+            onClick={() => void reloadAfterConflict()}
             className="rounded px-3 py-1 text-[11px] font-semibold"
             style={{ background: 'var(--status-gate)', color: 'var(--surface-base)' }}
           >

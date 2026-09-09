@@ -21,6 +21,10 @@ import type { SkillGuardResult } from '../api/skills.js';
 export interface SkillsWriter {
   /** The catalog revision the page holds right now (`null` before the first load). */
   revision(): string | null;
+  /** After a `null` (409): clear the page's prompt and re-read the catalog, adopting the current
+   *  revision. A caller that holds a draft (the Add/Replace files map) KEEPS it across this and
+   *  retries the same write once it resolves — nothing is retyped after a conflict. */
+  reload(): Promise<void>;
   run(
     mutation: (expectedRevision: string) => Promise<SkillGuardResult>,
     opts?: {

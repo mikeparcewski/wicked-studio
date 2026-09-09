@@ -10,8 +10,11 @@ import type { SkillsWriter } from './skillsWriter.js';
  * operator pastes a JSON files map (`{"SKILL.md": "...", "refs/x.md": "..."}`), validated live
  * ({@link parseFilesMap}: an object of string contents, relative paths, `SKILL.md` present). The
  * write runs through the page's CAS writer; the daemon's guards answer: `blocked` keeps the modal
- * open with the findings (nothing changed); anything else closes it through `onDone`; a revision
- * conflict closes it plain — the page's reload prompt owns that moment.
+ * open with the findings (nothing changed); anything else closes it through `onDone`. A revision
+ * conflict (409) keeps the modal MOUNTED — the name and the pasted files map are the operator's
+ * work and are never dropped for a stale revision: the banner names the conflict, the catalog is
+ * re-read through the writer, and the same map is retried against the revision it adopts
+ * (review round 2).
  */
 
 /** The frontmatter-name charset, echoed client-side; the daemon is the authority. */
@@ -33,6 +36,9 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<SkillGuardResult | null>(null);
+  /** The last write hit a revision conflict: nothing was written, the draft is kept, the catalog
+   *  is (being) re-read — the operator retries the same map against the new revision. */
+  const [conflict, setConflict] = useState(false);
   useModalEscape(onClose);
 
   const target = mode === 'add' ? newName.trim() : name ?? '';
@@ -49,10 +55,15 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
     setBusy(true);
     setError(null);
     setBlocked(null);
+    setConflict(false);
     try {
       const result = await writer.run((rev) => (mode === 'add' ? addSkill(target, files, rev) : replaceSkill(target, files, rev)));
       if (result === null) {
-        onClose();
+        // A stale revision: the daemon wrote nothing. The name + files map stay exactly as pasted;
+        // the catalog is re-read here so the retry rides the current revision.
+        setConflict(true);
+        await writer.reload();
+        setBusy(false);
         return;
       }
       if (result.verdict === 'blocked') {
@@ -126,6 +137,20 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
           </p>
         )}
         {blocked !== null && <SkillFindings verb={verb} result={blocked} testId="skills-files-findings" />}
+        {conflict && (
+          <p
+            data-testid="skills-files-conflict"
+            role="alert"
+            className="rounded px-2 py-1 text-[10px]"
+            style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)', color: 'var(--ink-muted)' }}
+          >
+            <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>The skills catalog changed under this page — nothing was written.</span>
+            {' '}
+            {busy
+              ? 'Reloading the catalog…'
+              : `Your ${mode === 'add' ? 'name and files map are' : 'files map is'} kept and the catalog was reloaded — ${verb} again to write against the current revision.`}
+          </p>
+        )}
         <div className="flex items-center justify-end gap-2">
           <button
             data-testid="skills-files-cancel"
@@ -144,7 +169,7 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
             className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
-            {busy ? 'Writing…' : verb}
+            {busy ? (conflict ? 'Reloading…' : 'Writing…') : verb}
           </button>
         </div>
       </div>

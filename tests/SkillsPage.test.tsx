@@ -31,7 +31,13 @@ import type { SkillFileEntry, SkillGuardResult, SkillManifestEntry, SkillsCatalo
  *    unsaved edits surfaces as the file conflict, never a silent overwrite; Save's endpoint
  *    follows the file's scope + requested path (never the tab, never the daemon's echoed `path`);
  *    a file list answering after a tab switch is ignored; the active file locks while dirty;
- *    a failed re-read marks the page stale and freezes writes; a write in flight freezes the rest.
+ *    a failed re-read marks the page stale and freezes writes; a write in flight freezes the rest;
+ *  - drafts survive every way out (review round 2): a row click on ANOTHER skill while the drawer
+ *    is dirty goes through the discard confirmation (the drawer's `key` swaps only on Discard);
+ *    an Add/Replace 409 keeps the modal with its name + files map, reloads the catalog and retries
+ *    the same payload against the new revision; the editor is read-only while a file loads, a read
+ *    answering for a file no longer selected is dropped, and one that would land over text typed
+ *    since the request left is set aside as a stale read — the draft stays.
  */
 
 const apiFetch = vi.fn();
@@ -1282,5 +1288,251 @@ describe('SkillsPage — the page verbs: Add, Refresh baseline, Analyze, Publish
     await screen.findAllByTestId('skills-row');
     fireEvent.click(screen.getByTestId('skills-publish'));
     expect(await screen.findByTestId('skills-page-error')).toHaveTextContent('snapshot write failed: ENOSPC');
+  });
+});
+
+describe('SkillsPage — review round 2: a draft survives a skill switch, a modal 409, and a read that lands mid-typing', () => {
+  const mineHandlers: Record<string, Handler> = {
+    [`GET /skills/${MINE}/files`]: () => Promise.resolve({ files: [{ path: 'SKILL.md', hash: 'h', size: 4 }] }),
+    [`GET /skills/${MINE}/files/SKILL.md`]: () => Promise.resolve(fileRead('SKILL.md', 'mine')),
+  };
+
+  it('selecting ANOTHER skill while the drawer is dirty asks first: Keep editing keeps the draft (no navigation, no key swap); Discard opens the other skill', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog()), ...fileHandlers(REPO_LEARN), ...mineHandlers });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    const editor = await within(drawer).findByTestId('skills-editor');
+    fireEvent.change(editor, { target: { value: 'draft for A' } });
+    navigate.mockClear();
+
+    fireEvent.click(row(MINE));
+    // Nothing navigated, the drawer is still A's with the draft intact, and the prompt names B.
+    expect(navigate).not.toHaveBeenCalled();
+    expect(screen.getByTestId('skills-drawer').dataset.skill).toBe(REPO_LEARN);
+    const prompt = within(drawer).getByTestId('skills-discard-prompt');
+    expect(prompt.dataset.leaveTo).toBe(MINE);
+    expect(within(prompt).getByTestId('skills-discard')).toHaveTextContent(`Discard and open ${MINE}`);
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('draft for A');
+    expect(calls('GET', `/skills/${MINE}/files`)).toBe(0);
+
+    fireEvent.click(within(prompt).getByTestId('skills-keep-editing'));
+    expect(within(drawer).queryByTestId('skills-discard-prompt')).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(screen.getByTestId('skills-drawer').dataset.skill).toBe(REPO_LEARN);
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('draft for A');
+    expect(within(drawer).getByTestId('skills-file-dirty')).toBeInTheDocument();
+
+    // Escape still closes through the same confirmation, worded for a close (no skill to open).
+    fireEvent.keyDown(document, { key: 'Escape' });
+    const closePrompt = within(drawer).getByTestId('skills-discard-prompt');
+    expect(closePrompt.dataset.leaveTo).toBeUndefined();
+    expect(within(closePrompt).getByTestId('skills-discard')).toHaveTextContent('Discard and close');
+    fireEvent.click(within(closePrompt).getByTestId('skills-keep-editing'));
+    expect(within(drawer).queryByTestId('skills-discard-prompt')).toBeNull();
+
+    // Asked again and discarded: NOW the navigation runs and B's drawer mounts, prompt-free.
+    fireEvent.click(row(MINE));
+    fireEvent.click(within(within(drawer).getByTestId('skills-discard-prompt')).getByTestId('skills-discard'));
+    expect(navigate).toHaveBeenCalledWith(`/skills?skill=${MINE}`);
+    await waitFor(() => expect(screen.getByTestId('skills-drawer').dataset.skill).toBe(MINE));
+    const next = screen.getByTestId('skills-drawer');
+    await waitFor(() => expect(within(next).getByTestId('skills-editor')).toHaveValue('mine'));
+    expect(within(next).queryByTestId('skills-discard-prompt')).toBeNull();
+    expect(within(next).queryByTestId('skills-file-dirty')).toBeNull();
+  });
+
+  it('a PRISTINE drawer switches skills on a row click at once — the confirmation is only ever for a draft', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog()), ...fileHandlers(REPO_LEARN), ...mineHandlers });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    await within(drawer).findByTestId('skills-editor');
+    fireEvent.click(row(MINE));
+    expect(navigate).toHaveBeenCalledWith(`/skills?skill=${MINE}`);
+    await waitFor(() => expect(screen.getByTestId('skills-drawer').dataset.skill).toBe(MINE));
+    expect(screen.queryByTestId('skills-discard-prompt')).toBeNull();
+    await waitFor(() => expect(within(screen.getByTestId('skills-drawer')).getByTestId('skills-editor')).toHaveValue('mine'));
+  });
+
+  it('Add → 409 keeps the modal with the name + files map intact, shows the conflict banner, reloads the catalog, and the retry posts the SAME payload against the new revision', async () => {
+    const posts: unknown[] = [];
+    let revision = REV_1;
+    let added = false;
+    wire({
+      'GET /skills': () => Promise.resolve(added
+        ? catalog({ revision, skills: { 'new-skill': entry({ dir: 'skills/new-skill', baselineHash: null, lastPublishedHash: null }) } })
+        : catalog({ revision })),
+      'POST /skills': (init) => {
+        const b = body(init) as { expectedRevision: string };
+        posts.push(b);
+        if (b.expectedRevision !== revision) return Promise.reject(new ApiError(409, `expected revision ${b.expectedRevision}, catalog is at ${revision}`));
+        added = true;
+        revision = REV_3;
+        return Promise.resolve(clear(REV_3));
+      },
+      'GET /skills/new-skill/files': () => Promise.resolve({ files: [{ path: 'SKILL.md', hash: 'h', size: 3 }] }),
+      'GET /skills/new-skill/files/SKILL.md': () => Promise.resolve(fileRead('SKILL.md', 'new')),
+    });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+    fireEvent.click(screen.getByTestId('skills-add-open'));
+    const modal = screen.getByTestId('skills-files-modal');
+    fireEvent.change(within(modal).getByTestId('skills-files-name'), { target: { value: 'new-skill' } });
+    fireEvent.change(within(modal).getByTestId('skills-files-map'), { target: { value: '{"SKILL.md": "new"}' } });
+
+    // Another session moved the catalog to r2 after this page loaded it at r1.
+    revision = REV_2;
+    fireEvent.click(within(modal).getByTestId('skills-files-save'));
+
+    const banner = await within(modal).findByTestId('skills-files-conflict');
+    expect(banner).toHaveTextContent('The skills catalog changed under this page — nothing was written.');
+    // Still mounted, intact; the catalog was re-read (r2 adopted) and Save is re-armed.
+    await waitFor(() => expect(calls('GET', '/skills')).toBe(2));
+    await waitFor(() => expect(within(modal).getByTestId('skills-files-save')).toBeEnabled());
+    expect(screen.getByTestId('skills-files-modal')).toBe(modal);
+    expect(within(modal).getByTestId('skills-files-name')).toHaveValue('new-skill');
+    expect(within(modal).getByTestId('skills-files-map')).toHaveValue('{"SKILL.md": "new"}');
+    expect(banner).toHaveTextContent('Your name and files map are kept and the catalog was reloaded — Add skill again');
+    expect(within(modal).getByTestId('skills-files-save')).toHaveTextContent('Add skill');
+    // The modal owns this conflict: no page prompt, no error, no "Added" note, nothing navigated.
+    expect(screen.queryByTestId('skills-conflict')).toBeNull();
+    expect(within(modal).queryByTestId('skills-files-error')).toBeNull();
+    expect(screen.queryByTestId('skills-note')).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(posts).toEqual([{ name: 'new-skill', files: { 'SKILL.md': 'new' }, expectedRevision: REV_1 }]);
+
+    // The retry: the same payload, now conditioned on r2 → applied; the modal closes; the new skill opens.
+    fireEvent.click(within(modal).getByTestId('skills-files-save'));
+    await waitFor(() => expect(screen.queryByTestId('skills-files-modal')).toBeNull());
+    expect(posts).toEqual([
+      { name: 'new-skill', files: { 'SKILL.md': 'new' }, expectedRevision: REV_1 },
+      { name: 'new-skill', files: { 'SKILL.md': 'new' }, expectedRevision: REV_2 },
+    ]);
+    expect(await screen.findByTestId('skills-note')).toHaveTextContent('Added new-skill');
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/skills?skill=new-skill'));
+    expect((await screen.findByTestId('skills-drawer')).dataset.skill).toBe('new-skill');
+  });
+
+  it('Replace → 409 shares the branch: the files map is kept, the catalog reloaded, and the retry rides the new revision', async () => {
+    const posts: unknown[] = [];
+    let revision = REV_1;
+    wire({
+      'GET /skills': () => Promise.resolve(catalog({ revision })),
+      ...fileHandlers(REPO_LEARN),
+      [`POST /skills/${REPO_LEARN}/replace`]: (init) => {
+        const b = body(init) as { expectedRevision: string };
+        posts.push(b);
+        if (b.expectedRevision !== revision) return Promise.reject(new ApiError(409, 'stale'));
+        return Promise.resolve(clear(REV_3));
+      },
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    await within(drawer).findByTestId('skills-editor');
+    fireEvent.click(within(drawer).getByTestId('skills-replace-open'));
+    const modal = screen.getByTestId('skills-files-modal');
+    const map = '{"SKILL.md": "---\\nname: x\\n---"}';
+    fireEvent.change(within(modal).getByTestId('skills-files-map'), { target: { value: map } });
+
+    revision = REV_2;
+    fireEvent.click(within(modal).getByTestId('skills-files-save'));
+    const banner = await within(modal).findByTestId('skills-files-conflict');
+    await waitFor(() => expect(within(modal).getByTestId('skills-files-save')).toBeEnabled());
+    expect(banner).toHaveTextContent('Your files map is kept and the catalog was reloaded — Replace files again');
+    expect(within(modal).getByTestId('skills-files-map')).toHaveValue(map);
+    expect(calls('GET', '/skills')).toBe(2);
+    expect(screen.queryByTestId('skills-conflict')).toBeNull();
+
+    fireEvent.click(within(modal).getByTestId('skills-files-save'));
+    await waitFor(() => expect(screen.queryByTestId('skills-files-modal')).toBeNull());
+    expect(posts.map((p) => (p as { expectedRevision: string }).expectedRevision)).toEqual([REV_1, REV_2]);
+    expect((await within(drawer).findByTestId('skills-findings')).dataset.verdict).toBe('clear');
+  });
+
+  it('the editor is read-only while a file loads; text that reaches the draft anyway is NOT overwritten by the answer — the read is set aside as stale, the draft stays', async () => {
+    let resolveNotes: (v: unknown) => void = () => {};
+    const deferred = new Promise<unknown>((r) => { resolveNotes = r; });
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      ...fileHandlers(REPO_LEARN),
+      [`GET /skills/${REPO_LEARN}/files/refs/notes.md`]: () => deferred,
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    const editor = await within(drawer).findByTestId('skills-editor');
+    expect(editor).toHaveValue(SKILL_MD);
+    expect(editor).not.toHaveAttribute('readonly');
+
+    fireEvent.click(within(drawer).getAllByTestId('skills-file')[1]!);
+    // Loading: the previous content is still on screen, but the editor is read-only and says so.
+    expect(within(drawer).getByTestId('skills-editor')).toHaveAttribute('readonly');
+    expect(within(drawer).getByTestId('skills-editor')).toHaveAttribute('aria-busy', 'true');
+    expect(within(drawer).getByTestId('skills-file-loading')).toBeInTheDocument();
+    expect(within(drawer).getByTestId('skills-file-path')).toHaveTextContent('SKILL.md');
+    for (const f of within(drawer).getAllByTestId('skills-file')) expect(f).toBeDisabled();
+
+    // Belt and braces: a change that reaches the draft anyway (nothing upstream is trusted).
+    fireEvent.change(within(drawer).getByTestId('skills-editor'), { target: { value: `${SKILL_MD} typed while loading` } });
+    await act(async () => {
+      resolveNotes(fileRead('refs/notes.md', 'notes'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // The answer did NOT land over the typing: the draft stays, dirty against SKILL.md; the stale read is named.
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue(`${SKILL_MD} typed while loading`);
+    expect(within(drawer).getByTestId('skills-file-path')).toHaveTextContent('SKILL.md');
+    expect(within(drawer).getByTestId('skills-file-dirty')).toBeInTheDocument();
+    const stale = within(drawer).getByTestId('skills-file-stale-read');
+    expect(stale.dataset.path).toBe('refs/notes.md');
+    expect(stale).toHaveTextContent('refs/notes.md finished loading while you were typing — its content was not applied over your text.');
+    expect(within(drawer).getByTestId('skills-editor')).not.toHaveAttribute('readonly');
+    expect(within(drawer).queryByTestId('skills-file-loading')).toBeNull();
+    // Save would write the typed text to the file it was typed INTO (SKILL.md) — never to refs/notes.md.
+    expect(within(drawer).getByTestId('skills-save')).toBeEnabled();
+    expect(within(drawer).getAllByTestId('skills-file')[0]).toHaveAttribute('aria-current', 'true');
+
+    // Discarding clears the draft and the marker; the tree unlocks and refs/notes.md opens on a fresh read.
+    fireEvent.click(within(drawer).getByTestId('skills-discard-edits'));
+    expect(within(drawer).queryByTestId('skills-file-stale-read')).toBeNull();
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue(SKILL_MD);
+    fireEvent.click(within(drawer).getAllByTestId('skills-file')[1]!);
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue('notes'));
+    expect(within(drawer).getByTestId('skills-file-path')).toHaveTextContent('refs/notes.md');
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/refs/notes.md`)).toBe(2);
+  });
+
+  it('a read for a file that is NO LONGER selected is dropped: a Reset re-opens SKILL.md while refs/notes.md is still loading, and the late answer never lands', async () => {
+    let resolveNotes: (v: unknown) => void = () => {};
+    const deferred = new Promise<unknown>((r) => { resolveNotes = r; });
+    let content = SKILL_MD;
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      ...fileHandlers(REPO_LEARN),
+      [`GET /skills/${REPO_LEARN}/files/SKILL.md`]: () => Promise.resolve(fileRead('SKILL.md', content)),
+      [`GET /skills/${REPO_LEARN}/files/refs/notes.md`]: () => deferred,
+      [`POST /skills/${REPO_LEARN}/reset`]: () => { content = 'baseline body'; return Promise.resolve(clear()); },
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    await within(drawer).findByTestId('skills-editor');
+    fireEvent.click(within(drawer).getAllByTestId('skills-file')[1]!);
+    expect(within(drawer).getByTestId('skills-editor')).toHaveAttribute('readonly');
+
+    // A Reset while the pick is in flight: the tree and SKILL.md (the file still on screen) reload.
+    fireEvent.click(within(drawer).getByTestId('skills-reset-open'));
+    const modal = screen.getByTestId('skills-confirm-modal');
+    fireEvent.change(within(modal).getByTestId('skills-confirm-input'), { target: { value: REPO_LEARN } });
+    fireEvent.click(within(modal).getByTestId('skills-confirm'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue('baseline body'));
+    expect(within(drawer).getByTestId('skills-editor')).not.toHaveAttribute('readonly');
+
+    // The stale pick answers late: dropped — SKILL.md stays, pristine; nothing flips to refs/notes.md.
+    await act(async () => {
+      resolveNotes(fileRead('refs/notes.md', 'notes'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('baseline body');
+    expect(within(drawer).getByTestId('skills-file-path')).toHaveTextContent('SKILL.md');
+    expect(within(drawer).queryByTestId('skills-file-dirty')).toBeNull();
+    expect(within(drawer).queryByTestId('skills-file-stale-read')).toBeNull();
+    expect(within(drawer).queryByTestId('skills-file-loading')).toBeNull();
   });
 });
