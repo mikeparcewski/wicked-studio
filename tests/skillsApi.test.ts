@@ -13,6 +13,7 @@ import {
   readSupportFile,
   setSkillEnabled,
   skillCounts,
+  skillFilePathIssue,
   skillRouteName,
   skillRoutePath,
   skillRouteSegment,
@@ -46,7 +47,9 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: vi.fn() }));
  *  - `isSkillsUnsupported` folds a 501 and the bare unknown-route 404 (a named 404 is an answer);
  *    `isSkillsConflict` is the CAS 409 and nothing else;
  *  - `skillCounts` is the five-tile KPI fold; `filterSkills` the catalog predicate the chips count with;
- *  - `parseFilesMap` is the Add/Replace modal's live validation; `findingLocation` the `file:line` cite.
+ *  - `parseFilesMap` is the Add/Replace modal's live validation — every key under the ROUTE
+ *    BUILDER's segment rules (`skillFilePathIssue`, one rule for both); `findingLocation` the
+ *    `file:line` cite.
  */
 
 function entry(over: Partial<SkillManifestEntry> = {}): SkillManifestEntry {
@@ -331,10 +334,38 @@ describe('parseFilesMap — the Add/Replace validation', () => {
     expect(parseFilesMap('[1]').issue).toMatch(/JSON object/);
     expect(parseFilesMap('{}').issue).toMatch(/empty/);
     expect(parseFilesMap('{"SKILL.md": 3}').issue).toMatch(/must be a string/);
-    expect(parseFilesMap('{"SKILL.md": "x", "/etc/passwd": "y"}').issue).toMatch(/relative path/);
-    expect(parseFilesMap('{"SKILL.md": "x", "a/../b": "y"}').issue).toMatch(/relative path/);
+    expect(parseFilesMap('{"SKILL.md": "x", "/etc/passwd": "y"}').issue).toMatch(/absolute file path "\/etc\/passwd"/);
+    expect(parseFilesMap('{"SKILL.md": "x", "a/../b": "y"}').issue).toMatch(/file path "a\/\.\.\/b": the dot-only segment "\.\."/);
     expect(parseFilesMap('{"refs/a.md": "x"}').issue).toMatch(/SKILL\.md/);
     expect(parseFilesMap('{"refs/a.md": "x"}').files).toBeNull();
+  });
+
+  it('review round 3: every key is validated with the ROUTE BUILDER’s segment rules — `a/./b`, `a//b`, `a/`, `a\\b` (and `..`, absolute, empty) are refused, the issue names the offending key, and `skillRoutePath` refuses the same key with the same sentence', () => {
+    const refused: Array<[string, RegExp]> = [
+      ['a/./b', /dot-only segment "\."/],
+      ['a//b', /an empty segment/],
+      ['a/', /an empty segment/],
+      ['a\\b', /path separator/],
+      ['a/../b', /dot-only segment "\.\."/],
+      ['/etc/passwd', /absolute file path/],
+      ['', /empty file path/],
+    ];
+    for (const [key, reason] of refused) {
+      const r = parseFilesMap(JSON.stringify({ 'SKILL.md': 'x', [key]: 'y' }));
+      expect(r.files).toBeNull();
+      expect(r.issue).toMatch(reason);
+      if (key !== '') expect(r.issue).toContain(`"${key}"`);
+      // ONE rule: the modal's refusal IS the route layer's refusal, sentence for sentence — Save can
+      // never arm for a map whose key `PUT /skills/:name/files/*path` would later refuse.
+      expect(skillFilePathIssue(key)).toBe(r.issue);
+      expect(() => skillRoutePath(key)).toThrow(r.issue!);
+    }
+    // And what the route layer accepts, the modal accepts: nested dirs, dotfiles, spaces, a literal `%`.
+    for (const key of ['refs/notes.md', '.claude-plugin/plugin.json', 'docs/a b#c.md', 'refs/a%41.md', 'SKILL.md']) {
+      expect(parseFilesMap(JSON.stringify({ 'SKILL.md': 'x', [key]: 'y' })).issue).toBeNull();
+      expect(skillFilePathIssue(key)).toBeNull();
+      expect(() => skillRoutePath(key)).not.toThrow();
+    }
   });
 });
 

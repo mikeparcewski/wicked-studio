@@ -43,9 +43,13 @@ import type { SkillsWriter } from './skillsWriter.js';
  *    CAS stays the backstop for whatever the re-read did not see.
  *  - **Late answers are ignored.** Every read carries an intent token; a file list or a file that
  *    answers after the operator switched tabs, picked another file, or saved is dropped — the
- *    Support editor is never swapped for a skill file by a slow list. And a read never lands over
- *    typing: the editor is read-only while a file is loading, and if text reached the draft after
- *    the request left anyway, the answer is set aside as a STALE read (the draft stays, named).
+ *    Support editor is never swapped for a skill file by a slow list. The skill tree with its list
+ *    still loading is a first-class PENDING state (the mount, or a switch back to it before the
+ *    list landed): the loading state shows, nothing is selected, and the file last open there
+ *    (else the first) opens ONCE — the moment the list arrives, and only if the operator is still
+ *    on that tree. And a read never lands over typing: the editor is read-only while a file is
+ *    loading, and if text reached the draft after the request left anyway, the answer is set
+ *    aside as a STALE read (the draft stays, named).
  *
  * The page owns the catalog: the drawer reports every applied content write through `onChanged`
  * so the page reloads (provenance flips, hashes move, `unpublished` lights up) — and every dirty
@@ -58,6 +62,12 @@ import type { SkillsWriter } from './skillsWriter.js';
 type SkillDrawerTab = 'skill' | 'support';
 
 const TAB_LABEL: Record<SkillDrawerTab, string> = { skill: 'Skill files', support: 'Support files' };
+
+/** The file a tree (re)opens: the one last open there when it is still listed, else the first
+ *  (SKILL.md for the skill tree — the fold puts it first); `undefined` for an empty tree. */
+function reopenTarget(last: string | null, rows: readonly SkillFileEntry[]): string | undefined {
+  return last !== null && rows.some((r) => r.path === last) ? last : rows[0]?.path;
+}
 
 /** The open file: the daemon's typed read bound to the REQUESTED scope + path, stamped with the
  *  catalog revision the page held as the request left — what Save is conditioned on. */
@@ -112,12 +122,18 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
   const [actionError, setActionError] = useState<string | null>(null);
   const [modal, setModal] = useState<'reset' | 'replace' | null>(null);
   const [discardPrompt, setDiscardPrompt] = useState(false);
+  /** The skill tree wants a file open but its list has not landed yet (the mount; a switch back
+   *  to it while the list is pending): the loading state shows, and the open runs ONCE when the
+   *  list arrives — cleared by any move away, so a late list is never an instruction to open. */
+  const [openOnList, setOpenOnList] = useState(true);
 
   /** The intent token: every operator move that changes WHICH content is on screen (a pick, a tab
    *  switch, a save, a dir write) bumps it; an async answer applies only if it is still current. */
   const intent = useRef(0);
   const fileRef = useRef<OpenFile | null>(null);
   const draftRef = useRef('');
+  /** The file last OPENED on each tree — what a switch back to that tree re-selects. */
+  const lastOpened = useRef<Record<SkillDrawerTab, string | null>>({ skill: null, support: null });
   useEffect(() => { fileRef.current = file; }, [file]);
   useEffect(() => { draftRef.current = draft; }, [draft]);
 
@@ -193,6 +209,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
         setStaleRead(path);
         return;
       }
+      lastOpened.current[scope] = path;
       setFile(f);
       setDraft(f.content);
     } catch (e) {
@@ -204,17 +221,23 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
     }
   }, [readFile]);
 
-  // The page keys this drawer by skill name, so one mount = one skill: load the tree, open the
-  // first file (SKILL.md when present — the fold puts it first). A list that answers after the
-  // operator already moved (to Support, say) is data for the tree, not an instruction to open.
+  // The page keys this drawer by skill name, so one mount = one skill: load the tree. The open
+  // that follows is the pending-list effect below (`openOnList` starts true).
   useEffect(() => {
-    const seq = ++intent.current;
-    void loadSkillFiles().then((rows) => {
-      if (seq !== intent.current) return;
-      const first = rows[0];
-      if (first !== undefined) void openFile('skill', first.path);
-    });
-  }, [loadSkillFiles, openFile]);
+    void loadSkillFiles();
+  }, [loadSkillFiles]);
+
+  // The skill tree asked for a file before its list was here (the mount, or a switch back while
+  // the list was still loading): the moment the list lands, open the file last open there (else
+  // the first — SKILL.md) exactly once. `openOnList` is cleared by every move away, so a list that
+  // answers after the operator already moved (to Support, say) is data for the tree, not an
+  // instruction to open; and `openFile` bumps the intent token, so nothing older lands after it.
+  useEffect(() => {
+    if (!openOnList || skillFiles === null) return;
+    setOpenOnList(false);
+    const target = reopenTarget(lastOpened.current.skill, skillFiles);
+    if (target !== undefined) void openFile('skill', target);
+  }, [openOnList, skillFiles, openFile]);
 
   // Every successful catalog read re-reads the open file (content + hash): the page's revision
   // moved (a Refresh, a toggle, a publish, another session's write) and the content on screen must
@@ -252,24 +275,37 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
 
   const files: readonly SkillFileEntry[] | null = tab === 'skill' ? skillFiles : support;
 
-  /** Switching trees opens the other tree's first file; locked while the open file is dirty or loading. */
+  /** No file on screen: a new intent (an in-flight read for the previous tree is void), the
+   *  editor and its per-file state cleared. */
+  const clearEditor = (): void => {
+    intent.current += 1;
+    setFile(null);
+    setDraft('');
+    setIntervening(null);
+    setStaleRead(null);
+    setBlockedDraft(null);
+    setFileLoading(false);
+  };
+
+  /** Switching trees re-opens the file last open on the other tree (else its first); locked while
+   *  the open file is dirty or loading. The skill tree with its list still PENDING is not "no
+   *  files": the editor clears to the loading state and the open waits for the list
+   *  (`openOnList`) — never a stray or duplicate open, never the other tree's file left on screen. */
   const selectTab = (next: SkillDrawerTab): void => {
     if (next === tab) return;
     setTab(next);
     setLastResult(null);
     setFileError(null);
-    const rows = next === 'skill' ? skillFiles ?? [] : support;
-    const first = rows[0];
-    if (first !== undefined) {
-      void openFile(next, first.path);
-    } else {
-      intent.current += 1;
-      setFile(null);
-      setDraft('');
-      setIntervening(null);
-      setStaleRead(null);
-      setFileLoading(false);
+    const rows = next === 'skill' ? skillFiles : support;
+    if (rows === null) {
+      clearEditor();
+      setOpenOnList(true);
+      return;
     }
+    setOpenOnList(false);
+    const target = reopenTarget(lastOpened.current[next], rows);
+    if (target !== undefined) void openFile(next, target);
+    else clearEditor();
   };
 
   const readOnlyReason =
@@ -552,9 +588,10 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           )}
         </nav>
 
-        {/* The editor column. */}
+        {/* The editor column. A file is loading, or one is about to (the skill list is pending):
+            the loading state — never "pick a file" over a tree that has nothing to pick yet. */}
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          {fileLoading && file === null ? (
+          {(fileLoading || openOnList) && file === null ? (
             <p data-testid="skills-file-loading" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>Loading file…</p>
           ) : fileError !== null ? (
             <p data-testid="skills-file-error" className="rounded px-2 py-1 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>{fileError}</p>

@@ -250,11 +250,17 @@ export function SkillsPage({ navigate, search = '' }: {
     }
   };
 
+  /** After an applied Add: the modal closes, the note stands, and the catalog is re-read — the new
+   *  skill's drawer (`?skill=<name>`) opens only once that re-read SUCCEEDS. A failed re-read has
+   *  already raised the stale banner (the rows stay, writes wait); navigating anyway would render
+   *  "No skill named … in this catalog" over a skill the daemon DID write (review round 3). */
   const onAdded = (name: string, result: SkillGuardResult): void => {
     setAddOpen(false);
     setNote(`Added ${name} — publish to hand it to workers.`);
     setPageResult(result.findings.length > 0 ? { verb: `Add ${name}`, result } : null);
-    void load().then(() => navigate(skillsPath(name)));
+    void load().then((next) => {
+      if (next !== null) navigate(skillsPath(name));
+    });
   };
 
   const baseline = catalog?.manifest.baseline ?? null;

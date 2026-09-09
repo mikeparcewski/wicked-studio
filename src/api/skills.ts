@@ -266,11 +266,18 @@ export interface SkillFileContent {
 // (review round 2). A literal `%2e%2e` is by the same rule a file named `%2e%2e`, encoded to
 // `%252e%252e` — the route layer's single decode never turns it into `..`.
 
+/** The ONE reason a route segment is refused (`null` when it is clean); `what` names it. */
+function segmentIssue(raw: string, what: string): string | null {
+  if (raw === '') return `refusing ${what}: an empty segment`;
+  if (/^\.+$/.test(raw)) return `refusing ${what}: the dot-only segment "${raw}" would escape its route`;
+  if (/[/\\\0]/.test(raw)) return `refusing ${what}: the segment "${raw}" carries a path separator or NUL`;
+  return null;
+}
+
 /** One validated, encoded route segment; `what` names it in the refusal. */
 export function skillRouteSegment(raw: string, what: string): string {
-  if (raw === '') throw new Error(`refusing ${what}: an empty segment`);
-  if (/^\.+$/.test(raw)) throw new Error(`refusing ${what}: the dot-only segment "${raw}" would escape its route`);
-  if (/[/\\\0]/.test(raw)) throw new Error(`refusing ${what}: the segment "${raw}" carries a path separator or NUL`);
+  const issue = segmentIssue(raw, what);
+  if (issue !== null) throw new Error(issue);
   return encodeURIComponent(raw);
 }
 
@@ -280,14 +287,30 @@ export function skillRouteName(name: string): string {
 }
 
 /**
- * A file path (relative to the skill dir, or to the root for a support file) as validated `*path`
- * segments joined by `/`. Empty, absolute (`/x`), empty-segment (`a//b`, a trailing `/`), dot-only
- * and separator-smuggling paths are refused before any request is built.
+ * The ONE reason a file path (relative to the skill dir, or to the root for a support file) is
+ * refused as a route — `null` when it is clean. Empty, absolute (`/x`), empty-segment (`a//b`, a
+ * trailing `/`), dot-only (`.`, `..`) and separator-smuggling (`\`, NUL) paths are refused, and
+ * the sentence names the offending path. Shared by the route builder ({@link skillRoutePath},
+ * which throws it) and the Add/Replace validation ({@link parseFilesMap}, which shows it), so the
+ * modal can never arm Save for a files map whose key the route layer — or the daemon's
+ * containment behind it — would refuse (review round 3).
  */
+export function skillFilePathIssue(path: string): string | null {
+  if (path === '') return 'refusing an empty file path';
+  if (path.startsWith('/')) return `refusing the absolute file path "${path}"`;
+  for (const s of path.split('/')) {
+    const issue = segmentIssue(s, `file path "${path}"`);
+    if (issue !== null) return issue;
+  }
+  return null;
+}
+
+/** A file path as validated `*path` segments joined by `/`, each encoded exactly once — refused
+ *  ({@link skillFilePathIssue}) before any request is built. */
 export function skillRoutePath(path: string): string {
-  if (path === '') throw new Error('refusing an empty file path');
-  if (path.startsWith('/')) throw new Error(`refusing the absolute file path "${path}"`);
-  return path.split('/').map((s) => skillRouteSegment(s, `file path "${path}"`)).join('/');
+  const issue = skillFilePathIssue(path);
+  if (issue !== null) throw new Error(issue);
+  return path.split('/').map((s) => encodeURIComponent(s)).join('/');
 }
 
 function skillFileRoute(name: string, path: string): string {
@@ -402,8 +425,12 @@ export function analyzeSkills(): Promise<SkillGuardResult> {
 }
 
 /**
- * Parse a pasted files map for Add/Replace: a JSON object whose values are all strings. Returns
- * the map, or the ONE issue to surface (the modal's Save stays disabled while there is one).
+ * Parse a pasted files map for Add/Replace: a JSON object whose values are all strings and whose
+ * keys are paths the route layer accepts — {@link skillFilePathIssue}, the SAME segment rules every
+ * `*path` route is built under (no empty / dot-only segment, no `//` or trailing `/`, no `\` or
+ * NUL, relative), so Save can never arm for a map the daemon would refuse. Returns the map, or the
+ * ONE issue to surface, naming the offending key (the modal's Save stays disabled while there is
+ * one).
  */
 export function parseFilesMap(text: string): { files: SkillFilesMap; issue: null } | { files: null; issue: string } {
   let parsed: unknown;
@@ -419,9 +446,8 @@ export function parseFilesMap(text: string): { files: SkillFilesMap; issue: null
   if (entries.length === 0) return { files: null, issue: 'the files map is empty' };
   for (const [path, content] of entries) {
     if (typeof content !== 'string') return { files: null, issue: `"${path}" must be a string (file content)` };
-    if (path === '' || path.startsWith('/') || path.split('/').includes('..')) {
-      return { files: null, issue: `"${path}" must be a relative path with no ".." segment` };
-    }
+    const pathIssue = skillFilePathIssue(path);
+    if (pathIssue !== null) return { files: null, issue: pathIssue };
   }
   if (!entries.some(([path]) => path === 'SKILL.md')) {
     return { files: null, issue: 'the files map must include SKILL.md — it is the skill' };

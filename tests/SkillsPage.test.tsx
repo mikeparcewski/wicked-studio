@@ -1536,3 +1536,188 @@ describe('SkillsPage — review round 2: a draft survives a skill switch, a moda
     expect(within(drawer).queryByTestId('skills-file-loading')).toBeNull();
   });
 });
+
+describe('SkillsPage — review round 3 (closing sweep): unsafe map keys, a failed post-add re-read, the skill tree while its list is pending', () => {
+  const SUPPORT_HANDLERS: Record<string, Handler> = {
+    'GET /skills/support/.claude-plugin/plugin.json': () => Promise.resolve(fileRead('.claude-plugin/plugin.json', '{"name":"wicked-garden"}')),
+    'GET /skills/support/scripts/_python.sh': () => Promise.resolve(fileRead('scripts/_python.sh', '#!/bin/sh')),
+  };
+
+  it('the Add modal refuses a files-map key the route layer would refuse (`a//b`, `a/./b`, `a/`, `a\\b`): the issue names the key, Save stays disabled, nothing is posted', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog()) });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+    fireEvent.click(screen.getByTestId('skills-add-open'));
+    const modal = screen.getByTestId('skills-files-modal');
+    fireEvent.change(within(modal).getByTestId('skills-files-name'), { target: { value: 'new-skill' } });
+
+    const refused: Array<[string, RegExp]> = [
+      ['a//b', /an empty segment/],
+      ['a/./b', /dot-only segment "\."/],
+      ['a/', /an empty segment/],
+      ['a\\b', /path separator/],
+    ];
+    for (const [key, reason] of refused) {
+      fireEvent.change(within(modal).getByTestId('skills-files-map'), { target: { value: JSON.stringify({ 'SKILL.md': 'new', [key]: 'y' }) } });
+      const issue = within(modal).getByTestId('skills-files-issue');
+      expect(issue).toHaveTextContent(`"${key}"`);
+      expect(issue).toHaveTextContent(reason);
+      expect(within(modal).getByTestId('skills-files-map')).toHaveAttribute('aria-invalid', 'true');
+      expect(within(modal).getByTestId('skills-files-save')).toBeDisabled();
+    }
+    // A clean nested key arms Save again.
+    fireEvent.change(within(modal).getByTestId('skills-files-map'), { target: { value: JSON.stringify({ 'SKILL.md': 'new', 'refs/a.md': 'y' }) } });
+    expect(within(modal).queryByTestId('skills-files-issue')).toBeNull();
+    expect(within(modal).getByTestId('skills-files-save')).toBeEnabled();
+    expect(calls('POST', '/skills')).toBe(0);
+  });
+
+  it('Add applied but the post-add catalog re-read FAILS: the modal closes, the "Added" note stands, the stale banner shows, and the page does NOT navigate to ?skill=<name> (no "No skill named…" over a skill the daemon wrote)', async () => {
+    let added = false;
+    let fail = false;
+    wire({
+      'GET /skills': () => {
+        if (fail) return Promise.reject(new ApiError(500, 'store busy'));
+        return Promise.resolve(added
+          ? catalog({ revision: REV_2, skills: { 'new-skill': entry({ dir: 'skills/new-skill', baselineHash: null, lastPublishedHash: null }) } })
+          : catalog());
+      },
+      // The write lands — and the daemon's very next catalog read fails.
+      'POST /skills': () => { added = true; fail = true; return Promise.resolve(clear()); },
+      'GET /skills/new-skill/files': () => Promise.resolve({ files: [{ path: 'SKILL.md', hash: 'h', size: 3 }] }),
+      'GET /skills/new-skill/files/SKILL.md': () => Promise.resolve(fileRead('SKILL.md', 'new')),
+    });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+    fireEvent.click(screen.getByTestId('skills-add-open'));
+    const modal = screen.getByTestId('skills-files-modal');
+    fireEvent.change(within(modal).getByTestId('skills-files-name'), { target: { value: 'new-skill' } });
+    fireEvent.change(within(modal).getByTestId('skills-files-map'), { target: { value: '{"SKILL.md": "new"}' } });
+    fireEvent.click(within(modal).getByTestId('skills-files-save'));
+
+    await waitFor(() => expect(screen.queryByTestId('skills-files-modal')).toBeNull());
+    expect(await screen.findByTestId('skills-note')).toHaveTextContent('Added new-skill — publish to hand it to workers.');
+    const stale = await screen.findByTestId('skills-stale');
+    expect(stale).toHaveTextContent('The catalog could not be re-read.');
+    expect(stale).toHaveTextContent('store busy');
+    expect(calls('GET', '/skills')).toBe(2);
+    // No navigation, no dead-address note, no drawer: the rows on screen are the pre-add catalog, marked stale.
+    expect(navigate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('skills-deep-link-missing')).toBeNull();
+    expect(screen.queryByTestId('skills-drawer')).toBeNull();
+    expect(screen.getAllByTestId('skills-row')).toHaveLength(4);
+    expect(screen.getByTestId('skills-add-open')).toBeDisabled();
+
+    // Retry: the re-read succeeds, the new skill is in the catalog, the note survived; the row is the door.
+    fail = false;
+    fireEvent.click(within(stale).getByTestId('skills-stale-retry'));
+    await waitFor(() => expect(screen.queryByTestId('skills-stale')).toBeNull());
+    expect(screen.getByTestId('skills-kpi-total').dataset.value).toBe('5');
+    expect(screen.getByTestId('skills-note')).toHaveTextContent('Added new-skill');
+    expect(navigate).not.toHaveBeenCalled();
+    fireEvent.click(row('new-skill'));
+    expect(navigate).toHaveBeenCalledWith('/skills?skill=new-skill');
+    expect((await screen.findByTestId('skills-drawer')).dataset.skill).toBe('new-skill');
+  });
+
+  it('switching BACK to Skill files while the list is still loading shows the loading state (nothing selected, no stray open, the Support tab still available); when the list lands, SKILL.md opens exactly once', async () => {
+    let resolveList: (v: { files: SkillFileEntry[] }) => void = () => {};
+    const deferred = new Promise<{ files: SkillFileEntry[] }>((r) => { resolveList = r; });
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      [`GET /skills/${REPO_LEARN}/files`]: () => deferred,
+      [`GET /skills/${REPO_LEARN}/files/SKILL.md`]: () => Promise.resolve(fileRead('SKILL.md', SKILL_MD)),
+      [`GET /skills/${REPO_LEARN}/files/refs/notes.md`]: () => Promise.resolve(fileRead('refs/notes.md', 'notes')),
+      ...SUPPORT_HANDLERS,
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+    // The mount, list pending: the tree AND the editor say a file is coming — not "pick a file" over nothing.
+    expect(within(drawer).getByTestId('skills-files-loading')).toBeInTheDocument();
+    expect(within(drawer).getByTestId('skills-file-loading')).toBeInTheDocument();
+    expect(within(drawer).queryByTestId('skills-file-none')).toBeNull();
+
+    // Slow list, fast support read: to Support…
+    fireEvent.click(within(drawer).getByTestId('skills-tab-support'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue('{"name":"wicked-garden"}'));
+    expect(within(drawer).getByTestId('skills-file-path').dataset.scope).toBe('support');
+
+    // …and quickly back to Skill while the list is still pending.
+    fireEvent.click(within(drawer).getByTestId('skills-tab-skill'));
+    expect(within(drawer).getByTestId('skills-tab-skill')).toHaveAttribute('aria-selected', 'true');
+    expect(within(drawer).getByTestId('skills-file-tree').dataset.tab).toBe('skill');
+    expect(within(drawer).getByTestId('skills-files-loading')).toBeInTheDocument();
+    expect(within(drawer).getByTestId('skills-file-loading')).toBeInTheDocument();
+    expect(within(drawer).queryByTestId('skills-file-none')).toBeNull();
+    // Nothing selected, nothing opened, and the support file is NOT left on screen under the skill tab.
+    expect(within(drawer).queryByTestId('skills-editor')).toBeNull();
+    expect(within(drawer).queryByTestId('skills-file-path')).toBeNull();
+    expect(within(drawer).queryAllByTestId('skills-file')).toHaveLength(0);
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(0);
+    // Not a trap: the operator can still leave for Support while the list is pending.
+    expect(within(drawer).getByTestId('skills-tab-support')).toBeEnabled();
+
+    await act(async () => {
+      resolveList({ files: [{ path: 'refs/notes.md', hash: 'h1', size: 5 }, { path: 'SKILL.md', hash: 'h2', size: SKILL_MD.length }] });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // The list landed on the tree that asked for it: SKILL.md opens — once, through the skill route.
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue(SKILL_MD));
+    expect(within(drawer).getByTestId('skills-file-path').dataset.scope).toBe('skill');
+    const files = within(drawer).getAllByTestId('skills-file');
+    expect(files.map((f) => f.dataset.path)).toEqual(['SKILL.md', 'refs/notes.md']);
+    expect(files[0]).toHaveAttribute('aria-current', 'true');
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(1);
+    // The in-flight list was waited for, not re-requested.
+    expect(calls('GET', `/skills/${REPO_LEARN}/files`)).toBe(1);
+    expect(within(drawer).queryByTestId('skills-files-loading')).toBeNull();
+    expect(within(drawer).queryByTestId('skills-file-loading')).toBeNull();
+  });
+
+  it('…but a list that lands after the operator moved on AGAIN (Skill pending → Support) opens nothing; and a switch back re-selects the file last open on that tree, not always the first', async () => {
+    let resolveList: (v: { files: SkillFileEntry[] }) => void = () => {};
+    const deferred = new Promise<{ files: SkillFileEntry[] }>((r) => { resolveList = r; });
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      [`GET /skills/${REPO_LEARN}/files`]: () => deferred,
+      [`GET /skills/${REPO_LEARN}/files/SKILL.md`]: () => Promise.resolve(fileRead('SKILL.md', SKILL_MD)),
+      [`GET /skills/${REPO_LEARN}/files/refs/notes.md`]: () => Promise.resolve(fileRead('refs/notes.md', 'notes')),
+      ...SUPPORT_HANDLERS,
+    });
+    render(<Harness />);
+    const drawer = await openDrawer(REPO_LEARN);
+
+    fireEvent.click(within(drawer).getByTestId('skills-tab-support'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue('{"name":"wicked-garden"}'));
+    fireEvent.click(within(drawer).getByTestId('skills-tab-skill'));
+    expect(within(drawer).getByTestId('skills-file-loading')).toBeInTheDocument();
+    fireEvent.click(within(drawer).getByTestId('skills-tab-support'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue('{"name":"wicked-garden"}'));
+    expect(calls('GET', '/skills/support/.claude-plugin/plugin.json')).toBe(2);
+
+    // The late list is data for the skill tree, not an instruction to open: the support editor stays.
+    await act(async () => {
+      resolveList({ files: [{ path: 'refs/notes.md', hash: 'h1', size: 5 }, { path: 'SKILL.md', hash: 'h2', size: SKILL_MD.length }] });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(within(drawer).getByTestId('skills-editor')).toHaveValue('{"name":"wicked-garden"}');
+    expect(within(drawer).getByTestId('skills-file-path').dataset.scope).toBe('support');
+    expect(within(drawer).getByTestId('skills-file-tree').dataset.tab).toBe('support');
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(0);
+
+    // Back on Skill (the list is here): SKILL.md opens (nothing was open there yet); pick refs/notes.md…
+    fireEvent.click(within(drawer).getByTestId('skills-tab-skill'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue(SKILL_MD));
+    fireEvent.click(within(drawer).getAllByTestId('skills-file')[1]!);
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue('notes'));
+    // …go to Support and come back: refs/notes.md is re-selected — the previous file, not SKILL.md again.
+    fireEvent.click(within(drawer).getByTestId('skills-tab-support'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue('{"name":"wicked-garden"}'));
+    fireEvent.click(within(drawer).getByTestId('skills-tab-skill'));
+    await waitFor(() => expect(within(drawer).getByTestId('skills-editor')).toHaveValue('notes'));
+    expect(within(drawer).getByTestId('skills-file-path')).toHaveTextContent('refs/notes.md');
+    expect(within(drawer).getAllByTestId('skills-file')[1]).toHaveAttribute('aria-current', 'true');
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(1);
+    expect(calls('GET', `/skills/${REPO_LEARN}/files/refs/notes.md`)).toBe(2);
+  });
+});
