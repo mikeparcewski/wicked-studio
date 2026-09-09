@@ -24,6 +24,15 @@ What this rig is, and what it is not:
     :7701 — crew#476). Every child of the daemon (bridge, workers, estate-mcp) inherits this env.
     Before anything starts, every write target is resolved and asserted NOT to be under the
     operator's real home or `~/.wicked-crew` (`setup.write_targets`).
+  - THE BRIDGE IS PINNED TO AN EXACT VERSION (`BRIDGE_PINNED_VERSION`). Setup resolves the offline
+    `_npx` cache for the spec, reads the INSTALLED `wicked-interactive` version and its tarball
+    integrity (sha512, from the cache's own lockfile), requires version == pin, clones it into the
+    scratch npm cache and records `{version, integrity, resolved, path}` as `setup.bridge`. No cache
+    (or a different version) is a SETUP FAILURE — the bridge never falls back to the registry
+    (`npm_config_offline=true` on the daemon's env makes a cache miss loud). At teardown the
+    identified bridge process must have run FROM the scratch clone (`bridge_not_from_pinned_cache`
+    otherwise). Why the pin matters: 0.8.1 predates `DELETE /api/docs/:doc`, which is exactly the
+    studio#213 expected gap (CLN-1, ISO-D/ISO-DD) — a different bridge flips those rows.
   - ISOLATION IS RE-DERIVED, NOT ASSERTED. At teardown the suite (a) scans the real `~/.wicked-crew`
     for entries stamped by this run, (b) byte-scans every operator-global wicked store
     (`~/.wicked-crew`, `~/.something-wicked`, `~/.wicked`, `~/wicked-interactive`, `~/.config/wicked-*`)
@@ -49,6 +58,18 @@ What this rig is, and what it is not:
     `unitExecuting` / `unitOutputDelta` / `unitOutputCaptured` / `unitDone` / `acpSessionStarted`
     anywhere, a `runCancelled` after the `awaitingHuman`, every planned unit still un-executed
     (`pending|distributed|rejected`), and a non-empty units array.
+  - CAMPAIGN ISOLATION (TST-2) IS EXERCISED WITH REAL FIXTURE DATA, without a governed run. The
+    only daemon writer for a campaign is `POST /campaigns` → `adapter.launchCampaign` (the engine
+    LAUNCHES: every node dispatches a run — governed). So the suite writes the campaign record the
+    way the engine itself does (`wicked_core::campaign::persist` → `put_node` → the estate `nodes`
+    row: kind `{"other":"campaign"}`, `metadata` = the serialized `Campaign`, symbol
+    `wicked-apps synthetic campaign/<id>:` interned in `symbols`) straight into the scratch
+    `core.db`, mirroring the row layout of the `project` node the daemon just wrote — status
+    `cancelled`, one node whose `run_spec.repo_ref` is Project A's repo. `campaign_list` opens the
+    store read-only per call (core-ts `campaign_list` → `open_store_ro` + `find_symbols`), so the
+    seed is visible on `GET /campaigns` with no restart. A seed the daemon does not list is
+    `blocked` with the exact reason (never `skip`); a listed seed makes the partition assertion
+    real: A renders its card (ownership, plain) and B must not (xfail studio#216).
   - Steps the UI cannot yet perform are performed over the daemon API and LABELLED
     `[SUBSTITUTE]` in the report (certify the journey, not the proxy). Memories and proposals
     have NO UI author path (agents are the only producer), so their seeds use a SUBSTITUTE
@@ -65,11 +86,19 @@ What this rig is, and what it is not:
     when the route answers 501. The gate journey (TST-1) can NEVER skip: a pre-gate failure is a
     FAIL carrying the captured cause (last events, roster snapshot); `SEED_GOVERNED=0` is a FAIL
     too (certification requires the rejection proven from the run's events).
+  - DEM-REC is `blocked` ONLY for the established prerequisite (`classify_recorder_answer`): the
+    record request acknowledged 2xx AND the bridge's answer is exactly the missing
+    `demo.spec.mjs` / missing recorder browser. Any other recorder error, an HTTP ≥ 400 ack, a
+    missing ack, or no answer within the budget is a FAIL.
   - TEARDOWN AFFECTS THE VERDICT (`teardown_failures`): a failed cancellation, `daemon_stopped=
-    false`, a bridge pid surviving SIGKILL, an unverified bridge identity, a failed temp-dir
-    removal, or an isolation scan that could not run (or hit an unreadable file: `live_scan_error`
-    with path + errno) each make `report.ok=false` — cleanup continues past each failure, and every
-    failure lands in `findings` AND `setup.teardown.failures[]`.
+    false`, a bridge pid surviving SIGKILL, an unverified bridge identity, a live lock pid nobody
+    identified (`bridge_unidentified_alive`), a failed `ps` (`bridge_enumeration_failed` — nothing
+    beyond the owned daemon group is signalled), a bridge that did not run from the pinned clone, a
+    browser that failed to close, a failed temp-dir removal, or an isolation scan that could not run
+    (or could not ENUMERATE a directory / read a file: `live_scan_error` with path + errno) each make
+    `report.ok=false`. Every teardown step runs in its own try/except (`run_teardown_steps`): a
+    failure in one never prevents the next, and every failure lands in `findings` AND
+    `setup.teardown.failures[]`.
   - BUILD IDENTITY IS BYTES, not a version label: the served `index.html` and every referenced
     asset are hashed and compared against THIS worktree's `dist/` build (`npm run build`); a
     mismatch or a missing asset is a setup failure.
@@ -86,8 +115,9 @@ scrubbed to `~`) to a file as well as stdout.
 
 `python3 e2e/seed_surfaces_test.py --self-test` runs the in-process checks of the harness's own
 safety plumbing (exit semantics, xfail hygiene, pid identity, gate oracle, fail-closed teardown,
-isolation-scan errors, campaign oracle, build-identity compare, per-target cleanup rows,
-persistence content oracle) — no daemon.
+isolation-scan errors incl. directory enumeration, campaign oracle, recorder classification,
+bridge-stop planning, teardown continuity, bridge pin, build-identity compare, per-target cleanup
+rows, persistence content oracle) — no daemon.
 
 Prints a per-scenario table and a JSON report to stdout. Exit 0 ONLY when `report.ok`: no
 scenario is `fail`/`xpass`, nothing was contaminated, setup did not fail, nothing aborted, and
@@ -104,6 +134,7 @@ import re
 import shutil
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -116,7 +147,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from importlib import metadata
 from pathlib import Path
 from tempfile import mkdtemp
-from typing import Callable
+from typing import Callable, Iterator
 from urllib.parse import quote, unquote
 
 REPO = Path(__file__).resolve().parent.parent
@@ -155,6 +186,21 @@ GOVERNED_ENABLED = os.environ.get("SEED_GOVERNED", "1") != "0"
 # crew 0.7.25 `bridge-pool.ts INTERACTIVE_SPEC` — the exact spec npx resolves, and therefore the
 # `_npx/<hash>` cache key we clone into the scratch npm cache.
 INTERACTIVE_SPEC = "wicked-interactive@^0.8.1"
+# The EXACT bridge this revision is certified against. The offline cache must hold precisely this
+# version (setup fails otherwise): 0.8.1 has no `DELETE /api/docs/:doc`, which is the studio#213
+# expected gap the delete rows (CLN-1*, ISO-D, ISO-DD) assert — a newer bridge flips them to xpass.
+BRIDGE_PINNED_VERSION = "0.8.1"
+# `ps` is parsed (`lstart` → strptime with English month/day names); it must run under the C locale
+# so a non-English operator locale cannot turn every start time into "unverified".
+PS_ENV = {"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"), "LC_ALL": "C", "LANG": "C"}
+# DEM-REC: the ONLY recorder answers that excuse execution — the established prerequisite
+# (`wicked-interactive/src/service/demo.js recordDemo`: no agent-authored spec, or no Playwright
+# browser for the bridge's own Chromium). Anything else the recorder says is a failure.
+RECORDER_PREREQ_RE = re.compile(
+    r"no demo\.spec\.mjs authored yet|browserType\.launch|Executable doesn't exist|"
+    r"playwright[^.]{0,80}(?:not installed|install)|chromium[^.]{0,60}not found",
+    re.I,
+)
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 # wicked-core domain.rs `UnitStatus`: pending → distributed → done | rejected. Only `done` means a
@@ -197,6 +243,12 @@ MEMORY_CONTENT_RETIRE = f"seed-surfaces memory {STAMP} RETIRE: this scope is era
 PROPOSAL_CONTENT_APPROVE = f"seed-surfaces-proposal-{STAMP} APPROVE: approving promotes this line into the memory store."
 PROPOSAL_CONTENT_REJECT = f"seed-surfaces-proposal-{STAMP} REJECT: rejecting writes nothing to the memory store."
 SUITE_FACET = {"suite": f"seed-surfaces-{STAMP}"}
+# FBK-1: the exact text a point-and-comment "Change text" batch writes into A's document (a
+# deterministic `content-edit` the bridge applies itself — no agent).
+FEEDBACK_TEXT = f"seed-surfaces feedback {STAMP}: this block was rewritten through point-and-comment."
+# TST-2: the campaign fixture written in the engine's own row format (see `Rig.seed_campaign_record`).
+CAMPAIGN_ID = f"seed-campaign-{STAMP}"
+CAMPAIGN_NAME = f"Seed-surfaces campaign {STAMP} (Project A's repo)"
 
 ORIGIN = ""  # the disposable daemon's origin — set by Rig
 API = ""
@@ -318,9 +370,18 @@ def teardown_failures(t: dict) -> list[str]:
       - `daemon_stopped` false (leader alive or group non-empty after SIGKILL);
       - bridge pids still alive after SIGKILL, or a bridge identity that could not be verified
         (`ps` failed / a candidate had no readable start time) — such pids are never signalled;
+      - `bridge_enumeration_failed`: `ps` failed, so NO row (even a partially identified one) was
+        signalled — only the owned daemon group was stopped; a live bridge may remain;
+      - `bridge_unidentified_alive`: the advisory lock names a pid that is ALIVE but matches no
+        identified process — refusing to signal it is right; calling the cleanup a success is not;
+      - `bridge_not_from_pinned_cache`: an identified bridge did not run from the scratch clone of
+        the pinned version (the results would describe some other bridge);
+      - `browser_close_error`: Chromium did not close cleanly;
       - the temp dir still present after removal was attempted;
-      - the isolation scan raising, or any unreadable file / stat error inside the operator stores
-        (`live_scan_error`: the store was not fully inspected, so "uncontaminated" is unproven)."""
+      - the isolation scan raising, or any directory that could not be ENUMERATED / file that could
+        not be read or stat'ed inside the operator stores (`live_scan_error`: the store was not fully
+        inspected, so "uncontaminated" is unproven);
+      - any teardown step that raised (`teardown_step_raised`)."""
     out: list[str] = []
     for c in t.get("cancelled_runs") or []:
         if not isinstance(c, dict):
@@ -338,24 +399,51 @@ def teardown_failures(t: dict) -> list[str]:
             out.append(f"bridge_survived_sigkill: pids {remaining}")
         if bridge.get("identity_unverified"):
             out.append(f"bridge_identity_unverified: {bridge.get('identity_unverified')}")
+        if bridge.get("enumeration_failed"):
+            out.append(f"bridge_enumeration_failed: {bridge.get('enumeration_failed')}")
+        if bridge.get("unidentified_alive"):
+            out.append(f"bridge_unidentified_alive: {bridge.get('unidentified_alive')}")
+        if bridge.get("not_from_pinned_cache"):
+            out.append(f"bridge_not_from_pinned_cache: {bridge.get('not_from_pinned_cache')}")
         if bridge.get("error"):
             out.append(f"bridge_stop_error: {bridge['error']}")
+    if t.get("browser_close_error"):
+        out.append(f"browser_close_error: {t['browser_close_error']}")
     if "tmp_removed" in t and t.get("tmp_removed") is not True:
         out.append(f"tmp_not_removed: {t.get('tmp')} ({t.get('tmp_remove_error') or 'still present'})")
     if t.get("isolation_scan_error"):
         out.append(f"isolation_scan_failed: {t['isolation_scan_error']}")
     scan = t.get("isolation_scan") or {}
     for e in (scan.get("scan_errors") or []) if isinstance(scan, dict) else []:
-        out.append(f"live_scan_error: {e.get('file')} — {e.get('error')} (errno {e.get('errno')})")
+        out.append(f"live_scan_error: {e.get('file')} — {e.get('error')} (errno {e.get('errno')}{', ' + e['stage'] if e.get('stage') else ''})")
     for e in t.get("step_errors") or []:
         out.append(f"teardown_step_raised: {e}")
     return out
 
 
+def run_teardown_steps(steps: list[tuple[str, Callable[[], None]]]) -> list[str]:
+    """Run EVERY step in its own try/except — a raise in one never prevents the next. Returns the
+    recorded errors (`<step>: <type>: <message>`), each of which is a `teardown_step_raised` verdict
+    failure. Pure with respect to the steps; self-tested."""
+    errors: list[str] = []
+    for name, fn in steps:
+        try:
+            fn()
+        except BaseException as e:  # noqa: BLE001 — cleanup continues; the failure is recorded, never swallowed
+            errors.append(f"{name}: {type(e).__name__}: {e}")
+    return errors
+
+
 def finalize(rep: dict, suite_ok: bool) -> dict:
     """`report.ok` is the ONLY thing the exit code reads: the scenario table AND the isolation proof
-    AND a clean setup AND a clean teardown (no verdict-affecting failure) must all hold."""
-    failures = list((rep.get("setup") or {}).get("teardown", {}).get("failures") or [])
+    AND a clean setup AND a clean teardown (no verdict-affecting failure) must all hold. A browser
+    that failed to close is a teardown failure too (recorded on `setup.browser_close_error` by the
+    browser's own `finally`, before the rig's teardown runs)."""
+    setup = rep.get("setup") or {}
+    failures = list((setup.get("teardown") or {}).get("failures") or [])
+    close_error = setup.get("browser_close_error")
+    if close_error and not any(f.startswith("browser_close_error") for f in failures):
+        failures.append(f"browser_close_error: {close_error}")
     rep["teardown_failures"] = failures
     rep["ok"] = (
         bool(suite_ok)
@@ -429,17 +517,211 @@ def compare_build(dist: dict[str, str], served: dict[str, str]) -> list[str]:
     return problems
 
 
-def campaigns_isolation_oracle(status: int, body: object, a_cards: list[str], b_cards: list[str]) -> dict:
-    """TST-2's deterministic half. The campaigns wire must answer 200 with a list (any other
-    answer is a FAIL carrying status/body — never "zero campaigns"); Project B's cards must exclude
-    every card A renders (the isolation assertion); a card on the single-repo project A FAILS the
-    BLOCKED premise (the assertion then has data and the row must stop being blocked)."""
+def campaigns_isolation_oracle(status: int, body: object, seeded_id: str, a_cards: list[str], b_cards: list[str], issue: str) -> dict:
+    """TST-2's oracle over REAL fixture data (the campaign seeded in the engine's own row format,
+    scoped to Project A's repo). The wire must answer 200 with a `campaigns` list that carries the
+    seed (any other answer is a FAIL with status/body — never "zero campaigns"); OWNERSHIP is plain:
+    A's page must render the seeded card. The ONE expected gap tied to `issue` is the partition:
+    B's page renders A's campaign (App.tsx: the campaign store is not project-partitioned)."""
     assert status == 200, f"GET /campaigns → {status} {str(body)[:300]}"
     campaigns = body.get("campaigns") if isinstance(body, dict) else body
     assert isinstance(campaigns, list), f"GET /campaigns answered 200 without a `campaigns` list: {str(body)[:300]}"
-    leaked = sorted(set(a_cards) & set(b_cards))
-    assert not leaked, f"Project B's campaign list carries A's campaign card(s): {leaked}"
-    return {"engine_campaigns": len(campaigns), "a_cards": a_cards, "b_cards": b_cards}
+    ids = [c.get("id") for c in campaigns if isinstance(c, dict)]
+    assert seeded_id in ids, f"the daemon does not list the seeded campaign {seeded_id!r}: {ids}"
+    assert seeded_id in a_cards, f"Project A's campaigns page does not render its own campaign {seeded_id!r}: {a_cards}"
+    foreign_on_b = sorted(set(b_cards) - {seeded_id})
+    assert not foreign_on_b, f"Project B's campaigns page renders cards that belong to nobody in this rig: {foreign_on_b}"
+    expect_gap(seeded_id not in b_cards, issue, f"Project B's campaigns page renders Project A's campaign {seeded_id!r} (B owns no repo and no campaign): {b_cards}")
+    return {"engine_campaigns": len(campaigns), "engine_ids": ids, "a_cards": a_cards, "b_cards": b_cards}
+
+
+def classify_recorder_answer(ack_status: int | None, answer: str | None, timed_out: bool) -> tuple[str, str]:
+    """DEM-REC's verdict rule — pure, self-tested. `blocked` ONLY when the record request was
+    acknowledged 2xx AND the bridge's answer is exactly the established prerequisite (no agent-
+    authored `demo.spec.mjs` / no recorder browser for the bridge's own Chromium). Everything else
+    — a ≥ 400 ack, no ack at all, no answer within the budget, or ANY other recorder error — is a
+    `fail` carrying what was observed."""
+    if ack_status is None:
+        return "fail", "the record request produced no acknowledgment (no POST /api/events response was observed)"
+    if not 200 <= ack_status < 300:
+        return "fail", f"the record request was refused: POST /api/events → HTTP {ack_status}"
+    if timed_out or not answer:
+        return "fail", "the recorder gave no answer within the budget (no 'Recording failed' entry and no new version)"
+    if RECORDER_PREREQ_RE.search(answer):
+        return "blocked", f"established prerequisite: {answer[:240]!r}"
+    return "fail", f"the recorder answered with an error that is NOT the established prerequisite: {answer[:300]!r}"
+
+
+def plan_bridge_stop(found: dict, lock_pid: object, idocs: object, alive: Callable[[int], bool] = None) -> tuple[list[int], dict]:
+    """Decide WHICH pids the bridge teardown may signal — pure, self-tested. Only rows identified by
+    a SUCCESSFUL `ps` (command line names `wicked-interactive` + our root, verified start time) are
+    signalled. A failed `ps` signals NOTHING — not even a partially identified row — and records
+    `enumeration_failed`; a candidate with no readable start time records `identity_unverified`; a
+    lock pid that is alive but matches no identified process records `unidentified_alive` (refused,
+    and a verdict failure). Returns (pids_to_signal, info)."""
+    alive = alive or pid_alive
+    info: dict = {}
+    procs = found.get("identified") or []
+    identified = {p["pid"] for p in procs}
+    if not found.get("ps_ok"):
+        info["identity_unverified"] = f"ps failed ({found.get('ps_error')}) — no bridge pid can be identified; only the daemon group we spawned was stopped"
+        info["enumeration_failed"] = (f"ps failed ({found.get('ps_error')}) — {len(procs)} partially identified row(s) "
+                                      f"{sorted(identified)} NOT signalled; a live bridge for {idocs} may remain")
+        pids: list[int] = []
+    else:
+        if found.get("unverified"):
+            info["identity_unverified"] = (f"{len(found['unverified'])} candidate(s) serving {idocs} have no readable start time "
+                                           f"(pids {[p['pid'] for p in found['unverified']]}) — NOT signalled")
+        pids = sorted(identified)
+    if valid_pid(lock_pid) and lock_pid not in identified and alive(lock_pid):  # type: ignore[arg-type]
+        info["unidentified_alive"] = (f"lock pid {lock_pid} is ALIVE but no identified process serving {idocs} carries it — "
+                                      f"NOT signalled (identity unproven); a live bridge may remain")
+    return pids, info
+
+
+def parse_semver(v: str) -> tuple[int, int, int] | None:
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", v)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+
+
+def caret_max(versions: list[str], spec: str) -> str | None:
+    """The version npm's `^` resolution picks from `versions` for `spec` (`name@^X.Y.Z`): the highest
+    RELEASE version in the caret range (`^X.Y.Z` = >=X.Y.Z <(X+1).0.0; `^0.Y.Z` = >=0.Y.Z <0.(Y+1).0;
+    `^0.0.Z` = exactly 0.0.Z). Pre-releases never satisfy a caret range. None when nothing does."""
+    m = re.search(r"@\^(\d+\.\d+\.\d+)$", spec)
+    if not m:
+        raise ValueError(f"not a caret spec: {spec!r}")
+    lo = parse_semver(m.group(1))
+    assert lo is not None
+    if lo[0] > 0:
+        hi = (lo[0] + 1, 0, 0)
+    elif lo[1] > 0:
+        hi = (0, lo[1] + 1, 0)
+    else:
+        hi = (0, 0, lo[2] + 1)
+    best: tuple[int, int, int] | None = None
+    for v in versions:
+        t = parse_semver(v)
+        if t is not None and lo <= t < hi and (best is None or t > best):
+            best = t
+    return ".".join(map(str, best)) if best else None
+
+
+def seed_registry_manifest(src_npm: Path, dst_npm: Path, name: str) -> dict:
+    """Copy the CACHED registry manifest (npm's `make-fetch-happen:request-cache:https://registry.
+    npmjs.org/<name>` cacache entry — its index file AND every content blob it names) from the
+    operator's npm cache into the scratch cache, same layout, so `npx --offline` can resolve the
+    spec without the network. Returns what was seeded plus the newest manifest's `versions`,
+    `dist-tags` and cache time — or `error`. Pure over the filesystem; self-tested."""
+    key = f"make-fetch-happen:request-cache:https://registry.npmjs.org/{name}"
+    src_cc, dst_cc = src_npm / "_cacache", dst_npm / "_cacache"
+    index_root = src_cc / "index-v5"
+    if not index_root.is_dir():
+        return {"error": f"no npm content cache at {src_cc} — npx cannot resolve {name} offline"}
+    copied_index: list[str] = []
+    copied_blobs: list[str] = []
+    newest: tuple[int, dict] | None = None
+    for idx in sorted(p for p in index_root.rglob("*") if p.is_file()):
+        try:
+            text = idx.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if key not in text:
+            continue
+        entries = []
+        for line in text.splitlines():
+            parts = line.split("\t", 1)
+            if len(parts) != 2:
+                continue
+            try:
+                entry = json.loads(parts[1])
+            except json.JSONDecodeError:
+                continue
+            if entry.get("key") == key:
+                entries.append(entry)
+        if not entries:
+            continue
+        rel = idx.relative_to(src_cc)
+        (dst_cc / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(idx, dst_cc / rel)
+        copied_index.append(str(rel))
+        for entry in entries:
+            integrity = str(entry.get("integrity") or "")
+            if "-" not in integrity:
+                continue
+            algo, b64 = integrity.split("-", 1)
+            try:
+                import base64
+                hexd = base64.b64decode(b64).hex()
+            except Exception:  # noqa: BLE001 — a malformed entry is skipped, the manifest check below decides
+                continue
+            blob_rel = Path("content-v2") / algo / hexd[:2] / hexd[2:4] / hexd[4:]
+            blob = src_cc / blob_rel
+            if not blob.is_file():
+                continue
+            (dst_cc / blob_rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(blob, dst_cc / blob_rel)
+            copied_blobs.append(str(blob_rel))
+            try:
+                manifest = json.loads(blob.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            t = int(entry.get("time") or 0)
+            if isinstance(manifest, dict) and "versions" in manifest and (newest is None or t > newest[0]):
+                newest = (t, manifest)
+    if not copied_index or newest is None:
+        return {"error": f"the npm cache at {src_cc} holds no usable registry manifest for {name} — npx cannot resolve the spec offline "
+                         f"(index files copied: {copied_index}, blobs: {copied_blobs})"}
+    t, manifest = newest
+    return {
+        "index_files": copied_index, "blobs": copied_blobs,
+        "versions": sorted(manifest.get("versions", {}).keys()), "dist_tags": manifest.get("dist-tags"),
+        "cached_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t / 1000)) if t else None,
+    }
+
+
+def resolve_bridge_pin(npx_root: Path, spec: str, pinned: str) -> dict:
+    """Find the OFFLINE `_npx/<hash>` install npx would use for exactly `spec`, read the INSTALLED
+    `wicked-interactive` version and the tarball integrity (sha512) from the cache's own lockfile,
+    and require version == `pinned`. Pure over the filesystem; self-tested. Returns the record —
+    with `error` set whenever the pin cannot be met (no cache, another version, no integrity): the
+    caller turns that into a setup failure, never into a registry fallback."""
+    candidates: list[dict] = []
+    try:
+        pkgs = sorted(npx_root.glob("*/package.json")) if npx_root.is_dir() else []
+    except OSError as e:
+        return {"candidates": [], "error": f"cannot enumerate {npx_root}: {e}"}
+    for pkg in pkgs:
+        try:
+            meta = json.loads(pkg.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (meta.get("_npx") or {}).get("packages") != [spec]:
+            continue
+        root = pkg.parent
+        version = None
+        try:
+            version = json.loads((root / "node_modules" / "wicked-interactive" / "package.json").read_text()).get("version")
+        except (OSError, json.JSONDecodeError):
+            pass
+        entry: dict = {}
+        try:
+            lock = json.loads((root / "package-lock.json").read_text())
+            entry = (lock.get("packages") or {}).get("node_modules/wicked-interactive") or {}
+        except (OSError, json.JSONDecodeError):
+            pass
+        candidates.append({"path": str(root), "key": root.name, "version": version, "lock_version": entry.get("version"),
+                           "integrity": entry.get("integrity"), "resolved": entry.get("resolved")})
+    if not candidates:
+        return {"candidates": [], "error": (f"no offline `_npx` cache holds {spec} under {npx_root} — the bridge would have to resolve the spec "
+                                           f"from the registry (unpinned, needs network); prime the cache once and rerun")}
+    exact = [c for c in candidates if c["version"] == pinned]
+    if not exact:
+        return {"candidates": candidates, "error": f"the offline cache holds wicked-interactive {[c['version'] for c in candidates]}, not the pinned {pinned}"}
+    chosen = exact[0]
+    if not chosen.get("integrity"):
+        return {"candidates": candidates, **chosen, "error": f"the cached install of wicked-interactive {pinned} carries no tarball integrity in its lockfile — its bytes cannot be identified"}
+    return {"candidates": candidates, **chosen}
 
 
 def persistence_oracle(before: dict, after: dict) -> None:
@@ -499,7 +781,7 @@ def ps_rows() -> tuple[list[dict], str | None]:
     """The process table, or (partial rows, error) when `ps` itself failed — a failed `ps` must
     never read as "no bridge running"."""
     try:
-        res = subprocess.run(["ps", "-axo", "pid=,pgid=,ppid=,command="], capture_output=True, text=True, timeout=20)
+        res = subprocess.run(["ps", "-axo", "pid=,pgid=,ppid=,command="], capture_output=True, text=True, timeout=20, env=PS_ENV)
     except (OSError, subprocess.TimeoutExpired) as e:
         return [], f"ps failed: {e}"
     rows = []
@@ -516,11 +798,14 @@ def ps_rows() -> tuple[list[dict], str | None]:
     return rows, None
 
 
-def ps_started_at(pid: int) -> float | None:
+def ps_started_at(pid: int, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> float | None:
     """The process start time, or None when it could not be READ (a failed/odd `ps`, a vanished
-    pid) — None means UNVERIFIED, never "started recently enough"."""
+    pid, an unparseable `lstart`) — None means UNVERIFIED (listed, never signalled), never "started
+    recently enough". `ps` runs under `LC_ALL=C` (`PS_ENV`) so `lstart` is the English
+    `%a %b %d %H:%M:%S %Y` regardless of the operator's locale; a parse failure still yields None
+    and therefore NARROWS matching (unverified ⇒ not identified ⇒ not signalled), never widens it."""
     try:
-        res = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=20)
+        res = runner(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=20, env=PS_ENV)
     except (OSError, subprocess.TimeoutExpired):
         return None
     if res.returncode != 0:
@@ -772,24 +1057,55 @@ def scan_file_for(path: Path, needles: list[bytes], opener: Callable[[Path], obj
     return found, None
 
 
-def scan_tree(roots: tuple[Path, ...] | list[Path], since: float, needles: list[bytes], opener: Callable[[Path], object] | None = None) -> dict:
+def walk_files(root: Path, errors: list[dict], scandir: Callable = os.scandir) -> Iterator[tuple[Path, os.DirEntry | None]]:
+    """An EXPLICIT directory walk (no `Path.rglob`, which swallows enumeration errors before any
+    caller sees them). Every directory that cannot be enumerated, and every entry whose type cannot
+    be determined, is RECORDED in `errors` (path, errno, stage) and the walk continues with the
+    rest. Symlinks are never followed. Yields (path, DirEntry) for regular files."""
+    stack: list[Path] = [root]
+    while stack:
+        d = stack.pop()
+        try:
+            with scandir(d) as it:
+                entries = list(it)
+        except OSError as e:
+            errors.append({"file": str(d), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}", "stage": "scandir"})
+            continue
+        for ent in entries:
+            try:
+                if ent.is_symlink():
+                    continue
+                if ent.is_dir(follow_symlinks=False):
+                    stack.append(Path(ent.path))
+                    continue
+                if ent.is_file(follow_symlinks=False):
+                    yield Path(ent.path), ent
+            except OSError as e:
+                errors.append({"file": str(ent.path), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}", "stage": "entry"})
+
+
+def scan_tree(roots: tuple[Path, ...] | list[Path], since: float, needles: list[bytes], opener: Callable[[Path], object] | None = None,
+              scandir: Callable = os.scandir) -> dict:
     """Every regular file under `roots` modified since `since` (mtime OR ctime) is byte-scanned for
-    the needles. Stat and read errors are RECORDED (`scan_errors`), and scanning continues — an
-    error means the store was not fully inspected, which `teardown_failures` turns into
-    `live_scan_error`."""
+    the needles. Enumeration, stat and read errors are ALL RECORDED (`scan_errors`, with the stage)
+    and scanning continues — an error means the store was not fully inspected, which
+    `teardown_failures` turns into `live_scan_error` (⇒ `report.ok=false`). Fails closed: a
+    directory the walk could not open is an error, never an empty result."""
     modified: list[str] = []
     hits: list[dict] = []
     errors: list[dict] = []
     for root in roots:
-        if not root.exists():
+        try:
+            if not root.exists():
+                continue
+        except OSError as e:
+            errors.append({"file": str(root), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}", "stage": "exists"})
             continue
-        for p in root.rglob("*"):
+        for p, _ent in walk_files(root, errors, scandir):
             try:
-                if p.is_symlink() or not p.is_file():
-                    continue
                 st = p.stat()
             except OSError as e:
-                errors.append({"file": str(p), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}"})
+                errors.append({"file": str(p), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}", "stage": "stat"})
                 continue
             if st.st_mtime < since - 2 and st.st_ctime < since - 2:
                 continue
@@ -801,7 +1117,7 @@ def scan_tree(roots: tuple[Path, ...] | list[Path], since: float, needles: list[
             for n in found:
                 hits.append({"file": str(p), "needle": n.decode()})
             if err is not None:
-                errors.append(err)
+                errors.append({**err, "stage": "read"})
     return {"modified": modified, "hits": hits, "scan_errors": errors}
 
 
@@ -823,9 +1139,9 @@ class Rig:
         # which would turn the live daemon's own housekeeping into a false contamination hit.
         self.needles: list[str] = [
             f"e2e-scope-{STAMP}", f"seed-surfaces-{STAMP}", f"seed-doc-a-{STAMP}", f"seed-doc-b-{STAMP}",
-            f"seed-demo-a-{STAMP}", f"Seed-surfaces rule {STAMP}", TEST_BRIEF_TOKEN,
+            f"seed-demo-a-{STAMP}", f"seed-demo-b-{STAMP}", f"Seed-surfaces rule {STAMP}", TEST_BRIEF_TOKEN,
             f"Seed-surfaces import {STAMP}", CORPUS_SCOPE, MEMORY_SCOPE_ROOT, f"seed-surfaces memory {STAMP}",
-            f"seed-surfaces-proposal-{STAMP}",
+            f"seed-surfaces-proposal-{STAMP}", CAMPAIGN_ID, f"seed-surfaces feedback {STAMP}",
         ]
         self.live_before = snapshot_live_runs()
         self.tmp = Path(mkdtemp(prefix="seed-surfaces-")).resolve()
@@ -862,8 +1178,11 @@ class Rig:
             # identity, not paths — git/npm/node `os.userInfo()` fallbacks read these
             "USER": os.environ.get("USER", "seed-surfaces"),
             "LOGNAME": os.environ.get("LOGNAME", os.environ.get("USER", "seed-surfaces")),
-            # npm/npx (the bridge spawn): cache pinned into the temp dir, update chatter off.
+            # npm/npx (the bridge spawn): cache pinned into the temp dir, update chatter off, and
+            # OFFLINE — the pinned clone is the only source; a cache miss fails the bridge start
+            # loudly instead of resolving the spec from the registry (an unpinned bridge).
             "npm_config_cache": str(self.npm_cache),
+            "npm_config_offline": "true",
             "npm_config_update_notifier": "false",
             "NO_UPDATE_NOTIFIER": "1",
             # crew + the engine
@@ -889,7 +1208,7 @@ class Rig:
 
     def prepare(self) -> None:
         self.assert_write_targets()
-        self.seed_bridge_cache()
+        self.pin_bridge()
         self.clone_repo()
 
     def assert_write_targets(self) -> None:
@@ -914,34 +1233,65 @@ class Rig:
         if bad:
             raise SetupFailure("guard", f"write targets resolve under the operator's home: {bad}")
 
-    def seed_bridge_cache(self) -> None:
-        """The bridge is `npx --yes wicked-interactive@^0.8.1 serve` under the SCRATCH HOME, so npx
-        would otherwise fetch 200 MB into a cold cache. Clone the operator's already-resolved
-        `_npx/<hash>` install (read-only on the source; APFS clonefile when available) into the
-        scratch npm cache under the same key, so the bridge starts offline in seconds."""
-        info: dict = {"seeded": False, "spec": INTERACTIVE_SPEC}
+    def pin_bridge(self) -> None:
+        """Resolve the bridge to an EXACT version from an OFFLINE source, or fail setup. The bridge
+        is `npx --yes wicked-interactive@^0.8.1 serve` under the SCRATCH HOME; `resolve_bridge_pin`
+        finds the operator's already-resolved `_npx/<hash>` install for exactly that spec, reads the
+        INSTALLED version + the tarball integrity from the cache's own lockfile, and requires
+        version == `BRIDGE_PINNED_VERSION`. The install is then CLONED (read-only on the source;
+        APFS clonefile when available) into the scratch npm cache under the same key, and the
+        clone's own package.json is re-read as the recorded version. No cache, a version drift, a
+        missing integrity or a failed clone is a SETUP FAILURE — never a registry fallback."""
         t0 = time.time()
-        for pkg in sorted((REAL_HOME / ".npm" / "_npx").glob("*/package.json")):
-            try:
-                meta = json.loads(pkg.read_text())
-            except (OSError, json.JSONDecodeError):
-                continue
-            if meta.get("_npx", {}).get("packages") != [INTERACTIVE_SPEC]:
-                continue
-            src = pkg.parent
-            dst = self.npm_cache / "_npx" / src.name
-            try:
-                if sys.platform == "darwin":
-                    subprocess.run(["cp", "-Rc", str(src), str(dst)], check=True, capture_output=True, timeout=300)
-                else:
-                    shutil.copytree(src, dst, symlinks=True)
-                info.update(seeded=True, source=str(src), key=src.name, seconds=round(time.time() - t0, 1))
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
-                info["error"] = str(e)[:300]
-            break
-        if not info["seeded"]:
-            info["note"] = "no cached install found — the bridge's npx will resolve the spec from the registry (slower; needs network)"
-        self.report["setup"]["bridge_cache"] = info
+        pin = resolve_bridge_pin(REAL_HOME / ".npm" / "_npx", INTERACTIVE_SPEC, BRIDGE_PINNED_VERSION)
+        info: dict = {"pinned": BRIDGE_PINNED_VERSION, "spec": INTERACTIVE_SPEC, "offline": True, **pin}
+        self.report["setup"]["bridge"] = info
+        if pin.get("error"):
+            raise SetupFailure("bridge_pin", pin["error"])
+        src = Path(pin["path"])
+        dst = self.npm_cache / "_npx" / src.name
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["cp", "-Rc", str(src), str(dst)], check=True, capture_output=True, timeout=300)
+            else:
+                shutil.copytree(src, dst, symlinks=True)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+            info["error"] = f"cloning the pinned bridge cache failed: {str(e)[:300]}"
+            raise SetupFailure("bridge_pin", info["error"]) from e
+        try:
+            cloned = json.loads((dst / "node_modules" / "wicked-interactive" / "package.json").read_text())["version"]
+        except (OSError, json.JSONDecodeError, KeyError) as e:
+            info["error"] = f"the scratch clone carries no readable wicked-interactive/package.json: {e}"
+            raise SetupFailure("bridge_pin", info["error"]) from e
+        info.update(scratch_path=str(dst), cloned_version=cloned)
+        if cloned != BRIDGE_PINNED_VERSION:
+            info["error"] = f"the scratch clone is wicked-interactive {cloned}, not the pinned {BRIDGE_PINNED_VERSION}"
+            raise SetupFailure("bridge_pin", info["error"])
+        # npx resolves the RANGE against the registry manifest even with a warm `_npx` install (an
+        # `--offline` run without it fails ENOTCACHED). Seed the operator's CACHED manifest into the
+        # scratch cache and prove the range resolves to the pin from THAT frozen snapshot — then the
+        # daemon's `npm_config_offline=true` makes any other resolution impossible, not just unlikely.
+        manifest = seed_registry_manifest(REAL_HOME / ".npm", self.npm_cache, "wicked-interactive")
+        info["registry_manifest"] = manifest
+        if manifest.get("error"):
+            info["error"] = manifest["error"]
+            raise SetupFailure("bridge_pin", info["error"])
+        resolves_to = caret_max(manifest["versions"], INTERACTIVE_SPEC)
+        manifest["resolves_to"] = resolves_to
+        if resolves_to != BRIDGE_PINNED_VERSION:
+            info["error"] = (f"the cached registry manifest ({manifest.get('cached_at')}) resolves {INTERACTIVE_SPEC} to {resolves_to!r}, not the pinned "
+                             f"{BRIDGE_PINNED_VERSION} — the bridge would not be the certified one")
+            raise SetupFailure("bridge_pin", info["error"])
+        self._cacache_blobs_seeded = self._cacache_blobs()
+        info.update(seconds=round(time.time() - t0, 1), cacache_blobs_seeded=len(self._cacache_blobs_seeded))
+
+    def _cacache_blobs(self) -> set[str]:
+        """Every content blob in the scratch npm cache — a NEW one after the bridge started means npm
+        fetched something (a registry resolution the pin forbids)."""
+        root = self.npm_cache / "_cacache" / "content-v2"
+        if not root.is_dir():
+            return set()
+        return {str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()}
 
     def clone_repo(self) -> None:
         """The registered repository: a LOCAL CLONE of this checkout at HEAD, inside the temp dir.
@@ -1140,6 +1490,85 @@ class Rig:
             raise RuntimeError(f"{tool}: result was not a JSON object: {text!r}")
         return payload
 
+    # ── campaign fixture (TST-2) — the engine's own row, no governed run ────────────
+    def seed_campaign_record(self, cid: str, name: str, project_id: str, repo_ref: str) -> dict:
+        """Write ONE campaign into the scratch engine store exactly the way the engine persists it —
+        without `POST /campaigns`, whose only implementation (`adapter.launchCampaign`) LAUNCHES the
+        campaign (every node dispatches a governed run). `wicked_core::campaign::persist` →
+        `put_node` → the estate `nodes` row {kind `{"other":"campaign"}`, language `wicked-apps`,
+        file `campaign/<id>`, `data` = the Node JSON whose `metadata` IS the serialized `Campaign`}
+        with its symbol `wicked-apps synthetic campaign/<id>:` interned in `symbols`. The row layout
+        is MIRRORED from the `project` node the daemon itself wrote for `project_id` (same table,
+        same columns, same encodings) — so a store-schema drift shows up as a seed that the daemon
+        does not list (⇒ TST-2 `blocked` with this record), never as a silently wrong row. The
+        campaign is TERMINAL (`cancelled`, its one node `cancelled`) so the scheduler never touches
+        it; its node's `run_spec.repo_ref` is Project A's repo — the only project attribution the
+        engine's `CampaignDef` can carry today (no campaign-level project id; `POST /campaigns
+        {projectId}` fans over the project's repos exactly like this)."""
+        db = self.state / "core.db"
+        assert under(db.resolve(), self.tmp), f"refusing to write a store outside the temp dir: {db}"
+        campaign = {
+            "id": cid, "def_id": cid, "status": "cancelled",
+            "def": {
+                "id": cid, "name": name,
+                "nodes": [{"node_id": "n1", "run_spec": {
+                    "problem": f"{name}: seed-surfaces campaign fixture — never dispatched (terminal on write)",
+                    "clis": [], "entity_mode": "shared", "human_confirm": "none", "repo_ref": repo_ref, "workflow_id": None,
+                }}],
+                "edges": [], "policy": "continue_independent", "max_concurrency": 1,
+            },
+            "node_status": {"n1": "cancelled"}, "node_run_id": {}, "node_attempt": {},
+            "pending_decision_amend": {}, "pending_failure_gates": [], "fail_fast_tripped": False,
+        }
+        record: dict = {"method": "mirror of the daemon's own `project` node row in the scratch estate store", "db": str(db), "campaign_id": cid,
+                        "engine_writer": "wicked_core::campaign::persist → put_node → estate `nodes` + `symbols` (core-ts campaign_list reads via open_store_ro + find_symbols)"}
+        con = sqlite3.connect(str(db), timeout=15)
+        con.row_factory = sqlite3.Row
+        try:
+            con.execute("PRAGMA busy_timeout=15000")
+            cols = [r[1] for r in con.execute("PRAGMA table_info(nodes)")]
+            tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            record.update(nodes_columns=cols, has_symbols_table="symbols" in tables, journal_mode=con.execute("PRAGMA journal_mode").fetchone()[0])
+            sibling = con.execute("SELECT * FROM nodes WHERE name=? AND kind LIKE '%project%'", (project_id,)).fetchone()
+            if sibling is None:
+                raise RuntimeError(f"no `project` node row for {project_id} in {db} — nothing to mirror (kinds present: "
+                                   f"{[r[0] for r in con.execute('SELECT DISTINCT kind FROM nodes')]})")
+            data = json.loads(sibling["data"])
+            old_tag, new_tag = f"project/{project_id}", f"campaign/{cid}"
+            sym_old = str(data.get("symbol"))
+            if old_tag not in sym_old or "project" not in json.dumps(data.get("kind")):
+                raise RuntimeError(f"the sibling row does not have the expected synthetic layout: symbol={sym_old!r} kind={data.get('kind')!r}")
+            sym_new = sym_old.replace(old_tag, new_tag)
+            node = dict(data)
+            node["symbol"] = sym_new
+            node["name"] = cid
+            node["kind"] = json.loads(json.dumps(data["kind"]).replace('"project"', '"campaign"'))
+            loc = data.get("location")
+            if isinstance(loc, dict):
+                node["location"] = {k: (v.replace(old_tag, new_tag) if isinstance(v, str) else v) for k, v in loc.items()}
+            node["metadata"] = campaign
+            values = {c: sibling[c] for c in cols}
+            values.update(name=cid, kind=sibling["kind"].replace('"project"', '"campaign"'), data=json.dumps(node))
+            if "file" in values and isinstance(values["file"], str):
+                values["file"] = values["file"].replace(old_tag, new_tag)
+            if "symbols" in tables:
+                con.execute("INSERT INTO symbols(sym) VALUES (?)", (sym_new,))
+                sid = con.execute("SELECT sid FROM symbols WHERE sym=?", (sym_new,)).fetchone()[0]
+                sym_cols = {r[1] for r in con.execute("PRAGMA table_info(symbols)")}
+                if "had_node" in sym_cols:
+                    con.execute("UPDATE symbols SET had_node=1 WHERE sid=?", (sid,))
+                values["symbol"] = sid
+                record["sid"] = sid
+            else:
+                values["symbol"] = sym_new
+            con.execute(f"INSERT INTO nodes({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})", [values[c] for c in cols])
+            con.commit()
+            record.update(symbol=sym_new, kind=values["kind"], file=values.get("file"), status="cancelled", repo_ref=repo_ref, written=True)
+        finally:
+            con.close()
+        self.report["setup"]["campaign_seed"] = record
+        return record
+
     def register_repo(self) -> None:
         """Setup, over the API — labelled. Registration launches the built-in `onboarding` workflow:
         two TOOL phases (`wicked-estate index`, `wicked-estate clusters`), no agent, no council."""
@@ -1201,9 +1630,11 @@ class Rig:
     def stop_bridge(self) -> dict:
         """The pool spawns the bridge DETACHED (its own group), so the daemon's group stop does not
         reach it. Identify it by command line + VERIFIED start time, cross-check the advisory lock,
-        then terminate — never signal a pid the identity check did not produce. A failed `ps` or a
-        candidate with no readable start time leaves the identity UNVERIFIED: nothing is signalled
-        beyond the daemon group we spawned ourselves, and the teardown records the failure."""
+        then terminate — never signal a pid the identity check did not produce (`plan_bridge_stop`
+        decides; it is pure and self-tested). A failed `ps` signals NOTHING beyond the daemon group
+        we spawned (`enumeration_failed`); an alive lock pid nobody identified is `unidentified_alive`
+        — both are verdict failures. An identified bridge that did not run from the scratch clone of
+        the pinned version is `not_from_pinned_cache`."""
         info: dict = {}
         found = bridge_processes(self.idocs, self.daemon_started_at or self.run_started_at)
         procs = found["identified"]
@@ -1218,28 +1649,54 @@ class Rig:
             unverified=[brief(p) for p in found["unverified"]],
             lock_pid_matches_identified=lock_pid in identified,
         )
-        if not found["ps_ok"]:
-            info["identity_unverified"] = f"ps failed ({found['ps_error']}) — no bridge pid can be identified; only the daemon group we spawned was stopped"
-        elif found["unverified"]:
-            info["identity_unverified"] = (f"{len(found['unverified'])} candidate(s) serving {self.idocs} have no readable start time "
-                                           f"(pids {[p['pid'] for p in found['unverified']]}) — NOT signalled")
-        if procs:
-            info["terminated"] = terminate_pids(sorted(identified))
-        elif valid_pid(lock_pid) and pid_alive(lock_pid):
-            info["refused"] = f"lock pid {lock_pid} is alive but no process serving {self.idocs} was identified — NOT signalled"
+        pids, plan = plan_bridge_stop(found, lock_pid, self.idocs)
+        info.update(plan)
+        bridge_setup = self.report["setup"].get("bridge") or {}
+        scratch_key = bridge_setup.get("scratch_path")
+        lock_version = lock.get("version") if lock else None
+        info["lock_version"] = lock_version
+        if procs and scratch_key:
+            problems: list[str] = []
+            if lock_version is not None and str(lock_version) != BRIDGE_PINNED_VERSION:
+                problems.append(f"the running bridge reports version {lock_version!r} in its lock, not the pinned {BRIDGE_PINNED_VERSION}")
+            from_clone = [p["pid"] for p in procs if scratch_key in p["command"]]
+            info["ran_from_pinned_clone"] = from_clone
+            if not from_clone:
+                problems.append(f"none of the identified bridge processes {sorted(identified)} run from the pinned scratch clone {scratch_key} "
+                                f"— commands: {[p['command'][:160] for p in procs]}")
+            try:
+                now_version = json.loads((Path(scratch_key) / "node_modules" / "wicked-interactive" / "package.json").read_text())["version"]
+            except (OSError, json.JSONDecodeError, KeyError) as e:
+                now_version = f"unreadable: {e}"
+            info["pinned_clone_version_at_teardown"] = now_version
+            if now_version != BRIDGE_PINNED_VERSION:
+                problems.append(f"the scratch clone is wicked-interactive {now_version!r} at teardown, not the pinned {BRIDGE_PINNED_VERSION} (npx re-installed)")
+            added = sorted(self._cacache_blobs() - getattr(self, "_cacache_blobs_seeded", set()))
+            info["cacache_blobs_added_during_run"] = added
+            if added:
+                problems.append(f"npm fetched {len(added)} new content blob(s) into the scratch cache during the run (a registry resolution): {added[:5]}")
+            if problems:
+                info["not_from_pinned_cache"] = "; ".join(problems)
+        if pids:
+            info["terminated"] = terminate_pids(pids)
         return info
 
     def scratch_writes(self, base: Path, cap: int = 400) -> list[str]:
+        """What landed under a scratch dir (informational — the HOME-WRITES finding). Uses the
+        explicit walk; enumeration errors are recorded on the teardown record, never raised, so this
+        inspection can never block the steps after it."""
         out: list[str] = []
+        errors: list[dict] = []
         if not base.exists():
             return out
-        for p in sorted(base.rglob("*")):
-            if p.is_file() or p.is_symlink():
-                out.append(str(p.relative_to(self.tmp)))
+        for p, _ent in walk_files(base, errors):
+            out.append(str(p.relative_to(self.tmp)))
             if len(out) >= cap:
                 out.append("… (truncated)")
                 break
-        return out
+        if errors:
+            self.report["setup"].setdefault("teardown", {}).setdefault("scratch_writes_errors", []).extend(errors[:20])
+        return sorted(out)
 
     def scan_operator_state(self) -> dict:
         """Re-derive isolation: every file under the operator-global wicked stores that was modified
@@ -1249,11 +1706,30 @@ class Rig:
         since = self.run_started_at
         tree = scan_tree(OPERATOR_STATE_ROOTS, since, needles)
         modified, hits = tree["modified"], tree["hits"]
-        stamped = sorted(
-            str(p.relative_to(LIVE_STATE_HOME))
-            for p in LIVE_STATE_HOME.rglob("*")
-            if any(n in p.name for n in self.needles)
-        ) if LIVE_STATE_HOME.is_dir() else []
+        # Stamped ENTRY NAMES under ~/.wicked-crew (files and directories) — the same explicit walk;
+        # a directory the walk cannot open is a scan error (the proof is incomplete), never silence.
+        stamped: list[str] = []
+        if LIVE_STATE_HOME.is_dir():
+            name_errors: list[dict] = []
+            stack = [LIVE_STATE_HOME]
+            while stack:
+                d = stack.pop()
+                try:
+                    with os.scandir(d) as it:
+                        entries = list(it)
+                except OSError as e:
+                    name_errors.append({"file": str(d), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}", "stage": "scandir"})
+                    continue
+                for ent in entries:
+                    if any(n in ent.name for n in self.needles):
+                        stamped.append(str(Path(ent.path).relative_to(LIVE_STATE_HOME)))
+                    try:
+                        if ent.is_dir(follow_symlinks=False):
+                            stack.append(Path(ent.path))
+                    except OSError as e:
+                        name_errors.append({"file": str(ent.path), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}", "stage": "entry"})
+            tree["scan_errors"].extend(name_errors)
+            stamped.sort()
         live_after = snapshot_live_runs()
         new_live = sorted(set(live_after["run_ids"]) - set(self.live_before["run_ids"]))
         ours_on_live = [
@@ -1273,18 +1749,14 @@ class Rig:
         }
 
     def teardown(self, findings: list[str]) -> list[str]:
-        """Runs on EVERY exit path. Every step is attempted even when an earlier one failed; every
-        failure is recorded (`step_errors`, then `failures` via `teardown_failures`) and lands in
-        `findings` — the verdict reads them. Returns the contamination findings (`live_touched`)."""
+        """Runs on EVERY exit path. EVERY step runs in its own try/except (`run_teardown_steps`):
+        cancel → daemon group → log → bridge → fixture server → scratch-writes inspection →
+        isolation scan → temp-dir removal — a raise in any one is recorded (`step_errors`, a
+        `teardown_step_raised` failure) and the NEXT step still runs (an inspection failure can
+        never keep the temp dir alive). Every failure lands in `findings` and `failures` via
+        `teardown_failures` — the verdict reads them. Returns the contamination findings."""
         t: dict = self.report["setup"].setdefault("teardown", {})
-        step_errors: list[str] = []
-        t["step_errors"] = step_errors
-
-        def step(name: str, fn: Callable[[], None]) -> None:
-            try:
-                fn()
-            except BaseException as e:  # noqa: BLE001 — cleanup continues; the failure is recorded, never swallowed
-                step_errors.append(f"{name}: {type(e).__name__}: {e}")
+        live_touched: list[str] = []
 
         def _cancel() -> None:
             t["cancelled_runs"] = self.cancel_live_runs()
@@ -1305,38 +1777,32 @@ class Rig:
             if self.fixture_httpd is not None:
                 self.fixture_httpd.shutdown()
 
-        step("cancel_live_runs", _cancel)
-        step("stop_daemon_group", _daemon)
-        step("close_daemon_log", _log)
-        step("stop_bridge", _bridge)
-        step("stop_fixture_server", _fixture)
-        if "bridge" not in t:
-            t["bridge"] = {"error": "stop_bridge raised — see step_errors"}
-        home_writes = self.scratch_writes(self.home, cap=100_000)
-        tmp_writes = self.scratch_writes(self.tmpdir)
-        # Per-directory counts survive the list cap: run 6 wrote 391 codex plugin-clone files that
-        # pushed the bridge's `.wicked-interactive/instances.json` past a 400-entry list.
-        by_dir: dict[str, int] = {}
-        for p in home_writes:
-            parts = p.split("/")
-            key = "/".join(parts[1:3]) if len(parts) > 2 else p
-            by_dir[key] = by_dir.get(key, 0) + 1
-        t["scratch_home_writes"] = home_writes[:400] + (["… (truncated)"] if len(home_writes) > 400 else [])
-        t["scratch_home_writes_by_dir"] = dict(sorted(by_dir.items(), key=lambda kv: -kv[1]))
-        t["scratch_tmpdir_writes"] = {"count": len(tmp_writes), "sample": tmp_writes[:5]}
-        if home_writes:
-            # The writes no WICKED_* knob pins today — they would have landed in the operator's real
-            # home without the scratch HOME (TMPDIR writes are expected and counted separately).
-            findings.append(f"HOME-WRITES: the daemon/bridge/CLIs wrote {len(home_writes)} entries under the scratch HOME "
-                            f"(would have landed in the operator's home) — by directory: {t['scratch_home_writes_by_dir']}; "
-                            f"plus {len(tmp_writes)} under the scratch TMPDIR")
-        live_touched: list[str] = []
-        try:
-            scan = self.scan_operator_state()
-        except BaseException as e:  # noqa: BLE001 — an un-run scan is a verdict-affecting failure, never a clean bill
-            t["isolation_scan_error"] = f"{type(e).__name__}: {e}"
-            scan = None
-        if scan is not None:
+        def _scratch_writes() -> None:
+            home_writes = self.scratch_writes(self.home, cap=100_000)
+            tmp_writes = self.scratch_writes(self.tmpdir)
+            # Per-directory counts survive the list cap: run 6 wrote 391 codex plugin-clone files that
+            # pushed the bridge's `.wicked-interactive/instances.json` past a 400-entry list.
+            by_dir: dict[str, int] = {}
+            for p in home_writes:
+                parts = p.split("/")
+                key = "/".join(parts[1:3]) if len(parts) > 2 else p
+                by_dir[key] = by_dir.get(key, 0) + 1
+            t["scratch_home_writes"] = home_writes[:400] + (["… (truncated)"] if len(home_writes) > 400 else [])
+            t["scratch_home_writes_by_dir"] = dict(sorted(by_dir.items(), key=lambda kv: -kv[1]))
+            t["scratch_tmpdir_writes"] = {"count": len(tmp_writes), "sample": tmp_writes[:5]}
+            if home_writes:
+                # The writes no WICKED_* knob pins today — they would have landed in the operator's real
+                # home without the scratch HOME (TMPDIR writes are expected and counted separately).
+                findings.append(f"HOME-WRITES: the daemon/bridge/CLIs wrote {len(home_writes)} entries under the scratch HOME "
+                                f"(would have landed in the operator's home) — by directory: {t['scratch_home_writes_by_dir']}; "
+                                f"plus {len(tmp_writes)} under the scratch TMPDIR")
+
+        def _scan() -> None:
+            try:
+                scan = self.scan_operator_state()
+            except BaseException as e:  # noqa: BLE001 — an un-run scan is a verdict-affecting failure, never a clean bill
+                t["isolation_scan_error"] = f"{type(e).__name__}: {e}"
+                return
             t["isolation_scan"] = scan
             for e in scan["stamped_entries_in_live_state_home"]:
                 live_touched.append(f"~/.wicked-crew/{e} carries this run's stamp")
@@ -1348,16 +1814,33 @@ class Rig:
                 findings.append(f"LIVE-7701: {len(scan['live_7701']['new_run_ids'])} run(s) appeared on the live daemon during this run "
                                 f"without this run's identifiers (operator activity, not ours): {scan['live_7701']['new_run_ids']}")
             if scan["scan_errors"]:
-                findings.append(f"LIVE-SCAN-ERROR: {len(scan['scan_errors'])} file(s) inside the operator stores could not be inspected — "
+                findings.append(f"LIVE-SCAN-ERROR: {len(scan['scan_errors'])} entr(ies) inside the operator stores could not be inspected — "
                                 f"the isolation proof is INCOMPLETE: {scan['scan_errors'][:5]}")
-        t["tmp"] = str(self.tmp)
-        t["tmp_kept"] = KEEP_TMP
-        if not KEEP_TMP:
-            try:
-                shutil.rmtree(self.tmp)
-            except OSError as e:
-                t["tmp_remove_error"] = f"{type(e).__name__}: {e}"
-            t["tmp_removed"] = not self.tmp.exists()
+
+        def _tmp() -> None:
+            t["tmp"] = str(self.tmp)
+            t["tmp_kept"] = KEEP_TMP
+            if not KEEP_TMP:
+                try:
+                    shutil.rmtree(self.tmp)
+                except OSError as e:
+                    t["tmp_remove_error"] = f"{type(e).__name__}: {e}"
+                t["tmp_removed"] = not self.tmp.exists()
+
+        t["step_errors"] = run_teardown_steps([
+            ("cancel_live_runs", _cancel),
+            ("stop_daemon_group", _daemon),
+            ("close_daemon_log", _log),
+            ("stop_bridge", _bridge),
+            ("stop_fixture_server", _fixture),
+            ("scratch_writes", _scratch_writes),
+            ("isolation_scan", _scan),
+            ("remove_tmp", _tmp),
+        ])
+        if "bridge" not in t:
+            t["bridge"] = {"error": "stop_bridge raised — see step_errors"}
+        if "isolation_scan" not in t and "isolation_scan_error" not in t:
+            t["isolation_scan_error"] = "the isolation scan step did not record a result — see step_errors"
         t["failures"] = teardown_failures(t)
         for f in t["failures"]:
             findings.append(f"TEARDOWN: {f}")
@@ -1694,6 +2177,199 @@ def doc_versions(pid: str, name: str) -> dict:
     st, manifest = api("GET", f"/projects/{quote(pid)}/interactive/d/{quote(name)}/api/versions")
     assert st == 200 and isinstance(manifest, dict), f"versions wire → {st} {str(manifest)[:300]}"
     return manifest
+
+
+def doc_members(pid: str) -> list[str]:
+    """The SERVER-SIDE owner record: crew's project membership. The bridge files every doc/demo it
+    creates for a project as an `interactive.doc` member (`POST /projects/:id/members`, project.js
+    `bindDocToProject`) — the one authority that says which project a document belongs to."""
+    st, detail = api("GET", f"/projects/{quote(pid)}")
+    assert st == 200 and isinstance(detail, dict), f"GET /projects/{pid} → {st} {str(detail)[:200]}"
+    return sorted(m.get("member_ref") for m in detail.get("members", []) if m.get("member_kind") == "interactive.doc")
+
+
+def doc_conversation(pid: str, name: str) -> list[dict]:
+    st, conv = api("GET", f"/projects/{quote(pid)}/interactive/d/{quote(name)}/api/conversation")
+    assert st == 200 and isinstance(conv, list), f"conversation wire → {st} {str(conv)[:200]}"
+    return [e for e in conv if isinstance(e, dict)]
+
+
+def frame_text(frame) -> str:
+    return str(frame.evaluate("() => (document.body?.innerText ?? '').trim()"))
+
+
+def open_panel(page, tab: str) -> None:
+    """The right panel starts COLLAPSED once a document owns the canvas (`DocumentCanvas`:
+    `panelOpen = useState(docId === null)`), so the thread's `doc-message`s are NOT in the DOM until
+    the rail's glyph opens the panel on a tab. Run 8 of this suite asserted the thread while the panel
+    was collapsed — the wait could never succeed; every thread read now opens the Chat tab first."""
+    if tid(page, "doc-panel", tab=tab).count() == 0:
+        tid(page, "panel-rail-tab", tab=tab).click()
+    tid(page, "doc-panel", tab=tab).wait_for(timeout=10_000)
+
+
+THREAD_HAS_TEXT_JS = "t => Array.from(document.querySelectorAll('[data-testid=\"doc-message\"]')).some(m => (m.textContent || '').includes(t))"
+
+
+def feedback_journey(page, A: str, doc_a: str, B: str, doc_b: str) -> str:
+    """FBK-1 — FEEDBACK through the real UI: point at an instrumented block of A's document, choose
+    "Change text", type, submit ONE batch. The bridge applies a deterministic `content-edit` ITSELF
+    (no agent: `materializeFeedback` → `applyFeedbackItems`) and lands a NEW version whose HTML
+    carries the text; the batch is ALSO the thread's user message (`chat.posted` →
+    `conversation.jsonl`). Persistence: after a FULL reload the canvas frames the new head with the
+    text and the thread (Chat tab opened) rehydrates the message from `GET /api/conversation`.
+    Isolation: B's own document shows none of it (thread, lineage, conversation). Module-level so the
+    fix-validation probe runs exactly the code the suite runs."""
+    before = doc_versions(A, doc_a)
+    n_before, head_before = len(before["versions"]), before["head"]
+    b_before = doc_versions(B, doc_b)
+    goto(page, f"/p/{quote(A)}/document/{quote(doc_a)}")
+    canvas = tid(page, "doc-canvas", doc_id=doc_a)
+    canvas.wait_for(timeout=BRIDGE_TIMEOUT_MS)
+    tid(page, "feedback-overlay").wait_for(timeout=15_000)
+    try:
+        page.wait_for_function("() => document.querySelector('[data-testid=\"feedback-overlay\"]')?.getAttribute('data-ready') === 'true'", timeout=20_000)
+    except Exception as e:  # noqa: BLE001 — the disabled overlay's own reason is the finding
+        raise AssertionError("point-and-comment never became ready: the injected instrument bridge did not answer the inventory request "
+                             f"(toggle title: {tid(page, 'feedback-toggle').get_attribute('title')!r})") from e
+    frame = frame_of(canvas.first)
+    target = frame.evaluate(
+        "() => { const els = Array.from(document.querySelectorAll('[data-wid]'));"
+        " const el = els.find(e => !e.querySelector('[data-wid]') && (e.innerText || '').trim().length > 0);"
+        " return el ? { wid: el.getAttribute('data-wid'), text: (el.innerText || '').trim() } : null; }"
+    )
+    assert target, "the document renders no non-composite instrumented block (`[data-wid]` with text) to comment on"
+    # The ORIGINAL click grammar: a click on an instrumented block INSIDE the frame is preempted by
+    # the injected bridge and reported (`wid-click`) — the targeted card opens, no mode toggle.
+    frame.locator(f'[data-wid="{target["wid"]}"]').first.click()
+    card = tid(page, "feedback-comment")
+    card.wait_for(timeout=10_000)
+    mode = tid(page, "feedback-mode-change-text")
+    assert mode.count() == 1, f"'Change text' is not offered for block {target['wid']!r} (the bridge reported no text, or a composite block)"
+    mode.click()
+    tid(page, "feedback-comment-input").fill(FEEDBACK_TEXT)
+    tid(page, "feedback-comment-add").click()
+    card.wait_for(state="detached", timeout=10_000)
+    assert tid(page, "feedback-pin").count() == 1, f"{tid(page, 'feedback-pin').count()} pins after one comment"
+    with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/interactive/api/events"), timeout=30_000) as ack:
+        tid(page, "feedback-submit").click()
+    ack_status = ack.value.status
+    assert 200 <= ack_status < 300, f"the feedback batch was refused: POST /api/events → HTTP {ack_status}"
+    assert tid(page, "feedback-error").count() == 0, text_of(tid(page, "feedback-error"))
+    deadline = time.time() + 60
+    after = doc_versions(A, doc_a)
+    while time.time() < deadline and len(after["versions"]) == n_before:
+        time.sleep(1)
+        after = doc_versions(A, doc_a)
+    assert len(after["versions"]) == n_before + 1, f"no new version landed within 60 s of the feedback batch (versions {n_before} → {len(after['versions'])})"
+    new_head = after["head"]
+    assert new_head != head_before and any(v.get("version") == new_head and v.get("parent") == head_before for v in after["versions"]), f"the new head {new_head} is not a child of {head_before}: {after}"
+    st, new_html = fetch(f"/api/v1/projects/{quote(A)}/interactive/d/{quote(doc_a)}/doc/{new_head}")
+    assert st == 200 and FEEDBACK_TEXT.encode() in new_html, f"v{new_head} does not carry the typed text (HTTP {st})"
+    st, old_html = fetch(f"/api/v1/projects/{quote(A)}/interactive/d/{quote(doc_a)}/doc/{head_before}")
+    assert st == 200 and FEEDBACK_TEXT.encode() not in old_html, f"v{head_before} was rewritten in place (write-once violated)"
+    # The thread lives in the right panel, which is COLLAPSED while a doc owns the canvas: open Chat.
+    open_panel(page, "chat")
+    page.wait_for_function(THREAD_HAS_TEXT_JS, arg=FEEDBACK_TEXT, timeout=30_000)
+    # Persistence: a FULL reload — canvas at the new head, text rendered, thread rehydrated from the wire.
+    goto(page, f"/p/{quote(A)}/document/{quote(doc_a)}")
+    canvas = tid(page, "doc-canvas", doc_id=doc_a)
+    canvas.wait_for(timeout=BRIDGE_TIMEOUT_MS)
+    assert canvas.first.get_attribute("data-version") == str(new_head), f"after reload the canvas frames v{canvas.first.get_attribute('data-version')}, not the new head v{new_head}"
+    rendered = frame_text(frame_of(canvas.first))
+    assert FEEDBACK_TEXT in rendered, f"the reloaded canvas does not render the edited text: {rendered[:200]!r}"
+    open_panel(page, "chat")
+    page.wait_for_function(THREAD_HAS_TEXT_JS, arg=FEEDBACK_TEXT, timeout=30_000)
+    mine = [e for e in doc_conversation(A, doc_a) if FEEDBACK_TEXT in str(e.get("text", ""))]
+    assert mine and mine[0].get("role") == "user", f"GET /api/conversation does not carry the batch as a user message: {mine}"
+    # Isolation: Project B's OWN document saw nothing of it (its thread OPENED, so the check is not vacuous).
+    goto(page, f"/p/{quote(B)}/document/{quote(doc_b)}")
+    tid(page, "doc-canvas", doc_id=doc_b).wait_for(timeout=BRIDGE_TIMEOUT_MS)
+    open_panel(page, "chat")
+    page.wait_for_load_state("networkidle")
+    assert tid(page, "thread").count() == 1, "B's document thread did not render after opening the Chat tab"
+    b_thread = tid(page, "doc-message").all_text_contents()
+    assert not any(FEEDBACK_TEXT in t for t in b_thread), "Project B's document thread shows A's feedback batch"
+    b_after = doc_versions(B, doc_b)
+    assert (len(b_after["versions"]), b_after["head"]) == (len(b_before["versions"]), b_before["head"]), f"B's document lineage changed: {b_before} → {b_after}"
+    assert not [e for e in doc_conversation(B, doc_b) if FEEDBACK_TEXT in str(e.get("text", ""))], "B's conversation carries A's feedback"
+    return (f"feedback on block {target['wid']} of '{doc_a}' (Change text → {FEEDBACK_TEXT[:40]!r}…) submitted as ONE batch (POST /api/events {ack_status}); "
+            f"the bridge landed v{new_head} (parent v{head_before}) carrying the text, v{head_before} untouched; the Chat tab shows the batch; after a full reload the canvas "
+            f"frames v{new_head} with the text and the thread rehydrates the batch from GET /api/conversation (role user); B's own document ({len(b_thread)} thread messages): "
+            f"none carry it, lineage and conversation unchanged")
+
+
+def compare_journey(page, A: str, doc_a: str) -> str:
+    """VIB-CMP — DOCUMENT COMPARISON: two versions of A's document (v_head carries FBK-1's edit, its
+    parent does not) side by side through the Compare tab. The lens is split / overlay of two real
+    version frames — the product has NO textual diff markers, so the oracle is per-pane CONTENT
+    identity: each pane renders exactly its version (the head pane carries the edited text, the parent
+    pane does not; the served `/doc/<v>` bytes agree), the comparand selector lists every other
+    version, overlay stacks the same two, and exit returns to the solo canvas at the head without
+    writing a comparand into the URL (compare is a lens, not an address)."""
+    manifest = doc_versions(A, doc_a)
+    assert len(manifest["versions"]) >= 2, f"comparison needs two versions; the manifest has {len(manifest['versions'])}"
+    head = manifest["head"]
+    parent = next(v.get("parent") for v in manifest["versions"] if v.get("version") == head)
+    assert isinstance(parent, int), f"the head v{head} has no parent to compare against: {manifest}"
+    goto(page, f"/p/{quote(A)}/document/{quote(doc_a)}")
+    tid(page, "doc-canvas", doc_id=doc_a).wait_for(timeout=BRIDGE_TIMEOUT_MS)
+    open_panel(page, "compare")
+    toggle = tid(page, "version-compare-toggle")
+    toggle.wait_for(timeout=10_000)
+    assert toggle.is_enabled(), f"Compare is disabled: {toggle.get_attribute('title')!r}"
+    toggle.click()
+    tid(page, "compare-split").wait_for(timeout=15_000)
+    tid(page, "compare-controls").wait_for(timeout=10_000)
+    panes = tid(page, "compare-pane")
+    assert panes.count() == 2, f"{panes.count()} compare panes"
+    pane_versions = attr_values(page, "compare-pane", "data-version")
+    assert pane_versions == [str(head), str(parent)], f"panes show {pane_versions}, expected [selected v{head}, parent v{parent}]"
+    texts = {pane_versions[i]: frame_text(frame_of(panes.nth(i))) for i in range(2)}
+    assert texts[str(head)] and texts[str(parent)], f"a pane rendered nothing: {texts}"
+    assert FEEDBACK_TEXT in texts[str(head)], f"the head pane (v{head}) does not render the edited text"
+    assert FEEDBACK_TEXT not in texts[str(parent)], f"the parent pane (v{parent}) renders the edited text — both panes show the same version"
+    st1, h_head = fetch(f"/api/v1/projects/{quote(A)}/interactive/d/{quote(doc_a)}/doc/{head}")
+    st2, h_parent = fetch(f"/api/v1/projects/{quote(A)}/interactive/d/{quote(doc_a)}/doc/{parent}")
+    assert st1 == 200 and st2 == 200 and FEEDBACK_TEXT.encode() in h_head and FEEDBACK_TEXT.encode() not in h_parent, "the served version bytes disagree with the panes"
+    options = tid(page, "compare-vs").locator("option").evaluate_all("els => els.map(e => e.value)")
+    assert sorted(options, key=int) == sorted((str(v["version"]) for v in manifest["versions"] if v["version"] != head), key=int), f"comparand options {options}"
+    tid(page, "compare-overlay-toggle").click()
+    tid(page, "compare-overlay").wait_for(timeout=10_000)
+    layers = attr_values(page, "compare-pane", "data-layer")
+    assert sorted(layers) == ["top", "under"], f"overlay layers {layers}"
+    assert tid(page, "overlay-slider").count() == 1
+    overlay_versions = dict(zip(attr_values(page, "compare-pane", "data-layer"), attr_values(page, "compare-pane", "data-version")))
+    assert overlay_versions == {"under": str(head), "top": str(parent)}, f"overlay stacks {overlay_versions}"
+    tid(page, "compare-exit").click()
+    tid(page, "compare-pane").first.wait_for(state="detached", timeout=10_000)
+    canvas = tid(page, "doc-canvas", doc_id=doc_a)
+    canvas.wait_for(timeout=BRIDGE_TIMEOUT_MS)
+    assert canvas.first.get_attribute("data-version") == str(head), "exiting compare did not return to the head"
+    assert not re.search(r"[?&](cmp|compare|vs|comparand)=", page.url), f"compare wrote a comparand into the URL: {page.url}"
+    return (f"v{head} ↔ v{parent} of '{doc_a}' compared side by side (each pane renders its own version: the head pane carries the FBK-1 text, the parent does not; "
+            f"served bytes agree), comparand options {options}, overlay stacks under=v{head}/top=v{parent} with the opacity slider, exit returns to the solo canvas at v{head} "
+            f"with no comparand in the URL — the product has no textual diff markers; the lens is split/overlay of the two real version frames")
+
+
+def campaign_cards(page, pid: str) -> list[str]:
+    """`/p/:id/campaigns` → every `campaign-card` id, with the recency window widened to `all` — a
+    campaign with no member run is outside every window, and the surface offers it only behind the
+    '+N older' chip / the `all` range (never silently gone)."""
+    goto(page, f"/p/{quote(pid)}/campaigns")
+    tid(page, "project-campaigns", project_id=pid).wait_for(timeout=15_000)
+    wait_any(page, ["campaigns-page", "campaigns-unsupported"], 30_000)
+    assert tid(page, "campaigns-unsupported").count() == 0, "this daemon has no campaign surface (`GET /campaigns` not served)"
+    page.wait_for_load_state("networkidle")
+    older = tid(page, "campaigns-show-older")
+    if older.count() > 0:
+        older.click()
+    else:
+        all_btn = page.locator('[data-testid="campaigns-filter"] button[data-range="all"]')
+        if all_btn.count() > 0 and all_btn.get_attribute("aria-pressed") != "true":
+            all_btn.click()
+    page.wait_for_load_state("networkidle")
+    return attr_values(page, "campaign-card", "data-campaign-id")
 
 
 def doc_capture(page, pid: str, name: str) -> dict:
@@ -2403,6 +3079,18 @@ def run_scenarios(rig: Rig, page) -> None:
 
     suite.run("VIB-4", "Document survives a reload (canvas identity + picker listing + versions head/lineage)", vib4, requires=("VIB-1D",))
 
+    def fbk1() -> str:
+        (A, doc_a), (B, doc_b) = ctx["docs"][0], ctx["docs"][1]
+        return feedback_journey(page, A, doc_a, B, doc_b)
+
+    suite.run("FBK-1", "Feedback journey: point-and-comment on A's doc → deterministic version + thread message; persists on reload; not on B's doc", fbk1, requires=("VIB-4", "VIB-2D"))
+
+    def vibcmp() -> str:
+        A, doc_a = ctx["docs"][0]
+        return compare_journey(page, A, doc_a)
+
+    suite.run("VIB-CMP", "Document comparison: two versions of A's doc side by side + overlay; each pane renders its own version", vibcmp, requires=("FBK-1",))
+
     def vib3() -> str:
         (A, doc_a), (B, doc_b) = ctx["docs"][0], ctx["docs"][1]
         a_ids = picker_ids(page, A, "document")
@@ -2423,18 +3111,26 @@ def run_scenarios(rig: Rig, page) -> None:
 
     suite.run("VIB-3F", "Foreign deep link: /p/B/document/<A's doc> must not frame A's document", vib3f, xfail="crew#472", requires=("VIB-1D", "VIB-2D"))
 
-    def isof() -> str:
-        """MUTATION isolation, the EDIT arm: from Project B's shell, fork A's document (Versions tab →
-        Fork = `POST /d/:doc/api/fork`, a new version). Correct: B's shell does not frame it, or the
-        fork is refused. Expected gap (crew#472): the fork lands a new version on A's document."""
-        (A, doc_a), (B, _doc_b) = ctx["docs"][0], ctx["docs"][1]
-        before = doc_versions(A, doc_a)
+    def foreign_fork(mode: str, owner: str, name: str, foreign: str, own_name: str, surface_testid: str) -> str:
+        """The shared body of ISO-F (documents) and ISO-DF (demos): from the FOREIGN project's shell,
+        fork the owner's artifact (Versions tab → Fork = `POST /d/:doc/api/fork`). Correct: the
+        foreign shell does not frame it, or the fork is refused. When the fork LANDS (crew#472), the
+        BILATERAL ownership/persistence checks run FIRST, on RELOAD, as plain assertions — the
+        owner's shell frames the new head and its Versions tab lists the whole lineage; the wire
+        agrees; the foreign project's own artifact is untouched and still listed; the server-side
+        owner record (crew `interactive.doc` membership) still files the artifact under the owner
+        and NOT under the foreign project — and only then the ONE expected gap fires."""
+        before = doc_versions(owner, name)
         n_before = len(before["versions"])
-        goto(page, f"/p/{quote(B)}/document/{quote(doc_a)}")
-        seen = wait_any(page, ["doc-canvas", "doc-canvas-error", "doc-picker-empty", "doc-canvas-loading"], BRIDGE_TIMEOUT_MS)
-        if not (seen == "doc-canvas" and tid(page, "doc-canvas", doc_id=doc_a).count() > 0):
-            return f"B's shell does not frame A's document (rendered: {seen}) — no foreign mutation is reachable"
-        # The panel starts collapsed once a doc owns the canvas: the rail's Versions glyph opens it on that tab.
+        foreign_before = doc_versions(foreign, own_name)
+        goto(page, f"/p/{quote(foreign)}/{mode}/{quote(name)}")
+        picker = "doc-picker" if mode == "document" else "demo-picker"
+        surface = "doc" if mode == "document" else "video"
+        seen = wait_any(page, [surface_testid, f"{surface}-canvas-error", f"{picker}-empty", picker, f"{surface}-canvas-loading"], BRIDGE_TIMEOUT_MS)
+        attr = {"doc_id": name} if mode == "document" else {"demo_id": name}
+        if not (seen == surface_testid and tid(page, surface_testid, **attr).count() > 0):
+            return f"{foreign}'s shell does not frame {owner}'s {mode} (rendered: {seen}) — no foreign mutation is reachable"
+        # The panel starts collapsed once an artifact owns the canvas: the rail's Versions glyph opens it on that tab.
         tid(page, "panel-rail-tab", tab="versions").click()
         tid(page, "doc-panel", tab="versions").wait_for(timeout=10_000)
         head_row = tid(page, "version-detail", version=str(before["head"]))
@@ -2449,35 +3145,64 @@ def run_scenarios(rig: Rig, page) -> None:
                 outcome = ("landed", page.url)
             else:
                 page.wait_for_timeout(250)
-        after = doc_versions(A, doc_a)
+        after = doc_versions(owner, name)
         n_after = len(after["versions"])
         if outcome is None:
-            raise AssertionError(f"the fork from B's shell neither landed nor was refused within 30s (A's versions {n_before} → {n_after})")
+            raise AssertionError(f"the fork from {foreign}'s shell neither landed nor was refused within 30s ({owner}'s versions {n_before} → {n_after})")
         if outcome[0] == "refused":
-            assert n_after == n_before, f"the UI reported a refused fork but A's document gained versions ({n_before} → {n_after})"
-            return f"B's shell framed A's document but the fork was REFUSED ({outcome[1][:200]}); A's lineage unchanged ({n_before} versions)"
-        expect_gap(n_after == n_before, "crew#472",
-                   f"a fork issued from Project B's shell LANDED on Project A's document {doc_a!r}: versions {n_before} → {n_after} "
-                   f"(new head {after.get('head')}, url {outcome[1].replace(ORIGIN, '')}) — the shared root accepts foreign mutations")
-        return "the fork from B's shell changed nothing on A's document"
+            assert n_after == n_before, f"the UI reported a refused fork but {owner}'s {mode} gained versions ({n_before} → {n_after})"
+            return f"{foreign}'s shell framed {owner}'s {mode} but the fork was REFUSED ({outcome[1][:200]}); lineage unchanged ({n_before} versions)"
+        leaked = n_after != n_before
+        # ── BILATERAL, on RELOAD, before the gap fires ──
+        goto(page, f"/p/{quote(owner)}/{mode}/{quote(name)}")
+        canvas = tid(page, surface_testid, **attr)
+        canvas.wait_for(timeout=BRIDGE_TIMEOUT_MS)
+        assert canvas.first.get_attribute("data-version") == str(after["head"]), f"the owner's shell frames v{canvas.first.get_attribute('data-version')} after reload, not the current head v{after['head']}"
+        tid(page, "panel-rail-tab", tab="versions").click()
+        tid(page, "doc-panel", tab="versions").wait_for(timeout=10_000)
+        page.wait_for_function("n => document.querySelectorAll('[data-testid=\"version-detail\"]').length === n", arg=n_after, timeout=15_000)
+        listed = sorted(attr_values(page, "version-detail", "data-version"), key=int)
+        assert listed == sorted((str(v["version"]) for v in after["versions"]), key=int), f"the owner's Versions tab lists {listed}, the wire says {[v['version'] for v in after['versions']]}"
+        reloaded = doc_versions(owner, name)
+        assert (reloaded["head"], [v["version"] for v in reloaded["versions"]]) == (after["head"], [v["version"] for v in after["versions"]]), "the mutation did not persist on the wire"
+        foreign_ids = picker_ids(page, foreign, mode)
+        assert own_name in foreign_ids, f"{foreign}'s picker lost its OWN {mode} {own_name!r}: {foreign_ids}"
+        foreign_after = doc_versions(foreign, own_name)
+        assert (len(foreign_after["versions"]), foreign_after["head"]) == (len(foreign_before["versions"]), foreign_before["head"]), f"{foreign}'s own {mode} lineage changed: {foreign_before} → {foreign_after}"
+        owner_docs, foreign_docs = doc_members(owner), doc_members(foreign)
+        assert name in owner_docs, f"crew no longer files {name!r} under its owner {owner} (interactive.doc members: {owner_docs})"
+        assert name not in foreign_docs, f"the foreign fork RE-FILED {name!r} under {foreign} (interactive.doc members: {foreign_docs})"
+        assert own_name in foreign_docs, f"crew no longer files {own_name!r} under {foreign}: {foreign_docs}"
+        expect_gap(not leaked, "crew#472",
+                   f"a fork issued from Project {foreign}'s shell LANDED on Project {owner}'s {mode} {name!r}: versions {n_before} → {n_after} "
+                   f"(new head {after.get('head')}, url {outcome[1].replace(ORIGIN, '')}) — the shared root accepts foreign mutations; "
+                   f"bilateral checks held: owner frames v{after['head']} + lists {listed} after reload, foreign project's own {mode} untouched, "
+                   f"crew membership still {owner}∋{name} / {foreign}∌{name}")
+        return f"the fork from {foreign}'s shell changed nothing on {owner}'s {mode}"
 
-    suite.run("ISO-F", "Foreign-context mutation (edit arm): fork A's doc from B's shell must be refused or unreachable", isof,
+    def isof() -> str:
+        """MUTATION isolation, the EDIT arm for DOCUMENTS: fork A's document from B's shell."""
+        (A, doc_a), (B, doc_b) = ctx["docs"][0], ctx["docs"][1]
+        return foreign_fork("document", A, doc_a, B, doc_b, "doc-canvas")
+
+    suite.run("ISO-F", "Foreign-context mutation (edit arm): fork A's doc from B's shell must be refused or unreachable; bilateral ownership after", isof,
               xfail="crew#472", requires=("VIB-1D", "VIB-2D"))
 
-    def isod() -> str:
-        """MUTATION isolation, the DELETE arm: from Project B's picker, delete A's document. Correct:
-        A's doc is not listed under B (invisible) or the delete is refused by scope. Two known gaps
-        gate this today — the picker leak (crew#472) and the pinned bridge's missing DELETE route
-        (studio#213); the one that fires is named in the detail."""
-        (A, doc_a), (B, _doc_b) = ctx["docs"][0], ctx["docs"][1]
-        b_ids = picker_ids(page, B, "document")
-        if doc_a not in b_ids:
-            return f"A's document is invisible from B's picker ({b_ids}) — no foreign delete is reachable"
-        a_before = picker_ids(page, A, "document")
-        assert doc_a in a_before, f"A's own picker lost {doc_a} before the foreign delete: {a_before}"
-        goto(page, f"/p/{quote(B)}/document")
-        wait_any(page, ["doc-picker", "doc-picker-empty", "doc-canvas-error", "doc-canvas-loading"], BRIDGE_TIMEOUT_MS)
-        tid(page, "doc-delete-trigger", doc_id=doc_a).click()
+    def foreign_delete(mode: str, owner: str, name: str, foreign: str) -> str:
+        """The shared body of ISO-D (documents) and ISO-DD (demos): from the FOREIGN project's picker,
+        delete the owner's artifact. Correct: not listed there (invisible) or refused by scope. Two
+        known gaps gate this today — the picker leak (crew#472) and the pinned bridge's missing
+        DELETE route (studio#213); the one that fires is named in the detail."""
+        foreign_ids = picker_ids(page, foreign, mode)
+        if name not in foreign_ids:
+            return f"{owner}'s {mode} is invisible from {foreign}'s picker ({foreign_ids}) — no foreign delete is reachable"
+        owner_before = picker_ids(page, owner, mode)
+        assert name in owner_before, f"{owner}'s own picker lost {name} before the foreign delete: {owner_before}"
+        picker = "doc-picker" if mode == "document" else "demo-picker"
+        surface = "doc" if mode == "document" else "video"
+        goto(page, f"/p/{quote(foreign)}/{mode}")
+        wait_any(page, [picker, f"{picker}-empty", f"{surface}-canvas-error", f"{surface}-canvas-loading"], BRIDGE_TIMEOUT_MS)
+        tid(page, "doc-delete-trigger", doc_id=name).click()
         tid(page, "doc-delete-confirm").wait_for(timeout=10_000)
         tid(page, "doc-delete-go").click()
         deadline = time.time() + 30
@@ -2485,23 +3210,28 @@ def run_scenarios(rig: Rig, page) -> None:
             if tid(page, "doc-delete-error").count() > 0:
                 wire = text_of(tid(page, "doc-delete-error"))
                 if PREDATES_DELETE_RE.search(wire):
-                    raise ExpectedGap(f"studio#213: the foreign delete cannot reach a scope check — the pinned bridge predates DELETE /api/docs/:doc ({wire[:200]})")
+                    raise ExpectedGap(f"studio#213: the foreign delete cannot reach a scope check — the pinned bridge {BRIDGE_PINNED_VERSION} predates DELETE /api/docs/:doc ({wire[:200]})")
                 if re.search(r"project|scope|not (in|part of)|forbidden|403", wire, re.I):
-                    return f"the delete of A's document from B's shell was REFUSED by scope: {wire[:200]}"
-                raise AssertionError(f"delete from B's shell failed on the wire for an unrelated reason: {wire[:300]}")
+                    return f"the delete of {owner}'s {mode} from {foreign}'s shell was REFUSED by scope: {wire[:200]}"
+                raise AssertionError(f"delete from {foreign}'s shell failed on the wire for an unrelated reason: {wire[:300]}")
             if tid(page, "doc-delete-partial").count() > 0:
                 raise AssertionError(f"PARTIAL delete from a foreign shell: {text_of(tid(page, 'doc-delete-partial'))[:300]}")
             if tid(page, "doc-delete-bridge-hint").count() > 0:
-                reason = bridge_unavailable_reason(B)
+                reason = bridge_unavailable_reason(foreign)
                 if reason is not None:
                     raise Skip(f"bridge unavailable during the foreign delete (daemon 503 bridge_unavailable: {reason[:200]})")
                 raise AssertionError(f"foreign delete shows a bridge hint while the daemon serves the bridge: {text_of(tid(page, 'doc-delete-bridge-hint'))[:200]}")
             if tid(page, "doc-delete-confirm").count() == 0:
                 break
             page.wait_for_timeout(200)
-        a_after = picker_ids(page, A, "document")
-        expect_gap(doc_a in a_after, "crew#472", f"a delete issued from Project B's shell REMOVED Project A's document {doc_a!r} (A's picker: {a_before} → {a_after})")
-        return "the delete from B's shell left A's document in place"
+        owner_after = picker_ids(page, owner, mode)
+        expect_gap(name in owner_after, "crew#472", f"a delete issued from Project {foreign}'s shell REMOVED Project {owner}'s {mode} {name!r} (owner's picker: {owner_before} → {owner_after})")
+        return f"the delete from {foreign}'s shell left {owner}'s {mode} in place"
+
+    def isod() -> str:
+        """MUTATION isolation, the DELETE arm for DOCUMENTS: delete A's document from B's picker."""
+        (A, doc_a), (B, _doc_b) = ctx["docs"][0], ctx["docs"][1]
+        return foreign_delete("document", A, doc_a, B)
 
     suite.run("ISO-D", "Foreign-context mutation (delete arm): delete A's doc from B's shell must be refused or invisible", isod,
               xfail="studio#213 (delete wire) / crew#472 (leak)", requires=("VIB-1D", "VIB-2D"))
@@ -2514,6 +3244,17 @@ def run_scenarios(rig: Rig, page) -> None:
         return f"demo '{name}' created under A via the wizard (target {rig.fixture_url}, one hand-pinned step; authoring agent disabled); A's picker lists it"
 
     suite.run("DEM-1D", "Seed a demo in Project A via the wizard (deterministic)", dem1d, requires=("PRJ-1",))
+
+    def dem2d() -> str:
+        name = ui_seed_demo(page, ctx["B"], f"seed-demo-b-{STAMP}", rig.fixture_url)
+        ctx["demos"].append((ctx["B"], name))
+        ids = picker_ids(page, ctx["B"], "video")
+        assert name in ids, f"{name} missing from B's demo picker: {ids}"
+        members = doc_members(ctx["B"])
+        assert name in members, f"crew does not file the demo under B (interactive.doc members: {members})"
+        return f"demo '{name}' created under B via the wizard (the scoping control for DEM-3/DEM-3F/ISO-DF/ISO-DD); B's picker lists it; crew files it under B"
+
+    suite.run("DEM-2D", "Seed a demo in Project B via the wizard (deterministic)", dem2d, requires=("PRJ-2", "DEM-1D"))
 
     def demplay() -> str:
         """PLAYBACK of the seeded demo: the player frames the storyboard at the manifest head, the
@@ -2562,14 +3303,22 @@ def run_scenarios(rig: Rig, page) -> None:
         tid(page, "demo-player", demo_id=demo).wait_for(timeout=BRIDGE_TIMEOUT_MS)
         button = tid(page, "video-record")
         button.wait_for(timeout=15_000)
-        button.click()
+        # The ACK: the click posts `wicked.interactive.demo.requested` over POST /api/events — its
+        # HTTP status is captured here; no observed response is "no acknowledgment" (a FAIL).
+        ack_status: int | None = None
+        try:
+            with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/interactive/api/events"), timeout=15_000) as ack:
+                button.click()
+            ack_status = ack.value.status
+        except Exception:  # noqa: BLE001 — Playwright's timeout: no response was observed
+            ack_status = None
         page.wait_for_function(
             "() => ['queuing','recording'].includes(document.querySelector('[data-testid=\"video-record\"]')?.getAttribute('data-state')) "
             "|| document.querySelector('[data-testid=\"video-record-error\"]') !== null",
             timeout=15_000,
         )
         if tid(page, "video-record-error").count() > 0:
-            raise AssertionError(f"the record request itself was refused at the click site: {text_of(tid(page, 'video-record-error'))[:300]}")
+            raise AssertionError(f"the record request itself was refused at the click site (ack {ack_status}): {text_of(tid(page, 'video-record-error'))[:300]}")
         deadline = time.time() + 30
         bridge_answer = None
         landed = None
@@ -2587,28 +3336,61 @@ def run_scenarios(rig: Rig, page) -> None:
         if landed is not None:
             raise AssertionError(f"a recording LANDED (head {head} → {landed['head']}) — the BLOCKED premise no longer holds; implement the playback-of-recording assertion")
         state = button.get_attribute("data-state")
-        answer = str(bridge_answer.get("text"))[:240] if bridge_answer else "no bridge answer within 30 s"
+        answer = str(bridge_answer.get("text")) if bridge_answer else None
+        verdict, reason = classify_recorder_answer(ack_status, answer, timed_out=bridge_answer is None)
+        ctx["recorder"] = {"ack_status": ack_status, "answer": (answer or "")[:240], "state": state, "verdict": verdict}
+        if verdict == "fail":
+            raise AssertionError(f"DEM-REC: {reason} (⏺ data-state {state!r}, ack {ack_status})")
         raise Blocked(
-            "BLOCKED — demo RECORDING needs a second browser/recorder the rig cannot host: the record request was queued through the UI "
-            f"(⏺ → data-state {state!r}, POST /api/events wicked.interactive.demo.requested accepted) and the bridge answered: {answer!r}. "
-            "The recorder is the bridge's OWN Playwright Chromium (`recordDemo`: `import('playwright')` → `chromium.launch`), resolved from the "
-            "bridge's HOME/PLAYWRIGHT_BROWSERS_PATH — under the hermetic scratch HOME there is no browser cache, and the rig's Playwright is the "
-            "test client, not the bridge's; it also replays `demo.spec.mjs`, which only the demo AUTHORING run writes (disabled here: "
-            "`--no-interactive-demo-events`, no agent runs in the seed suite; the wizard's steps have no backend consumer — finding 10). "
+            f"BLOCKED — demo RECORDING needs a second browser/recorder the rig cannot host. The record request was queued through the UI "
+            f"(⏺ → data-state {state!r}; POST /api/events wicked.interactive.demo.requested acknowledged HTTP {ack_status}) and the bridge "
+            f"answered with the {reason}. The recorder is the bridge's OWN Playwright Chromium (`recordDemo`: `import('playwright')` → "
+            "`chromium.launch`), resolved from the bridge's HOME/PLAYWRIGHT_BROWSERS_PATH — under the hermetic scratch HOME there is no browser "
+            "cache, and the rig's Playwright is the test client, not the bridge's; it also replays `demo.spec.mjs`, which only the demo AUTHORING "
+            "run writes (disabled here: `--no-interactive-demo-events`, no agent runs in the seed suite; the wizard's steps have no backend "
+            "consumer — finding 10). Any OTHER recorder answer, a ≥400 ack, a missing ack or no answer is a FAIL (`classify_recorder_answer`). "
             "Playback of the seeded storyboard IS certified (DEM-PLAY). Tracked in studio#217."
         )
 
     suite.run("DEM-REC", "Demo recording (⏺ Re-record → new version → playback of the recording)", demrec, requires=("DEM-PLAY",))
 
     def dem3() -> str:
-        A, demo_a = ctx["demos"][0]
+        (A, demo_a), (B, demo_b) = ctx["demos"][0], ctx["demos"][1]
         a_ids = picker_ids(page, A, "video")
-        assert a_ids and demo_a in a_ids, f"ownership broken: A's demo picker does not list its own demo {demo_a!r}: {a_ids}"
-        b_ids = picker_ids(page, ctx["B"], "video")
-        expect_gap(demo_a not in b_ids, "crew#472", f"Project B's demo picker lists A's demo {demo_a!r}: {b_ids}")
-        return "B lists none of A's demos"
+        b_ids = picker_ids(page, B, "video")
+        disjoint_pickers_oracle(a_ids, b_ids, demo_a, demo_b, "crew#472")
+        return "A and B list only their own demos"
 
-    suite.run("DEM-3", "Demos are disjoint per project (B ∌ A's demo)", dem3, xfail="crew#472", requires=("DEM-1D", "PRJ-2"))
+    suite.run("DEM-3", "Demos are disjoint per project (A ∌ B's demo, B ∌ A's demo)", dem3, xfail="crew#472", requires=("DEM-1D", "DEM-2D"))
+
+    def dem3f() -> str:
+        """A foreign deep link for DEMOS: B's shell asked for A's demo by URL must not frame it. A
+        refusal (error surface, picker, empty) is the correct answer here — not a product failure."""
+        (A, demo_a), (B, _demo_b) = ctx["demos"][0], ctx["demos"][1]
+        goto(page, f"/p/{quote(B)}/video/{quote(demo_a)}")
+        seen = wait_any(page, ["demo-player", "video-canvas-error", "demo-picker-empty", "demo-picker", "video-canvas-loading"], BRIDGE_TIMEOUT_MS)
+        framed = seen == "demo-player" and tid(page, "demo-player", demo_id=demo_a).count() > 0
+        expect_gap(not framed, "crew#472", f"Project B's shell frames A's demo {demo_a!r} through a deep link (/p/{B}/video/{demo_a})")
+        return f"B's shell refuses A's demo by deep link (rendered: {seen})"
+
+    suite.run("DEM-3F", "Foreign deep link: /p/B/video/<A's demo> must not frame A's demo", dem3f, xfail="crew#472", requires=("DEM-1D", "DEM-2D"))
+
+    def isodf() -> str:
+        """MUTATION isolation, the EDIT arm for DEMOS: fork A's demo from B's shell (the storyboard's
+        Versions tab → Fork), then the bilateral ownership/persistence checks on reload."""
+        (A, demo_a), (B, demo_b) = ctx["demos"][0], ctx["demos"][1]
+        return foreign_fork("video", A, demo_a, B, demo_b, "demo-player")
+
+    suite.run("ISO-DF", "Foreign-context mutation (edit arm, demo): fork A's demo from B's shell must be refused or unreachable; bilateral ownership after", isodf,
+              xfail="crew#472", requires=("DEM-1D", "DEM-2D"))
+
+    def isodd() -> str:
+        """MUTATION isolation, the DELETE arm for DEMOS: delete A's demo from B's picker."""
+        (A, demo_a), (B, _demo_b) = ctx["demos"][0], ctx["demos"][1]
+        return foreign_delete("video", A, demo_a, B)
+
+    suite.run("ISO-DD", "Foreign-context mutation (delete arm, demo): delete A's demo from B's shell must be refused or invisible", isodd,
+              xfail="studio#213 (delete wire) / crew#472 (leak)", requires=("DEM-1D", "DEM-2D"))
 
     # ── THE ONE GOVERNED SCENARIO — serialized, gate rejected ─────────────────
     def tst1() -> str:
@@ -2708,36 +3490,41 @@ def run_scenarios(rig: Rig, page) -> None:
     suite.run("TST-S", "The test run is scoped: on A's dashboard, absent from B's", tsts, requires=("PRJ-2", "TST-1"))
 
     def tst2() -> str:
-        """Campaign isolation: the wire MUST answer 200 with a list (anything else FAILS with
-        status/body); Project B's campaign cards MUST exclude A's (the isolation assertion, run on
-        whatever data exists); only the part the governed budget prevents — LAUNCHING a fan so the
-        assertion has a campaign to bite on — is reported blocked."""
+        """Campaign isolation over REAL fixture data, without a governed run. The only daemon writer
+        (`POST /campaigns`) LAUNCHES the campaign — every node dispatches a run — so the fixture is
+        written the way the engine persists one (`Rig.seed_campaign_record`: the estate `nodes` row,
+        terminal status, node scoped to Project A's repo) into the scratch store; `GET /campaigns`
+        reads the store read-only per call, so the seed lists without a restart. A seed the daemon
+        does not list is `blocked` with the exact reason. Then the partition is REAL: A's page must
+        render its card (plain), B's page must not (the ONE expected gap, studio#216)."""
         A, B = ctx["A"], ctx["B"]
-
-        def cards(pid: str) -> list[str]:
-            goto(page, f"/p/{quote(pid)}/campaigns")
-            tid(page, "project-campaigns", project_id=pid).wait_for(timeout=15_000)
-            wait_any(page, ["campaigns-page", "campaigns-unsupported"], 30_000)
-            page.wait_for_load_state("networkidle")
-            return attr_values(page, "campaign-card", "data-campaign-id")
-
-        a_cards = cards(A)
-        b_cards = cards(B)
+        try:
+            seed = rig.seed_campaign_record(CAMPAIGN_ID, CAMPAIGN_NAME, A, REPO_ID)
+        except Exception as e:  # noqa: BLE001 — the fixture could not be written: blocked, with the writer inspected
+            raise Blocked(
+                f"BLOCKED — the campaign fixture could not be seeded without a governed run: {type(e).__name__}: {e}. Writers inspected: crew "
+                "`POST /campaigns` → `adapter.launchCampaign` (engine `campaign::launch`: persists AND dispatches every node's run — governed); "
+                "the engine's own row (`wicked_core::campaign::persist` → `put_node` → estate `nodes`/`symbols`, read back by core-ts "
+                "`campaign_list` via `open_store_ro` + `find_symbols`) is the only non-governed path and mirroring it into the scratch store failed as above. "
+                "Context: studio#216."
+            ) from e
         st, body = api("GET", "/campaigns")
-        proof = campaigns_isolation_oracle(st, body, a_cards, b_cards)
+        engine_ids = [c.get("id") for c in (body.get("campaigns") or [])] if isinstance(body, dict) and isinstance(body.get("campaigns"), list) else None
+        if engine_ids is not None and CAMPAIGN_ID not in engine_ids:
+            raise Blocked(f"BLOCKED — the campaign fixture was written ({seed['symbol']}) but the daemon does not list it (GET /campaigns → {st}, ids {engine_ids}); "
+                          f"the mirrored row does not match what `campaign_list` reads on this engine — seed record: {json.dumps(seed)[:400]}. Context: studio#216.")
+        dst, detail = api("GET", f"/campaigns/{quote(CAMPAIGN_ID)}")
+        assert dst == 200 and isinstance(detail, dict) and (detail.get("campaign") or {}).get("id") == CAMPAIGN_ID, f"GET /campaigns/{CAMPAIGN_ID} → {dst} {str(detail)[:200]}"
+        node_repo = ((detail["campaign"].get("def") or {}).get("nodes") or [{}])[0].get("run_spec", {}).get("repo_ref")
+        assert node_repo == REPO_ID, f"the daemon serves the seed with repo_ref {node_repo!r}, not A's repo {REPO_ID!r}"
+        a_cards = campaign_cards(page, A)
+        b_cards = campaign_cards(page, B)
+        proof = campaigns_isolation_oracle(st, body, CAMPAIGN_ID, a_cards, b_cards, "studio#216")
         ctx["campaigns_proof"] = proof
-        if a_cards:
-            raise AssertionError(f"campaign card(s) rendered on the single-repo project A ({a_cards}) — the BLOCKED premise no longer holds; "
-                                 f"the partition assertion ran (B renders {b_cards}) and this row must become a plain verdict (App.tsx:466)")
-        raise Blocked(
-            f"BLOCKED (fan only) — deterministic half executed: GET /campaigns → 200 with a list of {proof['engine_campaigns']} campaigns; "
-            f"A renders {len(a_cards)} campaign cards, B renders {len(b_cards)}, and B's set excludes A's (∩ = ∅). What the budget prevents: "
-            "a single-repo test registers no engine campaign (`campaignRegistered:false`), so the partition (App.tsx:466) has no campaign to bite on; "
-            "observing it needs a ≥2-repo FAN (crew#390 shape) = ≥2 governed runs, over the one-governed-scenario budget. Fixture path when a fan is "
-            "affordable: attach a second repo to A, launch once, then this same assertion (B's cards ∌ A's) is the verdict. Context: studio#216."
-        )
+        return f"A renders its campaign {CAMPAIGN_ID} and B renders none of A's (A: {a_cards}, B: {b_cards}; engine lists {proof['engine_campaigns']})"
 
-    suite.run("TST-2", "Tests list is partitioned per project (campaign isolation)", tst2, requires=("PRJ-2",))
+    suite.run("TST-2", "Tests list is partitioned per project (campaign isolation over a seeded campaign scoped to A's repo)", tst2,
+              xfail="studio#216", requires=("PRJ-2", "ATT-1"))
 
     # ── Cleanup — only after every consumer ───────────────────────────────────
     # CLN-1 PER TARGET: one row per seeded doc/demo — an ExpectedGap on the first never hides the rest.
@@ -2814,6 +3601,7 @@ def run_scenarios(rig: Rig, page) -> None:
 
 
 def self_test() -> int:
+    global KEEP_TMP
     results: dict[str, bool] = {}
     # 1. exit semantics: report.ok is the ONLY thing the exit code reads
     results["exit_nonzero_when_report_not_ok"] = exit_code({"ok": False}) != 0
@@ -2913,16 +3701,19 @@ def self_test() -> int:
     all_bad = {
         "cancelled_runs": [{"run": "r1", "before": "running", "accepted": False, "final": "running", "verified_terminal": False}],
         "daemon": {"pid": 1, "forced": True, "exit_code": None, "group_empty": False}, "daemon_stopped": False,
-        "bridge": {"terminated": {"signalled": [9], "forced": [9], "remaining": [9]}, "identity_unverified": "no start time"},
+        "bridge": {"terminated": {"signalled": [9], "forced": [9], "remaining": [9]}, "identity_unverified": "no start time",
+                   "enumeration_failed": "ps exited 1", "unidentified_alive": "lock pid 7 alive", "not_from_pinned_cache": "ran from elsewhere"},
+        "browser_close_error": "Target closed",
         "tmp": "/x", "tmp_removed": False, "tmp_remove_error": "EBUSY",
         "isolation_scan_error": "PermissionError: scan aborted",
-        "isolation_scan": {"scan_errors": [{"file": "/x/y", "errno": 13, "error": "PermissionError: Permission denied"}]},
+        "isolation_scan": {"scan_errors": [{"file": "/x/y", "errno": 13, "error": "PermissionError: Permission denied", "stage": "scandir"}]},
         "step_errors": ["stop_bridge: RuntimeError: boom"],
     }
     fails = teardown_failures(all_bad)
     kinds = {f.split(":")[0] for f in fails}
     results["teardown_names_every_failure_kind"] = {
-        "run_cancel_failed", "daemon_not_stopped", "bridge_survived_sigkill", "bridge_identity_unverified", "tmp_not_removed",
+        "run_cancel_failed", "daemon_not_stopped", "bridge_survived_sigkill", "bridge_identity_unverified", "bridge_enumeration_failed",
+        "bridge_unidentified_alive", "bridge_not_from_pinned_cache", "browser_close_error", "tmp_not_removed",
         "isolation_scan_failed", "live_scan_error", "teardown_step_raised",
     } <= kinds
     rep = finalize({"live_touched": [], "setup": {"teardown": {"failures": fails}}}, suite_ok=True)
@@ -2981,18 +3772,25 @@ def self_test() -> int:
             f.startswith("live_scan_error") for f in teardown_failures({"isolation_scan": {"scan_errors": tree["scan_errors"]}}))
     finally:
         shutil.rmtree(scan_root, ignore_errors=True)
-    # 10. campaign isolation oracle (item 5): a 500 body is a FAIL (never "zero campaigns"), a 200
-    #     without a list is a FAIL, B carrying A's card is a FAIL, a clean answer returns.
-    def camp_raises(st, body, a, b) -> bool:
+    # 10. campaign isolation oracle (r3 item 1): the wire must be 200 + a list THAT CARRIES THE SEED
+    #     (a 500 body is a FAIL, never "zero campaigns"); A must render its own card (ownership, plain);
+    #     B rendering the seed is the ONE expected gap; any other card on B is a plain FAIL; the
+    #     partitioned answer returns.
+    def camp_raises(st, body, a, b, cls=AssertionError) -> bool:
         try:
-            campaigns_isolation_oracle(st, body, a, b)
+            campaigns_isolation_oracle(st, body, "c1", a, b, "issue#0")
+        except cls as e:
+            return type(e) is cls
         except AssertionError:
-            return True
+            return False
         return False
-    results["campaigns_500_is_fail"] = camp_raises(500, {"error": "database unavailable"}, [], [])
-    results["campaigns_200_without_list_is_fail"] = camp_raises(200, {"ok": True}, [], [])
-    results["campaigns_b_carrying_a_is_fail"] = camp_raises(200, {"campaigns": [{"id": "c1"}]}, ["c1"], ["c1"])
-    results["campaigns_clean_passes"] = not camp_raises(200, {"campaigns": []}, [], []) and not camp_raises(200, {"campaigns": [{"id": "c1"}]}, ["c1"], [])
+    results["campaigns_500_is_fail"] = camp_raises(500, {"error": "database unavailable"}, ["c1"], [])
+    results["campaigns_200_without_list_is_fail"] = camp_raises(200, {"ok": True}, ["c1"], [])
+    results["campaigns_seed_unlisted_is_fail"] = camp_raises(200, {"campaigns": []}, ["c1"], [])
+    results["campaigns_owner_missing_card_is_fail"] = camp_raises(200, {"campaigns": [{"id": "c1"}]}, [], [])
+    results["campaigns_b_carrying_seed_is_expected_gap"] = camp_raises(200, {"campaigns": [{"id": "c1"}]}, ["c1"], ["c1"], ExpectedGap)
+    results["campaigns_foreign_card_on_b_is_fail"] = camp_raises(200, {"campaigns": [{"id": "c1"}, {"id": "zz"}]}, ["c1"], ["zz"])
+    results["campaigns_partitioned_passes"] = not camp_raises(200, {"campaigns": [{"id": "c1"}]}, ["c1"], []) and not camp_raises(200, {"campaigns": [{"id": "c1"}]}, ["c1"], [], ExpectedGap)
     # 11. build identity is bytes (item 6): same label + different bytes, or a missing asset, is a mismatch.
     dist = {"index.html": "aa" * 32, "assets/index-X.js": "bb" * 32}
     results["build_identical_bytes_pass"] = compare_build(dist, dict(dist)) == []
@@ -3029,6 +3827,176 @@ def self_test() -> int:
     results["persistence_missing_key_fails"] = pers_raises({k: v for k, v in cap.items() if k != "lineage"})
     # 14. the committed report carries no operator home path.
     results["report_scrub_removes_home"] = str(REAL_HOME) not in scrub_report_text(json.dumps({"p": f"{REAL_HOME}/.wicked-crew/x", "q": f"/private{REAL_HOME}/y"}))
+    import tempfile as _tempfile
+    _tmp_root = _tempfile.gettempdir().rstrip("/")
+    results["report_scrub_removes_tmp_root"] = (_tmp_root == "/tmp" or _tmp_root not in scrub_report_text(json.dumps({"c": f"node /private{_tmp_root}/seed-surfaces-x/idocs", "d": f"{_tmp_root}/y"})))
+    # 15. the isolation scan fails closed on DIRECTORY ENUMERATION (r3 item 3a): a subdirectory whose
+    #     `scandir` raises is a `scan_errors` entry (stage scandir) while its readable sibling is still
+    #     scanned; an unreadable root is an error, never an empty clean result.
+    enum_root = Path(mkdtemp(prefix="seed-selftest-enum-"))
+    try:
+        (enum_root / "ok.log").write_bytes(b"e2e-scope-selftest")
+        (enum_root / "locked").mkdir()
+        (enum_root / "locked" / "hidden.log").write_bytes(b"e2e-scope-selftest")
+        real_scandir = os.scandir
+
+        def flaky_scandir(p):
+            if str(p).endswith("locked"):
+                raise PermissionError(13, "Permission denied")
+            return real_scandir(p)
+
+        def dead_scandir(p):
+            raise PermissionError(13, "Permission denied")
+
+        tree = scan_tree([enum_root], 0.0, [b"e2e-scope-selftest"], scandir=flaky_scandir)
+        results["scan_enumeration_error_is_recorded_sibling_still_scanned"] = (
+            any(e.get("stage") == "scandir" and e["errno"] == 13 and e["file"].endswith("locked") for e in tree["scan_errors"])
+            and any(h["file"].endswith("ok.log") for h in tree["hits"])
+        )
+        results["scan_enumeration_error_is_live_scan_error"] = any(
+            f.startswith("live_scan_error") for f in teardown_failures({"isolation_scan": {"scan_errors": tree["scan_errors"]}}))
+        dead = scan_tree([enum_root], 0.0, [b"e2e-scope-selftest"], scandir=dead_scandir)
+        results["scan_unreadable_root_is_error_not_clean"] = bool(dead["scan_errors"]) and dead["modified"] == [] and dead["hits"] == []
+    finally:
+        shutil.rmtree(enum_root, ignore_errors=True)
+    # 16. bridge-stop planning fails closed (r3 items 3b/3c): a failed `ps` signals NOTHING — not even a
+    #     partially identified row — and is a failure; an ALIVE lock pid nobody identified is refused AND
+    #     a failure; a dead stale lock pid is not; the identified + matching case signals cleanly.
+    ident = {"pid": 4242, "pgid": 4242, "ppid": 1, "command": "node wicked-interactive serve --root /x/idocs", "started_at": 200.0}
+    pids, info = plan_bridge_stop({"identified": [ident], "unverified": [], "ps_ok": False, "ps_error": "ps exited 1"}, None, "/x/idocs", alive=lambda p: True)
+    results["bridge_failed_ps_signals_nothing_even_partial_rows"] = pids == [] and "enumeration_failed" in info
+    results["bridge_failed_ps_is_teardown_failure"] = any(f.startswith("bridge_enumeration_failed") for f in teardown_failures({"bridge": info}))
+    pids, info = plan_bridge_stop({"identified": [], "unverified": [], "ps_ok": True, "ps_error": None}, 5150, "/x/idocs", alive=lambda p: True)
+    results["bridge_alive_unidentified_lock_pid_is_refused"] = pids == [] and "unidentified_alive" in info
+    results["bridge_alive_unidentified_lock_pid_is_teardown_failure"] = any(f.startswith("bridge_unidentified_alive") for f in teardown_failures({"bridge": info}))
+    pids, info = plan_bridge_stop({"identified": [ident], "unverified": [], "ps_ok": True, "ps_error": None}, 4242, "/x/idocs", alive=lambda p: True)
+    results["bridge_identified_matching_lock_signals_cleanly"] = pids == [4242] and teardown_failures({"bridge": {**info, "terminated": {"remaining": []}}}) == []
+    pids, info = plan_bridge_stop({"identified": [], "unverified": [], "ps_ok": True, "ps_error": None}, 5150, "/x/idocs", alive=lambda p: False)
+    results["bridge_dead_stale_lock_pid_is_not_a_failure"] = pids == [] and teardown_failures({"bridge": info}) == []
+    results["teardown_flags_bridge_not_from_pinned_cache"] = any(f.startswith("bridge_not_from_pinned_cache") for f in teardown_failures({"bridge": {"not_from_pinned_cache": "x"}}))
+    # 17. DEM-REC classification (r3 item 4): only the established prerequisite with a 2xx ack is blocked.
+    prereq = "Recording failed: no demo.spec.mjs authored yet — the agent must write the spec before recording"
+    results["recorder_unrelated_error_is_fail"] = classify_recorder_answer(200, "Recording failed: database corrupt", False)[0] == "fail"
+    results["recorder_http_500_then_timeout_is_fail"] = classify_recorder_answer(500, None, True)[0] == "fail"
+    results["recorder_http_500_with_prereq_is_fail"] = classify_recorder_answer(500, prereq, False)[0] == "fail"
+    results["recorder_timeout_is_fail"] = classify_recorder_answer(200, None, True)[0] == "fail"
+    results["recorder_missing_ack_is_fail"] = classify_recorder_answer(None, prereq, False)[0] == "fail"
+    results["recorder_prereq_with_2xx_ack_is_blocked"] = classify_recorder_answer(202, prereq, False)[0] == "blocked"
+    results["recorder_missing_browser_with_2xx_ack_is_blocked"] = classify_recorder_answer(
+        200, "Recording failed: browserType.launch: Executable doesn't exist at /scratch/ms-playwright/chromium", False)[0] == "blocked"
+    # 18. cleanup continuity (r3 item 5): every step runs past a raise (pure), and the REAL Rig teardown
+    #     still removes the temp dir when the scratch-writes inspection raises.
+    attempted_steps: list[str] = []
+
+    def step_raise() -> None:
+        attempted_steps.append("b")
+        raise RuntimeError("boom")
+
+    errs = run_teardown_steps([("a", lambda: attempted_steps.append("a")), ("b", step_raise), ("c", lambda: attempted_steps.append("c"))])
+    results["teardown_steps_all_run_past_a_raise"] = attempted_steps == ["a", "b", "c"] and errs == ["b: RuntimeError: boom"]
+    rig = Rig.__new__(Rig)
+    rig.report = {"setup": {}}
+    rig.tmp = Path(mkdtemp(prefix="seed-selftest-rig-")).resolve()
+    rig.home, rig.tmpdir, rig.idocs = rig.tmp / "home", rig.tmp / "tmp", rig.tmp / "idocs"
+    rig.home.mkdir(); rig.tmpdir.mkdir()
+    (rig.home / "written.txt").write_text("x")
+    rig.daemon = None; rig.daemon_log = None; rig.fixture_httpd = None
+    rig.run_started_at = time.time(); rig.daemon_started_at = None
+    rig.needles = []; rig.live_before = {"reachable": False, "run_ids": []}
+
+    def inspection_boom(*_a, **_k):
+        raise RuntimeError("inspection boom")
+
+    rig.scratch_writes = inspection_boom  # type: ignore[method-assign]
+    rig.stop_bridge = lambda: {}  # type: ignore[method-assign]
+    rig.scan_operator_state = lambda: {  # type: ignore[method-assign]
+        "stamped_entries_in_live_state_home": [], "identifier_hits": [], "scan_errors": [],
+        "live_7701": {"new_run_ids": [], "new_runs_carrying_our_identifiers": []},
+    }
+    keep_before = KEEP_TMP
+    KEEP_TMP = False
+    try:
+        rig_findings: list[str] = []
+        rig.teardown(rig_findings)
+    finally:
+        KEEP_TMP = keep_before
+        shutil.rmtree(rig.tmp, ignore_errors=True)
+    t_rec = rig.report["setup"]["teardown"]
+    results["teardown_inspection_failure_does_not_block_tmp_removal"] = (
+        t_rec.get("tmp_removed") is True and any(e.startswith("scratch_writes: RuntimeError") for e in t_rec["step_errors"]) and "isolation_scan" in t_rec)
+    results["teardown_inspection_failure_is_verdict_failure"] = any(f.startswith("teardown_step_raised: scratch_writes") for f in t_rec["failures"])
+    rep = finalize({"live_touched": [], "setup": {"browser_close_error": "Target closed", "teardown": {"failures": []}}}, suite_ok=True)
+    results["browser_close_error_forces_ok_false"] = rep["ok"] is False and any(f.startswith("browser_close_error") for f in rep["teardown_failures"])
+    # 19. bridge pin (r3 item 6): no cache / a version drift / a missing integrity are ERRORS (setup
+    #     failures — never a registry fallback); the exact version resolves with its sha512.
+    npx = Path(mkdtemp(prefix="seed-selftest-npx-"))
+    try:
+        results["bridge_pin_no_cache_is_error"] = "error" in resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1")
+
+        def mk(key: str, version: str, integrity: bool = True) -> None:
+            d = npx / key
+            (d / "node_modules" / "wicked-interactive").mkdir(parents=True)
+            (d / "package.json").write_text(json.dumps({"_npx": {"packages": [INTERACTIVE_SPEC]}}))
+            (d / "node_modules" / "wicked-interactive" / "package.json").write_text(json.dumps({"name": "wicked-interactive", "version": version}))
+            entry: dict = {"version": version, "resolved": f"https://registry.npmjs.org/wicked-interactive/-/wicked-interactive-{version}.tgz"}
+            if integrity:
+                entry["integrity"] = "sha512-" + "A" * 86 + "=="
+            (d / "package-lock.json").write_text(json.dumps({"packages": {"node_modules/wicked-interactive": entry}}))
+
+        mk("k1", "0.9.0")
+        results["bridge_pin_version_drift_is_error"] = "error" in resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1")
+        mk("k2", "0.8.1", integrity=False)
+        results["bridge_pin_missing_integrity_is_error"] = "error" in resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1")
+        shutil.rmtree(npx / "k2")
+        mk("k3", "0.8.1")
+        pin = resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1")
+        results["bridge_pin_exact_version_resolves_with_integrity"] = (
+            "error" not in pin and pin["version"] == "0.8.1" and str(pin["integrity"]).startswith("sha512-") and pin["key"] == "k3")
+    finally:
+        shutil.rmtree(npx, ignore_errors=True)
+    # 19b. the offline range resolution: `^` semantics npm applies, and the cached registry manifest is
+    #      copied (index + blob) so `npx --offline` resolves without the network.
+    results["caret_zero_minor_excludes_next_minor"] = caret_max(["0.8.0", "0.8.1", "0.9.0", "0.8.2-rc.1"], "wicked-interactive@^0.8.1") == "0.8.1"
+    results["caret_picks_highest_in_range"] = caret_max(["0.8.1", "0.8.3", "0.8.2", "0.9.0"], "wicked-interactive@^0.8.1") == "0.8.3"
+    results["caret_major_excludes_next_major"] = caret_max(["1.2.3", "1.9.0", "2.0.0"], "x@^1.2.3") == "1.9.0"
+    results["caret_nothing_satisfying_is_none"] = caret_max(["0.7.0", "0.9.0"], "x@^0.8.1") is None
+    cc_src, cc_dst = Path(mkdtemp(prefix="seed-selftest-cc-src-")), Path(mkdtemp(prefix="seed-selftest-cc-dst-"))
+    try:
+        import base64 as _b64
+        results["registry_manifest_missing_is_error"] = "error" in seed_registry_manifest(cc_src, cc_dst, "wicked-interactive")
+        blob = json.dumps({"name": "wicked-interactive", "dist-tags": {"latest": "0.9.0"}, "versions": {"0.8.1": {}, "0.9.0": {}}}).encode()
+        digest = hashlib.sha512(blob).digest()
+        hexd = digest.hex()
+        integrity = "sha512-" + _b64.b64encode(digest).decode()
+        blob_path = cc_src / "_cacache" / "content-v2" / "sha512" / hexd[:2] / hexd[2:4] / hexd[4:]
+        blob_path.parent.mkdir(parents=True)
+        blob_path.write_bytes(blob)
+        idx = cc_src / "_cacache" / "index-v5" / "ab" / "cd" / "deadbeef"
+        idx.parent.mkdir(parents=True)
+        entry = {"key": "make-fetch-happen:request-cache:https://registry.npmjs.org/wicked-interactive", "integrity": integrity, "time": 1788928058856, "size": len(blob)}
+        idx.write_text("0123\t" + json.dumps(entry) + "\n")
+        seeded = seed_registry_manifest(cc_src, cc_dst, "wicked-interactive")
+        results["registry_manifest_seeded_index_and_blob"] = (
+            "error" not in seeded and (cc_dst / "_cacache" / "index-v5" / "ab" / "cd" / "deadbeef").is_file()
+            and (cc_dst / "_cacache" / "content-v2" / "sha512" / hexd[:2] / hexd[2:4] / hexd[4:]).read_bytes() == blob
+            and seeded["versions"] == ["0.8.1", "0.9.0"] and caret_max(seeded["versions"], INTERACTIVE_SPEC) == "0.8.1")
+    finally:
+        shutil.rmtree(cc_src, ignore_errors=True)
+        shutil.rmtree(cc_dst, ignore_errors=True)
+    # 20. `ps` runs under the C locale (Copilot): a non-English `lstart` still parses to None
+    #     (UNVERIFIED — narrows matching, never widens), the env pins LC_ALL=C, and the C-locale form parses.
+    seen_env: dict = {}
+
+    def fake_ps_de(args, **kw):
+        seen_env.update(kw.get("env") or {})
+        return subprocess.CompletedProcess(args, 0, stdout="Di. Sep  9 03:37:00 2026\n", stderr="")
+
+    def fake_ps_c(args, **kw):
+        return subprocess.CompletedProcess(args, 0, stdout="Tue Sep  9 03:37:00 2026\n", stderr="")
+
+    results["ps_started_at_unparseable_locale_is_unverified"] = ps_started_at(1, runner=fake_ps_de) is None and seen_env.get("LC_ALL") == "C"
+    results["ps_started_at_c_locale_parses"] = isinstance(ps_started_at(1, runner=fake_ps_c), float)
+    results["ps_env_pins_c_locale"] = PS_ENV.get("LC_ALL") == "C" and "PATH" in PS_ENV
     ok = all(results.values())
     print(json.dumps({"self_test": results, "ok": ok}, indent=2))
     return 0 if ok else 1
@@ -3042,11 +4010,20 @@ def _on_sigterm(*_args) -> None:
 
 
 def scrub_report_text(text: str) -> str:
-    """The committed artifact must not carry the operator's home path: every occurrence of the real
-    HOME (and its /private-prefixed spelling) reads `~`."""
-    for home in dict.fromkeys([str(REAL_HOME), f"/private{REAL_HOME}", str(Path.home())]):
-        if home and home != "/":
-            text = text.replace(home, "~")
+    """The committed artifact must not carry the operator's home path (or the per-user temp folder
+    the bridge command lines name): every occurrence of the real HOME (and its /private-prefixed
+    spelling) reads `~`; the per-user temp root (`tempfile.gettempdir()`, both spellings) reads
+    `$TMPDIR`."""
+    import tempfile
+    tmp_root = tempfile.gettempdir().rstrip("/")
+    dashed = tmp_root.replace("/", "-")  # the CLI seats' project-dir spelling of a cwd (`-private-var-folders-…-T-…`)
+    for needle, mask in dict.fromkeys([
+        (str(REAL_HOME), "~"), (f"/private{REAL_HOME}", "~"), (str(Path.home()), "~"),
+        (f"/private{tmp_root}", "$TMPDIR"), (tmp_root, "$TMPDIR"),
+        (f"-private{dashed}", "-TMPDIR"), (dashed, "-TMPDIR"),
+    ]):
+        if needle and needle not in ("/", "/tmp", "/private/tmp", "-tmp", "-private-tmp") and len(needle) > 8:
+            text = text.replace(needle, mask)
     return text
 
 
