@@ -133,7 +133,7 @@
       "ok": true,
       "root": "$TMPDIR/seed-surfaces-oswm_ks7/repo",
       "head": "514d311",
-      "source": "/private/tmp/seedsuite-wt-wicked-studio",
+      "source": "<repo>",
       "inherited_codegraph_removed": true
     },
     "daemon": {
@@ -351,7 +351,7 @@
             "pgid": 6111,
             "ppid": 6111,
             "started_at": 1788943473.0,
-            "command": "node $TMPDIR/seed-surfaces-oswm_ks7/npm-cache/_npx/f3c1d902516e713e/node_modules/.bin/wicked-interactive serve --root /private/var/folders/h9/54gktm4j4"
+            "command": "node $TMPDIR/seed-surfaces-oswm_ks7/npm-cache/_npx/f3c1d902516e713e/node_modules/.bin/wicked-interactive serve --root $TMPDIR"
           }
         ],
         "unverified": [],
@@ -942,7 +942,7 @@
       "governed": false,
       "xfail": "studio#212",
       "seconds": 5.4,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/STR-1.png"
+      "shot": "e2e/shots/seed-surfaces/STR-1.png"
     },
     {
       "id": "STR-1S",
@@ -1172,7 +1172,7 @@
       "governed": false,
       "xfail": "crew#472",
       "seconds": 0.2,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/VIB-3.png"
+      "shot": "e2e/shots/seed-surfaces/VIB-3.png"
     },
     {
       "id": "VIB-3F",
@@ -1182,7 +1182,7 @@
       "governed": false,
       "xfail": "crew#472",
       "seconds": 0.1,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/VIB-3F.png"
+      "shot": "e2e/shots/seed-surfaces/VIB-3F.png"
     },
     {
       "id": "ISO-F",
@@ -1192,7 +1192,7 @@
       "governed": false,
       "xfail": "crew#472",
       "seconds": 1.1,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/ISO-F.png"
+      "shot": "e2e/shots/seed-surfaces/ISO-F.png"
     },
     {
       "id": "ISO-D",
@@ -1202,7 +1202,7 @@
       "governed": false,
       "xfail": "studio#213 (delete wire) / crew#472 (leak)",
       "seconds": 5.4,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/ISO-D.png"
+      "shot": "e2e/shots/seed-surfaces/ISO-D.png"
     },
     {
       "id": "DEM-1D",
@@ -1242,7 +1242,7 @@
       "governed": false,
       "xfail": null,
       "seconds": 1.2,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/DEM-REC.png"
+      "shot": "e2e/shots/seed-surfaces/DEM-REC.png"
     },
     {
       "id": "DEM-3",
@@ -1252,7 +1252,7 @@
       "governed": false,
       "xfail": "crew#472",
       "seconds": 0.3,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/DEM-3.png"
+      "shot": "e2e/shots/seed-surfaces/DEM-3.png"
     },
     {
       "id": "DEM-3F",
@@ -1262,7 +1262,7 @@
       "governed": false,
       "xfail": "crew#472",
       "seconds": 0.2,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/DEM-3F.png"
+      "shot": "e2e/shots/seed-surfaces/DEM-3F.png"
     },
     {
       "id": "ISO-DF",
@@ -1272,7 +1272,7 @@
       "governed": false,
       "xfail": "crew#472",
       "seconds": 0.7,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/ISO-DF.png"
+      "shot": "e2e/shots/seed-surfaces/ISO-DF.png"
     },
     {
       "id": "ISO-DD",
@@ -1282,7 +1282,7 @@
       "governed": false,
       "xfail": "studio#213 (delete wire) / crew#472 (leak)",
       "seconds": 0.7,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/ISO-DD.png"
+      "shot": "e2e/shots/seed-surfaces/ISO-DD.png"
     },
     {
       "id": "TST-1",
@@ -1312,7 +1312,7 @@
       "governed": false,
       "xfail": "studio#216",
       "seconds": 1.2,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/TST-2.png"
+      "shot": "e2e/shots/seed-surfaces/TST-2.png"
     },
     {
       "id": "CLN-1a",
@@ -1322,7 +1322,7 @@
       "governed": false,
       "xfail": "studio#213",
       "seconds": 0.6,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/CLN-1a.png"
+      "shot": "e2e/shots/seed-surfaces/CLN-1a.png"
     },
     {
       "id": "CLN-1b",
@@ -1332,7 +1332,7 @@
       "governed": false,
       "xfail": "studio#213",
       "seconds": 0.7,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/CLN-1b.png"
+      "shot": "e2e/shots/seed-surfaces/CLN-1b.png"
     },
     {
       "id": "CLN-1c",
@@ -1342,7 +1342,7 @@
       "governed": false,
       "xfail": "studio#213",
       "seconds": 0.7,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/CLN-1c.png"
+      "shot": "e2e/shots/seed-surfaces/CLN-1c.png"
     },
     {
       "id": "CLN-1d",
@@ -1352,7 +1352,7 @@
       "governed": false,
       "xfail": "studio#213",
       "seconds": 0.7,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/CLN-1d.png"
+      "shot": "e2e/shots/seed-surfaces/CLN-1d.png"
     },
     {
       "id": "CLN-STR",
@@ -1372,7 +1372,7 @@
       "governed": false,
       "xfail": "studio#214",
       "seconds": 0.8,
-      "shot": "/private/tmp/seedsuite-wt-wicked-studio/e2e/shots/seed-surfaces/CLN-2.png"
+      "shot": "e2e/shots/seed-surfaces/CLN-2.png"
     },
     {
       "id": "CLN-2S",

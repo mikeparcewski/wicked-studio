@@ -24,15 +24,23 @@ What this rig is, and what it is not:
     :7701 — crew#476). Every child of the daemon (bridge, workers, estate-mcp) inherits this env.
     Before anything starts, every write target is resolved and asserted NOT to be under the
     operator's real home or `~/.wicked-crew` (`setup.write_targets`).
-  - THE BRIDGE IS PINNED TO AN EXACT VERSION (`BRIDGE_PINNED_VERSION`). Setup resolves the offline
-    `_npx` cache for the spec, reads the INSTALLED `wicked-interactive` version and its tarball
-    integrity (sha512, from the cache's own lockfile), requires version == pin, clones it into the
-    scratch npm cache and records `{version, integrity, resolved, path}` as `setup.bridge`. No cache
-    (or a different version) is a SETUP FAILURE — the bridge never falls back to the registry
-    (`npm_config_offline=true` on the daemon's env makes a cache miss loud). At teardown the
-    identified bridge process must have run FROM the scratch clone (`bridge_not_from_pinned_cache`
-    otherwise). Why the pin matters: 0.8.1 predates `DELETE /api/docs/:doc`, which is exactly the
-    studio#213 expected gap (CLN-1, ISO-D/ISO-DD) — a different bridge flips those rows.
+  - THE BRIDGE IS PINNED TO AN EXACT VERSION (`BRIDGE_PINNED_VERSION`) — BY BYTES. Setup resolves
+    the offline `_npx` cache for the spec and VALIDATES its lock metadata (`resolve_bridge_pin`: the
+    installed `package.json`, the root `package-lock.json` entry AND npm's hidden lockfile all name
+    the pin; the integrity is a well-formed `sha512-<base64>` and identical in both lockfiles),
+    clones it into the scratch npm cache, then VERIFIES THE CLONE (`verify_bridge_clone`: an lstat
+    walk refusing any symlink that escapes the clone; every file sha256-equal to the source install
+    with nothing missing or extra; and — when the operator's cacache still holds the tarball blob
+    for that integrity — the blob's sha512 == integrity and every `package/` member byte-equal to
+    the clone; otherwise the tie is npm's hidden lockfile, which records the sha512 npm verified
+    when it extracted this very tree). `setup.bridge.clone_verification.bytes_verified_by` states
+    which route ran. No cache, a version drift, a lock naming another version, a malformed or
+    disagreeing integrity, an escaping symlink or a byte mismatch is a SETUP FAILURE — the bridge
+    never falls back to the registry (`npm_config_offline=true` on the daemon's env makes a cache
+    miss loud). At teardown the identified bridge process must have run FROM the scratch clone
+    (`bridge_not_from_pinned_cache` otherwise). Why the pin matters: 0.8.1 predates `DELETE
+    /api/docs/:doc`, which is exactly the studio#213 expected gap (CLN-1, ISO-D/ISO-DD) — a
+    different bridge flips those rows.
   - ISOLATION IS RE-DERIVED, NOT ASSERTED. At teardown the suite (a) scans the real `~/.wicked-crew`
     for entries stamped by this run, (b) byte-scans every operator-global wicked store
     (`~/.wicked-crew`, `~/.something-wicked`, `~/.wicked`, `~/wicked-interactive`, `~/.config/wicked-*`)
@@ -67,9 +75,20 @@ What this rig is, and what it is not:
     `core.db`, mirroring the row layout of the `project` node the daemon just wrote — status
     `cancelled`, one node whose `run_spec.repo_ref` is Project A's repo. `campaign_list` opens the
     store read-only per call (core-ts `campaign_list` → `open_store_ro` + `find_symbols`), so the
-    seed is visible on `GET /campaigns` with no restart. A seed the daemon does not list is
-    `blocked` with the exact reason (never `skip`); a listed seed makes the partition assertion
-    real: A renders its card (ownership, plain) and B must not (xfail studio#216).
+    seed is visible on `GET /campaigns` with no restart. TST-2 is NEVER `blocked`: a fixture write
+    that raises (`campaign-seed-write-failed`), a wire that is not 200 + a `campaigns` list (a 500
+    carrying `{"campaigns": []}` included), a transport error, or a 200 list without the seed
+    (`campaign-seed-missing`) are FAILURES with their cause — validated in that order, HTTP first;
+    a listed seed makes the partition assertion real: A renders its card (ownership, plain) and B
+    must not (the ONE expected gap, xfail studio#216). `campaign_isolation_scenario` is the body
+    the suite runs AND the self-tests drive.
+  - RUN MANAGEMENT IS COVERED OVER TST-1's TERMINAL RUN, no second governed launch: RUN-DET (the
+    detail after a full reload: cancelled status, the rejected gate narrated before `Run cancelled`,
+    nothing actionable, the raw wire view == `GET /runs/:id/events`), RUN-ARC (archive — a
+    `[SUBSTITUTE]` over `POST /runs/:id/archive`, because the studio mounts NO archive control:
+    WorkPage's only `archiveRun` call is Unarchive — then the UI proves it left A's dashboard and
+    /work's active list and sits under the Archived toggle, on two full loads), RUN-UNARC (the
+    mounted Unarchive control restores it; wire + reload agree).
   - Steps the UI cannot yet perform are performed over the daemon API and LABELLED
     `[SUBSTITUTE]` in the report (certify the journey, not the proxy). Memories and proposals
     have NO UI author path (agents are the only producer), so their seeds use a SUBSTITUTE
@@ -86,19 +105,25 @@ What this rig is, and what it is not:
     when the route answers 501. The gate journey (TST-1) can NEVER skip: a pre-gate failure is a
     FAIL carrying the captured cause (last events, roster snapshot); `SEED_GOVERNED=0` is a FAIL
     too (certification requires the rejection proven from the run's events).
-  - DEM-REC is `blocked` ONLY for the established prerequisite (`classify_recorder_answer`): the
-    record request acknowledged 2xx AND the bridge's answer is exactly the missing
-    `demo.spec.mjs` / missing recorder browser. Any other recorder error, an HTTP ≥ 400 ack, a
-    missing ack, or no answer within the budget is a FAIL.
+  - DEM-REC is `blocked` ONLY for a POSITIVELY IDENTIFIED prerequisite (`classify_recorder_answer`
+    over `RECORDER_PREREQS`): the record request acknowledged 2xx AND the bridge's whole answer IS
+    `Recording failed: no demo.spec.mjs authored yet …` or the recorder-browser-not-installed
+    message ("Playwright is not installed — run npx playwright install …", or Playwright's own
+    "browserType.launch: Executable doesn't exist at …"), anchored at the start. `browserType.launch`
+    alone is NOT a prerequisite: a launch timeout, a crashed/closed browser, `spawn EACCES`, any
+    other recorder error, an HTTP ≥ 400 ack, a missing ack, or no answer within the budget is a FAIL.
   - TEARDOWN AFFECTS THE VERDICT (`teardown_failures`): a failed cancellation, `daemon_stopped=
     false`, a bridge pid surviving SIGKILL, an unverified bridge identity, a live lock pid nobody
     identified (`bridge_unidentified_alive`), a failed `ps` (`bridge_enumeration_failed` — nothing
     beyond the owned daemon group is signalled), a bridge that did not run from the pinned clone, a
-    browser that failed to close, a failed temp-dir removal, or an isolation scan that could not run
-    (or could not ENUMERATE a directory / read a file: `live_scan_error` with path + errno) each make
-    `report.ok=false`. Every teardown step runs in its own try/except (`run_teardown_steps`): a
-    failure in one never prevents the next, and every failure lands in `findings` AND
-    `setup.teardown.failures[]`.
+    malformed advisory lock pid (`bridge_lock_pid_invalid` — the lock is ignored, the identified
+    processes are still stopped), a browser that failed to close, a failed temp-dir removal, an
+    isolation scan that could not run (or could not ENUMERATE a directory / read a file:
+    `live_scan_error` with path + errno), or a live `:7701` observation that was established at
+    baseline and LOST at the final snapshot (`live_observation_lost` — the run-id diff is unproven)
+    each make `report.ok=false`. Every teardown step runs in its own try/except
+    (`run_teardown_steps`): a failure in one never prevents the next, and every failure lands in
+    `findings` AND `setup.teardown.failures[]`.
   - BUILD IDENTITY IS BYTES, not a version label: the served `index.html` and every referenced
     asset are hashed and compared against THIS worktree's `dist/` build (`npm run build`); a
     mismatch or a missing asset is a setup failure.
@@ -110,14 +135,20 @@ playwright install chromium`), `git`.
 
 Env knobs: CREW_CLI, SEED_GOVERNED_TIMEOUT_S (default 600), SEED_ONBOARD_TIMEOUT_S (default
 240), SEED_GOVERNED=0 (disables the governed scenario — TST-1 then FAILS, by design),
-SEED_KEEP_TMP=1, SEED_HEADED=1. `--report-out <path>` writes the JSON report (operator home
-scrubbed to `~`) to a file as well as stdout.
+SEED_KEEP_TMP=1, SEED_HEADED=1. `--report-out <path>` writes the JSON report to a file as well as
+stdout, SCRUBBED (`scrub_report_text`): the operator's home → `~`, this checkout's root → `<repo>`
+(screenshot paths repo-relative), the per-user temp root → `$TMPDIR` — exact strings in both
+`/private` spellings and dashed forms, plus any `/var/folders/<x>/<y>` prefix by shape (truncated
+included). `--rescrub-report <path>` re-applies the current scrub to an existing report offline.
 
 `python3 e2e/seed_surfaces_test.py --self-test` runs the in-process checks of the harness's own
 safety plumbing (exit semantics, xfail hygiene, pid identity, gate oracle, fail-closed teardown,
-isolation-scan errors incl. directory enumeration, campaign oracle, recorder classification,
-bridge-stop planning, teardown continuity, bridge pin, build-identity compare, per-target cleanup
-rows, persistence content oracle) — no daemon.
+isolation-scan errors incl. directory enumeration, the ACTUAL TST-2 scenario function under the
+codex probes, recorder classification incl. crash/timeout/EACCES, bridge-stop planning, the real
+`stop_bridge` with a malformed lock pid, teardown continuity, bridge pin metadata + clone byte
+verification + escaping symlinks, the real `scan_operator_state` losing the live observation,
+build-identity compare, per-target cleanup rows, persistence content oracle, the report scrub) —
+no daemon.
 
 Prints a per-scenario table and a JSON report to stdout. Exit 0 ONLY when `report.ok`: no
 scenario is `fail`/`xpass`, nothing was contaminated, setup did not fail, nothing aborted, and
@@ -193,13 +224,20 @@ BRIDGE_PINNED_VERSION = "0.8.1"
 # `ps` is parsed (`lstart` → strptime with English month/day names); it must run under the C locale
 # so a non-English operator locale cannot turn every start time into "unverified".
 PS_ENV = {"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"), "LC_ALL": "C", "LANG": "C"}
-# DEM-REC: the ONLY recorder answers that excuse execution — the established prerequisite
-# (`wicked-interactive/src/service/demo.js recordDemo`: no agent-authored spec, or no Playwright
-# browser for the bridge's own Chromium). Anything else the recorder says is a failure.
-RECORDER_PREREQ_RE = re.compile(
-    r"no demo\.spec\.mjs authored yet|browserType\.launch|Executable doesn't exist|"
-    r"playwright[^.]{0,80}(?:not installed|install)|chromium[^.]{0,60}not found",
-    re.I,
+# DEM-REC: the ONLY recorder answers that excuse execution — the POSITIVELY IDENTIFIED prerequisites
+# the pinned bridge itself raises (`wicked-interactive` 0.8.1 `src/service/handlers.js:104` posts
+# `Recording failed: ${e.message}`; `src/service/demo.js:160` throws the missing-spec message and
+# `:168` the not-installed one; `preflight.js:85` names Playwright's own missing-browser error as the
+# second install gate). Each pattern is ANCHORED at the start of the answer and names the whole
+# message — `browserType.launch` alone is NOT a prerequisite: a launch timeout, a crashed or closed
+# browser, `spawn EACCES` and every other recorder error are FAILURES.
+RECORDER_PREREQS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("no demo.spec.mjs authored yet",
+     re.compile(r"^\s*Recording failed: no demo\.spec\.mjs authored yet(?: — the agent must write the spec before recording)?\s*\.?\s*$")),
+    ("recorder browser not installed",
+     re.compile(r"^\s*Recording failed: Playwright is not installed — run `npx playwright install` \(the install gate should have caught this\)\s*$")),
+    ("recorder browser not installed",
+     re.compile(r"^\s*Recording failed: browserType\.launch: Executable doesn't exist at \S+")),
 )
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
@@ -344,8 +382,9 @@ class Suite:
         if status != "pass" and self.page is not None:
             try:
                 SHOTS.mkdir(parents=True, exist_ok=True)
-                shot = str(SHOTS / f"{sid}.png")
-                self.page.screenshot(path=shot, full_page=True)
+                target = SHOTS / f"{sid}.png"
+                self.page.screenshot(path=str(target), full_page=True)
+                shot = str(target.relative_to(REPO))  # repo-relative: the report never names this checkout's root
             except Exception:  # noqa: BLE001 — a screenshot must never mask the scenario's verdict
                 shot = None
         row = {
@@ -376,6 +415,12 @@ def teardown_failures(t: dict) -> list[str]:
         identified process — refusing to signal it is right; calling the cleanup a success is not;
       - `bridge_not_from_pinned_cache`: an identified bridge did not run from the scratch clone of
         the pinned version (the results would describe some other bridge);
+      - `bridge_lock_pid_invalid`: the advisory `.wi-serve.json` names a pid that is not a positive
+        integer (a list, a string, a bool …) — the lock was ignored, cleanup of the independently
+        identified processes still ran, but a bridge that writes a malformed lock is a finding;
+      - `live_observation_lost`: the live `:7701` daemon answered at baseline but not at the final
+        snapshot (connection refused / non-200 / non-list) — the before/after run-id diff that
+        proves nothing landed there is UNPROVEN, so the isolation verdict cannot be clean;
       - `browser_close_error`: Chromium did not close cleanly;
       - the temp dir still present after removal was attempted;
       - the isolation scan raising, or any directory that could not be ENUMERATED / file that could
@@ -405,6 +450,8 @@ def teardown_failures(t: dict) -> list[str]:
             out.append(f"bridge_unidentified_alive: {bridge.get('unidentified_alive')}")
         if bridge.get("not_from_pinned_cache"):
             out.append(f"bridge_not_from_pinned_cache: {bridge.get('not_from_pinned_cache')}")
+        if bridge.get("lock_pid_invalid"):
+            out.append(f"bridge_lock_pid_invalid: {bridge.get('lock_pid_invalid')}")
         if bridge.get("error"):
             out.append(f"bridge_stop_error: {bridge['error']}")
     if t.get("browser_close_error"):
@@ -416,6 +463,10 @@ def teardown_failures(t: dict) -> list[str]:
     scan = t.get("isolation_scan") or {}
     for e in (scan.get("scan_errors") or []) if isinstance(scan, dict) else []:
         out.append(f"live_scan_error: {e.get('file')} — {e.get('error')} (errno {e.get('errno')}{', ' + e['stage'] if e.get('stage') else ''})")
+    live = (scan.get("live_7701") or {}) if isinstance(scan, dict) else {}
+    if isinstance(live, dict) and live.get("observation_lost"):
+        out.append(f"live_observation_lost: the live :{LIVE_DAEMON_PORT} daemon answered at baseline ({live.get('runs_before')} runs) but not at the "
+                   f"final snapshot ({live.get('error_after') or 'no error recorded'}) — the before/after run-id diff is unproven")
     for e in t.get("step_errors") or []:
         out.append(f"teardown_step_raised: {e}")
     return out
@@ -535,21 +586,74 @@ def campaigns_isolation_oracle(status: int, body: object, seeded_id: str, a_card
     return {"engine_campaigns": len(campaigns), "engine_ids": ids, "a_cards": a_cards, "b_cards": b_cards}
 
 
+CAMPAIGN_WRITERS_INSPECTED = (
+    "crew `POST /campaigns` → `adapter.launchCampaign` (engine `campaign::launch`: persists AND dispatches every node's run — governed); "
+    "the engine's own row (`wicked_core::campaign::persist` → `put_node` → estate `nodes`/`symbols`, read back by core-ts `campaign_list` "
+    "via `open_store_ro` + `find_symbols`) is the only non-governed path"
+)
+
+
+def campaign_isolation_scenario(
+    *, seed: Callable[[], dict], get: Callable[[str], tuple[int, object]], cards: Callable[[str], list[str]],
+    campaign_id: str, repo_id: str, a: str, b: str, issue: str, record: dict | None = None,
+) -> str:
+    """TST-2's ACTUAL scenario body (the suite's closure only binds the collaborators; the self-tests
+    drive THIS function with fakes and the real `Rig.seed_campaign_record` against a corrupt store).
+    Every operational failure is a FAIL with its captured cause — never `blocked`:
+      - the fixture write raising (DB corruption, a schema drift, a missing sibling row) ⇒
+        `campaign-seed-write-failed`;
+      - the wire answering anything but 200 with a `campaigns` list (a 500 carrying `{"campaigns":
+        []}` included), a transport error, an exception ⇒ FAIL with status/body — validated FIRST;
+      - a 200 list that does not carry the seed ⇒ `campaign-seed-missing`;
+      - `GET /campaigns/:id` not serving the seed with A's repo on its node ⇒ FAIL.
+    Only THEN the partition: A renders its card (plain); B rendering A's campaign is the ONE
+    expected gap tied to `issue` (studio#216)."""
+    try:
+        seeded = seed()
+    except Exception as e:  # noqa: BLE001 — an operational failure of the fixture writer is a FAIL, never a blocked row
+        raise AssertionError(
+            f"campaign-seed-write-failed: the campaign fixture could not be written into the scratch store — {type(e).__name__}: {e}. "
+            f"Writers inspected: {CAMPAIGN_WRITERS_INSPECTED}; mirroring the engine's row failed as above (operational, not studio#216)."
+        ) from e
+    st, body = get("/campaigns")
+    assert st == 200, f"GET /campaigns → HTTP {st} {str(body)[:300]} — the campaign wire is not answering (operational failure, not a gap)"
+    campaigns = body.get("campaigns") if isinstance(body, dict) else None
+    assert isinstance(campaigns, list), f"GET /campaigns answered 200 without a `campaigns` list: {str(body)[:300]}"
+    ids = [c.get("id") for c in campaigns if isinstance(c, dict)]
+    assert campaign_id in ids, (
+        f"campaign-seed-missing: the fixture was written ({(seeded or {}).get('symbol')!r}) but GET /campaigns (200, {len(ids)} campaigns) does not "
+        f"list it (ids {ids}) — the mirrored row does not match what `campaign_list` reads on this engine; seed record: {json.dumps(seeded, default=str)[:400]}"
+    )
+    dst, detail = get(f"/campaigns/{quote(campaign_id)}")
+    assert dst == 200 and isinstance(detail, dict) and (detail.get("campaign") or {}).get("id") == campaign_id, f"GET /campaigns/{campaign_id} → {dst} {str(detail)[:200]}"
+    nodes = ((detail["campaign"].get("def") or {}).get("nodes") or [{}])
+    node_repo = (nodes[0].get("run_spec") or {}).get("repo_ref") if isinstance(nodes[0], dict) else None
+    assert node_repo == repo_id, f"the daemon serves the seed with repo_ref {node_repo!r}, not A's repo {repo_id!r}"
+    a_cards = cards(a)
+    b_cards = cards(b)
+    proof = campaigns_isolation_oracle(st, body, campaign_id, a_cards, b_cards, issue)
+    if record is not None:
+        record.update(proof)
+    return f"A renders its campaign {campaign_id} and B renders none of A's (A: {a_cards}, B: {b_cards}; engine lists {proof['engine_campaigns']})"
+
+
 def classify_recorder_answer(ack_status: int | None, answer: str | None, timed_out: bool) -> tuple[str, str]:
     """DEM-REC's verdict rule — pure, self-tested. `blocked` ONLY when the record request was
-    acknowledged 2xx AND the bridge's answer is exactly the established prerequisite (no agent-
-    authored `demo.spec.mjs` / no recorder browser for the bridge's own Chromium). Everything else
-    — a ≥ 400 ack, no ack at all, no answer within the budget, or ANY other recorder error — is a
-    `fail` carrying what was observed."""
+    acknowledged 2xx AND the bridge's answer IS one of the positively identified prerequisites in
+    `RECORDER_PREREQS` (the whole message, anchored: no agent-authored `demo.spec.mjs`, or the
+    recorder browser not installed). Everything else — a ≥ 400 ack, no ack at all, no answer within
+    the budget, a launch timeout, a crashed/closed browser, `spawn EACCES`, a bare `browserType.launch`
+    mention or ANY other recorder error — is a `fail` carrying what was observed."""
     if ack_status is None:
         return "fail", "the record request produced no acknowledgment (no POST /api/events response was observed)"
     if not 200 <= ack_status < 300:
         return "fail", f"the record request was refused: POST /api/events → HTTP {ack_status}"
     if timed_out or not answer:
         return "fail", "the recorder gave no answer within the budget (no 'Recording failed' entry and no new version)"
-    if RECORDER_PREREQ_RE.search(answer):
-        return "blocked", f"established prerequisite: {answer[:240]!r}"
-    return "fail", f"the recorder answered with an error that is NOT the established prerequisite: {answer[:300]!r}"
+    for name, pattern in RECORDER_PREREQS:
+        if pattern.match(answer):
+            return "blocked", f"established prerequisite ({name}): {answer[:240]!r}"
+    return "fail", f"the recorder answered with an error that is NOT one of the identified prerequisites {[n for n, _ in RECORDER_PREREQS]}: {answer[:300]!r}"
 
 
 def plan_bridge_stop(found: dict, lock_pid: object, idocs: object, alive: Callable[[int], bool] = None) -> tuple[list[int], dict]:
@@ -680,12 +784,20 @@ def seed_registry_manifest(src_npm: Path, dst_npm: Path, name: str) -> dict:
     }
 
 
+# A well-formed npm `integrity` for sha512: the 64-byte digest is 88 base64 characters ending in `==`.
+INTEGRITY_RE = re.compile(r"^sha512-[A-Za-z0-9+/]{86}==$")
+BRIDGE_PACKAGE_REL = Path("node_modules") / "wicked-interactive"
+
+
 def resolve_bridge_pin(npx_root: Path, spec: str, pinned: str) -> dict:
-    """Find the OFFLINE `_npx/<hash>` install npx would use for exactly `spec`, read the INSTALLED
-    `wicked-interactive` version and the tarball integrity (sha512) from the cache's own lockfile,
-    and require version == `pinned`. Pure over the filesystem; self-tested. Returns the record —
-    with `error` set whenever the pin cannot be met (no cache, another version, no integrity): the
-    caller turns that into a setup failure, never into a registry fallback."""
+    """Find the OFFLINE `_npx/<hash>` install npx would use for exactly `spec` and VALIDATE its lock
+    metadata: the INSTALLED `wicked-interactive/package.json` version, the root `package-lock.json`
+    entry's version AND npm's hidden lockfile (`node_modules/.package-lock.json`, written after npm
+    verified the extracted tarball against `integrity`) must all name `pinned`; the recorded
+    integrity must be a well-formed `sha512-<base64>` and identical in both lockfiles. Pure over the
+    filesystem; self-tested. Returns the record — with `error` set whenever the pin cannot be met
+    (no cache, another version, a lock naming another version, a malformed or disagreeing integrity):
+    the caller turns that into a setup failure, never into a registry fallback."""
     candidates: list[dict] = []
     try:
         pkgs = sorted(npx_root.glob("*/package.json")) if npx_root.is_dir() else []
@@ -701,7 +813,7 @@ def resolve_bridge_pin(npx_root: Path, spec: str, pinned: str) -> dict:
         root = pkg.parent
         version = None
         try:
-            version = json.loads((root / "node_modules" / "wicked-interactive" / "package.json").read_text()).get("version")
+            version = json.loads((root / BRIDGE_PACKAGE_REL / "package.json").read_text()).get("version")
         except (OSError, json.JSONDecodeError):
             pass
         entry: dict = {}
@@ -710,8 +822,16 @@ def resolve_bridge_pin(npx_root: Path, spec: str, pinned: str) -> dict:
             entry = (lock.get("packages") or {}).get("node_modules/wicked-interactive") or {}
         except (OSError, json.JSONDecodeError):
             pass
+        hidden: dict = {}
+        hidden_state = "absent"
+        try:
+            hidden = (json.loads((root / "node_modules" / ".package-lock.json").read_text()).get("packages") or {}).get("node_modules/wicked-interactive") or {}
+            hidden_state = "ok" if hidden else "no wicked-interactive entry"
+        except (OSError, json.JSONDecodeError) as e:
+            hidden_state = f"unreadable: {type(e).__name__}"
         candidates.append({"path": str(root), "key": root.name, "version": version, "lock_version": entry.get("version"),
-                           "integrity": entry.get("integrity"), "resolved": entry.get("resolved")})
+                           "integrity": entry.get("integrity"), "resolved": entry.get("resolved"),
+                           "hidden_lock": hidden_state, "hidden_lock_version": hidden.get("version"), "hidden_lock_integrity": hidden.get("integrity")})
     if not candidates:
         return {"candidates": [], "error": (f"no offline `_npx` cache holds {spec} under {npx_root} — the bridge would have to resolve the spec "
                                            f"from the registry (unpinned, needs network); prime the cache once and rerun")}
@@ -719,9 +839,161 @@ def resolve_bridge_pin(npx_root: Path, spec: str, pinned: str) -> dict:
     if not exact:
         return {"candidates": candidates, "error": f"the offline cache holds wicked-interactive {[c['version'] for c in candidates]}, not the pinned {pinned}"}
     chosen = exact[0]
-    if not chosen.get("integrity"):
-        return {"candidates": candidates, **chosen, "error": f"the cached install of wicked-interactive {pinned} carries no tarball integrity in its lockfile — its bytes cannot be identified"}
+    if chosen.get("lock_version") != pinned:
+        return {"candidates": candidates, **chosen, "error": (f"the cache's package-lock.json names wicked-interactive {chosen.get('lock_version')!r}, not the pinned {pinned} "
+                                                            f"(installed package.json says {pinned}) — lock metadata and installed tree disagree; the bytes cannot be identified")}
+    integrity = chosen.get("integrity")
+    if not isinstance(integrity, str) or not INTEGRITY_RE.match(integrity):
+        return {"candidates": candidates, **chosen, "error": (f"the cached install of wicked-interactive {pinned} carries no well-formed tarball integrity in its lockfile "
+                                                            f"(got {integrity!r}; expected `sha512-<86 base64 chars>==`) — its bytes cannot be identified")}
+    if chosen.get("hidden_lock") != "ok":
+        return {"candidates": candidates, **chosen, "error": (f"npm's hidden lockfile (node_modules/.package-lock.json) is {chosen.get('hidden_lock')} — without it npm itself would "
+                                                            f"not trust this node_modules tree; the install's provenance cannot be tied to the integrity")}
+    if chosen.get("hidden_lock_version") != pinned or chosen.get("hidden_lock_integrity") != integrity:
+        return {"candidates": candidates, **chosen, "error": (f"npm's hidden lockfile records wicked-interactive {chosen.get('hidden_lock_version')!r} / {str(chosen.get('hidden_lock_integrity'))[:24]}…, "
+                                                            f"the root lockfile {pinned} / {integrity[:24]}… — the installed tree does not descend from the recorded tarball")}
     return {"candidates": candidates, **chosen}
+
+
+def integrity_blob_path(cacache: Path, integrity: str) -> Path | None:
+    """Where cacache stores the content blob for an `<algo>-<base64>` integrity (`content-v2/<algo>/
+    <hex[:2]>/<hex[2:4]>/<hex[4:]>`). None for a malformed integrity."""
+    import base64
+    if "-" not in integrity:
+        return None
+    algo, b64 = integrity.split("-", 1)
+    try:
+        hexd = base64.b64decode(b64, validate=True).hex()
+    except (ValueError, TypeError):
+        return None
+    return cacache / "content-v2" / algo / hexd[:2] / hexd[2:4] / hexd[4:]
+
+
+def _tree_digest(root: Path, errors: list[str], symlinks: list[dict]) -> dict[str, str]:
+    """Every regular file under `root` (lstat walk — symlinks are RECORDED, never followed) → its
+    sha256, keyed by the path relative to `root`. Enumeration/read errors are recorded, not swallowed."""
+    out: dict[str, str] = {}
+    stack: list[Path] = [root]
+    while stack:
+        d = stack.pop()
+        try:
+            with os.scandir(d) as it:
+                entries = list(it)
+        except OSError as e:
+            errors.append(f"{d}: {type(e).__name__}: {e.strerror or e}")
+            continue
+        for ent in entries:
+            p = Path(ent.path)
+            try:
+                if ent.is_symlink():
+                    symlinks.append({"path": str(p.relative_to(root)), "target": os.readlink(p)})
+                    continue
+                if ent.is_dir(follow_symlinks=False):
+                    stack.append(p)
+                elif ent.is_file(follow_symlinks=False):
+                    out[str(p.relative_to(root))] = hashlib.sha256(p.read_bytes()).hexdigest()
+            except OSError as e:
+                errors.append(f"{p}: {type(e).__name__}: {e.strerror or e}")
+    return out
+
+
+def verify_bridge_clone(src: Path, dst: Path, integrity: str, cacache: Path | None) -> dict:
+    """Establish that the scratch clone `dst` IS, byte for byte, the pinned bridge — pure over the
+    filesystem; self-tested. Three checks, all recorded:
+      1. SYMLINKS: an lstat walk of the clone; every symlink's target (resolved from its own
+         directory) must stay INSIDE the clone — an escaping or absolute target is an error (npm's
+         `.bin` shims are relative links into `node_modules`, so a legitimate clone has none).
+      2. CLONE == SOURCE: every regular file under the clone hashes (sha256) equal to the same
+         path under the source install, with no file missing or extra — the bytes the bridge
+         executes are the bytes npm installed.
+      3. THE TARBALL, when the operator's cacache still holds the content blob for `integrity`:
+         its sha512 must equal the integrity (what npm/pacote verified at install) and every member
+         of `package/` must hash equal to the clone's `node_modules/wicked-interactive` file — the
+         clone is then tied to the registry tarball directly. When the blob is absent (npx does not
+         retain tarballs after extraction), the tie is npm's hidden lockfile (already validated by
+         `resolve_bridge_pin`: it records the sha512 npm verified for this very tree) plus check 2.
+    `bytes_verified_by` states which route ran. `error` is set on any failure."""
+    import base64
+    import tarfile
+    rec: dict = {"src": str(src), "dst": str(dst)}
+    errors: list[str] = []
+    src_links: list[dict] = []
+    dst_links: list[dict] = []
+    src_files = _tree_digest(src, errors, src_links)
+    dst_files = _tree_digest(dst, errors, dst_links)
+    dst_real = os.path.realpath(dst)
+    escaping = []
+    for link in dst_links:
+        resolved = os.path.realpath(os.path.join(dst_real, os.path.dirname(link["path"]), link["target"]))
+        if os.path.isabs(link["target"]) or not (resolved == dst_real or resolved.startswith(dst_real + os.sep)):
+            escaping.append({**link, "resolves_to": resolved})
+    rec.update(files_compared=len(dst_files), symlinks=len(dst_links), escaping_symlinks=escaping, walk_errors=errors[:20])
+    missing = sorted(set(src_files) - set(dst_files))
+    extra = sorted(set(dst_files) - set(src_files))
+    mismatched = sorted(p for p in set(src_files) & set(dst_files) if src_files[p] != dst_files[p])
+    rec.update(missing_in_clone=missing[:20], extra_in_clone=extra[:20], mismatched=mismatched[:20],
+               missing_count=len(missing), extra_count=len(extra), mismatched_count=len(mismatched))
+    pkg_prefix = str(BRIDGE_PACKAGE_REL) + os.sep
+    pkg_files = {p[len(pkg_prefix):]: h for p, h in dst_files.items() if p.startswith(pkg_prefix)}
+    rec["package_files"] = len(pkg_files)
+    rec["package_tree_sha256"] = hashlib.sha256("".join(f"{p}\t{h}\n" for p, h in sorted(pkg_files.items())).encode()).hexdigest()
+    rec["clone_tree_sha256"] = hashlib.sha256("".join(f"{p}\t{h}\n" for p, h in sorted(dst_files.items())).encode()).hexdigest()
+    problems: list[str] = []
+    if errors:
+        problems.append(f"{len(errors)} path(s) could not be walked/read: {errors[:3]}")
+    if escaping:
+        problems.append(f"{len(escaping)} symlink(s) escape the scratch clone: {escaping[:3]}")
+    if missing or extra or mismatched:
+        problems.append(f"the clone differs from the source install: {len(missing)} missing, {len(extra)} extra, {len(mismatched)} mismatched (e.g. {(mismatched or missing or extra)[:3]})")
+    if not pkg_files:
+        problems.append(f"the clone holds no files under {BRIDGE_PACKAGE_REL}")
+    tarball: dict = {"present": False}
+    blob = integrity_blob_path(cacache, integrity) if cacache is not None else None
+    if blob is not None:
+        tarball["path"] = str(blob)
+    if blob is not None and blob.is_file():
+        tarball["present"] = True
+        try:
+            data = blob.read_bytes()
+            digest = hashlib.sha512(data).digest()
+            expected = base64.b64decode(integrity.split("-", 1)[1])
+            tarball["sha512_matches_integrity"] = digest == expected
+            if digest != expected:
+                problems.append(f"the cached tarball {blob} does not hash to the lockfile integrity (sha512 {base64.b64encode(digest).decode()[:24]}…)")
+            else:
+                members_mismatched: list[str] = []
+                members_missing: list[str] = []
+                count = 0
+                import io
+                with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
+                    for m in tf.getmembers():
+                        if not m.isfile():
+                            continue
+                        rel = m.name.split("/", 1)[1] if "/" in m.name else m.name
+                        count += 1
+                        fh = tf.extractfile(m)
+                        h = hashlib.sha256(fh.read()).hexdigest() if fh is not None else None
+                        if rel not in pkg_files:
+                            members_missing.append(rel)
+                        elif pkg_files[rel] != h:
+                            members_mismatched.append(rel)
+                tarball.update(members=count, members_missing_in_clone=members_missing[:20], members_mismatched=members_mismatched[:20])
+                if members_missing or members_mismatched:
+                    problems.append(f"the clone's {BRIDGE_PACKAGE_REL} differs from the tarball: {len(members_missing)} missing, {len(members_mismatched)} mismatched")
+        except (OSError, tarfile.TarError, ValueError) as e:
+            tarball["error"] = f"{type(e).__name__}: {e}"
+            problems.append(f"the cached tarball could not be verified: {type(e).__name__}: {e}")
+    rec["tarball"] = tarball
+    if tarball.get("present") and not problems:
+        rec["bytes_verified_by"] = ("tarball: the cacache blob for the lockfile integrity hashes (sha512) to that integrity and every `package/` member is byte-equal "
+                                    "to the clone's node_modules/wicked-interactive; plus the whole clone tree is byte-equal (sha256 per file) to the source install")
+    elif not problems:
+        rec["bytes_verified_by"] = ("hidden lockfile: the tarball is not retained in the operator's npm cacache on this host, so the tie to the integrity is npm's "
+                                    "node_modules/.package-lock.json (it records the sha512 npm verified when it extracted this very tree — validated equal to the root "
+                                    "lockfile by resolve_bridge_pin); the whole clone tree is byte-equal (sha256 per file) to that install, and no symlink escapes it")
+    if problems:
+        rec["error"] = "; ".join(problems)
+    return rec
 
 
 def persistence_oracle(before: dict, after: dict) -> None:
@@ -1267,6 +1539,14 @@ class Rig:
         if cloned != BRIDGE_PINNED_VERSION:
             info["error"] = f"the scratch clone is wicked-interactive {cloned}, not the pinned {BRIDGE_PINNED_VERSION}"
             raise SetupFailure("bridge_pin", info["error"])
+        # BYTES: the clone must be the pinned install (sha256 per file vs the source; no escaping
+        # symlink), tied to the lockfile integrity through the cached tarball when the operator's
+        # cacache still holds it, else through npm's hidden lockfile — `verify_bridge_clone` says which.
+        verification = verify_bridge_clone(src, dst, str(pin["integrity"]), REAL_HOME / ".npm" / "_cacache")
+        info["clone_verification"] = verification
+        if verification.get("error"):
+            info["error"] = f"the scratch clone could not be verified as the pinned bridge: {verification['error']}"
+            raise SetupFailure("bridge_pin", info["error"])
         # npx resolves the RANGE against the registry manifest even with a warm `_npx` install (an
         # `--offline` run without it fails ENOTCACHED). Seed the operator's CACHED manifest into the
         # scratch cache and prove the range resolves to the pin from THAT frozen snapshot — then the
@@ -1500,7 +1780,8 @@ class Rig:
         with its symbol `wicked-apps synthetic campaign/<id>:` interned in `symbols`. The row layout
         is MIRRORED from the `project` node the daemon itself wrote for `project_id` (same table,
         same columns, same encodings) — so a store-schema drift shows up as a seed that the daemon
-        does not list (⇒ TST-2 `blocked` with this record), never as a silently wrong row. The
+        does not list (⇒ TST-2 FAILS `campaign-seed-missing` with this record), never as a silently
+        wrong row; a write that raises (a corrupt store, no sibling row) FAILS `campaign-seed-write-failed`. The
         campaign is TERMINAL (`cancelled`, its one node `cancelled`) so the scheduler never touches
         it; its node's `run_spec.repo_ref` is Project A's repo — the only project attribution the
         engine's `CampaignDef` can carry today (no campaign-level project id; `POST /campaigns
@@ -1627,28 +1908,38 @@ class Rig:
             cancelled.append(entry)
         return cancelled
 
-    def stop_bridge(self) -> dict:
+    def stop_bridge(self, *, processes: Callable[..., dict] | None = None, terminate: Callable[[list[int]], dict] | None = None) -> dict:
         """The pool spawns the bridge DETACHED (its own group), so the daemon's group stop does not
         reach it. Identify it by command line + VERIFIED start time, cross-check the advisory lock,
         then terminate — never signal a pid the identity check did not produce (`plan_bridge_stop`
         decides; it is pure and self-tested). A failed `ps` signals NOTHING beyond the daemon group
         we spawned (`enumeration_failed`); an alive lock pid nobody identified is `unidentified_alive`
         — both are verdict failures. An identified bridge that did not run from the scratch clone of
-        the pinned version is `not_from_pinned_cache`."""
+        the pinned version is `not_from_pinned_cache`. The lock's `pid` is TYPE-VALIDATED before any
+        set membership (a list/str/bool pid is `lock_pid_invalid` — a verdict failure — and the
+        identified processes are still stopped). `processes`/`terminate` are injectable for the
+        self-tests; the suite runs the real `bridge_processes` / `terminate_pids`."""
+        processes = processes or bridge_processes
+        terminate = terminate or terminate_pids
         info: dict = {}
-        found = bridge_processes(self.idocs, self.daemon_started_at or self.run_started_at)
+        found = processes(self.idocs, self.daemon_started_at or self.run_started_at)
         procs = found["identified"]
         lock, lock_state = read_bridge_lock(self.idocs)
-        lock_pid = lock.get("pid") if lock else None
+        lock_pid_raw = lock.get("pid") if lock else None
+        lock_pid: int | None = lock_pid_raw if valid_pid(lock_pid_raw) else None
         identified = {p["pid"] for p in procs}
         brief = lambda p: {"pid": p["pid"], "pgid": p["pgid"], "ppid": p["ppid"], "started_at": p["started_at"], "command": p["command"][:200]}  # noqa: E731
         info.update(
-            lock=lock_state, lock_pid=lock_pid, lock_pid_valid=valid_pid(lock_pid),
+            lock=lock_state, lock_pid=lock_pid_raw if isinstance(lock_pid_raw, (int, str, float, bool, type(None))) else repr(lock_pid_raw),
+            lock_pid_valid=lock_pid is not None,
             ps_ok=found["ps_ok"], ps_error=found["ps_error"],
             identified=[brief(p) for p in procs],
             unverified=[brief(p) for p in found["unverified"]],
-            lock_pid_matches_identified=lock_pid in identified,
+            lock_pid_matches_identified=lock_pid is not None and lock_pid in identified,
         )
+        if lock is not None and "pid" in lock and lock_pid is None:
+            info["lock_pid_invalid"] = (f"the advisory .wi-serve.json names pid {lock_pid_raw!r} ({type(lock_pid_raw).__name__}), not a positive integer — "
+                                        f"the lock was IGNORED for signalling; the {len(identified)} independently identified process(es) {sorted(identified)} were still stopped")
         pids, plan = plan_bridge_stop(found, lock_pid, self.idocs)
         info.update(plan)
         bridge_setup = self.report["setup"].get("bridge") or {}
@@ -1678,7 +1969,7 @@ class Rig:
             if problems:
                 info["not_from_pinned_cache"] = "; ".join(problems)
         if pids:
-            info["terminated"] = terminate_pids(pids)
+            info["terminated"] = terminate(pids)
         return info
 
     def scratch_writes(self, base: Path, cap: int = 400) -> list[str]:
@@ -1698,20 +1989,28 @@ class Rig:
             self.report["setup"].setdefault("teardown", {}).setdefault("scratch_writes_errors", []).extend(errors[:20])
         return sorted(out)
 
-    def scan_operator_state(self) -> dict:
+    def scan_operator_state(self, *, snapshot: Callable[[], dict] | None = None, roots: tuple[Path, ...] | list[Path] | None = None,
+                            state_home: Path | None = None) -> dict:
         """Re-derive isolation: every file under the operator-global wicked stores that was modified
         DURING this run is byte-scanned for this run's identifiers; entries stamped by this run under
-        ~/.wicked-crew are listed; the live :7701 run ids are diffed."""
+        ~/.wicked-crew are listed; the live :7701 run ids are diffed. The live-daemon leg is only a
+        proof while BOTH snapshots succeeded: a baseline that answered and a final snapshot that did
+        not (connection refused, non-200, non-list) is `observation_lost` — a verdict failure, since
+        "no new run id" cannot be read off a failed listing. `snapshot`/`roots`/`state_home` are
+        injectable for the self-tests; the suite uses the real ones."""
+        snapshot = snapshot or snapshot_live_runs
+        roots = OPERATOR_STATE_ROOTS if roots is None else roots
+        state_home = LIVE_STATE_HOME if state_home is None else state_home
         needles = [n.encode() for n in dict.fromkeys(self.needles) if n]
         since = self.run_started_at
-        tree = scan_tree(OPERATOR_STATE_ROOTS, since, needles)
+        tree = scan_tree(roots, since, needles)
         modified, hits = tree["modified"], tree["hits"]
         # Stamped ENTRY NAMES under ~/.wicked-crew (files and directories) — the same explicit walk;
         # a directory the walk cannot open is a scan error (the proof is incomplete), never silence.
         stamped: list[str] = []
-        if LIVE_STATE_HOME.is_dir():
+        if state_home.is_dir():
             name_errors: list[dict] = []
-            stack = [LIVE_STATE_HOME]
+            stack = [state_home]
             while stack:
                 d = stack.pop()
                 try:
@@ -1722,7 +2021,7 @@ class Rig:
                     continue
                 for ent in entries:
                     if any(n in ent.name for n in self.needles):
-                        stamped.append(str(Path(ent.path).relative_to(LIVE_STATE_HOME)))
+                        stamped.append(str(Path(ent.path).relative_to(state_home)))
                     try:
                         if ent.is_dir(follow_symlinks=False):
                             stack.append(Path(ent.path))
@@ -1730,21 +2029,28 @@ class Rig:
                         name_errors.append({"file": str(ent.path), "errno": e.errno, "error": f"{type(e).__name__}: {e.strerror or e}", "stage": "entry"})
             tree["scan_errors"].extend(name_errors)
             stamped.sort()
-        live_after = snapshot_live_runs()
-        new_live = sorted(set(live_after["run_ids"]) - set(self.live_before["run_ids"]))
+        live_after = snapshot()
+        before_reachable = self.live_before.get("reachable") is True
+        after_reachable = live_after.get("reachable") is True
+        new_live = sorted(set(live_after.get("run_ids") or []) - set(self.live_before.get("run_ids") or []))
         ours_on_live = [
             rid for rid in new_live
-            if any(n in live_after.get("problems", {}).get(rid, "") for n in self.needles)
+            if any(n in (live_after.get("problems") or {}).get(rid, "") for n in self.needles)
         ]
         return {
-            "roots": [str(r) for r in OPERATOR_STATE_ROOTS], "needles": list(dict.fromkeys(self.needles)),
+            "roots": [str(r) for r in roots], "needles": list(dict.fromkeys(self.needles)),
             "files_modified_during_run": len(modified), "modified_sample": modified[:20],
             "scan_errors": tree["scan_errors"],
             "identifier_hits": hits, "stamped_entries_in_live_state_home": stamped,
             "live_7701": {
                 "reachable_before": self.live_before.get("reachable"), "reachable_after": live_after.get("reachable"),
-                "runs_before": len(self.live_before["run_ids"]), "runs_after": len(live_after["run_ids"]),
+                "error_before": self.live_before.get("error"), "error_after": live_after.get("error"),
+                "runs_before": len(self.live_before.get("run_ids") or []), "runs_after": len(live_after.get("run_ids") or []),
                 "new_run_ids": new_live, "new_runs_carrying_our_identifiers": ours_on_live,
+                # The diff is a PROOF only when both snapshots answered; an established observation
+                # that is lost at the end invalidates it (verdict failure `live_observation_lost`).
+                "observation_lost": before_reachable and not after_reachable,
+                "observed": before_reachable and after_reachable,
             },
         }
 
@@ -1813,6 +2119,12 @@ class Rig:
             if scan["live_7701"]["new_run_ids"] and not scan["live_7701"]["new_runs_carrying_our_identifiers"]:
                 findings.append(f"LIVE-7701: {len(scan['live_7701']['new_run_ids'])} run(s) appeared on the live daemon during this run "
                                 f"without this run's identifiers (operator activity, not ours): {scan['live_7701']['new_run_ids']}")
+            if scan["live_7701"].get("observation_lost"):
+                findings.append(f"LIVE-OBSERVATION-LOST: the live :{LIVE_DAEMON_PORT} daemon answered at baseline but not at the final snapshot "
+                                f"({scan['live_7701'].get('error_after')}) — the run-id diff is unproven; the isolation verdict is INVALID")
+            elif not scan["live_7701"].get("observed"):
+                findings.append(f"LIVE-7701-UNOBSERVED: the live :{LIVE_DAEMON_PORT} daemon did not answer at baseline "
+                                f"({scan['live_7701'].get('error_before')}) — the run-id diff leg of the isolation proof was never established")
             if scan["scan_errors"]:
                 findings.append(f"LIVE-SCAN-ERROR: {len(scan['scan_errors'])} entr(ies) inside the operator stores could not be inspected — "
                                 f"the isolation proof is INCOMPLETE: {scan['scan_errors'][:5]}")
@@ -3494,37 +3806,172 @@ def run_scenarios(rig: Rig, page) -> None:
         (`POST /campaigns`) LAUNCHES the campaign — every node dispatches a run — so the fixture is
         written the way the engine persists one (`Rig.seed_campaign_record`: the estate `nodes` row,
         terminal status, node scoped to Project A's repo) into the scratch store; `GET /campaigns`
-        reads the store read-only per call, so the seed lists without a restart. A seed the daemon
-        does not list is `blocked` with the exact reason. Then the partition is REAL: A's page must
-        render its card (plain), B's page must not (the ONE expected gap, studio#216)."""
+        reads the store read-only per call, so the seed lists without a restart. The body is
+        `campaign_isolation_scenario` (module-level, self-tested with the codex probes): a fixture
+        write that raises, a non-200/non-list wire, a transport error or a 200 list WITHOUT the seed
+        are FAILURES with their cause — never `blocked`; only "seed listed, A renders it, B renders
+        it too" is the ONE expected gap (studio#216)."""
         A, B = ctx["A"], ctx["B"]
-        try:
-            seed = rig.seed_campaign_record(CAMPAIGN_ID, CAMPAIGN_NAME, A, REPO_ID)
-        except Exception as e:  # noqa: BLE001 — the fixture could not be written: blocked, with the writer inspected
-            raise Blocked(
-                f"BLOCKED — the campaign fixture could not be seeded without a governed run: {type(e).__name__}: {e}. Writers inspected: crew "
-                "`POST /campaigns` → `adapter.launchCampaign` (engine `campaign::launch`: persists AND dispatches every node's run — governed); "
-                "the engine's own row (`wicked_core::campaign::persist` → `put_node` → estate `nodes`/`symbols`, read back by core-ts "
-                "`campaign_list` via `open_store_ro` + `find_symbols`) is the only non-governed path and mirroring it into the scratch store failed as above. "
-                "Context: studio#216."
-            ) from e
-        st, body = api("GET", "/campaigns")
-        engine_ids = [c.get("id") for c in (body.get("campaigns") or [])] if isinstance(body, dict) and isinstance(body.get("campaigns"), list) else None
-        if engine_ids is not None and CAMPAIGN_ID not in engine_ids:
-            raise Blocked(f"BLOCKED — the campaign fixture was written ({seed['symbol']}) but the daemon does not list it (GET /campaigns → {st}, ids {engine_ids}); "
-                          f"the mirrored row does not match what `campaign_list` reads on this engine — seed record: {json.dumps(seed)[:400]}. Context: studio#216.")
-        dst, detail = api("GET", f"/campaigns/{quote(CAMPAIGN_ID)}")
-        assert dst == 200 and isinstance(detail, dict) and (detail.get("campaign") or {}).get("id") == CAMPAIGN_ID, f"GET /campaigns/{CAMPAIGN_ID} → {dst} {str(detail)[:200]}"
-        node_repo = ((detail["campaign"].get("def") or {}).get("nodes") or [{}])[0].get("run_spec", {}).get("repo_ref")
-        assert node_repo == REPO_ID, f"the daemon serves the seed with repo_ref {node_repo!r}, not A's repo {REPO_ID!r}"
-        a_cards = campaign_cards(page, A)
-        b_cards = campaign_cards(page, B)
-        proof = campaigns_isolation_oracle(st, body, CAMPAIGN_ID, a_cards, b_cards, "studio#216")
+        proof: dict = {}
+        out = campaign_isolation_scenario(
+            seed=lambda: rig.seed_campaign_record(CAMPAIGN_ID, CAMPAIGN_NAME, A, REPO_ID),
+            get=lambda path: api("GET", path),
+            cards=lambda pid: campaign_cards(page, pid),
+            campaign_id=CAMPAIGN_ID, repo_id=REPO_ID, a=A, b=B, issue="studio#216", record=proof,
+        )
         ctx["campaigns_proof"] = proof
-        return f"A renders its campaign {CAMPAIGN_ID} and B renders none of A's (A: {a_cards}, B: {b_cards}; engine lists {proof['engine_campaigns']})"
+        return out
 
     suite.run("TST-2", "Tests list is partitioned per project (campaign isolation over a seeded campaign scoped to A's repo)", tst2,
               xfail="studio#216", requires=("PRJ-2", "ATT-1"))
+
+    # ── Run management over TST-1's TERMINAL run — deterministic, no new governed launch ──────
+    # The archived run must not be in the shell's default run index (a `run-pending` detail), so
+    # the detail journey runs FIRST, then archive → unarchive restores the state the cleanup expects.
+    RUN_STORE_IGNORED = {"cliOutputDelta", "unitOutputDelta", "heartbeat"}  # studio store/events.ts IGNORED — never rendered, not even raw
+
+    def work_page(pid_hint: str | None = None) -> None:
+        goto(page, "/work")
+        page.locator("#work-panel-all").wait_for(timeout=20_000)
+        page.wait_for_load_state("networkidle")
+
+    def archived_row_unarchive(rid: str):
+        """The Unarchive button that WorkPage renders beside a run-link ONLY inside its Archived
+        group (WorkPage.tsx: `<div class="flex …"><div class="flex-1"><RunLink/></div><button>Unarchive`)."""
+        return page.locator(f"xpath=//*[@data-testid='run-link' and @data-run-id='{rid}']/ancestor::div[1]/following-sibling::button[normalize-space()='Unarchive']")
+
+    def show_archived(rid: str | None = None) -> None:
+        toggle = page.get_by_role("button", name=re.compile(r"^Archived"))
+        toggle.wait_for(timeout=15_000)
+        if toggle.get_attribute("aria-pressed") != "true":
+            toggle.click()
+        # The group fetches `GET /runs?include=archived` on toggle-on; settle on its answer.
+        page.wait_for_function(
+            "() => /Nothing archived\\./.test(document.body.textContent || '') || Array.from(document.querySelectorAll('button')).some(b => (b.textContent || '').trim() === 'Unarchive')",
+            timeout=20_000,
+        )
+
+    def rundet() -> str:
+        """RUN-DET: the run detail after a FULL reload of its legacy address — `/runs/:id` redirects into
+        A's shell (`useLegacyRedirect`: the run is filed under A) — renders the cancelled status, the
+        rejected intake gate in the narrated feed (`Gate: waiting on you …` then `Run cancelled`, in
+        that order), offers nothing actionable (no approval dock), and the raw wire view lists exactly
+        the durable events `GET /runs/:id/events` serves (minus the store's never-rendered deltas/heartbeats)."""
+        rid, A = ctx["test_run"], ctx["A"]
+        assert run_status(rid) == "cancelled", f"TST-1's run is {run_status(rid)!r}, not cancelled"
+        events = run_events(rid)
+        assert isinstance(events, list) and events, "GET /runs/:id/events served no events — nothing to compare the detail against"
+        rendered_types = [e.get("type") for e in events if e.get("session") == rid and e.get("type") not in RUN_STORE_IGNORED]
+        assert "awaitingHuman" in rendered_types and "runCancelled" in rendered_types, f"the event log lacks the gate/cancel pair: {rendered_types[-8:]}"
+
+        def observe() -> dict:
+            goto(page, f"/runs/{quote(rid)}")
+            page.wait_for_url(re.compile(rf"/p/{re.escape(quote(A))}/build/{re.escape(quote(rid))}$"), timeout=20_000)
+            header = tid(page, "run-header")
+            header.wait_for(timeout=30_000)
+            assert tid(page, "run-pending").count() == 0, "the detail is stuck in its pending state (run not in the shell's index)"
+            status_text = text_of(header)
+            assert "Cancelled" in status_text, f"the run header does not read Cancelled: {status_text[:200]!r}"
+            tid(page, "thread").wait_for(timeout=15_000)
+            page.wait_for_function(
+                "() => { const t = Array.from(document.querySelectorAll('[data-testid=\"narration-line\"]')).map(e => e.textContent || '');"
+                " return t.some(x => x.includes('Gate: waiting on you')) && t.some(x => x.includes('Run cancelled')); }",
+                timeout=20_000,
+            )
+            lines = tid(page, "narration-line").all_text_contents()
+            gate_at = next(i for i, t in enumerate(lines) if "Gate: waiting on you" in t)
+            cancel_at = next(i for i, t in enumerate(lines) if "Run cancelled" in t)
+            assert gate_at < cancel_at, f"the feed narrates the cancellation (#{cancel_at}) before the gate (#{gate_at})"
+            assert tid(page, "approval-dock").count() == 0 and tid(page, "steering-reject").count() == 0, "a cancelled run still offers an actionable gate"
+            tid(page, "feed-view-raw").click()
+            page.wait_for_function("n => document.querySelectorAll('[data-testid=\"raw-event\"]').length === n", arg=len(rendered_types), timeout=20_000)
+            raw_types = tid(page, "raw-event").evaluate_all("els => els.map(e => e.children[1] ? e.children[1].textContent : '')")
+            assert raw_types.count("awaitingHuman") == rendered_types.count("awaitingHuman") and raw_types.count("runCancelled") == rendered_types.count("runCancelled"), \
+                f"raw view types disagree with the event log: {raw_types[-6:]} vs {rendered_types[-6:]}"
+            stepper = tid(page, "process-stepper")
+            stepper.wait_for(timeout=10_000)
+            return {"status": status_text, "gate_line": lines[gate_at][:160], "cancel_line": lines[cancel_at][:80], "raw_events": len(raw_types), "url": page.url.replace(ORIGIN, "")}
+
+        first = observe()
+        second = observe()  # a second FULL load — the same rendering from the durable log
+        assert (first["raw_events"], first["gate_line"], first["cancel_line"]) == (second["raw_events"], second["gate_line"], second["cancel_line"]), f"the detail changed across reloads: {first} → {second}"
+        ctx["run_detail"] = second
+        return (f"/runs/{rid} → {second['url']} (filed under A); header reads Cancelled; the narrated feed shows the intake gate "
+                f"({second['gate_line']!r}) before {second['cancel_line']!r}; no approval dock; raw view lists {second['raw_events']} events == "
+                f"GET /runs/:id/events ({len(events)} frames, {len(events) - len(rendered_types)} delta/heartbeat frames the store never renders); identical on a second full load")
+
+    suite.run("RUN-DET", "Run detail after reload: cancelled status, rejected gate narrated, raw events == API", rundet, requires=("TST-1",))
+
+    def runarc() -> str:
+        """RUN-ARC: archive TST-1's terminal run and prove it through the UI. The studio mounts NO
+        archive control (WorkPage.tsx: `api.archiveRun(id, false)` — Unarchive — is the only caller),
+        so the archive itself is a `[SUBSTITUTE]` over `POST /runs/:id/archive`; the UI then verifies:
+        the run leaves the active surfaces (A's dashboard `dashboard-run`, the /work list) and appears
+        under /work's Archived toggle with its Unarchive control — after a FULL reload, twice."""
+        rid, A = ctx["test_run"], ctx["A"]
+        goto(page, f"/p/{quote(A)}")
+        tid(page, "dashboard-run", run_id=rid).wait_for(timeout=30_000)
+        work_page()
+        listed_before = tid(page, "run-link", run_id=rid).count() > 0
+        show_archived()
+        assert archived_row_unarchive(rid).count() == 0, "the run is already under Archived before the archive step"
+        # [SUBSTITUTE] — no UI control archives a run (WorkPage mounts Unarchive only).
+        st, body = api("POST", f"/runs/{quote(rid)}/archive", {"archived": True, "note": f"seed-surfaces {STAMP}: RUN-ARC write-off of the rejected TST-1 run"})
+        assert st == 200 and body == {"runId": rid, "archived": True}, f"POST /runs/{rid}/archive → {st} {body}"
+        view = run_view(rid)
+        assert view["session"].get("archived_at"), f"the run view carries no archived_at after the archive: {view['session'].get('archived_at')!r}"
+        assert rid not in {v["session"]["id"] for v in list_runs()}, "the default GET /runs still lists the archived run"
+        st2, all_runs = api("GET", "/runs?include=archived")
+        assert st2 == 200 and rid in {v["session"]["id"] for v in all_runs["runs"]}, "GET /runs?include=archived does not carry the archived run"
+        # UI, after a FULL reload: gone from the active surfaces …
+        goto(page, f"/p/{quote(A)}")
+        tid(page, "project-dashboard", project_id=A).wait_for(timeout=20_000)
+        page.wait_for_load_state("networkidle")
+        assert tid(page, "dashboard-run", run_id=rid).count() == 0, "A's dashboard still lists the archived run"
+        work_page()
+        assert tid(page, "run-link", run_id=rid).count() == 0, "/work's active list still shows the archived run"
+        # … and present under Archived, with the Unarchive control, on two consecutive full loads.
+        show_archived()
+        archived_row_unarchive(rid).wait_for(timeout=15_000)
+        row = tid(page, "run-link", run_id=rid)
+        assert row.get_attribute("data-status") == "cancelled", f"archived row status {row.get_attribute('data-status')!r}"
+        work_page()
+        show_archived()
+        archived_row_unarchive(rid).wait_for(timeout=15_000)
+        ctx["run_archived"] = True
+        return (f"[SUBSTITUTE] run {rid} archived over POST /runs/:id/archive (the studio mounts no archive control — WorkPage.tsx's only "
+                f"`archiveRun` call is Unarchive); wire: archived_at set, default GET /runs excludes it, ?include=archived carries it; UI after a full reload: "
+                f"A's dashboard no longer lists it, /work's active list does not ({'it was listed there before' if listed_before else 'it was not in /work''s active list before either — no workflow_id'}), "
+                f"the Archived toggle shows it (status cancelled) with its Unarchive control — again after a second full load")
+
+    suite.run("RUN-ARC", "Archive the terminal run ([SUBSTITUTE] API — no UI control) → leaves active surfaces, listed under Archived; reload persists", runarc, requires=("RUN-DET",))
+
+    def rununarc() -> str:
+        """RUN-UNARC: the mounted UI control — WorkPage's Unarchive beside the archived row — restores
+        the run: it leaves the Archived group, the wire clears `archived_at`, the default listing and
+        A's dashboard carry it again after a FULL reload."""
+        rid, A = ctx["test_run"], ctx["A"]
+        work_page()
+        show_archived()
+        button = archived_row_unarchive(rid)
+        button.wait_for(timeout=15_000)
+        with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith(f"/runs/{quote(rid)}/archive"), timeout=15_000) as ack:
+            button.click()
+        assert ack.value.status == 200, f"POST /runs/:id/archive (unarchive) → HTTP {ack.value.status}"
+        button.wait_for(state="detached", timeout=15_000)
+        view = run_view(rid)
+        assert not view["session"].get("archived_at"), f"archived_at still set after Unarchive: {view['session'].get('archived_at')!r}"
+        assert rid in {v["session"]["id"] for v in list_runs()}, "the default GET /runs does not list the restored run"
+        goto(page, f"/p/{quote(A)}")
+        tid(page, "dashboard-run", run_id=rid).wait_for(timeout=30_000)
+        work_page()
+        show_archived()
+        assert archived_row_unarchive(rid).count() == 0, "the run is still under Archived after Unarchive + reload"
+        ctx["run_archived"] = False
+        return (f"Unarchive clicked beside run {rid} in /work's Archived group (WorkPage.tsx, the mounted control) → POST /runs/:id/archive 200; "
+                f"the row left the group, archived_at is null on the wire, the default GET /runs lists it; after a full reload A's dashboard renders it again and Archived no longer holds it")
+
+    suite.run("RUN-UNARC", "Unarchive through WorkPage's control → back on active surfaces; reload persists", rununarc, requires=("RUN-ARC",))
 
     # ── Cleanup — only after every consumer ───────────────────────────────────
     # CLN-1 PER TARGET: one row per seeded doc/demo — an ExpectedGap on the first never hides the rest.
@@ -3702,19 +4149,21 @@ def self_test() -> int:
         "cancelled_runs": [{"run": "r1", "before": "running", "accepted": False, "final": "running", "verified_terminal": False}],
         "daemon": {"pid": 1, "forced": True, "exit_code": None, "group_empty": False}, "daemon_stopped": False,
         "bridge": {"terminated": {"signalled": [9], "forced": [9], "remaining": [9]}, "identity_unverified": "no start time",
-                   "enumeration_failed": "ps exited 1", "unidentified_alive": "lock pid 7 alive", "not_from_pinned_cache": "ran from elsewhere"},
+                   "enumeration_failed": "ps exited 1", "unidentified_alive": "lock pid 7 alive", "not_from_pinned_cache": "ran from elsewhere",
+                   "lock_pid_invalid": "pid [] (list)"},
         "browser_close_error": "Target closed",
         "tmp": "/x", "tmp_removed": False, "tmp_remove_error": "EBUSY",
         "isolation_scan_error": "PermissionError: scan aborted",
-        "isolation_scan": {"scan_errors": [{"file": "/x/y", "errno": 13, "error": "PermissionError: Permission denied", "stage": "scandir"}]},
+        "isolation_scan": {"scan_errors": [{"file": "/x/y", "errno": 13, "error": "PermissionError: Permission denied", "stage": "scandir"}],
+                           "live_7701": {"observation_lost": True, "runs_before": 46, "error_after": "Connection refused"}},
         "step_errors": ["stop_bridge: RuntimeError: boom"],
     }
     fails = teardown_failures(all_bad)
     kinds = {f.split(":")[0] for f in fails}
     results["teardown_names_every_failure_kind"] = {
         "run_cancel_failed", "daemon_not_stopped", "bridge_survived_sigkill", "bridge_identity_unverified", "bridge_enumeration_failed",
-        "bridge_unidentified_alive", "bridge_not_from_pinned_cache", "browser_close_error", "tmp_not_removed",
-        "isolation_scan_failed", "live_scan_error", "teardown_step_raised",
+        "bridge_unidentified_alive", "bridge_not_from_pinned_cache", "bridge_lock_pid_invalid", "browser_close_error", "tmp_not_removed",
+        "isolation_scan_failed", "live_scan_error", "live_observation_lost", "teardown_step_raised",
     } <= kinds
     rep = finalize({"live_touched": [], "setup": {"teardown": {"failures": fails}}}, suite_ok=True)
     results["teardown_failures_force_ok_false_and_nonzero_exit"] = rep["ok"] is False and exit_code(rep) != 0
@@ -3933,25 +4382,107 @@ def self_test() -> int:
     try:
         results["bridge_pin_no_cache_is_error"] = "error" in resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1")
 
-        def mk(key: str, version: str, integrity: bool = True) -> None:
+        GOOD_INTEGRITY = "sha512-" + "A" * 86 + "=="
+
+        def mk(key: str, version: str, integrity: object = True, lock_version: str | None = None, hidden: object = True) -> Path:
+            """A fake `_npx/<key>` install: installed package.json `version`; root lock entry
+            (`lock_version` defaults to `version`; `integrity` True = well-formed, False = absent, str =
+            that literal); npm's hidden lockfile (`hidden` True = same entry, False = absent, str = that
+            integrity)."""
             d = npx / key
             (d / "node_modules" / "wicked-interactive").mkdir(parents=True)
             (d / "package.json").write_text(json.dumps({"_npx": {"packages": [INTERACTIVE_SPEC]}}))
             (d / "node_modules" / "wicked-interactive" / "package.json").write_text(json.dumps({"name": "wicked-interactive", "version": version}))
-            entry: dict = {"version": version, "resolved": f"https://registry.npmjs.org/wicked-interactive/-/wicked-interactive-{version}.tgz"}
-            if integrity:
-                entry["integrity"] = "sha512-" + "A" * 86 + "=="
+            entry: dict = {"version": lock_version or version, "resolved": f"https://registry.npmjs.org/wicked-interactive/-/wicked-interactive-{version}.tgz"}
+            if integrity is True:
+                entry["integrity"] = GOOD_INTEGRITY
+            elif isinstance(integrity, str):
+                entry["integrity"] = integrity
             (d / "package-lock.json").write_text(json.dumps({"packages": {"node_modules/wicked-interactive": entry}}))
+            if hidden is not False:
+                h = dict(entry)
+                if isinstance(hidden, str):
+                    h["integrity"] = hidden
+                (d / "node_modules" / ".package-lock.json").write_text(json.dumps({"packages": {"node_modules/wicked-interactive": h}}))
+            return d
 
         mk("k1", "0.9.0")
         results["bridge_pin_version_drift_is_error"] = "error" in resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1")
         mk("k2", "0.8.1", integrity=False)
         results["bridge_pin_missing_integrity_is_error"] = "error" in resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1")
         shutil.rmtree(npx / "k2")
-        mk("k3", "0.8.1")
+        # r4 item 4 — lock metadata is VALIDATED, not merely present: a lock naming another version
+        # than the installed tree, a malformed integrity, a missing or disagreeing hidden lockfile.
+        mk("k2", "0.8.1", lock_version="9.9.9")
+        results["bridge_pin_lock_version_mismatch_is_error"] = "9.9.9" in str(resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1").get("error"))
+        shutil.rmtree(npx / "k2")
+        mk("k2", "0.8.1", integrity="not-an-integrity")
+        results["bridge_pin_malformed_integrity_is_error"] = "not-an-integrity" in str(resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1").get("error"))
+        shutil.rmtree(npx / "k2")
+        mk("k2", "0.8.1", hidden=False)
+        results["bridge_pin_missing_hidden_lockfile_is_error"] = "hidden lockfile" in str(resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1").get("error"))
+        shutil.rmtree(npx / "k2")
+        mk("k2", "0.8.1", hidden="sha512-" + "B" * 86 + "==")
+        results["bridge_pin_hidden_lockfile_disagreeing_integrity_is_error"] = "hidden lockfile" in str(resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1").get("error"))
+        shutil.rmtree(npx / "k2")
+        src_install = mk("k3", "0.8.1")
         pin = resolve_bridge_pin(npx, INTERACTIVE_SPEC, "0.8.1")
         results["bridge_pin_exact_version_resolves_with_integrity"] = (
-            "error" not in pin and pin["version"] == "0.8.1" and str(pin["integrity"]).startswith("sha512-") and pin["key"] == "k3")
+            "error" not in pin and pin["version"] == "0.8.1" and INTEGRITY_RE.match(str(pin["integrity"])) is not None and pin["key"] == "k3"
+            and pin["hidden_lock_integrity"] == pin["integrity"])
+        # r4 item 4 — the CLONE's bytes: identical clone passes (relative `.bin` symlink stays inside);
+        # an escaping symlink, a tampered byte, a missing file each fail; the tarball route verifies
+        # sha512 == integrity + member bytes when the blob exists, and a tampered blob fails.
+        import base64 as _b64b
+        import io as _io
+        import tarfile as _tarfile
+        pkg = src_install / "node_modules" / "wicked-interactive"
+        (pkg / "bin").mkdir()
+        (pkg / "bin" / "wicked-interactive.js").write_text("#!/usr/bin/env node\nconsole.log('bridge 0.8.1')\n")
+        (pkg / "src").mkdir()
+        (pkg / "src" / "server.js").write_text("export const v = '0.8.1';\n")
+        (src_install / "node_modules" / ".bin").mkdir()
+        (src_install / "node_modules" / ".bin" / "wicked-interactive").symlink_to("../wicked-interactive/bin/wicked-interactive.js")
+        clone_root = Path(mkdtemp(prefix="seed-selftest-clone-"))
+        try:
+            clone = clone_root / "k3"
+            shutil.copytree(src_install, clone, symlinks=True)
+            ok_rec = verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None)
+            results["bridge_clone_identical_passes_via_hidden_lockfile_route"] = (
+                "error" not in ok_rec and ok_rec["symlinks"] == 1 and ok_rec["escaping_symlinks"] == [] and ok_rec["mismatched_count"] == 0
+                and str(ok_rec.get("bytes_verified_by", "")).startswith("hidden lockfile") and ok_rec["tarball"]["present"] is False)
+            (clone / "node_modules" / ".bin" / "escape").symlink_to("../../../../../../etc/hosts")
+            esc = verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None)
+            results["bridge_clone_escaping_symlink_is_error"] = "escape" in str(esc.get("error")) and len(esc["escaping_symlinks"]) == 1
+            (clone / "node_modules" / ".bin" / "escape").unlink()
+            (clone / "node_modules" / ".bin" / "abs").symlink_to("/etc/hosts")
+            results["bridge_clone_absolute_symlink_is_error"] = "escape" in str(verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None).get("error"))
+            (clone / "node_modules" / ".bin" / "abs").unlink()
+            (pkg_clone := clone / "node_modules" / "wicked-interactive" / "src" / "server.js").write_text("export const v = '0.8.1'; // tampered\n")
+            results["bridge_clone_tampered_byte_is_error"] = "mismatched" in str(verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None).get("error"))
+            pkg_clone.write_text("export const v = '0.8.1';\n")
+            (clone / "node_modules" / "wicked-interactive" / "bin" / "wicked-interactive.js").unlink()
+            results["bridge_clone_missing_file_is_error"] = "missing" in str(verify_bridge_clone(src_install, clone, GOOD_INTEGRITY, cacache=None).get("error"))
+            shutil.copy2(pkg / "bin" / "wicked-interactive.js", clone / "node_modules" / "wicked-interactive" / "bin" / "wicked-interactive.js")
+            # the tarball route: a synthetic `package/…` tarball of the source files, stored under its own sha512 in a fake cacache
+            buf = _io.BytesIO()
+            with _tarfile.open(fileobj=buf, mode="w:gz") as tf:
+                for p in sorted(x for x in pkg.rglob("*") if x.is_file()):
+                    tf.add(p, arcname=f"package/{p.relative_to(pkg)}")
+            blob_bytes = buf.getvalue()
+            real_integrity = "sha512-" + _b64b.b64encode(hashlib.sha512(blob_bytes).digest()).decode()
+            cacache = clone_root / "_cacache"
+            blob_path = integrity_blob_path(cacache, real_integrity)
+            blob_path.parent.mkdir(parents=True)
+            blob_path.write_bytes(blob_bytes)
+            tar_ok = verify_bridge_clone(src_install, clone, real_integrity, cacache)
+            results["bridge_clone_tarball_route_verifies_sha512_and_members"] = (
+                "error" not in tar_ok and tar_ok["tarball"]["present"] and tar_ok["tarball"]["sha512_matches_integrity"]
+                and tar_ok["tarball"]["members"] == 3 and str(tar_ok["bytes_verified_by"]).startswith("tarball"))
+            blob_path.write_bytes(blob_bytes[:-1] + bytes([blob_bytes[-1] ^ 0xFF]))
+            results["bridge_clone_tampered_tarball_is_error"] = "does not hash" in str(verify_bridge_clone(src_install, clone, real_integrity, cacache).get("error"))
+        finally:
+            shutil.rmtree(clone_root, ignore_errors=True)
     finally:
         shutil.rmtree(npx, ignore_errors=True)
     # 19b. the offline range resolution: `^` semantics npm applies, and the cached registry manifest is
@@ -3997,6 +4528,173 @@ def self_test() -> int:
     results["ps_started_at_unparseable_locale_is_unverified"] = ps_started_at(1, runner=fake_ps_de) is None and seen_env.get("LC_ALL") == "C"
     results["ps_started_at_c_locale_parses"] = isinstance(ps_started_at(1, runner=fake_ps_c), float)
     results["ps_env_pins_c_locale"] = PS_ENV.get("LC_ALL") == "C" and "PATH" in PS_ENV
+    # 21. TST-2 — the ACTUAL scenario function (codex r4 item 1), driven through `Suite.run` exactly as
+    #     the suite does (xfail marker on): every operational failure is a FAIL, never `blocked`.
+    listing_ok = (200, {"campaigns": [{"id": "c1", "status": "cancelled"}]})
+    detail_ok = (200, {"campaign": {"id": "c1", "def": {"nodes": [{"node_id": "n1", "run_spec": {"repo_ref": "repo-a"}}]}}})
+
+    def tst2_probe(*, seed=None, listing=listing_ok, detail=detail_ok, a_cards=("c1",), b_cards=()) -> dict:
+        s2 = Suite()
+
+        def getter(path: str):
+            if path == "/campaigns":
+                if isinstance(listing, BaseException):
+                    raise listing
+                return listing
+            return detail
+
+        s2.run("TST-2", "probe", lambda: campaign_isolation_scenario(
+            seed=seed or (lambda: {"symbol": "wicked-apps synthetic campaign/c1:", "written": True}), get=getter,
+            cards=lambda pid: list(a_cards) if pid == "A" else list(b_cards),
+            campaign_id="c1", repo_id="repo-a", a="A", b="B", issue="issue#0"), xfail="issue#0")
+        return s2.rows[0]
+
+    corrupt = Rig.__new__(Rig)
+    corrupt.report = {"setup": {}}
+    corrupt.tmp = Path(mkdtemp(prefix="seed-selftest-corrupt-")).resolve()
+    corrupt.state = corrupt.tmp / "state"
+    corrupt.state.mkdir()
+    (corrupt.state / "core.db").write_bytes(b"this is not a sqlite database " * 64)
+    try:
+        row = tst2_probe(seed=lambda: corrupt.seed_campaign_record("c1", "Probe", "projA", "repo-a"))
+        results["tst2_db_corruption_is_fail_not_blocked"] = row["status"] == "fail" and "campaign-seed-write-failed" in row["detail"] and "DatabaseError" in row["detail"]
+    finally:
+        shutil.rmtree(corrupt.tmp, ignore_errors=True)
+    row = tst2_probe(listing=(500, {"campaigns": []}))
+    results["tst2_http_500_empty_list_is_fail_not_blocked"] = row["status"] == "fail" and "HTTP 500" in row["detail"]
+    row = tst2_probe(listing=(200, {"ok": True}))
+    results["tst2_200_without_list_is_fail"] = row["status"] == "fail" and "without a `campaigns` list" in row["detail"]
+    row = tst2_probe(listing=(200, {"campaigns": []}))
+    results["tst2_seed_missing_is_fail_named"] = row["status"] == "fail" and "campaign-seed-missing" in row["detail"]
+    row = tst2_probe(listing=urllib.error.URLError("connection refused"))
+    results["tst2_transport_error_is_fail"] = row["status"] == "fail" and "URLError" in row["detail"]
+    row = tst2_probe(detail=(404, {"error": "not found"}))
+    results["tst2_detail_404_is_fail"] = row["status"] == "fail" and "GET /campaigns/c1" in row["detail"]
+    row = tst2_probe(a_cards=(), b_cards=())
+    results["tst2_owner_card_missing_is_fail"] = row["status"] == "fail" and "does not render its own campaign" in row["detail"]
+    row = tst2_probe(a_cards=("c1",), b_cards=("c1",))
+    results["tst2_b_rendering_seed_is_the_xfail"] = row["status"] == "xfail" and "issue#0" in row["detail"]
+    row = tst2_probe(a_cards=("c1",), b_cards=())
+    results["tst2_partitioned_passes_scenario_body"] = row["status"] == "xpass"  # the marker is stale ONLY when the product partitions
+    results["tst2_never_blocked"] = all(r != "blocked" for r in [
+        tst2_probe(listing=(500, {"campaigns": []}))["status"], tst2_probe(listing=(200, {"campaigns": []}))["status"],
+        tst2_probe(seed=lambda: (_ for _ in ()).throw(sqlite3.DatabaseError("database disk image is malformed")))["status"]])
+    # 22. DEM-REC (codex r4 item 2): `browserType.launch` alone is NOT a prerequisite — a crash, a launch
+    #     timeout, EACCES, a closed browser and an embedded mention are FAILURES; only the two identified
+    #     answers (anchored) are blocked.
+    fails_22 = [
+        "Recording failed: browserType.launch: Target page, context or browser has been closed",
+        "Recording failed: browserType.launch: Timeout 180000ms exceeded.",
+        "Recording failed: browserType.launch: spawn EACCES",
+        "Recording failed: browserType.launch: Browser closed unexpectedly",
+        "Recording failed: Target page, context or browser has been closed",
+        "Recording failed: browserType.launch",
+        "Recording failed: ENOSPC: no space left on device, while writing demo.spec.mjs authored yet",
+        "the spec said: no demo.spec.mjs authored yet",  # not the bridge's answer shape (not anchored)
+        "Recording failed: Playwright is not installed",  # a truncated / different not-installed sentence is not the identified one
+    ]
+    results["recorder_crash_timeout_eacces_closed_are_fail"] = all(classify_recorder_answer(200, a, False)[0] == "fail" for a in fails_22)
+    blocked_22 = [
+        "Recording failed: no demo.spec.mjs authored yet — the agent must write the spec before recording",
+        "Recording failed: Playwright is not installed — run `npx playwright install` (the install gate should have caught this)",
+        "Recording failed: browserType.launch: Executable doesn't exist at /scratch/ms-playwright/chromium-1200/chrome-mac/Chromium.app",
+    ]
+    results["recorder_identified_prereqs_with_2xx_are_blocked"] = all(classify_recorder_answer(200, a, False)[0] == "blocked" for a in blocked_22)
+    results["recorder_identified_prereqs_with_4xx_are_fail"] = all(classify_recorder_answer(400, a, False)[0] == "fail" for a in blocked_22)
+    # 23. advisory lock pid TYPES (codex r4 item 5): the REAL `Rig.stop_bridge` with `{"pid": []}` (and a
+    #     string pid) must terminate the independently identified bridge, record `lock_pid_invalid` (a
+    #     verdict failure) and never raise; a valid matching pid records no such failure.
+    ident_bridge = {"pid": 4242, "pgid": 4242, "ppid": 1, "command": "node wicked-interactive serve --root /x/idocs", "started_at": 200.0}
+
+    def stop_probe(lock_body: object) -> tuple[dict, list[list[int]], str | None]:
+        pr = Rig.__new__(Rig)
+        pr.report = {"setup": {}}
+        pr.tmp = Path(mkdtemp(prefix="seed-selftest-lock-")).resolve()
+        pr.idocs = pr.tmp / "idocs"
+        pr.idocs.mkdir()
+        (pr.idocs / ".wi-serve.json").write_text(json.dumps(lock_body))
+        pr.daemon_started_at = 100.0
+        pr.run_started_at = 100.0
+        calls: list[list[int]] = []
+        try:
+            info = pr.stop_bridge(
+                processes=lambda root, nb: {"identified": [ident_bridge], "unverified": [], "older_excluded": [], "ps_ok": True, "ps_error": None},
+                terminate=lambda pids: (calls.append(list(pids)), {"signalled": list(pids), "forced": [], "remaining": []})[1],
+            )
+            return info, calls, None
+        except Exception as e:  # noqa: BLE001 — the probe records the raise instead of crashing the self-test
+            return {}, calls, f"{type(e).__name__}: {e}"
+        finally:
+            shutil.rmtree(pr.tmp, ignore_errors=True)
+
+    info, calls, raised = stop_probe({"pid": [], "version": "0.8.1"})
+    results["lock_pid_list_no_typeerror_bridge_still_terminated"] = raised is None and calls == [[4242]]
+    results["lock_pid_list_is_recorded_failure"] = bool(info.get("lock_pid_invalid")) and any(f.startswith("bridge_lock_pid_invalid") for f in teardown_failures({"bridge": info}))
+    info, calls, raised = stop_probe({"pid": "4242"})
+    results["lock_pid_string_is_refused_and_recorded"] = raised is None and calls == [[4242]] and bool(info.get("lock_pid_invalid")) and info["lock_pid_matches_identified"] is False
+    info, calls, raised = stop_probe({"pid": 4242, "version": "0.8.1"})
+    results["lock_pid_valid_matching_is_clean"] = raised is None and calls == [[4242]] and "lock_pid_invalid" not in info and info["lock_pid_matches_identified"] is True \
+        and teardown_failures({"bridge": {**info, "terminated": {"remaining": []}}}) == []
+    # 24. the live-daemon observation (codex r4 item 6): the REAL `Rig.scan_operator_state` with a
+    #     reachable baseline and a connection-refused final snapshot ⇒ `observation_lost` ⇒ a verdict
+    #     failure ⇒ `report.ok=false`; both reachable ⇒ observed, no failure; an unreachable baseline
+    #     is "never observed", not "lost".
+    empty_root = Path(mkdtemp(prefix="seed-selftest-live-")).resolve()
+    try:
+        def scan_probe(before: dict, after: dict) -> dict:
+            lr = Rig.__new__(Rig)
+            lr.report = {"setup": {}}
+            lr.needles = ["e2e-scope-selftest"]
+            lr.run_started_at = time.time()
+            lr.live_before = before
+            return lr.scan_operator_state(snapshot=lambda: after, roots=(empty_root,), state_home=empty_root / "no-such-home")
+
+        lost = scan_probe({"reachable": True, "run_ids": ["r1", "r2"], "problems": {}},
+                          {"reachable": False, "error": "<urlopen error [Errno 61] Connection refused>", "run_ids": []})
+        lost_fails = teardown_failures({"isolation_scan": lost})
+        results["live_observation_lost_is_flagged"] = lost["live_7701"]["observation_lost"] is True and lost["live_7701"]["error_after"].endswith("Connection refused>")
+        results["live_observation_lost_is_verdict_failure"] = any(f.startswith("live_observation_lost") for f in lost_fails)
+        results["live_observation_lost_forces_ok_false"] = finalize({"live_touched": [], "setup": {"teardown": {"failures": lost_fails}}}, suite_ok=True)["ok"] is False
+        lost_500 = scan_probe({"reachable": True, "run_ids": ["r1"], "problems": {}}, {"reachable": False, "error": "GET /runs → 500", "run_ids": []})
+        results["live_final_listing_error_is_lost"] = lost_500["live_7701"]["observation_lost"] is True
+        kept = scan_probe({"reachable": True, "run_ids": ["r1"], "problems": {}}, {"reachable": True, "run_ids": ["r1"], "problems": {}})
+        results["live_observation_kept_is_clean"] = kept["live_7701"]["observed"] is True and kept["live_7701"]["observation_lost"] is False and teardown_failures({"isolation_scan": kept}) == []
+        never = scan_probe({"reachable": False, "error": "refused", "run_ids": []}, {"reachable": False, "error": "refused", "run_ids": []})
+        results["live_never_observed_is_not_lost"] = never["live_7701"]["observation_lost"] is False and never["live_7701"]["observed"] is False
+    finally:
+        shutil.rmtree(empty_root, ignore_errors=True)
+    # 25. the report scrub (Copilot threads): this checkout's root → `<repo>` in both spellings, shots
+    #     repo-relative, a TRUNCATED temp-root prefix → `$TMPDIR` by shape (both spellings, dashed), the
+    #     `/private`-prefixed home never degrades to `/private~`, and the scrub is idempotent.
+    repo_s = str(REPO)
+    repo_alt_s = repo_s[len("/private"):] if repo_s.startswith("/private/") else f"/private{repo_s}"
+    sample = json.dumps({
+        "source": repo_s, "alt": f"{repo_alt_s}/e2e/x.py", "shot": f"{repo_s}/e2e/shots/seed-surfaces/STR-1.png",
+        # synthetic per-user folder ids — the shape (`<2>/<30>/T`) is what matters, never a real one
+        "trunc": "node .../wicked-interactive serve --root /private/var/folders/zz/zz0000000000000000000",
+        "full": "/var/folders/zz/zz00000000000000000000000000gn/T/seed-surfaces-abc/idocs",
+        "full_private": "/private/var/folders/zz/zz00000000000000000000000000gn/T/seed-surfaces-abc/idocs",
+        "dashed": ".claude/projects/-private-var-folders-zz-zz00000000000000000000000000gn-T-seed-surfaces-abc-repo",
+        "dashed_trunc": "-var-folders-zz-zz000",
+        "home": f"{REAL_HOME}/.wicked-crew/x", "home_private": f"/private{REAL_HOME}/y", "tmp_mask": "$TMPDIR/already",
+    })
+    scrubbed = scrub_report_text(sample)
+    doc = json.loads(scrubbed)
+    results["scrub_repo_root_both_spellings"] = doc["source"] == "<repo>" and doc["alt"] == "<repo>/e2e/x.py"
+    results["scrub_shot_is_repo_relative"] = doc["shot"] == "e2e/shots/seed-surfaces/STR-1.png"
+    results["scrub_truncated_tmp_root_masked"] = doc["trunc"].endswith("--root $TMPDIR") and "var/folders" not in scrubbed
+    results["scrub_full_tmp_root_both_spellings"] = doc["full"] == "$TMPDIR/seed-surfaces-abc/idocs" and doc["full_private"] == "$TMPDIR/seed-surfaces-abc/idocs"
+    results["scrub_dashed_tmp_root_incl_truncated"] = doc["dashed"] == ".claude/projects/-TMPDIR-seed-surfaces-abc-repo" and doc["dashed_trunc"] == "-TMPDIR"
+    results["scrub_home_never_degrades_to_private_tilde"] = doc["home"] == "~/.wicked-crew/x" and doc["home_private"] == "~/y" and "/private~" not in scrubbed
+    results["scrub_is_idempotent"] = scrub_report_text(scrubbed) == scrubbed and doc["tmp_mask"] == "$TMPDIR/already"
+    rescrub_dir = Path(mkdtemp(prefix="seed-selftest-rescrub-"))
+    try:
+        target = rescrub_dir / "report.json"
+        target.write_text(sample, encoding="utf-8")
+        outcome = rescrub_report_file(target)
+        results["rescrub_file_in_place_leaves_valid_json_without_residue"] = outcome["changed"] is True and json.loads(target.read_text())["source"] == "<repo>" and rescrub_report_file(target)["changed"] is False
+    finally:
+        shutil.rmtree(rescrub_dir, ignore_errors=True)
     ok = all(results.values())
     print(json.dumps({"self_test": results, "ok": ok}, indent=2))
     return 0 if ok else 1
@@ -4009,27 +4707,67 @@ def _on_sigterm(*_args) -> None:
     raise KeyboardInterrupt("SIGTERM")
 
 
+# The macOS per-user temp root, by SHAPE — `/var/folders/<2 chars>/<30 chars>/T` — so a TRUNCATED prefix
+# (a `command[:200]` cut mid-segment, as run 9's report carried) is masked too, not only the exact string.
+TMP_ROOT_RE = re.compile(r"(?:/private)?/var/folders/[^/\s\"'\\]+/[^/\s\"'\\]+(?:/T(?=[/\s\"'\\]|$))?")
+TMP_ROOT_DASHED_RE = re.compile(r"-(?:private-)?var-folders-[A-Za-z0-9_]+-[A-Za-z0-9_]+(?:-T(?=-|[\s\"']|$))?")
+
+
 def scrub_report_text(text: str) -> str:
-    """The committed artifact must not carry the operator's home path (or the per-user temp folder
-    the bridge command lines name): every occurrence of the real HOME (and its /private-prefixed
-    spelling) reads `~`; the per-user temp root (`tempfile.gettempdir()`, both spellings) reads
-    `$TMPDIR`."""
+    """What the committed artifact masks — exactly:
+      - the operator's real HOME (`~`): the plain spelling, the `/private`-prefixed spelling, and
+        `Path.home()`;
+      - THIS checkout's root (`<repo>`): `Path(__file__).resolve().parents[1]`, in both its
+        `/private/…` and un-prefixed spellings and their dashed forms (the CLI seats' project-dir
+        naming), so `setup.repo_clone.source` and every path under the worktree read `<repo>/…`;
+      - screenshot paths repo-relative (`"shot": "e2e/shots/…"`, never `<repo>/e2e/…`);
+      - the per-user temp root (`$TMPDIR`): `tempfile.gettempdir()` in both spellings and the dashed
+        spelling, AND — by shape — any `/private/var/folders/<x>/<y>[/T]` or `/var/folders/<x>/<y>[/T]`
+        prefix however long, truncated included (`TMP_ROOT_RE`), plus the dashed shape.
+    Longer literals are replaced first so a `/private`-prefixed path never degrades to `/private~`.
+    Idempotent (masks are never re-matched); self-tested."""
     import tempfile
     tmp_root = tempfile.gettempdir().rstrip("/")
     dashed = tmp_root.replace("/", "-")  # the CLI seats' project-dir spelling of a cwd (`-private-var-folders-…-T-…`)
-    for needle, mask in dict.fromkeys([
+    repo = str(REPO)
+    repo_alt = repo[len("/private"):] if repo.startswith("/private/") else f"/private{repo}"
+    literals = [
         (str(REAL_HOME), "~"), (f"/private{REAL_HOME}", "~"), (str(Path.home()), "~"),
+        (repo, "<repo>"), (repo_alt, "<repo>"), (repo.replace("/", "-"), "-repo"), (repo_alt.replace("/", "-"), "-repo"),
         (f"/private{tmp_root}", "$TMPDIR"), (tmp_root, "$TMPDIR"),
         (f"-private{dashed}", "-TMPDIR"), (dashed, "-TMPDIR"),
-    ]):
+    ]
+    for needle, mask in sorted(dict.fromkeys(literals), key=lambda kv: -len(kv[0])):
         if needle and needle not in ("/", "/tmp", "/private/tmp", "-tmp", "-private-tmp") and len(needle) > 8:
             text = text.replace(needle, mask)
+    text = TMP_ROOT_RE.sub("$TMPDIR", text)
+    text = TMP_ROOT_DASHED_RE.sub("-TMPDIR", text)
+    text = re.sub(r'("shot": ")<repo>/', r"\1", text)
     return text
+
+
+def rescrub_report_file(path: Path) -> dict:
+    """Apply `scrub_report_text` to an EXISTING report file in place (no re-run): the JSON must still
+    parse and no raw temp-root / repo-root / home spelling may survive. Returns what changed."""
+    before = path.read_text(encoding="utf-8")
+    after = scrub_report_text(before)
+    json.loads(after)  # a scrub must never corrupt the artifact
+    residue = [n for n in (str(REPO), "/var/folders/", str(REAL_HOME)) if n in after]
+    if residue:
+        raise RuntimeError(f"scrub left residue: {residue}")
+    if after != before:
+        path.write_text(after, encoding="utf-8")
+    return {"path": str(path), "changed": after != before, "bytes_before": len(before), "bytes_after": len(after)}
 
 
 def main(argv: list[str]) -> int:
     if "--self-test" in argv:
         return self_test()
+    if "--rescrub-report" in argv:
+        # Offline: re-apply the current scrub to an already-committed report (no daemon, no re-run).
+        target = Path(argv[argv.index("--rescrub-report") + 1])
+        print(json.dumps(rescrub_report_file(target)))
+        return 0
     report_out = argv[argv.index("--report-out") + 1] if "--report-out" in argv and argv.index("--report-out") + 1 < len(argv) else None
     signal.signal(signal.SIGTERM, _on_sigterm)
     report: dict = {"ok": False, "setup": {}, "scenarios": suite.rows, "findings": findings, "live_touched": [], "counts": {}}
