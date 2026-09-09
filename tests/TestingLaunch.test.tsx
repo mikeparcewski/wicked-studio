@@ -1094,6 +1094,68 @@ describe('the landing header verbs — the Harness, folded in', () => {
     });
   });
 
+  it('a second ?new=test after a SUCCESSFUL launch is a FRESH panel — the rail ＋ starts a second test (#210 review)', async () => {
+    const user = userEvent.setup();
+    wireUp({ runId: 'run-first', runIds: ['run-first'] });
+    const navigate = vi.fn();
+    // The App's real prop flow: the ＋ lands `?new=test` → the landing opens the panel and
+    // consumes the query with ONE replace → the App re-renders the landing with a null intent.
+    const { rerender } = render(<CampaignsPage runs={[]} navigate={navigate} launchIntent="campaign" />);
+    const first = await screen.findByTestId('testing-launch-panel');
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns', { replace: true });
+    rerender(<CampaignsPage runs={[]} navigate={navigate} launchIntent={null} />);
+    // Consuming the query keeps the SAME open instance — no flicker, no reset mid-typing.
+    expect(screen.getByTestId('testing-launch-panel')).toBe(first);
+
+    await user.type(within(first).getByTestId('testing-launch-instructions'), 'First pass');
+    await user.click(within(first).getByTestId('testing-launch-unscoped'));
+    await user.click(within(first).getByTestId('testing-launch-submit'));
+    expect(await screen.findByTestId('testing-launch-waiting')).toHaveTextContent(/run-firs/);
+
+    // The rail ＋ again: `?new=test` re-arrives on the landing whose panel is ALREADY open and
+    // sitting in its launched state. Before the fix `setPanel('campaign')` was a no-op and the
+    // unkeyed panel kept `launched` — no second test could start from the shortcut.
+    rerender(<CampaignsPage runs={[]} navigate={navigate} launchIntent="campaign" />);
+    const fresh = await screen.findByTestId('testing-launch-panel');
+    expect(fresh).not.toBe(first);
+    expect(fresh).toHaveAttribute('data-intent', 'campaign');
+    expect(screen.queryByTestId('testing-launch-waiting')).toBeNull();
+    expect(within(fresh).getByTestId('testing-launch-instructions')).toHaveValue('');
+    expect(within(fresh).getByTestId('testing-launch-submit')).toBeDisabled();
+    // Consumed again — exactly one replace per arrival.
+    expect(navigate).toHaveBeenCalledTimes(2);
+
+    // …and the fresh panel LAUNCHES: the second test from the shortcut, its own run.
+    wireUp({ runId: 'run-second', runIds: ['run-second'] });
+    await user.type(within(fresh).getByTestId('testing-launch-instructions'), 'Second pass');
+    await user.click(within(fresh).getByTestId('testing-launch-unscoped'));
+    await user.click(within(fresh).getByTestId('testing-launch-submit'));
+    expect(await screen.findByTestId('testing-launch-waiting')).toHaveTextContent(/run-seco/);
+    expect(bodySentTo('/testing/recon')).toMatchObject({ problem: `${TEST_PROBLEM_PREFIX}\n\nFirst pass` });
+    const bodies = apiFetch.mock.calls.filter(([p]) => p === '/testing/recon');
+    expect(bodies).toHaveLength(2);
+  });
+
+  it('switching the verb after a launch (recon launched → "New test") is a fresh test panel, never a launched recon wearing the test title', async () => {
+    const user = userEvent.setup();
+    wireUp({ runId: 'run-recon', runIds: ['run-recon'] });
+    landing();
+
+    const recon = await openPanel(user, 'testing-recon-open');
+    await user.type(within(recon).getByTestId('testing-launch-instructions'), 'Survey the estate');
+    await user.click(within(recon).getByTestId('testing-launch-unscoped'));
+    await user.click(within(recon).getByTestId('testing-launch-submit'));
+    expect(await screen.findByTestId('testing-launch-waiting')).toHaveTextContent(/run-reco/);
+
+    await user.click(screen.getByTestId('testing-campaign-open'));
+    const test = screen.getByTestId('testing-launch-panel');
+    expect(test).not.toBe(recon);
+    expect(test).toHaveAttribute('data-intent', 'campaign');
+    expect(screen.queryByTestId('testing-launch-waiting')).toBeNull();
+    expect(within(test).getByTestId('testing-launch-instructions')).toHaveValue('');
+  });
+
   it('the three panels are one-at-a-time, the management-bar grammar', async () => {
     const user = userEvent.setup();
     wireUp({ runId: 'never-sent' });

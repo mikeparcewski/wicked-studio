@@ -320,6 +320,11 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
 
   const [panel, setPanel] = useState<PanelKind>(null);
   const openPanel = (p: Exclude<PanelKind, null>): void => setPanel((cur) => (cur === p ? null : p));
+  // Counts `?new=` ARRIVALS (not intents): part of the launch panel's `key`, so a re-arrival on
+  // an already-open panel remounts a FRESH launch instance instead of `setPanel(same)` no-op-ing
+  // onto one that has already launched (or errored) — the rail's ＋ after a successful launch
+  // must start a second test, not re-show the first one's "launched" state (#210 review).
+  const [arrival, setArrival] = useState(0);
 
   const [query, setQuery] = useState('');
   const [chip, setChip] = useState<CampaignChip>('all');
@@ -332,9 +337,12 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   // The arrival intent (wicked-studio#203): a create affordance that lands here must land with
   // its panel OPEN. Open it, then CONSUME the query — replace, so Back never re-opens the panel
   // and a second ＋ click from this very page changes the address again and re-fires.
+  // Consuming is also what makes EVERY ＋ click a distinct arrival (`null → intent → null`), so
+  // repeated same-intent arrivals each bump `arrival` and each get a fresh panel.
   useEffect(() => {
     if (launchIntent === null) return;
     setPanel(launchIntent);
+    setArrival((n) => n + 1);
     navigate(testingPath('campaigns'), { replace: true });
   }, [launchIntent, navigate]);
 
@@ -461,8 +469,11 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
         </button>
       </div>
 
+      {/* Keyed by intent AND arrival: a new `?new=` arrival, or switching the verb (recon ⇄ test),
+          is a NEW launch instance — a launched/errored panel never carries over into the next ask. */}
       {(panel === 'recon' || panel === 'campaign') && (
         <TestingLaunchPanel
+          key={`${panel}:${arrival}`}
           intent={panel}
           navigate={navigate}
           onClose={() => setPanel(null)}

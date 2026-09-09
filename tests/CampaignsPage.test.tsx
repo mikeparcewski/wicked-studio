@@ -143,6 +143,29 @@ describe('the ?new= arrival intent (#203) — a create affordance lands with its
     expect(screen.getByTestId('testing-launch-panel')).toHaveAttribute('data-intent', 'campaign');
   });
 
+  it('a REPEATED same-intent arrival remounts a fresh panel (typed text gone, query consumed again) — while consuming the query alone keeps the open instance', async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
+    const navigate = vi.fn();
+    const { rerender } = render(<CampaignsPage runs={[]} navigate={navigate} launchIntent="campaign" />);
+    const first = await screen.findByTestId('testing-launch-panel');
+    expect(navigate).toHaveBeenCalledTimes(1);
+
+    // The App re-renders with the consumed (null) intent — same instance, the operator's typing survives.
+    rerender(<CampaignsPage runs={[]} navigate={navigate} launchIntent={null} />);
+    expect(screen.getByTestId('testing-launch-panel')).toBe(first);
+    fireEvent.change(within(first).getByTestId('testing-launch-instructions'), { target: { value: 'half-typed' } });
+    expect(within(first).getByTestId('testing-launch-instructions')).toHaveValue('half-typed');
+
+    // The rail ＋ again (`null → campaign`): a NEW arrival = a NEW launch instance, consumed once more.
+    rerender(<CampaignsPage runs={[]} navigate={navigate} launchIntent="campaign" />);
+    const fresh = await screen.findByTestId('testing-launch-panel');
+    expect(fresh).not.toBe(first);
+    expect(fresh).toHaveAttribute('data-intent', 'campaign');
+    expect(within(fresh).getByTestId('testing-launch-instructions')).toHaveValue('');
+    expect(navigate).toHaveBeenCalledTimes(2);
+    expect(navigate).toHaveBeenLastCalledWith('/testing/campaigns', { replace: true });
+  });
+
   it('the intent-opened panel is the same one the verb toggles — clicking "New test" again closes it', async () => {
     listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
     render(<CampaignsPage runs={[]} navigate={vi.fn()} launchIntent="campaign" />);

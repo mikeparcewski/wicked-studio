@@ -40,7 +40,9 @@ steps. Rename regression: wicked-studio#203 (15 rendered strings + the rail ＋ 
 - **Arrival intent (#203 fix).** `?new=test` / `?new=recon` on the landing
   (`testingLaunchPath`, `readLaunchIntent` in `src/api/testing.ts`) opens that panel on mount and
   is consumed with a `replace` navigation. The rail's ＋ ("New Test") and its "Run recon" row use
-  it — a create affordance creates.
+  it — a create affordance creates. The launch panel is keyed by intent + an arrival counter, so
+  each arrival (and each verb switch) mounts a fresh launch instance — a launched or errored panel
+  never carries over into the next ask.
 
 ## 2. Codex's REQUIRED CHANGES → what changed here
 
@@ -87,7 +89,7 @@ at the client boundary (`apiFetch` / `api.*`) or the fetch boundary; nothing tou
 | T19 | decisions | wire: four `POST /runs/:id/gate` bodies + bodyless cancel, content type only with a body, encoded id, refusal → typed error; panel: each button → its decision exactly once → resolved copy with working doors; cancel resolves; refused decision keeps the gate up | `tests/gateWire.test.ts`, `tests/TestingLaunch.test.tsx` |
 | T20 | named gap | `MULTI_SCOPE_UNSUPPORTED_COPY` rendered **verbatim** for multi-repo and project scopes on an old daemon; `/runs` never touched; form stays live | `tests/TestingLaunch.test.tsx` |
 | T24 | landing states | probing (line alone, one `GET /campaigns`, no verbs) → page; 404 → unsupported copy with verbs usable; 200 empty → "no tests yet" + CTA; 200 populated → KPIs + strip + grid | `tests/CampaignsPage.test.tsx` |
-| — | `?new=` intent | `campaign`/`recon` open the panel and consume the query with one `replace`; plain arrival opens nothing; honored on an unsupported daemon; toggles with the verb; rail ＋ → `?new=test`, "Run recon" row → `?new=recon`; `readLaunchIntent` rejects bare/foreign/backend-worded values | `tests/CampaignsPage.test.tsx`, `tests/LeftSidebar.rail.test.tsx`, `tests/testingRoutes.test.tsx` |
+| — | `?new=` intent | `campaign`/`recon` open the panel and consume the query with one `replace`; plain arrival opens nothing; honored on an unsupported daemon; toggles with the verb; rail ＋ → `?new=test`, "Run recon" row → `?new=recon`; `readLaunchIntent` rejects bare/foreign/backend-worded values; **every arrival is a fresh launch instance** — a second `?new=test` after a successful launch (or on a half-typed panel) remounts an empty panel that launches a second test, while consuming the query alone keeps the open instance; switching the verb after a launch is a fresh panel too | `tests/CampaignsPage.test.tsx`, `tests/TestingLaunch.test.tsx`, `tests/LeftSidebar.rail.test.tsx`, `tests/testingRoutes.test.tsx` |
 | T30 | rename consistency | every rendered string (text + `title`/`aria-label`/`placeholder`) on: the Test rail heading (title, ▦/＋ labels, Run recon row), the project-shell crumb, the chat group-attach chip, the scoreboard not-found / loading / attached-row tooltip, the panel's fan-out and resolved copy, the landing's probing / unsupported / nothing-matches / older-chip copy, the Needs-You row + verb, `TESTING_UNSUPPORTED_COPY` | `tests/renameConsistency.test.tsx`, `tests/renameGuard.ts`, `tests/needsYou.test.ts`, `tests/LeftSidebar.rail.test.tsx` |
 
 T30's guard (`expectTestVocabulary`) is scoped to product copy: fixture ids are chosen without the
