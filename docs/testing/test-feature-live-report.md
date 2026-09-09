@@ -200,6 +200,40 @@ chosen run into the root deliberately.
 > four threads: stable screenshot names → solved by (3); `/repos` is a typed list (`list_repos`);
 > an undecodable `/ws` frame is a recorded placeholder (`ws_frame_undecodable`) and the socket keeps
 > being listened to; a non-JSON 2xx launch answer is recorded raw with a finding.
+>
+> **Revised a ninth time after codex round 9 (same day, still offline — read-only GETs only, no
+> launch). This is the harness's final fix round.** (1) **Attribution is structural only.** A run is
+> a sibling ONLY through a relationship the daemon exposes: membership in the campaign the launch
+> returned (`node_run_id` / `attached_runs`), `session.campaign_id` / `group_label` equal to its
+> label, or an explicit parent field naming our run. A `problem` that merely mentions our run id,
+> the label or the brief is `unrelated_new_runs[]` with reason `text-mention-only` (codex's probe:
+> "Investigate why d293f4d7-… failed" had been attributed and its gate then approved by this
+> harness) — only structurally attributed siblings are ever followed or gated; `TEST_PROBLEM_PREFIX`
+> is gone (a marker in the problem was still text). When the daemon exposes no such linkage for a
+> launch — the recorded case: `campaignRegistered=false`, no campaign served, zero new runs — the
+> feature verdict says `no-structural-attribution` (crew#473) instead of "zero siblings ran"; each
+> recorded `fail_reasons[]` gained that line, `harness_ok`/`result` unchanged
+> (`measured.siblings_*.structural_linkage`). (2) **The preflight fails closed on a run status it
+> does not know.** Every `GET /runs` entry is classified (`classify_runs`): a `session.status`
+> outside ACTIVE ∪ TERMINAL — `null`, missing, `frobnicated` — is `unknown_status_runs` and BLOCKS
+> (`unknown-run-status`); a reading without the classification is not clear either (the recorded
+> readings are backfilled `not measured`; `preflight_policy.known_run_statuses` names the set).
+> (3) **Campaign completeness.** The follow ends only when the launch's campaign has no pending
+> node — `def.nodes` is the denominator, `node_status` / `attached_runs` / the campaign's own status
+> the numerator, read on every poll (`campaign_pending`); a `pending` or scheduled node keeps the
+> follow going to `SIBLING_FOLLOW_MAX_S` and then fails `campaign-incomplete` — two unchanged polls
+> never certify an unfinished campaign. (4) **The launch contract is asserted, not just recorded**
+> (`contract_check`, in the verdict): `repoRefs == ["wicked-studio"]`, `problem` = the scenario's
+> intent framing (`Recon:` / `New test:`, the panel's `data-intent`) + a blank line + the brief
+> verbatim, ≥ 1 `awaitingHuman` frame for the run received over `/ws` BEFORE the gate was decided,
+> and LT-1 / LT-3 byte-identical problems — `launch-scope-mismatch` / `launch-brief-mismatch` /
+> `launch-intent-mismatch` / `gate-frame-not-received` / `brief-not-identical` are harness
+> failures. **Re-derived over the recorded runs, the contract holds with the values:** repoRefs
+> `["wicked-studio"]` ×3; problem 695 / 752 / 695 chars, each ending in the brief, LT-1 ≡ LT-3 byte
+> for byte (sha256 recorded), LT-2 the longer `New test:` framing; exactly 1 `awaitingHuman` frame before each
+> decision (`measured.contract`, `consistency_vs_LT-1.problem_identical`) — **no number changed**
+> (`report.json → revisions[8]`). Remaining reviewer heuristics are listed under "Known
+> limitations" below.
 
 | Component | Version |
 |---|---|
@@ -321,7 +355,13 @@ appeared (LT-2 additionally has no registered campaign). *(An earlier revision o
 `pass` on "recon completed + the plan names real files + classifies"; codex's review called that out
 and the verdict was split; its round 2 showed that one truthy verdict among unfinished siblings
 still passed, so the rule is now per sibling — `fail_reasons[]` in `report.json` names the sibling.
-The measurements did not change; the reading of them did.)*
+The measurements did not change; the reading of them did.)* *Round 9: siblings are attributed
+STRUCTURALLY only (campaign membership, `campaign_id`/`group_label`, a parent field — never a text
+mention), and the recorded daemon exposed no such linkage (no campaign registered, zero new runs), so
+each `fail_reasons[]` now also reads `no-structural-attribution` — siblings could not have been
+attributed at all (crew#473); the launch contract is asserted in the same verdict (`measured.contract`:
+repoRefs `["wicked-studio"]`, the intent framing + brief, 1 `awaitingHuman` frame before the
+decision — all met); `harness_ok` / `result` unchanged.*
 
 ### Every run had the same event shape
 
@@ -431,7 +471,7 @@ Captured full-page at 1440×900; 21 files, 2,107,067 bytes, none over 250 KB (no
 
 | # | Finding | Evidence | Issue |
 |---|---|---|---|
-| F1 | **The approved plan is never executed.** After approving "Run recon" (×2) and "New test" (×1), zero sibling runs and zero campaigns appeared, immediately and after a 120 s grace. `GET /runs` grew by exactly the one launched run each time. The feature's own copy ("sibling runs land the work", "run the approved plan as governed sibling runs under one test") has no engine counterpart. | `report.json` → `siblings_after_grace` for LT-1/2/3; crew `packages/crew/src/api/testing.ts` has no plan→launch consumer | crew#473 (extended with this evidence) |
+| F1 | **The approved plan is never executed.** After approving "Run recon" (×2) and "New test" (×1), zero sibling runs and zero campaigns appeared, immediately and after a 120 s grace. `GET /runs` grew by exactly the one launched run each time. The feature's own copy ("sibling runs land the work", "run the approved plan as governed sibling runs under one test") has no engine counterpart. *Round 9: and nothing the daemon exposes could have attributed a sibling had one appeared — no campaign is served for the returned label and the run DTO carries no parent pointer (`structural_linkage.available: false`); the verdict names it `no-structural-attribution`. A text mention of the run id in another run's problem is not a relationship and is never treated as one.* | `report.json` → `siblings_after_grace` (+ `structural_linkage`) for LT-1/2/3; crew `packages/crew/src/api/testing.ts` has no plan→launch consumer | crew#473 (extended with this evidence) |
 | F2 | **The only human gate is pre-execution.** Prompt: "Approve unit 1 before it runs: …" (180/246 chars; no plan content — the plan does not exist yet). After the plan is produced the units self-pass (`gateDecided` auto) and the session completes. LT-2's unit 3 literally ends "Holding at the gate — launching nothing until you approve. Want me to…?" with no gate to hold at. | `gate.pre_execution: true`, `contains_plan: false` ×3; LT-2 plan unit 3 | crew#473 |
 | F3 | **The UI's prefix fans every launch into 3 units.** Two prefix sentences + the one-sentence brief → `unitPlanned` ×3 → three councils per launch (LT-1 total 10m 51s). Product intent is 1. | `units_planned: 3` ×3 with the split texts | core#393 (extended with the measured count) |
 | F4 | **The split detaches the operator's brief from the "recon" instruction.** Unit 1 receives only "Recon: survey the target and propose a test plan…" and surveys whatever it finds interesting (LT-1/LT-3: the Home deck) or asks for a scope (LT-2). Only unit 3 works on the brief. | LT-1/2/3 plan files, unit 1 | core#393 (consequence) |
@@ -514,6 +554,46 @@ and records free/available memory for the report. All three launches cleared on 
 any point; the harness never registered, modified or deleted anything on the daemon; no PR/push was
 attempted by any run (`delivery: vacuous`).
 
+## Known limitations (reviewer heuristics that remain)
+
+The harness re-derives its verdicts from recorded evidence, but several of its readings are still
+heuristics over free text, or over what the daemon happens to expose. They are listed here rather
+than papered over; none of them can turn a `fail` into a `pass`, and each fails visibly rather than
+silently.
+
+- **Plan analysis is text analysis.** `analyze_plan` extracts scenario rows, "real files"
+  (canonicalized against `git ls-files`) and the tool-vs-agent classification from free-form worker
+  output with regexes (scenario verbs, result structures, survey-bullet shapes, surface nouns). It
+  gates `names_real_files` / `classifies` — necessary, never sufficient for `pass` — and the LT-3
+  consistency numbers (38.6 % / n/a / 0 %) measure that extraction, not a plan schema (there is none
+  — F9). A differently phrased plan would move these numbers without any feature change.
+- **The gate policy is an allow-list over prompt text plus unit metadata.** Approve requires a
+  recognized pre-execution shape, a recognized non-delivery `stage`/`gate` and no delivery verb
+  anywhere in the complete daemon prompt; anything else abstains (no click) or rejects. A delivery
+  gate phrased in words the verb list does not know is caught only if its `stage`/`gate` metadata
+  says so — the metadata check is the load-bearing one.
+- **`card_headline` re-implements studio's `cleanPrompt()`.** The card-consistency check depends on
+  that rule; a UI change to it would surface as `card-inconsistent` abstentions (harness failures),
+  not as approvals.
+- **Structural attribution depends on what the daemon exposes.** Siblings are attributed only
+  through campaign membership, `campaign_id`/`group_label` or a parent field. Today's single-repo
+  launches register no campaign and the run DTO carries no parent pointer, so the feature verdict is
+  `no-structural-attribution` until crew exposes the linkage (crew#473); the harness does not infer
+  it from text and cannot be made to.
+- **Campaign completeness is read from the DTO** (`def.nodes` / `node_status` / `attached_runs` /
+  `status`). Work scheduled outside those fields would not be waited for — none is today.
+- **`awaitingHuman_over_ws` counts frames whose `session` equals the launched run id** — the
+  correlation studio itself uses; a frame-shape change reads as `gate-frame-not-received` (a
+  harness failure), never as a pass.
+- **The swap gate ran under an acknowledged 95 % deviation** for the three recorded launches
+  (see "Preflight history"); the contract's 85 % is what the harness enforces by default.
+- **Two preflight gates postdate the recorded launches** — the fan-out fence and the unknown-run-status
+  classification (both backfilled `not measured`); the recorded preflights were judged on active
+  runs, load and swap.
+- **The intent framing is checked by its leading words** (`Recon:` / `New test:`) plus the panel's
+  `data-intent`; the rest of the panel's prefix copy is not pinned, so a copy edit does not fail the
+  harness — an intent swap does.
+
 ## Reproduce
 
 ```
@@ -546,7 +626,12 @@ python3 -m py_compile e2e/test_feature_live.py             # rules on tokens (in
                                                            # metadata (an incomplete record / a partially known unit kind ⇒ abstain;
                                                            # an approve needs the card's ord), the canonical daemon origin + fixed lock
                                                            # dir (TMPDIR never moves it), the per-invocation run dir (a blocked
-                                                           # preflight leaves the root byte-identical) + --promote, survey prose
+                                                           # preflight leaves the root byte-identical) + --promote, survey prose;
+                                                           # round 9: STRUCTURAL-only attribution (a text mention is unrelated, never
+                                                           # gated), the preflight's unknown-run-status block (null / unrecognized ⇒
+                                                           # blocked), campaign completeness (a pending node ⇒ campaign-incomplete),
+                                                           # the asserted launch contract (repo, framing + brief, WS gate frame,
+                                                           # LT-1 ≡ LT-3) — re-derived over the three recorded launches
 ```
 
 Requires `pip install playwright && playwright install chromium`, a reachable crew daemon with the

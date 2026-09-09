@@ -19,7 +19,8 @@
      "blocked_by": [],
      "swap_max_pct": 95,
      "load1_max": 20,
-     "fanout": "not measured \u2014 the fan-out gate (fanout_processes over `ps -axo pid=,command=`, codex round 3) postdates these launches; a live reading on this host at review time listed a second `wicked-crew serve --port 62432` daemon and codex council seats, i.e. the gate would have blocked"
+     "fanout": "not measured \u2014 the fan-out gate (fanout_processes over `ps -axo pid=,command=`, codex round 3) postdates these launches; a live reading on this host at review time listed a second `wicked-crew serve --port 62432` daemon and codex council seats, i.e. the gate would have blocked",
+     "unknown_status_runs": "not measured"
     }
    ],
    "cleared": true,
@@ -40,7 +41,8 @@
      "blocked_by": [],
      "swap_max_pct": 95,
      "load1_max": 20,
-     "fanout": "not measured \u2014 the fan-out gate (fanout_processes over `ps -axo pid=,command=`, codex round 3) postdates these launches; a live reading on this host at review time listed a second `wicked-crew serve --port 62432` daemon and codex council seats, i.e. the gate would have blocked"
+     "fanout": "not measured \u2014 the fan-out gate (fanout_processes over `ps -axo pid=,command=`, codex round 3) postdates these launches; a live reading on this host at review time listed a second `wicked-crew serve --port 62432` daemon and codex council seats, i.e. the gate would have blocked",
+     "unknown_status_runs": "not measured"
     }
    ],
    "cleared": true,
@@ -61,7 +63,8 @@
      "blocked_by": [],
      "swap_max_pct": 95,
      "load1_max": 20,
-     "fanout": "not measured \u2014 the fan-out gate (fanout_processes over `ps -axo pid=,command=`, codex round 3) postdates these launches; a live reading on this host at review time listed a second `wicked-crew serve --port 62432` daemon and codex council seats, i.e. the gate would have blocked"
+     "fanout": "not measured \u2014 the fan-out gate (fanout_processes over `ps -axo pid=,command=`, codex round 3) postdates these launches; a live reading on this host at review time listed a second `wicked-crew serve --port 62432` daemon and codex council seats, i.e. the gate would have blocked",
+     "unknown_status_runs": "not measured"
     }
    ],
    "cleared": true,
@@ -1474,14 +1477,28 @@
      "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
-     "sibling_acceptance": {}
+     "sibling_acceptance": {},
+     "structural_linkage": {
+      "campaign_served": false,
+      "campaign_linked_run_ids": [],
+      "structural_fields_on_new_runs": [],
+      "available": false,
+      "note": "backfilled (round 9): recorded at the time \u2014 campaignRegistered=false, campaign_for_label=[] (no campaign served for the label) and zero new runs (no run DTO to carry a campaign/parent field) \u2014 so no structural linkage was exposed for this launch; text mentions never count"
+     }
     },
     "siblings_after_grace": {
      "attributable_siblings": [],
      "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
-     "sibling_acceptance": {}
+     "sibling_acceptance": {},
+     "structural_linkage": {
+      "campaign_served": false,
+      "campaign_linked_run_ids": [],
+      "structural_fields_on_new_runs": [],
+      "available": false,
+      "note": "backfilled (round 9): recorded at the time \u2014 campaignRegistered=false, campaign_for_label=[] (no campaign served for the label) and zero new runs (no run DTO to carry a campaign/parent field) \u2014 so no structural linkage was exposed for this launch; text mentions never count"
+     }
     },
     "landing_after": {
      "campaign_cards": 1,
@@ -1572,7 +1589,23 @@
     "gates_seen": 1,
     "missing_outputs": [],
     "failed_fetches": [],
-    "fetch_errors": []
+    "fetch_errors": [],
+    "contract": {
+     "repo_refs": [
+      "wicked-studio"
+     ],
+     "repo_refs_ok": true,
+     "problem_chars": 695,
+     "problem_ends_with_instruction": true,
+     "intent": "recon",
+     "intent_prefix": "Recon:",
+     "framing_head": "Recon: survey the target and propose a t",
+     "panel_intent": null,
+     "intent_ok": true,
+     "awaiting_human_frames_before_decision": 1,
+     "gate_frame_ok": true,
+     "failures": []
+    }
    },
    "notes": [
     "the recon produced a plan but launched no sibling runs \u2014 the feature's copy promises otherwise"
@@ -1588,7 +1621,9 @@
    ],
    "harness_ok": true,
    "fail_reasons": [
-    "no attributable sibling runs after the approved recon completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)"
+    "no attributable sibling runs after the approved recon completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)",
+    "no-structural-attribution",
+    "the daemon exposed no structural linkage for this launch (campaign not served for the label, no campaign/parent field on any new run) \u2014 siblings cannot be attributed; text mentions are never attribution (crew#473)"
    ]
   },
   "LT-2": {
@@ -2895,14 +2930,28 @@
      "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
-     "sibling_acceptance": {}
+     "sibling_acceptance": {},
+     "structural_linkage": {
+      "campaign_served": false,
+      "campaign_linked_run_ids": [],
+      "structural_fields_on_new_runs": [],
+      "available": false,
+      "note": "backfilled (round 9): recorded at the time \u2014 campaignRegistered=false, campaign_for_label=[] (no campaign served for the label) and zero new runs (no run DTO to carry a campaign/parent field) \u2014 so no structural linkage was exposed for this launch; text mentions never count"
+     }
     },
     "siblings_after_grace": {
      "attributable_siblings": [],
      "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
-     "sibling_acceptance": {}
+     "sibling_acceptance": {},
+     "structural_linkage": {
+      "campaign_served": false,
+      "campaign_linked_run_ids": [],
+      "structural_fields_on_new_runs": [],
+      "available": false,
+      "note": "backfilled (round 9): recorded at the time \u2014 campaignRegistered=false, campaign_for_label=[] (no campaign served for the label) and zero new runs (no run DTO to carry a campaign/parent field) \u2014 so no structural linkage was exposed for this launch; text mentions never count"
+     }
     },
     "landing_after": {
      "campaign_cards": 1,
@@ -2990,7 +3039,23 @@
     "gates_seen": 1,
     "missing_outputs": [],
     "failed_fetches": [],
-    "fetch_errors": []
+    "fetch_errors": [],
+    "contract": {
+     "repo_refs": [
+      "wicked-studio"
+     ],
+     "repo_refs_ok": true,
+     "problem_chars": 752,
+     "problem_ends_with_instruction": true,
+     "intent": "campaign",
+     "intent_prefix": "New test:",
+     "framing_head": "New test: plan the test for the attached",
+     "panel_intent": null,
+     "intent_ok": true,
+     "awaiting_human_frames_before_decision": 1,
+     "gate_frame_ok": true,
+     "failures": []
+    }
    },
    "notes": [
     "the campaign produced a plan but launched no sibling runs \u2014 the feature's copy promises otherwise"
@@ -3007,6 +3072,8 @@
    "harness_ok": true,
    "fail_reasons": [
     "no attributable sibling runs after the approved campaign completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)",
+    "no-structural-attribution",
+    "the daemon exposed no structural linkage for this launch (campaign not served for the label, no campaign/parent field on any new run) \u2014 siblings cannot be attributed; text mentions are never attribution (crew#473)",
     "no engine campaign registered for label recon-mttnf3s6-99e928c5 (campaignRegistered=false)"
    ]
   },
@@ -4319,14 +4386,28 @@
      "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
-     "sibling_acceptance": {}
+     "sibling_acceptance": {},
+     "structural_linkage": {
+      "campaign_served": false,
+      "campaign_linked_run_ids": [],
+      "structural_fields_on_new_runs": [],
+      "available": false,
+      "note": "backfilled (round 9): recorded at the time \u2014 campaignRegistered=false, campaign_for_label=[] (no campaign served for the label) and zero new runs (no run DTO to carry a campaign/parent field) \u2014 so no structural linkage was exposed for this launch; text mentions never count"
+     }
     },
     "siblings_after_grace": {
      "attributable_siblings": [],
      "unrelated_new_runs": [],
      "new_campaigns": [],
      "campaign_for_label": [],
-     "sibling_acceptance": {}
+     "sibling_acceptance": {},
+     "structural_linkage": {
+      "campaign_served": false,
+      "campaign_linked_run_ids": [],
+      "structural_fields_on_new_runs": [],
+      "available": false,
+      "note": "backfilled (round 9): recorded at the time \u2014 campaignRegistered=false, campaign_for_label=[] (no campaign served for the label) and zero new runs (no run DTO to carry a campaign/parent field) \u2014 so no structural linkage was exposed for this launch; text mentions never count"
+     }
     },
     "landing_after": {
      "campaign_cards": 1,
@@ -4413,7 +4494,23 @@
     "gates_seen": 1,
     "missing_outputs": [],
     "failed_fetches": [],
-    "fetch_errors": []
+    "fetch_errors": [],
+    "contract": {
+     "repo_refs": [
+      "wicked-studio"
+     ],
+     "repo_refs_ok": true,
+     "problem_chars": 695,
+     "problem_ends_with_instruction": true,
+     "intent": "recon",
+     "intent_prefix": "Recon:",
+     "framing_head": "Recon: survey the target and propose a t",
+     "panel_intent": null,
+     "intent_ok": true,
+     "awaiting_human_frames_before_decision": 1,
+     "gate_frame_ok": true,
+     "failures": []
+    }
    },
    "notes": [
     "the recon produced a plan but launched no sibling runs \u2014 the feature's copy promises otherwise"
@@ -4502,11 +4599,22 @@
       "cli": true,
       "ui_pages": true
      }
+    ],
+    "problem_identical": true,
+    "problem_chars": [
+     695,
+     695
+    ],
+    "problem_sha256": [
+     "bc82d91c39a75432",
+     "bc82d91c39a75432"
     ]
    },
    "harness_ok": true,
    "fail_reasons": [
-    "no attributable sibling runs after the approved recon completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)"
+    "no attributable sibling runs after the approved recon completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)",
+    "no-structural-attribution",
+    "the daemon exposed no structural linkage for this launch (campaign not served for the label, no campaign/parent field on any new run) \u2014 siblings cannot be attributed; text mentions are never attribution (crew#473)"
    ]
   },
   "LT-4": {
@@ -4687,7 +4795,20 @@
    "ack": "coordinator authorization mid-run (2026-09-09), hard-coded 95 in the harness at launch time \u2014 predates SWAP_MAX_PCT / SWAP_MAX_PCT_ACK=contract-deviation; accepted as deviation evidence under the contract AMENDMENT of 2026-09-09 (its author, the coordinator, after codex rounds 2-4: the 85% default stands; an EXPLICIT operator override \u2014 SWAP_MAX_PCT together with SWAP_MAX_PCT_ACK=contract-deviation \u2014 is permitted and MUST be recorded in the report as a contract deviation; the three recorded launches ran under an authorized 95% override at 93% swap and are accepted as deviation evidence)",
    "note": "swap gate was 95%, not the brief's 85% \u2014 this host idles at ~93% swap; all three recorded launches read 93.0% and cleared ONLY because of the relaxation; under the default 85% none of them would have launched. The three recorded runs remain deviation evidence."
   },
-  "fanout_gate": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`) \u2014 round 5: the fence also matches build shorthand (`npm|pnpm|yarn|bun` with build|test|typecheck|lint|check anywhere, with or without `run`: `pnpm build`, `yarn build`, `bun test`) and direct build/test executables by basename after the launcher look-through (vite, tsc, esbuild, webpack, rollup, vitest, jest, playwright, rustc, make, ninja, gradle, mvn; `go build|test`; `node \u2026/vite/bin/vite.js build`); the dogfood daemon, an idle `node` and `npm view x` still never match \u2014 round 6: also pytest|py.test by basename and any python* (python, python3, python3.12) with `-m pytest` or `-m unittest` among its tokens, with or without `-n` (`pytest -n 8`, `python3 -m pytest -n 8`); `python3 -m json.tool` and the harness's own `python3 e2e/test_feature_live.py` never match"
+  "fanout_gate": "not in force \u2014 the fan-out gate postdates these launches (codex round 3: a positional regex over `ps`; round 4: decided on the TOKENS of each command line, `FANOUT_RULES`) \u2014 round 5: the fence also matches build shorthand (`npm|pnpm|yarn|bun` with build|test|typecheck|lint|check anywhere, with or without `run`: `pnpm build`, `yarn build`, `bun test`) and direct build/test executables by basename after the launcher look-through (vite, tsc, esbuild, webpack, rollup, vitest, jest, playwright, rustc, make, ninja, gradle, mvn; `go build|test`; `node \u2026/vite/bin/vite.js build`); the dogfood daemon, an idle `node` and `npm view x` still never match \u2014 round 6: also pytest|py.test by basename and any python* (python, python3, python3.12) with `-m pytest` or `-m unittest` among its tokens, with or without `-n` (`pytest -n 8`, `python3 -m pytest -n 8`); `python3 -m json.tool` and the harness's own `python3 e2e/test_feature_live.py` never match",
+  "known_run_statuses": [
+   "awaiting_human",
+   "canceled",
+   "cancelled",
+   "completed",
+   "executing",
+   "failed",
+   "pending",
+   "planning",
+   "rejected",
+   "running",
+   "starting"
+  ]
  },
  "revisions": [
   {
@@ -5319,6 +5440,83 @@
      "old": "unknown-gate-kind \u21d2 clicked REJECT; a partially known unit ({stage:null, gate:'human'}) counted as known; a prompt-only GET /runs/:id/gate 2xx was a known gate",
      "new": "unknown-gate-kind \u21d2 reject-by-abstention (no click; stage AND gate must be recognized wire values recon|build|review|test / auto|human_confirm|human_confirm_if); an incomplete gate record (no runId/ord) is unknown-gate-kind with no events fallback; an APPROVE requires the card to render the current ord",
      "why": "codex round 8 HIGH: a unit-4 prompt served without an ord was approved against a unit-1 card and unit-1 metadata"
+    }
+   ]
+  },
+  {
+   "date": "2026-09-09",
+   "reason": "codex round-9 REVISE on PR #215 (2 HIGH, 2 MEDIUM; the harness's final fix round) \u2014 offline re-derivation with the fixed harness over the committed measurements; no new runs, no daemon writes",
+   "changes": [
+    {
+     "field": "LT-1/2/3.measured.siblings_at_terminal + siblings_after_grace .structural_linkage",
+     "old": null,
+     "new": "{campaign_served: false, campaign_linked_run_ids: [], structural_fields_on_new_runs: [], available: false}",
+     "why": "attribution is STRUCTURAL only (codex round 9 HIGH: a run whose problem mentioned the launched run id was attributed and its gate then decided); the recorded launches exposed no linkage \u2014 campaignRegistered=false, no campaign served, zero new runs"
+    },
+    {
+     "field": "preflights[].readings[].unknown_status_runs",
+     "old": null,
+     "new": "not measured",
+     "why": "backfilled: the preflight now classifies every GET /runs entry and BLOCKS on a status outside ACTIVE \u222a TERMINAL (null, missing, unrecognized \u2014 codex round 9 HIGH: `status: null` counted as inactive); the recorded readings judged active runs, load and swap only"
+    },
+    {
+     "field": "preflight_policy.known_run_statuses",
+     "old": null,
+     "new": [
+      "awaiting_human",
+      "canceled",
+      "cancelled",
+      "completed",
+      "executing",
+      "failed",
+      "pending",
+      "planning",
+      "rejected",
+      "running",
+      "starting"
+     ],
+     "why": "the policy names the statuses it knows; anything else on the listing is `unknown-run-status`, a blocker"
+    },
+    {
+     "field": "LT-1/2/3.measured.contract",
+     "old": null,
+     "new": "repoRefs ['wicked-studio'] ok; problem 695 / 752 / 695 chars = the intent's framing (Recon: / New test: / Recon:) + blank line + INSTRUCTION verbatim; awaitingHuman frames over /ws before the gate decision = 1 (each); failures []",
+     "why": "codex round 9 MEDIUM: the launch body and the WS gate count were recorded, never asserted \u2014 now judged in derive_result (launch-scope-mismatch / launch-brief-mismatch / launch-intent-mismatch / gate-frame-not-received are harness failures); the three recorded launches satisfy the contract with these values \u2014 no number changes"
+    },
+    {
+     "field": "LT-1/2/3.fail_reasons",
+     "old": [
+      [
+       "no attributable sibling runs after the approved recon completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)"
+      ],
+      [
+       "no attributable sibling runs after the approved campaign completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)",
+       "no engine campaign registered for label recon-mttnf3s6-99e928c5 (campaignRegistered=false)"
+      ],
+      [
+       "no attributable sibling runs after the approved recon completed \u2014 the approved plan was never executed (0 unrelated new runs ignored)"
+      ]
+     ],
+     "new": "+ 'no-structural-attribution' (+ the sentence naming why) for each; harness_ok true / result fail unchanged",
+     "why": "honest: with no structural linkage exposed, siblings COULD NOT have been attributed \u2014 the verdict says so instead of \"zero siblings ran\" (crew#473)"
+    },
+    {
+     "field": "LT-3.consistency_vs_LT-1.{problem_identical, problem_chars, problem_sha256}",
+     "old": null,
+     "new": "true, [695, 695], ['bc82d91c39a75432', 'bc82d91c39a75432']",
+     "why": "LT-1 and LT-3 must POST byte-identical problems for the consistency row to compare like with like \u2014 asserted in analyze() (brief-not-identical = LT-3 harness failure); the recorded pair is identical"
+    },
+    {
+     "field": "sibling attribution rule",
+     "old": "campaign membership / campaign_id\u00b7group_label / parent field / the launched run id or label in `problem` (after TEST_PROBLEM_PREFIX)",
+     "new": "campaign membership (node_run_id, attached_runs) / campaign_id\u00b7group_label / parent field ONLY; a problem mentioning the id, the label or the brief is `unrelated_new_runs[]` reason `text-mention-only`; TEST_PROBLEM_PREFIX removed",
+     "why": "codex round 9 HIGH: text mentions authorized gate decisions on unrelated runs"
+    },
+    {
+     "field": "sibling follow completion",
+     "old": "attributable set stable for two polls AND every discovered run terminal",
+     "new": "\u2026 AND every node of the launch's campaign terminal (`campaign_pending` over def.nodes / node_status / attached_runs / campaign status, read every poll); a pending node keeps following to SIBLING_FOLLOW_MAX_S \u21d2 `campaign-incomplete`",
+     "why": "codex round 9 MEDIUM: two unchanged polls certified a campaign with a `pending` node"
     }
    ]
   }

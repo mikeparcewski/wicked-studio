@@ -63,8 +63,20 @@ fixtures are never rewritten (`--promote` copies a run into the root deliberatel
 blocked-preflight invocation leaves the root untouched); survey prose is not a scenario (`tests` in
 a path token is not a verb; a code-span path + ` — ` bullet proposes nothing — LT-3 22 → 21);
 Copilot: `/repos` is a typed list, an undecodable `/ws` frame is a recorded placeholder, a non-JSON
-2xx launch answer is recorded raw. The only local resource touched is `git ls-files` of this
-worktree (for the committed-plan re-derivation) and a temp dir.
+2xx launch answer is recorded raw. Round 9: attribution is STRUCTURAL only — codex's "Investigate why
+d293f4d7-… failed" probe is `unrelated` (`text-mention-only`), never followed, never gated; a served
+campaign's `attached_runs` / `node_run_id` member is a sibling; no structural linkage ⇒
+`no-structural-attribution` in the verdict; `TEST_PROBLEM_PREFIX` is gone. The preflight fails
+CLOSED on a run status it does not know (`classify_runs`: `status: null` / `frobnicated` / missing ⇒
+`unknown-run-status` blocks; all terminal ⇒ clear; a reading without the classification is not
+clear; `readings()` end to end with faked probes). Campaign completeness: a `pending` node keeps the
+follow going to SIBLING_FOLLOW_MAX_S ⇒ `campaign-incomplete`, never pass; a node that runs on poll 4
+is followed and the campaign completes. The launch contract is asserted: `repoRefs == [TARGET_REPO]`,
+`problem` = the intent's framing + blank line + INSTRUCTION, the panel's `data-intent`, ≥ 1
+`awaitingHuman` frame before the decision (`gate-frame-not-received`), LT-1 / LT-3 byte-identical
+(`brief-not-identical`) — codex's `another-repo` / unrelated problem / zero-frame fixture fails; the
+three recorded launches satisfy all of it (re-derived with the values). The only local resource
+touched is `git ls-files` of this worktree (for the committed-plan re-derivation) and a temp dir.
 
 Run:  python3 -m unittest e2e/test_feature_live_selftest.py -v
 (studio's CI has no Python step — run this by hand before pushing a harness change.)
@@ -97,7 +109,8 @@ DEVIATION_ENV = {"SWAP_MAX_PCT": "95", **ACK}
 
 
 def reading(**over) -> dict:
-    base = {"ts": "00:00:00", "free_mb": 60, "available_mb": 16000, "load1": 8.5, "swap_pct": 93.0, "active_runs": [], "fanout": []}
+    base = {"ts": "00:00:00", "free_mb": 60, "available_mb": 16000, "load1": 8.5, "swap_pct": 93.0, "active_runs": [],
+            "unknown_status_runs": [], "fanout": []}   # round 9: `[]` is the only clear unknown-status reading
     base.update(over)
     return base
 
@@ -117,11 +130,28 @@ class FakeClock:
 
 # A measured block shaped like the recorded LT-1 (d293f4d7…): everything the harness did worked,
 # the run completed with a real-file-naming, classifying plan — and zero siblings appeared.
+RECON_FRAMING = ("Recon: survey the target and propose a test plan — the scenarios, their dependencies, and which are deterministic "
+                 "tool checks vs governed agent runs. Present the proposed plan at the intake gate and launch nothing until it is approved.")
+TEST_FRAMING = ("New test: plan the test for the attached scope — the scenarios, their dependencies, and which are deterministic tool "
+                "checks vs governed agent runs — and run the approved plan as governed sibling runs under one test. Present the plan at "
+                "the intake gate and launch nothing until it is approved.")
+
+
+def problem_for(intent: str) -> str:
+    """What the panel posts for `intent` (TestingLaunchPanel.tsx: `${prefix}\\n\\n${brief}`) — the recorded framings."""
+    return f"{RECON_FRAMING if intent == 'recon' else TEST_FRAMING}\n\n{tfl.INSTRUCTION}"
+
+
+CONTRACT_LABELS = ("launch-scope-mismatch", "launch-brief-mismatch", "launch-intent-mismatch", "gate-frame-not-received")
+
+
 def recorded_like(intent: str = "recon", **over) -> dict:
     m = {
         "scenario": "LT-X", "intent": intent, "result": "not-run", "notes": [],
         "measured": {
             "post_status": 201, "run_ids": ["run-1"], "campaign_label": "recon-abc-123", "campaign_registered": False,
+            # the launch's wire contract as the recorded runs met it (round 9: asserted, not just recorded)
+            "post_body": {"problem": problem_for(intent), "repoRefs": [tfl.TARGET_REPO]}, "panel_intent": intent, "awaitingHuman_over_ws": 1,
             "gate_on_panel_card": True, "gate_via_run_page_fallback": False,
             "gates": [{"ord": 1, "first": True, "prompt": "Approve unit 1 before it runs: Recon: …", "decision": "approve",
                        "reason": "imperative is not deliver-class", "status": 200, "unit": {"stage": "test", "gate": "auto"}}],
@@ -231,6 +261,89 @@ class PreflightThresholds(Isolated):
             self.assertEqual(tfl.REPORT["contract_deviation"]["effective"], 95)  # the report's top-level object
         finally:
             tfl.readings, tfl.log = saved_readings, saved_log
+
+
+# ── Round 9 (HIGH): the preflight fails CLOSED on a run status it does not know ────────────────
+
+
+class PreflightRunStatus(Isolated):
+    """Codex round 9: `readings()` read `status in ACTIVE`, so an injected `/runs` entry with
+    `session.status: null` produced `active_runs=[]` and no preflight blocker — unknown daemon
+    state counted as "clear". Now every status outside ACTIVE ∪ TERMINAL (`KNOWN_STATUSES`) is an
+    `unknown_status_runs` record (`classify_runs`) and BLOCKS (`unknown-run-status`), and a reading
+    without the classification is not clear either — the fan-out gate's fail-closed shape."""
+
+    def run_(self, rid, status):
+        return {"session": {"id": rid, "status": status}}
+
+    def test_codex_probe_status_null_blocks_the_launch(self):
+        c = tfl.classify_runs([self.run_("u1", None)])
+        self.assertEqual(c, {"active": [], "terminal": [], "unknown": [{"id": "u1", "status": None}]})
+        why = tfl.preflight_ok(reading(swap_pct=50.0, unknown_status_runs=c["unknown"]), tfl.preflight_policy({}))
+        self.assertEqual(why, ["unknown-run-status: [{'id': 'u1', 'status': None}]"])
+
+    def test_unrecognized_missing_and_malformed_statuses_block(self):
+        runs = [self.run_("u1", "frobnicated"), {"session": {"id": "u2"}}, {"session": None}, {"no": "session"}, self.run_("u3", 7),
+                self.run_("u4", {"weird": True})]
+        c = tfl.classify_runs(runs)
+        self.assertEqual((c["active"], c["terminal"]), ([], []))
+        self.assertEqual([u["id"] for u in c["unknown"]], ["u1", "u2", None, None, "u3", "u4"])
+        self.assertEqual(c["unknown"][0]["status"], "frobnicated")
+        self.assertEqual(c["unknown"][5]["status"], "{'weird': True}")   # repr — the reading stays serializable
+        json.dumps(c)
+        why = tfl.preflight_ok(reading(swap_pct=50.0, unknown_status_runs=c["unknown"]), tfl.preflight_policy({}))
+        self.assertEqual(len(why), 1)
+        self.assertTrue(why[0].startswith("unknown-run-status: [{'id': 'u1', 'status': 'frobnicated'}"), why)
+        for st in ("frobnicated", None, "", "COMPLETED"):   # case matters: the wire is lower-case
+            self.assertEqual(tfl.classify_runs([self.run_("x", st)])["unknown"], [{"id": "x", "status": st}], st)
+
+    def test_all_terminal_is_clear_and_active_still_blocks_as_active(self):
+        runs = [self.run_("t1", "completed"), self.run_("t2", "failed"), self.run_("t3", "cancelled"), self.run_("t4", "canceled"), self.run_("t5", "rejected")]
+        c = tfl.classify_runs(runs)
+        self.assertEqual((c["active"], c["unknown"], c["terminal"]), ([], [], ["t1", "t2", "t3", "t4", "t5"]))
+        self.assertEqual(tfl.preflight_ok(reading(swap_pct=50.0, active_runs=c["active"], unknown_status_runs=c["unknown"]), tfl.preflight_policy({})), [])
+        c = tfl.classify_runs(runs + [self.run_("a1", "awaiting_human"), self.run_("u1", None)])
+        self.assertEqual((c["active"], c["unknown"]), (["a1"], [{"id": "u1", "status": None}]))
+        why = tfl.preflight_ok(reading(swap_pct=50.0, active_runs=c["active"], unknown_status_runs=c["unknown"]), tfl.preflight_policy({}))
+        self.assertEqual(why, ["active runs: ['a1']", "unknown-run-status: [{'id': 'u1', 'status': None}]"])
+        self.assertEqual(tfl.KNOWN_STATUSES, tfl.ACTIVE | tfl.TERMINAL)
+        self.assertEqual(tfl.preflight_policy({})["known_run_statuses"], sorted(tfl.ACTIVE | tfl.TERMINAL))
+
+    def test_a_reading_without_the_classification_is_not_clear(self):
+        r = reading(swap_pct=50.0)
+        del r["unknown_status_runs"]
+        self.assertEqual(tfl.preflight_ok(r, tfl.preflight_policy({})), ["unknown-run-status: not measured"])
+        self.assertEqual(tfl.preflight_ok(reading(swap_pct=50.0, unknown_status_runs=None), tfl.preflight_policy({})), ["unknown-run-status: not measured"])
+
+    def test_readings_classifies_the_live_listing_and_a_failed_listing_blocks_twice(self):
+        """`readings()` end to end with the macOS probes faked: codex's listing (one `status: null`
+        entry beside a completed run) yields `active_runs=[]` AND `unknown_status_runs=[…]` and the
+        reading is BLOCKED; the same listing without the null entry clears; a listing that raises
+        is `ERR` (active) + `not measured` (unknown) — two blockers, never a clear reading."""
+        vm = ("Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:  1000.\nPages inactive: 2000.\n"
+              "Pages speculative: 10.\nPages purgeable: 5.\n")
+        probes = {"vm_stat": vm, "vm.loadavg": "{ 3.5 4.0 4.2 }", "vm.swapusage": "total = 8192.00M  used = 4096.00M  free = 4096.00M  (encrypted)"}
+        listing = [self.run_("done", "completed"), self.run_("u1", None)]
+        with mock.patch.object(tfl.sys, "platform", "darwin"), mock.patch.object(tfl, "_probe", lambda argv: probes[argv[-1]]), \
+                mock.patch.object(tfl, "list_runs", lambda: listing), mock.patch.object(tfl, "fanout_processes", lambda: []):
+            r = tfl.readings()
+            self.assertEqual((r["active_runs"], r["unknown_status_runs"], r["swap_pct"], r["load1"]), ([], [{"id": "u1", "status": None}], 50.0, 3.5))
+            self.assertEqual(tfl.preflight_ok(r, tfl.preflight_policy({})), ["unknown-run-status: [{'id': 'u1', 'status': None}]"])
+            listing[:] = [self.run_("done", "completed")]
+            self.assertEqual(tfl.preflight_ok(tfl.readings(), tfl.preflight_policy({})), [])
+
+        def boom():
+            raise tfl.FetchError(tfl.FetchMiss("/runs", 503, "down"))
+        with mock.patch.object(tfl.sys, "platform", "darwin"), mock.patch.object(tfl, "_probe", lambda argv: probes[argv[-1]]), \
+                mock.patch.object(tfl, "list_runs", boom), mock.patch.object(tfl, "fanout_processes", lambda: []):
+            r = tfl.readings()
+        self.assertTrue(r["active_runs"][0].startswith("ERR "), r)
+        self.assertIsNone(r["unknown_status_runs"])
+        why = tfl.preflight_ok(r, tfl.preflight_policy({}))
+        self.assertTrue(why[0].startswith("active runs: ['ERR "), why)
+        self.assertEqual(why[1], "unknown-run-status: not measured")
+        self.assertIn("classified = classify_runs(list_runs())", inspect.getsource(tfl.readings))
+        self.assertNotIn('["status"] in ACTIVE]', inspect.getsource(tfl.readings))   # the round-8 comprehension is gone
 
 
 # ── Item 4: the pre-submit preflight and the launch reservation ───────────────────────────────
@@ -2075,6 +2188,99 @@ class SiblingGatesThroughTheUI(Isolated):
         self.assertNotIn('http_json("POST"', src)  # the harness has no POST path at all — gates go through the UI
         self.assertNotIn('method="POST"', src)
 
+    # ── Round 9 (MEDIUM): completion is the CAMPAIGN's, not "no new runs for two polls" ──────
+
+    def test_campaign_pending_names_every_open_node(self):
+        self.assertEqual(tfl.campaign_pending(None), [])
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": []}), [])
+        done = {"id": "c", "status": "completed", "node_status": {"a": "completed", "b": "failed", "c": "blocked", "d": "cancelled"},
+                "def_nodes": ["a", "b", "c", "d"], "attached_runs": [{"runId": "x", "status": "completed"}]}
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": [done]}), [])
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": [{**done, "status": "partially_completed"}]}), [])
+        open_ = {"id": "c", "status": "paused", "node_status": {"a": "completed", "b": "ready_to_resume"}, "def_nodes": ["a", "b", "c"],
+                 "attached_runs": [{"runId": "x", "status": "awaiting_human"}]}
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": [open_]}),
+                         ["campaign c node c: no node_status yet (scheduled, not started)", "campaign c node b: ready_to_resume",
+                          "campaign c attached run x: awaiting_human", "campaign c status paused"])
+        for st in ("pending", "ready", "running", "awaiting_human", "ready_to_resume"):
+            self.assertEqual(tfl.campaign_pending({"campaign_for_label": [{**done, "node_status": {**done["node_status"], "a": st}}]}),
+                             [f"campaign c node a: {st}"], st)
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": [{"id": "c"}]}), ["campaign c status None"])   # a status-less record is not complete
+        self.assertEqual((tfl.NODE_TERMINAL, tfl.CAMPAIGN_TERMINAL),
+                         ({"completed", "failed", "blocked", "cancelled"}, {"completed", "partially_completed", "failed", "cancelled"}))
+
+    def test_codex_round9_a_pending_campaign_node_keeps_the_follow_going_and_fails_campaign_incomplete(self):
+        """Codex's reproduction: a fake campaign with one completed sibling and another node
+        `pending` stopped following after 15 s (the discovered set stable for two polls, every
+        DISCOVERED run terminal) and received `{harness_ok: true, result: "pass"}`. Completion is now
+        the campaign's: the pending node keeps the follow going to SIBLING_FOLLOW_MAX_S, then
+        `campaign-incomplete` — not pass."""
+        camp = {"id": "lbl", "status": "running", "node_status": {"a": "completed", "b": "pending"}, "def_nodes": ["a", "b"],
+                "node_run_id": {"a": "s1"}, "attached_runs": []}
+
+        def rediscover():
+            return {"attributable_siblings": [{"id": "s1", "attributed_by": "listed in the campaign's node_run_id/attached_runs"}],
+                    "unrelated_new_runs": [], "campaign_for_label": [camp],
+                    "structural_linkage": {"campaign_served": True, "campaign_linked_run_ids": ["s1"], "structural_fields_on_new_runs": [], "available": True}}
+        tfl.run_detail = lambda sid: {"session": {"status": "completed"}}
+        tfl.acceptance_verdict = lambda sid: "pass"
+        clock = FakeClock()
+        out = tfl.follow_siblings(["s1"], max_s=60, sleep=clock.sleep, page=FakePage("x"), tag="LT-2", rediscover=rediscover, clock=clock, poll_s=15)
+        self.assertEqual((out["timed_out"], out["all_terminal"], out["stable_polls"], out["polls"]), (True, True, 5, 5))  # it kept going: 0, 15, 30, 45, 60 s
+        self.assertEqual(out["campaign_pending"], ["campaign lbl node b: pending", "campaign lbl status running"])
+        self.assertFalse(out["campaign_complete"])
+        self.assertTrue(any("campaign-incomplete: ['campaign lbl node b: pending'" in f for f in tfl.REPORT["findings"]), tfl.REPORT["findings"][-1:])
+        m = with_siblings("s1", siblings_followed=out)
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = [camp]
+        v = tfl.derive_result(m, [])
+        self.assertTrue(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertIn("campaign-incomplete", v["fail_reasons"])
+        self.assertIn("campaign not complete: campaign lbl node b: pending", v["fail_reasons"])
+        self.assertTrue(any("SIBLING_FOLLOW_MAX_S" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        # the same campaign judged WITHOUT a follow record (the after-grace snapshot alone): still not pass
+        m = with_siblings("s1", siblings_followed={"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}})
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = [camp]
+        v = tfl.derive_result(m, [])
+        self.assertEqual(v["result"], "fail")
+        self.assertIn("campaign-incomplete", v["fail_reasons"])
+
+    def test_a_node_delayed_beyond_two_polls_is_followed_when_it_runs_and_the_campaign_completes(self):
+        """The positive: node b stays `pending` for three polls (past the old two-poll certification),
+        then its run s2 appears in `node_run_id`, is followed to completion, and the campaign turns
+        `completed` — only then does the follow end, and the verdict is `pass`."""
+        polls = {"n": 0}
+
+        def rediscover():
+            polls["n"] += 1
+            n = polls["n"]
+            if n <= 3:
+                camp = {"id": "lbl", "status": "running", "node_status": {"a": "completed", "b": "pending"}, "def_nodes": ["a", "b"], "node_run_id": {"a": "s1"}, "attached_runs": []}
+                sibs = ["s1"]
+            elif n <= 5:
+                camp = {"id": "lbl", "status": "running", "node_status": {"a": "completed", "b": "running"}, "def_nodes": ["a", "b"], "node_run_id": {"a": "s1", "b": "s2"}, "attached_runs": []}
+                sibs = ["s1", "s2"]
+            else:
+                camp = {"id": "lbl", "status": "completed", "node_status": {"a": "completed", "b": "completed"}, "def_nodes": ["a", "b"], "node_run_id": {"a": "s1", "b": "s2"}, "attached_runs": []}
+                sibs = ["s1", "s2"]
+            return {"attributable_siblings": [{"id": s, "attributed_by": "listed in the campaign's node_run_id/attached_runs"} for s in sibs],
+                    "unrelated_new_runs": [], "campaign_for_label": [camp]}
+        s2 = iter(["running", "running", "completed", "completed"])
+        tfl.run_detail = lambda sid: {"session": {"status": "completed" if sid == "s1" else next(s2)}}
+        tfl.acceptance_verdict = lambda sid: "pass"
+        clock = FakeClock()
+        out = tfl.follow_siblings(["s1"], max_s=900, sleep=clock.sleep, page=FakePage("x"), tag="LT-2", rediscover=rediscover, clock=clock, poll_s=15)
+        # polls 1-3: s1 done but b pending → not complete; poll 4: s2 appears (stable 0); 5: stable 1; 6: stable 2, campaign completed → done
+        self.assertEqual((out["polls"], out["timed_out"], out["all_terminal"], out["campaign_pending"], out["campaign_complete"]), (6, False, True, [], True))
+        self.assertEqual(out["discovered"]["s2"]["poll"], 4)
+        m = with_siblings("s1", siblings_followed=out)
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = rediscover()["campaign_for_label"]
+        self.assertEqual(tfl.derive_result(m, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        src = inspect.getsource(tfl.follow_siblings)
+        self.assertIn("pending = campaign_pending(final_attribution)", src)
+        self.assertIn("if all_terminal and stable >= 2 and not pending:", src)
+        self.assertIn('"def_nodes": [n.get("node_id") for n in ((c.get("def") or {}).get("nodes") or [])', inspect.getsource(tfl._drive_intake))  # the live rediscovery records the denominator
+
 
 # ── Item 2: the verdict split — every sibling terminal WITH its own verdict ────────────────────
 
@@ -2124,7 +2330,7 @@ class ResultSplit(Isolated):
         self.assertEqual(v["result"], "fail")
         self.assertTrue(any("campaignRegistered=false" in r for r in v["fail_reasons"]))
         m["measured"]["campaign_registered"] = True
-        m["measured"]["siblings_after_grace"]["campaign_for_label"] = [{"id": "recon-abc-123"}]
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = [{"id": "recon-abc-123", "status": "completed", "node_status": {}, "def_nodes": [], "attached_runs": []}]
         self.assertEqual(tfl.derive_result(m, [])["result"], "pass")
 
     def test_plan_heuristics_alone_never_spell_pass(self):
@@ -2209,24 +2415,135 @@ class ResultSplit(Isolated):
         v = tfl.derive_result(blocked, ["preflight never cleared for LT-1 after 20 min"])
         self.assertEqual(v, {"harness_ok": False, "result": "blocked-preflight", "fail_reasons": ["preflight never cleared"]})
 
+    # ── Round 9 (MEDIUM): the launch's wire contract is ASSERTED, not just recorded ──────────
+
+    def test_codex_round9_contract_mismatches_are_harness_failures(self):
+        """Codex's fixture: everything else in order, `repoRefs: ["another-repo"]`, an unrelated
+        problem and ZERO `awaitingHuman` WS frames → `pass`. Now each is a named harness failure
+        (`contract_check`), a missing body / count fails closed, and the check is skipped only when
+        no launch was submitted (the pre-submit preflight already names that)."""
+        followed = {"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}}
+        ok = with_siblings("s1", siblings_followed=followed)
+        self.assertEqual(tfl.derive_result(ok, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        c = ok["measured"]["contract"]
+        self.assertEqual((c["repo_refs"], c["repo_refs_ok"], c["problem_ends_with_instruction"], c["intent_ok"], c["gate_frame_ok"], c["failures"]),
+                         ([tfl.TARGET_REPO], True, True, True, True, []))
+        self.assertEqual((c["intent"], c["intent_prefix"], c["panel_intent"], c["awaiting_human_frames_before_decision"]), ("recon", "Recon:", "recon", 1))
+        bad = with_siblings("s1", siblings_followed=followed, post_body={"problem": "unrelated", "repoRefs": ["another-repo"]}, awaitingHuman_over_ws=0)
+        v = tfl.derive_result(bad, [])
+        self.assertFalse(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        for label in CONTRACT_LABELS:
+            self.assertIn(label, v["fail_reasons"])
+        # each alone
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"problem": problem_for("recon"), "repoRefs": ["another-repo"]}), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-scope-mismatch"])
+        self.assertTrue(any(f"repoRefs=['another-repo']; the contract is [{tfl.TARGET_REPO!r}]" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        # a brief truncated by one char: the brief check fails and — the framing cannot be isolated from a body that does not end in
+        # the brief — so does the intent check (fail closed: an unverifiable framing is not the panel's composition)
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"problem": problem_for("recon")[:-1], "repoRefs": [tfl.TARGET_REPO]}), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-brief-mismatch", "launch-intent-mismatch"])
+        self.assertTrue(any("does not end with INSTRUCTION" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, awaitingHuman_over_ws=0), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["gate-frame-not-received"])
+        self.assertTrue(any("received over /ws before the gate decision: 0 (≥ 1 required)" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        # a missing body / count is a mismatch (fail closed); a raw-recorded body has no repoRefs; a bool is not a count
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body=None, awaitingHuman_over_ws=None), [])
+        for label in CONTRACT_LABELS:
+            self.assertIn(label, v["fail_reasons"])
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"raw": "problem=x", "parse_error": "Expecting value"}), [])
+        self.assertIn("launch-scope-mismatch", v["fail_reasons"])
+        self.assertIn("launch-brief-mismatch", v["fail_reasons"])
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, awaitingHuman_over_ws=True), [])
+        self.assertIn("gate-frame-not-received", v["fail_reasons"])
+        # not judged when the launch was never submitted — `preflight-at-submit` already fails the harness
+        v = tfl.derive_result(recorded_like(launch_aborted_by_preflight=["active runs: ['r1']"], post_status=None, run_ids=[], gate_on_panel_card=False,
+                                            gates=[], final_status=None, post_body=None, awaitingHuman_over_ws=None), [])
+        self.assertIn("preflight-at-submit", v["fail_reasons"])
+        self.assertFalse(any(r in CONTRACT_LABELS for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertEqual(v["harness_ok"], False)
+
+    def test_the_intent_must_match_the_scenario(self):
+        followed = {"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}}
+        served = [{"id": "recon-abc-123", "status": "completed", "node_status": {}, "def_nodes": [], "attached_runs": []}]
+        # LT-2 (campaign) whose panel posted the RECON framing
+        m = with_siblings("s1", intent="campaign", siblings_followed=followed, campaign_registered=True,
+                          post_body={"problem": problem_for("recon"), "repoRefs": [tfl.TARGET_REPO]}, panel_intent="campaign")
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = served
+        v = tfl.derive_result(m, [])
+        self.assertFalse(v["harness_ok"])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-intent-mismatch"])
+        self.assertTrue(any("requires the 'New test:' framing" in r and "the problem opens 'Recon: survey" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        # the campaign framing for the campaign intent: clear
+        m = with_siblings("s1", intent="campaign", siblings_followed=followed, campaign_registered=True, panel_intent="campaign")
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = served
+        self.assertEqual(tfl.derive_result(m, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        # the right framing, but the DOM's data-intent says otherwise
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, panel_intent="campaign"), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-intent-mismatch"])
+        # no data-intent recorded (the three recorded runs): judged on the framing alone
+        self.assertEqual(tfl.derive_result(with_siblings("s1", siblings_followed=followed, panel_intent=None), []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        # the right words without the blank line before the brief: not the panel's composition
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"problem": "Recon: x " + tfl.INSTRUCTION, "repoRefs": [tfl.TARGET_REPO]}), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-intent-mismatch"])
+        # the brief alone: no framing at all — the brief check and the intent check both fail
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"problem": tfl.INSTRUCTION, "repoRefs": [tfl.TARGET_REPO]}), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-brief-mismatch", "launch-intent-mismatch"])
+        self.assertEqual(tfl.INTENT_PREFIX, {"recon": "Recon:", "campaign": "New test:"})
+
+    def test_the_ws_gate_frame_is_sampled_before_the_decision_and_the_panel_intent_is_recorded(self):
+        src = inspect.getsource(tfl._drive_intake)
+        i_ws = src.index('m["measured"]["awaitingHuman_over_ws"] = len(ws_awaiting)')
+        i_decide = src.index("decide_gate_on_card(page, card, run_id=run_id")
+        self.assertLess(i_ws, i_decide)                                                  # counted BEFORE the first gate is decided
+        self.assertIn('m["measured"]["panel_intent"] = panel.get_attribute("data-intent")', src)
+        self.assertLess(src.index('m["measured"]["panel_intent"]'), src.index('testing-launch-submit"]\').click()'))
+        self.assertIn('x["contract"] = contract', inspect.getsource(tfl.derive_result))  # recorded for the report
+
+    def test_lt1_and_lt3_must_post_identical_briefs(self):
+        a = recorded_like()
+        a["scenario"] = "LT-1"
+        c = recorded_like()
+        c.update({"scenario": "LT-3", "harness_ok": True, "result": "pass", "fail_reasons": []})
+        for m in (a, c):
+            m["measured"].pop("plan")   # no plan: the consistency block comes from the briefs alone
+        tfl.REPORT["scenarios"] = {"LT-1": a, "LT-3": c}
+        tfl.analyze({"LT-1": a, "LT-3": c})
+        cmp = c["consistency_vs_LT-1"]
+        self.assertEqual((cmp["problem_identical"], cmp["problem_chars"]), (True, [len(problem_for("recon"))] * 2))
+        self.assertEqual(cmp["problem_sha256"][0], cmp["problem_sha256"][1])
+        self.assertEqual((c["harness_ok"], c["result"], c["fail_reasons"]), (True, "pass", []))   # identical: untouched
+        c["measured"]["post_body"] = {"problem": problem_for("recon").replace("survey", "Survey", 1), "repoRefs": [tfl.TARGET_REPO]}
+        n = len(tfl.REPORT["findings"])
+        tfl.analyze({"LT-1": a, "LT-3": c})
+        self.assertFalse(c["consistency_vs_LT-1"]["problem_identical"])
+        self.assertEqual((c["harness_ok"], c["result"]), (False, "fail"))
+        self.assertIn("brief-not-identical", c["fail_reasons"])
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 1)
+        self.assertIn("brief-not-identical", tfl.REPORT["findings"][-1])
+        self.assertEqual(tfl.identical_briefs({"measured": {}}, {"measured": {}})["problem_identical"], False)   # nothing posted is not "identical"
+
 
 # ── Item 6: attribution by relationship only — never by the brief ─────────────────────────────
 
 
-class SiblingAttribution(unittest.TestCase):
+class SiblingAttribution(Isolated):
+    """Attribution is STRUCTURAL only (codex round 9, HIGH): membership in the launch's campaign,
+    `campaign_id` / `group_label` == its label, or an explicit parent field naming our run. A
+    `problem` that mentions our run id, the label or the brief is `unrelated` with reason
+    `text-mention-only` — round 9's probe ("Investigate why d293f4d7-… failed") was attributed
+    through that text and its gate then approved by this harness. `TEST_PROBLEM_PREFIX` is gone:
+    a marker in the problem was still a text mention."""
+    LABEL = "recon-abc-123"
+
     def run_(self, rid, problem="something else", **s):
         return {"session": {"id": rid, "status": "completed", "problem": problem, **s}}
 
-    def attribute(self, runs, camps, prefix="", **kw):
-        saved = tfl.TEST_PROBLEM_PREFIX
-        tfl.TEST_PROBLEM_PREFIX = prefix
-        try:
-            return tfl.attribute_siblings(runs, camps, **kw)
-        finally:
-            tfl.TEST_PROBLEM_PREFIX = saved
+    def attribute(self, runs, camps, **kw):
+        return tfl.attribute_siblings(runs, camps, **kw)
 
-    def test_relationship_not_mere_appearance(self):
-        label = "recon-abc-123"
+    def test_structural_relationship_not_mere_appearance_and_never_text(self):
+        label = self.LABEL
         runs = [
             self.run_("old"),                                     # existed before → ignored
             self.run_("own"),                                     # the launched run → ignored
@@ -2234,40 +2551,122 @@ class SiblingAttribution(unittest.TestCase):
             self.run_("by-campaign", campaign_id=label),
             self.run_("by-group", group_label=label),
             self.run_("by-parent", parent_run_id="own"),
-            self.run_("by-problem-id", problem="PREFIX Execute S-1 from run own"),
-            self.run_("by-problem-label", problem=f"PREFIX campaign {label} scenario 2"),
-            self.run_(f"{label}:wicked-studio:a0"),               # a DAG node: linked via the campaign, not its id shape
-            self.run_("by-brief", problem="PREFIX Survey wicked-studio at its current main …"),  # the brief is NOT a relationship
-            self.run_("unmarked-id", problem="Execute S-1 from run own"),  # our id but no marker while one is configured
+            self.run_("by-problem-id", problem="Execute S-1 from run own"),          # TEXT: our id → unrelated (round 9)
+            self.run_("by-problem-label", problem=f"campaign {label} scenario 2"),   # TEXT: the label → unrelated
+            self.run_(f"{label}:wicked-studio:a0"),               # a DAG node: linked via the campaign's node_run_id, not its id shape
+            self.run_("attached"),                                # linked via the campaign's attached_runs[].runId
+            self.run_("by-brief", problem=tfl.INSTRUCTION),       # TEXT: the brief → unrelated
         ]
-        camps = [{"id": label, "node_run_id": {"wicked-studio": f"{label}:wicked-studio:a0"}, "attached_runs": []}]
-        out = self.attribute(runs, camps, prefix="PREFIX ", before={"old"}, own=["own"], label=label)
+        camps = [{"id": label, "status": "running", "node_run_id": {"wicked-studio": f"{label}:wicked-studio:a0"},
+                  "attached_runs": [{"runId": "attached", "status": "completed"}]}]
+        out = self.attribute(runs, camps, before={"old"}, own=["own"], label=label)
         self.assertEqual([s["id"] for s in out["attributable_siblings"]],
-                         ["by-campaign", "by-group", "by-parent", "by-problem-id", "by-problem-label", f"{label}:wicked-studio:a0"])
-        self.assertEqual([u["id"] for u in out["unrelated_new_runs"]], ["stranger", "by-brief", "unmarked-id"])
+                         ["by-campaign", "by-group", "by-parent", f"{label}:wicked-studio:a0", "attached"])
+        self.assertEqual([(u["id"], u["reason"]) for u in out["unrelated_new_runs"]],
+                         [("stranger", "no-structural-relationship"), ("by-problem-id", "text-mention-only"),
+                          ("by-problem-label", "text-mention-only"), ("by-brief", "text-mention-only")])
         self.assertTrue(all("attributed_by" in s for s in out["attributable_siblings"]))
+        self.assertEqual(out["attributable_siblings"][4]["attributed_by"], "listed in the campaign's node_run_id/attached_runs")
+        self.assertEqual(out["structural_linkage"],
+                         {"campaign_served": True, "campaign_linked_run_ids": ["attached", f"{label}:wicked-studio:a0"],
+                          "structural_fields_on_new_runs": ["campaign_id", "group_label", "parent_run_id"], "available": True})
+
+    def test_codex_round9_probe_a_text_mention_is_unrelated_and_never_gated(self):
+        """Codex's reproduction: a fake unrelated run saying "Investigate why d293f4d7-… failed"
+        was attributed (its problem carried the launched run id) and its gate then approved,
+        `wire_ok=true`. Now: `unrelated_new_runs[]` with reason `text-mention-only`, never in the
+        followed set, no decide call — through the real `follow_siblings` rediscovery loop."""
+        own = "d293f4d7-1e45-4346-809a-d6f2107c6b18"
+        label = "recon-mttmyh2a-c635a60c"
+        probe = self.run_("probe", problem=f"Investigate why {own} failed", status="awaiting_human")
+        out = self.attribute([probe], [], before=set(), own=[own], label=label)
+        self.assertEqual(out["attributable_siblings"], [])
+        self.assertEqual(out["unrelated_new_runs"], [{"id": "probe", "status": "awaiting_human", "problem": f"Investigate why {own} failed", "reason": "text-mention-only"}])
+        self.assertEqual(out["structural_linkage"], {"campaign_served": False, "campaign_linked_run_ids": [], "structural_fields_on_new_runs": [], "available": False})
+        # the label in the problem, a marker-style problem, the brief, a prefixed brief: all text
+        for problem in (f"under campaign {label}", f"PREFIX Execute S-1 from run {own}", tfl.INSTRUCTION, f"PREFIX {tfl.INSTRUCTION}"):
+            o = self.attribute([self.run_("t", problem=problem)], [], before=set(), own=[own], label=label)
+            self.assertEqual(o["attributable_siblings"], [], problem)
+            self.assertEqual(o["unrelated_new_runs"][0]["reason"], "text-mention-only", problem)
+        # through the follow: the probe is rediscovered on every poll as UNRELATED — never followed, never decided
+        saved = tfl.run_detail, tfl.acceptance_verdict
+        decided: list[str] = []
+
+        def decide(page, sid, **kw):
+            decided.append(sid)
+            return {"ord": 1, "decision": "approve", "status": 200}
+        try:
+            tfl.run_detail = lambda sid: {"session": {"status": "completed"}}
+            tfl.acceptance_verdict = lambda sid: "pass"
+            clock = FakeClock()
+            followed = tfl.follow_siblings(["s1"], max_s=600, sleep=clock.sleep, page=FakePage("x"), tag="LT-1", clock=clock, decide=decide,
+                                           rediscover=lambda: self.attribute([self.run_("s1", campaign_id="lbl"), probe], [], before=set(), own=[own], label="lbl"))
+        finally:
+            tfl.run_detail, tfl.acceptance_verdict = saved
+        self.assertEqual((sorted(followed["statuses"]), decided, followed["discovered"], followed["timed_out"]), (["s1"], [], {}, False))
+        self.assertEqual([u["id"] for u in followed["final_attribution"]["unrelated_new_runs"]], ["probe"])
+
+    def test_a_campaign_attached_run_is_a_sibling_and_a_served_campaign_is_structural_even_when_empty(self):
+        camps = [{"id": "lbl", "status": "running", "node_run_id": {}, "attached_runs": [{"runId": "att-1", "status": "running"}]}]
+        out = self.attribute([self.run_("att-1"), self.run_("other")], camps, before=set(), own=["own"], label="lbl")
+        self.assertEqual([s["id"] for s in out["attributable_siblings"]], ["att-1"])
+        self.assertEqual(out["attributable_siblings"][0]["attributed_by"], "listed in the campaign's node_run_id/attached_runs")
+        self.assertEqual([(u["id"], u["reason"]) for u in out["unrelated_new_runs"]], [("other", "no-structural-relationship")])
+        # the campaign served with NO members: linkage is available (membership readable) — zero siblings is a real zero
+        out = self.attribute([self.run_("other")], [{"id": "lbl", "status": "completed", "node_run_id": {}, "attached_runs": []}], before=set(), own=["own"], label="lbl")
+        self.assertEqual(out["structural_linkage"], {"campaign_served": True, "campaign_linked_run_ids": [], "structural_fields_on_new_runs": [], "available": True})
+        # no campaign served, but a new run carries a structural field (pointing elsewhere): the DTO exposes linkage
+        out = self.attribute([self.run_("other", group_label="someone-elses")], [], before=set(), own=["own"], label="lbl")
+        self.assertEqual((out["attributable_siblings"], out["structural_linkage"]["available"], out["structural_linkage"]["structural_fields_on_new_runs"]),
+                         ([], True, ["group_label"]))
+        # another campaign served, nothing on the new run: unavailable for THIS launch
+        out = self.attribute([self.run_("other")], [{"id": "another-campaign", "status": "running"}], before=set(), own=["own"], label="lbl")
+        self.assertEqual(out["structural_linkage"], {"campaign_served": False, "campaign_linked_run_ids": [], "structural_fields_on_new_runs": [], "available": False})
+
+    def test_no_structural_attribution_in_the_verdict(self):
+        """Zero siblings AND no structural linkage exposed ⇒ `no-structural-attribution` (honest: the
+        daemon gave nothing to attribute by — crew#473); zero siblings under a SERVED campaign ⇒ the
+        plain "no attributable sibling runs" (a real zero). Text-mention-only runs are counted, never attributed."""
+        none = {"attributable_siblings": [],
+                "unrelated_new_runs": [{"id": "probe", "status": "completed", "problem": "Investigate why run-1 failed", "reason": "text-mention-only"}],
+                "campaign_for_label": [],
+                "structural_linkage": {"campaign_served": False, "campaign_linked_run_ids": [], "structural_fields_on_new_runs": [], "available": False}}
+        v = tfl.derive_result(recorded_like(siblings_after_grace=none), [])
+        self.assertTrue(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertIn("no-structural-attribution", v["fail_reasons"])
+        self.assertTrue(any(r.startswith("no attributable sibling runs") and r.endswith("(1 unrelated new runs ignored, 1 of them text-mention-only)") for r in v["fail_reasons"]), v["fail_reasons"])
+        served = {**none, "unrelated_new_runs": [],
+                  "campaign_for_label": [{"id": "recon-abc-123", "status": "completed", "node_status": {}, "def_nodes": [], "attached_runs": []}],
+                  "structural_linkage": {**none["structural_linkage"], "campaign_served": True, "available": True}}
+        v = tfl.derive_result(recorded_like(siblings_after_grace=served), [])
+        self.assertEqual(v["result"], "fail")
+        self.assertNotIn("no-structural-attribution", v["fail_reasons"])
+        self.assertTrue(any(r.startswith("no attributable sibling runs") and r.endswith("(0 unrelated new runs ignored)") for r in v["fail_reasons"]), v["fail_reasons"])
+        # the live finding names the missing linkage
+        self.assertIn("(no-structural-attribution)", inspect.getsource(tfl._drive_intake))
 
     def test_identical_brief_is_unrelated(self):
         runs = [self.run_("twin", problem=tfl.INSTRUCTION), self.run_("prefixed-twin", problem=f"PREFIX {tfl.INSTRUCTION}")]
-        out = self.attribute(runs, [], prefix="PREFIX ", before=set(), own=["own"], label="lbl")
-        self.assertEqual(out["attributable_siblings"], [])
-        self.assertEqual([u["id"] for u in out["unrelated_new_runs"]], ["twin", "prefixed-twin"])
-        out = self.attribute([self.run_("twin", problem=tfl.INSTRUCTION)], [], before=set(), own=["own"], label="lbl")
-        self.assertEqual(out["attributable_siblings"], [])
-
-    def test_without_a_configured_marker_the_id_or_label_in_problem_suffices(self):
-        runs = [self.run_("by-id", problem="Execute S-1 from run own"), self.run_("by-label", problem="under campaign lbl")]
         out = self.attribute(runs, [], before=set(), own=["own"], label="lbl")
-        self.assertEqual([s["id"] for s in out["attributable_siblings"]], ["by-id", "by-label"])
+        self.assertEqual(out["attributable_siblings"], [])
+        self.assertEqual([(u["id"], u["reason"]) for u in out["unrelated_new_runs"]], [("twin", "text-mention-only"), ("prefixed-twin", "text-mention-only")])
 
-    def test_no_brief_parameter_remains(self):
+    def test_text_attribution_is_gone_from_the_code(self):
+        self.assertFalse(hasattr(tfl, "TEST_PROBLEM_PREFIX"))                        # the marker was still a text mention
         self.assertNotIn("brief", inspect.signature(tfl.attribute_siblings).parameters)
-        self.assertNotIn("brief=INSTRUCTION", inspect.getsource(tfl._drive_intake))
+        src = inspect.getsource(tfl.attribute_siblings)
+        self.assertNotIn("session.problem carries", src)
+        self.assertIn('"text-mention-only"', src)
+        live = inspect.getsource(tfl._drive_intake)
+        self.assertNotIn("brief=INSTRUCTION", live)
+        self.assertIn('ids = [s["id"] for s in sib["attributable_siblings"]]', live)   # only attributable siblings are ever followed / gated
+        self.assertIn("follow_siblings(ids, page=page", live)
 
     def test_unrelated_run_is_not_a_sibling(self):
         out = self.attribute([self.run_("new-1")], [], before=set(), own=["own"], label="lbl")
         self.assertEqual(out["attributable_siblings"], [])
-        self.assertEqual(out["unrelated_new_runs"][0]["id"], "new-1")
+        self.assertEqual((out["unrelated_new_runs"][0]["id"], out["unrelated_new_runs"][0]["reason"]), ("new-1", "no-structural-relationship"))
 
 
 # ── Item 9: typed evidence-fetch misses ───────────────────────────────────────────────────────
@@ -2874,6 +3273,50 @@ class RecordedPlansRederive(unittest.TestCase):
             self.assertEqual(v["fail_reasons"], sc["fail_reasons"], tag)
             for p in (p for p in report["preflights"] if p["scenario"] == tag):
                 self.assertIn("fanout", p["readings"][0], tag)  # backfilled: "not measured" — the gate postdates the launches
+
+    def test_codex_round9_recorded_runs_satisfy_the_launch_contract_and_say_no_structural_attribution(self):
+        """Re-derived offline over the committed report: every recorded launch posted
+        `repoRefs == ["wicked-studio"]`, a `problem` = the intent's framing + a blank line +
+        INSTRUCTION (695 / 752 / 695 chars; LT-1 and LT-3 byte-identical, LT-2 the `New test:` framing), and
+        exactly ONE `awaitingHuman` frame for the run was received over `/ws` before the gate was
+        decided — the contract holds with the recorded values (`measured.contract`; no number
+        changes). The recorded daemon exposed no structural linkage (campaignRegistered=false, no
+        campaign served, zero new runs), so each feature verdict now also says
+        `no-structural-attribution` — still `fail`, still `harness_ok`."""
+        if not (tfl.ART / "report.json").exists():
+            self.skipTest("no committed report.json beside the harness")
+        report = json.loads((tfl.ART / "report.json").read_text())
+        problems: dict[str, str] = {}
+        for tag in self.PLANS:
+            sc = report["scenarios"][tag]
+            m = sc["measured"]
+            c = tfl.contract_check(sc)
+            self.assertEqual(c["failures"], [], tag)
+            self.assertEqual((c["repo_refs"], c["problem_chars"], c["problem_ends_with_instruction"], c["intent_ok"],
+                              c["awaiting_human_frames_before_decision"], c["gate_frame_ok"]),
+                             (["wicked-studio"], {"LT-1": 695, "LT-2": 752, "LT-3": 695}[tag], True, True, 1, True), tag)  # LT-2: the longer `New test:` framing
+            self.assertEqual(c["intent_prefix"], {"LT-1": "Recon:", "LT-2": "New test:", "LT-3": "Recon:"}[tag], tag)
+            self.assertIsNone(c["panel_intent"], tag)   # not captured then, not backfilled — judged on the framing
+            self.assertEqual(m["contract"], c, f"{tag}.measured.contract in report.json is stale")
+            problems[tag] = m["post_body"]["problem"]
+            self.assertTrue(sc["harness_ok"], tag)
+            self.assertEqual(sc["result"], "fail", tag)
+            self.assertIn("no-structural-attribution", sc["fail_reasons"], tag)
+            self.assertNotIn("campaign-incomplete", sc["fail_reasons"], tag)   # no campaign was served: nothing pending
+            for snap in ("siblings_at_terminal", "siblings_after_grace"):
+                self.assertEqual((m[snap]["attributable_siblings"], m[snap]["unrelated_new_runs"]), ([], []), tag)
+                self.assertEqual((m[snap]["structural_linkage"]["campaign_served"], m[snap]["structural_linkage"]["available"]), (False, False), tag)
+        self.assertEqual(problems["LT-1"], problems["LT-3"])
+        self.assertNotEqual(problems["LT-1"], problems["LT-2"])
+        cmp = tfl.identical_briefs(report["scenarios"]["LT-1"], report["scenarios"]["LT-3"])
+        self.assertEqual((cmp["problem_identical"], cmp["problem_chars"]), (True, [695, 695]))
+        rec = report["scenarios"]["LT-3"]["consistency_vs_LT-1"]
+        for k in ("problem_identical", "problem_chars", "problem_sha256"):
+            self.assertEqual(cmp[k], rec[k], f"consistency.{k} in report.json is stale")
+        for p in report["preflights"]:
+            self.assertEqual(p["readings"][0]["unknown_status_runs"], "not measured", p["scenario"])  # backfilled: the classification postdates the launches
+        self.assertEqual(report["preflight_policy"]["known_run_statuses"], sorted(tfl.KNOWN_STATUSES))
+        self.assertTrue(report["revisions"][8]["reason"].startswith("codex round-9 REVISE"))
 
 
 # ── Item 7: contained, symlink-safe, unique-temp-file artifact writes ─────────────────────────

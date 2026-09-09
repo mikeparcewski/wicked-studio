@@ -147,13 +147,30 @@ the UI → decision → terminal; no wedge, no blocker); `result` is the FEATURE
 `"pass"` REQUIRES ≥ 1 attributable sibling run, EVERY attributable sibling terminal and EVERY one
 carrying its own acceptance verdict (`measured.sibling_verdicts`), and, for "New test", a
 registered campaign; otherwise `"fail"` with `fail_reasons[]` naming the sibling. Siblings are
-attributed by a daemon-visible relationship (`attribute_siblings`), never by "a run appeared" and
-never by the brief text (identical briefs are intentional); attributable siblings are followed to a
-terminal state (their gates decided on the UI on the way) before their acceptance is sampled — and
-the attributable set is REDISCOVERED on every poll of `follow_siblings` (runs + campaigns re-listed,
-`attribute_siblings` re-run, newly attributable runs added and followed), finishing only when the
-set has been stable for two polls AND every member is terminal; `SIBLING_FOLLOW_MAX_S` elapsing
-first is recorded (`timed_out`) and the scenario cannot `pass`.
+attributed by a STRUCTURAL relationship the daemon exposes (`attribute_siblings`: membership in the
+campaign the launch returned — `node_run_id` / `attached_runs` — or `session.campaign_id` /
+`group_label` equal to its label, or an explicit parent field naming our run), never by "a run
+appeared" and never by TEXT — a `problem` that mentions our run id, the label or the brief is
+`unrelated` with reason `text-mention-only` (codex round 9: "Investigate why <our id> failed" was
+attributed and its gate then decided by this harness); when the daemon exposes no structural
+linkage for a launch (the recorded runs: campaign never registered, no campaign/parent field on any
+new run) siblings CANNOT be attributed and the feature verdict says so — `no-structural-attribution`
+(crew#473). Attributable siblings are followed to a terminal state (their gates decided on the UI
+on the way) before their acceptance is sampled — and the attributable set is REDISCOVERED on every
+poll of `follow_siblings` (runs + campaigns re-listed, `attribute_siblings` re-run, newly attributable
+runs added and followed), finishing only when the set has been stable for two polls AND every member
+is terminal AND every node of the launch's campaign is terminal (`campaign_pending`: a `def.nodes`
+entry with no `node_status` yet, a non-terminal `node_status` / `attached_runs[].status`, a
+non-terminal campaign `status` — round 9: two unchanged polls certified a campaign with a `pending`
+node); `SIBLING_FOLLOW_MAX_S` elapsing first is recorded (`timed_out`, and `campaign-incomplete`
+when nodes were still pending) and the scenario cannot `pass`. The preflight's run listing is
+classified fail-closed (`classify_runs`): a `session.status` outside ACTIVE ∪ TERMINAL — `null`,
+missing, a value never seen — is `unknown_status_runs` and BLOCKS the launch (round 9: `null`
+counted as inactive). The launch's wire contract is ASSERTED in the verdict (`contract_check`,
+round 9): `repoRefs == [TARGET_REPO]`, `problem` = the scenario's intent framing (`Recon:` /
+`New test:`, the panel's `data-intent`) + blank line + INSTRUCTION verbatim, ≥ 1 `awaitingHuman`
+frame for the run received over `/ws` BEFORE the gate was decided, and LT-1 / LT-3 posted
+byte-identical problems (`identical_briefs`) — each mismatch a named harness failure.
 EVERY invocation writes under ITS OWN evidence directory — `e2e/artifacts/test-feature-live/runs/
 <UTC timestamp>-<pid>/` (report.json, the captured plans, the screenshots; recorded as
 `report.json → run_dir`). The committed historical `report.json` / `LT-*` files at the directory
@@ -188,9 +205,8 @@ Env:   STUDIO_URL (default http://localhost:7701), TARGET_REPO (default wicked-s
        RUN_TIMEOUT_MIN (default 60), SIBLING_GRACE_S (default 120), SIBLING_FOLLOW_MAX_S
        (default 900), SWAP_MAX_PCT (default 85 — a contract deviation when moved; requires
        SWAP_MAX_PCT_ACK=contract-deviation), FANOUT_PATTERN (an EXTRA regex over `ps` command
-       lines that also blocks the preflight — the token rules in `FANOUT_RULES` always apply),
-       TEST_PROBLEM_PREFIX (default "" — a marker a sibling's `problem` must carry, together with
-       our run id or campaign label, to be attributed).
+       lines that also blocks the preflight — the token rules in `FANOUT_RULES` always apply).
+       (TEST_PROBLEM_PREFIX is gone — round 9: a marker in `problem` was still a TEXT mention.)
 Prints a JSON report to stdout; artifacts land in e2e/artifacts/test-feature-live/runs/<UTC>-<pid>/
 (`python3 e2e/test_feature_live.py --promote <run-dir>` copies one run into the root deliberately).
 
@@ -327,7 +343,6 @@ GATE_TIMEOUT_S = int(float(os.environ.get("GATE_TIMEOUT_MIN", "25")) * 60)
 RUN_TIMEOUT_S = int(float(os.environ.get("RUN_TIMEOUT_MIN", "60")) * 60)
 SIBLING_GRACE_S = int(os.environ.get("SIBLING_GRACE_S", "120"))
 SIBLING_FOLLOW_MAX_S = int(os.environ.get("SIBLING_FOLLOW_MAX_S", "900"))
-TEST_PROBLEM_PREFIX = os.environ.get("TEST_PROBLEM_PREFIX", "")
 # The contract (brief-test-feature-live.md): "the harness must refuse to run if … swap > 85%" —
 # AMENDED by its author (the coordinator) on 2026-09-09, after codex rounds 2-4 of PR #215: "the 85%
 # default stands; an EXPLICIT operator override (SWAP_MAX_PCT together with
@@ -386,6 +401,20 @@ DOGFOOD_PORT = "7701"
 WEDGE_S = 10 * 60
 ACTIVE = {"running", "executing", "awaiting_human", "planning", "pending", "starting"}
 TERMINAL = {"completed", "failed", "cancelled", "canceled", "rejected"}
+# Every `session.status` this harness KNOWS. Anything else on `GET /runs` — `null`, missing, a value
+# never seen — is an UNKNOWN run state, and unknown does not establish that launching is safe: the
+# preflight blocks on it (`unknown_status_runs`; codex round 9: `status: null` counted as inactive).
+KNOWN_STATUSES = ACTIVE | TERMINAL
+# Campaign vocabularies (studio `src/api/campaigns.ts`: `CampaignNodeStatus` — terminal = completed |
+# failed | blocked | cancelled; `CampaignStatus`). A campaign is COMPLETE only when every node of its
+# `def.nodes` has a terminal `node_status`, every `attached_runs[]` entry is terminal and its own
+# status is terminal — never merely "no new runs for two polls" (codex round 9).
+NODE_TERMINAL = {"completed", "failed", "blocked", "cancelled"}
+CAMPAIGN_TERMINAL = {"completed", "partially_completed", "failed", "cancelled"}
+# The panel's problem framing per intent (`TestingLaunchPanel.tsx` RECON_PROBLEM_PREFIX /
+# TEST_PROBLEM_PREFIX: `${prefix}\n\n${brief}`), checked by its contract-visible leading words —
+# the intent the scenario asked for must be the intent the panel posted (round 9, `contract_check`).
+INTENT_PREFIX = {"recon": "Recon:", "campaign": "New test:"}
 # Gate KINDS that authorize delivery — decided from the unit's `stage`/`gate`, never from a keyword
 # somewhere in a plan body.
 DELIVER_KINDS = {"deliver", "release", "publish", "merge"}
@@ -780,6 +809,32 @@ def fanout_processes(table: str | None = None, pattern: re.Pattern | None = None
     return hits
 
 
+def _status_value(st: object) -> object:
+    return st if st is None or isinstance(st, (str, int, float, bool)) else repr(st)
+
+
+def classify_runs(runs: list) -> dict:
+    """Every entry of `GET /runs`, sorted into ACTIVE ids, TERMINAL ids and UNKNOWN records — a
+    `session.status` outside `KNOWN_STATUSES` (`null`, missing, a value this harness has never
+    seen, a malformed entry without a `session` object) is unknown. Codex round 9: the preflight
+    read `status in ACTIVE` and so counted `status: null` as inactive — `active_runs=[]`, no
+    blocker. Unknown daemon state is not "clear": `unknown_status_runs` blocks in `preflight_ok`."""
+    active: list = []
+    terminal: list = []
+    unknown: list[dict] = []
+    for r in runs:
+        s = r.get("session") if isinstance(r, dict) else None
+        s = s if isinstance(s, dict) else {}
+        rid, st = s.get("id"), s.get("status")
+        if isinstance(st, str) and st in ACTIVE:
+            active.append(rid)
+        elif isinstance(st, str) and st in TERMINAL:
+            terminal.append(rid)
+        else:
+            unknown.append({"id": _status_value(rid), "status": _status_value(st)})
+    return {"active": active, "terminal": terminal, "unknown": unknown}
+
+
 def readings() -> dict:
     if sys.platform != "darwin":
         raise SystemExit(f"the capacity gate is macOS-only (vm_stat / sysctl vm.*); this is {sys.platform} — "
@@ -795,10 +850,12 @@ def readings() -> dict:
     sw = _probe(["sysctl", "-n", "vm.swapusage"])
     total = float(_field(r"total = ([\d.]+)M", sw, "swap total"))
     used = float(_field(r"used = ([\d.]+)M", sw, "swap used"))
+    unknown: list | None
     try:
-        active = [r["session"]["id"] for r in list_runs() if r["session"]["status"] in ACTIVE]
+        classified = classify_runs(list_runs())
+        active, unknown = classified["active"], classified["unknown"]
     except Exception as e:  # the daemon being unreachable is itself a failed preflight
-        active = [f"ERR {e}"]
+        active, unknown = [f"ERR {e}"], None  # None = not measured — blocks like a match would
     return {
         "ts": time.strftime("%H:%M:%S"),
         "free_mb": pages("Pages free") // 2**20,
@@ -808,6 +865,9 @@ def readings() -> dict:
         "load1": load,
         "swap_pct": round(100 * used / total, 1) if total else 0.0,
         "active_runs": active,
+        # Every run whose status is outside KNOWN_STATUSES (null / missing / unrecognized) — `[]` is
+        # the only clear reading; None (the listing failed) blocks too (round 9).
+        "unknown_status_runs": unknown,
         # Gate (4): heavy worker / build processes on the host — `[]` is the only clear reading.
         "fanout": fanout_processes(),
     }
@@ -844,6 +904,7 @@ def preflight_policy(env: Mapping[str, str] | None = None) -> dict:
         "contract_swap_max_pct": SWAP_MAX_PCT_CONTRACT,
         "load1_max": LOAD1_MAX,
         "active_runs_max": 0,
+        "known_run_statuses": sorted(KNOWN_STATUSES),  # anything else on GET /runs blocks (round 9)
         "fanout_max": 0,
         "fanout_rules": FANOUT_RULES,
         "fanout_pattern": extra.pattern if extra else None,
@@ -874,6 +935,12 @@ def preflight_ok(r: dict, policy: dict | None = None) -> list[str]:
     why = []
     if len(r["active_runs"]) > policy["active_runs_max"]:
         why.append(f"active runs: {r['active_runs']}")
+    # A run in a state this harness does not KNOW (`null`, missing, unrecognized — `classify_runs`)
+    # blocks: unknown daemon state does not establish that launching is safe (codex round 9). Fail
+    # closed like the fan-out gate: `[]` is the only clear reading, a missing reading is not clear.
+    unknown = r.get("unknown_status_runs")
+    if unknown != []:
+        why.append(f"unknown-run-status: {unknown if unknown is not None else 'not measured'}")
     # No free-memory gate: macOS keeps `Pages free` near zero by design (58 MB–2 GB swings were
     # observed at load 9–14) — `free_mb`/`available_mb` are RECORDED for the report, never gated on.
     if r["load1"] >= policy["load1_max"]:
@@ -1521,36 +1588,54 @@ def gate_decision(prompt: str | None, unit: dict | None = None) -> tuple[str, st
 # Explicit parent pointers a sibling DTO may carry (wicked-crew-api-types `AgentSession` and its
 # successors) — any of them naming one of our run ids is a relationship.
 PARENT_FIELDS = ("parent_run_id", "parent_id", "parent_session_id", "parent", "launched_by", "spawned_by")
+# Every run-DTO field that expresses a STRUCTURAL relationship — the only attribution evidence there
+# is, besides membership in the launch's campaign. Their PRESENCE on a new run (any value) shows the
+# daemon exposes such linkage at all (`structural_linkage.available`).
+STRUCTURAL_FIELDS = ("campaign_id", "group_label") + PARENT_FIELDS
+
+
+def mentions_launch(problem: str, own_ids: list[str], label: str | None) -> bool:
+    """True when `problem` merely MENTIONS the launch — one of our run ids, the campaign label or
+    the brief (INSTRUCTION). A text mention is never a relationship (codex round 9: "Investigate
+    why d293f4d7-… failed" was attributed, and its gate then approved by this harness)."""
+    return any(o in problem for o in own_ids) or bool(label and label in problem) or INSTRUCTION in problem
 
 
 def attribute_siblings(runs: list[dict], campaigns: list[dict], *, before: set[str], own: list[str],
                        label: str | None) -> dict:
     """Split the runs that appeared since launch into ATTRIBUTABLE siblings and unrelated new runs.
-    A sibling is related to this launch by a daemon-visible RELATIONSHIP only (wicked-crew-api-types
-    0.25.0 `AgentSession` / `Campaign`):
-      * `session.campaign_id` or `group_label` equal to the returned campaign label;
-      * membership in that campaign's `node_run_id` values or `attached_runs[].runId` (DAG-node ids
-        are `{campaign}:{node}:a{n}` but membership is read from the campaign, not the id shape);
-      * an explicit parent field on the DTO (`PARENT_FIELDS`) naming one of our run ids;
-      * `session.problem` carrying one of our run ids or the campaign label — prefixed by the
-        `TEST_PROBLEM_PREFIX` marker when one is configured.
-    The brief text is NOT a relationship: identical briefs are intentional (LT-3 repeats LT-1's), so
-    a run whose problem merely equals INSTRUCTION is `unrelated`. A run that APPEARED is not a sibling."""
+    A sibling is related to this launch by a STRUCTURAL relationship the daemon exposes, and by
+    nothing else (wicked-crew-api-types `AgentSession` / `Campaign`):
+      * membership in the campaign the launch returned (`label`, served by GET /campaigns): its
+        `node_run_id` values or `attached_runs[].runId` (DAG-node ids are `{campaign}:{node}:a{n}`
+        but membership is read from the campaign, not the id shape);
+      * `session.campaign_id` or `group_label` equal to that label;
+      * an explicit parent field on the run DTO (`PARENT_FIELDS`) naming one of our run ids.
+    TEXT is never attribution (codex round 9, HIGH): a run whose `problem` carries our run id, the
+    label or the brief is `unrelated` with reason `text-mention-only` — a text-attributed run used to
+    receive this harness's gate decisions. Identical briefs are intentional (LT-3 repeats LT-1's),
+    so a run whose problem equals INSTRUCTION is unrelated too. A run that APPEARED is not a sibling.
+    `structural_linkage` records whether the daemon exposed ANY such relationship for this launch:
+    the campaign served (its membership readable, even when empty) or a structural field present on
+    a new run. `available: false` means siblings could not have been attributed at all — the verdict
+    says `no-structural-attribution` (honest; crew#473) instead of pretending zero siblings ran."""
+    mine = [c for c in campaigns if label and isinstance(c, dict) and c.get("id") == label]
     linked: set[str] = set()
-    for c in campaigns:
-        if label and c.get("id") == label:
-            linked |= {v for v in (c.get("node_run_id") or {}).values() if isinstance(v, str)}
-            linked |= {a.get("runId") for a in (c.get("attached_runs") or []) if isinstance(a, dict) and a.get("runId")}
+    for c in mine:
+        linked |= {v for v in (c.get("node_run_id") or {}).values() if isinstance(v, str)}
+        linked |= {a.get("runId") for a in (c.get("attached_runs") or []) if isinstance(a, dict) and isinstance(a.get("runId"), str)}
     own_ids = [o for o in own if o]
     siblings: list[dict] = []
     unrelated: list[dict] = []
+    fields_seen: set[str] = set()
     for r in runs:
-        s = r.get("session") or {}
+        s = r.get("session") if isinstance(r, dict) else None
+        s = s if isinstance(s, dict) else {}
         rid = s.get("id")
         if not rid or rid in before or rid in own_ids:
             continue
-        problem = s.get("problem") or ""
-        marked = problem if not TEST_PROBLEM_PREFIX else (problem if TEST_PROBLEM_PREFIX in problem else "")
+        fields_seen |= {f for f in STRUCTURAL_FIELDS if s.get(f) not in (None, "")}
+        problem = s.get("problem") if isinstance(s.get("problem"), str) else ""
         why = None
         if label and (s.get("campaign_id") == label or s.get("group_label") == label):
             why = "session.campaign_id/group_label == the launch's campaign label"
@@ -1558,16 +1643,21 @@ def attribute_siblings(runs: list[dict], campaigns: list[dict], *, before: set[s
             why = "listed in the campaign's node_run_id/attached_runs"
         elif any(s.get(f) in own_ids for f in PARENT_FIELDS if isinstance(s.get(f), str)):
             why = "an explicit parent field on the DTO names the launched run"
-        elif any(o in marked for o in own_ids):
-            why = "session.problem carries the launched run id" + (" after the TEST_PROBLEM_PREFIX marker" if TEST_PROBLEM_PREFIX else "")
-        elif label and label in marked:
-            why = "session.problem carries the campaign label" + (" after the TEST_PROBLEM_PREFIX marker" if TEST_PROBLEM_PREFIX else "")
         entry = {"id": rid, "status": s.get("status"), "problem": problem[:100]}
         if why:
             siblings.append({**entry, "attributed_by": why})
         else:
-            unrelated.append(entry)
-    return {"attributable_siblings": siblings, "unrelated_new_runs": unrelated}
+            unrelated.append({**entry, "reason": "text-mention-only" if mentions_launch(problem, own_ids, label) else "no-structural-relationship"})
+    return {
+        "attributable_siblings": siblings,
+        "unrelated_new_runs": unrelated,
+        "structural_linkage": {
+            "campaign_served": bool(mine),
+            "campaign_linked_run_ids": sorted(linked),
+            "structural_fields_on_new_runs": sorted(fields_seen),
+            "available": bool(mine) or bool(fields_seen),
+        },
+    }
 
 
 # ── Gates through the UI — the ONE click path for every gate ──────────────────────────────────
@@ -1974,6 +2064,35 @@ def decide_sibling_gate(page, sid: str, *, tag: str, return_to: str) -> dict:
     return entry
 
 
+def campaign_pending(attribution: dict | None) -> list[str]:
+    """Everything about the launch's campaign(s) that is NOT yet terminal, named — read from the
+    campaign state `siblings_now()` records on every poll (`campaign_for_label[]`: `status`,
+    `node_status`, `def_nodes`, `attached_runs`): a `def.nodes` entry with no `node_status` yet
+    (scheduled, not started), a node whose status is outside NODE_TERMINAL (`pending`, `ready`,
+    `running`, `awaiting_human`, `ready_to_resume`), an attached run outside TERMINAL, a campaign
+    whose own status is outside CAMPAIGN_TERMINAL (`running`, `paused`). Empty = every node is
+    accounted for (or the launch has no served campaign). Codex round 9: the follow ended on "no
+    new runs for two polls" while the campaign still held a `pending` node — `pass`."""
+    out: list[str] = []
+    for c in (attribution or {}).get("campaign_for_label") or []:
+        if not isinstance(c, dict):
+            continue
+        cid = c.get("id")
+        ns = c.get("node_status") if isinstance(c.get("node_status"), dict) else {}
+        for node in c.get("def_nodes") or []:
+            if node not in ns:
+                out.append(f"campaign {cid} node {node}: no node_status yet (scheduled, not started)")
+        for node, st in ns.items():
+            if st not in NODE_TERMINAL:
+                out.append(f"campaign {cid} node {node}: {st}")
+        for a in c.get("attached_runs") or []:
+            if isinstance(a, dict) and a.get("status") not in TERMINAL:
+                out.append(f"campaign {cid} attached run {a.get('runId')}: {a.get('status')}")
+        if c.get("status") not in CAMPAIGN_TERMINAL:
+            out.append(f"campaign {cid} status {c.get('status')}")
+    return out
+
+
 def follow_siblings(sibling_ids: list[str], max_s: int = SIBLING_FOLLOW_MAX_S, sleep=time.sleep, page=None, *,
                     tag: str = "", return_to: str | None = None, decide=None, rediscover=None,
                     clock=time.time, poll_s: int = 15) -> dict:
@@ -1983,8 +2102,11 @@ def follow_siblings(sibling_ids: list[str], max_s: int = SIBLING_FOLLOW_MAX_S, s
     campaign node launched after its predecessor completed); every newly attributable run joins the
     followed set, has its gates decided THROUGH THE UI like the others (`decide_sibling_gate`) and
     is sampled for its verdict. The follow finishes only when the set has been STABLE for two
-    consecutive polls AND every member is terminal; `max_s` elapsing first is recorded as
-    `timed_out` (the set is not proven complete — the scenario cannot `pass`). A rediscovery that
+    consecutive polls AND every member is terminal AND the launch's campaign has NO pending node
+    (`campaign_pending` over the campaign state rediscovered on this poll — round 9: a `pending`
+    node whose run does not exist yet is not "complete", it keeps the follow going); `max_s`
+    elapsing first is recorded as `timed_out` (the set is not proven complete — the scenario cannot
+    `pass`; `campaign_pending` names what was still open → `campaign-incomplete`). A rediscovery that
     fails is a typed miss (recorded by `get()`) and resets the stability count: an unknown set is
     not a stable set. Returns per-sibling statuses, the gates decided (`gates[sid][]`), which
     siblings were discovered late (`discovered`), the poll/stability counters and the verdicts
@@ -2038,12 +2160,16 @@ def follow_siblings(sibling_ids: list[str], max_s: int = SIBLING_FOLLOW_MAX_S, s
                 continue  # its card never rendered twice — stop re-navigating, let the timeout report it
             gates[sid].append(decide(page, sid, tag=tag, return_to=return_to))
         all_terminal = bool(statuses) and all(st in TERMINAL for st in statuses.values())
-        if all_terminal and stable >= 2:
+        # Completion is a property of the CAMPAIGN, not of the runs discovered so far: a node still
+        # `pending` (its run not yet launched) keeps the follow going until it runs — or `max_s`.
+        pending = campaign_pending(final_attribution)
+        if all_terminal and stable >= 2 and not pending:
             break
         if clock() - started >= max_s:
             timed_out = True
             finding(f"{tag}: sibling follow hit SIBLING_FOLLOW_MAX_S ({max_s}s) after {polls} polls with statuses {statuses} "
-                    f"(set stable for {stable} poll{'s' if stable != 1 else ''}) — the attributable set is not proven complete")
+                    f"(set stable for {stable} poll{'s' if stable != 1 else ''}) — the attributable set is not proven complete"
+                    + (f"; campaign-incomplete: {pending}" if pending else ""))
             break
         sleep(poll_s)
     return {
@@ -2056,6 +2182,8 @@ def follow_siblings(sibling_ids: list[str], max_s: int = SIBLING_FOLLOW_MAX_S, s
         "timed_out": timed_out,
         "followed_s": int(clock() - started),
         "all_terminal": bool(statuses) and all(st in TERMINAL for st in statuses.values()),
+        "campaign_pending": pending,
+        "campaign_complete": not pending,
         "acceptance": {sid: acceptance_verdict(sid) for sid in followed},
         "final_attribution": final_attribution,
     }
@@ -2099,18 +2227,68 @@ def sibling_gate_conflicts(followed: dict | None) -> list[str]:
     return out
 
 
+def contract_check(m: dict) -> dict:
+    """The launch's wire contract, ASSERTED — codex round 9: the POST body and the `/ws` gate count
+    were recorded and never judged, so a fixture posting `repoRefs: ["another-repo"]`, an unrelated
+    problem and zero `awaitingHuman` frames still passed. Judged, as a pure function of the
+    measurements: (1) `post_body.repoRefs == [TARGET_REPO]` (`launch-scope-mismatch`); (2) `problem`
+    ends with INSTRUCTION verbatim (`launch-brief-mismatch`); (3) what precedes it is the panel's
+    framing for THIS scenario's intent — its contract-visible leading words `Recon:` / `New test:`
+    (`INTENT_PREFIX`), a blank line before the brief (`${prefix}\\n\\n${brief}`) — and the panel's
+    `data-intent`, when recorded (`panel_intent`), equals the scenario's intent
+    (`launch-intent-mismatch`); (4) at least one `awaitingHuman` frame for the launched run was
+    received over `/ws` BEFORE the gate was decided — `awaitingHuman_over_ws` is sampled in
+    `_drive_intake` before `decide_gate_on_card` (`gate-frame-not-received`). A missing body or
+    count is a mismatch (fail closed). Every failure is a HARNESS failure. Returns the values judged
+    (recorded as `measured.contract`) and `failures[]` (label + detail)."""
+    x = m.get("measured") or {}
+    intent = m.get("intent") or "run"
+    body = x.get("post_body") if isinstance(x.get("post_body"), dict) else {}
+    repo_refs = body.get("repoRefs")
+    problem = body.get("problem") if isinstance(body.get("problem"), str) else ""
+    brief_ok = problem.endswith(INSTRUCTION) and len(problem) > len(INSTRUCTION)
+    framing = problem[: len(problem) - len(INSTRUCTION)] if brief_ok else problem
+    want_prefix = INTENT_PREFIX.get(intent)
+    panel_intent = x.get("panel_intent")
+    intent_ok = bool(want_prefix) and framing.startswith(want_prefix) and framing.endswith("\n\n") \
+        and (panel_intent is None or panel_intent == intent)
+    frames = x.get("awaitingHuman_over_ws")
+    frame_ok = isinstance(frames, int) and not isinstance(frames, bool) and frames >= 1
+    failures: list[str] = []
+    if repo_refs != [TARGET_REPO]:
+        failures += ["launch-scope-mismatch", f"POST body repoRefs={repo_refs!r}; the contract is [{TARGET_REPO!r}]"]
+    if not brief_ok:
+        failures += ["launch-brief-mismatch", f"POST body problem ({len(problem)} chars) does not end with INSTRUCTION (…{problem[-60:]!r})"]
+    if not intent_ok:
+        failures += ["launch-intent-mismatch", f"scenario intent {intent!r} requires the {want_prefix!r} framing + a blank line before the brief "
+                                               f"(panel data-intent {panel_intent!r}); the problem opens {framing[:40]!r}"]
+    if not frame_ok:
+        failures += ["gate-frame-not-received", f"awaitingHuman frames for the run received over /ws before the gate decision: {frames!r} (≥ 1 required)"]
+    return {
+        "repo_refs": repo_refs, "repo_refs_ok": repo_refs == [TARGET_REPO],
+        "problem_chars": len(problem), "problem_ends_with_instruction": brief_ok,
+        "intent": intent, "intent_prefix": want_prefix, "framing_head": framing[:40], "panel_intent": panel_intent, "intent_ok": intent_ok,
+        "awaiting_human_frames_before_decision": frames, "gate_frame_ok": frame_ok,
+        "failures": failures,
+    }
+
+
 def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
     """The verdict split, as a pure function of the measurements (so the committed report can be
     re-derived offline). `harness_ok`: the harness did its job — launch submitted (after the
-    pre-submit preflight) and accepted with run ids, gate rendered on the UI, every gate decision
+    pre-submit preflight) and accepted with run ids, the launch's wire contract met
+    (`contract_check`: the target repo, the intent framing + INSTRUCTION, ≥ 1 `awaitingHuman` frame
+    over `/ws` before the decision — round 9), gate rendered on the UI, every gate decision
     posted and wire-verified (the parent's AND every followed sibling's — `gate-wire-mismatch` /
     `sibling-gate-wire-mismatch`), terminal state, no wedge, no blocker. `result`: the FEATURE contract — "pass" REQUIRES
-    a completed run whose plan names real files and classifies, PLUS ≥ 1 attributable sibling run
-    with EVERY attributable sibling terminal and EVERY one carrying its own acceptance verdict
-    (recorded per id in `measured.sibling_verdicts`), PLUS (for the "campaign" intent) a registered
+    a completed run whose plan names real files and classifies, PLUS ≥ 1 STRUCTURALLY attributable
+    sibling run with EVERY attributable sibling terminal and EVERY one carrying its own acceptance
+    verdict (recorded per id in `measured.sibling_verdicts`), PLUS the launch's campaign complete —
+    no pending node (`campaign-incomplete`) — PLUS (for the "campaign" intent) a registered
     campaign served by GET /campaigns, and NO evidence-fetch error. Anything less is "fail" with
-    `fail_reasons[]` naming the sibling / the fetch; recon completion + text heuristics alone
-    never spell "pass"."""
+    `fail_reasons[]` naming the sibling / the node / the fetch; when the daemon exposed no
+    structural linkage for the launch the reason is `no-structural-attribution` (siblings could not
+    have been attributed — crew#473); recon completion + text heuristics alone never spell "pass"."""
     x = m.get("measured") or {}
     tag, intent = m.get("scenario"), m.get("intent") or "run"
     if m.get("result") == "blocked-preflight":
@@ -2124,6 +2302,11 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
     st = x.get("post_status")
     if not x.get("launch_aborted_by_preflight") and not (isinstance(st, int) and 200 <= st < 300 and x.get("run_ids")):
         hard.append(f"launch not accepted (POST /testing/recon → {st})")
+    # The wire contract of the launch itself (round 9): judged whenever a launch was submitted.
+    contract = contract_check(m)
+    x["contract"] = contract
+    if not x.get("launch_aborted_by_preflight"):
+        hard += contract["failures"]
     if not (x.get("gate_on_panel_card") or x.get("gate_via_run_page_fallback")):
         hard.append("no gate card rendered on the UI")
     gates = x.get("gates") or []
@@ -2185,8 +2368,18 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
     # follow rediscovered later — a sibling that appeared on poll 7 is judged like the others.
     sib_ids = list(dict.fromkeys([s.get("id") for s in sibs if s.get("id")] + list(statuses)))
     if not sib_ids:
+        unrelated = after.get("unrelated_new_runs") or []
+        mentions = sum(1 for u in unrelated if isinstance(u, dict) and u.get("reason") == "text-mention-only")
         fail.append(f"no attributable sibling runs after the approved {intent} completed — the approved plan was never executed"
-                    f" ({len(after.get('unrelated_new_runs') or [])} unrelated new runs ignored)")
+                    f" ({len(unrelated)} unrelated new runs ignored{f', {mentions} of them text-mention-only' if mentions else ''})")
+        # Round 9: when the daemon exposes no structural linkage for the launch (no campaign served
+        # for its label, no campaign/parent field on any new run) siblings COULD NOT be attributed —
+        # say so, instead of "zero siblings ran" (crew#473). Text mentions never stand in.
+        linkage = after.get("structural_linkage")
+        if isinstance(linkage, dict) and not linkage.get("available"):
+            fail.append("no-structural-attribution")
+            fail.append("the daemon exposed no structural linkage for this launch (campaign not served for the label, no "
+                        "campaign/parent field on any new run) — siblings cannot be attributed; text mentions are never attribution (crew#473)")
     else:
         verdicts = followed.get("acceptance") or {}
         sibling_verdicts: dict[str, dict] = {}
@@ -2208,6 +2401,13 @@ def derive_result(m: dict, blockers: list[str] | None = None) -> dict:
             if not any(r.startswith("sibling ") and "terminal" in r for r in fail):
                 fail.append("not every attributable sibling reached a terminal state (all_terminal=false)")
         x["sibling_verdicts"] = sibling_verdicts
+    # Campaign completeness (round 9): every node of the launch's campaign terminal — judged on the
+    # LAST campaign state the follow rediscovered (else the after-grace snapshot). A pending node is
+    # a scenario the approved plan has not run; two unchanged polls never certify it.
+    pending = campaign_pending(followed.get("final_attribution") or after)
+    if pending:
+        fail.append("campaign-incomplete")
+        fail += [f"campaign not complete: {p}" for p in pending]
     if intent == "campaign":
         if not x.get("campaign_registered"):
             fail.append(f"no engine campaign registered for label {x.get('campaign_label')} (campaignRegistered=false)")
@@ -2360,6 +2560,7 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
         page.locator(f'[data-testid="{verb}"]').click()
         panel = page.locator(f'[data-testid="testing-launch-panel"][data-intent="{intent}"]')
         panel.wait_for(timeout=10000)
+        m["measured"]["panel_intent"] = panel.get_attribute("data-intent")  # asserted against the scenario's intent in contract_check (round 9)
         panel.locator('[data-testid="testing-launch-instructions"]').fill(INSTRUCTION)
         panel.locator('[data-testid="testing-launch-repo-search"]').fill(TARGET_REPO)
         panel.locator(f'[data-testid="testing-launch-repo-option"][data-repo="{TARGET_REPO}"]').click()
@@ -2635,7 +2836,12 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
             return {
                 **attributed,
                 "new_campaigns": [c["id"] for c in cs if c["id"] not in camps_before],
-                "campaign_for_label": [{"id": c["id"], "status": c["status"], "node_status": c.get("node_status"), "attached_runs": c.get("attached_runs")} for c in mine],
+                # The campaign's COMPLETE node state, every poll — `campaign_pending` judges it (round 9):
+                # def.nodes is the denominator, node_status / attached_runs the numerator.
+                "campaign_for_label": [{"id": c["id"], "status": c["status"], "node_status": c.get("node_status"),
+                                        "node_run_id": c.get("node_run_id"),
+                                        "def_nodes": [n.get("node_id") for n in ((c.get("def") or {}).get("nodes") or []) if isinstance(n, dict)],
+                                        "attached_runs": c.get("attached_runs")} for c in mine],
                 "sibling_acceptance": {s["id"]: acceptance_verdict(s["id"]) for s in attributed["attributable_siblings"]},
             }
         m["measured"]["siblings_at_terminal"] = siblings_now()
@@ -2653,9 +2859,12 @@ def _drive_intake(tag: str, intent: str, m: dict, lock: LaunchLock) -> dict:
             m["measured"]["siblings_followed"] = follow_siblings(ids, page=page, tag=tag, return_to=f"{BASE}/testing/campaigns",
                                                                  rediscover=siblings_now)
         else:
+            linkage = sib.get("structural_linkage") or {}
             finding(f"{tag}: NO attributable sibling runs were launched after the approved {intent} completed "
                     f"(attributable: 0, unrelated new runs: {len(sib['unrelated_new_runs'])}, campaigns for label {campaign_label}: "
-                    f"{len(sib['campaign_for_label'])}) — the plan is never executed (crew#473)")
+                    f"{len(sib['campaign_for_label'])}) — the plan is never executed (crew#473)"
+                    + ("" if linkage.get("available") else "; the daemon exposed no structural linkage for this launch "
+                       "(campaign not served, no campaign/parent field on any new run) — siblings cannot be attributed (no-structural-attribution)"))
 
         # ── LT-5: the operator's view after the run ────────────────────────────────────────
         page.goto(f"{BASE}/runs/{urllib.parse.quote(run_id, safe='')}", wait_until="networkidle")
@@ -2973,11 +3182,47 @@ def write_report(report: dict | None = None, path: Path | None = None, root: Pat
 SCENARIO_PLAN = (("LT-1", "recon"), ("LT-2", "campaign"), ("LT-3", "recon"))
 
 
+def identical_briefs(a: dict, c: dict) -> dict:
+    """LT-1 and LT-3 must have POSTED byte-identical `problem`s — the same framing, the same brief
+    — or LT-3's consistency measurement compares two different asks (codex round 9: never asserted).
+    Pure: the comparison (`problem_identical`, the two lengths, sha256 of each) for
+    `consistency_vs_LT-1`; `enforce_identical_briefs` turns a mismatch into LT-3's harness failure."""
+    def prob(m: dict) -> str | None:
+        body = (m.get("measured") or {}).get("post_body")
+        p = body.get("problem") if isinstance(body, dict) else None
+        return p if isinstance(p, str) else None
+    pa, pc = prob(a), prob(c)
+    return {
+        "problem_identical": pa is not None and pa == pc,
+        "problem_chars": [len(pa) if pa is not None else None, len(pc) if pc is not None else None],
+        "problem_sha256": [hashlib.sha256(p.encode("utf-8")).hexdigest()[:16] if p is not None else None for p in (pa, pc)],
+    }
+
+
+def enforce_identical_briefs(c: dict, cmp: dict) -> None:
+    """A non-identical LT-1 / LT-3 pair is LT-3's HARNESS failure (`brief-not-identical`): its
+    `harness_ok` is false, the reason named, a `pass` becomes `fail`. Identical: nothing changes."""
+    if cmp.get("problem_identical"):
+        return
+    c["harness_ok"] = False
+    c["fail_reasons"] = list(c.get("fail_reasons") or []) + [
+        "brief-not-identical",
+        f"LT-3 posted a different problem than LT-1 (chars {cmp.get('problem_chars')}) — the consistency measurement compares two asks"]
+    if c.get("result") == "pass":
+        c["result"] = "fail"
+    finding(f"LT-3: the posted problem is not byte-identical to LT-1's (chars {cmp.get('problem_chars')}) — brief-not-identical, harness_ok=false")
+
+
 def analyze(results: dict[str, dict]) -> None:
-    """LT-3 consistency, LT-4 surfaces coverage, LT-5 operator's-view rollup — over whatever ran."""
+    """LT-3 consistency (+ the LT-1 / LT-3 identical-brief assertion, round 9), LT-4 surfaces
+    coverage, LT-5 operator's-view rollup — over whatever ran."""
     a, c = results.get("LT-1"), results.get("LT-3")
     if a and c and a["measured"].get("plan") and c["measured"].get("plan"):
         REPORT["scenarios"]["LT-3"]["consistency_vs_LT-1"] = consistency(a, c)
+    if a and c and (a["measured"].get("post_body") is not None or c["measured"].get("post_body") is not None):
+        cmp = identical_briefs(a, c)
+        REPORT["scenarios"]["LT-3"].setdefault("consistency_vs_LT-1", {}).update(cmp)
+        enforce_identical_briefs(REPORT["scenarios"]["LT-3"], cmp)
     # LT-4: surfaces asked vs proposed, per plan.
     asked = {"ws_events": True, "api_routes": True, "cli": True, "ui_pages": True}
     REPORT["scenarios"]["LT-4"] = {
