@@ -28,15 +28,17 @@
  *    head is served), a NUL-sniffed one `binary` (`content: null`) — Save stays disabled on either
  *    so the editor never clobbers what it cannot show. `?side=baseline` reads the shipped copy.
  *
- * The adoption seam has two honest non-catalog states: a bare unknown-route 404 means "this crew
- * daemon predates the skills routes" ({@link isSkillsUnsupported}); a **503** means the route exists
- * but there is no catalog to serve — the root is unseeded (no installed plugin), `current` fails
- * verification, or the daemon booted without the seam ({@link isSkillsUnavailable}) — a LOUD error
- * with the daemon's sentence, never an empty catalog pretending.
+ * The adoption seam has two honest non-catalog states: the shared forward-compat signal — a bare
+ * unknown-route 404 (this crew daemon predates the skills routes) or a 501 (the route exists but
+ * nothing stands behind it yet) — is the NAMED unsupported state ({@link isSkillsUnsupported}, the
+ * same pair every other seam folds); a **503** means the route exists but there is no catalog to
+ * serve — the root is unseeded (no installed plugin), `current` fails verification, or the daemon
+ * booted without the seam ({@link isSkillsUnavailable}) — a LOUD error with the daemon's sentence,
+ * never an empty catalog pretending.
  */
 
 import { apiFetch } from './client.js';
-import { ApiError, isRouteAbsent } from './errors.js';
+import { ApiError, isRouteUnsupported } from './errors.js';
 import type {
   DiagnosticsSkillsState,
   SkillAnalyzeResult,
@@ -138,19 +140,23 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function isRevision(v: unknown): v is number {
-  return typeof v === 'number' && Number.isInteger(v) && v >= 0;
+/** A non-negative SAFE integer — what the contract means by `revision: number` and by a snapshot
+ *  `gen`: a monotonic counter. `NaN`, `±Infinity`, a float, a negative or a string are none of it;
+ *  JSON cannot even spell the first two, so their arrival is a mis-shaped body, not a catalog. */
+function isCounter(v: unknown): v is number {
+  return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 }
 
-const CATALOG_SHAPE = '{manifest: {skills, files, …}, revision: number, root, current}';
+const CATALOG_SHAPE = '{manifest: {skills, files, …}, revision: number, root, current: {gen: number, path} | null}';
 
 /**
  * The catalog read, shape-checked at the seam: a daemon that answers `/skills` with anything but
  * `SkillsManifestResponse` gets a NAMED error — never a page rendering zero skills (or index-named
  * rows, or a crash in {@link supportFiles}) against a daemon that answered something. `skills` and
- * `files` must be PLAIN objects, `revision` a non-negative integer (0.27.0: revisions are numbers —
- * a string revision is a pre-contract daemon, not a catalog), `root` a string and `current` null or
- * `{gen, path}`.
+ * `files` must be PLAIN objects, `revision` a non-negative safe integer (0.27.0: revisions are
+ * numbers — a string revision is a pre-contract daemon, not a catalog), `root` a string and
+ * `current` null or `{gen, path}` with `gen` the same kind of counter (a `NaN` / `Infinity` / float
+ * generation would render as the snapshot line and be compared against `published.gen`).
  */
 export function readCatalogBody(body: unknown): SkillsCatalog {
   if (isPlainObject(body)) {
@@ -159,9 +165,9 @@ export function readCatalogBody(body: unknown): SkillsCatalog {
       isPlainObject(manifest)
       && isPlainObject(manifest.skills)
       && isPlainObject(manifest.files)
-      && isRevision(revision)
+      && isCounter(revision)
       && typeof root === 'string'
-      && (current === null || (isPlainObject(current) && typeof current.gen === 'number' && typeof current.path === 'string'))
+      && (current === null || (isPlainObject(current) && isCounter(current.gen) && typeof current.path === 'string'))
     ) {
       return { manifest: manifest as unknown as SkillManifest, revision, root, current: current as SkillsCatalog['current'] };
     }
@@ -515,12 +521,14 @@ export function readSkillDeepLink(search: string): string | null {
 // ── The adoption seam + the CAS seam ──────────────────────────────────────────────────────────
 
 /**
- * True when this daemon PREDATES the skills routes: Fastify's bare unknown-route 404. A NAMED
+ * True when this daemon cannot serve the skills routes YET — the shared two-layer forward-compat
+ * signal every adoption seam folds ({@link isRouteUnsupported}): Fastify's bare unknown-route 404
+ * (crew predates `/skills`) or a 501 (the route exists but nothing stands behind it yet). A NAMED
  * 404 from a daemon WITH the routes ("unknown skill: …", "no such file") is a real answer and
- * surfaces as one.
+ * surfaces as one; a 503 is {@link isSkillsUnavailable}, not this.
  */
 export function isSkillsUnsupported(e: unknown): boolean {
-  return isRouteAbsent(e);
+  return isRouteUnsupported(e);
 }
 
 /** The honest in-band copy for {@link isSkillsUnsupported} refusals. */

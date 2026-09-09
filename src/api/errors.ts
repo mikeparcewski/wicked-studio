@@ -74,3 +74,17 @@ export function isRouteAbsent(e: unknown): boolean {
     e instanceof ApiError && e.status === 404 && (e.wire === 'Not Found' || e.wire === 'not found')
   );
 }
+
+/**
+ * The two-layer forward-compat signal every adoption seam folds: {@link isRouteAbsent}
+ * (the crew daemon predates the route) OR a **501** (the route exists but what stands
+ * behind it — the embedded engine's method, a store seam, the fold — does not yet).
+ * Both mean "nothing to manage here yet, upgrade wicked-crew" and render the named
+ * unsupported state; a NAMED 4xx/5xx from a daemon WITH the feature is a real answer
+ * and surfaces as one. The per-surface `is<Surface>Unsupported` helpers spell this
+ * same pair (diagnostics, steering, memory, proposals, testing, wiki); new seams
+ * should call this instead of restating it.
+ */
+export function isRouteUnsupported(e: unknown): boolean {
+  return (e instanceof ApiError && e.status === 501) || isRouteAbsent(e);
+}

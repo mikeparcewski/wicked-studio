@@ -386,6 +386,17 @@ describe('SkillsPage — the honest non-catalog states', () => {
     expect(screen.queryByTestId('skills-analyze')).toBeNull();
   });
 
+  it('a 501 (route present, nothing behind it yet) is the same named unsupported state — the forward-compat pair every adoption seam folds', async () => {
+    wire({ 'GET /skills': () => Promise.reject(new ApiError(501, 'skills store not implemented by this engine')) });
+    render(<Harness />);
+    const state = await screen.findByTestId('skills-unsupported');
+    expect(state).toHaveTextContent(/predates the skills catalog/);
+    expect(screen.queryByTestId('skills-unavailable')).toBeNull();
+    expect(screen.queryByTestId('skills-error')).toBeNull();
+    expect(screen.queryByTestId('skills-kpis')).toBeNull();
+    expect(screen.queryByTestId('skills-publish')).toBeNull();
+  });
+
   it('a 503 (route present, no catalog to serve: unseeded / corrupt current / no seam) renders the NAMED unavailable state with the daemon’s sentence', async () => {
     wire({ 'GET /skills': () => Promise.reject(new ApiError(503, 'the skills root is not seeded: no installed wicked-garden plugin was found')) });
     render(<Harness />);
@@ -415,7 +426,13 @@ describe('SkillsPage — the honest non-catalog states', () => {
     // A STRING revision is a pre-0.27.0 daemon (or a hand-mirrored shape) — not the contract.
     wire({ 'GET /skills': () => Promise.resolve({ ...catalog(), revision: 'rev-0001' }) });
     render(<Harness />);
-    expect(await screen.findByTestId('skills-error')).toHaveTextContent(/no catalog \(expected \{manifest: \{skills, files, …\}, revision: number, root, current\}\)/);
+    expect(await screen.findByTestId('skills-error')).toHaveTextContent(/no catalog \(expected \{manifest: \{skills, files, …\}, revision: number, root, current: \{gen: number, path\} \| null\}\)/);
+    cleanup();
+
+    // A `current.gen` that is not a counter (NaN cannot even travel as JSON; a float / negative can) — refused at the seam.
+    wire({ 'GET /skills': () => Promise.resolve({ ...catalog(), current: { gen: 2.5, path: SNAPSHOT_PATH } }) });
+    render(<Harness />);
+    expect(await screen.findByTestId('skills-error')).toHaveTextContent(/no catalog/);
     cleanup();
 
     // A manifest without the `files` map (the old `support` map instead) is not the contract either.

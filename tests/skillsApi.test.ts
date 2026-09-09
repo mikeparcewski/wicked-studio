@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '../src/api/errors.js';
+import { ApiError, isRouteUnsupported } from '../src/api/errors.js';
 import { apiFetch } from '../src/api/client.js';
 import {
   addSkill,
@@ -168,11 +168,31 @@ describe('readCatalogBody — exactly SkillsManifestResponse, never a silent emp
     expect(() => readCatalogBody([CATALOG])).toThrow(/no catalog/);
   });
 
-  it('revisions are NUMBERS (0.27.0): a string, a float, a negative or a missing revision is a mis-shaped answer', () => {
-    expect(() => readCatalogBody({ ...CATALOG, revision: 'rev-0007' })).toThrow(/expected \{manifest: \{skills, files, …\}, revision: number, root, current\}/);
+  it('revisions are NUMBERS (0.27.0): a string, a float, a negative, NaN, ±Infinity, an unsafe integer or a missing revision is a mis-shaped answer', () => {
+    expect(() => readCatalogBody({ ...CATALOG, revision: 'rev-0007' })).toThrow(/expected \{manifest: \{skills, files, …\}, revision: number, root, current: \{gen: number, path\} \| null\}/);
     expect(() => readCatalogBody({ ...CATALOG, revision: 1.5 })).toThrow(/no catalog/);
     expect(() => readCatalogBody({ ...CATALOG, revision: -1 })).toThrow(/no catalog/);
+    expect(() => readCatalogBody({ ...CATALOG, revision: Number.NaN })).toThrow(/no catalog/);
+    expect(() => readCatalogBody({ ...CATALOG, revision: Number.POSITIVE_INFINITY })).toThrow(/no catalog/);
+    expect(() => readCatalogBody({ ...CATALOG, revision: Number.NEGATIVE_INFINITY })).toThrow(/no catalog/);
+    expect(() => readCatalogBody({ ...CATALOG, revision: Number.MAX_SAFE_INTEGER + 1 })).toThrow(/no catalog/);
     expect(() => readCatalogBody({ ...CATALOG, revision: undefined })).toThrow(/no catalog/);
+    expect(readCatalogBody({ ...CATALOG, revision: Number.MAX_SAFE_INTEGER }).revision).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('current.gen is the same kind of counter (Copilot, fix pass 4): NaN / ±Infinity / a float / a negative / a string / an unsafe integer is a mis-shaped answer; 0 and safe integers pass', () => {
+    const at = (gen: unknown) => ({ ...CATALOG, current: { gen, path: '/state/skills/snapshots/000003' } });
+    expect(() => readCatalogBody(at(Number.NaN))).toThrow(/no catalog/);
+    expect(() => readCatalogBody(at(Number.POSITIVE_INFINITY))).toThrow(/no catalog/);
+    expect(() => readCatalogBody(at(Number.NEGATIVE_INFINITY))).toThrow(/no catalog/);
+    expect(() => readCatalogBody(at(2.5))).toThrow(/no catalog/);
+    expect(() => readCatalogBody(at(-1))).toThrow(/no catalog/);
+    expect(() => readCatalogBody(at('3'))).toThrow(/no catalog/);
+    expect(() => readCatalogBody(at(Number.MAX_SAFE_INTEGER + 1))).toThrow(/no catalog/);
+    expect(() => readCatalogBody(at(undefined))).toThrow(/no catalog/);
+    expect(readCatalogBody(at(0)).current).toEqual({ gen: 0, path: '/state/skills/snapshots/000003' });
+    expect(readCatalogBody(at(3)).current).toEqual({ gen: 3, path: '/state/skills/snapshots/000003' });
+    expect(readCatalogBody(at(Number.MAX_SAFE_INTEGER)).current?.gen).toBe(Number.MAX_SAFE_INTEGER);
   });
 
   it('requires PLAIN objects for `skills` and `files` — an array, null, or the OLD `support` map instead of `files` is a mis-shaped answer, not weird rows', () => {
@@ -450,23 +470,29 @@ describe('sortSkillFiles / listSkillFiles / supportFiles — the two trees', () 
 });
 
 describe('isSkillsUnsupported / isSkillsUnavailable / isSkillsConflict — the adoption seam and the CAS seam', () => {
-  it('unsupported is the bare unknown-route 404 (both Fastify and SPA spellings) — the daemon predates the routes', () => {
+  it('unsupported is the shared forward-compat pair — the bare unknown-route 404 (both Fastify and SPA spellings) OR a 501 — the same signal every other adoption seam folds', () => {
     expect(isSkillsUnsupported(new ApiError(404, 'Not Found'))).toBe(true);
     expect(isSkillsUnsupported(new ApiError(404, 'not found'))).toBe(true);
+    expect(isSkillsUnsupported(new ApiError(501, 'not implemented'))).toBe(true);
+    expect(isSkillsUnsupported(new ApiError(501, ''))).toBe(true);
+    // ONE spelling: the shared helper in errors.ts is what this seam answers.
+    for (const e of [new ApiError(404, 'Not Found'), new ApiError(501, 'x'), new ApiError(404, 'unknown skill: nope'), new ApiError(503, 'unseeded'), new Error('Not Found')]) {
+      expect(isSkillsUnsupported(e)).toBe(isRouteUnsupported(e));
+    }
   });
 
-  it('a NAMED 404, a 501, a 503, any other status, and a non-wire error are NOT "predates"', () => {
+  it('a NAMED 404, a 503, any other status, and a non-wire error are NOT "unsupported"', () => {
     expect(isSkillsUnsupported(new ApiError(404, 'unknown skill: nope'))).toBe(false);
-    expect(isSkillsUnsupported(new ApiError(501, 'not implemented'))).toBe(false);
     expect(isSkillsUnsupported(new ApiError(503, 'the skills root is not seeded'))).toBe(false);
     expect(isSkillsUnsupported(new ApiError(500, 'boom'))).toBe(false);
     expect(isSkillsUnsupported(new ApiError(409, 'stale revision'))).toBe(false);
     expect(isSkillsUnsupported(new Error('Not Found'))).toBe(false);
   });
 
-  it('unavailable is the 503 — the route exists but there is no catalog to serve (unseeded / corrupt current / no seam)', () => {
+  it('unavailable is the 503 — the route exists but there is no catalog to serve (unseeded / corrupt current / no seam); never the 501', () => {
     expect(isSkillsUnavailable(new ApiError(503, 'the skills root is not seeded: no installed wicked-garden plugin was found'))).toBe(true);
     expect(isSkillsUnavailable(new ApiError(503, 'the daemon booted without a skills store (no state home seam) — /skills is unavailable'))).toBe(true);
+    expect(isSkillsUnavailable(new ApiError(501, 'not implemented'))).toBe(false);
     expect(isSkillsUnavailable(new ApiError(404, 'Not Found'))).toBe(false);
     expect(isSkillsUnavailable(new ApiError(500, 'boom'))).toBe(false);
     expect(isSkillsUnavailable(new Error('503'))).toBe(false);
