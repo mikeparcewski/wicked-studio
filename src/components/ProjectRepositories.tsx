@@ -101,9 +101,17 @@ function isAttached(repo: RepoEntry, members: ProjectMember[]): boolean {
 
 interface Props {
   projectId: string;
-  /** Every member the parent holds — this section filters to `crew.repo` itself. */
+  /**
+   * The parent's membership state — every member (ProjectDetailPage) or already
+   * just the `crew.repo` subset (ProjectDashboard). This section filters to
+   * `crew.repo` itself, so either shape is fine; it never inspects the rest.
+   */
   members: ProjectMember[];
-  /** The parent's membership state with the change applied: attach appends, detach filters. */
+  /**
+   * The SAME array with only the repo change applied — attach appends the new
+   * member, detach filters the one member out — so whatever non-repo entries the
+   * parent handed in come back untouched.
+   */
   onMembersChange: (members: ProjectMember[]) => void;
 }
 
@@ -118,6 +126,15 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
   /** The member id being detached, or null. */
   const [detaching, setDetaching] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * ONE mutation at a time. Both `attach` and `detach` derive the next membership
+   * from the `members` they closed over, so two in flight at once would each
+   * report from a stale base and the later one would silently drop the earlier
+   * one's result. The lock also keeps a second row's Detach from re-pointing
+   * `confirming` while a detach is mid-request.
+   */
+  const busy = attaching !== null || detaching !== null;
 
   const repoMembers = useMemo(
     () => members.filter((m) => m.member_kind === REPO_KIND),
@@ -144,7 +161,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
   }
 
   async function attach(repo: RepoEntry): Promise<void> {
-    if (attaching !== null) return;
+    if (busy) return;
     setAttaching(repo.id);
     setError(null);
     try {
@@ -163,7 +180,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
   }
 
   async function detach(member: ProjectMember): Promise<void> {
-    if (detaching !== null) return;
+    if (busy) return;
     setDetaching(member.id);
     setError(null);
     try {
@@ -206,7 +223,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
                       type="button"
                       data-testid="project-repo-detach-confirm"
                       data-repo={m.member_ref}
-                      disabled={detaching !== null}
+                      disabled={busy}
                       onClick={() => void detach(m)}
                       style={{ ...CSS.dangerBtn, opacity: detaching === m.id ? 0.5 : 1 }}
                     >
@@ -215,7 +232,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
                     <button
                       type="button"
                       data-testid="project-repo-detach-cancel"
-                      disabled={detaching !== null}
+                      disabled={busy}
                       onClick={() => setConfirming(null)}
                       style={CSS.ghostBtn}
                     >
@@ -232,8 +249,9 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
                       data-testid="project-repo-detach"
                       data-repo={m.member_ref}
                       title="Detach this repository from the project (asks first)"
+                      disabled={busy}
                       onClick={() => setConfirming(m.id)}
-                      style={CSS.ghostBtn}
+                      style={{ ...CSS.ghostBtn, opacity: busy ? 0.5 : 1 }}
                     >
                       Detach
                     </button>
@@ -275,7 +293,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
                   data-testid="project-repo-option"
                   data-repo={r.id}
                   title={r.root_path}
-                  disabled={attaching !== null}
+                  disabled={busy}
                   onClick={() => void attach(r)}
                   style={{ ...CSS.option, opacity: attaching === r.id ? 0.5 : 1 }}
                 >

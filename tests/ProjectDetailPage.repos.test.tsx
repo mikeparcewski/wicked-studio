@@ -169,6 +169,52 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     expect(within(section).getByTestId('project-repo-row')).toHaveAttribute('data-repo', 'studio-web');
   });
 
+  it('one mutation at a time: while a detach is in flight every other Detach and the picker are disabled, then re-enable', async () => {
+    getProject.mockResolvedValue(detail('proj-1', [member('proj-1', 'studio-api'), member('proj-1', 'studio-web')]));
+    let settleDetach!: (v: { ok: true }) => void;
+    detachProjectMember.mockReturnValue(new Promise<{ ok: true }>((resolve) => { settleDetach = resolve; }));
+    const section = await renderPage();
+
+    const [first, second] = within(section).getAllByTestId('project-repo-row') as [HTMLElement, HTMLElement];
+    fireEvent.click(within(first).getByTestId('project-repo-detach'));
+    fireEvent.click(within(first).getByTestId('project-repo-detach-confirm'));
+    await waitFor(() => expect(detachProjectMember).toHaveBeenCalledTimes(1));
+
+    // Mid-request: the other row cannot start a second confirm, and the picker cannot attach.
+    expect(within(second).getByTestId('project-repo-detach')).toBeDisabled();
+    fireEvent.click(within(second).getByTestId('project-repo-detach'));
+    expect(within(second).queryByTestId('project-repo-detach-confirm')).toBeNull();
+    fireEvent.focus(within(section).getByTestId('project-repo-search'));
+    for (const option of await within(section).findAllByTestId('project-repo-option')) expect(option).toBeDisabled();
+    expect(attachProjectMember).not.toHaveBeenCalled();
+
+    settleDetach({ ok: true });
+    await waitFor(() => expect(within(section).getAllByTestId('project-repo-row')).toHaveLength(1));
+    const remaining = within(section).getByTestId('project-repo-row');
+    expect(remaining).toHaveAttribute('data-repo', 'studio-web');
+    expect(within(remaining).getByTestId('project-repo-detach')).toBeEnabled();
+    for (const option of within(section).getAllByTestId('project-repo-option')) expect(option).toBeEnabled();
+  });
+
+  it('attach and detach hand the parent back its non-repo members untouched', async () => {
+    getProject.mockResolvedValue(detail('proj-1', [member('proj-1', 'r-1', 'crew.run'), member('proj-1', 'studio-api')]));
+    attachProjectMember.mockResolvedValue({ member: member('proj-1', 'crew') });
+    detachProjectMember.mockResolvedValue({ ok: true });
+    const section = await renderPage();
+    expect(screen.getByText('Members (1)')).toBeInTheDocument();
+
+    fireEvent.focus(within(section).getByTestId('project-repo-search'));
+    fireEvent.click((await within(section).findAllByTestId('project-repo-option')).find((o) => o.getAttribute('data-repo') === 'crew')!);
+    await waitFor(() => expect(within(section).getAllByTestId('project-repo-row')).toHaveLength(2));
+    expect(screen.getByText('Members (1)')).toBeInTheDocument(); // the run member survived the attach
+
+    const row = within(section).getAllByTestId('project-repo-row').find((r) => r.getAttribute('data-repo') === 'studio-api')!;
+    fireEvent.click(within(row).getByTestId('project-repo-detach'));
+    fireEvent.click(within(row).getByTestId('project-repo-detach-confirm'));
+    await waitFor(() => expect(within(section).getAllByTestId('project-repo-row')).toHaveLength(1));
+    expect(screen.getByText('Members (1)')).toBeInTheDocument(); // and the detach
+  });
+
   it('is omitted for the synthesized default project (the wire rejects attach there)', async () => {
     getProject.mockResolvedValue(detail('default', [member('default', 'r-1', 'crew.run')]));
     getProjectActivity.mockResolvedValue({ entries: [], nextCursor: null, projectId: 'default' });
