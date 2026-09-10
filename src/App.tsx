@@ -368,7 +368,6 @@ export function App(): React.ReactElement {
         onLaunched={onLaunched}
         onNavigateBack={onNavigateBack}
         onRefresh={refresh}
-        onKill={onKill}
         navigate={navigate}
         launchProjectId={launchProjectId}
         // Slice Z (§7.6): the route names a run the index has not resolved —
