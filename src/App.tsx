@@ -617,8 +617,7 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // `/projects/:id` redirects into the shell (§1.5); this renders only for the tick
-    // before the redirect lands, and is the fallback if the redirect never does.
+    // `/projects/:id` — the project management page (Edit + Archive/Restore).
     if (panel === 'project-detail' && projectId) {
       return (
         <div className="flex-1 overflow-y-auto">

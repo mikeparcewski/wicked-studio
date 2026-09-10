@@ -8,7 +8,7 @@ import {
   type StatusCounts,
 } from '../board/windowStats.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
-import { projectPath } from '../hooks/useRoute.js';
+import { projectDetailPath, projectPath } from '../hooks/useRoute.js';
 import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { useGateStore } from '../store/gates.js';
 import { useProjectsStore } from '../store/projects.js';
@@ -725,8 +725,8 @@ export function ProjectsPage({ runs, navigate }: Props): React.ReactElement {
                   data-status={p.status}
                   role="link"
                   tabIndex={0}
-                  onClick={() => navigate(projectPath(p.id))}
-                  onKeyDown={(e) => { if (e.key === 'Enter') navigate(projectPath(p.id)); }}
+                  onClick={() => navigate(projectDetailPath(p.id))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') navigate(projectDetailPath(p.id)); }}
                   className="transition-colors hover:bg-surface-raised"
                   style={{
                     display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0,

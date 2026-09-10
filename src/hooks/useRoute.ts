@@ -137,6 +137,11 @@ export function projectPath(projectId: string): string {
   return `/p/${encodeURIComponent(projectId)}`;
 }
 
+/** Where `/projects/:id` lands — the project management page (Edit + Archive/Restore). */
+export function projectDetailPath(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}`;
+}
+
 /** Build a project-shell path. The single spelling of `/p/:projectId/:mode[/:artifactId]`. */
 export function modePath(projectId: string, mode: Mode, artifactId?: string | null): string {
   const base = `${projectPath(projectId)}/${mode}`;

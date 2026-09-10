@@ -4577,19 +4577,19 @@ def run_scenarios(rig: Rig, page) -> None:
         A = ctx["A"]
         goto(page, f"/projects/{quote(A)}")
         page.wait_for_load_state("networkidle")
-        archive = page.get_by_role("button", name=re.compile(r"^Archive$"))
-        expect_gap(
-            f"/projects/{quote(A)}" in page.url and archive.count() > 0, "studio#214",
-            f"ProjectDetailPage (the only Archive/Restore control, ProjectDetailPage.tsx) is unreachable: /projects/{A} "
-            f"redirected to {page.url.replace(ORIGIN, '')} (useLegacyRedirect) — no reachable UI affordance archives or restores a project",
+        assert f"/projects/{quote(A)}" in page.url, (
+            f"expected /projects/{A} to stay put but got {page.url.replace(ORIGIN, '')} — "
+            f"useLegacyRedirect is still redirecting /projects/:id (studio#214 regression)"
         )
+        archive = page.get_by_role("button", name=re.compile(r"^Archive$"))
+        assert archive.count() > 0, "Archive button not found on ProjectDetailPage — controls not rendered"
         archive.click()
         page.wait_for_function("() => document.body.textContent.includes('archived')", timeout=10_000)
         st, detail = api("GET", f"/projects/{quote(A)}")
         assert st == 200 and detail["project"]["status"] == "archived", f"archive did not persist: {detail.get('project')}"
         return "archived through ProjectDetailPage; server row status=archived"
 
-    suite.run("CLN-2", "Archive a project through the UI (ProjectDetailPage → Archive)", cln2, xfail="studio#214", requires=("PRJ-1",))
+    suite.run("CLN-2", "Archive a project through the UI (ProjectDetailPage → Archive)", cln2, requires=("PRJ-1",))
 
     def cln2s() -> str:
         A, B = ctx["A"], ctx["B"]
@@ -4611,7 +4611,7 @@ def run_scenarios(rig: Rig, page) -> None:
         for pid in (A, B):
             assert tid(page, "project-card", project_id=pid, status="archived").count() == 1, f"{pid} missing from the archived grid"
         if "CLN-2" not in suite.passed:
-            findings.append("CLN-2 (studio#214): no reachable UI affordance archives/restores a project — /projects/:id (ProjectDetailPage) redirects to /p/:id")
+            findings.append("CLN-2: UI archive via ProjectDetailPage failed — falling back to API substitute")
         return "[SUBSTITUTE] both projects archived over PATCH /projects/:id; UI verifies: no active card, both listed under the archived toggle"
 
     suite.run("CLN-2S", "Archive both projects (API substitute, UI-verified)", cln2s, requires=("PRJ-1", "PRJ-2"))
