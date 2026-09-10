@@ -146,6 +146,20 @@ describe('F-045 belt and braces: a frame naming a doc but NO project files under
     unbind();
   });
 
+  it('clear(key) drops the frames HELD for that doc and their timer — nothing fires into Unfiled after a thread was cleared (Copilot on #241)', () => {
+    ingest(status('late'));
+    expect(useDocThreadStore.getState().held[DOC]?.events).toHaveLength(1);
+    useDocThreadStore.getState().clear(KEY);
+    expect(useDocThreadStore.getState().held[DOC]).toBeUndefined();
+    vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    expect(messages()).toEqual([]);
+    // …and a later mount replays nothing either.
+    const unbind = useDocThreadStore.getState().bindDoc(PROJECT, DOC);
+    expect(messages()).toEqual([]);
+    unbind();
+  });
+
   it('the binding is by exact doc id — `deck` mounted does not claim `launch-deck` frames', () => {
     const unbind = useDocThreadStore.getState().bindDoc(PROJECT, 'deck');
     ingest(status('hello'));

@@ -809,7 +809,13 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
 
   setGenState: (key, state) => set((s) => ({ genState: { ...s.genState, [key]: state } })),
 
-  clear: (key) =>
+  clear: (key) => {
+    // A cleared thread drops the frames HELD for its doc too — the doc grammar has no `:`, so the
+    // id is the key's tail — and their timer, or a held frame could fire into Unfiled (or a later
+    // mount) after the thread it belonged to was cleared (Copilot on #241).
+    const docId = key.slice(key.lastIndexOf(':') + 1);
+    const heldEntry = get().held[docId];
+    if (heldEntry !== undefined) clearTimeout(heldEntry.timer);
     set((s) => {
       const messages = { ...s.messages }; delete messages[key];
       const genState = { ...s.genState }; delete genState[key];
@@ -819,7 +825,9 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
       const lastError = { ...s.lastError }; delete lastError[key];
       const lastSignalAt = { ...s.lastSignalAt }; delete lastSignalAt[key];
       const expectedDividers = { ...s.expectedDividers }; delete expectedDividers[key];
-      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers };
-    }),
+      const held = { ...s.held }; delete held[docId];
+      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers, held };
+    });
+  },
   };
 });
