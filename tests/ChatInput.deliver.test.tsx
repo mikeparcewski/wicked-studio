@@ -81,7 +81,9 @@ describe('ChatInput delivery (#123)', () => {
     // Visible before the send — the operator reads that a PR is coming.
     const notice = screen.getByTestId('deliver-notice');
     expect(notice.dataset.deliverState).toBe('on');
-    expect(notice.textContent).toMatch(/opens a PR/i);
+    // F-028: the notice NAMES the repo the PR lands on.
+    expect(notice.textContent).toMatch(/opens a PR on studio-api/i);
+    expect(notice.dataset.deliverRepo).toBe('studio-api');
     expect(notice.textContent).toMatch(/Merging stays yours/i);
 
     await send(user, 'add the delivery toggle');

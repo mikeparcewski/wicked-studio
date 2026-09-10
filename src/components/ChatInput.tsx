@@ -13,6 +13,7 @@ import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { ContextPopover } from './ContextPopover.js';
+import { describeGate, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
 import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
@@ -238,20 +239,61 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // /runs until the operator attaches one or explicitly overrides.
   const [preflightBlocked, setPreflightBlocked] = useState(false);
 
-  // Auto-attach (§7.8): a project's bound repo (`crew.repo` membership) rides
-  // the launch by default — visibly, as a removable chip (auto is a default,
+  // Auto-attach (§7.8): a project's bound repos (`crew.repo` membership) ride
+  // the launch by default — visibly, as removable chips (auto is a default,
   // not a lock). `reposTouched` = the operator has spoken; auto never wins.
-  const [autoAttached, setAutoAttached] = useState(false);
+  //
+  // F-028: the chips are CONTEXT, not the target. `explicitRefs` is the subset
+  // the operator TICKED (or a retry prefill seeded) — a chip outside it is
+  // auto-attached and says so. `targetChoice` is the Target-repo control. The
+  // ONE repo the launch works in (`LaunchRunBody.repoRef`) is derived from the
+  // three by `resolveLaunchTarget`, never read as `repoRefs[0]`.
+  const [explicitRefs, setExplicitRefs] = useState<string[]>(prefill?.repoRef ? [prefill.repoRef] : []);
+  const [targetChoice, setTargetChoice] = useState<string | null>(null);
   const reposTouched = useRef(prefill?.repoRef != null);
   const repoRefsRef = useRef(repoRefs);
   repoRefsRef.current = repoRefs;
   const autoTriedFor = useRef<string | null>(null);
 
-  function touchRepoRefs(refs: string[]): void {
+  /**
+   * The popover's checkbox list speaks in whole arrays; the diff against the
+   * current attachment is the operator's tick (added → explicit) or untick.
+   */
+  function onPopoverRepoRefs(next: string[]): void {
     reposTouched.current = true;
-    setAutoAttached(false);
-    setRepoRefs(refs);
+    const prev = repoRefsRef.current;
+    const added = next.filter((id) => !prev.includes(id));
+    const removed = prev.filter((id) => !next.includes(id));
+    setExplicitRefs((cur) => [
+      ...cur.filter((id) => !removed.includes(id)),
+      ...added.filter((id) => !cur.includes(id)),
+    ]);
+    setRepoRefs(next);
   }
+
+  /** A chip's × — removing an auto-attached chip is the operator speaking (§7.8). */
+  function removeRepoRef(rid: string): void {
+    reposTouched.current = true;
+    setExplicitRefs((cur) => cur.filter((id) => id !== rid));
+    setRepoRefs((cur) => cur.filter((id) => id !== rid));
+  }
+
+  // The effective workflow and its kind, derived ONCE for the submit guard, the
+  // wire body, the deliver notice and the pre-send summary below.
+  const launchWorkflow = workflowOverride?.trim() || workflow;
+  const launchKind = deliverKind(launchWorkflow);
+  const target = resolveLaunchTarget({
+    repoRefs,
+    explicitRefs,
+    selectedTarget: targetChoice,
+    // Build-kind work opens its PR on exactly one repo: several candidates
+    // without a choice is a question, not `[0]`.
+    requireExplicit: launchKind === 'build',
+  });
+  const targetRepoRef = target.kind === 'resolved' ? target.repoRef : null;
+  const targetLabel =
+    targetRepoRef === null ? null : repoSlugOf(repos.find((r) => r.id === targetRepoRef) ?? { name: targetRepoRef });
+  const targetRequired = launchKind === 'build' && target.kind === 'ambiguous';
 
   // ── Project binding (DES-FEEDBACK-001 §5, slice B) ─────────────────────────
   // `null` = Unfiled (§5.1): no `projectId` key in the POST body, the backend
@@ -361,7 +403,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         const refs = members.filter((m) => m.member_kind === 'crew.repo').map((m) => m.member_ref);
         if (refs.length === 0) return;
         setRepoRefs(refs);
-        setAutoAttached(true);
       })
       .catch(() => {
         autoTriedFor.current = null; // transient — retry on the next binding change
@@ -468,6 +509,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       setPreflightBlocked(true);
       return;
     }
+    // F-028: build-kind work with several attached repos and no target chosen
+    // does not launch — the Send button is already disabled with the reason on
+    // screen; this guards the Cmd+Enter path the same way. Nothing is guessed.
+    if (targetRequired) return;
     setPreflightBlocked(false);
     setSubmitting(true);
     setError(null);
@@ -492,9 +537,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       if (confirmMode === 'all') body.humanConfirm = 'all';
       else if (confirmMode === 'before') body.humanConfirm = `before:${beforeOrd}`;
     }
-    const firstRepo = repoRefs[0];
-    if (firstRepo) body.repoRef = firstRepo;
-    const wf = workflowOverride?.trim() || workflow;
+    // The ONE repo this run works in (F-028): the resolved target — an explicit
+    // tick or the Target-repo choice wins over auto-attached project members;
+    // a lone attached repo needs no choice. Never `repoRefs[0]`.
+    if (targetRepoRef !== null) body.repoRef = targetRepoRef;
+    const wf = launchWorkflow;
     if (wf) body.workflow = wf;
     // Delivery (crew#293/studio#123, wire reworked by crew#393): a repo-scoped
     // BUILD launch ALWAYS carries the key — `'pr'` when the toggle is on,
@@ -506,7 +553,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // run launches WITHOUT the key (the daemon defaults those to `'none'`;
     // older daemons also 400 on `'none'`, so unlicensed bodies never carry it).
     // The same verdict is on screen before the operator sends (`deliverNotice`).
-    if (deliverKind(wf) === 'build' && firstRepo) body.deliver = deliverOn ? 'pr' : 'none';
+    if (deliverKind(wf) === 'build' && targetRepoRef !== null) body.deliver = deliverOn ? 'pr' : 'none';
     // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
@@ -757,7 +804,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // Launch form (no run selected)
   // ══════════════════════════════════════════════════════════════════════════
 
-  const canSubmit = problem.trim().length > 0 && selectedClis.size > 0 && !submitting;
+  // F-028: an unresolved target on build-kind work disables Send — the reason
+  // renders beside the Target-repo control (`launch-target-reason`).
+  const canSubmit = problem.trim().length > 0 && selectedClis.size > 0 && !submitting && !targetRequired;
   const showDetection = detectedWorkflow !== null && !workflowDismissed && !workflow && !workflowOverride;
 
   // The switcher's current binding (§5.2). Pre-bound (§4.3): the project rides
@@ -786,14 +835,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // the line can never disagree with the body that goes on the wire. Silent
   // when the preference is off (the setting is the answer) and on the chat
   // surface (a system workflow has nothing to deliver).
-  const deliverWorkflow = workflowOverride?.trim() || workflow;
   // The toggle renders exactly where the wire key can go (crew#393): a
   // repo-scoped BUILD launch. Hidden — not merely disabled — everywhere else:
   // repo-less, freeform and system launches never carry the key, so a control
   // there would promise a choice the body cannot honor.
-  const deliverToggleVisible = deliverKind(deliverWorkflow) === 'build' && Boolean(repoRefs[0]);
+  const deliverToggleVisible = launchKind === 'build' && targetRepoRef !== null;
   const deliverNotice: { state: string; text: string } | null = ((): { state: string; text: string } | null => {
-    switch (deliverKind(deliverWorkflow)) {
+    switch (launchKind) {
       case 'system':
         return null;
       case 'freeform':
@@ -806,12 +854,19 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             }
           : null;
       case 'build':
-        // The SAME truthiness the submit site guards on (`const firstRepo =
-        // repoRefs[0]`), not `repoRefs.length > 0` — otherwise a falsy first
-        // entry renders "a PR is coming" over a body that carries no
-        // `deliver`, and the notice's whole contract is that it cannot
-        // disagree with the wire.
-        if (!repoRefs[0]) {
+        // The SAME resolution the submit site puts on the wire (`targetRepoRef`)
+        // — the notice's whole contract is that it cannot disagree with the body.
+        if (target.kind === 'ambiguous') {
+          // F-028: several repos attached, none chosen — the launch is held
+          // (Send disabled) and the notice says WHY there is no PR yet.
+          return deliverOn
+            ? {
+                state: 'no-target',
+                text: `No PR yet — ${target.candidates.length} repos are attached and a build run opens its PR on exactly one. Choose the target repo.`,
+              }
+            : null;
+        }
+        if (targetRepoRef === null) {
           return deliverOn
             ? {
                 state: 'no-repo',
@@ -821,8 +876,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         }
         return deliverOn
           ? {
+              // F-028: the notice NAMES the repo the PR lands on — `owner/repo`
+              // off its registered git URL, its registered name otherwise.
               state: 'on',
-              text: 'When this finishes it pushes its branch and opens a PR. Merging stays yours.',
+              text: `When this finishes it pushes its branch → opens a PR on ${targetLabel}. Merging stays yours.`,
             }
           : {
               // The consequence of OFF, said before the send (crew#393): the
@@ -882,15 +939,19 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }
   for (const rid of repoRefs) {
     const found = repos.find((r) => r.id === rid);
+    // A chip the operator did not tick came from the project (§7.8) and keeps
+    // saying so even after other ticks — context, not the target (F-028).
+    const auto = !explicitRefs.includes(rid);
     activePills.push({
-      label: `Repo: ${found?.name ?? rid}${autoAttached ? ' (from project)' : ''}`,
+      label: `Repo: ${found?.name ?? rid}${auto ? ' (from project)' : ''}`,
       // Removing an auto-attached chip is the operator speaking (§7.8: auto is
       // a default, not a lock) — auto never re-attaches afterwards.
-      onClear: () => touchRepoRefs(repoRefs.filter((id) => id !== rid)),
+      onClear: () => removeRepoRef(rid),
       attrs: {
         'data-testid': 'repo-chip',
         'data-repo-ref': rid,
-        'data-auto-attached': autoAttached ? 'true' : 'false',
+        'data-auto-attached': auto ? 'true' : 'false',
+        'data-target': rid === targetRepoRef ? 'true' : 'false',
       },
     });
   }
@@ -1176,6 +1237,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <p
           data-testid="deliver-notice"
           data-deliver-state={deliverNotice.state}
+          data-deliver-repo={targetRepoRef ?? ''}
           className="text-xs px-1 font-mono"
           style={{
             color:
@@ -1185,6 +1247,78 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           }}
         >
           {deliverNotice.text}
+        </p>
+      )}
+
+      {/* ── Target repo (F-028) — build-kind work with several repos attached
+          must be TOLD which one it works in: a required single-select with no
+          default. The chips stay as context; an explicit popover tick already
+          resolves it (and shows here); the choice here outranks the tick. ── */}
+      {launchKind === 'build' && repoRefs.length > 1 && (
+        <div
+          data-testid="launch-target-row"
+          className="flex items-center gap-2 flex-wrap text-xs px-1 font-mono"
+          style={{ color: 'var(--ink-muted)' }}
+        >
+          <span
+            className="text-[11px] font-mono uppercase tracking-widest"
+            style={{ color: 'var(--ink-dim)' }}
+          >
+            Target repo
+          </span>
+          <select
+            data-testid="launch-target-repo"
+            data-target-state={target.kind}
+            aria-label="Target repo"
+            aria-invalid={targetRequired}
+            required
+            title="The one repository this run works in — its worktree, its branch and its PR all land here"
+            className="rounded-lg px-2 py-1 text-[11px] font-mono"
+            style={{
+              background: 'var(--surface-card)',
+              border: `1px solid ${targetRequired ? 'var(--status-gate)' : 'var(--surface-raised)'}`,
+              color: 'var(--ink-high)',
+            }}
+            value={targetRepoRef ?? ''}
+            onChange={(e) => setTargetChoice(e.target.value === '' ? null : e.target.value)}
+          >
+            <option value="">choose the target repo…</option>
+            {repoRefs.map((rid) => {
+              const found = repos.find((r) => r.id === rid);
+              return (
+                <option key={rid} value={rid}>
+                  {found?.name ?? rid}
+                </option>
+              );
+            })}
+          </select>
+          {targetRequired && (
+            <span data-testid="launch-target-reason" style={{ color: 'var(--status-gate)' }}>
+              Required — {repoRefs.length} repos are attached and a build run works in exactly one.
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Pre-send summary (F-028) — the confirmation of WHAT is about to
+          launch, WHERE, and under which gate, read before Send. Rendered for
+          build-kind work (the launches that dispatch workers into a repo). ── */}
+      {launchKind === 'build' && (
+        <p
+          data-testid="launch-summary"
+          data-workflow={launchWorkflow}
+          data-target={targetRepoRef ?? ''}
+          data-gate={describeGate(mode, confirmMode, beforeOrd)}
+          className="text-xs px-1 font-mono"
+          style={{ color: 'var(--ink-muted)' }}
+        >
+          Launches <span style={{ color: 'var(--ink-high)' }}>{launchWorkflow}</span>
+          {' on '}
+          <span data-testid="launch-summary-target" style={{ color: targetLabel === null ? 'var(--status-gate)' : 'var(--ink-high)' }}>
+            {targetLabel ?? (target.kind === 'ambiguous' ? 'no target repo chosen' : 'no repository')}
+          </span>
+          {' · gate: '}
+          <span style={{ color: 'var(--ink-high)' }}>{describeGate(mode, confirmMode, beforeOrd)}</span>
         </p>
       )}
 
@@ -1249,7 +1383,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
                 }}
                 repos={repos}
                 repoRefs={repoRefs}
-                onRepoRefsChange={touchRepoRefs}
+                onRepoRefsChange={onPopoverRepoRefs}
                 attachedFiles={attachedFiles}
                 onFilesChange={setAttachedFiles}
               />

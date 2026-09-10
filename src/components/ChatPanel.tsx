@@ -36,7 +36,6 @@ interface Props {
   onLaunched: (runId: string) => void;
   onNavigateBack: () => void;
   onRefresh: () => void;
-  onKill?: (runId: string) => void | Promise<void>;
   /** App-level route navigation — threaded to ChatInput's seat sign-in warning (→ /system). */
   navigate?: (path: string) => void;
   /**
@@ -219,12 +218,103 @@ function statusDotColor(status: string): string {
   }
 }
 
-function StopIcon(): React.ReactElement {
+/**
+ * The run header's Cancel control (F-029) — for EVERY non-terminal status, not
+ * only inside an open gate. Acceptance run 1f12f9ab was mis-bound to the wrong
+ * repo and sat in `distributing` with four councils voting; the only cancel on
+ * the page (`steering-cancel`) lives inside a gate card, so the operator had to
+ * reach for the API. This is a labelled button (the icon-only stop glyph it
+ * replaces read as decoration), it asks first (cancelling stops workers now —
+ * never one click), it speaks the wire directly (`POST /runs/:id/cancel`), and
+ * a refusal stays on screen instead of being swallowed.
+ */
+function RunCancelControl({ runId, onCancelled }: {
+  runId: string;
+  onCancelled: () => void;
+}): React.ReactElement {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm(): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.cancelRun(runId);
+      setConfirming(false);
+      onCancelled();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function keep(): void {
+    if (busy) return;
+    setConfirming(false);
+    setError(null);
+  }
+
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        data-testid="run-cancel"
+        onClick={() => setConfirming(true)}
+        title="Cancel this run — stops its workers now; the worktree stays on disk"
+        className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
+        style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+      >
+        Cancel run
+      </button>
+    );
+  }
   return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="8" cy="8" r="6.75" stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="5.25" y="5.25" width="5.5" height="5.5" rx="0.75" fill="currentColor"/>
-    </svg>
+    <div
+      data-testid="run-cancel-confirm"
+      role="group"
+      aria-label="Confirm cancelling this run"
+      className="flex items-center gap-2 shrink-0 rounded-lg px-2 py-1"
+      style={{ background: 'var(--surface-raised)', border: '1px solid var(--status-fail-dim)' }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          keep();
+        }
+      }}
+    >
+      <span className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+        Cancel this run? Workers stop now; the worktree stays.
+      </span>
+      <button
+        type="button"
+        data-testid="run-cancel-yes"
+        onClick={() => void confirm()}
+        disabled={busy}
+        autoFocus
+        className="rounded-lg px-2.5 py-1 text-[11px] font-semibold font-mono disabled:opacity-50 transition-opacity"
+        style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+      >
+        {busy ? 'Cancelling…' : 'Yes, cancel'}
+      </button>
+      <button
+        type="button"
+        data-testid="run-cancel-keep"
+        onClick={keep}
+        disabled={busy}
+        className="rounded-lg px-2.5 py-1 text-[11px] font-semibold font-mono disabled:opacity-50 transition-opacity"
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)', color: 'var(--ink-body)' }}
+      >
+        Keep running
+      </button>
+      {error !== null && (
+        <span data-testid="run-cancel-error" className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
+          {error}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -609,7 +699,6 @@ function RunChat({
   onLaunched,
   onNavigateBack,
   onRefresh,
-  onKill,
   navigate,
 }: {
   view: SessionView;
@@ -618,7 +707,6 @@ function RunChat({
   onLaunched: (runId: string) => void;
   onNavigateBack: () => void;
   onRefresh: () => void;
-  onKill?: (runId: string) => void | Promise<void>;
   navigate?: (path: string) => void;
 }): React.ReactElement {
   const { session, units } = view;
@@ -776,20 +864,10 @@ function RunChat({
         {isTerminal && <InspectMenu lens={runTab} onSelect={setRunTab} />}
         <ModePill mode={mode} onChange={onModeChange} readOnly={isTerminal} />
         <ExportEvidenceButton runId={session.id} disabled={!isTerminal} />
-        {!isTerminal && onKill && (
-          <button
-            type="button"
-            onClick={() => void onKill(session.id)}
-            title="Kill run (Ctrl+K)"
-            aria-label="Kill run"
-            className="flex items-center justify-center w-6 h-6 rounded shrink-0 transition-opacity disabled:opacity-30"
-            style={{ color: 'var(--status-fail)', opacity: 0.65 }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.65'; }}
-          >
-            <StopIcon />
-          </button>
-        )}
+        {/* F-029: Cancel for every non-terminal status — planning, distributing,
+            executing AND awaiting_human — outside any gate card, confirmed, on
+            the wire's `POST /runs/:id/cancel`; the run index refreshes on success. */}
+        {!isTerminal && <RunCancelControl runId={session.id} onCancelled={onRefresh} />}
       </div>
 
       {/* Process stepper — the run's map: every phase, in order, with its state at a glance. */}
@@ -1032,7 +1110,7 @@ function NewRunView({
   );
 }
 
-export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefresh, onKill, navigate, launchProjectId = null, pendingRunId = null, runsLoaded = false }: Props): React.ReactElement {
+export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefresh, navigate, launchProjectId = null, pendingRunId = null, runsLoaded = false }: Props): React.ReactElement {
   const [mode, setMode] = useState<RunMode>('balanced');
 
   if (view) {
@@ -1060,7 +1138,6 @@ export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefres
         onLaunched={onLaunched}
         onNavigateBack={onNavigateBack}
         onRefresh={onRefresh}
-        {...(onKill !== undefined ? { onKill } : {})}
         {...(navigate !== undefined ? { navigate } : {})}
       />
     );
