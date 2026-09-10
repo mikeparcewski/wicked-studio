@@ -12,6 +12,8 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-09-10
+
 ### Fixed
 - **Document thread — bare status frames file under the doc's MOUNTED thread (acceptance finding
   F-045, belt and braces).** Crew's own interactive seams narrated their governed runs with
@@ -580,7 +582,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.0...v0.5.1
