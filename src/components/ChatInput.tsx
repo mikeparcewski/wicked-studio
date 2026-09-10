@@ -268,9 +268,15 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       ...cur.filter((id) => !removed.includes(id)),
       ...added.filter((id) => !cur.includes(id)),
     ]);
-    // Removing the CHOSEN target drops the choice with it: a stale choice would
-    // otherwise outrank every later tick the moment that repo is re-attached.
-    setTargetChoice((cur) => (cur !== null && removed.includes(cur) ? null : cur));
+    // The operator's LATEST act stands. A new tick clears any earlier Target
+    // choice ("select A, then tick B" must be B — a choice that outlived a later
+    // tick is the original wrong-repo dispatch class), and removing the chosen
+    // repo drops the choice with it (a stale one would outrank every later tick
+    // the moment that repo is re-attached).
+    setTargetChoice((cur) => {
+      if (cur === null || added.length > 0) return null;
+      return removed.includes(cur) ? null : cur;
+    });
     setRepoRefs(next);
   }
 
@@ -1309,25 +1315,28 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         </div>
       )}
 
-      {/* ── Pre-send summary (F-028) — the confirmation of WHAT is about to
-          launch, WHERE, and under which gate, read before Send. Rendered for
-          build-kind work (the launches that dispatch workers into a repo). ── */}
+      {/* ── Confirmation step (F-028) — WHAT is about to launch, WHERE, and
+          under which gate, together, read before Send: the workflow, the target
+          repo the run works in (and opens its PR on), and the gate posture the
+          body will carry. Rendered for build-kind work (the launches that
+          dispatch workers into a repo); `data-*` mirror the wire body. ── */}
       {launchKind === 'build' && (
         <p
-          data-testid="launch-summary"
+          data-testid="launch-confirm"
           data-workflow={launchWorkflow}
           data-target={targetRepoRef ?? ''}
           data-gate={describeGate(mode, confirmMode, beforeOrd)}
           className="text-xs px-1 font-mono"
           style={{ color: 'var(--ink-muted)' }}
         >
-          Launches <span style={{ color: 'var(--ink-high)' }}>{launchWorkflow}</span>
+          {targetRepoRef === null ? 'Not ready to send: ' : 'Ready to send: '}
+          <span data-testid="launch-confirm-workflow" style={{ color: 'var(--ink-high)' }}>{launchWorkflow}</span>
           {' on '}
-          <span data-testid="launch-summary-target" style={{ color: targetLabel === null ? 'var(--status-gate)' : 'var(--ink-high)' }}>
+          <span data-testid="launch-confirm-target" style={{ color: targetLabel === null ? 'var(--status-gate)' : 'var(--ink-high)' }}>
             {targetLabel ?? (target.kind === 'ambiguous' ? 'no target repo chosen' : 'no repository')}
           </span>
           {' · gate: '}
-          <span style={{ color: 'var(--ink-high)' }}>{describeGate(mode, confirmMode, beforeOrd)}</span>
+          <span data-testid="launch-confirm-gate" style={{ color: 'var(--ink-high)' }}>{describeGate(mode, confirmMode, beforeOrd)}</span>
         </p>
       )}
 

@@ -207,7 +207,7 @@ export function ContextPopover({
         <SectionHead>Set gate</SectionHead>
         <div className="flex items-center gap-2 flex-wrap">
           <select
-            data-testid="launch-confirm"
+            data-testid="launch-gate"
             className="rounded-lg px-2 py-1"
             style={{
               background: 'var(--surface-base)',

@@ -16,8 +16,11 @@ import type { RunMode } from './runMode.js';
  * Send guard, the wire body, the deliver notice and the pre-send summary can
  * never disagree about it.
  *
- * Precedence, highest first:
- *   1. `selectedTarget` — the Target-repo control, when it names an attached repo;
+ * Precedence, highest first — and the operator's LATEST act is what stands:
+ *   1. `selectedTarget` — the Target-repo control's CURRENT value, when it
+ *      names an attached repo. The composer clears it whenever a repo is
+ *      ticked afterwards (and when the chosen repo is removed), so a choice
+ *      never outranks a tick made after it: "select A, then tick B" is B;
  *   2. the operator's explicit popover ticks (`explicitRefs ∩ repoRefs`): one
  *      tick IS the target, whatever else the project auto-attached;
  *   3. a single attached repo needs no choice;
@@ -38,7 +41,11 @@ export interface LaunchTargetInput {
   repoRefs: readonly string[];
   /** The subset the operator ticked in the popover (or a retry prefill seeded), in tick order. */
   explicitRefs: readonly string[];
-  /** The Target-repo control's value, or `null` when the operator has not chosen. */
+  /**
+   * The Target-repo control's CURRENT value, or `null`. The caller keeps it the
+   * operator's latest act: cleared on any later tick and when the chosen repo
+   * is removed — see `ChatInput.onPopoverRepoRefs` / `removeRepoRef`.
+   */
   selectedTarget: string | null;
   /** Build-kind work: more than one candidate without a choice is ambiguous, never `[0]`. */
   requireExplicit: boolean;

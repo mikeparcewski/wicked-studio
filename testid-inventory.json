@@ -11,8 +11,8 @@
   "studioVersion": "0.5.2",
   "counts": {
     "files": 137,
-    "occurrences": 1144,
-    "static": 982,
+    "occurrences": 1146,
+    "static": 984,
     "dynamic": 57,
     "computed": 6
   },
@@ -2258,13 +2258,37 @@
     {
       "testId": "launch-confirm",
       "files": [
-        "src/components/ContextPopover.tsx"
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-confirm-gate",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-confirm-target",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-confirm-workflow",
+      "files": [
+        "src/components/ChatInput.tsx"
       ]
     },
     {
       "testId": "launch-error",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-gate",
+      "files": [
+        "src/components/ContextPopover.tsx"
       ]
     },
     {
@@ -2281,18 +2305,6 @@
     },
     {
       "testId": "launch-submit",
-      "files": [
-        "src/components/ChatInput.tsx"
-      ]
-    },
-    {
-      "testId": "launch-summary",
-      "files": [
-        "src/components/ChatInput.tsx"
-      ]
-    },
-    {
-      "testId": "launch-summary-target",
       "files": [
         "src/components/ChatInput.tsx"
       ]

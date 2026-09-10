@@ -100,7 +100,7 @@ What this rig is, and what it is not:
     composer ASKS which repo the run works in — `launch-target-repo` REQUIRED with no default, Send
     disabled with `launch-target-reason`, `deliver-notice[data-deliver-state=no-target]` — then that an
     explicit popover tick wins over the auto-attached chips, that the Target choice outranks the tick,
-    that the notice reads "→ opens a PR on <repo>" and `launch-summary` carries workflow + target + gate.
+    that the notice reads "→ opens a PR on <repo>" and `launch-confirm` carries workflow + target + gate.
     The run index is compared before/after: NOTHING launches. The second repo is detached at the end.
     RUN-CXL (F-029) asserts the run header's `run-cancel` control: it was OBSERVED (recorded, never
     asserted there) on a second page opened at `/p/A/build/<run>` while TST-1's run sat at its gate —
@@ -4399,7 +4399,7 @@ def run_scenarios(rig: Rig, page) -> None:
         REQUIRED with no default, Send disabled with `launch-target-reason`, the deliver notice in
         `no-target` — an explicit popover tick must WIN over the auto-attached chips, the Target
         choice must outrank the tick, the notice must read "→ opens a PR on <repo>", and
-        `launch-summary` must carry workflow + target + gate before Send. Nothing is launched: the
+        `launch-confirm` must carry workflow + target + gate before Send. Nothing is launched: the
         run index is compared before/after. The second repo is harness setup over the API, labelled
         `[SUBSTITUTE]` (register → onboarding `completed` → attach to A), exactly as the rig's first
         repo and ATT-1 — and it runs AFTER TST-1 because a two-repo project fans a Tests launch out.
@@ -4446,7 +4446,7 @@ def run_scenarios(rig: Rig, page) -> None:
             assert tid(page, "launch-submit").is_disabled(), "Send is enabled with no target chosen"
             assert tid(page, "deliver-notice").get_attribute("data-deliver-state") == "no-target", (
                 f"deliver notice state {tid(page, 'deliver-notice').get_attribute('data-deliver-state')!r}")
-            summary = tid(page, "launch-summary")
+            summary = tid(page, "launch-confirm")
             assert summary.get_attribute("data-workflow") == "bug" and summary.get_attribute("data-target") == "", "summary before a choice"
             assert tid(page, "repo-chip", target="true").count() == 0, "a chip is marked target before any choice"
             # (2) an explicit tick WINS over the auto-attached chips: untick the first repo (one candidate is left and
@@ -4456,7 +4456,7 @@ def run_scenarios(rig: Rig, page) -> None:
             tid(page, f"launch-repo-{REPO_ID}").click()
             page.wait_for_function("() => document.querySelectorAll('[data-testid=\"repo-chip\"]').length === 1", timeout=10_000)
             assert tid(page, "launch-target-row").count() == 0, "one candidate left, yet the Target control still renders"
-            assert tid(page, "launch-summary").get_attribute("data-target") == repo2, "the lone remaining repo did not resolve as the target"
+            assert tid(page, "launch-confirm").get_attribute("data-target") == repo2, "the lone remaining repo did not resolve as the target"
             tid(page, f"launch-repo-{REPO_ID}").click()
             drawer.click()
             page.wait_for_function("() => document.querySelectorAll('[data-testid=\"repo-chip\"]').length === 2", timeout=10_000)
@@ -4471,18 +4471,30 @@ def run_scenarios(rig: Rig, page) -> None:
             assert notice.get_attribute("data-deliver-state") == "on" and notice.get_attribute("data-deliver-repo") == REPO_ID
             tick_text = text_of(notice)
             assert "opens a PR on" in tick_text and f"seed-surfaces-{STAMP}" in tick_text, f"notice after the tick: {tick_text!r}"
-            # (3)/(4) the Target choice outranks the tick; the notice and the summary name it; Send enables.
+            # (3)/(4) a Target choice made AFTER the tick stands (the latest act); the notice and the confirmation
+            # step name it; Send enables.
             tid(page, "launch-target-repo").select_option(repo2)
             page.wait_for_function(
                 "id => document.querySelector('[data-testid=\"deliver-notice\"]')?.getAttribute('data-deliver-repo') === id", arg=repo2, timeout=10_000)
             chosen_text = text_of(tid(page, "deliver-notice"))
             assert "opens a PR on" in chosen_text and repo2_name in chosen_text, f"notice after the choice: {chosen_text!r}"
-            summary = tid(page, "launch-summary")
+            summary = tid(page, "launch-confirm")
             gate = summary.get_attribute("data-gate") or ""
             assert summary.get_attribute("data-workflow") == "bug" and summary.get_attribute("data-target") == repo2 and gate != "", (
                 f"summary workflow={summary.get_attribute('data-workflow')!r} target={summary.get_attribute('data-target')!r} gate={gate!r}")
             assert tid(page, "repo-chip", target="true").get_attribute("data-repo-ref") == repo2
             assert tid(page, "launch-submit").is_enabled(), "Send stays disabled after the target was chosen"
+            # (2b) select A, THEN tick B: the later tick wins — a choice never outlives a tick made after it (the
+            # original wrong-repo dispatch class). Untick the first repo and tick it again AFTER the choice of repo2.
+            drawer.click()
+            tid(page, f"launch-repo-{REPO_ID}").click()
+            page.wait_for_function("() => document.querySelectorAll('[data-testid=\"repo-chip\"]').length === 1", timeout=10_000)
+            tid(page, f"launch-repo-{REPO_ID}").click()
+            drawer.click()
+            page.wait_for_function("() => document.querySelectorAll('[data-testid=\"repo-chip\"]').length === 2", timeout=10_000)
+            assert tid(page, "launch-target-repo").input_value() == REPO_ID, "a tick made after the Target choice did not win"
+            assert tid(page, "launch-confirm").get_attribute("data-target") == REPO_ID, "the confirmation step kept the earlier choice"
+            assert tid(page, "deliver-notice").get_attribute("data-deliver-repo") == REPO_ID
             # NOTHING launched — the composer was only read.
             runs_after = {v["session"]["id"] for v in list_runs()}
             assert runs_after == runs_before, f"the scenario launched runs: {sorted(runs_after - runs_before)}"

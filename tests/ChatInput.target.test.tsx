@@ -18,7 +18,10 @@ import { clearRetryPrefill } from '../src/store/retryPrefill.js';
  *   - an explicit popover tick ALWAYS wins over the auto-attached chips;
  *   - the deliver notice names the repo the PR lands on ("→ opens a PR on
  *     acme/widgets"), off its git URL when registered, its name otherwise;
- *   - the pre-send summary shows workflow + target + gate before Send;
+ *   - the confirmation step (`launch-confirm`) shows workflow + target + gate
+ *     together before Send;
+ *   - the operator's LATEST act stands: a tick after a Target choice wins
+ *     ("select A, then tick B" sends B), un-ticking the target asks again;
  *   - the wire body carries exactly the resolved target — never `repoRefs[0]`.
  */
 
@@ -97,9 +100,10 @@ describe('ChatInput target repo (F-028)', () => {
     // The options are the normalized attachment: the placeholder + each attached repo once.
     expect([...select.options].map((o) => o.value)).toEqual(['', 'wicked-core', 'wicked-estate']);
     expect(screen.getByTestId('launch-target-reason').textContent).toMatch(/2 repos are attached/);
-    // The summary names the gap, the notice says why there is no PR yet.
-    expect(screen.getByTestId('launch-summary').dataset.target).toBe('');
-    expect(screen.getByTestId('launch-summary-target').textContent).toMatch(/no target repo chosen/);
+    // The confirmation step names the gap, the notice says why there is no PR yet.
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('');
+    expect(screen.getByTestId('launch-confirm').textContent).toMatch(/^Not ready to send: bug on no target repo chosen/);
+    expect(screen.getByTestId('launch-confirm-target').textContent).toMatch(/no target repo chosen/);
     expect(screen.getByTestId('deliver-notice').dataset.deliverState).toBe('no-target');
     expect(screen.queryByTestId('deliver-toggle'), 'no toggle without a repo to push to').toBeNull();
 
@@ -127,11 +131,13 @@ describe('ChatInput target repo (F-028)', () => {
     expect(notice.dataset.deliverRepo).toBe('wicked-estate');
     expect(notice.textContent).toMatch(/opens a PR on wicked-estate/);
     expect(notice.textContent).toMatch(/Merging stays yours/);
-    const summary = screen.getByTestId('launch-summary');
+    const summary = screen.getByTestId('launch-confirm');
     expect(summary.dataset.workflow).toBe('bug');
     expect(summary.dataset.target).toBe('wicked-estate');
     expect(summary.dataset.gate).toBe('first gate'); // COMPOSER_DEFAULT_GATE_POSTURE
-    expect(summary.textContent).toMatch(/Launches bug on wicked-estate · gate: first gate/);
+    expect(summary.textContent).toMatch(/Ready to send: bug on wicked-estate · gate: first gate/);
+    expect(screen.getByTestId('launch-confirm-workflow').textContent).toBe('bug');
+    expect(screen.getByTestId('launch-confirm-gate').textContent).toBe('first gate');
     const targetChip = screen.getAllByTestId('repo-chip').find((c) => c.dataset.repoRef === 'wicked-estate')!;
     expect(targetChip.dataset.target).toBe('true');
     // The chips stay context: the other project repo is still marked auto, not target.
@@ -170,7 +176,7 @@ describe('ChatInput target repo (F-028)', () => {
     expect(notice.dataset.deliverState).toBe('on');
     // `git_url: git@github.com:acme/wicked-studio.git` → owner/repo.
     expect(notice.textContent).toMatch(/→ opens a PR on acme\/wicked-studio\./);
-    expect(screen.getByTestId('launch-summary-target').textContent).toBe('acme/wicked-studio');
+    expect(screen.getByTestId('launch-confirm-target').textContent).toBe('acme/wicked-studio');
 
     await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
@@ -179,7 +185,45 @@ describe('ChatInput target repo (F-028)', () => {
     expect(sentBody().repoRef, 'the TICKED repo, listed last, wins over chip[0]').toBe('wicked-studio');
   });
 
-  it('the Target-repo choice outranks an explicit tick', async () => {
+  it('SUBMISSION: select A, then tick B → the body carries B (a choice never outlives a later tick)', async () => {
+    const user = userEvent.setup();
+    renderBound();
+    await chips();
+    await bind(user, { workflow: 'bug' });
+    await user.selectOptions(screen.getByTestId('launch-target-repo'), 'wicked-core'); // A: an auto chip, chosen
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-core');
+    await bind(user, { tick: 'wicked-studio' }); // B: ticked AFTER the choice
+    expect((screen.getByTestId('launch-target-repo') as HTMLSelectElement).value).toBe('wicked-studio');
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-studio');
+    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/opens a PR on acme\/wicked-studio/);
+    await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    await user.click(screen.getByTestId('launch-submit'));
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    expect(sentBody().repoRef, 'the LATER tick, not the earlier choice').toBe('wicked-studio');
+  });
+
+  it('SUBMISSION: tick B, then un-tick B → back to "choose a target", Send disabled, zero POST /runs', async () => {
+    const user = userEvent.setup();
+    renderBound();
+    await chips();
+    await bind(user, { workflow: 'bug', tick: 'wicked-studio' });
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-studio');
+    await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    await bind(user, { tick: 'wicked-studio' }); // un-tick
+    const select = screen.getByTestId('launch-target-repo') as HTMLSelectElement;
+    expect(select.value).toBe('');
+    expect(select.dataset.targetState).toBe('ambiguous');
+    expect(screen.getByTestId('launch-target-reason')).toBeInTheDocument();
+    expect(screen.getByTestId('launch-confirm').textContent).toMatch(/^Not ready to send/);
+    expect(screen.getByTestId('launch-submit')).toBeDisabled();
+    fireEvent.keyDown(screen.getByTestId('launch-problem'), { key: 'Enter', metaKey: true });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(client.api.launchRun).not.toHaveBeenCalled();
+  });
+
+  it('a Target-repo choice made AFTER the tick stands — it is the latest act', async () => {
     const user = userEvent.setup();
     renderBound();
     await chips();
@@ -199,12 +243,12 @@ describe('ChatInput target repo (F-028)', () => {
     await chips();
     await bind(user, { workflow: 'bug' });
     await user.selectOptions(screen.getByTestId('launch-target-repo'), 'wicked-estate');
-    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-estate');
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-estate');
     // Untick the chosen repo in the popover, then tick another: the tick is the target now.
     await bind(user, { tick: 'wicked-estate' });
-    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-core');
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-core');
     await bind(user, { tick: 'wicked-studio' });
-    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-studio');
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-studio');
     // Re-attach the once-chosen repo: with the stale choice gone, two ticks are a QUESTION
     // (ambiguous) — the old choice must not silently retarget the launch.
     await bind(user, { tick: 'wicked-estate' });
@@ -221,10 +265,10 @@ describe('ChatInput target repo (F-028)', () => {
     await chips();
     await bind(user, { workflow: 'bug', tick: 'wicked-studio' });
     await user.selectOptions(screen.getByTestId('launch-target-repo'), 'wicked-core');
-    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-core');
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-core');
     await user.click(screen.getByLabelText(/Clear Repo: wicked-core/));
     // The tick resumes as the target; re-ticking core later must not resurrect the choice.
-    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-studio');
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-studio');
     await bind(user, { tick: 'wicked-core' });
     expect((screen.getByTestId('launch-target-repo') as HTMLSelectElement).dataset.targetState).toBe('ambiguous');
   });
@@ -238,7 +282,7 @@ describe('ChatInput target repo (F-028)', () => {
     await user.click(screen.getByLabelText(/Clear Repo: wicked-core/));
     // One candidate left: no select, no reason — it IS the target.
     expect(screen.queryByTestId('launch-target-row')).toBeNull();
-    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-estate');
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-estate');
     expect(screen.getByTestId('deliver-notice').textContent).toMatch(/opens a PR on wicked-estate/);
     await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
@@ -254,7 +298,7 @@ describe('ChatInput target repo (F-028)', () => {
     await screen.findByTestId('repo-chip');
     await bind(user, { workflow: 'bug' });
     expect(screen.queryByTestId('launch-target-row')).toBeNull();
-    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-studio');
+    expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-studio');
     expect(screen.getByTestId('deliver-notice').textContent).toMatch(/opens a PR on acme\/wicked-studio/);
     await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
@@ -269,7 +313,7 @@ describe('ChatInput target repo (F-028)', () => {
     await chips();
     // No workflow, non-code-shaped text: freeform. No Target control, no summary, no block.
     expect(screen.queryByTestId('launch-target-row')).toBeNull();
-    expect(screen.queryByTestId('launch-summary')).toBeNull();
+    expect(screen.queryByTestId('launch-confirm')).toBeNull();
     await user.type(screen.getByTestId('launch-problem'), 'summarise what these repos do');
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     await user.click(screen.getByTestId('launch-submit'));
@@ -286,8 +330,8 @@ describe('ChatInput target repo (F-028)', () => {
     await chips();
     await bind(user, { workflow: 'bug' });
     await user.selectOptions(screen.getByTestId('gate-posture'), 'all');
-    expect(screen.getByTestId('launch-summary').dataset.gate).toBe('every unit');
+    expect(screen.getByTestId('launch-confirm').dataset.gate).toBe('every unit');
     await user.selectOptions(screen.getByTestId('gate-posture'), 'none');
-    expect(screen.getByTestId('launch-summary').dataset.gate).toBe('no gates');
+    expect(screen.getByTestId('launch-confirm').dataset.gate).toBe('no gates');
   });
 });

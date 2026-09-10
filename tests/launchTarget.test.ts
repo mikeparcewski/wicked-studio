@@ -52,9 +52,14 @@ describe('resolveLaunchTarget (F-028)', () => {
       .toEqual({ kind: 'resolved', repoRef: 'studio', source: 'first' });
   });
 
-  it('the Target-repo choice outranks an explicit tick', () => {
+  it("the Target-repo control's CURRENT value outranks the ticks — the composer keeps it the operator's latest act", () => {
+    // `selectedTarget` is only ever non-null when the choice came AFTER every tick
+    // (ChatInput clears it on any later tick); the resolver honours it as such.
     expect(resolveLaunchTarget({ repoRefs: ['core', 'estate', 'studio'], explicitRefs: ['studio'], selectedTarget: 'core', requireExplicit: true }))
       .toEqual({ kind: 'resolved', repoRef: 'core', source: 'selected' });
+    // Cleared choice (a tick came after it): the tick is the target.
+    expect(resolveLaunchTarget({ repoRefs: ['core', 'estate', 'studio'], explicitRefs: ['studio'], selectedTarget: null, requireExplicit: true }))
+      .toEqual({ kind: 'resolved', repoRef: 'studio', source: 'explicit' });
   });
 
   it('a choice or a tick that is no longer attached is ignored — never a phantom repoRef', () => {
