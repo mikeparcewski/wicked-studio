@@ -94,6 +94,8 @@ describe('ChatInput target repo (F-028)', () => {
     expect(select.value, 'no default when >1 candidate').toBe('');
     expect(select.dataset.targetState).toBe('ambiguous');
     expect(select).toBeRequired();
+    // The options are the normalized attachment: the placeholder + each attached repo once.
+    expect([...select.options].map((o) => o.value)).toEqual(['', 'wicked-core', 'wicked-estate']);
     expect(screen.getByTestId('launch-target-reason').textContent).toMatch(/2 repos are attached/);
     // The summary names the gap, the notice says why there is no PR yet.
     expect(screen.getByTestId('launch-summary').dataset.target).toBe('');

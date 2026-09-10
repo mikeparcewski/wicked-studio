@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describeGate, repoSlugOf, resolveLaunchTarget } from '../src/components/launchTarget.js';
+import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from '../src/components/launchTarget.js';
 
 /**
  * F-028 — the ONE derivation of `LaunchRunBody.repoRef`. Acceptance run
@@ -68,6 +68,18 @@ describe('resolveLaunchTarget (F-028)', () => {
     expect(resolveLaunchTarget({ repoRefs: ['', 'core', 'core'], explicitRefs: [], ...build }))
       .toEqual({ kind: 'resolved', repoRef: 'core', source: 'only' });
     expect(resolveLaunchTarget({ repoRefs: ['', ''], explicitRefs: [], ...build })).toEqual({ kind: 'none' });
+  });
+});
+
+describe('normalizeRepoRefs — the ONE list every attachment surface reads', () => {
+  it('drops empty entries and keeps the first occurrence of a duplicate, in attach order', () => {
+    expect(normalizeRepoRefs(['', 'core', 'estate', 'core', ''])).toEqual(['core', 'estate']);
+    expect(normalizeRepoRefs([])).toEqual([]);
+    expect(normalizeRepoRefs(['', ''])).toEqual([]);
+  });
+  it('is exactly what the resolver counts: only-empties is "none", so the preflight and the body agree', () => {
+    expect(resolveLaunchTarget({ repoRefs: ['', ''], explicitRefs: [], ...build })).toEqual({ kind: 'none' });
+    expect(normalizeRepoRefs(['', '']).length).toBe(0);
   });
 });
 

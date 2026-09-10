@@ -44,8 +44,18 @@ export interface LaunchTargetInput {
   requireExplicit: boolean;
 }
 
+/**
+ * The attached refs as the resolver sees them: empty entries dropped, first
+ * occurrence wins. Every surface that counts, lists or guards on "what is
+ * attached" reads THIS (the Target-repo options, the chips, the preflight's
+ * "no repository attached") so none of them can disagree with the target.
+ */
+export function normalizeRepoRefs(refs: readonly string[]): string[] {
+  return refs.filter((id, i, all) => id !== '' && all.indexOf(id) === i);
+}
+
 export function resolveLaunchTarget(input: LaunchTargetInput): LaunchTarget {
-  const attached = input.repoRefs.filter((id, i, all) => id !== '' && all.indexOf(id) === i);
+  const attached = normalizeRepoRefs(input.repoRefs);
   if (attached.length === 0) return { kind: 'none' };
   if (input.selectedTarget !== null && attached.includes(input.selectedTarget)) {
     return { kind: 'resolved', repoRef: input.selectedTarget, source: 'selected' };

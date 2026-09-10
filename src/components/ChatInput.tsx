@@ -13,7 +13,7 @@ import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { ContextPopover } from './ContextPopover.js';
-import { describeGate, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
+import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
 import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
@@ -282,8 +282,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // wire body, the deliver notice and the pre-send summary below.
   const launchWorkflow = workflowOverride?.trim() || workflow;
   const launchKind = deliverKind(launchWorkflow);
+  // What is attached, as the resolver counts it — the chips, the Target-repo
+  // options and the preflight's "no repository" all read this one list.
+  const attachedRefs = normalizeRepoRefs(repoRefs);
   const target = resolveLaunchTarget({
-    repoRefs,
+    repoRefs: attachedRefs,
     explicitRefs,
     selectedTarget: targetChoice,
     // Build-kind work opens its PR on exactly one repo: several candidates
@@ -294,6 +297,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const targetLabel =
     targetRepoRef === null ? null : repoSlugOf(repos.find((r) => r.id === targetRepoRef) ?? { name: targetRepoRef });
   const targetRequired = launchKind === 'build' && target.kind === 'ambiguous';
+  /** "No repository attached" — the resolver's verdict, the same one the wire body reads. */
+  const noRepoAttached = target.kind === 'none';
 
   // ── Project binding (DES-FEEDBACK-001 §5, slice B) ─────────────────────────
   // `null` = Unfiled (§5.1): no `projectId` key in the POST body, the backend
@@ -505,7 +510,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // cannot produce reviewable work. Warn-and-block: ZERO POST /runs until a
     // repo attaches or the operator overrides ("Launch anyway").
     const codeShaped = Boolean(workflowOverride?.trim() || workflow || detectWorkflow(problem));
-    if (!preflightOverride && codeShaped && repoRefs.length === 0) {
+    if (!preflightOverride && codeShaped && noRepoAttached) {
       setPreflightBlocked(true);
       return;
     }
@@ -937,7 +942,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       },
     });
   }
-  for (const rid of repoRefs) {
+  for (const rid of attachedRefs) {
     const found = repos.find((r) => r.id === rid);
     // A chip the operator did not tick came from the project (§7.8) and keeps
     // saying so even after other ticks — context, not the target (F-028).
@@ -1167,7 +1172,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {/* ── Preflight warn-and-block (§7.8, EC43) — a code intent with no repo
           fired zero POST /runs to get here; the override is the only way past
           without attaching. ── */}
-      {preflightBlocked && repoRefs.length === 0 && (
+      {preflightBlocked && noRepoAttached && (
         <div
           data-testid="preflight-block"
           className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
@@ -1254,7 +1259,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           must be TOLD which one it works in: a required single-select with no
           default. The chips stay as context; an explicit popover tick already
           resolves it (and shows here); the choice here outranks the tick. ── */}
-      {launchKind === 'build' && repoRefs.length > 1 && (
+      {launchKind === 'build' && attachedRefs.length > 1 && (
         <div
           data-testid="launch-target-row"
           className="flex items-center gap-2 flex-wrap text-xs px-1 font-mono"
@@ -1283,7 +1288,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             onChange={(e) => setTargetChoice(e.target.value === '' ? null : e.target.value)}
           >
             <option value="">choose the target repo…</option>
-            {repoRefs.map((rid) => {
+            {attachedRefs.map((rid) => {
               const found = repos.find((r) => r.id === rid);
               return (
                 <option key={rid} value={rid}>
@@ -1294,7 +1299,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           </select>
           {targetRequired && (
             <span data-testid="launch-target-reason" style={{ color: 'var(--status-gate)' }}>
-              Required — {repoRefs.length} repos are attached and a build run works in exactly one.
+              Required — {attachedRefs.length} repos are attached and a build run works in exactly one.
             </span>
           )}
         </div>
