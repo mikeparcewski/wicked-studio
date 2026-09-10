@@ -21,9 +21,11 @@ npm publish dates. Every version listed here exists on
   `project_id` on every seam emit (wicked-crew, F-045); independently, `docThread.ingest` files a
   frame that names a doc but no project under the project a `DocumentThread` is currently MOUNTED for
   that doc (`bindDoc`/`unbindDoc`, registered by the component — never inferred from retained
-  history, which a previous same-slug thread would poison). The composer claims the name for its
-  project the moment the create is SENT (a pending binding the mounting thread adopts — released on
-  a refused create), so a frame that beats the bridge's answer files on the project thread; a frame
+  history, which a previous same-slug thread would poison). The composer claims the doc for its
+  project the moment the create is SENT — under the bridge's CANONICAL id (`docSlug`, the bridge's
+  own `DOC_NAME` + `slugify` rule replicated byte for byte and pinned against observed ids), which
+  is what every frame carries — as a pending binding the mounting thread adopts (released on a
+  refused create), so a frame that beats the bridge's answer files on the project thread; a frame
   with no binding at all is HELD and released exactly once onto the thread that binds, expiring to
   Unfiled only when nothing is bound for 10 s (never while a pending create or an ambiguous pair
   is open; an unmount that leaves one thread releases the held frames to it). The stall banner

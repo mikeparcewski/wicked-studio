@@ -10,7 +10,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { DocumentThread } from '../src/components/DocumentThread.js';
 import { NO_GROUNDING_NARRATION } from '../src/components/DocSubjectPicker.js';
-import { threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
+import { BARE_FRAME_HOLD_MS, threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
 
 const PROJECT = 'proj-abc';
 const DOC = 'launch-deck';
@@ -237,31 +237,66 @@ describe('repository discovery can fail — never a silently ungrounded create (
   });
 });
 
-describe('the create-time binding (F-045, codex on #241): a bare frame that arrives BEFORE the create answers files on the project thread', () => {
-  it('files a document_id-only frame under the project while createDoc is still pending — never under Unfiled, exactly once', async () => {
-    let resolveCreate: (v: unknown) => void = () => undefined;
-    createDoc.mockReturnValue(new Promise((r) => { resolveCreate = r; }));
-    mount();
-    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
-    await send('a deck for the Q3 review');
-    await waitFor(() => expect(createDoc).toHaveBeenCalledTimes(1));
-    const sentName = (createDoc.mock.calls[0]![1] as { name: string }).name;
-    // Crew picked the doc up off the bus before the bridge answered the create.
-    useDocThreadStore.getState().ingest({
-      type: 'interactiveEvent',
-      event: { event_type: 'wicked.interactive.status.posted', payload: { document_id: sentName, state: 'processing', message: 'A governed crew picked up your brief' } },
-    } as unknown as import('../src/api/types.js').CoreEvent);
-    const onProject = useDocThreadStore.getState().messages[threadKey(PROJECT, sentName)] ?? [];
-    expect(onProject.some((m) => 'text' in m && m.text === 'A governed crew picked up your brief')).toBe(true);
-    expect(useDocThreadStore.getState().messages[threadKey('default', sentName)]).toBeUndefined();
-    expect(useDocThreadStore.getState().held[sentName]).toBeUndefined();
-    resolveCreate({ name: sentName, head: 0, generating: true });
-    await waitFor(() => expect((useDocThreadStore.getState().messages[threadKey(PROJECT, sentName)] ?? []).filter((m) => m.kind === 'user')).toHaveLength(1));
-    // Exactly one copy of the early frame.
-    expect((useDocThreadStore.getState().messages[threadKey(PROJECT, sentName)] ?? []).filter((m) => 'text' in m && m.text === 'A governed crew picked up your brief')).toHaveLength(1);
+describe('the create-time binding (F-045, codex on #241 / r3): a bare frame that arrives BEFORE the create answers files on the project thread', () => {
+  it('claims the bridge\'s CANONICAL slug — not the human name — when the create is sent; a slug-keyed frame that arrives while the create is pending and the hold deadline passes still lands on the project thread, exactly once, and never under Unfiled — through navigation and mount', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveCreate: (v: unknown) => void = () => undefined;
+      createDoc.mockReturnValue(new Promise((r) => { resolveCreate = r; }));
+      const navigate = vi.fn();
+      const view = render(<DocumentThread projectId={PROJECT} docId={null} selectedVersion={null} navigate={navigate} mode="document" />);
+      // The picker's discovery resolves; flush it under fake timers.
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2);
+      // A HUMAN name (quoted) — the bridge will answer with its slug.
+      fireEvent.change(screen.getByTestId('doc-composer'), { target: { value: '"Q3 Board Deck" for the leadership review' } });
+      fireEvent.click(screen.getByTestId('doc-composer-submit'));
+      await act(async () => { await Promise.resolve(); });
+      expect(createDoc).toHaveBeenCalledTimes(1);
+      const sentName = (createDoc.mock.calls[0]![1] as { name: string }).name;
+      expect(sentName).toBe('Q3 Board Deck');
+      const slug = 'q3-board-deck';
+      // The claim is under the SLUG.
+      expect(useDocThreadStore.getState().bindings[slug]).toEqual([{ projectId: PROJECT, pending: true }]);
+      expect(useDocThreadStore.getState().bindings[sentName]).toBeUndefined();
+
+      // Crew's pickup frame (slug-keyed, no project) arrives before the bridge has answered…
+      useDocThreadStore.getState().ingest({
+        type: 'interactiveEvent',
+        event: { event_type: 'wicked.interactive.status.posted', payload: { document_id: slug, state: 'processing', message: 'A governed crew picked up your brief' } },
+      } as unknown as import('../src/api/types.js').CoreEvent);
+      // …and the hold deadline passes while the create is STILL pending: nothing expires anywhere.
+      vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+      const onProject = (): DocMsg[] => useDocThreadStore.getState().messages[threadKey(PROJECT, slug)] ?? [];
+      expect(onProject().filter((m) => 'text' in m && m.text === 'A governed crew picked up your brief')).toHaveLength(1);
+      expect(useDocThreadStore.getState().messages[threadKey('default', slug)]).toBeUndefined();
+      expect(useDocThreadStore.getState().held[slug]).toBeUndefined();
+
+      // The bridge answers with the slug; the composer navigates; the thread mounts for the slug.
+      resolveCreate({ name: slug, head: 0, generating: true });
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(navigate).toHaveBeenCalled();
+      view.rerender(<DocumentThread projectId={PROJECT} docId={slug} selectedVersion={null} navigate={navigate} mode="document" />);
+      await act(async () => { await Promise.resolve(); });
+      // The mount ADOPTED the pending claim: one registration, mounted.
+      expect(useDocThreadStore.getState().bindings[slug]).toEqual([{ projectId: PROJECT, pending: false }]);
+      // Exactly ONE copy of the early frame, on the project thread; Unfiled never heard of it.
+      vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+      expect(onProject().filter((m) => 'text' in m && m.text === 'A governed crew picked up your brief')).toHaveLength(1);
+      expect(onProject().filter((m) => m.kind === 'user')).toHaveLength(1);
+      expect(useDocThreadStore.getState().messages[threadKey('default', slug)]).toBeUndefined();
+      // A later bare frame files straight onto the mounted thread.
+      useDocThreadStore.getState().ingest({
+        type: 'interactiveEvent',
+        event: { event_type: 'wicked.interactive.status.posted', payload: { document_id: slug, state: 'working', message: 'Convening a council' } },
+      } as unknown as import('../src/api/types.js').CoreEvent);
+      expect(onProject().some((m) => 'text' in m && m.text === 'Convening a council')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('a REFUSED create releases the pending claim — a later bare frame for that name is not filed on the project', async () => {
+  it('a REFUSED create releases the pending claim — a later bare frame for that slug is not filed on the project', async () => {
     createDoc.mockRejectedValue(new Error('the daemon refused this — repo_not_in_project'));
     mount();
     await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
@@ -269,6 +304,7 @@ describe('the create-time binding (F-045, codex on #241): a bare frame that arri
     await waitFor(() => expect(screen.getByTestId('doc-composer-error')).toBeTruthy());
     const sentName = (createDoc.mock.calls[0]![1] as { name: string }).name;
     expect(useDocThreadStore.getState().bindings[sentName]).toBeUndefined();
+    expect(Object.keys(useDocThreadStore.getState().bindings)).toEqual([]);
   });
 });
 
@@ -277,6 +313,26 @@ describe('the video (demo) launch composer picks the app\'s repositories too (co
     mount(PROJECT, 'video');
     await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
     expect(screen.getByTestId('doc-format')).toBeTruthy();
+  });
+
+  it('UI → wire: a format picked on the Video composer (and a repository) rides the wizard\'s create as style + repo_refs (codex r3 on #241)', async () => {
+    mount(PROJECT, 'video');
+    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
+    fireEvent.change(screen.getByTestId('doc-format'), { target: { value: 'ppt' } });
+    fireEvent.click(screen.getAllByTestId('doc-subject-repo')[1]!); // wicked-studio
+    const user = userEvent.setup();
+    await user.type(screen.getByTestId('doc-composer'), 'a walkthrough of the checkout flow');
+    await user.click(screen.getByTestId('doc-composer-submit'));
+    await screen.findByTestId('demo-wizard');
+    await user.type(screen.getByTestId('wizard-target'), 'https://shop.example/');
+    createDoc.mockResolvedValue({ name: 'a-walkthrough-of-the-checkout-flow', head: 0, kind: 'demo', learning: true });
+    await user.click(screen.getByTestId('wizard-create'));
+    await waitFor(() => expect(createDoc).toHaveBeenCalledTimes(1));
+    const body = createDoc.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.kind).toBe('demo');
+    expect(body.url).toBe('https://shop.example/');
+    expect(body.style).toBe('ppt');
+    expect(body.repo_refs).toEqual(['repo-studio']);
   });
 
   it('a failed discovery blocks the demo launch the same way', async () => {

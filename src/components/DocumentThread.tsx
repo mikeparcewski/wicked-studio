@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
 import { parseCreateAsk } from '../interactive/createAsk.js';
+import { docSlug } from '../interactive/docSlug.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DemoWizard } from './DemoWizard.js';
 import { DocSubjectPicker, NO_GROUNDING_NARRATION, type DocFormat, type SubjectStatus } from './DocSubjectPicker.js';
@@ -624,8 +625,11 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         // F-045: claim the doc for THIS project the moment the create is sent (codex on #241) —
         // the bridge emits doc.created before it answers, so crew's first frames can arrive before
         // the response, let alone before the thread mounts; a pending binding files them here and
-        // the mount adopts it. Released on failure, or re-pointed when the bridge respelled the name.
-        let releasePending = store.bindDoc(projectId, name, { pending: true });
+        // the mount adopts it. Claimed under the CANONICAL id — the bridge's own slug of `name`,
+        // which is what every frame carries (codex r3) — released on failure, and re-pointed in the
+        // unexpected case that the bridge answers with yet another spelling.
+        const expectedId = docSlug(name);
+        let releasePending = expectedId !== '' ? store.bindDoc(projectId, expectedId, { pending: true }) : (): void => undefined;
         let created;
         try {
           created = await createDoc(projectId, {
@@ -640,7 +644,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
           releasePending();
           throw e;
         }
-        if (created.name !== name) {
+        if (created.name !== expectedId) {
           releasePending();
           releasePending = store.bindDoc(projectId, created.name, { pending: true });
         }

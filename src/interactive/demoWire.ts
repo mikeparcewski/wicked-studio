@@ -12,6 +12,7 @@
 // the transcript stop being the record of why v4 became v5.
 
 import { createDoc, docBinding, requestRecord, type CreateDocBody, type DemoStepDraft } from '../api/interactive.js';
+import { docSlug } from './docSlug.js';
 import { nextMsgId, threadKey, useDocThreadStore } from '../store/docThread.js';
 import { submitFeedbackBatch, type SubmitBatchResult } from './feedbackBatch.js';
 
@@ -118,9 +119,10 @@ export async function createDemoFromDraft(
   const text = demoBrief(draft);
   const store = useDocThreadStore.getState();
   // F-045: the create-time claim (see DocumentThread's create path) — crew's first frames may
-  // land before the answer; a pending binding files them on this project's thread.
-  const name = draft.name.trim();
-  let releasePending = store.bindDoc(projectId, name, { pending: true });
+  // land before the answer; a pending binding under the bridge's CANONICAL id (its slug of the
+  // name — what every frame carries) files them on this project's thread (codex r3 on #241).
+  const name = docSlug(draft.name.trim());
+  let releasePending = name !== '' ? store.bindDoc(projectId, name, { pending: true }) : (): void => undefined;
   let created;
   try {
     created = await createDoc(projectId, demoDraftBody(projectId, draft, msgId, repoRefs, style));
