@@ -8,11 +8,11 @@
     "Entry kinds: `static` values appear verbatim in the DOM; `dynamic` are template-literal testids with each ${expr} normalised to '*'; `computed` carry the raw JSX expression — dynamic/computed resolve only against a live DOM."
   ],
   "version": 1,
-  "studioVersion": "0.5.2",
+  "studioVersion": "0.5.3",
   "counts": {
     "files": 138,
-    "occurrences": 1142,
-    "static": 980,
+    "occurrences": 1154,
+    "static": 992,
     "dynamic": 57,
     "computed": 6
   },
@@ -2306,13 +2306,37 @@
     {
       "testId": "launch-confirm",
       "files": [
-        "src/components/ContextPopover.tsx"
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-confirm-gate",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-confirm-target",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-confirm-workflow",
+      "files": [
+        "src/components/ChatInput.tsx"
       ]
     },
     {
       "testId": "launch-error",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-gate",
+      "files": [
+        "src/components/ContextPopover.tsx"
       ]
     },
     {
@@ -2329,6 +2353,24 @@
     },
     {
       "testId": "launch-submit",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-target-reason",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-target-repo",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-target-row",
       "files": [
         "src/components/ChatInput.tsx"
       ]
@@ -3651,6 +3693,36 @@
       "testId": "routing-provenance",
       "files": [
         "src/components/RoutingProvenance.tsx"
+      ]
+    },
+    {
+      "testId": "run-cancel",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-cancel-confirm",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-cancel-error",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-cancel-keep",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-cancel-yes",
+      "files": [
+        "src/components/ChatPanel.tsx"
       ]
     },
     {

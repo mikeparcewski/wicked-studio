@@ -48,6 +48,43 @@ npm publish dates. Every version listed here exists on
   `InteractiveDemoStepDraft`) — no local mirror to drift. `wicked-crew-api-types` is pinned to
   `0.30.0` exactly; the package publishes from wicked-crew on the F-045/F-046 merge.
 
+## [0.5.3] — 2026-09-10
+
+### Fixed
+- **Launch composer: a multi-repo project must be told which repo a build run works in (F-028).**
+  Choosing a project auto-attached every one of its repos as chips and the launch body took
+  `repoRef = repoRefs[0]`, so an explicit tick on the repo the operator meant was silently outranked
+  by whichever project member happened to be listed first — acceptance run `1f12f9ab` dispatched a
+  studio bug fix into wicked-core with four councils voting before it could be stopped. The chips are
+  now **context**: the one repo the run works in is derived by `resolveLaunchTarget`
+  (`src/components/launchTarget.ts`, the single definition the Send guard, the wire body, the deliver
+  notice and the pre-send summary all read) — Target-repo choice > explicit popover tick > the lone
+  attached repo > for **build-kind** work with several candidates **ambiguous, no default** (a
+  required `launch-target-repo` select with `launch-target-reason`; Send disabled, Cmd+Enter fires
+  nothing; the deliver notice reads `no-target`); non-build launches keep the first repo as context, as
+  before. Auto-attached chips keep their `(from project)` marker after a tick (`data-auto-attached`
+  is now per chip) and the target chip carries `data-target="true"`. The deliver notice names the
+  repo the PR lands on — `→ opens a PR on owner/repo` off the registered `git_url`, the registered
+  name otherwise (`repoSlugOf`; `data-deliver-repo`). A pre-send confirmation step (`launch-confirm` with `launch-confirm-workflow` / `-target` / `-gate`;
+  `data-workflow` / `data-target` / `data-gate`) reads workflow + target repo + gate posture before
+  Send. The operator's **latest act stands**: a tick made after a Target choice wins ("select A,
+  then tick B" sends B), and removing the chosen repo drops the choice. The popover's gate select is
+  now `launch-gate` (its former `launch-confirm` testid names the confirmation step). Wire unchanged
+  (`LaunchRunBody.repoRef`). Tests: `tests/launchTarget.test.ts`,
+  `tests/ChatInput.target.test.tsx`; seed suite: `LNCH-T` (`e2e/seed_surfaces_test.py`, authored,
+  not yet executed — see `docs/testing/seed-surfaces-plan.md` §3).
+- **Run page: `Cancel run` for every non-terminal status, outside gates (F-029).** A run in
+  `distributing` had no cancel anywhere on `/runs/:id` — `steering-cancel` lives inside a gate card
+  that had not opened, and the header's stop control was an unlabelled icon that read as decoration —
+  so a mis-bound run burned seats until the operator hit `POST /runs/:id/cancel` by hand. The header
+  now carries a labelled `run-cancel` button for planning / distributing / executing / awaiting_human;
+  it asks first (`run-cancel-confirm`: `run-cancel-yes` / `run-cancel-keep`, Escape keeps), speaks the
+  wire directly (`api.cancelRun`) and refreshes the run index; a refusal stays on screen
+  (`run-cancel-error`, `role="alert"`) instead of being swallowed. Terminal runs offer none. `ChatPanel` no longer
+  takes an `onKill` prop (the header speaks the wire itself; the Ctrl/⌘+Shift+K shortcut and the
+  palette verb are unchanged). Tests: `tests/ChatPanel.cancel.test.tsx`; seed suite: `RUN-CXL`
+  (observed at TST-1's gate on a second page; authored, not yet executed).
+
 ## [0.5.2] — 2026-09-09
 
 ### Added
@@ -543,7 +580,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.15...v0.5.0

@@ -94,6 +94,17 @@ What this rig is, and what it is not:
     WorkPage's only `archiveRun` call is Unarchive — then the UI proves it left A's dashboard and
     /work's active list and sits under the Archived toggle, on two full loads), RUN-UNARC (the
     mounted Unarchive control restores it; wire + reload agree).
+  - THE LAUNCH COMPOSER'S TARGET REPO (F-028) IS COVERED WITHOUT A LAUNCH: LNCH-T attaches a SECOND
+    fixture repo to Project A (`[SUBSTITUTE]` setup: register → onboarding `completed` → attach, exactly
+    as the rig's first repo and ATT-1), opens `/p/A/build/new`, picks the `bug` workflow, and asserts the
+    composer ASKS which repo the run works in — `launch-target-repo` REQUIRED with no default, Send
+    disabled with `launch-target-reason`, `deliver-notice[data-deliver-state=no-target]` — then that an
+    explicit popover tick wins over the auto-attached chips, that the Target choice outranks the tick,
+    that the notice reads "→ opens a PR on <repo>" and `launch-confirm` carries workflow + target + gate.
+    The run index is compared before/after: NOTHING launches. The second repo is detached at the end.
+    RUN-CXL (F-029) asserts the run header's `run-cancel` control: it was OBSERVED (recorded, never
+    asserted there) on a second page opened at `/p/A/build/<run>` while TST-1's run sat at its gate —
+    no extra governed launch — and must be absent on the terminal run's detail.
   - Steps the UI cannot yet perform are performed over the daemon API and LABELLED
     `[SUBSTITUTE]` in the report (certify the journey, not the proxy). Memories and proposals
     have NO UI author path (agents are the only producer), so their seeds use a SUBSTITUTE
@@ -4140,6 +4151,29 @@ def run_scenarios(rig: Rig, page) -> None:
         prompt = text_of(gate.locator('[data-testid="steering-prompt"]'))
         assert prompt != "", "the gate card carries no prompt"
         assert run_status(run_id) == "awaiting_human"
+        # F-029 OBSERVATION (RUN-CXL asserts it): the run page's header while the run is parked at its
+        # gate — read on a SECOND page so the launch panel's own state is untouched. Recorded, never
+        # TST-1's verdict: a failure here lands in ctx and RUN-CXL fails on it.
+        try:
+            p2 = page.context.new_page()
+            try:
+                p2.goto(f"{ORIGIN}/p/{quote(A)}/build/{quote(run_id)}", wait_until="domcontentloaded")
+                p2.add_style_tag(content=HIDE_GATE_TOASTS)
+                tid(p2, "run-header").wait_for(timeout=30_000)
+                p2.wait_for_function(
+                    "() => document.querySelector('[data-testid=\"run-cancel\"], [data-testid=\"approval-dock\"]') !== null",
+                    timeout=15_000,
+                )
+                n_cancel = tid(p2, "run-cancel").count()
+                ctx["run_cancel_at_gate"] = {
+                    "status": run_status(run_id), "run_cancel": n_cancel,
+                    "run_cancel_text": text_of(tid(p2, "run-cancel")) if n_cancel == 1 else None,
+                    "steering_cancel": tid(p2, "steering-cancel").count(), "url": p2.url.replace(ORIGIN, ""),
+                }
+            finally:
+                p2.close()
+        except Exception as e:  # noqa: BLE001 — an observation for RUN-CXL, never TST-1's verdict
+            ctx["run_cancel_at_gate"] = {"error": f"{type(e).__name__}: {e}"}
         before_gate = council_activity(run_id)
         gate.locator('[data-testid="steering-reject"]').click()
         tid(page, "testing-launch-resolved").wait_for(timeout=30_000)
@@ -4261,6 +4295,7 @@ def run_scenarios(rig: Rig, page) -> None:
             cancel_at = next(i for i, t in enumerate(lines) if "Run cancelled" in t)
             assert gate_at < cancel_at, f"the feed narrates the cancellation (#{cancel_at}) before the gate (#{gate_at})"
             assert tid(page, "approval-dock").count() == 0 and tid(page, "steering-reject").count() == 0, "a cancelled run still offers an actionable gate"
+            assert tid(page, "run-cancel").count() == 0, "a cancelled run still offers `Cancel run` in its header (F-029: non-terminal only)"
             tid(page, "feed-view-raw").click()
             page.wait_for_function("n => document.querySelectorAll('[data-testid=\"raw-event\"]').length === n", arg=len(expected_rows), timeout=20_000)
             # Per row, exactly what NarratorFeed.tsx paints as fields (RAW_ROW_EXTRACT_JS — self-tested against a
@@ -4354,6 +4389,160 @@ def run_scenarios(rig: Rig, page) -> None:
                 f"the row left the group, archived_at is null on the wire, the default GET /runs lists it; after a full reload A's dashboard renders it again and Archived no longer holds it")
 
     suite.run("RUN-UNARC", "Unarchive through WorkPage's control → back on active surfaces; reload persists", rununarc, requires=("RUN-ARC",))
+
+    # ── Launch composer: the target repo (F-028) — deterministic, NOTHING launches ──
+    LAUNCH_PROBE_TOKEN = f"seed-launch-probe-{STAMP}"
+
+    def lncht() -> str:
+        """LNCH-T (F-028): Project A spanning TWO repos, the Build composer bound to it, the `bug`
+        workflow chosen. The composer must ASK which repo the run works in — `launch-target-repo`
+        REQUIRED with no default, Send disabled with `launch-target-reason`, the deliver notice in
+        `no-target` — an explicit popover tick must WIN over the auto-attached chips, the Target
+        choice must outrank the tick, the notice must read "→ opens a PR on <repo>", and
+        `launch-confirm` must carry workflow + target + gate before Send. Nothing is launched: the
+        run index is compared before/after. The second repo is harness setup over the API, labelled
+        `[SUBSTITUTE]` (register → onboarding `completed` → attach to A), exactly as the rig's first
+        repo and ATT-1 — and it runs AFTER TST-1 because a two-repo project fans a Tests launch out.
+        The second repo is detached from A at the end (best effort, recorded)."""
+        A = ctx["A"]
+        runs_before = {v["session"]["id"] for v in list_runs()}
+        root2 = rig.tmp / "repo2"
+        subprocess.run(["git", "clone", "--quiet", "--local", str(REPO), str(root2)], check=True, capture_output=True)
+        repo2_name = f"seed-surfaces-{STAMP}-b"
+        st, registered = api("POST", "/repos", {"name": repo2_name, "rootPath": str(root2)})
+        assert st == 201 and isinstance(registered, dict), f"POST /repos (second fixture) → {st} {registered}"
+        repo2 = registered["repo"]["id"]
+        rig.needles.append(repo2)
+        onboard = registered.get("onboardRunId")
+        assert isinstance(onboard, str) and onboard, f"second repo registered without an onboardRunId: {str(registered)[:200]}"
+        rig.needles.append(onboard)
+        runs_before.add(onboard)  # the harness's onboarding run, not the composer's
+        onboard_status = wait_terminal(onboard, ONBOARD_TIMEOUT_S)
+        assert onboard_status == "completed", f"second repo's onboarding run {onboard} ended {onboard_status!r}"
+        st, body = api("POST", f"/projects/{quote(A)}/members", {"kind": "crew.repo", "ref": repo2, "attachedBy": "api"})
+        assert st in (200, 201), f"attach second repo → {st} {body}"
+        ctx["repo2"] = repo2
+        detach: dict = {"attempted": False}
+        try:
+            goto(page, f"/p/{quote(A)}/build/new")
+            tid(page, "launch-project-row").wait_for(timeout=20_000)
+            page.wait_for_function(
+                "() => document.querySelectorAll('[data-testid=\"repo-chip\"][data-auto-attached=\"true\"]').length === 2", timeout=20_000)
+            chips = attr_values(page, "repo-chip", "data-repo-ref")
+            assert sorted(chips) == sorted([REPO_ID, repo2]), f"the composer attached {chips}, expected both project repos"
+            drawer = page.get_by_role("button", name=re.compile(r"open launch options", re.I))
+            drawer.click()
+            tid(page, "launch-workflow").wait_for(timeout=10_000)
+            tid(page, "launch-workflow").select_option("bug")
+            drawer.click()
+            # (1) REQUIRED, no default; Send disabled with the reason; the notice says why there is no PR yet.
+            target = tid(page, "launch-target-repo")
+            target.wait_for(timeout=10_000)
+            assert target.input_value() == "", f"the Target-repo select defaulted to {target.input_value()!r} — a build run over two repos must ask"
+            assert target.get_attribute("data-target-state") == "ambiguous"
+            reason = text_of(tid(page, "launch-target-reason"))
+            assert "2 repos are attached" in reason, f"reason: {reason!r}"
+            tid(page, "launch-problem").fill(f"{LAUNCH_PROBE_TOKEN}: never launched — the seed suite only reads the composer")
+            assert tid(page, "launch-submit").is_disabled(), "Send is enabled with no target chosen"
+            assert tid(page, "deliver-notice").get_attribute("data-deliver-state") == "no-target", (
+                f"deliver notice state {tid(page, 'deliver-notice').get_attribute('data-deliver-state')!r}")
+            summary = tid(page, "launch-confirm")
+            assert summary.get_attribute("data-workflow") == "bug" and summary.get_attribute("data-target") == "", "summary before a choice"
+            assert tid(page, "repo-chip", target="true").count() == 0, "a chip is marked target before any choice"
+            # (2) an explicit tick WINS over the auto-attached chips: untick the first repo (one candidate is left and
+            # resolves by itself), then re-tick it — the tick is the operator's and outranks the remaining auto chip.
+            drawer.click()
+            tid(page, f"launch-repo-{REPO_ID}").wait_for(timeout=10_000)
+            tid(page, f"launch-repo-{REPO_ID}").click()
+            page.wait_for_function("() => document.querySelectorAll('[data-testid=\"repo-chip\"]').length === 1", timeout=10_000)
+            assert tid(page, "launch-target-row").count() == 0, "one candidate left, yet the Target control still renders"
+            assert tid(page, "launch-confirm").get_attribute("data-target") == repo2, "the lone remaining repo did not resolve as the target"
+            tid(page, f"launch-repo-{REPO_ID}").click()
+            drawer.click()
+            page.wait_for_function("() => document.querySelectorAll('[data-testid=\"repo-chip\"]').length === 2", timeout=10_000)
+            first_chip = tid(page, "repo-chip", repo_ref=REPO_ID)
+            assert first_chip.get_attribute("data-auto-attached") == "false" and first_chip.get_attribute("data-target") == "true", (
+                f"the ticked repo reads auto={first_chip.get_attribute('data-auto-attached')} target={first_chip.get_attribute('data-target')}")
+            second_chip = tid(page, "repo-chip", repo_ref=repo2)
+            assert second_chip.get_attribute("data-auto-attached") == "true" and second_chip.get_attribute("data-target") == "false", "the auto chip lost its marker or became the target"
+            assert tid(page, "launch-target-repo").input_value() == REPO_ID, "the Target control does not reflect the tick"
+            assert tid(page, "launch-target-reason").count() == 0, "a reason renders although the tick resolved the target"
+            notice = tid(page, "deliver-notice")
+            assert notice.get_attribute("data-deliver-state") == "on" and notice.get_attribute("data-deliver-repo") == REPO_ID
+            tick_text = text_of(notice)
+            assert "opens a PR on" in tick_text and f"seed-surfaces-{STAMP}" in tick_text, f"notice after the tick: {tick_text!r}"
+            # (3)/(4) a Target choice made AFTER the tick stands (the latest act); the notice and the confirmation
+            # step name it; Send enables.
+            tid(page, "launch-target-repo").select_option(repo2)
+            page.wait_for_function(
+                "id => document.querySelector('[data-testid=\"deliver-notice\"]')?.getAttribute('data-deliver-repo') === id", arg=repo2, timeout=10_000)
+            chosen_text = text_of(tid(page, "deliver-notice"))
+            assert "opens a PR on" in chosen_text and repo2_name in chosen_text, f"notice after the choice: {chosen_text!r}"
+            summary = tid(page, "launch-confirm")
+            gate = summary.get_attribute("data-gate") or ""
+            assert summary.get_attribute("data-workflow") == "bug" and summary.get_attribute("data-target") == repo2 and gate != "", (
+                f"summary workflow={summary.get_attribute('data-workflow')!r} target={summary.get_attribute('data-target')!r} gate={gate!r}")
+            assert tid(page, "repo-chip", target="true").get_attribute("data-repo-ref") == repo2
+            assert tid(page, "launch-submit").is_enabled(), "Send stays disabled after the target was chosen"
+            # (2b) select A, THEN tick B: the later tick wins — a choice never outlives a tick made after it (the
+            # original wrong-repo dispatch class). Untick the first repo and tick it again AFTER the choice of repo2.
+            drawer.click()
+            tid(page, f"launch-repo-{REPO_ID}").click()
+            page.wait_for_function("() => document.querySelectorAll('[data-testid=\"repo-chip\"]').length === 1", timeout=10_000)
+            tid(page, f"launch-repo-{REPO_ID}").click()
+            drawer.click()
+            page.wait_for_function("() => document.querySelectorAll('[data-testid=\"repo-chip\"]').length === 2", timeout=10_000)
+            assert tid(page, "launch-target-repo").input_value() == REPO_ID, "a tick made after the Target choice did not win"
+            assert tid(page, "launch-confirm").get_attribute("data-target") == REPO_ID, "the confirmation step kept the earlier choice"
+            assert tid(page, "deliver-notice").get_attribute("data-deliver-repo") == REPO_ID
+            # NOTHING launched — the composer was only read.
+            runs_after = {v["session"]["id"] for v in list_runs()}
+            assert runs_after == runs_before, f"the scenario launched runs: {sorted(runs_after - runs_before)}"
+            assert not any(LAUNCH_PROBE_TOKEN in v["session"].get("problem", "") for v in list_runs()), "a run carries the probe text"
+            return (f"[SUBSTITUTE] second repo {repo2} registered (onboarding {onboard} completed) and attached to A over the API; "
+                    f"UI at /p/{A}/build/new: both repos auto-attached as context; workflow bug → Target repo REQUIRED (value '', "
+                    f"state ambiguous, reason {reason!r}), Send disabled, deliver notice no-target; untick+re-tick of {REPO_ID} → the tick "
+                    f"won (auto=false, target=true; the auto chip kept its marker; notice {tick_text[:90]!r}); Target choice {repo2} outranked "
+                    f"it (notice {chosen_text[:90]!r}; summary workflow=bug target={repo2} gate={gate!r}); Send enabled; run index unchanged "
+                    f"({len(runs_before)} runs) — nothing launched")
+        finally:
+            detach["attempted"] = True
+            try:
+                st, detail = api("GET", f"/projects/{quote(A)}")
+                mid = next((m.get("id") for m in detail.get("members", []) if m.get("member_ref") == repo2), None)
+                if mid is not None:
+                    st, _ = api("DELETE", f"/projects/{quote(A)}/members/{quote(str(mid))}")
+                    detach["status"] = st
+                else:
+                    detach["status"] = "member-not-found"
+            except Exception as e:  # noqa: BLE001 — cleanup is recorded, never the verdict
+                detach["error"] = f"{type(e).__name__}: {e}"
+            rig.report["setup"]["lncht_detach"] = detach
+
+    suite.run("LNCH-T", "Launch composer: a two-repo project requires an explicit target repo; the tick wins; the notice names the repo — nothing launches", lncht, requires=("ATT-1",))
+
+    def runcxl() -> str:
+        """RUN-CXL (F-029): the run header's Cancel control. While TST-1's run sat at its gate
+        (`awaiting_human`) a second page opened `/p/A/build/<run>` and RECORDED the header — exactly
+        one `run-cancel` reading "Cancel run", outside the gate card (the gate card's own
+        `steering-cancel` is counted alongside, not instead). The terminal run's detail must offer
+        none (RUN-DET asserts that on its own reloads too)."""
+        rid, A = ctx["test_run"], ctx["A"]
+        obs = ctx.get("run_cancel_at_gate")
+        assert isinstance(obs, dict), "TST-1 recorded no gate-time observation of the run header"
+        assert "error" not in obs, f"the gate-time observation failed: {obs['error']}"
+        assert obs.get("status") == "awaiting_human", f"the gate-time page read the run as {obs.get('status')!r}"
+        assert obs.get("run_cancel") == 1, f"the live run's header rendered {obs.get('run_cancel')} `run-cancel` controls (expected 1)"
+        assert obs.get("run_cancel_text") == "Cancel run", f"the control reads {obs.get('run_cancel_text')!r}"
+        goto(page, f"/runs/{quote(rid)}")
+        page.wait_for_url(re.compile(rf"/p/{re.escape(quote(A))}/build/{re.escape(quote(rid))}$"), timeout=20_000)
+        tid(page, "run-header").wait_for(timeout=30_000)
+        assert run_status(rid) in TERMINAL_STATUSES
+        assert tid(page, "run-cancel").count() == 0, "the terminal run's header still offers Cancel run"
+        return (f"at the gate ({obs['url']}, status {obs['status']}): one `Cancel run` control in the header, {obs.get('steering_cancel')} "
+                f"gate-card cancel(s) beside it; on the terminal run's detail: none")
+
+    suite.run("RUN-CXL", "Run header Cancel: present while the run is live (observed at TST-1's gate), absent once terminal", runcxl, requires=("TST-1", "RUN-DET"))
 
     # ── Cleanup — only after every consumer ───────────────────────────────────
     # CLN-1 PER TARGET: one row per seeded doc/demo — an ExpectedGap on the first never hides the rest.
