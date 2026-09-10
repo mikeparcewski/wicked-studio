@@ -528,6 +528,14 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   // its format (`style`; '' lets crew infer it from the brief's format words).
   const [repoRefs, setRepoRefs] = useState<string[]>([]);
   const [format, setFormat] = useState<DocFormat>('');
+  // The picks belong to ONE launch context. This component is not remounted when the route moves
+  // (App.tsx), so a selection made for project A would otherwise ride the next create in project
+  // B — a 400 `repo_not_in_project` at best, a silently wrong subject at worst (Copilot on #241).
+  // Reset whenever the context changes; a successful create resets too (below).
+  useEffect(() => {
+    setRepoRefs([]);
+    setFormat('');
+  }, [projectId, docId, mode]);
   // The demo path's ordered disclosure (§4.1), seeded by the message that opened it. The
   // anchor id is minted BEFORE the wizard so the version it lands tags the same message
   // the transcript shows (§7.6) — the wizard is a longer way to write case 1, not a
@@ -605,6 +613,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         store.addNarration(opened, `Generating “${created.name}” from your brief.`);
         store.setGenState(opened, 'generating');
         setText('');
+        setRepoRefs([]); // the picks were for THIS document — the next launch starts clean
+        setFormat('');
         navigate(versionPath(projectId, created.name, null));
         return;
       }

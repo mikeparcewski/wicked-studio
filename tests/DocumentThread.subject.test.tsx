@@ -3,7 +3,7 @@
 // THEM — never the project's first member) and the picked format as `style`; nothing picked sends
 // neither key, so crew infers the style from the brief's format words.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DocumentThread } from '../src/components/DocumentThread.js';
 import { useDocThreadStore } from '../src/store/docThread.js';
@@ -38,8 +38,12 @@ vi.mock('../src/api/client.js', async (importOriginal) => {
   };
 });
 
-function mount(projectId = PROJECT): void {
-  render(<DocumentThread projectId={projectId} docId={null} selectedVersion={null} navigate={vi.fn()} />);
+function mount(projectId = PROJECT): { rerender: (projectId: string) => void } {
+  const view = render(<DocumentThread projectId={projectId} docId={null} selectedVersion={null} navigate={vi.fn()} />);
+  return {
+    rerender: (next: string) =>
+      view.rerender(<DocumentThread projectId={next} docId={null} selectedVersion={null} navigate={vi.fn()} />),
+  };
 }
 
 async function send(text: string): Promise<void> {
@@ -115,8 +119,46 @@ describe('the launch composer\'s subject + format picker (F-046)', () => {
   it('the Unfiled mount offers no repositories (an unbound doc cannot be about a project repo) but still offers the format', async () => {
     mount('default');
     expect(screen.getByTestId('doc-format')).toBeTruthy();
+    // Flush the picker's load effect (a resolved promise, no timers) before asserting the outcome.
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(listProjectMembers).not.toHaveBeenCalled();
-    await new Promise((r) => setTimeout(r, 20));
+    expect(listRepos).not.toHaveBeenCalled();
     expect(screen.queryAllByTestId('doc-subject-repo')).toHaveLength(0);
+  });
+
+  it('a pick made for one project never rides a create in another — the context change resets it (Copilot on #241)', async () => {
+    const { rerender } = mount();
+    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
+    fireEvent.click(screen.getAllByTestId('doc-subject-repo')[1]!); // wicked-studio → on
+    fireEvent.change(screen.getByTestId('doc-format'), { target: { value: 'ppt' } });
+    expect(screen.getAllByTestId('doc-subject-repo')[1]!.getAttribute('aria-pressed')).toBe('true');
+
+    // The route moves to another project (same mounted component, App.tsx does not key it).
+    listProjectMembers.mockResolvedValue({
+      members: [{ id: 'm9', project_id: 'proj-other', member_kind: 'crew.repo', member_ref: 'repo-core', meta: null }],
+    });
+    rerender('proj-other');
+    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(1));
+    expect(screen.getAllByTestId('doc-subject-repo')[0]!.getAttribute('aria-pressed')).toBe('false');
+    expect((screen.getByTestId('doc-format') as HTMLSelectElement).value).toBe('');
+
+    await send('a deck for the other project');
+    await waitFor(() => expect(createDoc).toHaveBeenCalledTimes(1));
+    const body = createDoc.mock.calls[0]![1] as Record<string, unknown>;
+    expect(createDoc.mock.calls[0]![0]).toBe('proj-other');
+    expect('repo_refs' in body).toBe(false);
+    expect('style' in body).toBe(false);
+  });
+
+  it('a successful create clears the picks so the next launch starts clean', async () => {
+    mount();
+    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
+    fireEvent.click(screen.getAllByTestId('doc-subject-repo')[0]!);
+    await send('first brochure');
+    await waitFor(() => expect(createDoc).toHaveBeenCalledTimes(1));
+    expect((createDoc.mock.calls[0]![1] as Record<string, unknown>).repo_refs).toEqual(['repo-core']);
+    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')[0]!.getAttribute('aria-pressed')).toBe('false'));
   });
 });
