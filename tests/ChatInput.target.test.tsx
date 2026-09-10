@@ -257,6 +257,11 @@ describe('ChatInput target repo (F-028)', () => {
     expect(select.value).toBe('');
     expect(screen.getByTestId('launch-target-reason')).toBeInTheDocument();
     expect(screen.getByTestId('launch-submit')).toBeDisabled();
+    // Two TICKS are the candidates, three repos are ATTACHED — both sentences count what they name.
+    expect(screen.getByTestId('launch-target-reason').textContent).toMatch(/3 repos are attached/);
+    expect(screen.getByTestId('deliver-notice').dataset.deliverState).toBe('no-target');
+    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/3 repos are attached/);
+    expect([...select.options].map((o) => o.value)).toEqual(['', 'wicked-core', 'wicked-studio', 'wicked-estate']);
   });
 
   it('a chip × on the chosen repo drops the choice the same way', async () => {

@@ -876,8 +876,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           // (Send disabled) and the notice says WHY there is no PR yet.
           return deliverOn
             ? {
+                // The ATTACHED count — the candidates may be the tick list alone
+                // when several repos were ticked, and the sentence says "attached".
                 state: 'no-target',
-                text: `No PR yet — ${target.candidates.length} repos are attached and a build run opens its PR on exactly one. Choose the target repo.`,
+                text: `No PR yet — ${attachedRefs.length} repos are attached and a build run opens its PR on exactly one. Choose the target repo.`,
               }
             : null;
         }
