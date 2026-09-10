@@ -101,12 +101,12 @@ describe('useLegacyRedirect (DES-MERGE-001 §1.5 — no bookmark breaks)', () =>
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('/projects/:id → /p/:id (the project dashboard), with no membership lookup', () => {
+  it('/projects/:id — the management page — is NOT redirected (Edit + Archive/Restore live there)', () => {
     const navigate = vi.fn();
 
     renderHook(() => useLegacyRedirect(legacy.projects('proj-1'), navigate));
 
-    expect(navigate).toHaveBeenCalledWith('/p/proj-1', { replace: true });
+    expect(navigate).not.toHaveBeenCalled();
     expect(listProjects).not.toHaveBeenCalled();
   });
 

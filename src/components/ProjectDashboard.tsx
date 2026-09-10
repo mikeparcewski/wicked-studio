@@ -13,7 +13,7 @@ import {
 } from '../board/windowStats.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { interactiveRootOf } from '../hooks/useBoardModel.js';
-import { modePath, type Mode, type Navigate } from '../hooks/useRoute.js';
+import { modePath, projectDetailPath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { useTriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useGateStore } from '../store/gates.js';
@@ -395,6 +395,21 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
             </a>
           </div>
           <span style={{ flex: 1 }} />
+          {/* Management page: Edit + Archive/Restore live at /projects/:id. */}
+          <a
+            {...link(projectDetailPath(projectId))}
+            data-testid="dashboard-manage"
+            style={{
+              display: 'inline-flex', alignItems: 'center', textDecoration: 'none',
+              background: 'transparent', color: 'var(--ink-muted)',
+              border: '1px solid var(--surface-raised)',
+              borderRadius: 'var(--radius-md)', padding: '5px 12px',
+              fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)',
+              whiteSpace: 'nowrap', flexShrink: 0, cursor: 'pointer',
+            }}
+          >
+            Manage
+          </a>
           {/* The section's creation verb — one click from wherever the need appears. */}
           <a
             {...link(launchPath(projectId, 'build'))}
