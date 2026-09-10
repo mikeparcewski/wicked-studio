@@ -574,8 +574,10 @@ describe('SkillsPage — the drawer: files, the textarea editor, Save → findin
     // Pristine: Save is disabled, nothing is dirty.
     expect(within(drawer).getByTestId('skills-save')).toBeDisabled();
     expect(within(drawer).queryByTestId('skills-file-dirty')).toBeNull();
-    // The row reads selected.
-    expect(row(REPO_LEARN)).toHaveAttribute('aria-selected', 'true');
+    // The row reads as the current one (`aria-current`, not `aria-selected` — a plain table row is
+    // no ARIA option) and carries the `data-selected` styling hook.
+    expect(row(REPO_LEARN)).toHaveAttribute('aria-current', 'true');
+    expect(row(REPO_LEARN)).toHaveAttribute('data-selected', 'true');
 
     // Picking the other file loads it.
     fireEvent.click(files[1]!);

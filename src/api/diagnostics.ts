@@ -17,7 +17,9 @@
 
 import { apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
-import type { DiagnosticsSkills } from './skills-wire.js';
+// Through the Skills surface module (which re-exports the contract block), so the release swap of
+// the mirror for `wicked-crew-api-types` touches `skills.ts` alone.
+import type { DiagnosticsSkills } from './skills.js';
 
 /** One CLI's ACP health, folded from the durable run event logs. */
 export interface DiagnosticsAcpCli {

@@ -105,7 +105,11 @@ export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, fro
                     data-testid="skills-row"
                     data-skill={r.name}
                     data-enabled={r.enabled}
-                    aria-selected={selected}
+                    // A plain <table> row is not a selectable ARIA widget (`aria-selected` belongs to
+                    // option/gridcell/tab); `aria-current` is the global attribute for "the one the
+                    // drawer is open on", and `data-selected` is the styling/test hook.
+                    aria-current={selected ? 'true' : undefined}
+                    data-selected={selected}
                     onClick={() => onSelect(r.name)}
                     className="cursor-pointer align-middle transition-colors"
                     style={{
