@@ -21,19 +21,23 @@ npm publish dates. Every version listed here exists on
   `project_id` on every seam emit (wicked-crew, F-045); independently, `docThread.ingest` files a
   frame that names a doc but no project under the project a `DocumentThread` is currently MOUNTED for
   that doc (`bindDoc`/`unbindDoc`, registered by the component — never inferred from retained
-  history, which a previous same-slug thread would poison), HOLDS it while no thread is mounted yet
-  (the bus can beat the create's navigation) and releases it onto the thread that mounts exactly
-  once, filing under Unfiled only when the 10 s hold expires. The stall banner therefore appears
-  only after a genuine 90 s silence.
+  history, which a previous same-slug thread would poison). The composer claims the name for its
+  project the moment the create is SENT (a pending binding the mounting thread adopts — released on
+  a refused create), so a frame that beats the bridge's answer files on the project thread; a frame
+  with no binding at all is HELD and released exactly once onto the thread that binds, expiring to
+  Unfiled only when nothing is bound for 10 s (never while a pending create or an ambiguous pair
+  is open; an unmount that leaves one thread releases the held frames to it). The stall banner
+  therefore appears only after a genuine 90 s silence.
 
 ### Added
 - **Launch composer — what the document (or demo) is ABOUT and in what format (F-046, studio half).**
   `DocSubjectPicker` offers the project's `crew.repo` members by name as toggles on BOTH the Document
   and the Video launch composer (sent on the create as `repo_refs`; crew validates them against the
   project and grounds the governed draft/demo run on THOSE repositories instead of the project's first
-  member — the demo wizard carries them through `demoDraftBody`) and, for a document, the bridge's four
-  formats (sent as `style`; "from the brief" sends nothing and lets crew infer it from the brief's
-  format words, so a print/A4 brief reaches the bridge's print instructions). Discovery has visible
+  member — the demo wizard carries them through `demoDraftBody`) and the bridge's four formats on
+  both composers (sent as `style`, the demo flow included; "from the brief" sends nothing and lets
+  crew infer it from the brief's format words, so a print/A4 brief reaches the bridge's print
+  instructions). Discovery has visible
   loading / error states with a retry: the composer refuses to submit while the repositories are
   unknown, unless the user explicitly chooses to create without repository grounding — which the
   thread then records. The picks reset when the launch context changes and after a create.

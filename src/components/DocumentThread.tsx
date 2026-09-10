@@ -620,14 +620,30 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         // create lands in the catch below — the visible composer error,
         // never a silent close (the loud-502 contract, §8.4.1 probe 3).
         const parsed = parseCreateAsk(body);
-        const created = await createDoc(projectId, {
-          name: parsed?.name ?? docName(body), kind: 'source',
-          brief: parsed?.brief ?? body, ...docBinding(projectId),
-          source_message_id: msgId,
-          // F-046: the subject repos and the format ride the create; both omitted when unset.
-          ...(repoRefs.length > 0 ? { repo_refs: repoRefs } : {}),
-          ...(format !== '' ? { style: format } : {}),
-        });
+        const name = parsed?.name ?? docName(body);
+        // F-045: claim the doc for THIS project the moment the create is sent (codex on #241) —
+        // the bridge emits doc.created before it answers, so crew's first frames can arrive before
+        // the response, let alone before the thread mounts; a pending binding files them here and
+        // the mount adopts it. Released on failure, or re-pointed when the bridge respelled the name.
+        let releasePending = store.bindDoc(projectId, name, { pending: true });
+        let created;
+        try {
+          created = await createDoc(projectId, {
+            name, kind: 'source',
+            brief: parsed?.brief ?? body, ...docBinding(projectId),
+            source_message_id: msgId,
+            // F-046: the subject repos and the format ride the create; both omitted when unset.
+            ...(repoRefs.length > 0 ? { repo_refs: repoRefs } : {}),
+            ...(format !== '' ? { style: format } : {}),
+          });
+        } catch (e) {
+          releasePending();
+          throw e;
+        }
+        if (created.name !== name) {
+          releasePending();
+          releasePending = store.bindDoc(projectId, created.name, { pending: true });
+        }
         const opened = threadKey(projectId, created.name);
         store.addUserMsg(opened, msgId, body);
         store.addNarration(opened, `Generating “${created.name}” from your brief.`);
@@ -804,6 +820,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
           seed={wizard.seed}
           msgId={wizard.msgId}
           repoRefs={repoRefs}
+          {...(format !== '' ? { style: format } : {})}
           onCancel={() => setWizard(null)}
           onCreated={(name) => {
             setWizard(null);

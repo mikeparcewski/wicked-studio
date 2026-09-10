@@ -159,11 +159,15 @@ function frameOf(event: CoreEvent): Frame | null {
  *  this only ever runs out for a doc this page is not showing. */
 export const BARE_FRAME_HOLD_MS = 10_000;
 
-/** The ONE project a doc is currently mounted under, or `null` when none — or several (the same
- *  slug open under two projects is ambiguous, and a guess would be a wrong thread). */
-export function boundProjectOf(bindings: Record<string, string[]>, docId: string): string | null {
-  const bound = bindings[docId] ?? [];
-  return bound.length === 1 ? (bound[0] ?? null) : null;
+/** One registration of a doc under a project: MOUNTED (a DocumentThread shows it) or PENDING (the
+ *  composer sent the create and owns the name until the thread mounts — codex on #241). */
+export interface DocBinding { projectId: string; pending: boolean }
+
+/** The ONE project a doc is currently bound under, or `null` when none — or several DISTINCT ones
+ *  (the same slug open under two projects is ambiguous, and a guess would be a wrong thread). */
+export function boundProjectOf(bindings: Record<string, DocBinding[]>, docId: string): string | null {
+  const projects = [...new Set((bindings[docId] ?? []).map((b) => b.projectId))];
+  return projects.length === 1 ? (projects[0] ?? null) : null;
 }
 
 /** A copy of a bare frame with `project_id` stamped where `frameOf` reads it — so a held frame
@@ -233,18 +237,25 @@ interface DocThreadStore {
    */
   lastSignalAt: Record<string, number>;
   /**
-   * Mounted document→project bindings (F-045): `docId → projects` a DocumentThread is CURRENTLY
-   * showing it under. Registered by the component while it shows the doc (`bindDoc` → the
-   * returned unbind on unmount) — never inferred from retained history. A bare frame files under
-   * the doc's one binding; with none (or several) it is held, see `held`.
+   * Document→project bindings (F-045): `docId → registrations` — MOUNTED (a DocumentThread is
+   * showing the doc; `bindDoc` → the returned unbind on unmount) or PENDING (the composer sent the
+   * create for this name and owns it until the thread mounts, which ADOPTS it — codex on #241).
+   * Never inferred from retained history. A bare frame files under the doc's one project; with
+   * none (or several distinct) it is held, see `held`.
    */
-  bindings: Record<string, string[]>;
-  /** Bare frames (no project stated) waiting for their doc's thread to mount, per doc — released
-   *  exactly once: onto the thread that mounts, or under Unfiled when `BARE_FRAME_HOLD_MS` runs out. */
+  bindings: Record<string, DocBinding[]>;
+  /** Bare frames (no project stated) waiting for a binding, per doc — released exactly once: onto
+   *  the thread that binds, or under Unfiled when `BARE_FRAME_HOLD_MS` runs out with no binding
+   *  at all (a pending create keeps them from expiring). */
   held: Record<string, HeldFrames>;
-  /** Register a mounted doc→project binding and file its held frames there; returns the unbind. */
-  bindDoc: (projectId: string, docId: string) => () => void;
-  unbindDoc: (projectId: string, docId: string) => void;
+  /**
+   * Register a doc→project binding and file its held frames there; returns the matching unbind.
+   * `pending: true` is the composer's create-time claim: a later mounted `bindDoc` of the same pair
+   * ADOPTS it (one registration, now mounted), so the pending unbind — a create failure, or the
+   * composer tidying up — is a no-op once the thread owns the doc, and the mount's unbind releases it.
+   */
+  bindDoc: (projectId: string, docId: string, opts?: { pending?: boolean }) => () => void;
+  unbindDoc: (projectId: string, docId: string, opts?: { pending?: boolean }) => void;
   /** Deferred continuation dividers (§7.10, the J3 bookkeeping pin), per thread:
    *  each waits for the wire to show its version exists. See `expectDivider`. */
   expectedDividers: Record<string, { msgId: string; version: number }[]>;
@@ -355,8 +366,22 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
       set({ held: { ...s.held, [docId]: { ...existing, events: [...existing.events, event] } } });
       return;
     }
-    const timer = setTimeout(() => releaseHeld(docId, UNFILED_MOUNT), BARE_FRAME_HOLD_MS);
+    const timer = setTimeout(() => expireHeld(docId), BARE_FRAME_HOLD_MS);
     set({ held: { ...s.held, [docId]: { events: [event], timer } } });
+  }
+
+  /** The hold ran out. With NO binding at all the frames go to Unfiled (the legacy home of a doc
+   *  nobody has open); while any binding exists — a pending create still answering, two threads
+   *  still both open — they wait another window rather than expire onto the wrong thread. */
+  function expireHeld(docId: string): void {
+    const entry = get().held[docId];
+    if (entry === undefined) return;
+    if ((get().bindings[docId] ?? []).length === 0) {
+      releaseHeld(docId, UNFILED_MOUNT);
+      return;
+    }
+    const timer = setTimeout(() => expireHeld(docId), BARE_FRAME_HOLD_MS);
+    set((s) => ({ held: { ...s.held, [docId]: { events: entry.events, timer } } }));
   }
 
   /** File every held frame for `docId` under `projectId` — exactly once (the entry is dropped first). */
@@ -385,26 +410,39 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
   held: {},
   expectedDividers: {},
 
-  bindDoc: (projectId, docId) => {
+  bindDoc: (projectId, docId, opts) => {
+    const pending = opts?.pending === true;
     set((s) => {
       const current = s.bindings[docId] ?? [];
-      return {
-        bindings: { ...s.bindings, [docId]: current.includes(projectId) ? current : [...current, projectId] },
-      };
+      const existing = current.find((b) => b.projectId === projectId);
+      let next: DocBinding[];
+      if (existing === undefined) next = [...current, { projectId, pending }];
+      // A mount ADOPTS the composer's pending claim; a pending claim never demotes a mount.
+      else if (existing.pending && !pending) next = current.map((b) => (b === existing ? { projectId, pending: false } : b));
+      else next = current;
+      return { bindings: { ...s.bindings, [docId]: next } };
     });
     const sole = boundProjectOf(get().bindings, docId);
     if (sole !== null) releaseHeld(docId, sole);
-    return () => get().unbindDoc(projectId, docId);
+    return () => get().unbindDoc(projectId, docId, { pending });
   },
 
-  unbindDoc: (projectId, docId) =>
+  unbindDoc: (projectId, docId, opts) => {
+    const pending = opts?.pending === true;
     set((s) => {
-      const current = (s.bindings[docId] ?? []).filter((p) => p !== projectId);
+      // A pending unbind removes only a still-PENDING registration (an adopted one is the mount's
+      // to release); a mounted unbind removes the registration whatever its state.
+      const current = (s.bindings[docId] ?? []).filter((b) => !(b.projectId === projectId && (!pending || b.pending)));
       const bindings = { ...s.bindings };
       if (current.length === 0) delete bindings[docId];
       else bindings[docId] = current;
       return { bindings };
-    }),
+    });
+    // An unbind can make the doc UNIQUELY bound again (two threads open, one unmounts): frames
+    // held during the ambiguity belong to the thread that remains (Copilot on #241).
+    const sole = boundProjectOf(get().bindings, docId);
+    if (sole !== null) releaseHeld(docId, sole);
+  },
 
   ingest: (event) => {
     const frame = frameOf(event);

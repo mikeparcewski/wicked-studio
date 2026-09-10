@@ -118,16 +118,23 @@ describe('F-045 belt and braces: a frame naming a doc but NO project files under
     expect(useDocThreadStore.getState().held[DOC]).toBeUndefined();
   });
 
-  it('the SAME slug mounted under TWO projects is ambiguous — held, then Unfiled, never a guess', () => {
+  it('the SAME slug mounted under TWO projects is ambiguous — held (never a guess) and never expired while bound; the thread that REMAINS gets the frames, Unfiled only once nothing is bound', () => {
     const a = useDocThreadStore.getState().bindDoc('proj-a', DOC);
     const b = useDocThreadStore.getState().bindDoc('proj-b', DOC);
     ingest(status('hello'));
     expect(messagesOf(threadKey('proj-a', DOC))).toEqual([]);
     expect(messagesOf(threadKey('proj-b', DOC))).toEqual([]);
     vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
-    expect(messagesOf(threadKey('default', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['hello']);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]); // still bound → still held, not expired
+    // proj-a unmounts: the doc is uniquely proj-b's now, and the held frame lands there (Copilot on #241).
     a();
+    expect(messagesOf(threadKey('proj-b', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['hello']);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
     b();
+    // A frame arriving with NOTHING bound is held, then Unfiled — the legacy home.
+    ingest(status('nobody home'));
+    vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+    expect(messagesOf(threadKey('default', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['nobody home']);
   });
 
   it('after UNMOUNT the binding is gone: a later bare frame is held again, not filed under the stale key', () => {
@@ -158,6 +165,42 @@ describe('F-045 belt and braces: a frame naming a doc but NO project files under
     const unbind = useDocThreadStore.getState().bindDoc(PROJECT, DOC);
     expect(messages()).toEqual([]);
     unbind();
+  });
+
+  it('a PENDING create-time binding files bare frames on the project thread and keeps them from expiring; the mount ADOPTS it and the pending release is then a no-op (codex on #241)', () => {
+    // The composer sent the create: the name is claimed for this project before any answer.
+    const releasePending = useDocThreadStore.getState().bindDoc(PROJECT, DOC, { pending: true });
+    ingest(status('picked up before the answer'));
+    expect(texts()).toEqual(['picked up before the answer']);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    // The thread mounts on navigation: ONE registration, now mounted.
+    const unmount = useDocThreadStore.getState().bindDoc(PROJECT, DOC);
+    expect(useDocThreadStore.getState().bindings[DOC]).toEqual([{ projectId: PROJECT, pending: false }]);
+    // The composer's pending release no longer removes anything — the mount owns the doc.
+    releasePending();
+    expect(useDocThreadStore.getState().bindings[DOC]).toEqual([{ projectId: PROJECT, pending: false }]);
+    ingest(status('still mine'));
+    expect(texts()).toEqual(['picked up before the answer', 'still mine']);
+    unmount();
+    expect(useDocThreadStore.getState().bindings[DOC]).toBeUndefined();
+  });
+
+  it('a failed create RELEASES its pending claim; held frames then wait, and never expire while ANY binding exists', () => {
+    const release = useDocThreadStore.getState().bindDoc(PROJECT, DOC, { pending: true });
+    release();
+    expect(useDocThreadStore.getState().bindings[DOC]).toBeUndefined();
+    // Ambiguous — two projects mounted — frames are held and do NOT expire into Unfiled while bound.
+    const a = useDocThreadStore.getState().bindDoc('proj-a', DOC);
+    const b = useDocThreadStore.getState().bindDoc('proj-b', DOC);
+    ingest(status('held while ambiguous'));
+    vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    expect(useDocThreadStore.getState().held[DOC]?.events).toHaveLength(1);
+    // One thread unmounts → the doc is uniquely bound again → the held frames land THERE (Copilot on #241).
+    a();
+    expect(messagesOf(threadKey('proj-b', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['held while ambiguous']);
+    expect(useDocThreadStore.getState().held[DOC]).toBeUndefined();
+    b();
   });
 
   it('the binding is by exact doc id — `deck` mounted does not claim `launch-deck` frames', () => {

@@ -66,6 +66,12 @@ describe('the ordered demo wizard — order is the thing it exists to carry', ()
     expect('repo_refs' in demoDraftBody(PROJECT, DRAFT, 'dmsg-7', [])).toBe(false);
   });
 
+  it('carries the composer\'s format as style (codex on #241) — omitted when none was picked', () => {
+    expect(demoDraftBody(PROJECT, DRAFT, 'dmsg-7', [], 'ppt').style).toBe('ppt');
+    expect('style' in demoDraftBody(PROJECT, DRAFT, 'dmsg-7', [])).toBe(false);
+    expect('style' in demoDraftBody(PROJECT, DRAFT, 'dmsg-7')).toBe(false);
+  });
+
   it('AC: `index` is the AUTHORING position, so spec order cannot drift from wizard order', () => {
     const body = demoDraftBody(PROJECT, DRAFT, 'dmsg-7');
 

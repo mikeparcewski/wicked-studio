@@ -49,7 +49,7 @@ export const NO_GROUNDING_NARRATION =
 
 export interface DocSubjectPickerProps {
   projectId: string;
-  /** A demo is about an app's repositories too, but has no document format. */
+  /** A demo is about an app's repositories too; its format rides the create the same way. */
   mode: 'document' | 'video';
   repoRefs: string[];
   onRepoRefs: (refs: string[]) => void;
@@ -173,7 +173,7 @@ export function DocSubjectPicker({
           </button>
         );
       })}
-      {mode === 'document' && (
+      {(
         <select
           data-testid="doc-format"
           aria-label="Document format"

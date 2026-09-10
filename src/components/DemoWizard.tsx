@@ -43,12 +43,14 @@ export interface DemoWizardProps {
   /** The repositories the demo's app is made of (F-046) — picked on the composer, sent on the
    *  create as `repo_refs` so crew grounds the spec run on THAT source, not the project's first member. */
   repoRefs?: string[];
+  /** The format picked on the composer (F-046) — carried on the create like a document's. */
+  style?: 'web' | 'doc' | 'ppt' | 'brochure';
   onCancel: () => void;
   /** The demo exists and its conversation has opened; the surface offers to record it. */
   onCreated: (demoId: string) => void;
 }
 
-export function DemoWizard({ projectId, seed, msgId, repoRefs, onCancel, onCreated }: DemoWizardProps): React.ReactElement {
+export function DemoWizard({ projectId, seed, msgId, repoRefs, style, onCancel, onCreated }: DemoWizardProps): React.ReactElement {
   const [draft, setDraft] = useState<DemoDraft>({
     name: seed, targetUrl: '', description: seed, steps: [],
   });
@@ -70,7 +72,7 @@ export function DemoWizard({ projectId, seed, msgId, repoRefs, onCancel, onCreat
     setBusy(true);
     setError(null);
     try {
-      const { name } = await createDemoFromDraft(projectId, draft, msgId, repoRefs);
+      const { name } = await createDemoFromDraft(projectId, draft, msgId, repoRefs, style);
       onCreated(name);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));

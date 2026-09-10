@@ -80,6 +80,7 @@ export function demoBrief(draft: DemoDraft): string {
  */
 export function demoDraftBody(
   projectId: string, draft: DemoDraft, sourceMessageId: string, repoRefs: readonly string[] = [],
+  style?: CreateDocBody['style'],
 ): CreateDocBody {
   const steps: DemoStepDraft[] = draft.steps.map((step, index) => ({
     index,
@@ -97,8 +98,10 @@ export function demoDraftBody(
     ...(steps.length > 0 ? { demo_steps: steps } : {}),
     // §6.2 (slice U): the Unfiled mount creates unbound; real projects bind.
     ...docBinding(projectId),
-    // F-046: the app's repositories, picked on the composer — crew grounds the spec run on THEM.
+    // F-046: the app's repositories, picked on the composer — crew grounds the spec run on THEM —
+    // and the picked format, carried the same way a document's is (codex on #241).
     ...(repoRefs.length > 0 ? { repo_refs: [...repoRefs] } : {}),
+    ...(style !== undefined ? { style } : {}),
     source_message_id: sourceMessageId,
   };
 }
@@ -110,11 +113,27 @@ export function demoDraftBody(
  */
 export async function createDemoFromDraft(
   projectId: string, draft: DemoDraft, msgId: string, repoRefs: readonly string[] = [],
+  style?: CreateDocBody['style'],
 ): Promise<{ name: string; text: string }> {
   const text = demoBrief(draft);
-  const created = await createDoc(projectId, demoDraftBody(projectId, draft, msgId, repoRefs));
-  const key = threadKey(projectId, created.name);
   const store = useDocThreadStore.getState();
+  // F-045: the create-time claim (see DocumentThread's create path) — crew's first frames may
+  // land before the answer; a pending binding files them on this project's thread.
+  const name = draft.name.trim();
+  let releasePending = store.bindDoc(projectId, name, { pending: true });
+  let created;
+  try {
+    created = await createDoc(projectId, demoDraftBody(projectId, draft, msgId, repoRefs, style));
+  } catch (e) {
+    releasePending();
+    throw e;
+  }
+  if (created.name !== name) {
+    releasePending();
+    releasePending = store.bindDoc(projectId, created.name, { pending: true });
+  }
+  void releasePending; // adopted by the thread that mounts on navigation; a re-point above already released the stale one
+  const key = threadKey(projectId, created.name);
   store.addUserMsg(key, msgId, text);
   store.addNarration(
     key,

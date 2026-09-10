@@ -237,11 +237,46 @@ describe('repository discovery can fail — never a silently ungrounded create (
   });
 });
 
+describe('the create-time binding (F-045, codex on #241): a bare frame that arrives BEFORE the create answers files on the project thread', () => {
+  it('files a document_id-only frame under the project while createDoc is still pending — never under Unfiled, exactly once', async () => {
+    let resolveCreate: (v: unknown) => void = () => undefined;
+    createDoc.mockReturnValue(new Promise((r) => { resolveCreate = r; }));
+    mount();
+    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
+    await send('a deck for the Q3 review');
+    await waitFor(() => expect(createDoc).toHaveBeenCalledTimes(1));
+    const sentName = (createDoc.mock.calls[0]![1] as { name: string }).name;
+    // Crew picked the doc up off the bus before the bridge answered the create.
+    useDocThreadStore.getState().ingest({
+      type: 'interactiveEvent',
+      event: { event_type: 'wicked.interactive.status.posted', payload: { document_id: sentName, state: 'processing', message: 'A governed crew picked up your brief' } },
+    } as unknown as import('../src/api/types.js').CoreEvent);
+    const onProject = useDocThreadStore.getState().messages[threadKey(PROJECT, sentName)] ?? [];
+    expect(onProject.some((m) => 'text' in m && m.text === 'A governed crew picked up your brief')).toBe(true);
+    expect(useDocThreadStore.getState().messages[threadKey('default', sentName)]).toBeUndefined();
+    expect(useDocThreadStore.getState().held[sentName]).toBeUndefined();
+    resolveCreate({ name: sentName, head: 0, generating: true });
+    await waitFor(() => expect((useDocThreadStore.getState().messages[threadKey(PROJECT, sentName)] ?? []).filter((m) => m.kind === 'user')).toHaveLength(1));
+    // Exactly one copy of the early frame.
+    expect((useDocThreadStore.getState().messages[threadKey(PROJECT, sentName)] ?? []).filter((m) => 'text' in m && m.text === 'A governed crew picked up your brief')).toHaveLength(1);
+  });
+
+  it('a REFUSED create releases the pending claim — a later bare frame for that name is not filed on the project', async () => {
+    createDoc.mockRejectedValue(new Error('the daemon refused this — repo_not_in_project'));
+    mount();
+    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
+    await send('a refused brief');
+    await waitFor(() => expect(screen.getByTestId('doc-composer-error')).toBeTruthy());
+    const sentName = (createDoc.mock.calls[0]![1] as { name: string }).name;
+    expect(useDocThreadStore.getState().bindings[sentName]).toBeUndefined();
+  });
+});
+
 describe('the video (demo) launch composer picks the app\'s repositories too (codex on #241)', () => {
-  it('renders the repository toggles without a document format select', async () => {
+  it('renders the repository toggles AND the format select — a demo carries its format on the create like a document (codex on #241)', async () => {
     mount(PROJECT, 'video');
     await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
-    expect(screen.queryByTestId('doc-format')).toBeNull();
+    expect(screen.getByTestId('doc-format')).toBeTruthy();
   });
 
   it('a failed discovery blocks the demo launch the same way', async () => {
