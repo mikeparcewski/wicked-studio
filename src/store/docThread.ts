@@ -117,9 +117,9 @@ function pick(bag: Record<string, unknown>, ...keys: string[]): string | null {
   return null;
 }
 
-interface Frame { key: string; type: string; payload: Record<string, unknown> }
+interface Frame { docId: string; projectId: string | null; type: string; payload: Record<string, unknown> }
 
-/** A relayed interactive frame, reduced to `(thread key, event type, payload)`.
+/** A relayed interactive frame, reduced to `(doc, stated project or null, event type, payload)`.
  *
  *  Project resolution (the round-2 first-generation fix): the bridge stamps
  *  `project_id` on every payload of a doc BOUND to a crew project (serviceEmit
@@ -135,10 +135,14 @@ interface Frame { key: string; type: string; payload: Record<string, unknown> }
  *  alone, so every heartbeat was filed under `default:<doc>` while the
  *  project-bound thread heard nothing and, 90 s in, told the user "the
  *  generation service may be down" over a run that was executing. Crew stamps
- *  `project_id` now — and independently, a frame that names a doc but no project
- *  is filed under the ONE thread this page has open for that doc (`known`),
- *  falling back to Unfiled only when none (or several) is open. */
-function frameOf(event: CoreEvent, known: (docId: string) => string | null = () => null): Frame | null {
+ *  `project_id` now — and independently, `ingest` files a frame that names a doc
+ *  but no project under the project a DocumentThread is MOUNTED for that doc
+ *  (`bindings`, registered by the component while it shows the doc — never
+ *  derived from retained history, which a previous same-slug thread would
+ *  poison), HOLDS it while no thread is mounted yet (the bus can beat the
+ *  create's navigation by a few ms), and files it under Unfiled only when the
+ *  hold expires — the legacy home of a doc nobody has open. */
+function frameOf(event: CoreEvent): Frame | null {
   if (event.type !== 'interactiveEvent') return null;
   const ev = event.event as Record<string, unknown> | undefined;
   if (typeof ev !== 'object' || ev === null) return null;
@@ -146,30 +150,34 @@ function frameOf(event: CoreEvent, known: (docId: string) => string | null = () 
   const payload = (typeof ev.payload === 'object' && ev.payload !== null ? ev.payload : ev) as Record<string, unknown>;
   const docId = pick(payload, 'document_id', 'doc_id', 'document');
   if (type === null || docId === null) return null;
-  const projectId = pick(payload, 'project_id', 'project')
-    ?? pick(ev, 'project_id', 'project')
-    ?? known(docId)
-    ?? UNFILED_MOUNT;
-  return { key: threadKey(projectId, docId), type, payload };
+  const projectId = pick(payload, 'project_id', 'project') ?? pick(ev, 'project_id', 'project');
+  return { docId, projectId, type, payload };
 }
 
-/** The project of the ONE thread this page has open for `docId` — a key in any of
- *  the store's per-thread maps — or `null` when none or more than one is. The
- *  doc-name grammar has no `:`, so the suffix match cannot straddle the separator. */
-export function soleThreadProject(
-  s: Pick<DocThreadStore, 'messages' | 'genState' | 'hydrated' | 'pending' | 'lastSignalAt'>,
-  docId: string,
-): string | null {
-  const suffix = `:${docId}`;
-  const projects = new Set<string>();
-  for (const bag of [s.messages, s.genState, s.hydrated, s.pending, s.lastSignalAt]) {
-    for (const key of Object.keys(bag)) {
-      if (key.endsWith(suffix)) projects.add(key.slice(0, -suffix.length));
-    }
-  }
-  if (projects.size !== 1) return null;
-  return [...projects][0] ?? null;
+/** How long a bare frame (no project stated) waits for its doc's thread to mount before it is
+ *  filed under Unfiled — the create's own navigation mounts the thread within milliseconds, so
+ *  this only ever runs out for a doc this page is not showing. */
+export const BARE_FRAME_HOLD_MS = 10_000;
+
+/** The ONE project a doc is currently mounted under, or `null` when none — or several (the same
+ *  slug open under two projects is ambiguous, and a guess would be a wrong thread). */
+export function boundProjectOf(bindings: Record<string, string[]>, docId: string): string | null {
+  const bound = bindings[docId] ?? [];
+  return bound.length === 1 ? (bound[0] ?? null) : null;
 }
+
+/** A copy of a bare frame with `project_id` stamped where `frameOf` reads it — so a held frame
+ *  rides the standard fold once its project is known. Never mutates the original. */
+function stamped(event: CoreEvent, projectId: string): CoreEvent {
+  const ev = event.event as Record<string, unknown>;
+  const inner = typeof ev.payload === 'object' && ev.payload !== null
+    ? { ...ev, payload: { ...(ev.payload as Record<string, unknown>), project_id: projectId } }
+    : { ...ev, project_id: projectId };
+  return { ...event, event: inner } as unknown as CoreEvent;
+}
+
+/** Bare frames parked for one doc, and the timer that files them under Unfiled if nothing mounts. */
+export interface HeldFrames { events: CoreEvent[]; timer: ReturnType<typeof setTimeout> }
 
 /** The one spelling of a thread's identity. Thread id = the doc's lineage (§2.4). */
 export function threadKey(projectId: string, docId: string): string {
@@ -224,6 +232,19 @@ interface DocThreadStore {
    * A thread that has never heard anything has no entry.
    */
   lastSignalAt: Record<string, number>;
+  /**
+   * Mounted document→project bindings (F-045): `docId → projects` a DocumentThread is CURRENTLY
+   * showing it under. Registered by the component while it shows the doc (`bindDoc` → the
+   * returned unbind on unmount) — never inferred from retained history. A bare frame files under
+   * the doc's one binding; with none (or several) it is held, see `held`.
+   */
+  bindings: Record<string, string[]>;
+  /** Bare frames (no project stated) waiting for their doc's thread to mount, per doc — released
+   *  exactly once: onto the thread that mounts, or under Unfiled when `BARE_FRAME_HOLD_MS` runs out. */
+  held: Record<string, HeldFrames>;
+  /** Register a mounted doc→project binding and file its held frames there; returns the unbind. */
+  bindDoc: (projectId: string, docId: string) => () => void;
+  unbindDoc: (projectId: string, docId: string) => void;
   /** Deferred continuation dividers (§7.10, the J3 bookkeeping pin), per thread:
    *  each waits for the wire to show its version exists. See `expectDivider`. */
   expectedDividers: Record<string, { msgId: string; version: number }[]>;
@@ -325,7 +346,33 @@ function persistSendStates(key: string): void {
   writeSendStates(key, out);
 }
 
-export const useDocThreadStore = create<DocThreadStore>((set, get) => ({
+export const useDocThreadStore = create<DocThreadStore>((set, get) => {
+  /** Park a bare frame until its doc's thread mounts, or the hold expires (→ Unfiled, the legacy home). */
+  function hold(docId: string, event: CoreEvent): void {
+    const s = get();
+    const existing = s.held[docId];
+    if (existing !== undefined) {
+      set({ held: { ...s.held, [docId]: { ...existing, events: [...existing.events, event] } } });
+      return;
+    }
+    const timer = setTimeout(() => releaseHeld(docId, UNFILED_MOUNT), BARE_FRAME_HOLD_MS);
+    set({ held: { ...s.held, [docId]: { events: [event], timer } } });
+  }
+
+  /** File every held frame for `docId` under `projectId` — exactly once (the entry is dropped first). */
+  function releaseHeld(docId: string, projectId: string): void {
+    const entry = get().held[docId];
+    if (entry === undefined) return;
+    clearTimeout(entry.timer);
+    set((s) => {
+      const held = { ...s.held };
+      delete held[docId];
+      return { held };
+    });
+    for (const event of entry.events) get().ingest(stamped(event, projectId));
+  }
+
+  return {
   messages: {},
   genState: {},
   pending: {},
@@ -334,12 +381,42 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => ({
   landings: [],
   lastError: {},
   lastSignalAt: {},
+  bindings: {},
+  held: {},
   expectedDividers: {},
 
+  bindDoc: (projectId, docId) => {
+    set((s) => {
+      const current = s.bindings[docId] ?? [];
+      return {
+        bindings: { ...s.bindings, [docId]: current.includes(projectId) ? current : [...current, projectId] },
+      };
+    });
+    const sole = boundProjectOf(get().bindings, docId);
+    if (sole !== null) releaseHeld(docId, sole);
+    return () => get().unbindDoc(projectId, docId);
+  },
+
+  unbindDoc: (projectId, docId) =>
+    set((s) => {
+      const current = (s.bindings[docId] ?? []).filter((p) => p !== projectId);
+      const bindings = { ...s.bindings };
+      if (current.length === 0) delete bindings[docId];
+      else bindings[docId] = current;
+      return { bindings };
+    }),
+
   ingest: (event) => {
-    const frame = frameOf(event, (docId) => soleThreadProject(get(), docId));
+    const frame = frameOf(event);
     if (frame === null) return;
-    const { key, type, payload } = frame;
+    // A stated project always wins; a bare frame files under the doc's ONE mounted thread, or waits.
+    const projectId = frame.projectId ?? boundProjectOf(get().bindings, frame.docId);
+    if (projectId === null) {
+      hold(frame.docId, event);
+      return;
+    }
+    const key = threadKey(projectId, frame.docId);
+    const { type, payload } = frame;
     // §6.1 honesty budget: every parsed frame for this thread is a liveness
     // signal — stamp it before the fold, whatever the fold does with the frame.
     set((s) => ({ lastSignalAt: { ...s.lastSignalAt, [key]: Date.now() } }));
@@ -744,4 +821,5 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => ({
       const expectedDividers = { ...s.expectedDividers }; delete expectedDividers[key];
       return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers };
     }),
-}));
+  };
+});

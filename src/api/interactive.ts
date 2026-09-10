@@ -14,6 +14,8 @@
 import { apiBase } from './client.js';
 import { ApiError } from './errors.js';
 import type {
+  InteractiveDemoStepDraft,
+  InteractiveDocCreateRequest,
   InteractiveDocDeleteLedgerReport,
   InteractiveDocDeleteResponse,
 } from './types.js';
@@ -92,42 +94,18 @@ export interface ExportResult {
  * (what the step is about) plus an `action` (what happens to it) — never a bare label,
  * for the same reason a status line is never bare (§3.3).
  */
-export interface DemoStepDraft {
-  index: number;
-  subject: string;
-  action: string;
-}
-
-export interface CreateDocBody {
-  name: string;
-  html?: string;
-  kind?: 'source' | 'demo';
-  source_paths?: string[];
-  brief?: string;
-  url?: string;
-  /** `kind: "demo"` only — the wizard's ordered steps, which the agent authors the
-   *  deterministic spec from (ADR-0018: the agent authors, the service records). */
-  demo_steps?: DemoStepDraft[];
-  style?: 'web' | 'ppt' | 'brochure' | 'doc';
-  /** Crew project binding. Registration is the authority: a doc that cannot be
-   *  filed is a loud error with no doc created (DES-PROJECT-001 §2.3). */
-  project?: string;
-  /**
-   * The repositories this document is ABOUT (acceptance finding F-046) — repo ids from the
-   * project's `crew.repo` members. Crew's proxy validates them against the project BEFORE the
-   * bridge sees the create (a miss is a 400 `{code:"repo_not_in_project"}` with nothing
-   * created), strips them from the forwarded body, and grounds the governed draft/demo run on
-   * THOSE repositories instead of the project's first member. Unfiled docs cannot name one.
-   */
-  repo_refs?: string[];
-  /** The thread message this generation came from (§7.6). The bridge writes it into
-   *  the version's `meta.sourceMessageId` at commit; the client only supplies it. */
-  source_message_id?: string;
-  // NOTE (issue #65): slice 16's `theme_id` field is GONE — `POST /api/docs` never read
-  // it (server.js consumes name/kind/source_paths/brief/url/style/project only), and the
-  // theme registry it named never existed. A doc's theme is learned per-doc via
-  // `requestThemeLearn` and sticks server-side.
-}
+/**
+ * The create body IS the shared wire declaration (`wicked-crew-api-types` 0.30.0,
+ * `InteractiveDocCreateRequest`) — crew's proxy reads exactly this shape, so there is no local
+ * mirror to drift (F-046). The bridge consumes `name/kind/html/source_paths/brief/url/demo_steps/
+ * style/project/source_message_id`; crew consumes `repo_ref`/`repo_refs` before forwarding
+ * (validated against the project — a miss is a 400 `InteractiveDocCreateRefusal` with nothing
+ * created — and grounds the governed run on THOSE repositories) and canonicalizes `project` from
+ * the route. NOTE (issue #65): the retired `theme_id` never existed on either side.
+ */
+export type CreateDocBody = InteractiveDocCreateRequest;
+/** `kind: "demo"` — one hand-pinned step (ADR-0018: the agent authors, the service records). */
+export type DemoStepDraft = InteractiveDemoStepDraft;
 
 /**
  * The synthesized Unfiled mount (DES-UX-001 §6.2, slice U): crew's proxy

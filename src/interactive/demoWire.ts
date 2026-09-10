@@ -79,7 +79,7 @@ export function demoBrief(draft: DemoDraft): string {
  * the two cannot disagree, which is the property the storyboard's chapter numbers rest on.
  */
 export function demoDraftBody(
-  projectId: string, draft: DemoDraft, sourceMessageId: string,
+  projectId: string, draft: DemoDraft, sourceMessageId: string, repoRefs: readonly string[] = [],
 ): CreateDocBody {
   const steps: DemoStepDraft[] = draft.steps.map((step, index) => ({
     index,
@@ -97,6 +97,8 @@ export function demoDraftBody(
     ...(steps.length > 0 ? { demo_steps: steps } : {}),
     // §6.2 (slice U): the Unfiled mount creates unbound; real projects bind.
     ...docBinding(projectId),
+    // F-046: the app's repositories, picked on the composer — crew grounds the spec run on THEM.
+    ...(repoRefs.length > 0 ? { repo_refs: [...repoRefs] } : {}),
     source_message_id: sourceMessageId,
   };
 }
@@ -107,10 +109,10 @@ export function demoDraftBody(
  * one thread per artifact, spanning every version (§2.4).
  */
 export async function createDemoFromDraft(
-  projectId: string, draft: DemoDraft, msgId: string,
+  projectId: string, draft: DemoDraft, msgId: string, repoRefs: readonly string[] = [],
 ): Promise<{ name: string; text: string }> {
   const text = demoBrief(draft);
-  const created = await createDoc(projectId, demoDraftBody(projectId, draft, msgId));
+  const created = await createDoc(projectId, demoDraftBody(projectId, draft, msgId, repoRefs));
   const key = threadKey(projectId, created.name);
   const store = useDocThreadStore.getState();
   store.addUserMsg(key, msgId, text);

@@ -57,6 +57,15 @@ afterEach(() => { vi.clearAllMocks(); });
 // ── 1. The ordered wizard (§4.5, §4.1) ───────────────────────────────────────
 
 describe('the ordered demo wizard — order is the thing it exists to carry', () => {
+  it('carries the composer\'s repositories as repo_refs (F-046) — omitted when none were picked', () => {
+    const grounded = demoDraftBody(PROJECT, DRAFT, 'dmsg-7', ['repo-studio', 'repo-core']);
+    expect(grounded.repo_refs).toEqual(['repo-studio', 'repo-core']);
+    expect(grounded.kind).toBe('demo');
+    const bare = demoDraftBody(PROJECT, DRAFT, 'dmsg-7');
+    expect('repo_refs' in bare).toBe(false);
+    expect('repo_refs' in demoDraftBody(PROJECT, DRAFT, 'dmsg-7', [])).toBe(false);
+  });
+
   it('AC: `index` is the AUTHORING position, so spec order cannot drift from wizard order', () => {
     const body = demoDraftBody(PROJECT, DRAFT, 'dmsg-7');
 

@@ -14,6 +14,8 @@ const postEvent = vi.fn();
 const injectDocMessage = vi.fn();
 
 vi.mock('../src/api/interactive.js', () => ({
+  // The launch composer's subject picker reads the Unfiled mount id from this module (F-046).
+  UNFILED_MOUNT: 'default',
   createDoc: vi.fn(),
   postFork: vi.fn(),
   getVersions: vi.fn(),

@@ -11,8 +11,8 @@
   "studioVersion": "0.5.2",
   "counts": {
     "files": 138,
-    "occurrences": 1137,
-    "static": 975,
+    "occurrences": 1142,
+    "static": 980,
     "dynamic": 57,
     "computed": 6
   },
@@ -1482,7 +1482,37 @@
       ]
     },
     {
+      "testId": "doc-subject-error",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-loading",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-nogrounding",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-none",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
       "testId": "doc-subject-repo",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-retry",
       "files": [
         "src/components/DocSubjectPicker.tsx"
       ]

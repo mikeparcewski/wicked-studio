@@ -13,26 +13,34 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Fixed
-- **Document thread — status frames file by `document_id` when the producer names no project
-  (acceptance finding F-045, belt and braces).** Crew's own interactive seams narrated their governed
-  runs with `document_id` alone, so every heartbeat was filed under the Unfiled mount while the
-  project-bound thread heard nothing and, 90 s into a live run, showed "no worker has picked this up —
-  the generation service may be down" with a Retry that would have injected a duplicate. Crew now stamps
+- **Document thread — bare status frames file under the doc's MOUNTED thread (acceptance finding
+  F-045, belt and braces).** Crew's own interactive seams narrated their governed runs with
+  `document_id` alone, so every heartbeat was filed under the Unfiled mount while the project-bound
+  thread heard nothing and, 90 s into a live run, showed "no worker has picked this up — the
+  generation service may be down" with a Retry that would have injected a duplicate. Crew now stamps
   `project_id` on every seam emit (wicked-crew, F-045); independently, `docThread.ingest` files a
-  frame that names a doc but no project under the ONE thread this page has open for that doc
-  (`soleThreadProject`), falling back to Unfiled only when none — or more than one — is open. The
-  stall banner therefore appears only after a genuine 90 s silence.
+  frame that names a doc but no project under the project a `DocumentThread` is currently MOUNTED for
+  that doc (`bindDoc`/`unbindDoc`, registered by the component — never inferred from retained
+  history, which a previous same-slug thread would poison), HOLDS it while no thread is mounted yet
+  (the bus can beat the create's navigation) and releases it onto the thread that mounts exactly
+  once, filing under Unfiled only when the 10 s hold expires. The stall banner therefore appears
+  only after a genuine 90 s silence.
 
 ### Added
-- **Launch composer — what the document is ABOUT and in what format (F-046, studio half).**
-  `DocSubjectPicker` offers the project's `crew.repo` members by name as toggles (sent on the create as
-  `repo_refs`; crew validates them against the project and grounds the governed draft/demo run on
-  THOSE repositories instead of the project's first member) and the bridge's four formats (sent as
-  `style`; "from the brief" sends nothing and lets crew infer it from the brief's format words, so a
-  print/A4 brief reaches the bridge's print instructions). The Unfiled mount offers the format only.
-  `CreateDocBody` gains `repo_refs`. Depends on wicked-crew's F-046 change for the refs to have any
-  effect (an older crew relays them to the bridge, which ignores unknown fields).
-
+- **Launch composer — what the document (or demo) is ABOUT and in what format (F-046, studio half).**
+  `DocSubjectPicker` offers the project's `crew.repo` members by name as toggles on BOTH the Document
+  and the Video launch composer (sent on the create as `repo_refs`; crew validates them against the
+  project and grounds the governed draft/demo run on THOSE repositories instead of the project's first
+  member — the demo wizard carries them through `demoDraftBody`) and, for a document, the bridge's four
+  formats (sent as `style`; "from the brief" sends nothing and lets crew infer it from the brief's
+  format words, so a print/A4 brief reaches the bridge's print instructions). Discovery has visible
+  loading / error states with a retry: the composer refuses to submit while the repositories are
+  unknown, unless the user explicitly chooses to create without repository grounding — which the
+  thread then records. The picks reset when the launch context changes and after a create.
+- **Create body typed from the shared wire declaration.** `CreateDocBody` is now
+  `wicked-crew-api-types` 0.30.0's `InteractiveDocCreateRequest` (and `DemoStepDraft` its
+  `InteractiveDemoStepDraft`) — no local mirror to drift. `wicked-crew-api-types` is pinned to
+  `0.30.0` exactly; the package publishes from wicked-crew on the F-045/F-046 merge.
 
 ## [0.5.2] — 2026-09-09
 
