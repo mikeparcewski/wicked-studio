@@ -37,9 +37,10 @@ export interface ProjectRepoOption { id: string; name: string }
 export async function loadProjectRepos(projectId: string): Promise<ProjectRepoOption[]> {
   if (projectId === UNFILED_MOUNT) return [];
   const [{ members }, { repos }] = await Promise.all([api.listProjectMembers(projectId), api.listRepos()]);
+  const nameById = new Map(repos.map((r) => [r.id, r.name] as const)); // one pass over the registry, not one per member
   return members
     .filter((m) => m.member_kind === 'crew.repo')
-    .map((m) => ({ id: m.member_ref, name: repos.find((r) => r.id === m.member_ref)?.name ?? m.member_ref }));
+    .map((m) => ({ id: m.member_ref, name: nameById.get(m.member_ref) ?? m.member_ref }));
 }
 
 /** The thread line a no-grounding create leaves behind (the composer adds it after the create). */
