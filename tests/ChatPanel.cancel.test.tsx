@@ -108,6 +108,8 @@ describe('run header Cancel (F-029)', () => {
     await user.click(screen.getByTestId('run-cancel-yes'));
     const err = await screen.findByTestId('run-cancel-error');
     expect(err).toHaveTextContent('run is already terminal');
+    // Announced, not merely painted — the file's other error surfaces are alerts too.
+    expect(err).toHaveAttribute('role', 'alert');
     expect(screen.getByTestId('run-cancel-confirm')).toBeInTheDocument();
     expect(onRefresh).not.toHaveBeenCalled();
   });

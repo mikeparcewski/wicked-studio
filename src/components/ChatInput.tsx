@@ -268,6 +268,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       ...cur.filter((id) => !removed.includes(id)),
       ...added.filter((id) => !cur.includes(id)),
     ]);
+    // Removing the CHOSEN target drops the choice with it: a stale choice would
+    // otherwise outrank every later tick the moment that repo is re-attached.
+    setTargetChoice((cur) => (cur !== null && removed.includes(cur) ? null : cur));
     setRepoRefs(next);
   }
 
@@ -275,6 +278,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   function removeRepoRef(rid: string): void {
     reposTouched.current = true;
     setExplicitRefs((cur) => cur.filter((id) => id !== rid));
+    setTargetChoice((cur) => (cur === rid ? null : cur));
     setRepoRefs((cur) => cur.filter((id) => id !== rid));
   }
 

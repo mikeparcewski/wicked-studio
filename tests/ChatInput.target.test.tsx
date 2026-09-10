@@ -193,6 +193,42 @@ describe('ChatInput target repo (F-028)', () => {
     expect(sentBody().repoRef).toBe('wicked-core');
   });
 
+  it('removing the CHOSEN repo drops the choice — a later tick is not silently outranked when it is re-attached', async () => {
+    const user = userEvent.setup();
+    renderBound();
+    await chips();
+    await bind(user, { workflow: 'bug' });
+    await user.selectOptions(screen.getByTestId('launch-target-repo'), 'wicked-estate');
+    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-estate');
+    // Untick the chosen repo in the popover, then tick another: the tick is the target now.
+    await bind(user, { tick: 'wicked-estate' });
+    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-core');
+    await bind(user, { tick: 'wicked-studio' });
+    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-studio');
+    // Re-attach the once-chosen repo: with the stale choice gone, two ticks are a QUESTION
+    // (ambiguous) — the old choice must not silently retarget the launch.
+    await bind(user, { tick: 'wicked-estate' });
+    const select = screen.getByTestId('launch-target-repo') as HTMLSelectElement;
+    expect(select.dataset.targetState).toBe('ambiguous');
+    expect(select.value).toBe('');
+    expect(screen.getByTestId('launch-target-reason')).toBeInTheDocument();
+    expect(screen.getByTestId('launch-submit')).toBeDisabled();
+  });
+
+  it('a chip × on the chosen repo drops the choice the same way', async () => {
+    const user = userEvent.setup();
+    renderBound();
+    await chips();
+    await bind(user, { workflow: 'bug', tick: 'wicked-studio' });
+    await user.selectOptions(screen.getByTestId('launch-target-repo'), 'wicked-core');
+    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-core');
+    await user.click(screen.getByLabelText(/Clear Repo: wicked-core/));
+    // The tick resumes as the target; re-ticking core later must not resurrect the choice.
+    expect(screen.getByTestId('launch-summary').dataset.target).toBe('wicked-studio');
+    await bind(user, { tick: 'wicked-core' });
+    expect((screen.getByTestId('launch-target-repo') as HTMLSelectElement).dataset.targetState).toBe('ambiguous');
+  });
+
   it('removing chips down to one candidate resolves the target without a choice', async () => {
     const user = userEvent.setup();
     renderBound();

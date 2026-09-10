@@ -310,7 +310,7 @@ function RunCancelControl({ runId, onCancelled }: {
         Keep running
       </button>
       {error !== null && (
-        <span data-testid="run-cancel-error" className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
+        <span role="alert" data-testid="run-cancel-error" className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
           {error}
         </span>
       )}
