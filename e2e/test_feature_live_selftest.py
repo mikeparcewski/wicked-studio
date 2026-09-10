@@ -1,0 +1,4072 @@
+#!/usr/bin/env python3
+"""
+Offline regression tests for the live Test-feature harness (`e2e/test_feature_live.py`).
+
+Deterministic, stdlib `unittest` only: no network, no Playwright, no daemon, no macOS probes —
+the harness module is imported via `importlib` (its `main()` is `__main__`-guarded) and its pure
+pieces are exercised with fakes: the preflight thresholds + the acknowledged contract deviation
+(the amended contract), the fan-out gate decided on TOKENS over an injected process table (codex's
+three argument-order probes; round 5's build shorthand `pnpm build` / `yarn build` / `bun test` and
+direct executables `node …/vite/bin/vite.js build`; a failed `ps`), the pre-submit preflight and the
+flock launch reservation (O_NOFOLLOW, symlinked lock / directory refused), the gate policy (an
+ALLOW-LIST that fails closed: approve only on an allow-listed shape + a known non-delivery kind +
+no delivery verb anywhere in the complete prompt — codex's `gh pr create`, `push the branch`,
+`Prompt unavailable` probes all reject) and the UI click path with a fake page AND a fake read-only
+daemon (`GET /runs/:id/gate`, `GET /runs/:id/events` over `tfl._fetch` — no test touches the
+network): the decision is taken on the COMPLETE prompt the daemon serves, never on the card's
+`cleanPrompt()` headline (round 5: `… Finalize the test [gh pr create --fill]` rejects on the
+bracketed command the card hides; an unserved full prompt rejects; a card that is not the full
+prompt's headline rejects), and the wire is verified (exact endpoint for THIS run, body.approve ==
+the decision, 2xx — a contradictory wire is a mismatch), sibling gates through the UI while
+following with per-poll REDISCOVERY (a late sibling is followed; a late sibling still gated at the
+timeout fails; a sibling gate's wire mismatch fails the harness), the verdict split (every sibling
+terminal with its own verdict), sibling attribution without the brief fallback, typed
+evidence-fetch misses (events, listings, and a unit `output` of the wrong type), the launch body
+recorded raw when it is not JSON, `scrub()`, plan analysis (scenario rows only, execution RESULTS
+excluded only on a result STRUCTURE — a proposed command or an expected outcome such as "Verify
+failed /runs cards render red" is a scenario — canonical file identity; re-derived over the three
+committed plans), the artifacts root walked BEFORE startup creates it (a symlinked `e2e/artifacts`
+refuses `main()`), and the ONE dir-fd-anchored artifact writer (`O_DIRECTORY | O_NOFOLLOW` on the
+verified directory, `O_EXCL | O_NOFOLLOW` temp file via `dir_fd=`, `fsync`, `rename` via
+`src_dir_fd`/`dst_dir_fd`) under deterministic symlink SUBSTITUTION between validation and write
+(target swapped → the link is replaced, never followed; parent swapped → refused; temp name
+pre-planted → refused). Round 6: gate IDENTITY before any click — the card must be the daemon's
+CURRENT gate (`GET /runs/:id/gate`, else the LATEST `awaitingHuman` event, never an older prompt);
+codex's stale ord-1 card over a current ord-4 delivery gate is `reject-by-abstention` with NO click
+(`gate-state-conflict`, `harness_ok=false`), an unreadable latest prompt never falls back to an older
+readable one; every directory component under the evidence dir is opened `O_NOFOLLOW` RELATIVE to
+the previous descriptor (an ancestor `e2e/artifacts` swapped for a link — between two walks or
+during one — is refused, for artifacts, the report and the lock); `pytest -n 8` / `python3 -m pytest
+-n 8` / `-m unittest` trip the fan-out fence; a result structure excludes only a verb-less cell (`S-1
+Verify CLI returns exit code 1 …` and `S-2 Verify completed UI cards show ✓ …` are scenarios). Round 7: a FAILED current-gate read
+(`GET /runs/:id/gate` 503 / 404 / malformed 200 / transport) never decides on events a caller fetched
+earlier — there is no argument for them; the ONLY fallback is a FRESH `GET /runs/:id/events` and the
+current UNRESOLVED gate in it (the latest `awaitingHuman` with no later `gateDecided`/`resumed` for
+its ord, no terminal event after it): codex's stale unit-1 card over a newer unit-4 delivery event
+is identified as the ord-4 gate and abstained on every branch (`gate-state-conflict`); a fresh log
+that settles nothing (fetch failed, no gate, already decided, ambiguous, run over) is
+`gate-state-unknown` — abstain, `harness_ok=false`; a healthy gate read approves as recorded. The
+launch reservation protects the DAEMON, not a worktree: `<system temp dir>/wicked-test-feature-live-
+<uid>/<sha256(daemon origin)>.launch.lock` (0700, refused unless this user's and private), so two
+worktrees aiming at one daemon contend for ONE lock and different daemons never do. Round 8: gate
+identity requires COMPLETE metadata — a `GET /runs/:id/gate` record must carry `runId` + an integer
+`ord` (+ the prompt; a prompt-only 2xx is an incomplete record: `unknown-gate-kind`, abstain, no
+events fallback), the unit's `stage` AND `gate` must both be recognized wire values
+(`recon|build|review|test`, `auto|human_confirm|human_confirm_if`; `{stage: null, gate: "human"}`
+abstains), and an APPROVE requires the card to render the current ord (`card-ord-unverified`
+otherwise) — codex's unit-4 prompt + unit-1 card + unit-1 metadata probe clicks nothing; the
+reservation is keyed by the CANONICAL daemon origin (`localhost` ≡ `127.0.0.1` ≡ `[::1]` ≡
+`loopback`; other hosts via the resolver's canonical name) in a FIXED per-user directory
+(`/private/tmp/wicked-test-feature-live-<uid>` on macOS, `/tmp/…` elsewhere) that `TMPDIR` never
+moves; every invocation writes its own `runs/<UTC>-<pid>/` directory and the committed root
+fixtures are never rewritten (`--promote` copies a run into the root deliberately; a
+blocked-preflight invocation leaves the root untouched); survey prose is not a scenario (`tests` in
+a path token is not a verb; a code-span path + ` — ` bullet proposes nothing — LT-3 22 → 21);
+Copilot: `/repos` is a typed list, an undecodable `/ws` frame is a recorded placeholder, a non-JSON
+2xx launch answer is recorded raw. Round 9: attribution is STRUCTURAL only — codex's "Investigate why
+d293f4d7-… failed" probe is `unrelated` (`text-mention-only`), never followed, never gated; a served
+campaign's `attached_runs` / `node_run_id` member is a sibling; no structural linkage ⇒
+`no-structural-attribution` in the verdict; `TEST_PROBLEM_PREFIX` is gone. The preflight fails
+CLOSED on a run status it does not know (`classify_runs`: `status: null` / `frobnicated` / missing ⇒
+`unknown-run-status` blocks; all terminal ⇒ clear; a reading without the classification is not
+clear; `readings()` end to end with faked probes). Campaign completeness: a `pending` node keeps the
+follow going to SIBLING_FOLLOW_MAX_S ⇒ `campaign-incomplete`, never pass; a node that runs on poll 4
+is followed and the campaign completes. The launch contract is asserted: `repoRefs == [TARGET_REPO]`,
+`problem` = the intent's framing + blank line + INSTRUCTION, the panel's `data-intent`, ≥ 1
+`awaitingHuman` frame before the decision (`gate-frame-not-received`), LT-1 / LT-3 byte-identical
+(`brief-not-identical`) — codex's `another-repo` / unrelated problem / zero-frame fixture fails; the
+three recorded launches satisfy all of it (re-derived with the values). The only local resource
+touched is `git ls-files` of this worktree (for the committed-plan re-derivation) and a temp dir.
+
+Run:  python3 -m unittest e2e/test_feature_live_selftest.py -v
+(studio's CI has no Python step — run this by hand before pushing a harness change.)
+"""
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import inspect
+import json
+import os
+import re
+import stat
+import subprocess
+import tempfile
+import types
+import unittest
+import urllib.error
+import urllib.parse
+from pathlib import Path
+from unittest import mock
+
+HERE = Path(__file__).resolve().parent
+_spec = importlib.util.spec_from_file_location("test_feature_live", HERE / "test_feature_live.py")
+tfl = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(tfl)  # type: ignore[union-attr]
+
+ACK = {"SWAP_MAX_PCT_ACK": "contract-deviation"}
+DEVIATION_ENV = {"SWAP_MAX_PCT": "95", **ACK}
+
+
+def reading(**over) -> dict:
+    base = {"ts": "00:00:00", "free_mb": 60, "available_mb": 16000, "load1": 8.5, "swap_pct": 93.0, "active_runs": [],
+            "unknown_status_runs": [], "fanout": []}   # round 9: `[]` is the only clear unknown-status reading
+    base.update(over)
+    return base
+
+
+class FakeClock:
+    """Injected into `follow_siblings` so a 15-minute follow window elapses in no real time."""
+
+    def __init__(self, t: float = 1000.0):
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+    def sleep(self, s: float) -> None:
+        self.t += s
+
+
+# A measured block shaped like the recorded LT-1 (d293f4d7…): everything the harness did worked,
+# the run completed with a real-file-naming, classifying plan — and zero siblings appeared.
+RECON_FRAMING = ("Recon: survey the target and propose a test plan — the scenarios, their dependencies, and which are deterministic "
+                 "tool checks vs governed agent runs. Present the proposed plan at the intake gate and launch nothing until it is approved.")
+TEST_FRAMING = ("New test: plan the test for the attached scope — the scenarios, their dependencies, and which are deterministic tool "
+                "checks vs governed agent runs — and run the approved plan as governed sibling runs under one test. Present the plan at "
+                "the intake gate and launch nothing until it is approved.")
+
+
+def problem_for(intent: str) -> str:
+    """What the panel posts for `intent` (TestingLaunchPanel.tsx: `${prefix}\\n\\n${brief}`) — the recorded framings."""
+    return f"{RECON_FRAMING if intent == 'recon' else TEST_FRAMING}\n\n{tfl.INSTRUCTION}"
+
+
+CONTRACT_LABELS = ("launch-scope-mismatch", "launch-brief-mismatch", "launch-intent-mismatch", "gate-frame-not-received")
+
+
+def recorded_like(intent: str = "recon", **over) -> dict:
+    m = {
+        "scenario": "LT-X", "intent": intent, "result": "not-run", "notes": [],
+        "measured": {
+            "post_status": 201, "run_ids": ["run-1"], "campaign_label": "recon-abc-123", "campaign_registered": False,
+            # the launch's wire contract as the recorded runs met it (round 9: asserted, not just recorded)
+            "post_body": {"problem": problem_for(intent), "repoRefs": [tfl.TARGET_REPO]}, "panel_intent": intent, "awaitingHuman_over_ws": 1,
+            "gate_on_panel_card": True, "gate_via_run_page_fallback": False,
+            "gates": [{"ord": 1, "first": True, "prompt": "Approve unit 1 before it runs: Recon: …", "decision": "approve",
+                       "reason": "imperative is not deliver-class", "status": 200, "unit": {"stage": "test", "gate": "auto"}}],
+            "final_status": "completed", "wedged": False,
+            "plan": {"names_real_files": True, "classifies": True},
+            "siblings_at_terminal": {"attributable_siblings": [], "unrelated_new_runs": [], "campaign_for_label": []},
+            "siblings_after_grace": {"attributable_siblings": [], "unrelated_new_runs": [], "campaign_for_label": []},
+            "fetch_errors": [],
+        },
+    }
+    m["measured"].update(over)
+    return m
+
+
+def with_siblings(*ids: str, **over) -> dict:
+    sib = {"attributable_siblings": [{"id": i, "attributed_by": "x"} for i in ids], "unrelated_new_runs": [], "campaign_for_label": []}
+    return recorded_like(siblings_after_grace=sib, **over)
+
+
+class Isolated(unittest.TestCase):
+    """Snapshot/restore the module's global REPORT (findings, preflights, policy, fetch sink)."""
+
+    def setUp(self):
+        self._saved = json.loads(json.dumps(tfl.REPORT, default=str))
+        tfl.set_fetch_sink(None)
+
+    def tearDown(self):
+        tfl.REPORT.clear()
+        tfl.REPORT.update(self._saved)
+        tfl.set_fetch_sink(None)
+
+
+# ── Item 1 (the contract as AMENDED 2026-09-09): the 85 % default, the acknowledged override ───
+# "the 85% default stands; an EXPLICIT operator override (SWAP_MAX_PCT together with
+# SWAP_MAX_PCT_ACK=contract-deviation) is permitted and MUST be recorded in the report as a contract
+# deviation" — the harness implements exactly that; these tests are its statement.
+
+
+class PreflightThresholds(Isolated):
+    def test_contract_default_is_85(self):
+        p = tfl.preflight_policy({})
+        self.assertEqual(p["swap_max_pct"], 85)
+        self.assertEqual(p["contract_swap_max_pct"], 85)
+        self.assertEqual(tfl.SWAP_MAX_PCT_CONTRACT, 85)
+        self.assertNotIn("contract_deviation", p)
+        self.assertEqual(p["source"], "contract default")
+        self.assertIsNone(tfl.deviation_line(p))
+
+    def test_override_without_the_acknowledgement_refuses_naming_both_vars(self):
+        for env in ({"SWAP_MAX_PCT": "95"}, {"SWAP_MAX_PCT": "95", "SWAP_MAX_PCT_ACK": ""}, {"SWAP_MAX_PCT": "95", "SWAP_MAX_PCT_ACK": "yes"}):
+            with self.assertRaises(SystemExit, msg=env) as cm:
+                tfl.preflight_policy(env)
+            self.assertIn("SWAP_MAX_PCT=95", str(cm.exception))
+            self.assertIn("SWAP_MAX_PCT_ACK=contract-deviation", str(cm.exception))
+
+    def test_acknowledged_override_is_recorded_as_a_contract_deviation_object(self):
+        p = tfl.preflight_policy(DEVIATION_ENV)
+        self.assertEqual(p["swap_max_pct"], 95)
+        self.assertEqual(p["source"], "SWAP_MAX_PCT env")
+        d = p["contract_deviation"]
+        self.assertEqual({k: d[k] for k in ("var", "contract", "effective", "ack")},
+                         {"var": "SWAP_MAX_PCT", "contract": 85, "effective": 95, "ack": "SWAP_MAX_PCT_ACK=contract-deviation"})
+        self.assertIn("not enforced", d["note"])
+        line = tfl.deviation_line(p)
+        self.assertTrue(line.startswith("CONTRACT DEVIATION:"), line)
+        self.assertIn("85% → 95%", line)
+
+    def test_override_equal_to_the_contract_needs_no_ack_and_is_not_a_deviation(self):
+        self.assertNotIn("contract_deviation", tfl.preflight_policy({"SWAP_MAX_PCT": "85"}))
+
+    def test_invalid_env_refuses(self):
+        for bad in ("abc", "0", "101", "-5"):
+            with self.assertRaises(SystemExit, msg=bad):
+                tfl.preflight_policy({"SWAP_MAX_PCT": bad, **ACK})
+
+    def test_swap_gate_uses_the_effective_threshold(self):
+        r = reading(swap_pct=93.0)
+        self.assertEqual(tfl.preflight_ok(r, tfl.preflight_policy({})), ["swap 93.0% >= 85%"])
+        self.assertEqual(tfl.preflight_ok(r, tfl.preflight_policy(DEVIATION_ENV)), [])
+        self.assertEqual(tfl.preflight_ok(reading(swap_pct=84.9), tfl.preflight_policy({})), [])
+
+    def test_load_and_active_run_gates(self):
+        p = tfl.preflight_policy(DEVIATION_ENV)
+        self.assertEqual(tfl.preflight_ok(reading(load1=20.0), p), ["load1 20.0 >= 20"])
+        self.assertEqual(tfl.preflight_ok(reading(active_runs=["r1"]), p), ["active runs: ['r1']"])
+        self.assertEqual(tfl.preflight_ok(reading(), p), [])
+        why = tfl.preflight_ok(reading(load1=25, active_runs=["r1"], swap_pct=99), tfl.preflight_policy({}))
+        self.assertEqual(len(why), 3)
+
+    def test_every_preflight_logs_the_deviation_and_stamps_the_threshold(self):
+        saved_readings, saved_log = tfl.readings, tfl.log
+        lines: list[str] = []
+        try:
+            tfl.readings = lambda: reading(swap_pct=93.0)
+            tfl.log = lines.append
+            tfl.REPORT["preflight_policy"] = tfl.preflight_policy(DEVIATION_ENV)
+            tfl.REPORT["preflights"] = []
+            self.assertTrue(tfl.preflight("T-1"))
+            self.assertTrue(tfl.preflight("T-2"))
+            for entry in tfl.REPORT["preflights"]:
+                self.assertEqual(entry["at"], "before-launch")
+                self.assertTrue(entry["cleared"])
+                self.assertEqual(entry["readings"][0]["swap_max_pct"], 95)
+                self.assertEqual(entry["readings"][0]["load1_max"], 20)
+                self.assertEqual(entry["readings"][0]["blocked_by"], [])
+            self.assertEqual(sum(1 for l in lines if l.startswith("CONTRACT DEVIATION:")), 2, lines)  # at EVERY preflight
+            self.assertEqual(tfl.REPORT["contract_deviation"]["effective"], 95)  # the report's top-level object
+        finally:
+            tfl.readings, tfl.log = saved_readings, saved_log
+
+
+# ── Round 9 (HIGH): the preflight fails CLOSED on a run status it does not know ────────────────
+
+
+class PreflightRunStatus(Isolated):
+    """Codex round 9: `readings()` read `status in ACTIVE`, so an injected `/runs` entry with
+    `session.status: null` produced `active_runs=[]` and no preflight blocker — unknown daemon
+    state counted as "clear". Now every status outside ACTIVE ∪ TERMINAL (`KNOWN_STATUSES`) is an
+    `unknown_status_runs` record (`classify_runs`) and BLOCKS (`unknown-run-status`), and a reading
+    without the classification is not clear either — the fan-out gate's fail-closed shape."""
+
+    def run_(self, rid, status):
+        return {"session": {"id": rid, "status": status}}
+
+    def test_codex_probe_status_null_blocks_the_launch(self):
+        c = tfl.classify_runs([self.run_("u1", None)])
+        self.assertEqual(c, {"active": [], "terminal": [], "unknown": [{"id": "u1", "status": None}]})
+        why = tfl.preflight_ok(reading(swap_pct=50.0, unknown_status_runs=c["unknown"]), tfl.preflight_policy({}))
+        self.assertEqual(why, ["unknown-run-status: [{'id': 'u1', 'status': None}]"])
+
+    def test_unrecognized_missing_and_malformed_statuses_block(self):
+        runs = [self.run_("u1", "frobnicated"), {"session": {"id": "u2"}}, {"session": None}, {"no": "session"}, self.run_("u3", 7),
+                self.run_("u4", {"weird": True})]
+        c = tfl.classify_runs(runs)
+        self.assertEqual((c["active"], c["terminal"]), ([], []))
+        self.assertEqual([u["id"] for u in c["unknown"]], ["u1", "u2", None, None, "u3", "u4"])
+        self.assertEqual(c["unknown"][0]["status"], "frobnicated")
+        self.assertEqual(c["unknown"][5]["status"], "{'weird': True}")   # repr — the reading stays serializable
+        json.dumps(c)
+        why = tfl.preflight_ok(reading(swap_pct=50.0, unknown_status_runs=c["unknown"]), tfl.preflight_policy({}))
+        self.assertEqual(len(why), 1)
+        self.assertTrue(why[0].startswith("unknown-run-status: [{'id': 'u1', 'status': 'frobnicated'}"), why)
+        for st in ("frobnicated", None, "", "COMPLETED"):   # case matters: the wire is lower-case
+            self.assertEqual(tfl.classify_runs([self.run_("x", st)])["unknown"], [{"id": "x", "status": st}], st)
+
+    def test_all_terminal_is_clear_and_active_still_blocks_as_active(self):
+        runs = [self.run_("t1", "completed"), self.run_("t2", "failed"), self.run_("t3", "cancelled"), self.run_("t4", "canceled"), self.run_("t5", "rejected")]
+        c = tfl.classify_runs(runs)
+        self.assertEqual((c["active"], c["unknown"], c["terminal"]), ([], [], ["t1", "t2", "t3", "t4", "t5"]))
+        self.assertEqual(tfl.preflight_ok(reading(swap_pct=50.0, active_runs=c["active"], unknown_status_runs=c["unknown"]), tfl.preflight_policy({})), [])
+        c = tfl.classify_runs(runs + [self.run_("a1", "awaiting_human"), self.run_("u1", None)])
+        self.assertEqual((c["active"], c["unknown"]), (["a1"], [{"id": "u1", "status": None}]))
+        why = tfl.preflight_ok(reading(swap_pct=50.0, active_runs=c["active"], unknown_status_runs=c["unknown"]), tfl.preflight_policy({}))
+        self.assertEqual(why, ["active runs: ['a1']", "unknown-run-status: [{'id': 'u1', 'status': None}]"])
+        self.assertEqual(tfl.KNOWN_STATUSES, tfl.ACTIVE | tfl.TERMINAL)
+        self.assertEqual(tfl.preflight_policy({})["known_run_statuses"], sorted(tfl.ACTIVE | tfl.TERMINAL))
+
+    def test_a_reading_without_the_classification_is_not_clear(self):
+        r = reading(swap_pct=50.0)
+        del r["unknown_status_runs"]
+        self.assertEqual(tfl.preflight_ok(r, tfl.preflight_policy({})), ["unknown-run-status: not measured"])
+        self.assertEqual(tfl.preflight_ok(reading(swap_pct=50.0, unknown_status_runs=None), tfl.preflight_policy({})), ["unknown-run-status: not measured"])
+
+    def test_readings_classifies_the_live_listing_and_a_failed_listing_blocks_twice(self):
+        """`readings()` end to end with the macOS probes faked: codex's listing (one `status: null`
+        entry beside a completed run) yields `active_runs=[]` AND `unknown_status_runs=[…]` and the
+        reading is BLOCKED; the same listing without the null entry clears; a listing that raises
+        is `ERR` (active) + `not measured` (unknown) — two blockers, never a clear reading."""
+        vm = ("Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:  1000.\nPages inactive: 2000.\n"
+              "Pages speculative: 10.\nPages purgeable: 5.\n")
+        probes = {"vm_stat": vm, "vm.loadavg": "{ 3.5 4.0 4.2 }", "vm.swapusage": "total = 8192.00M  used = 4096.00M  free = 4096.00M  (encrypted)"}
+        listing = [self.run_("done", "completed"), self.run_("u1", None)]
+        with mock.patch.object(tfl.sys, "platform", "darwin"), mock.patch.object(tfl, "_probe", lambda argv: probes[argv[-1]]), \
+                mock.patch.object(tfl, "list_runs", lambda: listing), mock.patch.object(tfl, "fanout_processes", lambda: []):
+            r = tfl.readings()
+            self.assertEqual((r["active_runs"], r["unknown_status_runs"], r["swap_pct"], r["load1"]), ([], [{"id": "u1", "status": None}], 50.0, 3.5))
+            self.assertEqual(tfl.preflight_ok(r, tfl.preflight_policy({})), ["unknown-run-status: [{'id': 'u1', 'status': None}]"])
+            listing[:] = [self.run_("done", "completed")]
+            self.assertEqual(tfl.preflight_ok(tfl.readings(), tfl.preflight_policy({})), [])
+
+        def boom():
+            raise tfl.FetchError(tfl.FetchMiss("/runs", 503, "down"))
+        with mock.patch.object(tfl.sys, "platform", "darwin"), mock.patch.object(tfl, "_probe", lambda argv: probes[argv[-1]]), \
+                mock.patch.object(tfl, "list_runs", boom), mock.patch.object(tfl, "fanout_processes", lambda: []):
+            r = tfl.readings()
+        self.assertTrue(r["active_runs"][0].startswith("ERR "), r)
+        self.assertIsNone(r["unknown_status_runs"])
+        why = tfl.preflight_ok(r, tfl.preflight_policy({}))
+        self.assertTrue(why[0].startswith("active runs: ['ERR "), why)
+        self.assertEqual(why[1], "unknown-run-status: not measured")
+        self.assertIn("classified = classify_runs(list_runs())", inspect.getsource(tfl.readings))
+        self.assertNotIn('["status"] in ACTIVE]', inspect.getsource(tfl.readings))   # the round-8 comprehension is gone
+
+
+# ── Item 4: the pre-submit preflight and the launch reservation ───────────────────────────────
+
+
+class PreflightAtSubmit(Isolated):
+    def test_blocked_at_submit_does_not_wait_and_is_a_harness_failure(self):
+        saved_readings, saved_sleep = tfl.readings, tfl.time.sleep
+        try:
+            tfl.readings = lambda: reading(active_runs=["r1"], swap_pct=50.0)  # another run started in the window
+            tfl.time.sleep = lambda *_: (_ for _ in ()).throw(AssertionError("the pre-submit preflight must never wait"))
+            tfl.REPORT["preflight_policy"] = tfl.preflight_policy({})
+            tfl.REPORT["preflights"] = []
+            why = tfl.preflight_at_submit("T-1")
+            self.assertEqual(why, ["active runs: ['r1']"])
+            entry = tfl.REPORT["preflights"][0]
+            self.assertEqual((entry["at"], entry["cleared"], len(entry["readings"])), ("submit", False, 1))
+            self.assertEqual(entry["readings"][0]["swap_max_pct"], 85)
+            tfl.readings = lambda: reading(swap_pct=50.0)
+            self.assertEqual(tfl.preflight_at_submit("T-1"), [])
+            self.assertTrue(tfl.REPORT["preflights"][1]["cleared"])
+        finally:
+            tfl.readings, tfl.time.sleep = saved_readings, saved_sleep
+        v = tfl.derive_result(recorded_like(launch_aborted_by_preflight=["active runs: ['r1']"], post_status=None, run_ids=[],
+                                            gate_on_panel_card=False, gates=[], final_status=None), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertIn("preflight-at-submit", v["fail_reasons"])
+        self.assertFalse(any("launch not accepted" in r for r in v["fail_reasons"]), v["fail_reasons"])  # nothing was posted
+
+    def test_the_submit_click_is_preceded_by_the_reservation_and_the_fresh_preflight(self):
+        src = inspect.getsource(tfl._drive_intake)
+        i_lock, i_pf, i_click = src.index("lock.acquire()"), src.index("preflight_at_submit(tag)"), src.index('testing-launch-submit"]\').click()')
+        self.assertLess(i_lock, i_pf)
+        self.assertLess(i_pf, i_click)
+        self.assertIn('m["measured"]["launch_aborted_by_preflight"] = why', src)
+        self.assertLess(src.index("launch_aborted_by_preflight"), i_click)
+        # Released once the intake gate is decided, and on every exit path by the wrapper.
+        self.assertGreater(src.index("lock.release()"), src.index("decide_gate_on_card(page, card"))
+        self.assertIn("finally:\n        lock.release()", inspect.getsource(tfl.drive_intake))
+
+
+# ── Round 3, item 2: the fan-out gate (no heavy worker / build processes on the host) ──────────
+
+PS_TABLE = """  123 /usr/bin/python3 e2e/test_feature_live.py
+  456 node /opt/homebrew/lib/node_modules/wicked-crew/node_modules/.bin/codex exec --skip-git-repo-check You are one evaluator
+  789 claude -p "do a thing"
+  790 claude --print x
+  791 /Applications/Claude.app/Contents/MacOS/Claude
+  800 cargo build --release
+  801 cargo test -p wicked-core
+  802 cargo clippy
+  803 node /x/node_modules/.bin/vitest run
+  804 npm run test
+  805 npm test
+  806 npm run build
+  807 npm run dev
+  808 node /opt/homebrew/bin/wicked-crew serve --port 7701
+  809 wicked-crew serve
+  810 node /opt/homebrew/bin/wicked-crew serve --port 62432 --db /tmp/x/core.db
+  811 ps -axo pid=,command=
+  812 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --type=renderer
+  813 cargo +stable build
+  814 claude --model opus --print task
+  815 wicked-crew serve --db /tmp/x --port 62432
+  816 node /x/app.js --port 62432
+  817 node /opt/homebrew/bin/wicked-crew serve --port=62432
+  818 node /opt/homebrew/bin/wicked-crew serve --port=7701
+  819 pnpm build
+  820 yarn build
+  821 node /x/node_modules/vite/bin/vite.js build
+  822 bun test
+  823 node
+  824 npm view wicked-crew version
+  825 node /x/node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
+  826 node /x/node_modules/playwright/driver/package/cli.js run-driver
+  827 pytest -n 8
+  828 python3 -m pytest -n 8
+  829 python3 -m json.tool /tmp/x.json
+  830 /usr/bin/python3.12 -m pytest tests/ -q
+  831 python3 -m unittest e2e/test_feature_live_selftest.py -v
+  832 py.test -q
+"""
+# Codex round 4's three probes — the positional regex returned no match for any of them.
+CODEX_FANOUT_PROBES = ("cargo +stable build", "claude --model opus --print task", "wicked-crew serve --db /tmp/x --port 62432")
+# Codex round 5's probes — the round-4 fence required a literal `run` before a build script and knew
+# no direct build executable: `pnpm build`, `yarn build` and `node …/vite/bin/vite.js build` all cleared.
+CODEX_R5_FANOUT = ("pnpm build", "yarn build", "node /x/node_modules/vite/bin/vite.js build", "bun test")
+CODEX_R5_CLEAR = ("node /opt/homebrew/bin/wicked-crew serve --port 7701", "node", "npm view x")
+
+
+class FanoutGate(Isolated):
+    def test_the_rules_match_the_documented_fanout_and_nothing_else(self):
+        hits = tfl.fanout_processes(PS_TABLE)
+        self.assertEqual([h.split(" ", 1)[0] for h in hits],
+                         ["456", "789", "790", "800", "801", "802", "803", "804", "805", "806", "810", "813", "814", "815", "817",
+                          "819", "820", "821", "822", "825", "827", "828", "830", "831", "832"])
+        self.assertTrue(hits[0].startswith("456 node "), hits[0])          # `pid cmd`
+        self.assertTrue(all(len(h) <= 170 for h in hits))                  # command lines are clipped
+        # The dogfood daemon (:7701 — `--port 7701` or `--port=7701` — or no port), the harness, the
+        # interactive Claude app, `npm run dev`, `npm view …`, an idle `node`, an unrelated `node …
+        # --port 62432`, Playwright's own driver, `ps` itself and a Chrome renderer are not fan-out.
+        self.assertEqual(tfl.fanout_processes(""), [])
+        self.assertEqual(tfl.fanout_processes("  808 wicked-crew serve --port 7701\n  809 wicked-crew serve\n  816 node /x/app.js --port 62432\n"), [])
+
+    def test_codex_round5_build_shorthand_and_direct_executables_block(self):
+        """Codex round 5: deterministic probes with `pnpm build` and `yarn build` returned no fan-out
+        matches and no preflight blockers (the predicate required a literal `run` token before a
+        build script), and `node …/vite/bin/vite.js build` passed too (no direct executable rule).
+        Now: package runners match build|test|typecheck|lint|check ANYWHERE among their tokens, and
+        direct build/test executables match by basename after the launcher look-through (a
+        `.js`/`.mjs`/`.cjs` extension stripped)."""
+        for probe in CODEX_R5_FANOUT:
+            self.assertIsNotNone(tfl.fanout_rule(probe), probe)
+            self.assertEqual(tfl.fanout_processes(f"  1 {probe}\n"), [f"1 {probe}"], probe)
+            self.assertEqual(tfl.preflight_ok(reading(swap_pct=50.0, fanout=tfl.fanout_processes(f"  1 {probe}\n")), tfl.preflight_policy({})),
+                             [f"fanout: ['1 {probe}']"], probe)   # and the preflight BLOCKS on it
+        for clear in CODEX_R5_CLEAR:
+            self.assertIsNone(tfl.fanout_rule(clear), clear)
+            self.assertEqual(tfl.fanout_processes(f"  1 {clear}\n"), [], clear)
+        self.assertEqual(tfl.fanout_rule("pnpm build"), "pnpm build|test|typecheck|lint|check")
+        self.assertEqual(tfl.fanout_rule("yarn build"), "yarn build|test|typecheck|lint|check")
+        self.assertEqual(tfl.fanout_rule("bun test"), "bun build|test|typecheck|lint|check")           # bun: a launcher that is also a runner
+        self.assertEqual(tfl.fanout_rule("bun run build"), "bun build|test|typecheck|lint|check")
+        self.assertEqual(tfl.fanout_rule("node /x/node_modules/vite/bin/vite.js build"), "vite (direct build/test executable)")
+        # shorthand + scripts, with or without `run`, `:`-qualified scripts included
+        for cmd in ("npm build", "npm run build", "npm run build:with-studio", "pnpm run test:unit", "yarn typecheck", "yarn run lint",
+                    "pnpm check", "npm run check:types", "npm test -- --watch", "npm run test"):
+            self.assertIsNotNone(tfl.fanout_rule(cmd), cmd)
+        for cmd in ("npm view x", "npm install", "npm i lint-staged", "npm run dev", "npm run preview", "pnpm install", "yarn --version",
+                    "bun", "bun /x/app.js", "bun install"):
+            self.assertIsNone(tfl.fanout_rule(cmd), cmd)
+        # direct build/test executables, by basename, whatever the arguments — launchers looked through
+        for cmd in ("vite build", "node /x/node_modules/vite/bin/vite.js", "tsc --noEmit", "node /x/node_modules/typescript/bin/tsc -p .",
+                    "esbuild src/x.ts --bundle", "webpack --mode production", "rollup -c", "vitest run", "node /x/.bin/jest --ci",
+                    "npx playwright test", "rustc main.rs", "make -j8", "/usr/bin/make", "ninja -C build", "gradle assemble", "mvn package",
+                    "bun x vitest run", "go build ./...", "go test ./..."):
+            self.assertIsNotNone(tfl.fanout_rule(cmd), cmd)
+        self.assertEqual(tfl.fanout_rule("go test ./..."), "go build|test")
+        for cmd in ("go version", "go env GOPATH", "node /x/node_modules/playwright/driver/package/cli.js run-driver",   # Playwright's own driver
+                    "vim /tmp/vite", "cat tsc.log", "python3 e2e/test_feature_live.py"):
+            self.assertIsNone(tfl.fanout_rule(cmd), cmd)
+        self.assertEqual(tfl._prog_name("/x/node_modules/vite/bin/vite.js"), "vite")
+        self.assertEqual(tfl._prog_name("/x/.bin/codex"), "codex")
+        self.assertEqual(tfl._prog_name("webpack.cjs"), "webpack")
+        self.assertEqual(tfl._program(["node", "/x/node_modules/vite/bin/vite.js", "build"]), ("vite", 1))
+        self.assertEqual(tfl._program(["bun", "test"]), ("bun", 0))
+        self.assertEqual(tfl._program(["bun", "x", "vitest", "run"]), ("vitest", 2))
+        self.assertTrue(tfl.BUILD_PROGRAMS <= tfl.KNOWN_PROGRAMS and tfl.PACKAGE_RUNNERS <= tfl.KNOWN_PROGRAMS)
+        self.assertEqual(tfl.BUILD_SCRIPT_TOKENS, {"build", "test", "typecheck", "lint", "check"})
+        for word in ("pnpm build", "yarn build", "bun test", "vite", "tsc", "esbuild", "webpack", "rollup", "jest", "playwright", "rustc",
+                     "make", "ninja", "gradle", "mvn", "go: build|test"):
+            self.assertIn(word, tfl.FANOUT_RULES, word)   # the documented rules name them
+
+    def test_codex_round6_pytest_fanouts_block(self):
+        """Codex round 6 (MEDIUM): `pytest -n 8` and `python3 -m pytest -n 8` both returned no fan-out
+        match — the fence knew no pytest at all, so an active test fan-out left the default fence
+        clear. Now: `pytest`/`py.test` by basename (a direct test executable), and any `python*`
+        (`python`, `python3`, `python3.12`) whose tokens carry `-m pytest` or `-m unittest` (the
+        module right after `-m` is the runner), with or without `-n`; `python3 -m json.tool` and the
+        harness itself never match."""
+        for probe in ("pytest -n 8", "python3 -m pytest -n 8"):
+            self.assertIsNotNone(tfl.fanout_rule(probe), probe)
+            self.assertEqual(tfl.fanout_processes(f"  1 {probe}\n"), [f"1 {probe}"], probe)
+            self.assertEqual(tfl.preflight_ok(reading(swap_pct=50.0, fanout=tfl.fanout_processes(f"  1 {probe}\n")), tfl.preflight_policy({})),
+                             [f"fanout: ['1 {probe}']"], probe)   # and the preflight BLOCKS on it
+        self.assertIsNone(tfl.fanout_rule("python3 -m json.tool"))
+        self.assertEqual(tfl.fanout_processes("  1 python3 -m json.tool x.json\n"), [])
+        self.assertEqual(tfl.fanout_rule("pytest -n 8"), "pytest (direct build/test executable)")
+        self.assertEqual(tfl.fanout_rule("pytest"), "pytest (direct build/test executable)")
+        self.assertEqual(tfl.fanout_rule("py.test -q tests/"), "py.test (direct build/test executable)")
+        self.assertEqual(tfl.fanout_rule("/opt/venv/bin/pytest -x"), "pytest (direct build/test executable)")
+        self.assertEqual(tfl.fanout_rule("python3 -m pytest -n 8"), "python -m pytest (module-launched test runner)")
+        self.assertEqual(tfl.fanout_rule("python -m pytest"), "python -m pytest (module-launched test runner)")
+        self.assertEqual(tfl.fanout_rule("/usr/bin/python3.12 -m pytest tests/ -q"), "python -m pytest (module-launched test runner)")
+        self.assertEqual(tfl.fanout_rule("python3 -X dev -m pytest"), "python -m pytest (module-launched test runner)")
+        self.assertEqual(tfl.fanout_rule("python3 -m unittest e2e/test_feature_live_selftest.py -v"), "python -m unittest (module-launched test runner)")
+        self.assertEqual(tfl.fanout_rule("nice -n 10 python3 -m pytest"), "python -m pytest (module-launched test runner)")
+        for clear in ("python3 -m json.tool", "python3 -m venv .venv", "python3 -m http.server", "python3 -m pip install x", 'python3 -c "import pytest"',
+                      "python3 e2e/test_feature_live.py", "/usr/bin/python3 e2e/test_feature_live.py", "python3", "node /x/app.js unittest",
+                      "vim pytest.ini", "cat /tmp/pytest.log", "unittest"):
+            self.assertIsNone(tfl.fanout_rule(clear), clear)
+        self.assertEqual(tfl._program(["python3", "-m", "pytest", "-n", "8"]), ("pytest", 2))
+        self.assertEqual(tfl._program(["python3.12", "-m", "unittest"]), ("unittest", 2))
+        self.assertEqual(tfl._program(["python3", "-m", "json.tool"]), ("python3", 0))
+        self.assertTrue(tfl._is_launcher("python3.12") and tfl._is_launcher("python") and tfl._is_launcher("node"))
+        self.assertFalse(tfl._is_launcher("pythonic") or tfl._is_launcher("pytest"))
+        self.assertTrue({"pytest", "py.test"} <= tfl.BUILD_PROGRAMS)
+        self.assertEqual(tfl.PY_TEST_MODULES, {"pytest", "unittest"})
+        self.assertTrue(tfl.PY_TEST_MODULES <= tfl.KNOWN_PROGRAMS)
+        for word in ("pytest", "py.test", "-m pytest", "-m unittest", "python3 -m json.tool"):
+            self.assertIn(word, tfl.FANOUT_RULES, word)   # the documented rules name them
+
+    def test_rules_are_decided_on_tokens_not_argument_order(self):
+        """Codex round 4: `fanout_processes()` returned no matches for `cargo +stable build`,
+        `claude --model opus --print task` and `wicked-crew serve --db /tmp/x --port 62432` — the
+        default was a positional regex. Every rule is now a predicate over the tokenized argv."""
+        for probe in CODEX_FANOUT_PROBES:
+            self.assertIsNotNone(tfl.fanout_rule(probe), probe)
+            self.assertEqual(tfl.fanout_processes(f"  1 {probe}\n"), [f"1 {probe}"], probe)
+        self.assertEqual(tfl.fanout_rule("cargo +stable build"), "cargo build|test|clippy|run")
+        self.assertEqual(tfl.fanout_rule("claude --model opus --print task"), "claude -p|--print")
+        self.assertEqual(tfl.fanout_rule("wicked-crew serve --db /tmp/x --port 62432"), "second wicked-crew serve --port 62432")
+        self.assertEqual(tfl.fanout_rule("wicked-crew serve --port=62432"), "second wicked-crew serve --port 62432")   # --port=NNNN
+        self.assertEqual(tfl.fanout_rule("node /opt/homebrew/bin/wicked-crew --db x serve --port 62432"), "second wicked-crew serve --port 62432")
+        for clear in ("wicked-crew serve", "wicked-crew serve --port 7701", "node /opt/homebrew/bin/wicked-crew serve --port=7701",
+                      "node /x/app.js --port 62432", "wicked-crew --port 62432", "/Applications/Claude.app/Contents/MacOS/Claude",
+                      "claude", "claude --model opus", "cargo fmt", "cargo metadata --format-version 1", "npm run dev", "npm install",
+                      "codex", "codex login", "vim /tmp/cargo", "python3 e2e/test_feature_live.py", "", "   "):
+            self.assertIsNone(tfl.fanout_rule(clear), clear)
+        # runtime launchers are looked through; `+toolchain` / options / VAR=value never hide the program
+        self.assertEqual(tfl.fanout_rule("node /opt/homebrew/lib/node_modules/wicked-crew/node_modules/.bin/codex exec --skip-git-repo-check You"), "codex exec")
+        self.assertEqual(tfl.fanout_rule("node /x/node_modules/.bin/vitest run"), "vitest (direct build/test executable)")
+        self.assertEqual(tfl.fanout_rule("npx vitest"), "vitest (direct build/test executable)")
+        self.assertEqual(tfl.fanout_rule("env RUST_LOG=debug cargo test -p wicked-core"), "cargo build|test|clippy|run")
+        self.assertEqual(tfl.fanout_rule("/usr/bin/nice -n 10 cargo clippy --all-targets"), "cargo build|test|clippy|run")
+        self.assertEqual(tfl.fanout_rule("cargo +nightly-2026-01-01 run --bin x"), "cargo build|test|clippy|run")
+        self.assertEqual(tfl.fanout_rule('claude -p "do a thing" --model opus'), "claude -p|--print")
+        self.assertEqual(tfl.fanout_rule("claude --print"), "claude -p|--print")
+        self.assertEqual(tfl.fanout_rule("codex --model o3 exec 'x'"), "codex exec")
+        self.assertEqual(tfl.fanout_rule("npm test -- --watch"), "npm build|test|typecheck|lint|check")
+        self.assertEqual(tfl.fanout_rule("npm run build:with-studio"), "npm build|test|typecheck|lint|check")
+        self.assertEqual(tfl.fanout_rule("pnpm run test:unit"), "pnpm build|test|typecheck|lint|check")
+        self.assertEqual(tfl.fanout_rule('claude -p "an unbalanced \' quote'), "claude -p|--print")   # shlex fails → whitespace split
+        self.assertEqual(tfl._program(["node", "--max-old-space-size=4096", "/x/.bin/vitest", "run"]), ("vitest", 2))
+        self.assertEqual(tfl._program(["node"]), ("node", 0))
+        self.assertEqual(tfl._program(["node", "/x/app.js", "--port", "62432"]), ("node", 0))   # a launcher running something else
+        self.assertEqual(tfl._program(["vim", "/tmp/cargo"]), ("vim", 0))                       # not a launcher: argv[0] is the program
+        self.assertEqual(tfl._program(["/usr/bin/nice", "-n", "10", "cargo", "clippy"]), ("cargo", 3))
+        self.assertEqual(tfl._program([]), ("", 0))
+        self.assertEqual(tfl._port_value(["serve", "--port", "62432"]), "62432")
+        self.assertEqual(tfl._port_value(["serve", "--port=62432"]), "62432")
+        self.assertEqual(tfl._port_value(["serve", "--port"]), None)
+        self.assertEqual(tfl._port_value(["serve"]), None)
+        self.assertFalse(hasattr(tfl, "FANOUT_PATTERN_DEFAULT"))   # the positional regex is gone
+        self.assertIn("shlex.split", inspect.getsource(tfl._tokens))
+
+    def test_the_extra_pattern_adds_matches_and_an_invalid_regex_refuses(self):
+        rx = tfl.fanout_pattern({"FANOUT_PATTERN": r"npm run dev"})
+        hits = tfl.fanout_processes(PS_TABLE, rx)
+        self.assertIn("807 npm run dev", hits)                                       # the extra pattern ADDS …
+        self.assertTrue(set(tfl.fanout_processes(PS_TABLE)) <= set(hits))            # … it never replaces the token rules
+        self.assertIsNone(tfl.fanout_pattern({}))
+        self.assertIsNone(tfl.fanout_pattern({"FANOUT_PATTERN": "  "}))
+        with self.assertRaises(SystemExit) as cm:
+            tfl.fanout_pattern({"FANOUT_PATTERN": "("})
+        self.assertIn("FANOUT_PATTERN", str(cm.exception))
+        p = tfl.preflight_policy({})
+        self.assertEqual((p["fanout_max"], p["fanout_pattern"], p["fanout_source"], p["fanout_rules"]), (0, None, "token rules", tfl.FANOUT_RULES))
+        p = tfl.preflight_policy({"FANOUT_PATTERN": "foo"})
+        self.assertEqual((p["fanout_pattern"], p["fanout_source"]), ("foo", "token rules + FANOUT_PATTERN env (extra matches)"))
+
+    def test_a_failed_ps_is_a_failed_preflight(self):
+        saved = tfl.subprocess.run
+        try:
+            for exc in (FileNotFoundError("ps"), subprocess.CalledProcessError(1, ["ps"]), OSError("boom")):
+                def fail(argv, **kw):
+                    raise exc
+                tfl.subprocess.run = fail
+                fan = tfl.fanout_processes()
+                self.assertEqual(len(fan), 1, fan)
+                self.assertTrue(fan[0].startswith("ERR `ps -axo pid=,command=` failed"), fan[0])
+                self.assertIn("failing closed", fan[0])
+                self.assertEqual(tfl.preflight_ok(reading(swap_pct=50.0, fanout=fan), tfl.preflight_policy({})), [f"fanout: {fan}"])  # blocked
+        finally:
+            tfl.subprocess.run = saved
+
+    def test_the_reading_carries_the_fanout_and_only_an_empty_list_clears(self):
+        self.assertIn('"fanout": fanout_processes()', inspect.getsource(tfl.readings))
+        p = tfl.preflight_policy({})
+        self.assertEqual(tfl.preflight_ok(reading(swap_pct=50.0, fanout=["456 codex exec x"]), p), ["fanout: ['456 codex exec x']"])
+        self.assertEqual(tfl.preflight_ok(reading(swap_pct=50.0, fanout=[]), p), [])
+        r = reading(swap_pct=50.0)
+        del r["fanout"]
+        self.assertEqual(tfl.preflight_ok(r, p), ["fanout: not measured"])  # no reading is not "clear"
+        why = tfl.preflight_ok(reading(load1=25, active_runs=["r1"], swap_pct=99, fanout=["1 cargo build"]), p)
+        self.assertEqual(len(why), 4)  # all four gates report
+
+    def test_fanout_is_judged_at_both_preflight_points(self):
+        saved = tfl.readings, tfl.time.sleep, tfl.PREFLIGHT_MAX_S
+        try:
+            tfl.readings = lambda: reading(swap_pct=50.0, fanout=["456 codex exec x", "800 cargo build --release"])
+            tfl.time.sleep = lambda *_: (_ for _ in ()).throw(AssertionError("must not sleep"))
+            tfl.PREFLIGHT_MAX_S = 0
+            tfl.REPORT["preflight_policy"] = tfl.preflight_policy({})
+            tfl.REPORT["preflights"], tfl.REPORT["blockers"] = [], []
+            # (a) before browser start-up: blocked, never clears, reported as a blocker
+            self.assertFalse(tfl.preflight("T-1"))
+            entry = tfl.REPORT["preflights"][0]
+            self.assertEqual(entry["readings"][0]["blocked_by"], ["fanout: ['456 codex exec x', '800 cargo build --release']"])
+            self.assertEqual(entry["readings"][0]["fanout"], ["456 codex exec x", "800 cargo build --release"])
+            self.assertTrue(tfl.REPORT["blockers"][0].startswith("preflight never cleared for T-1"))
+            # (b) immediately before the submit click: blocked, the launch is not submitted
+            why = tfl.preflight_at_submit("T-1")
+            self.assertEqual(why, ["fanout: ['456 codex exec x', '800 cargo build --release']"])
+            self.assertEqual(tfl.REPORT["preflights"][1]["at"], "submit")
+            tfl.readings = lambda: reading(swap_pct=50.0)
+            self.assertEqual(tfl.preflight_at_submit("T-1"), [])
+        finally:
+            tfl.readings, tfl.time.sleep, tfl.PREFLIGHT_MAX_S = saved
+        v = tfl.derive_result(recorded_like(launch_aborted_by_preflight=["fanout: ['456 codex exec x']"], post_status=None, run_ids=[],
+                                            gate_on_panel_card=False, gates=[], final_status=None), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("preflight-at-submit", v["fail_reasons"])
+
+
+class LaunchReservation(unittest.TestCase):
+    def test_the_lock_is_opened_nofollow_and_a_symlinked_lock_or_directory_is_refused(self):
+        src = inspect.getsource(tfl.LaunchLock.acquire)
+        self.assertIn("O_NOFOLLOW", src)
+        self.assertIn("open_artifact_root(self.path.parent, create=True, mode=0o700)", src)   # the lock's directory: the trusted descriptor walk, created private
+        self.assertIn("os.open(self.path.name, flags, 0o600, dir_fd=dfd)", src)   # the lock file: RELATIVE to that descriptor
+        self.assertNotIn("os.open(str(", src)                                      # round 6: no pathname open remains
+        self.assertNotIn("mkdir(", src)
+        self.assertNotIn("refuse_symlinked_components", src)
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "victim").write_text("keep")
+            (d / "art").mkdir()
+            (d / "art" / ".launch.lock").symlink_to(d / "victim")
+            with self.assertRaises(SystemExit) as cm:
+                tfl.LaunchLock(d / "art" / ".launch.lock").acquire()
+            self.assertIn("symlink", str(cm.exception))
+            self.assertEqual((d / "victim").read_text(), "keep")  # nothing written through the link
+            (d / "realdir").mkdir()
+            (d / "link").symlink_to(d / "realdir")
+            with self.assertRaises(SystemExit) as cm:
+                tfl.LaunchLock(d / "link" / ".launch.lock").acquire()  # a symlinked INTERMEDIATE directory
+            self.assertIn(str(d / "link"), str(cm.exception))
+            self.assertEqual(list((d / "realdir").iterdir()), [])
+            lock = tfl.LaunchLock(d / "plain" / ".launch.lock").acquire()  # a real directory is created and used
+            self.assertTrue(lock.held)
+            lock.release()
+
+    def test_second_holder_fails_fast_with_a_named_message(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "sub" / ".launch.lock"
+            a = tfl.LaunchLock(path).acquire()
+            self.assertTrue(a.held)
+            b = tfl.LaunchLock(path)
+            with self.assertRaises(SystemExit) as cm:
+                b.acquire()
+            self.assertIn("another harness process", str(cm.exception))
+            self.assertIn(str(path), str(cm.exception))
+            self.assertFalse(b.held)
+            a.release()
+            self.assertFalse(a.held)
+            b.acquire()  # free again
+            self.assertTrue(b.held)
+            b.release()
+            b.release()  # idempotent
+
+    def test_the_lock_lives_outside_every_worktree_in_a_private_per_user_dir_keyed_by_daemon_origin(self):
+        """Codex round 7 (MEDIUM): the reservation must protect the DAEMON — `ART/.launch.lock` gave
+        every worktree its own lock, so two harnesses in two worktrees both saw an idle daemon and
+        both submitted. Now (round 8): `/private/tmp/wicked-test-feature-live-<uid>/<sha256(canonical
+        daemon origin)>.launch.lock` (macOS; `/tmp/…` elsewhere) — outside any worktree, never
+        under the home directory."""
+        self.assertEqual(tfl.LOCK_DIR, tfl.lock_dir_for())
+        self.assertEqual(tfl.LOCK_DIR.name, f"wicked-test-feature-live-{os.getuid()}")
+        self.assertNotIn(tfl.ROOT, tfl.LOCK_PATH.parents)                                   # outside the worktree …
+        self.assertNotIn(tfl.ART, tfl.LOCK_PATH.parents)
+        self.assertNotIn(Path.home(), tfl.LOCK_PATH.parents)                                # … never under the operator's home …
+        self.assertNotIn(Path.home() / ".wicked-crew", tfl.LOCK_PATH.parents)
+        self.assertNotIn(Path.home() / "Library" / "Application Support", tfl.LOCK_PATH.parents)   # … `~/Library/Application Support` included (round 8)
+        self.assertEqual(tfl.LOCK_PATH.parent, tfl.LOCK_DIR)
+        self.assertEqual(tfl.LOCK_PATH.name, hashlib.sha256(tfl.daemon_origin(tfl.BASE).encode()).hexdigest() + ".launch.lock")
+        self.assertEqual(tfl.LOCK_PATH, tfl.lock_path_for())
+        self.assertNotIn('ART / ".launch.lock"', inspect.getsource(tfl))
+        # one daemon, one lock — however STUDIO_URL spells it; another daemon, another lock
+        self.assertEqual(tfl.lock_path_for("http://localhost:7701"), tfl.lock_path_for("http://LOCALHOST:7701/"))
+        self.assertEqual(tfl.lock_path_for("http://localhost:7701"), tfl.lock_path_for("http://localhost:7701/api/v1"))
+        self.assertNotEqual(tfl.lock_path_for("http://localhost:7701"), tfl.lock_path_for("http://localhost:7702"))
+        self.assertNotEqual(tfl.lock_path_for("http://localhost:7701"), tfl.lock_path_for("https://localhost:7701"))
+        self.assertEqual(tfl.daemon_origin("http://localhost:7701/x?y=1"), "http://loopback:7701")
+        self.assertEqual(tfl.daemon_origin("localhost:7701"), "http://loopback:7701")
+        with mock.patch.object(tfl, "RESOLVE", side_effect=OSError("no resolver")):         # an unresolvable host keeps its (lower-cased) spelling
+            self.assertEqual(tfl.daemon_origin("https://Studio.Example"), "https://studio.example:443")
+        self.assertEqual(len(tfl.origin_key("http://localhost:7701")), 64)
+
+    def test_codex_round8_one_reservation_per_daemon_whatever_the_spelling_or_tmpdir(self):
+        """Codex round 8 (HIGH): `localhost:7701` and `127.0.0.1:7701` produced different lock keys,
+        and the lock directory followed `tempfile.gettempdir()` (= `TMPDIR`) — two processes aiming
+        at ONE daemon could hold two reservations, both observe idle state and both submit. Now the
+        origin is CANONICAL (scheme lower-cased; the host canonicalized — loopback spellings and the
+        machine's loopback aliases collapse to `loopback`, other hosts to the resolver's canonical
+        name; the default port explicit) and the directory is a fixed function of platform + uid."""
+        same = ("http://localhost:7701", "http://127.0.0.1:7701", "http://[::1]:7701", "HTTP://LOCALHOST:7701/", "http://127.0.0.1:7701/api/v1",
+                "localhost:7701", "http://127.1.2.3:7701", "http://ip6-localhost:7701", "http://localhost.:7701", "http://[::1]:7701/x?y=1")
+        self.assertEqual({tfl.daemon_origin(u) for u in same}, {"http://loopback:7701"})
+        self.assertEqual({tfl.origin_key(u) for u in same}, {tfl.origin_key("http://loopback:7701")})
+        self.assertEqual({tfl.lock_path_for(u) for u in same}, {tfl.lock_path_for("http://localhost:7701")})
+        self.assertEqual({tfl.LaunchLock(base=u).path for u in same}, {tfl.LOCK_PATH})
+        self.assertNotEqual(tfl.origin_key("http://localhost:7701"), tfl.origin_key("http://localhost:7702"))   # another port: another daemon
+        self.assertNotEqual(tfl.origin_key("http://localhost:7701"), tfl.origin_key("https://localhost:7701"))  # another scheme too
+        self.assertEqual(tfl.daemon_origin("https://localhost"), "https://loopback:443")                          # the default port is explicit
+        self.assertEqual(tfl.daemon_origin("http://127.0.0.1"), "http://loopback:80")
+        self.assertEqual(tfl.daemon_origin("http://0.0.0.0:7701"), "http://0.0.0.0:7701")                         # not loopback
+        # the machine's own loopback alias (a name the resolver maps ONLY to loopback addresses) collapses too …
+        def loopback_alias(host, *a, **k):
+            return [(2, 1, 6, "mymac.local", ("127.0.0.1", 0)), (30, 1, 6, "", ("::1", 0, 0, 0))]
+        with mock.patch.object(tfl, "RESOLVE", loopback_alias):
+            self.assertEqual(tfl.daemon_origin("http://MyMac.local:7701"), "http://loopback:7701")
+            self.assertEqual(tfl.origin_key("http://MyMac.local:7701"), tfl.origin_key("http://127.0.0.1:7701"))
+        # … a host that resolves to a real address takes the resolver's canonical name (two aliases → one key) …
+        def canonical(host, *a, **k):
+            return [(2, 1, 6, "studio.internal.example", ("10.0.0.5", 0))]
+        with mock.patch.object(tfl, "RESOLVE", canonical):
+            self.assertEqual(tfl.daemon_origin("http://studio:7701"), "http://studio.internal.example:7701")
+            self.assertEqual(tfl.origin_key("http://studio:7701"), tfl.origin_key("http://STUDIO.internal.example.:7701"))
+        # … a mixed (loopback + LAN) answer is NOT loopback, and a resolver failure keeps the spelling — never a refusal
+        def mixed(host, *a, **k):
+            return [(2, 1, 6, "mymac.local", ("127.0.0.1", 0)), (2, 1, 6, "", ("192.168.1.9", 0))]
+        with mock.patch.object(tfl, "RESOLVE", mixed):
+            self.assertEqual(tfl.daemon_origin("http://mymac.local:7701"), "http://mymac.local:7701")
+        with mock.patch.object(tfl, "RESOLVE", side_effect=OSError("boom")):
+            self.assertEqual(tfl.daemon_origin("http://studio.example:7701"), "http://studio.example:7701")
+        self.assertEqual(tfl.canonical_host(""), "")
+        self.assertEqual(tfl.canonical_host("[::1]"), "loopback")
+        self.assertEqual(tfl.canonical_host("LocalHost."), "loopback")
+        # the directory: a pure function of platform + uid — TMPDIR / TMP / TEMP never move it, `tempfile` is not even imported
+        with mock.patch.dict(os.environ, {"TMPDIR": "/somewhere/else", "TMP": "/x", "TEMP": "/y"}):
+            self.assertEqual(tfl.lock_dir_for(), tfl.LOCK_DIR)
+            self.assertEqual(tfl.lock_path_for("http://127.0.0.1:7701"), tfl.LOCK_PATH)
+            self.assertEqual(tfl.LaunchLock(base="http://[::1]:7701").path, tfl.LOCK_PATH)
+        self.assertEqual(tfl.lock_dir_for("darwin", 7), Path("/private/tmp/wicked-test-feature-live-7"))
+        self.assertEqual(tfl.lock_dir_for("linux", 7), Path("/tmp/wicked-test-feature-live-7"))
+        self.assertEqual(tfl.lock_dir_for("freebsd14", 7), Path("/tmp/wicked-test-feature-live-7"))
+        for p in (tfl.lock_dir_for("darwin", 7), tfl.lock_dir_for("linux", 7), tfl.LOCK_DIR):
+            self.assertNotIn(Path.home(), p.parents, p)
+        self.assertFalse(hasattr(tfl, "tempfile"))                                               # not imported at all
+        module = inspect.getsource(tfl)
+        self.assertNotIn("import tempfile", module)
+        self.assertIsNone(re.search(r"""environ\.get\(\s*["'](TMPDIR|TMP|TEMP)|environ\[\s*["'](TMPDIR|TMP|TEMP)|getenv\(\s*["'](TMPDIR|TMP|TEMP)""", module))
+        self.assertIn("LOCK_DIR = lock_dir_for()", module)
+
+    def test_two_worktrees_aiming_at_one_daemon_contend_for_the_same_reservation(self):
+        """Codex round 7's race, closed: harness A in worktree A and harness B in worktree B, the same
+        daemon — the lock path is the same whatever ROOT / ART are (patched to two distinct
+        worktree roots here), so B fails FAST while A holds it; harness C aiming at ANOTHER daemon
+        is independent. The lock dir is created 0700, the lock 0600, and the report record names
+        the (scrubbed) path, the scope and the origin."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            lock_dir = d / "locks"
+            roots = (d / "wt-a", d / "wt-b")
+            locks = []
+            for root in roots:                                                   # two distinct worktrees …
+                art = root / "e2e" / "artifacts" / "test-feature-live"
+                art.mkdir(parents=True)
+                with mock.patch.object(tfl, "ROOT", root), mock.patch.object(tfl, "ART", art):
+                    locks.append(tfl.LaunchLock(base="http://localhost:7701", lock_dir=lock_dir))
+            a, b = locks
+            self.assertEqual(a.path, b.path)                                     # … ONE reservation for one daemon …
+            for root in roots:
+                self.assertNotIn(root, a.path.parents)                           # … under neither of them
+                self.assertEqual(list((root / "e2e" / "artifacts" / "test-feature-live").iterdir()), [])
+            a.acquire()
+            self.assertTrue(a.held)
+            with self.assertRaises(SystemExit) as cm:
+                b.acquire()                                                      # worktree B fails fast
+            self.assertIn("another harness process", str(cm.exception))
+            self.assertIn(str(a.path), str(cm.exception))
+            self.assertFalse(b.held)
+            c = tfl.LaunchLock(base="http://localhost:7702", lock_dir=lock_dir)  # another daemon: independent
+            self.assertNotEqual(c.path, a.path)
+            self.assertEqual(c.path.parent, a.path.parent)
+            c.acquire()
+            self.assertTrue(c.held)
+            c.release()
+            self.assertEqual(stat.S_IMODE(lock_dir.stat().st_mode), 0o700)       # created private …
+            self.assertEqual(stat.S_IMODE(a.path.stat().st_mode), 0o600)         # … the lock too
+            self.assertEqual(sorted(p.name for p in lock_dir.iterdir()), sorted({a.path.name, c.path.name}))
+            rec = a.describe()
+            self.assertEqual((rec["scope"], rec["origin"], rec["held"], rec["key"]), ("daemon-origin", "http://loopback:7701", True, a.path.name))
+            self.assertEqual((rec["path"], rec["dir"], rec["pid"]), (tfl.scrub(str(a.path)), tfl.scrub(str(lock_dir)), os.getpid()))
+            a.release()
+            b.acquire()                                                          # free again — worktree B proceeds
+            self.assertTrue(b.held)
+            b.release()
+
+    def test_a_lock_dir_that_is_not_this_users_private_directory_is_refused(self):
+        """The system temp dir is shared: a directory of the reservation's name planted by someone
+        else, or left group/world-writable, is refused — nothing is created or locked in it."""
+        with tempfile.TemporaryDirectory() as d:
+            lock_dir = Path(d) / "locks"
+            lock_dir.mkdir()
+            for bad in (0o777, 0o775, 0o770, 0o722):
+                lock_dir.chmod(bad)
+                with self.assertRaises(SystemExit) as cm:
+                    tfl.LaunchLock(base="http://localhost:7701", lock_dir=lock_dir).acquire()
+                self.assertIn("not a private directory of this user", str(cm.exception))
+                self.assertEqual(list(lock_dir.iterdir()), [])                   # nothing was created in it
+            for ok in (0o700, 0o755, 0o750):                                     # this user's, not writable by others
+                lock_dir.chmod(ok)
+                lock = tfl.LaunchLock(base="http://localhost:7701", lock_dir=lock_dir).acquire()
+                self.assertTrue(lock.held)
+                lock.release()
+        src = inspect.getsource(tfl.LaunchLock.acquire)
+        self.assertIn("os.fstat(dfd)", src)                                      # judged on the DESCRIPTOR reached by the walk …
+        self.assertLess(src.index("os.fstat(dfd)"), src.index("os.open(self.path.name"))   # … BEFORE the lock is created on it
+        self.assertIn("st.st_uid != os.getuid() or st.st_mode & 0o022", src)
+
+    def test_drive_intake_records_the_reservation_in_the_report(self):
+        saved = json.loads(json.dumps(tfl.REPORT, default=str))
+        real = tfl._drive_intake
+        try:
+            tfl._drive_intake = lambda tag, intent, m, lock: {**m, "lock_path_seen": lock.path, "lock_held_seen": lock.held}
+            out = tfl.drive_intake("LT-X", "recon")
+            self.assertEqual((out["lock_path_seen"], out["lock_held_seen"]), (tfl.LOCK_PATH, False))
+            rec = tfl.REPORT["launch_lock"]
+            self.assertEqual((rec["path"], rec["dir"], rec["scope"], rec["origin"], rec["key"]),
+                             (tfl.scrub(str(tfl.LOCK_PATH)), tfl.scrub(str(tfl.LOCK_DIR)), "daemon-origin", tfl.daemon_origin(tfl.BASE), tfl.LOCK_PATH.name))
+            self.assertNotIn(os.path.expanduser("~"), json.dumps(rec))          # scrubbed
+            drive = inspect.getsource(real)                                     # the REAL _drive_intake (the module's is stubbed above)
+            self.assertLess(drive.index("lock.acquire()"), drive.index('m["measured"]["launch_lock"] = lock.describe()'))   # recorded once HELD, too …
+            self.assertLess(drive.index('m["measured"]["launch_lock"] = lock.describe()'), drive.index("preflight_at_submit(tag)"))   # … before the pre-submit preflight
+        finally:
+            tfl._drive_intake = real
+            tfl.REPORT.clear()
+            tfl.REPORT.update(saved)
+            tfl.set_fetch_sink(None)
+
+
+# ── Item 3 (round 4): the gate policy is an ALLOW-LIST that fails closed ───────────────────────
+
+LT1_PLAN_ROUTES = ("`/runs/:id/{events,acceptance,archive,gate,cancel,guidance,resume,units/:ord/output,elicitation,"
+                   "files,diff,inject,deliver}` (client.ts)")
+KNOWN = {"stage": "test", "gate": "auto"}
+# Round 8: a PARTIALLY known unit is unknown, and so is a value the wire does not define ("human" is
+# not a `GateSpec`; the daemon says `auto`, `human_confirm`, `human_confirm_if`).
+UNKNOWN_UNITS = (None, {}, {"stage": None, "gate": None}, {"stage": "", "gate": " "}, {"ord": 4},
+                 {"stage": None, "gate": "human"}, {"stage": "test", "gate": None}, {"stage": "test", "gate": "human"},
+                 {"stage": "deploy", "gate": "auto"}, {"stage": "test", "gate": {"human": {}}}, {"stage": "test", "gate": {"human_confirm": {}, "x": 1}})
+
+
+class GateDecision(unittest.TestCase):
+    def test_delivery_kind_units_are_rejected_whatever_the_prompt_says(self):
+        for kind in ("deliver", "release", "publish", "merge", "Deliver"):
+            for unit in ({"stage": kind, "gate": "human_confirm"}, {"stage": "test", "gate": kind}):
+                decision, reason = tfl.gate_decision("Approve unit 4 before it runs: land the branch", unit)
+                self.assertEqual(decision, "reject", (kind, unit))
+                self.assertIn("gate kind", reason)
+                self.assertIn("never deliver", reason)
+
+    PRE_RECON = ("Approve unit 1 before it runs: Recon: survey the target and propose a test plan — the scenarios, their "
+                 "dependencies, and which are deterministic tool checks vs governed agent runs.")
+    PRE_NEWTEST = ("Approve unit 1 before it runs: New test: plan the test for the attached scope — the scenarios, their "
+                   "dependencies, and which are deterministic tool checks vs governed agent runs — and run the approved "
+                   "plan as governed sibling runs under one test.")
+    PLAN_CLEAN = ("Approve proposed test plan for wicked-studio before the siblings launch",
+                  "Approve the proposed test plan:\n| 1 | WS reconnect/backoff in `useEventStream.ts` | Deterministic |",
+                  "Approve test plan for wicked-studio", "Approve plan", "Approve the plan for the attached scope")
+    # Plan bodies that NAME a delivery route/verb — legitimate plans, and rejected all the same (c).
+    PLAN_WITH_DELIVER = (f"Approve proposed test plan for wicked-studio:\n**REST routes**: `/runs`, `/runs/:id`, {LT1_PLAN_ROUTES}",
+                         "Approve proposed test plan:\n| 5 | GET/POST /runs + subresources (archive, gate, cancel, guidance, resume, deliver, inject) | api/client.ts |")
+    # Codex round 4's three probes — all `approve` at 5ca59f0.
+    CODEX_R4 = (("Approve unit 4 before it runs: gh pr create --fill", KNOWN, "delivery-verb", "'gh pr create'"),
+                ("Please push the branch and open a PR", {"stage": "test", "gate": "human_confirm"}, "delivery-verb", "'push the branch'"),
+                ("Prompt unavailable (daemon restarted). Decide from the run page.", {"stage": "test", "gate": "human_confirm"}, "unknown-prompt-shape", "not on the allow-list"))
+    CODEX_R3 = "Approve unit 4 before it runs: Push the branch and open a PR"
+
+    def test_codex_round4_probes_reject_and_the_recorded_prompts_approve(self):
+        """Offline probes at 5ca59f0 returned `approve` for all three: `gh pr create` was not in the
+        verb list, "Please push…" had a known kind and a first clause the imperative regex missed,
+        and SteeringGate's `Prompt unavailable` fallback was readable text with a known kind."""
+        for p, unit, head, detail in self.CODEX_R4:
+            d, r = tfl.gate_decision(p, unit)
+            self.assertEqual(d, "reject", (p, r))
+            self.assertTrue(r.startswith(head), (p, r))
+            self.assertIn(detail, r)
+        for p in (self.PRE_RECON, self.PRE_NEWTEST):   # the recorded LT-1/LT-3 and LT-2 intake prompts, unit 1 stage test / gate auto
+            d, r = tfl.gate_decision(p, KNOWN)
+            self.assertEqual(d, "approve", (p, r))
+            self.assertTrue(r.startswith("pre-execution gate 'Approve unit 1 before it runs'"), r)
+            self.assertIn("allow-listed shape, known non-delivery kind, no delivery verb anywhere", r)
+            self.assertIn("unit stage/gate test/auto", r)
+
+    def test_approve_requires_all_three_conditions(self):
+        # (a) shape + (b) BOTH stage and gate recognized, non-delivery wire values + (c) no delivery verb → approve
+        for p in (*self.PLAN_CLEAN, self.PRE_RECON, self.PRE_NEWTEST):
+            for unit in (KNOWN, {"stage": "review", "gate": "human_confirm"}, {"stage": "build", "gate": "human_confirm_if"},
+                         {"stage": "recon", "gate": {"human_confirm": {"unconditional": False}}}, {"stage": " Test ", "gate": "AUTO"}):   # the wire's spellings, the gate's object form
+                d, r = tfl.gate_decision(p, unit)
+                self.assertEqual(d, "approve", (p, unit, r))
+        self.assertTrue(tfl.gate_decision(self.PLAN_CLEAN[0], KNOWN)[1].startswith("plan-approval gate"))
+        # (a) fails: any other shape → unknown-prompt-shape, kind known or not
+        for p in ("Amend the plan?", "Approve?", "verify /runs/:id/gate answers 200", "approve unit 1 before it runs: x",   # case matters: crew's exact shape
+                  "Please approve unit 1 before it runs: Recon", "Approved plan", "Approve the planned survey", "Prompt unavailable"):
+            for unit in (KNOWN, None):
+                d, r = tfl.gate_decision(p, unit)
+                self.assertEqual(d, "reject", (p, unit))
+                self.assertTrue(r.startswith("unknown-prompt-shape"), (p, r))
+        # (b) fails: an allow-listed shape with an UNKNOWN kind → unknown-gate-kind — and since round 8 an ABSTENTION (a partially
+        # known unit, `{stage: null, gate: "human"}`, is unknown; "human" is not even a wire value): nothing is clicked
+        for p in (self.PRE_RECON, self.PRE_NEWTEST, *self.PLAN_CLEAN):
+            for unit in UNKNOWN_UNITS:
+                d, r = tfl.gate_decision(p, unit)
+                self.assertEqual(d, "reject-by-abstention", (p, unit))
+                self.assertTrue(r.startswith("unknown-gate-kind"), r)
+                self.assertIn("alone does not authorize", r)
+                self.assertIn("nothing is clicked", r)
+        # (c) fails: a delivery verb anywhere — even in a plan body listing /runs/:id/deliver among the routes to test
+        for p in self.PLAN_WITH_DELIVER:
+            d, r = tfl.gate_decision(p, KNOWN)
+            self.assertEqual(d, "reject", p)
+            self.assertTrue(r.startswith("delivery-verb"), r)
+            self.assertIn("'deliver'", r)
+        self.assertEqual(tfl.gate_shape("Approve unit 12 before it runs: x"), "pre-execution")
+        self.assertEqual(tfl.gate_shape("Approve proposed test plan"), "plan-approval")
+        self.assertEqual(tfl.gate_shape("Approve the test plan"), "plan-approval")
+        self.assertIsNone(tfl.gate_shape("Approve the planned survey"))
+        self.assertIsNone(tfl.gate_shape("Approve unit before it runs:"))
+        self.assertEqual(tfl.gate_kinds({"stage": " Test", "gate": None}), {"test"})
+        self.assertEqual(tfl.gate_kinds({"stage": None, "gate": None}), set())
+        self.assertEqual(tfl.gate_kinds(None), set())
+        self.assertEqual(tfl.gate_kinds("deliver"), set())  # not a unit dict
+        self.assertEqual(tfl.gate_kinds({"stage": "test", "gate": {"human_confirm": {"unconditional": True}}}), {"test", "human_confirm"})
+        # round 8: the kind is KNOWN only when BOTH fields are recognized wire values
+        self.assertIsNone(tfl.unit_kind_unknown(KNOWN))
+        self.assertIsNone(tfl.unit_kind_unknown({"stage": "recon", "gate": {"human_confirm_if": "verdict_not_pass"}}))
+        why = tfl.unit_kind_unknown({"stage": None, "gate": "human"})
+        self.assertIn("stage None is missing", why)
+        self.assertIn("gate 'human' is not a wire value (auto|human_confirm|human_confirm_if)", why)
+        self.assertIn("gate None is missing", tfl.unit_kind_unknown({"stage": "test", "gate": None}))
+        self.assertIn("stage 'deploy' is not a wire value (build|recon|review|test)", tfl.unit_kind_unknown({"stage": "deploy", "gate": "auto"}))
+        self.assertEqual(tfl.unit_kind_unknown(None), "the unit lookup failed (no unit record)")
+        self.assertEqual((tfl.STAGE_KINDS, tfl.GATE_KINDS), ({"recon", "build", "review", "test"}, {"auto", "human_confirm", "human_confirm_if"}))
+        self.assertEqual(tfl.kind_value({"human_confirm_if": "verdict_not_pass"}), "human_confirm_if")
+        self.assertEqual(tfl.kind_value(" Auto "), "auto")
+        for bad in ({"a": 1, "b": 2}, {}, 7, None, "", "  ", [], {1: 2}):
+            self.assertIsNone(tfl.kind_value(bad), repr(bad))
+
+    def test_delivery_verbs_and_commands_reject_wherever_they_appear(self):
+        """The complete prompt is scanned, whatever the shape or the kind: the brief's extended list
+        (`gh pr create`, `git push`, `push the branch`, `open a/the PR / pull request`, merge,
+        deliver(y), publish, `npm/cargo publish`, release, `create a release`)."""
+        for p in ("Deliver: open a PR against main", "Delivery of the branch to origin", "Push the branch to origin",
+                  "Open a PR with the results", "Open PR #12 now", "Merge into main", "Publish the package", "Release 0.5.2",
+                  "Approve the delivery of the branch", "Approve deliver: push and open a PR", "approve the merge into main",
+                  "Approve unit 4 before it runs: gh pr create --fill", "Approve unit 4 before it runs: run `pr create` when green",
+                  "Approve unit 4 before it runs: git push origin HEAD", "Approve unit 4 before it runs: then push branch",
+                  "Approve unit 4 before it runs: open the pull request", "Approve unit 4 before it runs: npm publish --access public",
+                  "Approve unit 4 before it runs: cargo publish -p wicked-core", "Approve unit 4 before it runs: create a release from the tag",
+                  "Approve unit 4 before it runs: create release notes", "Approve proposed test plan, then merge",
+                  self.CODEX_R3, "Please push the branch and open a PR"):
+            for unit in (KNOWN, {"stage": "test", "gate": "human_confirm"}, None):
+                d, r = tfl.gate_decision(p, unit)
+                self.assertEqual(d, "reject", (p, unit))
+                self.assertTrue(r.startswith("delivery-verb"), (p, r))
+                self.assertIn("never deliver", r)
+        # the pre-execution shape with a delivery verb ANYWHERE — not only in the first clause
+        for tail in ("Deliver the report", "survey, then merge into main", "publish the package", "cut release 0.5.2",
+                     "open PR #12", "open a pull request", "Open a PR with the results", "and push"):
+            d, r = tfl.gate_decision(f"Approve unit 2 before it runs: Recon: {tail}", KNOWN)
+            self.assertEqual(d, "reject", tail)
+            self.assertTrue(r.startswith("delivery-verb"), r)
+        # the reason names the whole command asked for
+        self.assertIn("'gh pr create'", tfl.gate_decision("Approve unit 4 before it runs: gh pr create --fill", KNOWN)[1])
+        self.assertIn("'push the branch'", tfl.gate_decision("Please push the branch and open a PR", KNOWN)[1])
+        self.assertIn("'create a release'", tfl.gate_decision("Approve unit 4 before it runs: create a release", KNOWN)[1])
+        rx = tfl.DELIVERY_VERB_RE
+        for s in ("gh pr create", "pr create", "git push", "push the branch", "push branch", "open a PR", "open the pull request",
+                  "open PR", "pull request", "merge", "deliver", "delivery", "publish", "release", "npm publish", "cargo publish",
+                  "create a release", "create release", "Push", "MERGE"):
+            self.assertTrue(rx.search(s), s)
+        for s in ("proposed", "pushed", "merged", "deliverable", "released", "premerge", "the approved plan", "gate", "unit"):
+            self.assertFalse(rx.search(s), s)   # word-bounded: no suffix wildcards — the list is the brief's, exactly
+        self.assertFalse(hasattr(tfl, "IMPERATIVE_DELIVER_RE"))   # the first-clause rule is gone; the imperative only names prompts
+
+    def test_unreadable_gate_fails_closed(self):
+        for p in ("", None, "   \n"):
+            self.assertEqual(tfl.gate_decision(p), ("reject", "unreadable-gate"), repr(p))
+            self.assertEqual(tfl.gate_decision(p, None), ("reject", "unreadable-gate"), repr(p))
+            self.assertEqual(tfl.gate_decision(p, {"stage": "deliver", "gate": "human_confirm"})[0], "reject", repr(p))
+            # a KNOWN non-delivery kind never authorizes approving what cannot be read (round 3)
+            self.assertEqual(tfl.gate_decision(p, {"stage": "test", "gate": "auto"}), ("reject", "unreadable-gate"), repr(p))
+        # SteeringGate's fallback TEXT for a missing prompt is readable — and still not an allow-listed shape (round 4)
+        for p in ("Prompt unavailable (daemon restarted)", "Prompt unavailable (daemon restarted). The run is awaiting a decision; open /runs/:id.",
+                  "Prompt unavailable"):
+            d, r = tfl.gate_decision(p, {"stage": "test", "gate": "human_confirm"})
+            self.assertEqual(d, "reject", p)
+            self.assertTrue(r.startswith("unknown-prompt-shape"), r)
+
+    def test_imperative_is_the_first_clause(self):
+        self.assertEqual(tfl.imperative("Approve unit 1 before it runs: Recon: survey the target"), "Approve unit 1 before it runs")
+        self.assertEqual(tfl.imperative("Deliver: open a PR against main"), "Deliver")
+        self.assertEqual(tfl.imperative("- **Merge** into main\nthen deliver"), "Merge into main")
+        self.assertEqual(tfl.imperative("verify /runs/:id/deliver"), "verify /runs/")  # the ':' ends the clause — still not deliver-class
+        self.assertLessEqual(len(tfl.imperative("x" * 500)), 80)
+        self.assertEqual(tfl.imperative(None), "")
+
+    def test_gate_unit_lookup(self):
+        detail = {"units": [{"ord": 1, "stage": "test", "gate": "auto"}, {"ord": 4, "stage": "deliver", "gate": "human_confirm"}]}
+        self.assertEqual(tfl.gate_unit(detail, 4), {"ord": 4, "stage": "deliver", "gate": "human_confirm"})
+        self.assertEqual(tfl.gate_unit(detail, 1), {"ord": 1, "stage": "test", "gate": "auto"})
+        self.assertIsNone(tfl.gate_unit(detail, 9))
+        self.assertIsNone(tfl.gate_unit(detail, None))
+        self.assertIsNone(tfl.gate_unit(None, 1))
+        self.assertIsNone(tfl.gate_unit({}, 1))
+
+    def test_every_gate_click_goes_through_the_one_card_path(self):
+        drive = inspect.getsource(tfl._drive_intake)
+        self.assertNotIn('steering-approve"]', drive)
+        self.assertNotIn('steering-reject"]', drive)
+        self.assertNotIn("steering-{decision}", drive)
+        self.assertEqual(drive.count("decide_gate_on_card("), 2, "first gate + later gates")
+        self.assertIn("decide_gate_on_card(", inspect.getsource(tfl.decide_sibling_gate))
+        self.assertEqual(inspect.getsource(tfl.decide_gate_on_card).count("steering-{decision}"), 1)
+        # No ad-hoc prompt test at a call site — the ONE allow-list lives in gate_decision.
+        self.assertNotIn('re.match(r"Approve unit \\d+ before it runs", ptxt)', drive)
+        self.assertNotIn("PRE_EXECUTION_RE", drive)
+        self.assertNotIn("PLAN_APPROVAL_RE", drive)
+        # The intake gate's decision reads the gated unit's stage/gate from the run detail first.
+        self.assertLess(drive.index("gate_unit(run_detail(run_id), gate_ord)"), drive.index("decide_gate_on_card(page, card"))
+
+
+# ── A fake Playwright page: enough surface for the gate click path and sibling navigation ─────
+
+
+class FakeResponse:
+    def __init__(self, url: str, status: int = 200, post_data: str = '{"approve": true}'):
+        self.url, self.status = url, status
+        self.request = types.SimpleNamespace(method="POST", post_data=post_data)
+
+
+class FakeExpect:
+    """Playwright's `expect_response`: the predicate is EVALUATED against the response the fake SPA
+    produces for the click — a response the predicate rejects is a timeout, as on the real wire."""
+
+    def __init__(self, page, pred):
+        self.page, self.pred, self.value = page, pred, None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        if a[0] is not None:
+            return False
+        resp = self.page.wire_response()
+        if not self.pred(resp):
+            raise TimeoutError(f"no response matched the predicate (the SPA posted {resp.request.method} {resp.url})")
+        self.value = resp
+        return False
+
+
+class FakeLocator:
+    def __init__(self, page, selector: str):
+        self.page, self.selector = page, selector
+
+    @property
+    def first(self):
+        return self
+
+    def locator(self, sel: str):
+        return FakeLocator(self.page, f"{self.selector} {sel}")
+
+    def wait_for(self, timeout=None):
+        if self.page.card_missing:
+            raise TimeoutError("no card")
+        self.page.waited.append(self.selector)
+
+    def inner_text(self) -> str:
+        if self.selector.endswith('[data-testid="steering-prompt"]'):
+            if self.page.prompt is None:
+                raise RuntimeError("no steering-prompt element")
+            return self.page.prompt
+        # the card itself — what SteeringGate renders: the status line, `run <id8> · before unit #N`
+        # (only when the SPA had a numeric ord), then the headline
+        ord_line = f" · before unit #{self.page.card_ord}" if self.page.card_ord is not None else ""
+        return f"Awaiting human decision\nrun {self.page.run_id[:8]}{ord_line}\n{self.page.prompt or ''}"
+
+    def get_attribute(self, name: str):
+        return (self.page.card_run_id or self.page.run_id) if name == "data-run-id" else None
+
+    def click(self):
+        self.page.clicks.append(self.selector)
+
+    def count(self):
+        return 0 if self.page.card_missing else 1
+
+
+class FakePage:
+    """`wire_run_id` is the run whose gate the fake SPA actually posts to (default: this run);
+    `wire_approve` forces the posted `approve` (None = mirror the button clicked — the honest wire;
+    a bool = a UI wire regression the harness must catch). `card_ord` is the ord the card RENDERS
+    (`· before unit #N`; None = the SPA had none to show), `card_run_id` its `data-run-id` (None =
+    this run)."""
+
+    def __init__(self, prompt, run_id="sib-1", card_missing=False, gate_status=200, wire_run_id=None, wire_approve=None,
+                 card_ord=None, card_run_id=None):
+        self.prompt, self.run_id, self.card_missing, self.gate_status = prompt, run_id, card_missing, gate_status
+        self.wire_run_id, self.wire_approve = wire_run_id or run_id, wire_approve
+        self.card_ord, self.card_run_id = card_ord, card_run_id
+        self.gotos: list[str] = []
+        self.clicks: list[str] = []
+        self.waited: list[str] = []
+
+    def goto(self, url: str, wait_until=None):
+        self.gotos.append(url)
+
+    def locator(self, sel: str):
+        return FakeLocator(self, sel)
+
+    def wire_response(self) -> FakeResponse:
+        clicked_approve = bool(self.clicks) and 'steering-approve"]' in self.clicks[-1]
+        approve = clicked_approve if self.wire_approve is None else self.wire_approve
+        return FakeResponse(f"{tfl.BASE}/api/v1/runs/{self.wire_run_id}/gate", self.gate_status, json.dumps({"approve": approve}))
+
+    def expect_response(self, pred, timeout=None):
+        return FakeExpect(self, pred)
+
+
+class FakeDaemon:
+    """The READ-ONLY daemon the gate path consults for the complete prompt — `GET /runs/:id/gate`
+    (the cached open-gate record, `GateInfo`) and `GET /runs/:id/events` — installed over
+    `tfl._fetch`, the harness's one HTTP seam, so no test touches the network. A run without a
+    record answers 404 (the daemon's "nothing pending"); a `(status, body)` tuple is served as-is."""
+
+    def __init__(self):
+        self.gates: dict[str, dict | tuple] = {}
+        self.events: dict[str, list | tuple] = {}
+        self.calls: list[str] = []
+
+    def fetch(self, path: str):
+        self.calls.append(path)
+        m = re.fullmatch(r"/runs/([^/]+)/gate", path)
+        if m:
+            g = self.gates.get(urllib.parse.unquote(m.group(1)))
+            return (404, {"error": "no gate"}) if g is None else (g if isinstance(g, tuple) else (200, g))
+        m = re.fullmatch(r"/runs/([^/]+)/events", path)
+        if m:
+            ev = self.events.get(urllib.parse.unquote(m.group(1)))
+            return (404, {"error": "no run"}) if ev is None else (ev if isinstance(ev, tuple) else (200, {"events": ev}))
+        return 404, {"error": f"unrouted {path}"}
+
+
+def gate_record(run_id: str, prompt: str, ord_: int | None) -> dict:
+    return {"runId": run_id, "ord": ord_, "prompt": prompt, "lifecycle": "open", "receivedAt": "2026-09-09T00:00:00Z"}
+
+
+# Codex round 5's probe: the card shows `cleanPrompt()`'s headline — everything before the first `[` —
+# so the delivery command in the bracket never reaches a decision taken on the card's text.
+R5_FULL = "Approve unit 4 before it runs: Finalize the test [gh pr create --fill]"
+R5_CARD = "Approve unit 4 before it runs: Finalize the test"
+
+
+class GateClickPath(Isolated):
+    def setUp(self):
+        super().setUp()
+        self.daemon = FakeDaemon()
+        self._saved_fetch = tfl._fetch
+        tfl._fetch = self.daemon.fetch
+
+    def tearDown(self):
+        tfl._fetch = self._saved_fetch
+        super().tearDown()
+
+    def card(self, page):
+        return page.locator(f'[data-testid="steering-gate"][data-run-id="{page.run_id}"]')
+
+    def page(self, prompt: str, *, ord_: int | None, card: str | None = None, run_id: str = "sib-1", serve: bool = True,
+             card_ord: int | None | str = "mirror", **kw) -> FakePage:
+        """A rendered card showing `cleanPrompt(prompt)` (or `card`) whose COMPLETE prompt the fake
+        daemon serves from `GET /runs/:id/gate` for `ord_` (unless `serve=False`). The card renders
+        `ord_` as its `before unit #N` line (`card_ord="mirror"`), or the given ord / none."""
+        if serve:
+            self.daemon.gates[run_id] = gate_record(run_id, prompt, ord_)
+        return FakePage(tfl.card_headline(prompt) if card is None else card, run_id=run_id,
+                        card_ord=ord_ if card_ord == "mirror" else card_ord, **kw)
+
+    def test_deliver_imperative_clicks_reject_and_records_the_unit(self):
+        page = self.page("Deliver: open a PR against main", ord_=4)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit={"stage": "test", "gate": "human_confirm"}, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertEqual(len(page.clicks), 1)
+        self.assertIn('steering-reject"]', page.clicks[0])
+        self.assertEqual((entry["ord"], entry["first"], entry["status"], entry["unit"]), (4, False, 200, {"stage": "test", "gate": "human_confirm"}))
+        self.assertEqual(entry["url"], "/api/v1/runs/sib-1/gate")
+        self.assertEqual(entry["body"], {"approve": False})  # a REJECT wires {approve: false} — the round-2 fixture said true
+        self.assertTrue(entry["wire_ok"])
+        self.assertIn("body.approve == False", entry["wire_check"])
+        self.assertTrue(any("REJECTED by policy" in f for f in tfl.REPORT["findings"]))
+        self.assertFalse(any("gate-wire-mismatch" in f for f in tfl.REPORT["findings"]))
+
+    def test_codex_round5_bracketed_delivery_command_is_rejected_off_the_complete_prompt(self):
+        """Codex round 5 (HIGH): for `Approve unit 4 before it runs: Finalize the test [gh pr create
+        --fill]` the full-prompt policy rejects, but the headline-driven click path approved with
+        `{approve:true}` and `wire_ok:true` — `SteeringGate.cleanPrompt()` strips the bracket. The
+        decision now reads the COMPLETE prompt from the daemon (`GET /runs/:id/gate`) and only
+        CLICKS on the card."""
+        self.assertEqual(tfl.card_headline(R5_FULL), R5_CARD)
+        self.assertEqual(tfl.gate_decision(R5_CARD, KNOWN)[0], "approve")   # the card alone WOULD approve — the round-4 hole
+        self.assertEqual(tfl.gate_decision(R5_FULL, KNOWN)[0], "reject")
+        page = self.page(R5_FULL, ord_=4)
+        self.assertEqual(page.prompt, R5_CARD)                              # what the operator sees
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit=KNOWN, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertTrue(entry["reason"].startswith("delivery-verb"), entry["reason"])
+        self.assertIn("'gh pr create'", entry["reason"])
+        self.assertIn('steering-reject"]', page.clicks[0])                  # executed through the UI card only
+        self.assertEqual(entry["body"], {"approve": False})
+        self.assertTrue(entry["wire_ok"])
+        self.assertEqual((entry["prompt"], entry["prompt_len"], entry["prompt_card"], entry["card_consistent"]), (R5_FULL, len(R5_FULL), R5_CARD, True))
+        self.assertTrue(entry["prompt_source"].startswith("GET /runs/:id/gate"), entry["prompt_source"])
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate"])         # read-only, and the events were not needed
+        self.assertTrue(any("REJECTED by policy" in f and "gh pr create" in f for f in tfl.REPORT["findings"]))
+        # the same prompt as a LATER gate on the parent and as a sibling's gate: same path, same result
+        for ord_, unit in ((2, {"stage": "test", "gate": "human_confirm"}), (4, {"stage": "build", "gate": "auto"})):
+            page = self.page(R5_FULL, ord_=ord_, run_id="sib-7")
+            entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-7", ord_=ord_, unit=unit, tag="T", first=False)
+            self.assertEqual((entry["decision"], entry["wire_ok"]), ("reject", True), ord_)
+
+    def test_the_recorded_intake_prompts_approve_on_the_complete_prompt(self):
+        for prompt in (GateDecision.PRE_RECON, GateDecision.PRE_NEWTEST):   # the recorded LT-1/LT-3 and LT-2 intake prompts
+            page = self.page(prompt, ord_=1, run_id="run-1")
+            self.assertEqual(page.prompt, prompt)                          # no bracket: the card shows the whole prompt
+            entry = tfl.decide_gate_on_card(page, self.card(page), run_id="run-1", ord_=1, unit=KNOWN, tag="LT-1", first=True, card_text=page.prompt)
+            self.assertEqual((entry["decision"], entry["first"], entry["wire_ok"], entry["card_consistent"]), ("approve", True, True, True))
+            self.assertEqual((entry["prompt"], entry["prompt_card"]), (prompt, prompt))
+            self.assertIn('steering-approve"]', page.clicks[0])
+
+    def test_an_unserved_current_prompt_abstains_however_clean_the_card(self):
+        """The daemon's CURRENT gate cannot be read — no cached record, and the FRESH events are not
+        served either (round 7: `gate-state-unknown`) or their latest `awaitingHuman` has no prompt
+        (`unreadable-gate`) — ⇒ NOTHING is clicked (`reject-by-abstention`), even though the card
+        shows an allow-listed headline. Round 6: an unreadable gate used to be REJECTED on the card
+        — an irreversible act on a gate the harness could not identify; now the run is left as it
+        is and the harness fails."""
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False)      # the card renders; the daemon serves nothing — not even events
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject-by-abstention")
+        self.assertTrue(entry["reason"].startswith("gate-state-unknown: unknown-gate"), entry["reason"])
+        self.assertEqual(page.clicks, [])                                   # NO click — neither approve nor reject
+        self.assertIsNone(entry["prompt"])
+        self.assertIsNone(entry["prompt_len"])
+        self.assertEqual(entry["prompt_card"], GateDecision.PRE_RECON)      # the card's text IS recorded
+        self.assertIsNone(entry["card_consistent"])
+        self.assertIn("404", entry["prompt_source"])
+        self.assertIn("the fresh GET /runs/:id/events failed", entry["prompt_source"])
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate", "/runs/sib-1/events"])   # the events were fetched FRESH — and were not there
+        self.assertEqual((entry["status"], entry["url"], entry["body"], entry["wire_ok"]), (None, None, None, None))
+        self.assertIn("not clicked — gate-state-unknown", entry["wire_check"])
+        self.assertTrue(any("gate-state-unknown" in f and "NO click" in f and "could not be established" in f for f in tfl.REPORT["findings"]))
+        # the LATEST awaitingHuman event carries no prompt → unreadable, whatever an OLDER event says
+        self.daemon.events["sib-1"] = [{"type": "awaitingHuman", "ord": 1, "prompt": GateDecision.PRE_RECON, "seq": 5},
+                                       {"type": "awaitingHuman", "ord": 1, "seq": 6}]
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("(ord 1, seq 6) carries no readable prompt", entry["reason"])
+        self.assertIn("never substituted", entry["reason"])
+        # a gate record with an EMPTY prompt IS the current gate, unreadable — the readable event is NOT a substitute
+        self.daemon.gates["sib-1"] = gate_record("sib-1", "   ", 1)
+        self.daemon.events["sib-1"] = [{"type": "awaitingHuman", "ord": 1, "prompt": GateDecision.PRE_RECON, "seq": 5}]
+        self.daemon.calls.clear()
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("empty prompt", entry["reason"])
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate"])         # the events were not even consulted
+        # a FAILED gate GET (not a 404) is a recorded typed miss — the FRESH events are the only fallback; none → unknown → abstain
+        self.daemon.gates["sib-1"] = (500, {"error": "boom"})
+        del self.daemon.events["sib-1"]
+        n = len(tfl.REPORT.get("fetch_errors") or [])
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("→ 500", entry["prompt_source"])
+        self.assertTrue(entry["reason"].startswith("gate-state-unknown:"), entry["reason"])
+        self.assertEqual(len(tfl.REPORT["fetch_errors"]) - n, 2)           # the gate GET and the events GET (404 on an unknown run)
+        self.assertEqual(tfl.REPORT["fetch_errors"][-2]["endpoint"], "/runs/sib-1/gate")
+        # the verdict: a harness failure named for what it is — not a wire failure, not "did not post"
+        v = tfl.derive_result(recorded_like(gates=[entry], final_status="awaiting_human"), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("gate-state-unknown", v["fail_reasons"])
+        self.assertNotIn("gate-state-conflict", v["fail_reasons"])
+        self.assertNotIn("a gate decision did not post", v["fail_reasons"])
+        self.assertNotIn("gate-wire-mismatch", v["fail_reasons"])
+
+    def test_the_latest_awaitingHuman_event_is_the_current_gate_when_nothing_is_cached(self):
+        # no cached record (404) → the LATEST awaitingHuman event: its `prompt` verbatim, its ord the current ord
+        self.daemon.events["sib-1"] = [{"type": "awaitingHuman", "ord": 1, "prompt": "stale", "seq": 2},
+                                       {"type": "awaitingHuman", "ord": 1, "prompt": GateDecision.PRE_RECON, "seq": 9}]
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], entry["prompt"], entry["card_consistent"], entry["current_ord"]), ("approve", GateDecision.PRE_RECON, True, 1))
+        self.assertEqual(entry["prompt_source"], "awaitingHuman event (ord 1, seq 9) — unresolved in the fresh GET /runs/:id/events")
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate", "/runs/sib-1/events"])
+        # a cached record for ANOTHER ord is the daemon's CURRENT gate — the ord-1 card is stale: no fallback to the
+        # ord-1 event, NO click (round 6; round 5 fell back to the event and approved)
+        self.daemon.calls.clear()
+        self.daemon.gates["sib-1"] = gate_record("sib-1", R5_FULL, 4)
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("the card shows ord 1 but the daemon's current gate is ord 4", entry["reason"])
+        self.assertEqual((entry["ord"], entry["current_ord"], entry["card_ord"]), (1, 4, 1))
+        self.assertEqual((entry["prompt"], entry["prompt_card"]), (R5_FULL, GateDecision.PRE_RECON))   # BOTH texts recorded
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate"])
+        # no record: the events are re-read FRESH every time (round 7 — nothing a caller fetched earlier can be handed in);
+        # identity matches → the bracketed prompt rejects, clicked
+        self.daemon.calls.clear()
+        del self.daemon.gates["sib-1"]
+        self.daemon.events["sib-1"] = [{"type": "awaitingHuman", "ord": 4, "prompt": R5_FULL, "seq": 11}]
+        page = self.page(R5_FULL, ord_=4, serve=False)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit=KNOWN, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertTrue(entry["reason"].startswith("delivery-verb"), entry["reason"])
+        self.assertEqual(entry["prompt_source"], "awaitingHuman event (ord 4, seq 11) — unresolved in the fresh GET /runs/:id/events")
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate", "/runs/sib-1/events"])
+        self.assertIn('steering-reject"]', page.clicks[0])
+        # the pure helpers
+        self.assertIsNone(tfl.latest_awaiting_human([]))
+        self.assertEqual(tfl.latest_awaiting_human([{"type": "awaitingHuman", "ord": 1, "seq": 1}, {"type": "unitPlanned"},
+                                                    {"type": "awaitingHuman", "ord": 3, "seq": 4}])["ord"], 3)
+        self.daemon.events["sib-1"] = []
+        cur = tfl.current_gate("sib-1")
+        self.assertEqual((cur["readable"], cur["known"], cur["prompt"], cur["ord"], cur["source"]), (False, False, None, None, None))
+        self.assertEqual(cur["why"], "GET /runs/:id/gate → 404 (no cached gate); fresh events: no awaitingHuman event in the fresh events — gate state unknown")
+        self.daemon.events["sib-1"] = [{"type": "awaitingHuman", "ord": 3, "prompt": "p", "seq": 1, "session": "sib-1"}]
+        cur = tfl.current_gate("sib-1")
+        self.assertEqual((cur["readable"], cur["known"], cur["prompt"], cur["ord"], cur["record_run_id"], cur["source"]),
+                         (True, True, "p", 3, "sib-1", "awaitingHuman event (ord 3, seq 1) — unresolved in the fresh GET /runs/:id/events"))
+        self.assertNotIn("events", inspect.signature(tfl.current_gate).parameters)   # round 7: no caller-supplied events, ever
+        self.assertFalse(hasattr(tfl, "full_gate_prompt"))
+        self.assertFalse(hasattr(tfl, "gate_prompt_from_events"))   # the per-ord filter and the older-readable-prompt fallback are gone
+
+    def test_codex_round6_stale_card_never_approves_the_daemons_current_delivery_gate(self):
+        """Codex round 6 (HIGH): a fake daemon serving a delivery prompt for ord 4 (`GET
+        /runs/:id/gate`) alongside an old ord-1 event/card produced `decision=approve`,
+        `card_consistent=true`, `wire_ok=true` — the ord-mismatched record was discarded, the ord-1
+        event's readable prompt stood in, and the POST (no ord on the wire) would have approved the
+        daemon's CURRENT gate: the delivery. Now the card's identity must BE the current gate."""
+        delivery = "Approve unit 4 before it runs: Deliver: push the branch and open a PR"
+        events = [{"type": "awaitingHuman", "ord": 1, "prompt": GateDecision.PRE_RECON, "seq": 3},
+                  {"type": "awaitingHuman", "ord": 4, "prompt": delivery, "seq": 12}]
+        self.daemon.gates["sib-1"] = gate_record("sib-1", delivery, 4)
+        self.daemon.events["sib-1"] = events          # the fresh log agrees; the record answers first, so it is not consulted
+        # (a) the stale ord-1 card — rendered ord 1, and the harness read ord 1 from the events earlier
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=True, card_text=page.prompt)
+        self.assertEqual(entry["decision"], "reject-by-abstention")
+        self.assertEqual(page.clicks, [])                                         # NO click — approve OR reject
+        self.assertTrue(entry["reason"].startswith("gate-state-conflict:"), entry["reason"])
+        self.assertIn("card shows ord 1 but the daemon's current gate is ord 4", entry["reason"])
+        self.assertEqual((entry["ord"], entry["card_ord"], entry["current_ord"]), (1, 1, 4))
+        self.assertEqual((entry["prompt"], entry["prompt_card"]), (delivery, GateDecision.PRE_RECON))    # both texts, recorded
+        self.assertIs(entry["card_consistent"], False)
+        self.assertEqual((entry["status"], entry["url"], entry["body"], entry["wire_ok"]), (None, None, None, None))
+        self.assertTrue(any("gate-state-conflict" in f and "NO click" in f and "ord 4" in f and "Deliver" in f for f in tfl.REPORT["findings"]))
+        v = tfl.derive_result(recorded_like(gates=[entry], final_status="awaiting_human"), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("gate-state-conflict", v["fail_reasons"])
+        self.assertTrue(any("daemon current ord=4" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        # (b) the card exposes no ord, but the harness read ord 1 from the events → still a conflict
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False, card_ord=None)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("harness read ord 1 from the events but the daemon's current gate is ord 4", entry["reason"])
+        # (c) no ord anywhere: the headline is not cleanPrompt(current) → conflict
+        page = self.page(GateDecision.PRE_RECON, ord_=None, serve=False, card_ord=None)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=None, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("card-prompt-mismatch", entry["reason"])
+        # (d) the HONEST ord-4 card: identity matches → decided on the ord-4 prompt → REJECT (delivery verb), clicked, wire verified
+        page = self.page(delivery, ord_=4, serve=False)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit={"stage": "test", "gate": "human_confirm"}, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertTrue(entry["reason"].startswith("delivery-verb"), entry["reason"])
+        self.assertIn('steering-reject"]', page.clicks[0])
+        self.assertEqual((entry["current_ord"], entry["card_ord"], entry["card_run_id"], entry["wire_ok"]), (4, 4, "sib-1", True))
+        # (e) the record names another run / the card does → conflict
+        self.daemon.gates["sib-1"] = gate_record("sib-9", GateDecision.PRE_RECON, 1)
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("names run 'sib-9'", entry["reason"])
+        self.daemon.gates["sib-1"] = gate_record("sib-1", GateDecision.PRE_RECON, 1)
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False, card_run_id="sib-2")
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("the card is run sib-2's (data-run-id), not sib-1's", entry["reason"])
+        # the pure conflict predicate
+        cur = {"readable": True, "record_run_id": "r", "ord": 4, "prompt": delivery}
+        head = tfl.card_headline(delivery)
+        self.assertIsNone(tfl.gate_state_conflict(cur, run_id="r", ord_=4, card_run_id="r", card_ord=4, card_text=head))
+        self.assertIsNone(tfl.gate_state_conflict(cur, run_id="r", ord_=None, card_run_id=None, card_ord=None, card_text=head))   # no identity exposed: the headline decides
+        self.assertIn("read ord 1", tfl.gate_state_conflict(cur, run_id="r", ord_=1, card_run_id="r", card_ord=4, card_text=head))
+        self.assertIn("card shows ord 1", tfl.gate_state_conflict(cur, run_id="r", ord_=4, card_run_id="r", card_ord=1, card_text=head))
+        self.assertIn("card-prompt-mismatch", tfl.gate_state_conflict(cur, run_id="r", ord_=4, card_run_id="r", card_ord=4, card_text="Approve unit 4 before it runs: Recon"))
+        self.assertIn("unreadable-gate", tfl.gate_state_conflict({"readable": False, "why": "x"}, run_id="r", ord_=4, card_run_id="r", card_ord=4, card_text=""))
+        self.assertIn("unknown-gate", tfl.gate_state_conflict({"readable": False, "known": False, "why": "x"}, run_id="r", ord_=4, card_run_id="r", card_ord=4, card_text=head))
+        self.assertEqual(tfl.card_ord_from_text("Awaiting human decision\nrun d293f4d7 · before unit #4\nApprove…"), 4)
+        self.assertIsNone(tfl.card_ord_from_text("Awaiting human decision\nrun d293f4d7\nApprove…"))
+        self.assertIsNone(tfl.card_ord_from_text(None))
+
+    def test_an_unreadable_latest_prompt_never_falls_back_to_an_older_readable_one(self):
+        """Codex round 6: `gate_prompt_from_events` skipped an unreadable latest prompt and returned
+        an older readable one — the harness then decided a gate it could not read, on text that was
+        not its. Now the LATEST event (or the cached record) IS the current gate: unreadable ⇒
+        abstain, whatever older events say and whatever the card shows."""
+        events = [{"type": "awaitingHuman", "ord": 1, "prompt": GateDecision.PRE_RECON, "seq": 3},
+                  {"type": "awaitingHuman", "ord": 4, "seq": 12}]                   # the latest carries no prompt
+        self.daemon.events["sib-1"] = events                                          # served FRESH on every decision (round 7)
+        for card_ord, ord_ in ((1, 1), (None, None), (4, 4)):
+            page = self.page(GateDecision.PRE_RECON, ord_=ord_, serve=False, card_ord=card_ord)
+            entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=ord_, unit=KNOWN, tag="T", first=False)
+            self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []), (card_ord, ord_))
+            self.assertTrue(entry["reason"].startswith("gate-state-conflict: unreadable-gate"), entry["reason"])   # established (ord 4), unreadable — not unknown
+            self.assertIn("(ord 4, seq 12) carries no readable prompt", entry["reason"])
+            self.assertIn("never substituted", entry["reason"])
+            self.assertIsNone(entry["prompt"])
+            self.assertEqual(entry["current_ord"], 4)
+        cur = tfl.current_gate("sib-1")
+        self.assertEqual((cur["readable"], cur["known"], cur["prompt"], cur["ord"]), (False, True, None, 4))
+        # the cached record is the current gate even with an empty prompt — the readable event is not consulted
+        self.daemon.gates["sib-1"] = gate_record("sib-1", "", 4)
+        self.daemon.events["sib-1"] = [{"type": "awaitingHuman", "ord": 4, "prompt": GateDecision.PRE_RECON, "seq": 12}]
+        self.daemon.calls.clear()
+        cur = tfl.current_gate("sib-1")
+        self.assertEqual((cur["readable"], cur["known"], cur["prompt"], cur["ord"]), (False, True, None, 4))
+        self.assertIn("empty prompt", cur["why"])
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate"])
+
+    DELIVERY = "Approve unit 4 before it runs: Deliver: push the branch and open a PR"
+    # The run's FRESH log in codex's round-7 reproduction: the ord-1 intake gate (decided), then the ord-4 delivery gate, OPEN.
+    R7_FRESH = [{"type": "awaitingHuman", "ord": 1, "prompt": GateDecision.PRE_RECON, "seq": 3, "session": "sib-1"},
+                {"type": "gateDecided", "ord": 1, "allow": True, "seq": 4},
+                {"type": "unitExecuting", "ord": 1, "seq": 5},
+                {"type": "awaitingHuman", "ord": 4, "prompt": DELIVERY, "seq": 12, "session": "sib-1"}]
+    # Every way `GET /runs/:id/gate` can fail to answer a record (None = the fake's 404).
+    R7_GATE_FAILURES = (("503", (503, {"error": "unavailable"})), ("404", None),
+                        ("malformed 200 (a list)", (200, ["not", "an", "object"])), ("malformed 200 (null)", (200, None)),
+                        ("transport failure", (0, {"error": "URLError: connection refused"})))
+
+    def _serve_gate(self, answer) -> None:
+        self.daemon.gates.pop("sib-1", None)
+        if answer is not None:
+            self.daemon.gates["sib-1"] = answer
+
+    def test_codex_round7_a_failed_current_gate_read_never_decides_on_events_fetched_earlier(self):
+        """Codex round 7 (HIGH): with the stale ord-1 card rendered and a NEWER ord-4 delivery gate
+        in the daemon's log, a gate endpoint answering 503 / 404 / a malformed 200 produced
+        `decision=approve`, `wire_ok=true` — every live caller handed in the events it had fetched
+        BEFORE the card rendered, the failure branch used them, and `/events` was never re-read; the
+        POST carries no ord, so the daemon's current DELIVERY gate would have been approved. Now
+        there is no argument for earlier events: on every failure branch the ONLY fallback is a
+        FRESH `GET /runs/:id/events`, the ord-4 gate is identified there, and the ord-1 card is a
+        gate-state conflict — NO click."""
+        for label, answer in self.R7_GATE_FAILURES:
+            with self.subTest(gate=label):
+                self._serve_gate(answer)
+                self.daemon.events["sib-1"] = list(self.R7_FRESH)
+                self.daemon.calls.clear()
+                page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False)      # the stale unit-1 card, as the SPA still shows it
+                entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=True, card_text=page.prompt)
+                self.assertEqual(entry["decision"], "reject-by-abstention")
+                self.assertEqual(page.clicks, [])                                                # NO click — approve OR reject
+                self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate", "/runs/sib-1/events"])  # the events WERE re-read, fresh
+                self.assertEqual((entry["ord"], entry["card_ord"], entry["current_ord"]), (1, 1, 4))   # the unit-4 gate identified
+                self.assertEqual((entry["prompt"], entry["prompt_card"]), (self.DELIVERY, GateDecision.PRE_RECON))   # both texts recorded
+                self.assertTrue(entry["reason"].startswith("gate-state-conflict:"), entry["reason"])
+                self.assertIn("card shows ord 1 but the daemon's current gate is ord 4", entry["reason"])
+                self.assertIn("unresolved in the fresh GET /runs/:id/events", entry["prompt_source"])
+                self.assertEqual((entry["status"], entry["url"], entry["body"], entry["wire_ok"]), (None, None, None, None))
+                v = tfl.derive_result(recorded_like(gates=[entry], final_status="awaiting_human"), [])
+                self.assertFalse(v["harness_ok"])
+                self.assertIn("gate-state-conflict", v["fail_reasons"])
+        self.assertTrue(any("gate-state-conflict on run sib-1" in f and "NO click" in f and "ord 4" in f and "Deliver" in f for f in tfl.REPORT["findings"]))
+        # the same failures with the HONEST ord-4 card: the identity holds on the fresh log → decided on the delivery prompt → REJECT, clicked
+        for label, answer in self.R7_GATE_FAILURES:
+            with self.subTest(gate=label, card="ord 4"):
+                self._serve_gate(answer)
+                page = self.page(self.DELIVERY, ord_=4, serve=False)
+                entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit={"stage": "test", "gate": "human_confirm"}, tag="T", first=False)
+                self.assertEqual(entry["decision"], "reject")
+                self.assertTrue(entry["reason"].startswith("delivery-verb"), entry["reason"])
+                self.assertIn('steering-reject"]', page.clicks[0])
+                self.assertEqual((entry["current_ord"], entry["wire_ok"]), (4, True))
+        # a HEALTHY gate read whose record IS the ord-1 gate: approve, as recorded — the events are not needed
+        self._serve_gate(gate_record("sib-1", GateDecision.PRE_RECON, 1))
+        self.daemon.calls.clear()
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=True, card_text=page.prompt)
+        self.assertEqual((entry["decision"], entry["wire_ok"], entry["current_ord"], entry["card_consistent"]), ("approve", True, 1, True))
+        self.assertIn('steering-approve"]', page.clicks[0])
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate"])
+        # and there is no way to hand earlier events in
+        self.assertNotIn("events", inspect.signature(tfl.decide_gate_on_card).parameters)
+        self.assertNotIn("events", inspect.signature(tfl.current_gate).parameters)
+
+    def test_codex_round7_fresh_events_that_settle_nothing_are_gate_state_unknown(self):
+        """The gate read failed AND the fresh events establish no current gate — the fetch failed
+        (404 / 500 / malformed), there is no `awaitingHuman`, the latest one is already decided, the
+        run is over, or a later `gateDecided`/`resumed` cannot be attributed (ambiguous) — ⇒ the
+        gate state is UNKNOWN: `reject-by-abstention`, NO click, finding `gate-state-unknown`,
+        `harness_ok=false` (a sibling's: `sibling-gate-state-unknown`)."""
+        decided = self.R7_FRESH + [{"type": "gateDecided", "ord": 4, "allow": True, "seq": 13}]
+        resumed_no_ord = self.R7_FRESH + [{"type": "resumed", "seq": 13}]
+        over = self.R7_FRESH + [{"type": "sessionFailed", "seq": 13}]
+        unattributable = [{"type": "awaitingHuman", "prompt": self.DELIVERY, "seq": 12}, {"type": "gateDecided", "ord": 4, "seq": 13}]
+        cases = (("events fetch fails (404)", None, "the fresh GET /runs/:id/events failed"),
+                 ("events fetch fails (500)", (500, {"error": "boom"}), "the fresh GET /runs/:id/events failed"),
+                 ("events malformed", (200, {"nope": 1}), "the fresh GET /runs/:id/events failed"),
+                 ("no awaitingHuman", [{"type": "unitPlanned", "ord": 1}], "no awaitingHuman event"),
+                 ("latest gate already decided", decided, "already resolved by gateDecided (ord 4, seq 13)"),
+                 ("resumed without an ord", resumed_no_ord, "ambiguous"),
+                 ("run over", over, "followed by sessionFailed"),
+                 ("gate without an ord, decision with one", unattributable, "ambiguous"))
+        for label, events, expect in cases:
+            for gate_label, answer in self.R7_GATE_FAILURES:
+                with self.subTest(events=label, gate=gate_label):
+                    self._serve_gate(answer)
+                    self.daemon.events.pop("sib-1", None)
+                    if events is not None:
+                        self.daemon.events["sib-1"] = events
+                    self.daemon.calls.clear()
+                    page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False)
+                    entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=True, card_text=page.prompt)
+                    self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+                    self.assertTrue(entry["reason"].startswith("gate-state-unknown: unknown-gate"), entry["reason"])
+                    self.assertIn(expect, entry["reason"])
+                    self.assertIn("gate state unknown", entry["prompt_source"])
+                    self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate", "/runs/sib-1/events"])
+                    self.assertIsNone(entry["prompt"])
+                    self.assertIsNone(entry["current_ord"])
+                    self.assertIn("not clicked — gate-state-unknown", entry["wire_check"])
+                    v = tfl.derive_result(recorded_like(gates=[entry], final_status="awaiting_human"), [])
+                    self.assertFalse(v["harness_ok"])
+                    self.assertIn("gate-state-unknown", v["fail_reasons"])
+                    self.assertNotIn("gate-state-conflict", v["fail_reasons"])
+        self.assertTrue(any("gate-state-unknown on run sib-1" in f and "NO click" in f for f in tfl.REPORT["findings"]))
+        self.assertEqual(tfl.abstention_label({"reason": "gate-state-unknown: unknown-gate: x"}), "gate-state-unknown")
+        self.assertEqual(tfl.abstention_label({"reason": "gate-state-conflict: unreadable-gate: x"}), "gate-state-conflict")
+        self.assertEqual(tfl.abstention_label({}), "gate-state-conflict")
+        followed = {"gates": {"s1": [{"ord": 1, "current_ord": None, "decision": "reject-by-abstention", "reason": "gate-state-unknown: unknown-gate: x"}]},
+                    "statuses": {"s1": "awaiting_human"}, "acceptance": {"s1": None}}
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed), [])
+        self.assertIn("sibling-gate-state-unknown", v["fail_reasons"])
+        self.assertNotIn("sibling-gate-state-conflict", v["fail_reasons"])
+
+    def test_codex_round8_incomplete_metadata_never_approves(self):
+        """Codex round 8 (HIGH): a 200 object containing only `prompt` became a known gate — with no
+        ord, every ord comparison was skipped, and a unit-4 prompt served that way was APPROVED
+        against a unit-1 card and unit-1 metadata (`wire_ok` true); separately `{stage: null,
+        gate: "human"}` counted as a known non-delivery kind. Now a gate is known only when the
+        record carries run id + ord + prompt AND the unit's stage/gate are both recognized wire
+        values; anything less is `unknown-gate-kind` ⇒ abstain (no click, `harness_ok=false`); and
+        an APPROVE additionally requires the card to render the daemon's current ord."""
+        unit4 = "Approve unit 4 before it runs: Run the approved suite against the fold"   # allow-listed, no delivery verb: the policy alone WOULD approve
+        self.assertEqual(tfl.gate_decision(unit4, KNOWN)[0], "approve")
+        # (a) codex's probe: a prompt-only 200 record, the unit-1 card showing exactly that headline, unit-1 metadata
+        self.daemon.gates["sib-1"] = {"prompt": unit4}
+        self.daemon.events["sib-1"] = [{"type": "awaitingHuman", "ord": 1, "prompt": GateDecision.PRE_RECON, "seq": 3, "session": "sib-1"}]
+        n = len(tfl.REPORT.get("fetch_errors") or [])
+        page = self.page(unit4, ord_=1, serve=False, card_ord=1)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=True, card_text=page.prompt)
+        self.assertEqual(entry["decision"], "reject-by-abstention")
+        self.assertEqual(page.clicks, [])                                                     # NO click — approve OR reject
+        self.assertTrue(entry["reason"].startswith("unknown-gate-kind:"), entry["reason"])
+        self.assertIn("INCOMPLETE record (no runId, ord)", entry["reason"])
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate"])                            # the events are NOT substituted for a record the daemon answered
+        self.assertIsNone(entry["prompt"])
+        self.assertIsNone(entry["current_ord"])
+        self.assertEqual((entry["status"], entry["url"], entry["body"], entry["wire_ok"]), (None, None, None, None))
+        self.assertIn("not clicked — unknown-gate-kind", entry["wire_check"])
+        self.assertEqual(len(tfl.REPORT["fetch_errors"]) - n, 1)                             # a typed miss: incomplete gate record
+        self.assertIn("incomplete gate record (no runId, ord)", tfl.REPORT["fetch_errors"][-1]["error"])
+        self.assertTrue(any("unknown-gate-kind on run sib-1" in f and "NO click" in f for f in tfl.REPORT["findings"]))
+        self.assertEqual(tfl.abstention_label(entry), "unknown-gate-kind")
+        v = tfl.derive_result(recorded_like(gates=[entry], final_status="awaiting_human"), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("unknown-gate-kind", v["fail_reasons"])
+        self.assertNotIn("gate-state-conflict", v["fail_reasons"])
+        self.assertNotIn("gate-state-unknown", v["fail_reasons"])
+        # (b) a record lacking the run id, or the ord (or with a non-integer ord): incomplete too — whatever the card shows
+        for record in ({"ord": 1, "prompt": GateDecision.PRE_RECON}, {"runId": "sib-1", "prompt": GateDecision.PRE_RECON},
+                       {"runId": "sib-1", "ord": "1", "prompt": GateDecision.PRE_RECON}, {"runId": "sib-1", "ord": True, "prompt": GateDecision.PRE_RECON},
+                       {"runId": "", "ord": 1, "prompt": GateDecision.PRE_RECON}):
+            with self.subTest(record=record):
+                self.daemon.gates["sib-1"] = record
+                self.daemon.calls.clear()
+                page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False, card_ord=1)
+                entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=True, card_text=page.prompt)
+                self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+                self.assertTrue(entry["reason"].startswith("unknown-gate-kind:"), entry["reason"])
+                self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate"])
+        self.assertEqual(tfl.gate_record_missing({"prompt": "x"}), "runId, ord")
+        self.assertEqual(tfl.gate_record_missing({"runId": "r", "prompt": "x"}), "ord")
+        self.assertEqual(tfl.gate_record_missing({"ord": 2, "prompt": "x"}), "runId")
+        self.assertIsNone(tfl.gate_record_missing(gate_record("r", "x", 2)))
+        cur = tfl.current_gate("sib-1")
+        self.assertEqual((cur["known"], cur["incomplete"], cur["readable"], cur["prompt"]), (False, True, False, None))
+        self.assertIn("unknown-gate-kind:", tfl.gate_state_conflict(cur, run_id="sib-1", ord_=1, card_run_id="sib-1", card_ord=1, card_text=GateDecision.PRE_RECON))
+        # (c) a COMPLETE ord-1 record and an honest ord-1 card, but the unit's kind is not established: abstain, no click
+        self.daemon.gates["sib-1"] = gate_record("sib-1", GateDecision.PRE_RECON, 1)
+        for unit in ({"stage": None, "gate": "human"}, {"stage": "test", "gate": None}, {"stage": "test", "gate": "human"},
+                     {"stage": "deploy", "gate": "auto"}, {"stage": "", "gate": "auto"}, None, {}):
+            with self.subTest(unit=unit):
+                page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False, card_ord=1)
+                entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=unit, tag="T", first=True, card_text=page.prompt)
+                self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+                self.assertTrue(entry["reason"].startswith("unknown-gate-kind:"), entry["reason"])
+                self.assertEqual((entry["current_ord"], entry["card_ord"], entry["prompt"]), (1, 1, GateDecision.PRE_RECON))   # identity held; the kind did not
+                self.assertEqual(tfl.abstention_label(entry), "unknown-gate-kind")
+                self.assertIn("not clicked — unknown-gate-kind", entry["wire_check"])
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False, card_ord=1)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit={"stage": None, "gate": "human"}, tag="T", first=False)
+        self.assertIn("stage None is missing; gate 'human' is not a wire value", entry["reason"])
+        # (d) an APPROVE must be proven against the card: complete ord-1 record + KNOWN metadata, but the card renders no
+        # `before unit #N` line → the policy says approve, the click is refused (`card-ord-unverified`, a gate-state
+        # conflict); with the ord rendered and equal → approve, clicked, wire verified
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False, card_ord=None)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=None, unit=KNOWN, tag="T", first=True, card_text=page.prompt)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertTrue(entry["reason"].startswith("gate-state-conflict: card-ord-unverified"), entry["reason"])
+        self.assertIn("the card shows no ord", entry["reason"])
+        self.assertIn("the policy would have approved", entry["reason"])
+        self.assertEqual(tfl.abstention_label(entry), "gate-state-conflict")
+        v = tfl.derive_result(recorded_like(gates=[entry], final_status="awaiting_human"), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("gate-state-conflict", v["fail_reasons"])
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False, card_ord=1)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=True, card_text=page.prompt)
+        self.assertEqual((entry["decision"], entry["wire_ok"], entry["card_ord"], entry["current_ord"]), ("approve", True, 1, 1))
+        self.assertIn('steering-approve"]', page.clicks[0])
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False, card_ord=1)               # the gate's OBJECT form on the wire is a known kind
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit={"stage": "test", "gate": {"human_confirm": {"unconditional": False}}}, tag="T", first=False)
+        self.assertEqual((entry["decision"], entry["wire_ok"]), ("approve", True))
+        # (e) a REJECT needs no rendered ord — it is the safe direction: a delivery prompt behind a card without an ord line is still rejected ON the card
+        self.daemon.gates["sib-1"] = gate_record("sib-1", self.DELIVERY, 4)
+        page = self.page(self.DELIVERY, ord_=None, serve=False, card_ord=None)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=None, unit=KNOWN, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertIn('steering-reject"]', page.clicks[0])
+        self.assertTrue(entry["wire_ok"])
+        # a delivery KIND with an otherwise unknown unit still rejects (the most severe reason first)
+        self.daemon.gates["sib-1"] = gate_record("sib-1", GateDecision.PRE_RECON, 1)
+        page = self.page(GateDecision.PRE_RECON, ord_=1, serve=False, card_ord=1)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit={"stage": "deliver", "gate": None}, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertIn("gate kind 'deliver'", entry["reason"])
+        # a sibling's abstention on an unknown kind is named for what it is
+        followed = {"gates": {"s1": [{"ord": 1, "current_ord": 1, "decision": "reject-by-abstention", "reason": "unknown-gate-kind: gate None is missing — …"}]},
+                    "statuses": {"s1": "awaiting_human"}, "acceptance": {"s1": None}}
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("sibling-unknown-gate-kind", v["fail_reasons"])
+        self.assertNotIn("sibling-gate-state-conflict", v["fail_reasons"])
+        self.assertEqual(tfl.ABSTENTION_LABELS, ("gate-state-unknown", "unknown-gate-kind"))
+        # the source: identity, then the policy, then the ord proof — all BEFORE the click; and the approve is gated on the card's ord
+        src = inspect.getsource(tfl.decide_gate_on_card)
+        self.assertLess(src.index("gate_state_conflict(cur"), src.index("gate_decision(prompt, unit)"))
+        self.assertLess(src.index("gate_decision(prompt, unit)"), src.index("card-ord-unverified"))
+        self.assertLess(src.index("card-ord-unverified"), src.index("steering-{decision}"))
+        self.assertIn('decision == "approve" and not (isinstance(card_ord, int) and card_ord == cur["ord"])', src)
+        self.assertIn("gate_record_missing(body)", inspect.getsource(tfl.current_gate))
+
+    def test_unresolved_gate_is_the_latest_awaitingHuman_that_nothing_after_resolves(self):
+        aw1 = {"type": "awaitingHuman", "ord": 1, "prompt": "a", "seq": 3}
+        aw4 = {"type": "awaitingHuman", "ord": 4, "prompt": "d", "seq": 12}
+
+        def gd(ord_, seq, kind="gateDecided"):
+            return {"type": kind, "ord": ord_, "seq": seq}
+        self.assertEqual(tfl.unresolved_gate([]), (None, "no awaitingHuman event in the fresh events"))
+        self.assertEqual(tfl.unresolved_gate([aw1]), (aw1, ""))
+        self.assertEqual(tfl.unresolved_gate([aw1, aw4]), (aw4, ""))                          # the latest; the older one is superseded
+        self.assertEqual(tfl.unresolved_gate([aw1, gd(1, 4), aw4]), (aw4, ""))
+        self.assertEqual(tfl.unresolved_gate([aw1, gd(3, 4)]), (aw1, ""))                     # an auto gate's decision for ANOTHER ord resolves nothing
+        self.assertEqual(tfl.unresolved_gate([gd(1, 2), aw1]), (aw1, ""))                     # a decision BEFORE the gate posted is not its resolution
+        self.assertEqual(tfl.unresolved_gate([aw4, "junk", None, {"type": "log"}]), (aw4, ""))  # non-dict / unrelated entries are skipped
+        ev, why = tfl.unresolved_gate([aw1, aw4, gd(4, 13)])
+        self.assertEqual((ev, "already resolved by gateDecided (ord 4, seq 13)" in why), (None, True))
+        ev, why = tfl.unresolved_gate([aw4, gd(4, 13, "resumed")])
+        self.assertEqual((ev, "already resolved by resumed (ord 4, seq 13)" in why), (None, True))
+        ev, why = tfl.unresolved_gate([aw4, {"type": "resumed", "seq": 13}])
+        self.assertEqual((ev, why.startswith("ambiguous")), (None, True))                    # a resolution with no ord: cannot be attributed
+        ev, why = tfl.unresolved_gate([{"type": "awaitingHuman", "prompt": "x", "seq": 1}, gd(1, 2)])
+        self.assertEqual((ev, why.startswith("ambiguous")), (None, True))                    # a gate with no ord, a decision with one: cannot be ruled out
+        for terminal in ("sessionCompleted", "runCancelled", "sessionFailed"):
+            ev, why = tfl.unresolved_gate([aw4, {"type": terminal, "seq": 13}])
+            self.assertEqual((ev, f"followed by {terminal}" in why and "no open gate" in why), (None, True), terminal)
+        self.assertEqual(tfl.RESOLVES_GATE, {"gateDecided", "resumed"})
+        self.assertEqual(tfl.ENDS_RUN, {"sessionCompleted", "runCancelled", "sessionFailed"})
+
+    def test_a_card_that_is_not_the_current_prompts_headline_abstains(self):
+        """The card is the click surface: when what it shows is not `cleanPrompt(current)` —
+        SteeringGate's `Prompt unavailable…` fallback, a stale or truncated headline — the identity is
+        in doubt and NOTHING is clicked (`card-prompt-mismatch` → `reject-by-abstention`; round 5
+        clicked REJECT, an irreversible act on a gate the operator could not see)."""
+        for card in ("Prompt unavailable (daemon restarted) — you can still approve or reject.", GateDecision.PRE_RECON[:40], "", "Approve unit 2 before it runs: Recon: survey"):
+            page = self.page(GateDecision.PRE_RECON, ord_=1, card=card)
+            entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+            self.assertEqual(entry["decision"], "reject-by-abstention", card)
+            self.assertIn("card-prompt-mismatch", entry["reason"])
+            self.assertIs(entry["card_consistent"], False)
+            self.assertEqual((entry["prompt"], entry["prompt_card"]), (GateDecision.PRE_RECON, card))   # both texts, recorded
+            self.assertEqual(page.clicks, [])
+        self.assertTrue(any("card-prompt-mismatch" in f and "NO click" in f for f in tfl.REPORT["findings"]))
+        # a bracketed footnote is NOT a mismatch — the card legitimately shows the headline
+        page = self.page("Approve unit 1 before it runs: Recon: survey [the gate fires before unit 1]", ord_=1)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], entry["card_consistent"]), ("approve", True))
+        self.assertEqual(entry["prompt_card"], "Approve unit 1 before it runs: Recon: survey")
+        # whitespace differences (inner_text collapses them) are not a mismatch either
+        page = self.page("Approve unit 1 before it runs:\n  Recon:   survey", ord_=1, card="Approve unit 1 before it runs: Recon: survey")
+        self.assertEqual(tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit=KNOWN, tag="T", first=False)["card_consistent"], True)
+        # a delivery prompt behind a mismatched card: the identity is in doubt — NOTHING is clicked, not even reject
+        page = self.page(R5_FULL, ord_=4, card="Prompt unavailable")
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit=KNOWN, tag="T", first=False)
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIs(entry["card_consistent"], False)
+        self.assertEqual(entry["prompt"], R5_FULL)
+        # card_headline mirrors SteeringGate.cleanPrompt: text before the first `[`, trimmed
+        self.assertEqual(tfl.card_headline("Head [note] tail"), "Head")
+        self.assertEqual(tfl.card_headline("  Head  "), "Head")
+        self.assertEqual(tfl.card_headline(None), "")
+
+    def test_every_call_site_decides_on_the_daemon_prompt_and_only_clicks_the_card(self):
+        src = inspect.getsource(tfl.decide_gate_on_card)
+        self.assertLess(src.index("current_gate(run_id)"), src.index("gate_state_conflict(cur"))    # the current gate, read FRESH, then its identity …
+        self.assertLess(src.index("gate_state_conflict(cur"), src.index("gate_decision(prompt, unit)"))    # … BEFORE the policy …
+        self.assertLess(src.index("gate_decision(prompt, unit)"), src.index("steering-{decision}"))        # … BEFORE the click
+        self.assertNotIn("gate_decision(card_text", src)
+        drive = inspect.getsource(tfl._drive_intake)
+        self.assertIn("card_text=prompt)", drive)                              # the intake gate
+        self.assertIn("card_text=ptxt)", drive)                                # later gates
+        self.assertNotIn("events=", drive)                                     # round 7: NO caller hands earlier events to a gate decision …
+        self.assertNotIn("events=", inspect.getsource(tfl.decide_sibling_gate))   # … the siblings' included
+        self.assertNotIn("prompt=prompt", drive)
+        self.assertNotIn("prompt=ptxt", drive)
+        self.assertNotIn("gate_decision(ptxt", drive)                          # no decision on a card text anywhere
+        self.assertNotIn("prompt", inspect.signature(tfl.decide_gate_on_card).parameters)
+        self.assertNotIn("events", inspect.signature(tfl.decide_gate_on_card).parameters)   # … there is no argument for them
+        self.assertNotIn("events", inspect.signature(tfl.current_gate).parameters)
+        self.assertIn("card_text", inspect.signature(tfl.decide_gate_on_card).parameters)
+        cg = inspect.getsource(tfl.current_gate)
+        self.assertIn("events = run_events(run_id)", cg)                       # the ONLY fallback: a fresh fetch, after the record's failure is recorded …
+        self.assertLess(cg.index("record_fetch_error(path, status"), cg.index("events = run_events(run_id)"))
+        self.assertIn("unresolved_gate(events)", cg)                           # … and the current UNRESOLVED gate in it
+        self.assertNotIn("latest_awaiting_human(events)", cg)                  # never the bare latest event
+
+    def test_a_rejected_decision_wired_as_approve_true_is_a_wire_mismatch_and_a_harness_failure(self):
+        """The round-2 fixture accepted `{approve: true}` while reporting REJECTED — exactly the UI
+        wire regression the check exists to catch. Now it FAILS the check."""
+        page = self.page("Deliver: open a PR against main", ord_=4, wire_approve=True)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit={"stage": "test", "gate": "human_confirm"}, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertIn('steering-reject"]', page.clicks[0])
+        self.assertEqual(entry["body"], {"approve": True})
+        self.assertFalse(entry["wire_ok"])
+        self.assertIn("approve=True but the decision 'reject' requires approve=False", entry["wire_check"])
+        self.assertTrue(any("gate-wire-mismatch" in f and "approve=True" in f for f in tfl.REPORT["findings"]))
+        v = tfl.derive_result(recorded_like(gates=[entry]), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("gate-wire-mismatch", v["fail_reasons"])
+        # and the mirror image: an APPROVE that wired {approve: false}
+        page = self.page("Approve unit 1 before it runs: Recon: survey", ord_=1, wire_approve=False)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit={"stage": "test", "gate": "auto"}, tag="T", first=True)
+        self.assertEqual((entry["decision"], entry["wire_ok"]), ("approve", False))
+
+    def test_a_post_to_another_runs_gate_is_not_this_gates_evidence(self):
+        page = self.page("Approve unit 1 before it runs: Recon: survey", ord_=1, run_id="sib-1", wire_run_id="sib-9")
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit={"stage": "test", "gate": "auto"}, tag="T", first=False)
+        self.assertEqual(entry["decision"], "approve")
+        self.assertEqual(len(page.clicks), 1)                       # the click happened …
+        self.assertEqual((entry["status"], entry["url"], entry["body"]), (None, None, None))  # … but no POST to THIS run's gate was seen
+        self.assertFalse(entry["wire_ok"])
+        self.assertIn("no POST /api/v1/runs/sib-1/gate observed within 60s", entry["wire_check"])
+        self.assertIn("sib-9", entry["wire_check"])
+        self.assertTrue(any("gate-wire-mismatch" in f for f in tfl.REPORT["findings"]))
+        v = tfl.derive_result(recorded_like(gates=[entry]), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("a gate decision did not post", v["fail_reasons"])
+        self.assertIn("gate-wire-mismatch", v["fail_reasons"])
+
+    def test_a_non_2xx_gate_answer_is_a_wire_mismatch(self):
+        page = self.page("Approve unit 1 before it runs: Recon: survey", ord_=1, gate_status=409)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=1, unit={"stage": "test", "gate": "auto"}, tag="T", first=False)
+        self.assertEqual((entry["status"], entry["wire_ok"]), (409, False))
+        self.assertIn("status 409 is not 2xx", entry["wire_check"])
+
+    def test_gate_url_matches_exactly_this_run(self):
+        rid = "d293f4d7-1e45-4346-809a-d6f2107c6b18"
+        self.assertTrue(tfl.gate_url_matches(f"http://localhost:7701/api/v1/runs/{rid}/gate", rid))
+        self.assertTrue(tfl.gate_url_matches(f"/api/v1/runs/{rid}/gate", rid))
+        self.assertTrue(tfl.gate_url_matches("http://h/api/v1/runs/recon-abc%3Awicked-studio%3Aa0/gate?x=1", "recon-abc:wicked-studio:a0"))  # encodeURIComponent
+        self.assertFalse(tfl.gate_url_matches("/api/v1/runs/other/gate", rid))
+        self.assertFalse(tfl.gate_url_matches(f"/api/v1/runs/{rid}/gate/../other/gate", rid))
+        self.assertFalse(tfl.gate_url_matches(f"/api/v1/runs/{rid}/deliver", rid))
+        self.assertFalse(tfl.gate_url_matches(f"/api/v1/runs/{rid}", rid))
+        self.assertFalse(tfl.gate_url_matches("", rid))
+        # the predicate the click waits on is method + exact endpoint, not `"/gate" in url`
+        src = inspect.getsource(tfl.decide_gate_on_card)
+        self.assertIn("gate_url_matches(r.url, run_id)", src)
+        self.assertNotIn('"/gate" in r.url', src)
+        # gate_wire_check, as a pure function over a recorded entry
+        ok = {"url": f"/api/v1/runs/{rid}/gate", "body": {"approve": True}, "decision": "approve", "status": 200}
+        self.assertIsNone(tfl.gate_wire_check(ok, rid))
+        self.assertIn("not /api/v1/runs/other/gate", tfl.gate_wire_check(ok, "other"))
+        self.assertIn("approve=None", tfl.gate_wire_check({**ok, "body": {"raw": "x"}}, rid))
+        self.assertIn("approve='yes'", tfl.gate_wire_check({**ok, "body": {"approve": "yes"}}, rid))
+        self.assertIn("status None is not 2xx", tfl.gate_wire_check({**ok, "status": None}, rid))
+        self.assertIn("status 300 is not 2xx", tfl.gate_wire_check({**ok, "status": 300}, rid))
+
+    def test_plan_approval_clicks_approve_only_without_a_delivery_verb_in_the_body(self):
+        page = self.page("Approve proposed test plan for wicked-studio:\n| 1 | WS reconnect/backoff in `useEventStream.ts` | Deterministic |", ord_=2)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=2, unit={"stage": "test", "gate": "human_confirm"}, tag="T", first=False)
+        self.assertEqual(entry["decision"], "approve")
+        self.assertIn('steering-approve"]', page.clicks[0])
+        # Round 4: a plan body listing /runs/:id/deliver among the routes to test is REJECTED (a
+        # recorded finding), never approved on its first clause — (c) scans the complete prompt.
+        page = self.page(f"Approve proposed test plan for wicked-studio:\n{LT1_PLAN_ROUTES}", ord_=2)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=2, unit={"stage": "test", "gate": "human_confirm"}, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertTrue(entry["reason"].startswith("delivery-verb"), entry["reason"])
+        self.assertIn('steering-reject"]', page.clicks[0])
+        self.assertTrue(entry["wire_ok"])
+        self.assertTrue(any("REJECTED by policy" in f and "delivery-verb" in f for f in tfl.REPORT["findings"]))
+
+    def test_codex_round4_probes_click_reject_on_the_card(self):
+        for prompt, unit in (("Approve unit 4 before it runs: gh pr create --fill", {"stage": "test", "gate": "auto"}),
+                             ("Please push the branch and open a PR", {"stage": "test", "gate": "human_confirm"}),
+                             ("Prompt unavailable (daemon restarted). Decide from the run page.", {"stage": "test", "gate": "human_confirm"})):
+            page = self.page(prompt, ord_=4)
+            entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit=unit, tag="T", first=False)
+            self.assertEqual(entry["decision"], "reject", prompt)
+            self.assertIn('steering-reject"]', page.clicks[0])
+            self.assertEqual(entry["body"], {"approve": False})
+            self.assertTrue(entry["wire_ok"])
+        self.assertTrue(any("not an allow-listed shape" in f and "Prompt unavailable" in f for f in tfl.REPORT["findings"]))
+
+    def test_delivery_kind_unit_clicks_reject_even_for_a_benign_prompt(self):
+        page = self.page("Approve unit 4 before it runs: land the branch", ord_=4)
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=4, unit={"stage": "deliver", "gate": "human_confirm"}, tag="T", first=False)
+        self.assertEqual(entry["decision"], "reject")
+        self.assertIn("gate kind 'deliver'", entry["reason"])
+
+    def test_unreadable_prompt_without_unit_info_abstains_with_a_finding(self):
+        for page in (FakePage(""), FakePage(None)):   # no card text AND nothing served by the daemon — no record, no events: UNKNOWN
+            entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=None, unit=None, tag="T", first=False)
+            self.assertEqual(entry["decision"], "reject-by-abstention")
+            self.assertIn("unknown-gate", entry["reason"])
+            self.assertEqual(page.clicks, [])
+        self.assertTrue(any("gate-state-unknown" in f and "could not be established" in f and "NO click" in f for f in tfl.REPORT["findings"]))
+        self.daemon.events["sib-1"] = [{"type": "awaitingHuman", "ord": 2, "seq": 7}]   # fresh events name the gate, but it has no prompt: UNREADABLE
+        for page in (FakePage(""), FakePage(None)):
+            entry = tfl.decide_gate_on_card(page, self.card(page), run_id="sib-1", ord_=None, unit=None, tag="T", first=False)
+            self.assertEqual((entry["decision"], page.clicks, entry["current_ord"]), ("reject-by-abstention", [], 2))
+            self.assertIn("unreadable-gate", entry["reason"])
+        self.assertTrue(any("gate-state-conflict" in f and "unreadable" in f and "NO click" in f for f in tfl.REPORT["findings"]))
+
+    def test_the_intake_gate_uses_the_same_path(self):
+        page = self.page("Approve unit 1 before it runs: Recon: survey the target and propose a test plan", ord_=1, run_id="run-1")
+        entry = tfl.decide_gate_on_card(page, self.card(page), run_id="run-1", ord_=1, unit={"stage": "test", "gate": "auto"}, tag="LT-1",
+                                        first=True, card_text=page.prompt)
+        self.assertEqual((entry["decision"], entry["first"]), ("approve", True))
+
+
+# ── Item 5: sibling gates decided THROUGH THE UI while following ─────────────────────────────
+
+
+class SiblingGatesThroughTheUI(Isolated):
+    def setUp(self):
+        super().setUp()
+        self._saved_fns = (tfl.run_detail, tfl.run_events, tfl.acceptance_verdict, tfl._fetch)
+        self.daemon = FakeDaemon()   # `GET /runs/:id/gate` 404s unless a test serves a record — the events are the fallback
+        tfl._fetch = self.daemon.fetch
+
+    def tearDown(self):
+        tfl.run_detail, tfl.run_events, tfl.acceptance_verdict, tfl._fetch = self._saved_fns
+        super().tearDown()
+
+    def test_decide_sibling_gate_navigates_reads_decides_clicks_and_returns(self):
+        fetched: list[str] = []
+
+        def events(sid):
+            fetched.append(sid)
+            return [{"type": "unitPlanned", "ord": 1}, {"type": "awaitingHuman", "ord": 2, "prompt": "Approve unit 2 before it runs: land the change", "seq": 4}]
+        tfl.run_events = events
+        tfl.run_detail = lambda sid: {"session": {"id": sid, "status": "awaiting_human"},
+                                      "units": [{"ord": 1, "stage": "test", "gate": "auto"}, {"ord": 2, "stage": "deliver", "gate": "human_confirm"}]}
+        page = FakePage("Approve unit 2 before it runs: land the change", run_id="sib-1")
+        entry = tfl.decide_sibling_gate(page, "sib-1", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertEqual(page.gotos, [f"{tfl.BASE}/runs/sib-1", "http://studio/testing/campaigns"])  # there and BACK to the launch panel
+        self.assertEqual(page.waited, ['[data-testid="steering-gate"][data-run-id="sib-1"]'])
+        self.assertEqual(entry["decision"], "reject")  # unit 2 is a deliver-stage unit
+        self.assertEqual(entry["unit"], {"stage": "deliver", "gate": "human_confirm"})
+        self.assertEqual(entry["ord"], 2)
+        self.assertIn('steering-reject"]', page.clicks[0])
+        self.assertEqual(entry["prompt_source"], "awaitingHuman event (ord 2, seq 4) — unresolved in the fresh GET /runs/:id/events")
+        self.assertEqual(self.daemon.calls, ["/runs/sib-1/gate"])                       # the record: one read-only GET …
+        self.assertEqual(fetched, ["sib-1", "sib-1"])                                   # … the events: once for the ord/unit, once FRESH for the gate (round 7)
+
+    def test_sibling_intake_gate_is_approved_on_the_card(self):
+        tfl.run_events = lambda sid: [{"type": "awaitingHuman", "ord": 1, "prompt": "Approve unit 1 before it runs: Execute scenario S-3", "seq": 2}]
+        tfl.run_detail = lambda sid: {"session": {"status": "awaiting_human"}, "units": [{"ord": 1, "stage": "test", "gate": "human_confirm"}]}
+        page = FakePage("Approve unit 1 before it runs: Execute scenario S-3", run_id="sib-2", card_ord=1)   # the card renders `before unit #1`
+        entry = tfl.decide_sibling_gate(page, "sib-2", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertEqual(entry["decision"], "approve")
+        self.assertEqual(entry["status"], 200)
+        self.assertEqual(entry["card_consistent"], True)
+        # round 8: the same sibling gate on a card WITHOUT the ord line is never approved — the approve is unproven, nothing is clicked
+        page = FakePage("Approve unit 1 before it runs: Execute scenario S-3", run_id="sib-2")
+        entry = tfl.decide_sibling_gate(page, "sib-2", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("card-ord-unverified", entry["reason"])
+        self.assertEqual(page.gotos[-1], "http://studio/testing/campaigns")
+        # the sibling's bracketed delivery command (codex round 5), served by the daemon's gate record: reject
+        self.daemon.gates["sib-2"] = gate_record("sib-2", R5_FULL, 1)
+        page = FakePage(R5_CARD, run_id="sib-2")
+        entry = tfl.decide_sibling_gate(page, "sib-2", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertEqual(entry["decision"], "reject")
+        self.assertTrue(entry["reason"].startswith("delivery-verb"), entry["reason"])
+        self.assertIn('steering-reject"]', page.clicks[0])
+
+    def test_missing_card_is_left_undecided_with_a_finding_and_still_returns(self):
+        tfl.run_events = lambda sid: []
+        tfl.run_detail = lambda sid: {"session": {"status": "awaiting_human"}, "units": []}
+        page = FakePage("irrelevant", run_id="sib-3", card_missing=True)
+        entry = tfl.decide_sibling_gate(page, "sib-3", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertIsNone(entry["decision"])
+        self.assertIsNone(entry["status"])
+        self.assertEqual(page.clicks, [])
+        self.assertEqual(page.gotos[-1], "http://studio/testing/campaigns")
+        self.assertTrue(any("rendered no gate card" in f for f in tfl.REPORT["findings"]))
+
+    def boom(self, sid):
+        raise tfl.FetchError(tfl.FetchMiss(f"/runs/{sid}", 500, "down"))
+
+    def test_unit_lookup_failure_with_an_unreadable_complete_prompt_fails_closed(self):
+        """Events and run detail down, no cached gate record: the CURRENT gate cannot be established
+        (round 7: `gate-state-unknown` — the fresh events fetch fails too): NOTHING is clicked,
+        whatever the card shows (nothing here; a clean headline below) — round 6; round 5 clicked
+        REJECT on a gate it could not identify."""
+        tfl.run_events = self.boom
+        tfl.run_detail = self.boom
+        page = FakePage("", run_id="sib-4")
+        entry = tfl.decide_sibling_gate(page, "sib-4", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertEqual(entry["decision"], "reject-by-abstention")
+        self.assertTrue(entry["reason"].startswith("gate-state-unknown: unknown-gate"), entry["reason"])
+        self.assertEqual(page.clicks, [])
+        self.assertIn("FetchError", entry["unit_lookup_error"])
+        self.assertIn("GET /runs/:id/gate → 404", entry["prompt_source"])
+        self.assertIn("the fresh GET /runs/:id/events failed", entry["prompt_source"])
+        page = FakePage("Approve unit 1 before it runs: Recon: survey", run_id="sib-4")   # a clean card headline changes nothing
+        entry = tfl.decide_sibling_gate(page, "sib-4", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertEqual(page.gotos[-1], "http://studio/testing/campaigns")    # and the browser still returns to the panel
+
+    def test_unit_lookup_failure_with_a_delivery_instruction_is_rejected_on_the_verb(self):
+        """Codex's round-3 probe, on the real click path: the unit lookup fails (no stage/gate); the
+        daemon's cached gate record reads "Approve unit 4 before it runs: Push the branch and open a
+        PR" → REJECT — on the delivery verb (the most severe reason), before the unknown kind is
+        even considered. Round 5: the card's text is never what is decided — with the gate record
+        gone too, the same card is `unreadable-gate` — and round 6: an unreadable current gate is
+        not clicked at all (`reject-by-abstention`), not a delivery-verb reject read off the card."""
+        tfl.run_events = self.boom
+        tfl.run_detail = self.boom
+        self.daemon.gates["sib-5"] = gate_record("sib-5", "Approve unit 4 before it runs: Push the branch and open a PR", 4)
+        page = FakePage("Approve unit 4 before it runs: Push the branch and open a PR", run_id="sib-5")
+        entry = tfl.decide_sibling_gate(page, "sib-5", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertEqual(entry["decision"], "reject")
+        self.assertTrue(entry["reason"].startswith("delivery-verb"), entry["reason"])
+        self.assertIn("'push the branch'", entry["reason"])
+        self.assertIn("unit stage/gate unknown", entry["reason"])
+        self.assertIn('steering-reject"]', page.clicks[0])
+        self.assertIsNone(entry["unit"])
+        self.assertIsNone(entry["ord"])                                  # the events were down: the harness has no ord of its own …
+        self.assertEqual(entry["current_ord"], 4)                        # … the cached record IS the current gate (ord 4) …
+        self.assertTrue(entry["prompt_source"].startswith("GET /runs/:id/gate"))   # … and the card's headline is its headline: identity holds
+        self.assertIn("FetchError", entry["unit_lookup_error"])
+        self.assertTrue(entry["wire_ok"])  # the reject reached THIS run's gate with {approve: false}
+        self.assertTrue(any("REJECTED by policy" in f and "delivery-verb" in f for f in tfl.REPORT["findings"]))
+        del self.daemon.gates["sib-5"]
+        page = FakePage("Approve unit 4 before it runs: Push the branch and open a PR", run_id="sib-5")
+        entry = tfl.decide_sibling_gate(page, "sib-5", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertEqual((entry["decision"], page.clicks), ("reject-by-abstention", []))
+        self.assertIn("unknown-gate", entry["reason"])                   # round 7: no record and the fresh events are down — unknown, not decided off the card
+
+    def test_unit_lookup_failure_abstains_on_an_allow_listed_prompt(self):
+        """Round 4: the pre-execution shape no longer approves on its own — (b) requires BOTH stage
+        and gate as recognized wire values, and a failed GET /runs/:id leaves them unknown →
+        `unknown-gate-kind`. Round 8: an unknown kind is an ABSTENTION — nothing is clicked (round 4
+        clicked REJECT, an irreversible act on a gate whose operation the harness could not tell)."""
+        tfl.run_events = self.boom
+        tfl.run_detail = self.boom
+        self.daemon.gates["sib-6"] = gate_record("sib-6", "Approve unit 1 before it runs: Recon: survey the target and propose a test plan", 1)
+        page = FakePage("Approve unit 1 before it runs: Recon: survey the target and propose a test plan", run_id="sib-6", card_ord=1)
+        entry = tfl.decide_sibling_gate(page, "sib-6", tag="LT-2", return_to="http://studio/testing/campaigns")
+        self.assertEqual(entry["decision"], "reject-by-abstention")
+        self.assertTrue(entry["reason"].startswith("unknown-gate-kind"), entry["reason"])
+        self.assertIn("the unit lookup failed", entry["reason"])
+        self.assertEqual(page.clicks, [])
+        self.assertIsNone(entry["wire_ok"])
+        self.assertIn("FetchError", entry["unit_lookup_error"])
+        self.assertEqual(page.gotos[-1], "http://studio/testing/campaigns")    # and the browser still returns to the panel
+        self.assertTrue(any("unknown-gate-kind on run sib-6" in f and "NO click" in f for f in tfl.REPORT["findings"]))
+        v = tfl.derive_result(with_siblings("sib-6", siblings_followed={"gates": {"sib-6": [entry]}, "statuses": {"sib-6": "awaiting_human"},
+                                                                       "acceptance": {"sib-6": None}}), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("sibling-unknown-gate-kind", v["fail_reasons"])
+
+    def test_a_sibling_gate_left_on_a_conflict_is_never_re_decided_and_fails_the_harness(self):
+        """A sibling whose card is not the daemon's current gate is abstained on ONCE — the follow
+        never re-navigates to re-decide it (a live SPA would render the same stale card), the
+        timeout reports it non-terminal, and `derive_result` names the conflict
+        (`sibling-gate-state-conflict`, `harness_ok=false`) — not a wire failure (round 6)."""
+        tfl.run_detail = lambda sid: {"session": {"status": "awaiting_human"}}
+        tfl.acceptance_verdict = lambda sid: None
+        decided: list[str] = []
+        abstention = {"ord": 1, "current_ord": 4, "decision": "reject-by-abstention", "status": None, "url": None, "body": None, "wire_ok": None,
+                      "reason": "gate-state-conflict: the card shows ord 1 but the daemon's current gate is ord 4"}
+
+        def fake_decide(page, sid, *, tag, return_to):
+            decided.append(sid)
+            return dict(abstention)
+        clock = FakeClock()
+        out = tfl.follow_siblings(["s1"], max_s=60, sleep=clock.sleep, page=FakePage("x"), tag="LT-2", decide=fake_decide, clock=clock, poll_s=15)
+        self.assertEqual(decided, ["s1"])                                  # abstained exactly once over 5 polls
+        self.assertEqual((out["polls"], out["timed_out"]), (5, True))
+        self.assertEqual(out["gates"]["s1"][0]["decision"], "reject-by-abstention")
+        self.assertEqual(tfl.sibling_gate_wire_failures(out), [])          # no wire was attempted — not a wire failure
+        self.assertEqual(tfl.sibling_gate_conflicts(out), ["sibling s1 gate ord=1 (daemon current ord=4): " + abstention["reason"]])
+        self.assertEqual(tfl.sibling_gate_conflicts(None), [])
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=out), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("sibling-gate-state-conflict", v["fail_reasons"])
+        self.assertNotIn("sibling-gate-wire-mismatch", v["fail_reasons"])
+        self.assertTrue(any(r.startswith("sibling s1 did not reach a terminal state") for r in v["fail_reasons"]), v["fail_reasons"])
+
+    def test_follow_siblings_decides_awaiting_gates_then_samples_verdicts(self):
+        timeline = {"s1": iter(["awaiting_human", "executing", "completed", "completed"]), "s2": iter(["executing", "completed", "completed", "completed"])}
+        tfl.run_detail = lambda sid: {"session": {"status": next(timeline[sid])}}
+        tfl.acceptance_verdict = lambda sid: {"s1": "pass", "s2": None}[sid]
+        decided: list[tuple] = []
+
+        def fake_decide(page, sid, *, tag, return_to):
+            decided.append((sid, tag, return_to))
+            return {"ord": 1, "decision": "approve", "status": 200}
+        page = FakePage("x")
+        clock = FakeClock()
+        out = tfl.follow_siblings(["s1", "s2"], max_s=60, sleep=clock.sleep, page=page, tag="LT-2", return_to="http://studio/testing/campaigns",
+                                  decide=fake_decide, clock=clock)
+        self.assertEqual(decided, [("s1", "LT-2", "http://studio/testing/campaigns")])
+        self.assertEqual(out["gates"], {"s1": [{"ord": 1, "decision": "approve", "status": 200}], "s2": []})
+        self.assertEqual(out["statuses"], {"s1": "completed", "s2": "completed"})
+        self.assertTrue(out["all_terminal"])
+        self.assertFalse(out["timed_out"])
+        self.assertEqual((out["discovered"], out["polls"]), ({}, 3))  # no rediscovery hook: the set is stable by construction
+        self.assertEqual(out["acceptance"], {"s1": "pass", "s2": None})
+
+    def test_follow_rediscovers_siblings_on_every_poll_and_ends_only_on_a_stable_terminal_set(self):
+        """Codex round 3: `follow_siblings` polled only the supplied ids, so a sequential campaign
+        node launched after its predecessor completed was never followed (an offline reproduction
+        returned `pass` for S1 while the listing held an attributable S2 awaiting approval)."""
+        polls = {"n": 0}
+
+        def rediscover():  # S2 exists only from the second poll on — after S1 has completed
+            polls["n"] += 1
+            ids = ["s1"] if polls["n"] < 2 else ["s1", "s2"]
+            return {"attributable_siblings": [{"id": i, "attributed_by": "listed in the campaign's node_run_id/attached_runs"} for i in ids],
+                    "unrelated_new_runs": []}
+        s2 = iter(["awaiting_human", "executing", "completed", "completed"])
+        tfl.run_detail = lambda sid: {"session": {"status": "completed" if sid == "s1" else next(s2)}}
+        tfl.acceptance_verdict = lambda sid: "pass"
+        decided: list[str] = []
+
+        def fake_decide(page, sid, *, tag, return_to):
+            decided.append(sid)
+            return {"ord": 1, "decision": "approve", "status": 200}
+        clock = FakeClock()
+        out = tfl.follow_siblings(["s1"], max_s=600, sleep=clock.sleep, page=FakePage("x"), tag="LT-2", decide=fake_decide,
+                                  rediscover=rediscover, clock=clock)
+        # poll 1: {s1}, s1 terminal, stable 1 → not done (two stable polls required)
+        # poll 2: s2 appears → stable 0; s2 awaiting_human → its gate decided ON THE UI
+        # poll 3: stable 1, s2 executing; poll 4: stable 2, s2 completed → done
+        self.assertEqual(out["statuses"], {"s1": "completed", "s2": "completed"})
+        self.assertEqual(decided, ["s2"])
+        self.assertEqual(out["gates"], {"s1": [], "s2": [{"ord": 1, "decision": "approve", "status": 200}]})
+        self.assertEqual(out["discovered"]["s2"]["poll"], 2)
+        self.assertEqual(out["discovered"]["s2"]["attributed_by"], "listed in the campaign's node_run_id/attached_runs")
+        self.assertEqual((out["polls"], out["stable_polls"], out["timed_out"], out["all_terminal"]), (4, 2, False, True))
+        self.assertEqual(out["acceptance"], {"s1": "pass", "s2": "pass"})
+        self.assertEqual(out["final_attribution"]["attributable_siblings"][1]["id"], "s2")
+        # derive_result judges the late sibling like the others — and it passes only because BOTH are terminal with verdicts
+        m = with_siblings("s1", siblings_followed=out)
+        self.assertEqual(tfl.derive_result(m, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        self.assertEqual(m["measured"]["sibling_verdicts"]["s2"], {"status": "completed", "verdict": "pass", "verdict_fetch_error": None, "discovered_late": True})
+        self.assertFalse(m["measured"]["sibling_verdicts"]["s1"]["discovered_late"])
+
+    def test_a_late_sibling_still_awaiting_human_at_the_follow_timeout_fails_the_scenario(self):
+        def rediscover():
+            return {"attributable_siblings": [{"id": "s1", "attributed_by": "x"}, {"id": "s2", "attributed_by": "x"}], "unrelated_new_runs": []}
+        tfl.run_detail = lambda sid: {"session": {"status": "completed" if sid == "s1" else "awaiting_human"}}
+        tfl.acceptance_verdict = lambda sid: "pass" if sid == "s1" else None
+        decided: list[str] = []
+
+        def fake_decide(page, sid, *, tag, return_to):
+            decided.append(sid)
+            return {"ord": 1, "decision": "approve", "status": 200}
+        clock = FakeClock()
+        out = tfl.follow_siblings(["s1"], max_s=60, sleep=clock.sleep, page=FakePage("x"), tag="LT-2", decide=fake_decide,
+                                  rediscover=rediscover, clock=clock, poll_s=15)
+        self.assertTrue(out["timed_out"])
+        self.assertFalse(out["all_terminal"])
+        self.assertEqual(out["statuses"], {"s1": "completed", "s2": "awaiting_human"})
+        self.assertIn("s2", decided)                                 # its gate WAS decided on the UI, the daemon did not move
+        self.assertEqual((out["polls"], out["followed_s"]), (5, 60))  # 0, 15, 30, 45, 60 s
+        self.assertTrue(any("SIBLING_FOLLOW_MAX_S" in f and "not proven complete" in f for f in tfl.REPORT["findings"]))
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=out), [])
+        self.assertTrue(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertTrue(any(r.startswith("sibling s2 did not reach a terminal state (status=awaiting_human)") for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertTrue(any(r.startswith("sibling s2 carries no acceptance verdict") for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertTrue(any("SIBLING_FOLLOW_MAX_S" in r for r in v["fail_reasons"]), v["fail_reasons"])
+
+    def test_a_failed_rediscovery_resets_the_stability_count(self):
+        polls = {"n": 0}
+
+        def rediscover():
+            polls["n"] += 1
+            if polls["n"] == 2:
+                raise tfl.FetchError(tfl.FetchMiss("/runs", 500, "down"))
+            return {"attributable_siblings": [{"id": "s1", "attributed_by": "x"}], "unrelated_new_runs": []}
+        tfl.run_detail = lambda sid: {"session": {"status": "completed"}}
+        tfl.acceptance_verdict = lambda sid: "pass"
+        clock = FakeClock()
+        out = tfl.follow_siblings(["s1"], max_s=600, sleep=clock.sleep, page=FakePage("x"), tag="LT-2", rediscover=rediscover, clock=clock)
+        # poll 1 stable 1 · poll 2 FAILED → 0 · poll 3 → 1 · poll 4 → 2 → done
+        self.assertEqual((out["polls"], out["stable_polls"], out["rediscover_errors"], out["timed_out"]), (4, 2, 1, False))
+        self.assertIn("rediscover=siblings_now", inspect.getsource(tfl._drive_intake))  # the live call site rediscovers
+
+    def test_follow_without_a_page_records_the_gap_once_and_never_uses_the_api(self):
+        seq = iter(["awaiting_human", "awaiting_human", "completed"])
+        tfl.run_detail = lambda sid: {"session": {"status": next(seq)}}
+        tfl.acceptance_verdict = lambda sid: None
+        n = len(tfl.REPORT["findings"])
+        out = tfl.follow_siblings(["s1"], max_s=60, sleep=lambda s: None, tag="LT-1")
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 1)
+        self.assertIn("cannot be decided on the UI", tfl.REPORT["findings"][-1])
+        self.assertEqual(out["gates"], {"s1": []})
+        src = inspect.getsource(tfl)
+        self.assertNotIn('http_json("POST"', src)  # the harness has no POST path at all — gates go through the UI
+        self.assertNotIn('method="POST"', src)
+
+    # ── Round 9 (MEDIUM): completion is the CAMPAIGN's, not "no new runs for two polls" ──────
+
+    def test_campaign_pending_names_every_open_node(self):
+        self.assertEqual(tfl.campaign_pending(None), [])
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": []}), [])
+        done = {"id": "c", "status": "completed", "node_status": {"a": "completed", "b": "failed", "c": "blocked", "d": "cancelled"},
+                "def_nodes": ["a", "b", "c", "d"], "attached_runs": [{"runId": "x", "status": "completed"}]}
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": [done]}), [])
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": [{**done, "status": "partially_completed"}]}), [])
+        open_ = {"id": "c", "status": "paused", "node_status": {"a": "completed", "b": "ready_to_resume"}, "def_nodes": ["a", "b", "c"],
+                 "attached_runs": [{"runId": "x", "status": "awaiting_human"}]}
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": [open_]}),
+                         ["campaign c node c: no node_status yet (scheduled, not started)", "campaign c node b: ready_to_resume",
+                          "campaign c attached run x: awaiting_human", "campaign c status paused"])
+        for st in ("pending", "ready", "running", "awaiting_human", "ready_to_resume"):
+            self.assertEqual(tfl.campaign_pending({"campaign_for_label": [{**done, "node_status": {**done["node_status"], "a": st}}]}),
+                             [f"campaign c node a: {st}"], st)
+        self.assertEqual(tfl.campaign_pending({"campaign_for_label": [{"id": "c"}]}), ["campaign c status None"])   # a status-less record is not complete
+        self.assertEqual((tfl.NODE_TERMINAL, tfl.CAMPAIGN_TERMINAL),
+                         ({"completed", "failed", "blocked", "cancelled"}, {"completed", "partially_completed", "failed", "cancelled"}))
+
+    def test_codex_round9_a_pending_campaign_node_keeps_the_follow_going_and_fails_campaign_incomplete(self):
+        """Codex's reproduction: a fake campaign with one completed sibling and another node
+        `pending` stopped following after 15 s (the discovered set stable for two polls, every
+        DISCOVERED run terminal) and received `{harness_ok: true, result: "pass"}`. Completion is now
+        the campaign's: the pending node keeps the follow going to SIBLING_FOLLOW_MAX_S, then
+        `campaign-incomplete` — not pass."""
+        camp = {"id": "lbl", "status": "running", "node_status": {"a": "completed", "b": "pending"}, "def_nodes": ["a", "b"],
+                "node_run_id": {"a": "s1"}, "attached_runs": []}
+
+        def rediscover():
+            return {"attributable_siblings": [{"id": "s1", "attributed_by": "listed in the campaign's node_run_id/attached_runs"}],
+                    "unrelated_new_runs": [], "campaign_for_label": [camp],
+                    "structural_linkage": {"campaign_served": True, "campaign_linked_run_ids": ["s1"], "structural_fields_on_new_runs": [], "available": True}}
+        tfl.run_detail = lambda sid: {"session": {"status": "completed"}}
+        tfl.acceptance_verdict = lambda sid: "pass"
+        clock = FakeClock()
+        out = tfl.follow_siblings(["s1"], max_s=60, sleep=clock.sleep, page=FakePage("x"), tag="LT-2", rediscover=rediscover, clock=clock, poll_s=15)
+        self.assertEqual((out["timed_out"], out["all_terminal"], out["stable_polls"], out["polls"]), (True, True, 5, 5))  # it kept going: 0, 15, 30, 45, 60 s
+        self.assertEqual(out["campaign_pending"], ["campaign lbl node b: pending", "campaign lbl status running"])
+        self.assertFalse(out["campaign_complete"])
+        self.assertTrue(any("campaign-incomplete: ['campaign lbl node b: pending'" in f for f in tfl.REPORT["findings"]), tfl.REPORT["findings"][-1:])
+        m = with_siblings("s1", siblings_followed=out)
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = [camp]
+        v = tfl.derive_result(m, [])
+        self.assertTrue(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertIn("campaign-incomplete", v["fail_reasons"])
+        self.assertIn("campaign not complete: campaign lbl node b: pending", v["fail_reasons"])
+        self.assertTrue(any("SIBLING_FOLLOW_MAX_S" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        # the same campaign judged WITHOUT a follow record (the after-grace snapshot alone): still not pass
+        m = with_siblings("s1", siblings_followed={"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}})
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = [camp]
+        v = tfl.derive_result(m, [])
+        self.assertEqual(v["result"], "fail")
+        self.assertIn("campaign-incomplete", v["fail_reasons"])
+
+    def test_a_node_delayed_beyond_two_polls_is_followed_when_it_runs_and_the_campaign_completes(self):
+        """The positive: node b stays `pending` for three polls (past the old two-poll certification),
+        then its run s2 appears in `node_run_id`, is followed to completion, and the campaign turns
+        `completed` — only then does the follow end, and the verdict is `pass`."""
+        polls = {"n": 0}
+
+        def rediscover():
+            polls["n"] += 1
+            n = polls["n"]
+            if n <= 3:
+                camp = {"id": "lbl", "status": "running", "node_status": {"a": "completed", "b": "pending"}, "def_nodes": ["a", "b"], "node_run_id": {"a": "s1"}, "attached_runs": []}
+                sibs = ["s1"]
+            elif n <= 5:
+                camp = {"id": "lbl", "status": "running", "node_status": {"a": "completed", "b": "running"}, "def_nodes": ["a", "b"], "node_run_id": {"a": "s1", "b": "s2"}, "attached_runs": []}
+                sibs = ["s1", "s2"]
+            else:
+                camp = {"id": "lbl", "status": "completed", "node_status": {"a": "completed", "b": "completed"}, "def_nodes": ["a", "b"], "node_run_id": {"a": "s1", "b": "s2"}, "attached_runs": []}
+                sibs = ["s1", "s2"]
+            return {"attributable_siblings": [{"id": s, "attributed_by": "listed in the campaign's node_run_id/attached_runs"} for s in sibs],
+                    "unrelated_new_runs": [], "campaign_for_label": [camp]}
+        s2 = iter(["running", "running", "completed", "completed"])
+        tfl.run_detail = lambda sid: {"session": {"status": "completed" if sid == "s1" else next(s2)}}
+        tfl.acceptance_verdict = lambda sid: "pass"
+        clock = FakeClock()
+        out = tfl.follow_siblings(["s1"], max_s=900, sleep=clock.sleep, page=FakePage("x"), tag="LT-2", rediscover=rediscover, clock=clock, poll_s=15)
+        # polls 1-3: s1 done but b pending → not complete; poll 4: s2 appears (stable 0); 5: stable 1; 6: stable 2, campaign completed → done
+        self.assertEqual((out["polls"], out["timed_out"], out["all_terminal"], out["campaign_pending"], out["campaign_complete"]), (6, False, True, [], True))
+        self.assertEqual(out["discovered"]["s2"]["poll"], 4)
+        m = with_siblings("s1", siblings_followed=out)
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = rediscover()["campaign_for_label"]
+        self.assertEqual(tfl.derive_result(m, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        src = inspect.getsource(tfl.follow_siblings)
+        self.assertIn("pending = campaign_pending(final_attribution)", src)
+        self.assertIn("if all_terminal and stable >= 2 and not pending:", src)
+        self.assertIn('"def_nodes": [n.get("node_id") for n in ((c.get("def") or {}).get("nodes") or [])', inspect.getsource(tfl._drive_intake))  # the live rediscovery records the denominator
+
+
+# ── Item 2: the verdict split — every sibling terminal WITH its own verdict ────────────────────
+
+
+class ResultSplit(Isolated):
+    def test_zero_siblings_is_fail_with_harness_ok(self):
+        v = tfl.derive_result(recorded_like(), [])
+        self.assertTrue(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertTrue(any("no attributable sibling runs" in r for r in v["fail_reasons"]), v["fail_reasons"])
+
+    def test_pass_requires_every_sibling_terminal_with_its_own_verdict(self):
+        m = with_siblings("s1", "s2", siblings_followed={"statuses": {"s1": "completed", "s2": "executing"}, "all_terminal": False,
+                                                          "acceptance": {"s1": "pass", "s2": None}})
+        v = tfl.derive_result(m, [])
+        self.assertTrue(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertTrue(any(r.startswith("sibling s2 did not reach a terminal state (status=executing)") for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertTrue(any(r.startswith("sibling s2 carries no acceptance verdict") for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertFalse(any("s1" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertEqual(m["measured"]["sibling_verdicts"], {
+            "s1": {"status": "completed", "verdict": "pass", "verdict_fetch_error": None, "discovered_late": False},
+            "s2": {"status": "executing", "verdict": None, "verdict_fetch_error": None, "discovered_late": False}})
+        m["measured"]["siblings_followed"] = {"statuses": {"s1": "completed", "s2": "completed"}, "all_terminal": True,
+                                              "acceptance": {"s1": "pass", "s2": "fail"}}
+        self.assertEqual(tfl.derive_result(m, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        self.assertEqual(m["measured"]["sibling_verdicts"]["s2"]["verdict"], "fail")
+
+    def test_unfollowed_or_verdictless_siblings_never_pass(self):
+        v = tfl.derive_result(with_siblings("s1"), [])
+        self.assertEqual(v["result"], "fail")
+        self.assertTrue(any("no acceptance verdict" in r for r in v["fail_reasons"]))
+        v = tfl.derive_result(with_siblings("s1", siblings_followed={"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": ""}}), [])
+        self.assertEqual(v["result"], "fail")
+
+    def test_a_verdict_fetch_error_is_not_a_verdict(self):
+        miss = tfl.FetchMiss("/runs/s1/acceptance", 500, "boom")
+        m = with_siblings("s1", siblings_followed={"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": miss}})
+        v = tfl.derive_result(m, [])
+        self.assertEqual(v["result"], "fail")
+        self.assertTrue(any("carries no acceptance verdict (the fetch failed: 500)" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertEqual(m["measured"]["sibling_verdicts"]["s1"]["verdict_fetch_error"]["status"], 500)
+
+    def test_campaign_intent_also_requires_a_registered_campaign(self):
+        m = with_siblings("s1", intent="campaign", siblings_followed={"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}})
+        v = tfl.derive_result(m, [])
+        self.assertEqual(v["result"], "fail")
+        self.assertTrue(any("campaignRegistered=false" in r for r in v["fail_reasons"]))
+        m["measured"]["campaign_registered"] = True
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = [{"id": "recon-abc-123", "status": "completed", "node_status": {}, "def_nodes": [], "attached_runs": []}]
+        self.assertEqual(tfl.derive_result(m, [])["result"], "pass")
+
+    def test_plan_heuristics_alone_never_spell_pass(self):
+        m = recorded_like()
+        m["measured"]["plan"] = {"names_real_files": True, "classifies": True}
+        self.assertEqual(tfl.derive_result(m, [])["result"], "fail")
+
+    def test_any_fetch_error_blocks_pass(self):
+        m = with_siblings("s1", siblings_followed={"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}},
+                          fetch_errors=[tfl.FetchMiss("/runs/run-1/units/2/output", 500, "boom")])
+        v = tfl.derive_result(m, [])
+        self.assertTrue(v["harness_ok"])  # infrastructure, not the harness's doing
+        self.assertEqual(v["result"], "fail")
+        self.assertTrue(any("evidence fetch error" in r and "/runs/run-1/units/2/output → 500" in r for r in v["fail_reasons"]), v["fail_reasons"])
+
+    def test_a_sibling_gate_wire_mismatch_fails_the_harness_and_the_verdict(self):
+        """Codex round 4's reproduction: a completed sibling WITH a verdict whose REJECT was wired
+        as `{approve: true}` (`wire_ok: false`) returned `{harness_ok: true, result: "pass",
+        fail_reasons: []}` — `derive_result` read only the parent's `measured.gates`."""
+        bad = {"ord": 2, "first": False, "prompt": "Deliver: open a PR against main", "decision": "reject", "status": 200,
+               "url": "/api/v1/runs/s1/gate", "body": {"approve": True}, "wire_ok": False,
+               "wire_check": "request body approve=True but the decision 'reject' requires approve=False"}
+        followed = {"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}, "gates": {"s1": [bad]}}
+        m = with_siblings("s1", siblings_followed=followed)
+        v = tfl.derive_result(m, [])
+        self.assertFalse(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertIn("sibling-gate-wire-mismatch", v["fail_reasons"])
+        self.assertTrue(any(r.startswith("sibling s1 gate ord=2 reject: request body approve=True") for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertNotIn("gate-wire-mismatch", v["fail_reasons"])  # the PARENT's gate was fine — the reason names the sibling
+        # the honest wire for the same reject → pass again (everything else about the sibling is in order)
+        good = {**bad, "body": {"approve": False}, "wire_ok": True, "wire_check": "POST /api/v1/runs/s1/gate for this run, body.approve == False, status 200"}
+        m = with_siblings("s1", siblings_followed={**followed, "gates": {"s1": [good]}})
+        self.assertEqual(tfl.derive_result(m, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        # sibling_gate_wire_failures, as a pure function: wire_ok=false; a recorded url that re-checks
+        # as another run's gate (even with wire_ok wrongly true); a non-2xx; and NOT an undecided card
+        self.assertEqual(tfl.sibling_gate_wire_failures(None), [])
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s1": [good]}}), [])
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s1": [{"ord": 1, "decision": "approve", "status": 200}]}}), [])  # fake_decide's minimal entry
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s1": [{"ord": 1, "decision": None, "status": None, "reason": "no SteeringGate card rendered"}]}}), [])
+        other = tfl.sibling_gate_wire_failures({"gates": {"s1": [{**good, "url": "/api/v1/runs/s9/gate"}]}})
+        self.assertEqual(len(other), 1)
+        self.assertIn("is not /api/v1/runs/s1/gate", other[0])
+        self.assertIn("sibling s1 gate ord=2 reject", other[0])
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s2": [{"ord": 1, "decision": "approve", "status": 409}]}}),
+                         ["sibling s2 gate ord=1 approve: status 409 is not 2xx"])
+        self.assertEqual(tfl.sibling_gate_wire_failures({"gates": {"s2": [{"ord": 1, "decision": "approve", "status": None}]}}),
+                         ["sibling s2 gate ord=1 approve: status None is not 2xx"])
+        # two siblings, one bad: harness_ok false, the good one is not named
+        m = with_siblings("s1", "s2", siblings_followed={"statuses": {"s1": "completed", "s2": "completed"}, "all_terminal": True,
+                                                          "acceptance": {"s1": "pass", "s2": "pass"}, "gates": {"s1": [good], "s2": [{**bad, "url": "/api/v1/runs/s2/gate"}]}})
+        v = tfl.derive_result(m, [])
+        self.assertFalse(v["harness_ok"])
+        self.assertTrue(any(r.startswith("sibling s2 gate") for r in v["fail_reasons"]))
+        self.assertFalse(any(r.startswith("sibling s1 gate") for r in v["fail_reasons"]))
+
+    def test_a_gate_wire_mismatch_is_a_harness_failure_but_older_entries_are_not_retroactively_failed(self):
+        g = {"ord": 1, "first": True, "decision": "reject", "status": 200, "wire_ok": False,
+             "wire_check": "request body approve=True but the decision 'reject' requires approve=False"}
+        v = tfl.derive_result(recorded_like(gates=[g]), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("gate-wire-mismatch", v["fail_reasons"])
+        self.assertTrue(any("approve=True" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertTrue(tfl.derive_result(recorded_like(), [])["harness_ok"])  # recorded_like's gate predates the field
+        self.assertTrue(tfl.derive_result(recorded_like(gates=[{**g, "wire_ok": True}]), [])["harness_ok"])
+
+    def test_harness_failures(self):
+        v = tfl.derive_result(recorded_like(wedged=True, final_status="executing"), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertEqual(v["result"], "wedged")
+        v = tfl.derive_result(recorded_like(gates=[]), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertIn("no gate was answered", v["fail_reasons"])
+        v = tfl.derive_result(recorded_like(gate_on_panel_card=False), [])
+        self.assertFalse(v["harness_ok"])
+        v = tfl.derive_result(recorded_like(post_status=400, run_ids=[]), [])
+        self.assertFalse(v["harness_ok"])
+        v = tfl.derive_result(recorded_like(post_status=201, run_ids=[], launch_answer_unexpected=True, launch_answer={"ok": True}), [])
+        self.assertFalse(v["harness_ok"])
+        self.assertTrue(any("neither runIds nor runId" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        blocked = {"scenario": "LT-1", "intent": "recon", "result": "blocked-preflight", "measured": {}}
+        v = tfl.derive_result(blocked, ["preflight never cleared for LT-1 after 20 min"])
+        self.assertEqual(v, {"harness_ok": False, "result": "blocked-preflight", "fail_reasons": ["preflight never cleared"]})
+
+    # ── Round 9 (MEDIUM): the launch's wire contract is ASSERTED, not just recorded ──────────
+
+    def test_codex_round9_contract_mismatches_are_harness_failures(self):
+        """Codex's fixture: everything else in order, `repoRefs: ["another-repo"]`, an unrelated
+        problem and ZERO `awaitingHuman` WS frames → `pass`. Now each is a named harness failure
+        (`contract_check`), a missing body / count fails closed, and the check is skipped only when
+        no launch was submitted (the pre-submit preflight already names that)."""
+        followed = {"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}}
+        ok = with_siblings("s1", siblings_followed=followed)
+        self.assertEqual(tfl.derive_result(ok, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        c = ok["measured"]["contract"]
+        self.assertEqual((c["repo_refs"], c["repo_refs_ok"], c["problem_ends_with_instruction"], c["intent_ok"], c["gate_frame_ok"], c["failures"]),
+                         ([tfl.TARGET_REPO], True, True, True, True, []))
+        self.assertEqual((c["intent"], c["intent_prefix"], c["panel_intent"], c["awaiting_human_frames_before_decision"]), ("recon", "Recon:", "recon", 1))
+        bad = with_siblings("s1", siblings_followed=followed, post_body={"problem": "unrelated", "repoRefs": ["another-repo"]}, awaitingHuman_over_ws=0)
+        v = tfl.derive_result(bad, [])
+        self.assertFalse(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        for label in CONTRACT_LABELS:
+            self.assertIn(label, v["fail_reasons"])
+        # each alone
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"problem": problem_for("recon"), "repoRefs": ["another-repo"]}), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-scope-mismatch"])
+        self.assertTrue(any(f"repoRefs=['another-repo']; the contract is [{tfl.TARGET_REPO!r}]" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        # a brief truncated by one char: the brief check fails and — the framing cannot be isolated from a body that does not end in
+        # the brief — so does the intent check (fail closed: an unverifiable framing is not the panel's composition)
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"problem": problem_for("recon")[:-1], "repoRefs": [tfl.TARGET_REPO]}), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-brief-mismatch", "launch-intent-mismatch"])
+        self.assertTrue(any("does not end with INSTRUCTION" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, awaitingHuman_over_ws=0), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["gate-frame-not-received"])
+        self.assertTrue(any("received over /ws before the gate decision: 0 (≥ 1 required)" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        # a missing body / count is a mismatch (fail closed); a raw-recorded body has no repoRefs; a bool is not a count
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body=None, awaitingHuman_over_ws=None), [])
+        for label in CONTRACT_LABELS:
+            self.assertIn(label, v["fail_reasons"])
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"raw": "problem=x", "parse_error": "Expecting value"}), [])
+        self.assertIn("launch-scope-mismatch", v["fail_reasons"])
+        self.assertIn("launch-brief-mismatch", v["fail_reasons"])
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, awaitingHuman_over_ws=True), [])
+        self.assertIn("gate-frame-not-received", v["fail_reasons"])
+        # not judged when the launch was never submitted — `preflight-at-submit` already fails the harness
+        v = tfl.derive_result(recorded_like(launch_aborted_by_preflight=["active runs: ['r1']"], post_status=None, run_ids=[], gate_on_panel_card=False,
+                                            gates=[], final_status=None, post_body=None, awaitingHuman_over_ws=None), [])
+        self.assertIn("preflight-at-submit", v["fail_reasons"])
+        self.assertFalse(any(r in CONTRACT_LABELS for r in v["fail_reasons"]), v["fail_reasons"])
+        self.assertEqual(v["harness_ok"], False)
+
+    def test_the_intent_must_match_the_scenario(self):
+        followed = {"statuses": {"s1": "completed"}, "all_terminal": True, "acceptance": {"s1": "pass"}}
+        served = [{"id": "recon-abc-123", "status": "completed", "node_status": {}, "def_nodes": [], "attached_runs": []}]
+        # LT-2 (campaign) whose panel posted the RECON framing
+        m = with_siblings("s1", intent="campaign", siblings_followed=followed, campaign_registered=True,
+                          post_body={"problem": problem_for("recon"), "repoRefs": [tfl.TARGET_REPO]}, panel_intent="campaign")
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = served
+        v = tfl.derive_result(m, [])
+        self.assertFalse(v["harness_ok"])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-intent-mismatch"])
+        self.assertTrue(any("requires the 'New test:' framing" in r and "the problem opens 'Recon: survey" in r for r in v["fail_reasons"]), v["fail_reasons"])
+        # the campaign framing for the campaign intent: clear
+        m = with_siblings("s1", intent="campaign", siblings_followed=followed, campaign_registered=True, panel_intent="campaign")
+        m["measured"]["siblings_after_grace"]["campaign_for_label"] = served
+        self.assertEqual(tfl.derive_result(m, []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        # the right framing, but the DOM's data-intent says otherwise
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, panel_intent="campaign"), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-intent-mismatch"])
+        # no data-intent recorded (the three recorded runs): judged on the framing alone
+        self.assertEqual(tfl.derive_result(with_siblings("s1", siblings_followed=followed, panel_intent=None), []), {"harness_ok": True, "result": "pass", "fail_reasons": []})
+        # the right words without the blank line before the brief: not the panel's composition
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"problem": "Recon: x " + tfl.INSTRUCTION, "repoRefs": [tfl.TARGET_REPO]}), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-intent-mismatch"])
+        # the brief alone: no framing at all — the brief check and the intent check both fail
+        v = tfl.derive_result(with_siblings("s1", siblings_followed=followed, post_body={"problem": tfl.INSTRUCTION, "repoRefs": [tfl.TARGET_REPO]}), [])
+        self.assertEqual([r for r in v["fail_reasons"] if r in CONTRACT_LABELS], ["launch-brief-mismatch", "launch-intent-mismatch"])
+        self.assertEqual(tfl.INTENT_PREFIX, {"recon": "Recon:", "campaign": "New test:"})
+
+    def test_the_ws_gate_frame_is_sampled_before_the_decision_and_the_panel_intent_is_recorded(self):
+        src = inspect.getsource(tfl._drive_intake)
+        i_ws = src.index('m["measured"]["awaitingHuman_over_ws"] = len(ws_awaiting)')
+        i_decide = src.index("decide_gate_on_card(page, card, run_id=run_id")
+        self.assertLess(i_ws, i_decide)                                                  # counted BEFORE the first gate is decided
+        self.assertIn('m["measured"]["panel_intent"] = panel.get_attribute("data-intent")', src)
+        self.assertLess(src.index('m["measured"]["panel_intent"]'), src.index('testing-launch-submit"]\').click()'))
+        self.assertIn('x["contract"] = contract', inspect.getsource(tfl.derive_result))  # recorded for the report
+
+    def test_lt1_and_lt3_must_post_identical_briefs(self):
+        a = recorded_like()
+        a["scenario"] = "LT-1"
+        c = recorded_like()
+        c.update({"scenario": "LT-3", "harness_ok": True, "result": "pass", "fail_reasons": []})
+        for m in (a, c):
+            m["measured"].pop("plan")   # no plan: the consistency block comes from the briefs alone
+        tfl.REPORT["scenarios"] = {"LT-1": a, "LT-3": c}
+        tfl.analyze({"LT-1": a, "LT-3": c})
+        cmp = c["consistency_vs_LT-1"]
+        self.assertEqual((cmp["problem_identical"], cmp["problem_chars"]), (True, [len(problem_for("recon"))] * 2))
+        self.assertEqual(cmp["problem_sha256"][0], cmp["problem_sha256"][1])
+        self.assertEqual((c["harness_ok"], c["result"], c["fail_reasons"]), (True, "pass", []))   # identical: untouched
+        c["measured"]["post_body"] = {"problem": problem_for("recon").replace("survey", "Survey", 1), "repoRefs": [tfl.TARGET_REPO]}
+        n = len(tfl.REPORT["findings"])
+        tfl.analyze({"LT-1": a, "LT-3": c})
+        self.assertFalse(c["consistency_vs_LT-1"]["problem_identical"])
+        self.assertEqual((c["harness_ok"], c["result"]), (False, "fail"))
+        self.assertIn("brief-not-identical", c["fail_reasons"])
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 1)
+        self.assertIn("brief-not-identical", tfl.REPORT["findings"][-1])
+        self.assertEqual(tfl.identical_briefs({"measured": {}}, {"measured": {}})["problem_identical"], False)   # nothing posted is not "identical"
+
+
+# ── Item 6: attribution by relationship only — never by the brief ─────────────────────────────
+
+
+class SiblingAttribution(Isolated):
+    """Attribution is STRUCTURAL only (codex round 9, HIGH): membership in the launch's campaign,
+    `campaign_id` / `group_label` == its label, or an explicit parent field naming our run. A
+    `problem` that mentions our run id, the label or the brief is `unrelated` with reason
+    `text-mention-only` — round 9's probe ("Investigate why d293f4d7-… failed") was attributed
+    through that text and its gate then approved by this harness. `TEST_PROBLEM_PREFIX` is gone:
+    a marker in the problem was still a text mention."""
+    LABEL = "recon-abc-123"
+
+    def run_(self, rid, problem="something else", **s):
+        return {"session": {"id": rid, "status": "completed", "problem": problem, **s}}
+
+    def attribute(self, runs, camps, **kw):
+        return tfl.attribute_siblings(runs, camps, **kw)
+
+    def test_structural_relationship_not_mere_appearance_and_never_text(self):
+        label = self.LABEL
+        runs = [
+            self.run_("old"),                                     # existed before → ignored
+            self.run_("own"),                                     # the launched run → ignored
+            self.run_("stranger", problem="someone else's recon"),  # appeared, unrelated
+            self.run_("by-campaign", campaign_id=label),
+            self.run_("by-group", group_label=label),
+            self.run_("by-parent", parent_run_id="own"),
+            self.run_("by-problem-id", problem="Execute S-1 from run own"),          # TEXT: our id → unrelated (round 9)
+            self.run_("by-problem-label", problem=f"campaign {label} scenario 2"),   # TEXT: the label → unrelated
+            self.run_(f"{label}:wicked-studio:a0"),               # a DAG node: linked via the campaign's node_run_id, not its id shape
+            self.run_("attached"),                                # linked via the campaign's attached_runs[].runId
+            self.run_("by-brief", problem=tfl.INSTRUCTION),       # TEXT: the brief → unrelated
+        ]
+        camps = [{"id": label, "status": "running", "node_run_id": {"wicked-studio": f"{label}:wicked-studio:a0"},
+                  "attached_runs": [{"runId": "attached", "status": "completed"}]}]
+        out = self.attribute(runs, camps, before={"old"}, own=["own"], label=label)
+        self.assertEqual([s["id"] for s in out["attributable_siblings"]],
+                         ["by-campaign", "by-group", "by-parent", f"{label}:wicked-studio:a0", "attached"])
+        self.assertEqual([(u["id"], u["reason"]) for u in out["unrelated_new_runs"]],
+                         [("stranger", "no-structural-relationship"), ("by-problem-id", "text-mention-only"),
+                          ("by-problem-label", "text-mention-only"), ("by-brief", "text-mention-only")])
+        self.assertTrue(all("attributed_by" in s for s in out["attributable_siblings"]))
+        self.assertEqual(out["attributable_siblings"][4]["attributed_by"], "listed in the campaign's node_run_id/attached_runs")
+        self.assertEqual(out["structural_linkage"],
+                         {"campaign_served": True, "campaign_linked_run_ids": ["attached", f"{label}:wicked-studio:a0"],
+                          "structural_fields_on_new_runs": ["campaign_id", "group_label", "parent_run_id"], "available": True})
+
+    def test_codex_round9_probe_a_text_mention_is_unrelated_and_never_gated(self):
+        """Codex's reproduction: a fake unrelated run saying "Investigate why d293f4d7-… failed"
+        was attributed (its problem carried the launched run id) and its gate then approved,
+        `wire_ok=true`. Now: `unrelated_new_runs[]` with reason `text-mention-only`, never in the
+        followed set, no decide call — through the real `follow_siblings` rediscovery loop."""
+        own = "d293f4d7-1e45-4346-809a-d6f2107c6b18"
+        label = "recon-mttmyh2a-c635a60c"
+        probe = self.run_("probe", problem=f"Investigate why {own} failed", status="awaiting_human")
+        out = self.attribute([probe], [], before=set(), own=[own], label=label)
+        self.assertEqual(out["attributable_siblings"], [])
+        self.assertEqual(out["unrelated_new_runs"], [{"id": "probe", "status": "awaiting_human", "problem": f"Investigate why {own} failed", "reason": "text-mention-only"}])
+        self.assertEqual(out["structural_linkage"], {"campaign_served": False, "campaign_linked_run_ids": [], "structural_fields_on_new_runs": [], "available": False})
+        # the label in the problem, a marker-style problem, the brief, a prefixed brief: all text
+        for problem in (f"under campaign {label}", f"PREFIX Execute S-1 from run {own}", tfl.INSTRUCTION, f"PREFIX {tfl.INSTRUCTION}"):
+            o = self.attribute([self.run_("t", problem=problem)], [], before=set(), own=[own], label=label)
+            self.assertEqual(o["attributable_siblings"], [], problem)
+            self.assertEqual(o["unrelated_new_runs"][0]["reason"], "text-mention-only", problem)
+        # through the follow: the probe is rediscovered on every poll as UNRELATED — never followed, never decided
+        saved = tfl.run_detail, tfl.acceptance_verdict
+        decided: list[str] = []
+
+        def decide(page, sid, **kw):
+            decided.append(sid)
+            return {"ord": 1, "decision": "approve", "status": 200}
+        try:
+            tfl.run_detail = lambda sid: {"session": {"status": "completed"}}
+            tfl.acceptance_verdict = lambda sid: "pass"
+            clock = FakeClock()
+            followed = tfl.follow_siblings(["s1"], max_s=600, sleep=clock.sleep, page=FakePage("x"), tag="LT-1", clock=clock, decide=decide,
+                                           rediscover=lambda: self.attribute([self.run_("s1", campaign_id="lbl"), probe], [], before=set(), own=[own], label="lbl"))
+        finally:
+            tfl.run_detail, tfl.acceptance_verdict = saved
+        self.assertEqual((sorted(followed["statuses"]), decided, followed["discovered"], followed["timed_out"]), (["s1"], [], {}, False))
+        self.assertEqual([u["id"] for u in followed["final_attribution"]["unrelated_new_runs"]], ["probe"])
+
+    def test_a_campaign_attached_run_is_a_sibling_and_a_served_campaign_is_structural_even_when_empty(self):
+        camps = [{"id": "lbl", "status": "running", "node_run_id": {}, "attached_runs": [{"runId": "att-1", "status": "running"}]}]
+        out = self.attribute([self.run_("att-1"), self.run_("other")], camps, before=set(), own=["own"], label="lbl")
+        self.assertEqual([s["id"] for s in out["attributable_siblings"]], ["att-1"])
+        self.assertEqual(out["attributable_siblings"][0]["attributed_by"], "listed in the campaign's node_run_id/attached_runs")
+        self.assertEqual([(u["id"], u["reason"]) for u in out["unrelated_new_runs"]], [("other", "no-structural-relationship")])
+        # the campaign served with NO members: linkage is available (membership readable) — zero siblings is a real zero
+        out = self.attribute([self.run_("other")], [{"id": "lbl", "status": "completed", "node_run_id": {}, "attached_runs": []}], before=set(), own=["own"], label="lbl")
+        self.assertEqual(out["structural_linkage"], {"campaign_served": True, "campaign_linked_run_ids": [], "structural_fields_on_new_runs": [], "available": True})
+        # no campaign served, but a new run carries a structural field (pointing elsewhere): the DTO exposes linkage
+        out = self.attribute([self.run_("other", group_label="someone-elses")], [], before=set(), own=["own"], label="lbl")
+        self.assertEqual((out["attributable_siblings"], out["structural_linkage"]["available"], out["structural_linkage"]["structural_fields_on_new_runs"]),
+                         ([], True, ["group_label"]))
+        # another campaign served, nothing on the new run: unavailable for THIS launch
+        out = self.attribute([self.run_("other")], [{"id": "another-campaign", "status": "running"}], before=set(), own=["own"], label="lbl")
+        self.assertEqual(out["structural_linkage"], {"campaign_served": False, "campaign_linked_run_ids": [], "structural_fields_on_new_runs": [], "available": False})
+
+    def test_no_structural_attribution_in_the_verdict(self):
+        """Zero siblings AND no structural linkage exposed ⇒ `no-structural-attribution` (honest: the
+        daemon gave nothing to attribute by — crew#473); zero siblings under a SERVED campaign ⇒ the
+        plain "no attributable sibling runs" (a real zero). Text-mention-only runs are counted, never attributed."""
+        none = {"attributable_siblings": [],
+                "unrelated_new_runs": [{"id": "probe", "status": "completed", "problem": "Investigate why run-1 failed", "reason": "text-mention-only"}],
+                "campaign_for_label": [],
+                "structural_linkage": {"campaign_served": False, "campaign_linked_run_ids": [], "structural_fields_on_new_runs": [], "available": False}}
+        v = tfl.derive_result(recorded_like(siblings_after_grace=none), [])
+        self.assertTrue(v["harness_ok"])
+        self.assertEqual(v["result"], "fail")
+        self.assertIn("no-structural-attribution", v["fail_reasons"])
+        self.assertTrue(any(r.startswith("no attributable sibling runs") and r.endswith("(1 unrelated new runs ignored, 1 of them text-mention-only)") for r in v["fail_reasons"]), v["fail_reasons"])
+        served = {**none, "unrelated_new_runs": [],
+                  "campaign_for_label": [{"id": "recon-abc-123", "status": "completed", "node_status": {}, "def_nodes": [], "attached_runs": []}],
+                  "structural_linkage": {**none["structural_linkage"], "campaign_served": True, "available": True}}
+        v = tfl.derive_result(recorded_like(siblings_after_grace=served), [])
+        self.assertEqual(v["result"], "fail")
+        self.assertNotIn("no-structural-attribution", v["fail_reasons"])
+        self.assertTrue(any(r.startswith("no attributable sibling runs") and r.endswith("(0 unrelated new runs ignored)") for r in v["fail_reasons"]), v["fail_reasons"])
+        # the live finding names the missing linkage
+        self.assertIn("(no-structural-attribution)", inspect.getsource(tfl._drive_intake))
+
+    def test_identical_brief_is_unrelated(self):
+        runs = [self.run_("twin", problem=tfl.INSTRUCTION), self.run_("prefixed-twin", problem=f"PREFIX {tfl.INSTRUCTION}")]
+        out = self.attribute(runs, [], before=set(), own=["own"], label="lbl")
+        self.assertEqual(out["attributable_siblings"], [])
+        self.assertEqual([(u["id"], u["reason"]) for u in out["unrelated_new_runs"]], [("twin", "text-mention-only"), ("prefixed-twin", "text-mention-only")])
+
+    def test_text_attribution_is_gone_from_the_code(self):
+        self.assertFalse(hasattr(tfl, "TEST_PROBLEM_PREFIX"))                        # the marker was still a text mention
+        self.assertNotIn("brief", inspect.signature(tfl.attribute_siblings).parameters)
+        src = inspect.getsource(tfl.attribute_siblings)
+        self.assertNotIn("session.problem carries", src)
+        self.assertIn('"text-mention-only"', src)
+        live = inspect.getsource(tfl._drive_intake)
+        self.assertNotIn("brief=INSTRUCTION", live)
+        self.assertIn('ids = [s["id"] for s in sib["attributable_siblings"]]', live)   # only attributable siblings are ever followed / gated
+        self.assertIn("follow_siblings(ids, page=page", live)
+
+    def test_unrelated_run_is_not_a_sibling(self):
+        out = self.attribute([self.run_("new-1")], [], before=set(), own=["own"], label="lbl")
+        self.assertEqual(out["attributable_siblings"], [])
+        self.assertEqual((out["unrelated_new_runs"][0]["id"], out["unrelated_new_runs"][0]["reason"]), ("new-1", "no-structural-relationship"))
+
+
+# ── Item 9: typed evidence-fetch misses ───────────────────────────────────────────────────────
+
+
+class EvidenceFetch(Isolated):
+    def setUp(self):
+        super().setUp()
+        self._saved_http = tfl.http_json
+        self.sink: list = []
+        tfl.set_fetch_sink(self.sink)
+
+    def tearDown(self):
+        tfl.http_json = self._saved_http
+        super().tearDown()
+
+    def answer(self, status, body):
+        tfl.http_json = lambda method, url, timeout=30: (status, body)
+
+    def test_unit_output_distinguishes_absent_from_failed(self):
+        self.answer(200, {"output": "the plan"})
+        self.assertEqual(tfl.unit_output("r", 1), "the plan")
+        self.answer(200, {"output": None})
+        self.assertIsNone(tfl.unit_output("r", 1))          # ABSENT evidence
+        self.answer(204, None)
+        self.assertIsNone(tfl.unit_output("r", 1))
+        self.assertEqual(self.sink, [])                       # nothing recorded for absence
+        self.answer(500, {"error": "boom"})
+        miss = tfl.unit_output("r", 2)
+        self.assertIsInstance(miss, tfl.FetchMiss)            # FAILED fetch
+        self.assertEqual((miss["kind"], miss["endpoint"], miss["status"]), ("fetch-error", "/runs/r/units/2/output", 500))
+        self.assertIn("boom", miss["error"])
+        self.assertEqual(self.sink, [miss])
+        self.assertTrue(any("evidence fetch failed: GET /runs/r/units/2/output → 500" in f for f in tfl.REPORT["findings"]))
+        self.assertEqual(json.loads(json.dumps(miss))["status"], 500)  # serializes as plain JSON
+
+    def test_unit_output_present_but_not_a_string_is_a_typed_miss_not_absence(self):
+        """Copilot on 5ca59f0 (`unit_output`, :349-353): a 2xx `{output: <number|object>}` was
+        folded into "absent" (None) — schema drift or corruption masked as a normal no-output case,
+        unlike `run_events`/`acceptance`, which record an unexpected 2xx shape as a typed miss."""
+        for out, tname in ((7, "int"), ({"a": 1}, "dict"), ([1, 2], "list"), (True, "bool"), (1.5, "float")):
+            self.answer(200, {"output": out})
+            miss = tfl.unit_output("r", 3)
+            self.assertIsInstance(miss, tfl.FetchMiss, repr(out))
+            self.assertEqual((miss["endpoint"], miss["status"]), ("/runs/r/units/3/output", 200))
+            self.assertIn(f"unexpected output type: {tname}", miss["error"])
+        self.assertEqual(len(self.sink), 5)
+        self.assertTrue(any("unexpected output type: int" in f for f in tfl.REPORT["findings"]))
+        # absent stays absent — and records nothing
+        del self.sink[:]
+        for body in ({"output": None}, {"output": ""}, {}, None):
+            self.answer(200, body)
+            self.assertIsNone(tfl.unit_output("r", 3), repr(body))
+        self.answer(204, None)
+        self.assertIsNone(tfl.unit_output("r", 3))
+        self.assertEqual(self.sink, [])
+        self.answer(200, {"output": "the plan"})
+        self.assertEqual(tfl.unit_output("r", 3), "the plan")
+        self.answer(200, "a bare string body")   # not the contract's shape either
+        self.assertIsInstance(tfl.unit_output("r", 3), tfl.FetchMiss)
+        self.assertIn("unexpected body shape", self.sink[-1]["error"])
+
+    def test_acceptance_and_verdict(self):
+        self.answer(200, {"acceptance": {"verdict": "pass"}})
+        self.assertEqual(tfl.acceptance("r")["acceptance"]["verdict"], "pass")
+        self.assertEqual(tfl.acceptance_verdict("r"), "pass")
+        self.answer(200, {"acceptance": {"required": False}})
+        self.assertIsNone(tfl.acceptance_verdict("r"))
+        self.answer(200, None)
+        self.assertIsNone(tfl.acceptance("r"))
+        self.answer(503, {"error": "down"})
+        self.assertIsInstance(tfl.acceptance("r"), tfl.FetchMiss)
+        self.assertIsInstance(tfl.acceptance_verdict("r"), tfl.FetchMiss)
+        self.assertEqual([e["endpoint"] for e in self.sink], ["/runs/r/acceptance", "/runs/r/acceptance"])
+
+    def test_run_detail_and_events_raise_a_typed_error_after_recording(self):
+        self.answer(500, {"error": "boom"})
+        with self.assertRaises(tfl.FetchError) as cm:
+            tfl.run_detail("r")
+        self.assertEqual(cm.exception.miss["endpoint"], "/runs/r")
+        self.assertEqual(cm.exception.miss["status"], 500)
+        self.answer(0, {"error": "URLError: connection refused"})  # transport failure = status 0
+        with self.assertRaises(tfl.FetchError) as cm:
+            tfl.run_events("r")
+        self.assertEqual(cm.exception.miss["status"], 0)
+        self.assertIn("connection refused", cm.exception.miss["error"])
+        self.answer(200, {"nope": True})
+        with self.assertRaises(tfl.FetchError):
+            tfl.run_detail("r")  # a 2xx without a `run` object is a typed miss too
+        self.assertEqual(len(self.sink), 3)
+
+    def test_run_events_and_listings_turn_unexpected_2xx_shapes_into_typed_misses(self):
+        """Copilot on 9b1bc96 (`run_events`, :296): a 204 decoded as None, or any non-list/dict
+        shape, raised `AttributeError` and crashed the harness without a typed miss."""
+        self.answer(200, {"events": [{"type": "x"}]})
+        self.assertEqual(tfl.run_events("r"), [{"type": "x"}])
+        self.answer(200, [{"type": "y"}])
+        self.assertEqual(tfl.run_events("r"), [{"type": "y"}])
+        for status, body in ((204, None), (200, None), (200, {"nope": True}), (200, {"events": None}), (200, "a string"), (200, 7)):
+            with self.assertRaises(tfl.FetchError, msg=repr(body)) as cm:
+                self.answer(status, body)
+                tfl.run_events("r")
+            self.assertEqual((cm.exception.miss["endpoint"], cm.exception.miss["status"]), ("/runs/r/events", 200))
+            self.assertIn("no events list", cm.exception.miss["error"])
+        self.answer(200, {"runs": [{"session": {"id": "a"}}]})
+        self.assertEqual(tfl.list_runs(), [{"session": {"id": "a"}}])
+        self.answer(200, {"campaigns": []})
+        self.assertEqual(tfl.list_campaigns(), [])
+        for body in (None, [], {"runs": None}, {"campaigns": "x"}, "str"):
+            with self.assertRaises(tfl.FetchError, msg=repr(body)):
+                self.answer(200, body)
+                tfl.list_runs()
+            with self.assertRaises(tfl.FetchError, msg=repr(body)):
+                self.answer(200, body)
+                tfl.list_campaigns()
+        self.assertEqual(self.sink[-1]["endpoint"], "/campaigns")
+        self.assertEqual(self.sink[-2]["endpoint"], "/runs")
+        self.assertEqual(len(self.sink), 6 + 10)
+
+    def test_one_finding_per_endpoint_and_status(self):
+        self.answer(500, {"error": "boom"})
+        n = len(tfl.REPORT["findings"])
+        tfl.unit_output("r", 1)
+        tfl.unit_output("r", 1)
+        self.assertEqual(len(self.sink), 2)
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 1)
+
+    def test_transport_errors_are_status_0(self):
+        saved = tfl.urllib.request.urlopen
+        try:
+            def refuse(req, timeout=None):
+                raise urllib.error.URLError("connection refused")
+            tfl.urllib.request.urlopen = refuse
+            status, body = self._saved_http("GET", "http://127.0.0.1:1/api/v1/health")
+        finally:
+            tfl.urllib.request.urlopen = saved
+        self.assertEqual(status, 0)
+        self.assertIn("URLError", body["error"])
+
+    def test_scenario_sink_and_plan_section_split(self):
+        src = inspect.getsource(tfl._drive_intake)
+        self.assertIn('m["measured"]["missing_outputs"] = missing_outputs', src)
+        self.assertIn('m["measured"]["failed_fetches"] = failed_fetches', src)
+        self.assertIn('set_fetch_sink(m["measured"].setdefault("fetch_errors", []))', inspect.getsource(tfl.drive_intake))
+
+
+class Scrub(unittest.TestCase):
+    def test_home_fold(self):
+        home = os.path.expanduser("~")
+        self.assertEqual(tfl.scrub(f"root {home}/Projects/x and {home}/y"), "root ~/Projects/x and ~/y")
+
+    def test_toolchain_elision(self):
+        text = "## Skills\n- ~/.pi/agent/skills/a/SKILL.md\n- ~/.pi/agent/skills/b/SKILL.md\n- `~/.claude/skills/c`\nkeep me\n~/.codex/x.md"
+        out = tfl.scrub(text)
+        self.assertEqual(out, "## Skills\n- … (3 local toolchain paths elided)\nkeep me\n- … (1 local toolchain path elided)")
+        self.assertNotIn("~/.pi", out)
+        self.assertNotIn("~/.claude", out)
+
+    def test_idempotent(self):
+        text = f"{os.path.expanduser('~')}/a\n- ~/.pi/agent/skills/x\n- ~/.pi/agent/skills/y\nplain"
+        once = tfl.scrub(text)
+        self.assertEqual(tfl.scrub(once), once)
+
+
+# ── Item 8: plan measurement over scenarios only ──────────────────────────────────────────────
+
+FAKE_PATHS = {"src/App.tsx", "src/store/gates.ts", "src/hooks/useEventStream.ts", "src/a/index.ts", "src/b/index.ts",
+              "tests/needsYou.test.ts", "e2e/studio_standalone_test.py"}
+FAKE_INDEX = (FAKE_PATHS, {p.rsplit("/", 1)[-1]: [q for q in FAKE_PATHS if q.rsplit("/", 1)[-1] == p.rsplit("/", 1)[-1]] for p in FAKE_PATHS})
+
+
+class AnalyzePlan(unittest.TestCase):
+    PLAN = "\n".join([
+        "## Test plan",
+        "- ~/.pi/agent/skills/wicked-testing-scenario-executor/SKILL.md",
+        "- ~/.claude/skills/wicked-testing-test-designer",
+        "- S-1 verify /ws awaitingHuman frame opens the gate in `App.tsx`",
+        "- 1.2 `[TOOL]` Gap check: `gates.ts` store parsing",
+        "- A specific set of files you want scenario coverage for",
+        "**Key gap found**: `e2e/studio_standalone_test.py` should be refreshed",
+        "### Table of contents",
+        "1. Scenario overview",
+        "| # | Scenario | Class |",
+        "|---|---|---|",
+        "| 1 | WS reconnect/backoff in `useEventStream.ts` | Deterministic |",
+        "| 2 | Needs-you queue ordering | Governed agent run — `needsYou.test.ts` |",
+        "| Layer | File |",
+        "|---|---|",
+        "| Socket lifecycle | src/hooks/useEventStream.ts |",
+        "| npm test | 2442 tests green |",
+    ])
+
+    def test_scenario_line_extraction(self):
+        titles, ids = tfl.scenario_items(self.PLAN)
+        self.assertIn("verify /ws awaitingHuman frame opens the gate in App.tsx", titles)
+        self.assertIn("Gap check: gates.ts store parsing", titles)
+        self.assertIn("WS reconnect/backoff in useEventStream.ts", titles)   # plan-table row (Scenario column)
+        self.assertIn("Needs-you queue ordering", titles)                    # plan-table row without a verb in the title
+        self.assertEqual(ids, ["1.2", "S-1"])
+        joined = "\n".join(titles)
+        self.assertNotIn("npm test", joined)              # an execution summary is a RESULT, not a scenario
+        self.assertNotIn("SKILL.md", joined)              # a toolchain path is NOT a scenario
+        self.assertNotIn("wicked-testing", joined)
+        self.assertNotIn("Table of contents", joined)     # heading noise dropped
+        self.assertNotIn("Scenario overview", joined)     # TOC item: no id, no verb
+        self.assertNotIn("Key gap found", joined)         # bold-label paragraph is not an item
+        self.assertNotIn("Socket lifecycle", joined)      # survey-table row: no verb in the title cell
+        self.assertNotIn("files you want scenario coverage", joined)
+        records, excluded = tfl.scenario_records(self.PLAN)
+        self.assertEqual(excluded, {"execution_section_lines": 0, "execution_summary_items": 1})
+        self.assertIn("[TOOL]", next(r["raw"] for r in records if r["id"] == "1.2"))  # raw keeps the class tag
+
+    def test_analyze_plan_reports_canonical_files(self):
+        plan = tfl.analyze_plan(self.PLAN, FAKE_INDEX)
+        self.assertEqual(plan["canonical_files"], ["e2e/studio_standalone_test.py", "src/App.tsx", "src/hooks/useEventStream.ts", "src/store/gates.ts"])
+        self.assertNotIn("tests/needsYou.test.ts", plan["canonical_files"])  # tests/ is not a source root
+        self.assertTrue(plan["names_real_files"])
+        self.assertEqual(plan["scenario_ids"], ["1.2", "S-1"])
+        self.assertEqual(len(plan["scenario_lines"]), 4)
+        self.assertTrue(plan["classifies"])  # Deterministic (row 1) + Governed agent run (row 2) — in the plan table
+        self.assertEqual(plan["surfaces"], {"ws_events": True, "api_routes": False, "cli": False, "ui_pages": False})
+
+    def test_no_plan_available_is_not_a_plan(self):
+        text = ("No plan available.\n\nThe brief asked for: the live /ws CoreEvent fold (awaitingHuman, unitPlanned, "
+                "sessionCompleted frames), the /api/v1 routes (runs, campaigns, testing/recon), its CLI entry points (npm run), "
+                "and its UI pages (/testing/campaigns, /runs/:id, /steering, the home deck) — deterministic tool check vs "
+                "governed agent run.\n\nFiles: `src/App.tsx`, `src/store/gates.ts`, `src/hooks/useEventStream.ts`\n")
+        plan = tfl.analyze_plan(text, FAKE_INDEX)
+        self.assertEqual(len(plan["canonical_files"]), 3)
+        self.assertFalse(plan["names_real_files"])  # three real files but ZERO scenarios
+        self.assertEqual(plan["scenario_lines"], [])
+        self.assertEqual(plan["scenario_ids"], [])
+        self.assertFalse(plan["classifies"])
+        self.assertEqual(plan["surfaces"], {"ws_events": False, "api_routes": False, "cli": False, "ui_pages": False})
+
+    def test_execution_verdict_sections_and_summaries_are_excluded(self):
+        text = "\n".join([
+            "## unit 2",
+            "- `npm test` → 237 files / 2442 tests green",
+            "- Tests: 12 passed, 0 failed for the /ws fold",
+            "- ✓ verify the gate renders on /runs/:id",
+            "- PASS verify /api/v1 routes",
+            "## Execution verdict — wicked-studio test plan",
+            "| Check | Result |",
+            "|---|---|",
+            "| npm run typecheck | clean |",
+            "### Outstanding gaps",
+            "- S-9 verify the /steering page renders",
+            "## unit 3",
+            "| # | Scenario | Class |",
+            "|---|---|---|",
+            "| 1 | verify /ws awaitingHuman opens the gate | Deterministic tool check |",
+            "| 2 | drive a real run end to end on /runs/:id | Governed agent run |",
+        ])
+        records, excluded = tfl.scenario_records(text)
+        # round 6: `✓ verify …` and `PASS verify …` carry a scenario verb — proposed checks, whatever else they say (the verb wins)
+        self.assertEqual([r["title"] for r in records], ["✓ verify the gate renders on /runs/:id", "PASS verify /api/v1 routes",
+                                                         "verify /ws awaitingHuman opens the gate", "drive a real run end to end on /runs/:id"])
+        self.assertEqual(excluded["execution_summary_items"], 2)  # `npm test` → … green (command + tally, no verb); Tests: 12 passed … (a label + a tally)
+        self.assertEqual(excluded["execution_section_lines"], 6)  # heading + table (3) + sub-heading + S-9 bullet
+        plan = tfl.analyze_plan(text, FAKE_INDEX)
+        self.assertTrue(plan["classifies"])
+        self.assertEqual(plan["surfaces"], {"ws_events": True, "api_routes": True, "cli": False, "ui_pages": True})
+        self.assertEqual(plan["excluded"], excluded)
+
+    def test_a_proposed_command_is_a_scenario_only_a_result_marker_excludes(self):
+        """Codex round 3: a plan-table row proposing "Run npm run typecheck to verify CLI behavior"
+        produced zero scenarios because the command alone matched the old regex. A line is a RESULT
+        only when it carries a result structure IN A VERB-LESS CELL (round 6 — this fixture used to
+        enshrine "verify the CLI exits with exit code 0" as a result, the misclassification codex
+        named); a fixture count ("21 failed runs ⇒ …", LT-1 unit 1 row 2) is not a result."""
+        table = "\n".join([
+            "| # | Scenario | Class |",
+            "|---|---|---|",
+            "| 1 | Run npm run typecheck to verify CLI behavior | Deterministic |",          # PROPOSED → scenario
+            "| 2 | Run `npm test` and `npm run lint` on the CLI | Deterministic |",           # PROPOSED → scenario
+            "| 3 | Contradiction guard: 21 failed runs ⇒ calm copy cannot render | Deterministic |",  # fixture count → scenario
+            "| 4 | npm test → 237 files / 2442 tests green | Deterministic |",                 # RESULT (command + tally + colour, no verb)
+            "| 5 | verify /ws fold: 12 passed, 0 failed | Deterministic |",                     # verb → scenario (round 6; was a RESULT on the count)
+            "| 6 | verify the CLI exits with exit code 0 | Deterministic |",                    # verb → scenario (round 6; was a RESULT on the exit code)
+            "| 7 | ✓ verify /api/v1/runs answers 200 | Deterministic |",                       # verb → scenario (round 6; was a RESULT on the tick)
+            "| 8 | PASS — verify /steering renders | Deterministic |",                          # verb → scenario (round 6; was a RESULT on the verdict word)
+            "| 9 | verify the page rendered the required credentials | Deterministic |",        # 'red' inside words is not a marker
+            "| 10 | check 2442 passed in 69s on the CLI | Deterministic |",                     # verb → scenario (round 6; was a RESULT on the tally)
+            "| 11 | 2442 passed in 69s | Deterministic |",                                      # RESULT (a summary tally, no verb)
+        ])
+        records, excluded = tfl.scenario_records(table)
+        titles = [r["title"] for r in records]
+        self.assertEqual(titles, ["Run npm run typecheck to verify CLI behavior", "Run npm test and npm run lint on the CLI",
+                                  "Contradiction guard: 21 failed runs ⇒ calm copy cannot render",
+                                  "verify /ws fold: 12 passed, 0 failed", "verify the CLI exits with exit code 0",
+                                  "✓ verify /api/v1/runs answers 200", "PASS — verify /steering renders",
+                                  "verify the page rendered the required credentials", "check 2442 passed in 69s on the CLI"])
+        self.assertEqual(excluded, {"execution_section_lines": 0, "execution_summary_items": 2})
+        plan = tfl.analyze_plan(table, FAKE_INDEX)
+        self.assertTrue(plan["surfaces"]["cli"])  # the proposed typecheck/test/lint checks now count towards LT-4's CLI surface
+        self.assertIn("the verb wins", plan["measured_over"])
+        self.assertEqual(plan["measured_over"], tfl.MEASURED_OVER)
+        for s in ("3 failed", "12 skipped)", "**12 passed**", "12 passed of 14", "FAILED: x", "npm test → red", "exit 1", "✗ x", "✔ x",
+                  "Tests: 12 passed, 0 failed", "Test results: 12 passed", "2442 passed in 69s"):
+            self.assertIsNotNone(tfl.result_marker(s), s)
+        for s in ("21 failed runs", "the passing lane", "a redirect", "greenfield", "npm run typecheck", "npm test", "Tests: run them", "PASSING",
+                  "verify the CLI exits with exit code 0", "✓ verify /api/v1/runs answers 200", "PASS — verify /steering renders",
+                  "check 2442 passed in 69s"):
+            self.assertIsNone(tfl.result_marker(s), s)
+        self.assertFalse(hasattr(tfl, "EXEC_SUMMARY_RE"))
+        self.assertFalse(hasattr(tfl, "RESULT_MARKER_RE"))   # round 5: a result is a STRUCTURE, not a word match
+
+    def test_codex_round5_expected_outcomes_are_scenarios_only_result_structures_exclude(self):
+        """Codex round 5 (MEDIUM): `- S-1 Verify failed /runs cards render red [TOOL]` and `- S-2
+        Verify /runs returns a FAIL verdict [AGENT]` both produced zero scenarios — unqualified
+        `red`/`green`/verdict-word matching treated an EXPECTED outcome as execution evidence. A
+        result now needs a structure (`result_marker`, per cell / bullet body)."""
+        plan = "\n".join([
+            "- S-1 Verify failed /runs cards render red [TOOL]",
+            "- S-2 Verify /runs returns a FAIL verdict [AGENT]",
+            "- S-3 Expect `npm test` → green on CI [TOOL]",
+            "- S-4 `[TOOL]` `RunsSection` renders red for failed runs",
+            "- S-5 should render red when 3 runs failed",
+            "- S-6 Verify the CLI prints PASS on a clean tree",
+            "- S-7 check that a FAIL verdict marks the campaign red",
+            "- `npm test` → 237 files / 2442 tests green",           # a RESULT: command → tally → colour, no verb
+            "- Tests: 12 passed, 0 failed for the /ws fold",          # a RESULT: tally in summary position (`Tests:` is a label)
+            "- ✓ verify the gate renders on /runs/:id",              # round 6: a scenario verb → a proposed check (was a RESULT on the tick)
+            "- PASS verify /api/v1 routes",                           # round 6: a scenario verb → a proposed check (was a RESULT on the verdict word)
+            "- verify `npm run typecheck` → PASS",                    # round 6: the verb is outside the command → a proposed check
+            "- verify the CLI exits with exit code 0",                # round 6: a scenario verb → a proposed check (was a RESULT on the exit code)
+        ])
+        records, excluded = tfl.scenario_records(plan)
+        self.assertEqual([r["id"] for r in records], ["S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", None, None, None, None])
+        self.assertEqual([r["title"] for r in records][:2], ["Verify failed /runs cards render red", "Verify /runs returns a FAIL verdict"])
+        self.assertEqual(excluded, {"execution_section_lines": 0, "execution_summary_items": 2})
+        analyzed = tfl.analyze_plan(plan, FAKE_INDEX)
+        self.assertEqual(len(analyzed["scenario_lines"]), 11)
+        self.assertTrue(analyzed["classifies"])                        # [TOOL] + [AGENT] on the kept scenario rows
+        self.assertTrue(analyzed["surfaces"]["api_routes"])            # `/runs` on S-1/S-2 — measured, not discarded
+        # the structures, named — in verb-less cells; the words alone, not
+        self.assertEqual(tfl.result_marker("Tests: 12 passed, 0 failed"), "count")
+        self.assertEqual(tfl.result_marker("✔ x"), "tick")
+        self.assertEqual(tfl.result_marker("exit code 0"), "exit-code")
+        self.assertEqual(tfl.result_marker("PASS — /steering renders"), "verdict-word")
+        self.assertEqual(tfl.result_marker("**FAILED** /steering renders"), "verdict-word")
+        self.assertEqual(tfl.result_marker("npm test → FAIL"), "verdict-word")
+        self.assertEqual(tfl.result_marker("npm run lint: PASS."), "verdict-word")
+        self.assertEqual(tfl.result_marker("`npm test` → 237 files / 2442 tests green"), "colour-verdict")
+        self.assertEqual(tfl.result_marker("npm test → red"), "colour-verdict")
+        self.assertEqual(tfl.result_marker("cargo test: 42 tests, all green"), "colour-verdict")
+        self.assertEqual(tfl.result_marker("lint green in 3.2s"), "colour-verdict")           # a duration is a tally
+        for scenario in ("Verify failed /runs cards render red [TOOL]", "S-1 Verify failed /runs cards render red [TOOL]",
+                         "Verify /runs returns a FAIL verdict [AGENT]", "Verify the CLI prints PASS", "the FAIL verdict path",
+                         "Expect `npm test` → green", "`RunsSection` renders red for failed runs", "should render red when 3 runs failed",
+                         "check that a FAIL verdict marks the campaign red", "verify the page rendered the required credentials",
+                         "Contradiction guard: 21 failed runs ⇒ calm copy cannot render", "Run npm run typecheck to verify CLI behavior",
+                         "assert 3 red cards after `npm run seed`", "green-field module", "PASSING", "passed", "failed",
+                         "verify the CLI exits with exit code 0", "✔ verify x", "PASS — verify /steering renders", "**FAILED** verify /steering renders"):
+            self.assertIsNone(tfl.result_marker(scenario), scenario)
+        # PASS/FAIL are case-sensitive verdict words: "this pass", "may fail" are prose
+        for prose in ("not read in depth this pass", "the check may fail on Windows", "pass: verify x", "fail → verify y"):
+            self.assertIsNone(tfl.result_marker(prose), prose)
+        # table rows are judged per CELL: a Scenario cell with a verb is a proposed check whatever it starts with (round 6);
+        # a verb-less cell carrying a verdict word is a result
+        rows = ("| # | Scenario | Class |\n|---|---|---|\n| 8 | PASS — verify /steering renders | Deterministic |\n"
+                "| 9 | Verify /runs returns a FAIL verdict | Governed agent run |\n| 10 | PASS — /steering renders | Deterministic |\n")
+        records, excluded = tfl.scenario_records(rows)
+        self.assertEqual([r["title"] for r in records], ["PASS — verify /steering renders", "Verify /runs returns a FAIL verdict"])
+        self.assertEqual(excluded["execution_summary_items"], 1)
+
+    def test_codex_round6_expected_outcomes_with_exit_codes_and_ticks_are_scenarios(self):
+        """Codex round 6 (MEDIUM): `S-1 Verify CLI returns exit code 1 for invalid input [TOOL]` and
+        `S-2 Verify completed UI cards show ✓ [TOOL]` both extracted ZERO scenarios — the exit-code
+        and tick structures excluded them regardless of the verb, and the self-test enshrined it
+        ("verify the CLI exits with exit code 0" as a RESULT). A structure now excludes only a
+        cell/body WITHOUT a scenario verb: the verb wins; a verb-less Result cell still marks a
+        results-table row."""
+        plan = "\n".join([
+            "- S-1 Verify CLI returns exit code 1 for invalid input [TOOL]",
+            "- S-2 Verify completed UI cards show ✓ [TOOL]",
+            "- S-3 Check `wicked-crew serve --port 0` exits with exit code 2 [TOOL]",
+            "- S-4 Expect /runs/:id to show ✔ on completed cards [TOOL]",
+            "- S-5 The CLI should exit 0 on `--help` [TOOL]",
+            "- S-6 Assert 12 passed, 0 failed after the /ws fold suite [AGENT]",
+            # results in a plan TABLE (every row of a Scenario-column table is a candidate) — all verb-less, all excluded
+            "| # | Scenario | Class |",
+            "|---|---|---|",
+            "| 7 | exit code 0 | Deterministic |",                                  # RESULT: no verb
+            "| 8 | ✓ /api/v1/runs answered 200 | Deterministic |",                  # RESULT: tick, no verb
+            "| 9 | Tests: 12 passed, 0 failed for the /ws fold | Deterministic |",  # RESULT: `Tests:` is a label, the tally is the structure
+            "| 10 | Test results: 3 failed | Deterministic |",                      # RESULT: a compound noun, not the verb
+            "| 11 | `npm test` → 237 files / 2442 tests green | Deterministic |",   # RESULT: command + tally + colour, no verb
+        ])
+        records, excluded = tfl.scenario_records(plan)
+        self.assertEqual([r["id"] for r in records], ["S-1", "S-2", "S-3", "S-4", "S-5", "S-6"])
+        self.assertEqual([r["title"] for r in records][:2], ["Verify CLI returns exit code 1 for invalid input", "Verify completed UI cards show ✓"])
+        self.assertEqual(excluded, {"execution_section_lines": 0, "execution_summary_items": 5})
+        analyzed = tfl.analyze_plan(plan, FAKE_INDEX)
+        self.assertEqual(len(analyzed["scenario_lines"]), 6)
+        self.assertTrue(analyzed["classifies"])
+        self.assertTrue(analyzed["surfaces"]["cli"] and analyzed["surfaces"]["ui_pages"])
+        self.assertIn("the verb wins", analyzed["measured_over"])
+        for s in ("Verify CLI returns exit code 1 for invalid input", "Verify completed UI cards show ✓", "verify the CLI exits with exit code 0",
+                  "✓ verify /api/v1/runs answers 200", "should exit 1 on a bad flag", "expect ✗ on the failed card", "assert 3 failed after seeding",
+                  "check the run page renders PASS", "S-1 Verify CLI returns exit code 1 for invalid input [TOOL]"):
+            self.assertIsNone(tfl.result_marker(s), s)
+        for s in ("exit code 1", "✓ /runs answered 200", "Tests: 12 passed, 0 failed", "Test results: 3 failed", "test summary: 3 failed",
+                  "2442 tests green in 69s", "tested: exit code 0"):
+            self.assertIsNotNone(tfl.result_marker(s), s)             # `tested:` is a label too
+        # a results table: the Scenario/Check cell carries the verb, the Result cell nothing but a structure → a result
+        results_table = "| Check | Result |\n|---|---|\n| verify /ws fold | 12 passed, 0 failed |\n| verify the CLI | exit code 0 |\n"
+        records, excluded = tfl.scenario_records(results_table)
+        self.assertEqual(records, [])
+        self.assertEqual(excluded["execution_summary_items"], 2)
+        # the verb regex: `N tests`, `Tests:`, `test results|summary|report` are nouns; test/tests/tested/testing as verbs are verbs
+        rx = tfl.RESULT_SCENARIO_VERB_RE
+        for noun in ("2442 tests", "Tests: 12 passed", "test results", "Test summary", "test report"):
+            self.assertIsNone(rx.search(noun), noun)
+        for verb in ("test the CLI", "tests the fold", "tested the page", "testing /runs", "Verify", "should", "expect", "assert", "check"):
+            self.assertIsNotNone(rx.search(verb), verb)
+
+    def test_classifies_and_surfaces_are_measured_over_scenario_rows_only(self):
+        survey = ("## Survey\n\nEach scenario is classified as a deterministic tool check or a governed agent run. The /ws CoreEvent fold "
+                  "(awaitingHuman), the /api/v1 routes, the CLI (npm run) and the UI pages (/testing/campaigns, /steering) are in scope.\n\n")
+        plan = tfl.analyze_plan(survey + "- S-1 verify the gate renders on the page\n", FAKE_INDEX)
+        self.assertEqual(plan["scenario_lines"], ["verify the gate renders on the page"])
+        self.assertFalse(plan["classifies"])
+        self.assertEqual(plan["surfaces"], {"ws_events": False, "api_routes": False, "cli": False, "ui_pages": False})
+        tagged = tfl.analyze_plan("- 1.1 `[TOOL]` check `gates.ts` store parsing\n- 1.2 `[AGENT]` verify a live /ws run end to end\n", FAKE_INDEX)
+        self.assertTrue(tagged["classifies"])  # the [TOOL]/[AGENT] vocabulary counts, on the scenario rows
+        self.assertTrue(tagged["surfaces"]["ws_events"])
+
+    def test_codex_round8_survey_prose_is_not_a_scenario(self):
+        """Codex round 8 (MEDIUM): LT-3's survey bullet `` **`tests/`** — 220+ Vitest specs … `` counted
+        as a scenario because `tests` inside the path token `tests/` matched the verb regex (22 rows
+        recorded, 21 explicit scenario rows in the plan). A scenario verb is now a STANDALONE word
+        (never adjacent to `/`, `.` or a word character) and a bullet that STARTS with a code-span
+        path followed by ` — ` is survey prose, whatever verbs it goes on to use."""
+        survey = "\n".join([
+            "- **`tests/`** — 220+ Vitest specs (jsdom), covering zustand stores, API client parsing, and component behavior. Includes `tests/fixtures/fixtureBridge.ts`",
+            "- **`testid-inventory.json`** — a committed selector contract; `tests/testidInventory.test.ts` fails CI on drift",
+            "- `e2e/` — ~65 Python Playwright scripts, each should be checked against the /ws fold",   # prose verb after a code-span path: survey
+            "- `scripts/changelog-section.py` — release tooling, not app runtime.",
+            "- tests/ holds the /ws specs",                                                       # `tests/` is a path token, not a verb
+            "- e2e/tests cover the /ws fold",
+            "- check.py runs the /api/v1 probes",                                                 # `check.` is a file name
+            "- the tests.ts module drives the /runs page",
+        ])
+        self.assertEqual(tfl.scenario_records(survey)[0], [])
+        scenarios = "\n".join([
+            "- `GET /runs` — verify the route answers 200",                                      # a code span that is NOT a path, then a real verb
+            "- verify `tests/useEventStream.test.ts` covers the /ws fold",                        # the verb stands alone; the path is the object
+            "- Check the /api/v1 routes answer the pinned shapes",
+            "- S-1 `tests/` — the /ws specs",                                                     # a leading id is the author's labelling
+            "- the /steering page should render the policies",
+            "- expect the /testing/campaigns landing to list the campaign",
+            "- tests the CLI entry points (npm scripts)",                                         # `tests` as a verb
+        ])
+        titles = [r["title"] for r in tfl.scenario_records(scenarios)[0]]
+        self.assertEqual(len(titles), 7, titles)
+        self.assertIn("GET /runs — verify the route answers 200", titles)
+        self.assertIn("tests/ — the /ws specs", titles)
+        rx = tfl.SCENARIO_VERB_RE
+        for path_token in ("tests/", "tests/x.ts", "e2e/tests", "check.py", "tests.ts", "src/checks/", "unittest", "attests"):
+            self.assertIsNone(rx.search(path_token), path_token)
+        for verb in ("tests", "Tests:", "verify", "check,", "(should)", "expect —", "test", "checks"):
+            self.assertIsNotNone(rx.search(verb), verb)
+        self.assertTrue(tfl.is_survey_bullet("**`tests/`** — 220+ Vitest specs"))
+        self.assertTrue(tfl.is_survey_bullet("`studio_standalone_test.py` — needs a running daemon"))
+        self.assertTrue(tfl.is_survey_bullet("`e2e/` – ~65 scripts"))                             # an en dash too
+        self.assertFalse(tfl.is_survey_bullet("`GET /runs` — verify it"))                          # not a path (whitespace inside)
+        self.assertFalse(tfl.is_survey_bullet("`[TOOL]` Audit existing coverage of `App.tsx`"))
+        self.assertFalse(tfl.is_survey_bullet("verify `tests/x.ts` — the fold"))                  # the span is not at the start
+        self.assertFalse(tfl.is_survey_bullet(""))
+        self.assertFalse(tfl.is_survey_bullet(None))
+        # a plan-table row is judged the same way; a Scenario-column row is the author's labelling and stays
+        rows = "| # | Scenario | Class |\n|---|---|---|\n| 1 | `tests/` — the Vitest specs | Deterministic |\n"
+        self.assertEqual([r["title"] for r in tfl.scenario_records(rows)[0]], ["tests/ — the Vitest specs"])
+        survey_table = "| Layer | File |\n|---|---|\n| `tests/` — 220 specs | tests/x.ts |\n"
+        self.assertEqual(tfl.scenario_records(survey_table)[0], [])
+        self.assertIn("survey prose excluded", tfl.MEASURED_OVER)
+        self.assertIn("STANDALONE word", tfl.MEASURED_OVER)
+        # the LT-3 line that moved, verbatim from the committed plan — and its plan-table neighbour, which stays
+        lt3 = "- **`tests/`** — 220+ Vitest specs (jsdom), covering zustand stores, API client parsing, and component behavior. Includes `tests/fixtures/fixtureBridge.ts`, a jsdom-native stand-in for the interactive-doc iframe bridge (no real iframe layout in jsdom, so rects are asserted rather than measured).\n| # | Scenario | Notes | Class |\n|---|---|---|---|\n| 2 | Vitest unit + component specs | jsdom, fixtures in `tests/fixtures/` | **Deterministic tool check** |\n"
+        self.assertEqual([r["title"] for r in tfl.scenario_records(lt3)[0]], ["Vitest unit + component specs"])
+
+    def test_canonical_identity(self):
+        self.assertEqual(tfl.canonical_files([], ["App.tsx"], FAKE_INDEX), ["src/App.tsx"])
+        self.assertEqual(tfl.canonical_files(["src/App.tsx"], ["App.tsx"], FAKE_INDEX), ["src/App.tsx"])   # one identity
+        self.assertEqual(tfl.canonical_files([], ["index.ts"], FAKE_INDEX), ["index.ts"])                # ambiguous stays bare
+        self.assertEqual(tfl.canonical_files(["src/a/index.ts"], ["index.ts"], FAKE_INDEX), ["src/a/index.ts"])  # covered → dropped
+
+    def test_consistency_jaccard_over_canonical_set(self):
+        a = {"measured": {"plan": tfl.analyze_plan("- S-1 verify the gate renders\n\nSource: `App.tsx`", FAKE_INDEX)}}
+        b = {"measured": {"plan": tfl.analyze_plan("- S-1 verify the gate renders\n\nSource: `src/App.tsx`", FAKE_INDEX)}}
+        c = tfl.consistency(a, b)
+        self.assertEqual(c["files_overlap_pct"], 100.0)   # App.tsx ≡ src/App.tsx
+        self.assertEqual(c["files_common"], ["src/App.tsx"])
+        self.assertEqual(c["scenario_titles_overlap_pct"], 100.0)
+        self.assertEqual(c["scenario_ids_overlap_pct"], 100.0)
+        # Different wording → different titles, even when the files agree.
+        d = {"measured": {"plan": tfl.analyze_plan("- S-2 check the gate closes\n\nSource: `src/App.tsx`", FAKE_INDEX)}}
+        c2 = tfl.consistency(a, d)
+        self.assertEqual((c2["files_overlap_pct"], c2["scenario_titles_overlap_pct"], c2["scenario_ids_overlap_pct"]), (100.0, 0.0, 0.0))
+        # No ids on either side → undefined (None), not 0.
+        e = {"measured": {"plan": tfl.analyze_plan("- verify the gate renders on the page", FAKE_INDEX)}}
+        self.assertIsNone(tfl.consistency(e, e)["scenario_ids_overlap_pct"])
+        # Legacy plan blocks (no canonical_files key) are canonicalized on the fly.
+        legacy = {"measured": {"plan": {"real_files": [], "real_basenames": ["App.tsx"], "scenario_lines": [], "scenario_ids": []}}}
+        saved = tfl._REPO_INDEX
+        tfl._REPO_INDEX = FAKE_INDEX
+        try:
+            self.assertEqual(tfl.consistency(legacy, b)["files_overlap_pct"], 100.0)
+        finally:
+            tfl._REPO_INDEX = saved
+
+
+class RecordedPlansRederive(unittest.TestCase):
+    """The committed report.json numbers must be what the committed code says about the committed
+    plan files — re-derived here, offline, over the real repo index (`git ls-files`)."""
+    PLANS = {"LT-1": "d293f4d7-1e45-4346-809a-d6f2107c6b18", "LT-2": "f8bc2bad-47fc-4971-8961-bb49acb1dc6b", "LT-3": "d12adb6c-e4be-430a-b0a7-666db5634112"}
+    EXPECT = {"LT-1": (16347, 31, 28, {"execution_section_lines": 28, "execution_summary_items": 1}),
+              "LT-2": (8252, 14, 13, {"execution_section_lines": 0, "execution_summary_items": 0}),
+              "LT-3": (13985, 30, 21, {"execution_section_lines": 0, "execution_summary_items": 0})}   # round 8: 22 → 21 (the `tests/` survey bullet)
+
+    @staticmethod
+    def plan_text(tag: str, rid: str) -> str:
+        t = (tfl.ART / f"{tag}-plan-{rid}.md").read_text()
+        i = t.index("```\n\n## unit") + len("```\n\n")
+        return t[i:-1]  # exactly what analyze_plan() saw: the unit outputs, not the POST-body header
+
+    def test_committed_plans_match_the_committed_report(self):
+        if not (tfl.ART / "report.json").exists():
+            self.skipTest("no committed report.json beside the harness")
+        report = json.loads((tfl.ART / "report.json").read_text())
+        for tag, rid in self.PLANS.items():
+            plan = tfl.analyze_plan(self.plan_text(tag, rid))
+            chars, files, lines, excluded = self.EXPECT[tag]
+            self.assertEqual((plan["chars"], len(plan["canonical_files"]), len(plan["scenario_lines"]), plan["excluded"]), (chars, files, lines, excluded), tag)
+            self.assertTrue(plan["names_real_files"] and plan["classifies"], tag)
+            self.assertEqual(plan["surfaces"], {"ws_events": True, "api_routes": True, "cli": True, "ui_pages": True}, tag)
+            recorded = report["scenarios"][tag]["measured"]["plan"]
+            for k in ("chars", "canonical_files", "scenario_lines", "scenario_ids", "classifies", "names_real_files", "surfaces", "excluded", "measured_over"):
+                self.assertEqual(plan[k], recorded[k], f"{tag}.plan.{k} in report.json is stale")
+        self.assertEqual(report["scenarios"]["LT-4"]["measured_over"], tfl.MEASURED_OVER)
+        cons = tfl.consistency({"measured": {"plan": tfl.analyze_plan(self.plan_text("LT-1", self.PLANS["LT-1"]))}},
+                               {"measured": {"plan": tfl.analyze_plan(self.plan_text("LT-3", self.PLANS["LT-3"]))}})
+        self.assertEqual((cons["files_overlap_pct"], cons["scenario_ids_overlap_pct"], cons["scenario_titles_overlap_pct"], cons["titles_a"], cons["titles_b"]),
+                         (38.6, None, 0.0, 28, 21))
+        recorded = report["scenarios"]["LT-3"]["consistency_vs_LT-1"]
+        for k in ("files_overlap_pct", "scenario_ids_overlap_pct", "scenario_titles_overlap_pct", "titles_a", "titles_b", "files_common"):
+            self.assertEqual(cons[k], recorded[k], f"consistency.{k} in report.json is stale")
+
+    def test_lt1_excluded_lines_are_its_execution_summaries(self):
+        text = self.plan_text("LT-1", self.PLANS["LT-1"])
+        titles, _ = tfl.scenario_items(text)
+        self.assertNotIn("npm test", titles)
+        self.assertNotIn("npm test → 237 files / 2442 tests green", titles)  # a RESULT: `green`
+        self.assertFalse(any(t.startswith("#10 e2e/studio_standalone_test.py") for t in titles))  # inside the "Execution verdict" section
+        self.assertIn("WS reconnect/backoff, stale-socket guard, malformed-frame skip", titles)
+        # Round 3: a proposed scenario whose fixture is a count stays a scenario (unit 1, plan-table row 2).
+        self.assertIn("Contradiction guard: 21 failed runs ⇒ calm copy cannot render", titles)
+
+    def test_lt3_survey_bullet_is_not_a_scenario(self):
+        """Codex round 8: LT-3's 22nd "scenario" was the survey bullet `` **`tests/`** — 220+ Vitest
+        specs (jsdom), covering … `` (unit 2's survey of what exists); the plan has 21 explicit
+        scenario rows. LT-1 and LT-2 re-derive unchanged (28 / 13)."""
+        titles, _ = tfl.scenario_items(self.plan_text("LT-3", self.PLANS["LT-3"]))
+        self.assertEqual(len(titles), 21)
+        self.assertFalse(any(t.startswith("tests/ — 220+ Vitest specs") for t in titles), titles[:3])
+        self.assertIn("Vitest unit + component specs", titles)                       # the plan-table row about the same specs stays
+        self.assertIn("WS socket lifecycle (reconnect/stale-gate/malformed-frame)", titles)
+        self.assertEqual(len(tfl.scenario_items(self.plan_text("LT-1", self.PLANS["LT-1"]))[0]), 28)
+        self.assertEqual(len(tfl.scenario_items(self.plan_text("LT-2", self.PLANS["LT-2"]))[0]), 13)
+
+    def test_recorded_gates_re_verify_on_the_wire_and_re_decide_approve(self):
+        """The three recorded intake gates, re-checked offline with `gate_wire_check` over the
+        recorded url/body/status (backfilled into gates[0] from `gate_response`, round 3) and
+        re-decided under the round-4 ALLOW-LIST policy (pre-execution shape, unit 1 stage test /
+        gate auto, no delivery verb) over the COMPLETE prompt (round 5: `gates[0].prompt` is the
+        whole awaitingHuman prompt — 180 / 246 / 180 chars, `prompt_raw_len` — and the card showed
+        all of it: no bracket, `card_consistent`): approve, wire verified — agreeing with what was clicked."""
+        if not (tfl.ART / "report.json").exists():
+            self.skipTest("no committed report.json beside the harness")
+        report = json.loads((tfl.ART / "report.json").read_text())
+        for tag in self.PLANS:
+            sc = report["scenarios"][tag]
+            m = sc["measured"]
+            g = m["gates"][0]
+            self.assertEqual(len(m["gates"]), 1, tag)
+            self.assertIsNone(tfl.gate_wire_check(g, m["run_ids"][0]), tag)
+            self.assertEqual((g["url"], g["body"]), (m["gate_response"]["url"], m["gate_response"]["body"]), tag)
+            self.assertTrue(g["wire_ok"], tag)
+            # the COMPLETE prompt: as long as the awaitingHuman event's, identical to the card's text (no bracket to strip)
+            self.assertEqual((len(g["prompt"]), g["prompt_len"]), (m["gate"]["prompt_raw_len"], m["gate"]["prompt_raw_len"]), tag)
+            self.assertEqual(g["prompt"], m["gate"]["prompt_ui"], tag)
+            self.assertEqual((g["prompt_card"], g["card_consistent"]), (tfl.card_headline(g["prompt"]), True), tag)
+            self.assertNotIn("[", g["prompt"], tag)
+            self.assertTrue(g["prompt_source"].startswith("backfilled"), tag)
+            decision, reason = tfl.gate_decision(g["prompt"], g["unit"])
+            self.assertEqual((decision, g["decision"]), ("approve", "approve"), tag)
+            self.assertEqual(reason, g["reason"], f"{tag}.gates[0].reason in report.json is stale")
+            self.assertIsNone(tfl.unit_kind_unknown(g["unit"]), tag)               # round 8: stage AND gate are both wire values (test / auto)
+            self.assertTrue(g["gate_identity_round8"].startswith("re-checked under the round-8 rule"), tag)
+            v = tfl.derive_result(sc, report["blockers"])
+            self.assertEqual((v["harness_ok"], v["result"]), (sc["harness_ok"], sc["result"]), tag)
+            self.assertEqual(v["fail_reasons"], sc["fail_reasons"], tag)
+            for p in (p for p in report["preflights"] if p["scenario"] == tag):
+                self.assertIn("fanout", p["readings"][0], tag)  # backfilled: "not measured" — the gate postdates the launches
+
+    def test_codex_round9_recorded_runs_satisfy_the_launch_contract_and_say_no_structural_attribution(self):
+        """Re-derived offline over the committed report: every recorded launch posted
+        `repoRefs == ["wicked-studio"]`, a `problem` = the intent's framing + a blank line +
+        INSTRUCTION (695 / 752 / 695 chars; LT-1 and LT-3 byte-identical, LT-2 the `New test:` framing), and
+        exactly ONE `awaitingHuman` frame for the run was received over `/ws` before the gate was
+        decided — the contract holds with the recorded values (`measured.contract`; no number
+        changes). The recorded daemon exposed no structural linkage (campaignRegistered=false, no
+        campaign served, zero new runs), so each feature verdict now also says
+        `no-structural-attribution` — still `fail`, still `harness_ok`."""
+        if not (tfl.ART / "report.json").exists():
+            self.skipTest("no committed report.json beside the harness")
+        report = json.loads((tfl.ART / "report.json").read_text())
+        problems: dict[str, str] = {}
+        for tag in self.PLANS:
+            sc = report["scenarios"][tag]
+            m = sc["measured"]
+            c = tfl.contract_check(sc)
+            self.assertEqual(c["failures"], [], tag)
+            self.assertEqual((c["repo_refs"], c["problem_chars"], c["problem_ends_with_instruction"], c["intent_ok"],
+                              c["awaiting_human_frames_before_decision"], c["gate_frame_ok"]),
+                             (["wicked-studio"], {"LT-1": 695, "LT-2": 752, "LT-3": 695}[tag], True, True, 1, True), tag)  # LT-2: the longer `New test:` framing
+            self.assertEqual(c["intent_prefix"], {"LT-1": "Recon:", "LT-2": "New test:", "LT-3": "Recon:"}[tag], tag)
+            self.assertIsNone(c["panel_intent"], tag)   # not captured then, not backfilled — judged on the framing
+            self.assertEqual(m["contract"], c, f"{tag}.measured.contract in report.json is stale")
+            problems[tag] = m["post_body"]["problem"]
+            self.assertTrue(sc["harness_ok"], tag)
+            self.assertEqual(sc["result"], "fail", tag)
+            self.assertIn("no-structural-attribution", sc["fail_reasons"], tag)
+            self.assertNotIn("campaign-incomplete", sc["fail_reasons"], tag)   # no campaign was served: nothing pending
+            for snap in ("siblings_at_terminal", "siblings_after_grace"):
+                self.assertEqual((m[snap]["attributable_siblings"], m[snap]["unrelated_new_runs"]), ([], []), tag)
+                self.assertEqual((m[snap]["structural_linkage"]["campaign_served"], m[snap]["structural_linkage"]["available"]), (False, False), tag)
+        self.assertEqual(problems["LT-1"], problems["LT-3"])
+        self.assertNotEqual(problems["LT-1"], problems["LT-2"])
+        cmp = tfl.identical_briefs(report["scenarios"]["LT-1"], report["scenarios"]["LT-3"])
+        self.assertEqual((cmp["problem_identical"], cmp["problem_chars"]), (True, [695, 695]))
+        rec = report["scenarios"]["LT-3"]["consistency_vs_LT-1"]
+        for k in ("problem_identical", "problem_chars", "problem_sha256"):
+            self.assertEqual(cmp[k], rec[k], f"consistency.{k} in report.json is stale")
+        for p in report["preflights"]:
+            self.assertEqual(p["readings"][0]["unknown_status_runs"], "not measured", p["scenario"])  # backfilled: the classification postdates the launches
+        self.assertEqual(report["preflight_policy"]["known_run_statuses"], sorted(tfl.KNOWN_STATUSES))
+        self.assertTrue(report["revisions"][8]["reason"].startswith("codex round-9 REVISE"))
+
+
+# ── Item 7: contained, symlink-safe, unique-temp-file artifact writes ─────────────────────────
+
+
+class ArtifactWrites(unittest.TestCase):
+    def test_safe_name(self):
+        self.assertEqual(tfl.safe_name("d293f4d7-1e45-4346-809a-d6f2107c6b18"), "d293f4d7-1e45-4346-809a-d6f2107c6b18")
+        self.assertEqual(tfl.safe_name("recon-abc:wicked-studio:a0"), "recon-abc_wicked-studio_a0")
+        self.assertEqual(tfl.safe_name("../../etc/passwd"), "______etc_passwd")
+        self.assertEqual(tfl.safe_name("a/b:c dé"), "a_b_c_d_")
+        for bad in ("", "...", "///", ".", " "):
+            with self.assertRaises(SystemExit, msg=repr(bad)):
+                tfl.safe_name(bad)
+
+    def test_artifact_path_is_contained_and_never_a_symlink(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "art"
+            p = tfl.artifact_path("LT-1-plan-x.md", root)
+            self.assertEqual(p, root / "LT-1-plan-x.md")
+            self.assertTrue(root.is_dir())
+            for name in ("../escape.md", "../../etc/passwd", "sub/../../escape.png"):
+                with self.assertRaises(SystemExit, msg=name):
+                    tfl.artifact_path(name, root)
+            (root / "real.md").write_text("x")
+            (root / "inside-link.md").symlink_to(root / "real.md")
+            (Path(d) / "outside.md").write_text("y")
+            (root / "outside-link.md").symlink_to(Path(d) / "outside.md")
+            for name in ("inside-link.md", "outside-link.md"):
+                with self.assertRaises(SystemExit, msg=name) as cm:
+                    tfl.artifact_path(name, root)
+                self.assertIn("symlink", str(cm.exception))
+            self.assertEqual((Path(d) / "outside.md").read_text(), "y")
+
+    def test_every_component_is_opened_no_follow_not_only_the_final_target(self):
+        """Codex round 3: containment trusted a symlinked root and checked only the final target.
+        Round 6: the check is no longer an `lstat` walk of pathnames but a no-follow open of every
+        component RELATIVE to the previous descriptor — the same probes, refused by the kernel."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "elsewhere").mkdir()
+            (d / "art").mkdir()
+            (d / "art" / "sub").symlink_to(d / "elsewhere")             # a symlinked INTERMEDIATE directory
+            with self.assertRaises(SystemExit) as cm:
+                tfl.artifact_path("sub/LT-1-plan-x.md", d / "art")
+            self.assertIn(str(d / "art" / "sub"), str(cm.exception))
+            self.assertIn("symlink", str(cm.exception))
+            self.assertEqual(list((d / "elsewhere").iterdir()), [])
+            (d / "artlink").symlink_to(d / "elsewhere")                 # a symlinked ROOT
+            with self.assertRaises(SystemExit) as cm:
+                tfl.artifact_path("x.md", d / "artlink")
+            self.assertIn(str(d / "artlink"), str(cm.exception))
+            with self.assertRaises(SystemExit):
+                tfl.write_report({"x": 1}, d / "artlink" / "report.json", d / "artlink")
+            self.assertEqual(list((d / "elsewhere").iterdir()), [])
+            (d / "base").symlink_to(d / "elsewhere")                    # a symlink ABOVE the root, walked from an explicit base
+            with self.assertRaises(SystemExit) as cm:
+                tfl.artifact_path("x.md", d / "base" / "art", base=d)
+            self.assertIn(str(d / "base"), str(cm.exception))
+            with self.assertRaises(SystemExit):
+                tfl.artifact_path("/etc/passwd", d / "art")             # an absolute name is not under the root
+            self.assertEqual(tfl.artifact_path("deep/er/x.md", d / "art"), d / "art" / "deep" / "er" / "x.md")  # real components are fine
+        # The real evidence dir is walked from the (resolved) repo root: e2e, e2e/artifacts, e2e/artifacts/test-feature-live.
+        self.assertEqual(tfl._anchor(tfl.ART), tfl.ROOT)
+        self.assertEqual(tfl._anchor(Path("/x/y/art")), Path("/x/y"))
+        root_src = inspect.getsource(tfl.ensure_artifact_root)
+        self.assertIn("open_artifact_root(root, base, create=True)", root_src)   # the descriptor walk IS the creation — no pathname mkdir
+        self.assertIsNone(re.search(r"^\s*\w[\w.]*\.mkdir\(", root_src, re.M), root_src)   # no CODE line calls a pathname mkdir
+        src = inspect.getsource(tfl.artifact_path)
+        self.assertIn("open_artifact_root(root, base, create=True)", src)
+        self.assertIn("open_dir_nofollow(part, fd, shown)", src)                 # each component RELATIVE to a descriptor
+        self.assertIn("follow_symlinks=False", src)                              # the final component: lstat via dir_fd
+        self.assertNotIn("mkdir(", src)
+        self.assertNotIn("resolve()", src)                                       # round 6: no pathname is resolved any more
+        self.assertNotIn("is_symlink()", src)
+        self.assertFalse(hasattr(tfl, "refuse_symlinked_components"))            # the pathname lstat walk is gone
+
+    def test_startup_refuses_a_symlinked_artifacts_dir_before_creating_anything(self):
+        """Codex round 4: `main()` called `ART.mkdir(parents=True)` before any component walk — with
+        `e2e/artifacts -> /elsewhere`, startup created `test-feature-live/` outside the repository
+        before a later check rejected it. Now the walk comes first and nothing is created."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            repo, elsewhere = d / "repo", d / "elsewhere"
+            (repo / "e2e").mkdir(parents=True)
+            elsewhere.mkdir()
+            (repo / "e2e" / "artifacts").symlink_to(elsewhere)                          # the planted link
+            art = repo / "e2e" / "artifacts" / "test-feature-live"
+            with self.assertRaises(SystemExit) as cm:
+                tfl.ensure_artifact_root(art, base=repo)
+            self.assertIn(str(repo / "e2e" / "artifacts"), str(cm.exception))
+            self.assertIn("symlink", str(cm.exception))
+            self.assertEqual(list(elsewhere.iterdir()), [])                            # NOTHING created through the link
+            self.assertFalse(art.exists())
+            # the real entry point, with the module's ROOT/ART pointed at this repo: refused before
+            # the policy, the testid check or any HTTP — no daemon is contacted
+            saved = tfl.ROOT, tfl.ART, tfl.http_json
+            tfl.ROOT, tfl.ART = repo, art
+            tfl.http_json = lambda *a, **k: (_ for _ in ()).throw(AssertionError("main() must refuse before any HTTP"))
+            try:
+                with self.assertRaises(SystemExit) as cm:
+                    tfl.main()
+                self.assertIn("symlink", str(cm.exception))
+                self.assertEqual(list(elsewhere.iterdir()), [])
+            finally:
+                tfl.ROOT, tfl.ART, tfl.http_json = saved
+            # a real directory chain is created — and only then
+            (repo / "e2e" / "artifacts").unlink()
+            self.assertEqual(tfl.ensure_artifact_root(art, base=repo), art)
+            self.assertTrue(art.is_dir())
+            # a link on the LAST component (the dir itself) is refused too
+            (repo / "e2e" / "artifacts" / "linked").symlink_to(elsewhere)
+            with self.assertRaises(SystemExit):
+                tfl.ensure_artifact_root(repo / "e2e" / "artifacts" / "linked", base=repo)
+        src = inspect.getsource(tfl.main)
+        self.assertNotIn("ART.mkdir", src)
+        self.assertTrue(src.lstrip().startswith("def main() -> None:\n    ensure_artifact_root()"), src[:120])  # the FIRST statement
+        self.assertLess(src.index("ensure_artifact_root()"), src.index("_policy()"))
+        self.assertLess(src.index("ensure_artifact_root()"), src.index("verify_testids()"))
+        self.assertLess(src.index("ensure_artifact_root()"), src.index("http_json("))
+
+    def test_plans_screenshots_and_the_report_go_through_the_one_fd_anchored_writer(self):
+        """Codex round 5: `artifact_path()` validated a pathname that `write_text()` and
+        `page.screenshot(path=…)` then re-resolved. Every artifact now lands through
+        `write_artifact` — screenshots as the bytes Playwright returns when no `path` is given."""
+        src = inspect.getsource(tfl._drive_intake)
+        self.assertIn('write_artifact(f"{tag}-plan-{safe_name(run_id)}.md",', src)
+        self.assertIn('write_artifact(f"{tag}-{name}.png", page.screenshot(full_page=True))', src)
+        self.assertNotIn("write_text(", src)
+        self.assertNotIn("screenshot(path=", src)
+        self.assertNotIn('artifact_path(f"', src)
+        self.assertNotIn('ART / f"', src)
+        self.assertNotIn("run_id.replace(':', '_')", src)
+        self.assertIn("return write_artifact(os.path.relpath(path, root)", inspect.getsource(tfl.write_report))
+        w = inspect.getsource(tfl.write_artifact)
+        self.assertLess(w.index("open_artifact_root(root, base, create=True)"), w.index("_refuse_symlink_at(name, dfd"))   # the walk, THEN the final-name lstat ON the descriptor …
+        self.assertLess(w.index("_refuse_symlink_at(name, dfd"), w.index("_create_exclusive(tmp, dfd"))                   # … THEN the temp file on it
+        for needle in ("dir_fd=dfd", "os.fsync(fd)", "os.rename(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)", "os.unlink(tmp, dir_fd=dfd)"):
+            self.assertIn(needle, w, needle)
+        self.assertNotIn("os.replace(", w)
+        self.assertNotIn("open(str(", w)
+        self.assertNotIn("artifact_path(", w)                                    # nothing is pathname-validated and then re-used
+        c = inspect.getsource(tfl._create_exclusive)
+        self.assertIn("os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW", c)
+        self.assertIn("dir_fd=dfd", c)
+        d = inspect.getsource(tfl.open_dir_nofollow)
+        self.assertIn("os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW", d)
+        self.assertIn("dir_fd=dir_fd", d)
+        self.assertNotIn("str(", d)                                              # a relative name on a descriptor, never a pathname
+        module = inspect.getsource(tfl)
+        self.assertFalse(hasattr(tfl, "tempfile"))                               # no path-named temp file anywhere — `tempfile` is not even imported (round 8: the lock dir is a fixed per-user path)
+        self.assertNotIn("import tempfile", module)
+        self.assertEqual(module.count("os.open(str("), 1)                        # the ONLY pathname open is the trusted anchor's …
+        self.assertIn("os.open(str(anchor), os.O_RDONLY | os.O_DIRECTORY)", module)
+        self.assertIn("os.mkdir(part, mode, dir_fd=fd)", module)                # … and every mkdir is relative to a descriptor (mode 0o755 / 0o700 for the lock dir)
+        for m in re.finditer(r"^\s*os\.mkdir\((.*)$", module, re.M):
+            self.assertIn("dir_fd=", m.group(1), m.group(0))
+        self.assertIsNone(re.search(r"^\s*(?!os\.)[\w.]+\.mkdir\(", module, re.M), "a pathname Path.mkdir remains")
+        self.assertFalse(hasattr(tfl, "_open_verified_dir"))                     # the pathname open + fstat/lstat identity check is gone
+
+    def test_symlink_substitution_after_validation_never_redirects_a_write(self):
+        """Deterministic TOCTOU: the target / the parent is swapped for a symlink AFTER the check and
+        BEFORE the write. A swapped TARGET (planted after the final-name lstat, as the temp file is
+        about to be created) is replaced by the fd-anchored rename — the link is never followed, the
+        victim untouched; a swapped PARENT (planted as the write's descriptor walk begins) is refused
+        by the no-follow relative open with nothing written; a pre-planted TEMP name fails `O_EXCL`."""
+        real_walk = tfl.open_artifact_root
+        real_create = tfl._create_exclusive
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            root, victim, elsewhere = d / "art", d / "victim.md", d / "elsewhere"
+            root.mkdir()
+            elsewhere.mkdir()
+            victim.write_text("keep")
+            # (a) the TARGET becomes a symlink to the victim after the final-name check, as the temp file is created
+            def plant_then_create(tmp, dfd, shown, name):
+                (root / "LT-9-plan-x.md").symlink_to(victim)
+                return real_create(tmp, dfd, shown, name)
+            tfl._create_exclusive = plant_then_create
+            try:
+                out = tfl.write_artifact("LT-9-plan-x.md", "new plan", root)
+            finally:
+                tfl._create_exclusive = real_create
+            self.assertEqual(out, root / "LT-9-plan-x.md")
+            self.assertFalse(out.is_symlink())                                  # the link was REPLACED …
+            self.assertEqual(out.read_text(), "new plan")
+            self.assertEqual(victim.read_text(), "keep")                        # … never written through
+            self.assertEqual(sorted(p.name for p in root.iterdir()), ["LT-9-plan-x.md"])   # no temp file left
+            # (b) the PARENT directory becomes a symlink to elsewhere as this write's descriptor walk begins
+            def swap_parent(root_=None, base=None, *, create=True):
+                os.rename(root, d / "art-real")
+                root.symlink_to(elsewhere)
+                return real_walk(root_, base, create=create)
+            tfl.open_artifact_root = swap_parent
+            try:
+                with self.assertRaises(SystemExit) as cm:
+                    tfl.write_artifact("LT-9-02-shot.png", b"\x89PNG", root)
+            finally:
+                tfl.open_artifact_root = real_walk
+            self.assertIn("without following a link", str(cm.exception))
+            self.assertIn(str(root), str(cm.exception))
+            self.assertEqual(list(elsewhere.iterdir()), [])                     # nothing landed outside
+            self.assertEqual(sorted(p.name for p in (d / "art-real").iterdir()), ["LT-9-plan-x.md"])   # nor in the moved original
+            root.unlink()
+            os.rename(d / "art-real", root)
+            # (c) a symlink pre-planted at the TEMP name: O_EXCL | O_NOFOLLOW refuses the create
+            saved_hex = tfl.secrets.token_hex
+            tfl.secrets.token_hex = lambda n=4: "deadbeef"
+            try:
+                planted = root / f".report.json.{os.getpid()}.deadbeef.tmp"
+                planted.symlink_to(victim)
+                with self.assertRaises(SystemExit) as cm:
+                    tfl.write_report({"x": 1}, root / "report.json", root)
+            finally:
+                tfl.secrets.token_hex = saved_hex
+            self.assertIn("could not be created exclusively", str(cm.exception))
+            self.assertEqual(victim.read_text(), "keep")
+            self.assertFalse((root / "report.json").exists())
+            self.assertTrue(planted.is_symlink())                               # the planted link was not followed, not unlinked
+            planted.unlink()
+            # (d) open_artifact_root itself: a link or a file is not a directory, a missing dir is not created
+            # when create=False; a real dir yields ITS descriptor
+            (d / "dirlink").symlink_to(root)
+            for bad in (d / "dirlink", victim, d / "missing"):
+                with self.assertRaises(SystemExit, msg=str(bad)):
+                    tfl.open_artifact_root(bad, create=False)
+            self.assertFalse((d / "missing").exists())
+            fd = tfl.open_artifact_root(root)
+            try:
+                self.assertEqual(os.fstat(fd).st_ino, os.lstat(root).st_ino)
+            finally:
+                os.close(fd)
+            # (e) an artifact is ONE plain file name — never a path, never a dotfile
+            for name in ("../escape.md", "sub/x.md", "/etc/passwd", ".hidden", "", ".", ".."):
+                with self.assertRaises(SystemExit, msg=name):
+                    tfl.write_artifact(name, "x", root)
+            with self.assertRaises(SystemExit):
+                tfl.write_report({"x": 1}, root / "sub" / "report.json", root)
+            self.assertEqual(sorted(p.name for p in root.iterdir()), ["LT-9-plan-x.md"])
+            # (f) the honest path: bytes and text both land, the file is a regular file, the report re-reads
+            self.assertEqual(tfl.write_artifact("LT-9-02-shot.png", b"\x89PNG\r\n", root).read_bytes(), b"\x89PNG\r\n")
+            self.assertEqual(json.loads(tfl.write_report({"ok": True}, root / "report.json", root).read_text()), {"ok": True})
+            self.assertEqual(sorted(p.name for p in root.iterdir()), ["LT-9-02-shot.png", "LT-9-plan-x.md", "report.json"])
+
+    def test_codex_round6_ancestor_substitution_is_refused_by_the_descriptor_walk(self):
+        """Codex round 6 (HIGH): `O_NOFOLLOW` on a pathname open protected only the FINAL directory
+        component — replacing `e2e/artifacts` (an ancestor) with a symlink after validation
+        redirected both the open and the `lstat` to the same outside directory, the fstat==lstat
+        identity check passed and writes escaped; the lock's pathname open had the same hole. Now
+        every component is opened RELATIVE to the previous descriptor with `O_NOFOLLOW`: the swapped
+        ancestor is refused (ELOOP) at its own step and nothing lands outside — for the artifacts,
+        the report and the lock; whether the swap happens between two walks, DURING one, or as a
+        missing component is about to be created."""
+        import shutil
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            repo, elsewhere = d / "repo", d / "elsewhere"
+            repo.mkdir()                                                      # the trusted anchor (the resolved repo root) exists
+            art = repo / "e2e" / "artifacts" / "test-feature-live"
+            (elsewhere / "test-feature-live").mkdir(parents=True)             # a real target dir: a pathname walk WOULD resolve into it
+            outside = elsewhere / "test-feature-live"
+
+            def swap_ancestor():
+                os.rename(repo / "e2e" / "artifacts", repo / "e2e" / "artifacts-real")
+                (repo / "e2e" / "artifacts").symlink_to(elsewhere)
+
+            def restore():
+                (repo / "e2e" / "artifacts").unlink()
+                os.rename(repo / "e2e" / "artifacts-real", repo / "e2e" / "artifacts")
+            saved = tfl.ROOT, tfl.ART
+            tfl.ROOT, tfl.ART = repo, art                                       # the module's view: this repo, this evidence dir
+            try:
+                self.assertEqual(tfl._anchor(art), repo)
+                rd = tfl.run_dir()                                              # THIS invocation's directory under the patched ART (round 8)
+                self.assertEqual(rd, art / "runs" / tfl.RUN_STAMP)
+                self.assertEqual(tfl._anchor(rd), repo)
+                self.assertEqual(tfl.ensure_artifact_root(), rd)                # validated + created honestly …
+                tfl.write_artifact("before.md", "ok")
+                self.assertEqual((rd / "before.md").read_text(), "ok")
+                self.assertEqual(sorted(p.name for p in art.iterdir()), ["runs"])   # … and nothing lands at the evidence root itself
+                tfl.LaunchLock(art / ".launch.lock").acquire().release()        # … the lock too
+                # (a) the ancestor is swapped AFTER that validation and BEFORE the next use
+                swap_ancestor()
+                try:
+                    for what, call in (("artifact", lambda: tfl.write_artifact("LT-1-plan-x.md", "escaped?")),
+                                       ("report", lambda: tfl.write_report({"x": 1})),
+                                       ("lock", lambda: tfl.LaunchLock(art / ".launch.lock").acquire())):
+                        with self.assertRaises(SystemExit, msg=what) as cm:
+                            call()
+                        self.assertIn(str(repo / "e2e" / "artifacts"), str(cm.exception), what)   # refused AT the swapped component
+                        self.assertIn("without following a link", str(cm.exception), what)
+                    self.assertEqual(list(outside.iterdir()), [])                                    # NOTHING landed outside
+                    original = repo / "e2e" / "artifacts-real" / "test-feature-live"
+                    self.assertEqual(sorted(p.name for p in original.iterdir()), [".launch.lock", "runs"])       # no temp file either …
+                    self.assertEqual(sorted(p.name for p in (original / "runs" / tfl.RUN_STAMP).iterdir()), ["before.md"])   # … anywhere
+                finally:
+                    restore()
+                # (b) the ancestor is swapped DURING the walk — after `e2e` was opened, as `artifacts` is about to be
+                real_open = tfl.open_dir_nofollow
+
+                def swap_midwalk(name, dir_fd, shown):
+                    if name == "artifacts" and not (repo / "e2e" / "artifacts").is_symlink():
+                        swap_ancestor()
+                    return real_open(name, dir_fd, shown)
+                tfl.open_dir_nofollow = swap_midwalk
+                try:
+                    with self.assertRaises(SystemExit) as cm:
+                        tfl.write_artifact("LT-1-plan-y.md", "escaped?")
+                    self.assertIn(str(repo / "e2e" / "artifacts"), str(cm.exception))
+                    with self.assertRaises(SystemExit):
+                        tfl.LaunchLock(art / ".launch.lock").acquire()
+                finally:
+                    tfl.open_dir_nofollow = real_open
+                    restore()
+                self.assertEqual(list(outside.iterdir()), [])
+                # (c) a link raced in where a MISSING component is about to be created: mkdir → EEXIST, the no-follow re-open → ELOOP
+                shutil.rmtree(repo / "e2e" / "artifacts")
+                real_mkdir = tfl.os.mkdir
+
+                def plant_then_mkdir(name, mode=0o777, *, dir_fd=None):
+                    if name == "artifacts":
+                        (repo / "e2e" / "artifacts").symlink_to(elsewhere)
+                    return real_mkdir(name, mode, dir_fd=dir_fd)
+                tfl.os.mkdir = plant_then_mkdir
+                try:
+                    with self.assertRaises(SystemExit) as cm:
+                        tfl.ensure_artifact_root()
+                finally:
+                    tfl.os.mkdir = real_mkdir
+                self.assertIn(str(repo / "e2e" / "artifacts"), str(cm.exception))
+                self.assertEqual(list(outside.iterdir()), [])
+                self.assertEqual(list(elsewhere.iterdir()), [outside])              # nothing new created through the link
+                # (d) honest again once the link is gone
+                (repo / "e2e" / "artifacts").unlink()
+                self.assertEqual(tfl.ensure_artifact_root(), rd)
+                self.assertEqual(tfl.write_artifact("after.md", "ok").read_text(), "ok")
+                self.assertEqual(tfl.write_artifact("after.md", "ok"), rd / "after.md")
+                self.assertEqual(list(outside.iterdir()), [])
+            finally:
+                tfl.ROOT, tfl.ART = saved
+
+    def test_write_is_atomic_and_leaves_no_tmp(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "sub" / "report.json"
+            out = tfl.write_report({"a": 1, "p": Path("/x")}, path)
+            self.assertEqual(out, path)
+            self.assertEqual(json.loads(path.read_text()), {"a": 1, "p": "/x"})
+            self.assertEqual(sorted(p.name for p in path.parent.iterdir()), ["report.json"])
+
+    def test_write_report_refuses_escape_and_symlinked_target(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "art"
+            root.mkdir()
+            with self.assertRaises(SystemExit):
+                tfl.write_report({"x": 1}, root / ".." / "report.json", root)
+            (Path(d) / "victim.json").write_text('{"keep": true}')
+            (root / "report.json").symlink_to(Path(d) / "victim.json")
+            with self.assertRaises(SystemExit):
+                tfl.write_report({"x": 1}, root / "report.json", root)
+            self.assertEqual(json.loads((Path(d) / "victim.json").read_text()), {"keep": True})
+            self.assertEqual([p.name for p in root.iterdir()], ["report.json"])  # no temp file left behind either
+
+    def test_failed_write_never_exposes_partial_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "report.json"
+            tfl.write_report({"good": True}, path)
+            saved = tfl.os.rename
+            tfl.os.rename = lambda *_, **__: (_ for _ in ()).throw(OSError("disk full"))
+            try:
+                with self.assertRaises(OSError):
+                    tfl.write_report({"partial": True}, path)
+            finally:
+                tfl.os.rename = saved
+            self.assertEqual(json.loads(path.read_text()), {"good": True})      # the previous report is intact
+            self.assertEqual(sorted(p.name for p in path.parent.iterdir()), ["report.json"])  # no tmp left behind
+            # A failure while PRODUCING the JSON (before the rename) → still no tmp, still intact.
+            saved_scrub = tfl.scrub
+            tfl.scrub = lambda _t: (_ for _ in ()).throw(RuntimeError("boom mid-serialization"))
+            try:
+                with self.assertRaises(RuntimeError):
+                    tfl.write_report({"partial": True}, path)
+            finally:
+                tfl.scrub = saved_scrub
+            self.assertEqual(json.loads(path.read_text()), {"good": True})
+            self.assertEqual(sorted(p.name for p in path.parent.iterdir()), ["report.json"])
+
+    def test_two_writers_use_unique_temp_files(self):
+        """Writer 2 runs to completion in the middle of writer 1's rename: with a shared
+        `report.json.tmp` it would have overwritten writer 1's temp file and renamed it away
+        (writer 1's rename then fails); with unique temp names (pid + random) both complete and
+        the last rename wins — and every rename is anchored on the verified directory's descriptor."""
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "report.json"
+            real_rename = tfl.os.rename
+            seen: list[tuple] = []
+
+            def rename_with_a_concurrent_writer(src, dst, **kw):
+                seen.append((src, dst, sorted(kw)))
+                if len(seen) == 1:
+                    tfl.write_report({"writer": 2}, path)  # completes fully while writer 1's temp file exists
+                real_rename(src, dst, **kw)
+            tfl.os.rename = rename_with_a_concurrent_writer
+            try:
+                tfl.write_report({"writer": 1}, path)
+            finally:
+                tfl.os.rename = real_rename
+            self.assertEqual(len(seen), 2)
+            self.assertNotEqual(seen[0][0], seen[1][0])
+            self.assertTrue(all(re.fullmatch(r"\.report\.json\.\d+\.[0-9a-f]{8}\.tmp", s[0]) for s in seen), seen)
+            self.assertTrue(all(s[1] == "report.json" and s[2] == ["dst_dir_fd", "src_dir_fd"] for s in seen), seen)   # relative names on dir fds
+            self.assertEqual(json.loads(path.read_text()), {"writer": 1})
+            self.assertEqual(sorted(p.name for p in path.parent.iterdir()), ["report.json"])
+
+    def test_main_persists_on_every_exit_path(self):
+        src = inspect.getsource(tfl.main)
+        self.assertIn("finally:", src)
+        self.assertIn('REPORT["aborted"]', src)
+        self.assertIn("write_report()  # evidence lands after EVERY scenario", src)
+        self.assertLess(src.index("try:"), src.index('http_json("GET", f"{API}/health")'))   # round 8: the daemon checks are inside the try — an aborted startup still lands its report
+
+
+# ── Codex round 8, item 3: every invocation writes its OWN run directory; the root is a fixture set ─
+
+
+class PerInvocationEvidence(Isolated):
+    """Codex round 8 (MEDIUM): `write_report` always targeted the historical `report.json` and the
+    screenshots reused stable names — even a blocked-preflight invocation replaced the three-run
+    report, and a rerun mixed historical plans with replacement screenshots (Copilot's thread on the
+    stable `{tag}-{name}.png` names). Now every invocation writes under
+    `ART/runs/<UTC timestamp>-<pid>/`, the root's committed files are never written, and
+    `--promote <run-dir>` is the one deliberate path into the root."""
+
+    FIXTURES = {"report.json": b'{"historical": true, "scenarios": {"LT-1": {"result": "fail"}}}',
+                "LT-1-plan-d293f4d7.md": b"# LT-1 historical plan\n", "LT-1-03-gate-card.png": b"\x89PNG historical"}
+
+    def _repo(self, d: Path) -> tuple[Path, Path]:
+        repo = d / "repo"
+        art = repo / "e2e" / "artifacts" / "test-feature-live"
+        art.mkdir(parents=True)
+        for name, data in self.FIXTURES.items():
+            (art / name).write_bytes(data)
+        (repo / ".gitignore").write_text("e2e/artifacts/test-feature-live/runs/\n")
+        return repo, art
+
+    def _root_untouched(self, art: Path) -> None:
+        for name, data in self.FIXTURES.items():
+            self.assertEqual((art / name).read_bytes(), data, name)
+        self.assertEqual(sorted(p.name for p in art.iterdir()), sorted([*self.FIXTURES, "runs"]))
+
+    def test_the_run_dir_is_the_default_target_of_every_writer(self):
+        self.assertEqual(tfl.run_dir(), tfl.ART / "runs" / tfl.RUN_STAMP)
+        self.assertRegex(tfl.RUN_STAMP, r"^\d{8}T\d{6}Z-\d+$")                            # UTC timestamp + pid
+        self.assertTrue(tfl.RUN_STAMP.endswith(f"-{os.getpid()}"))
+        self.assertEqual(tfl.run_dir(Path("/x/art")), Path("/x/art") / "runs" / tfl.RUN_STAMP)
+        for fn in (tfl.write_report, tfl.write_artifact, tfl.artifact_path, tfl.open_artifact_root, tfl.ensure_artifact_root):
+            self.assertIn("root or run_dir()", inspect.getsource(fn), fn.__name__)
+        module = inspect.getsource(tfl)
+        self.assertNotIn('ART / "report.json"', module)
+        self.assertEqual(module.count("root = root or ART"), 1)                              # exactly ONE writer defaults to the root …
+        self.assertIn("root = root or ART", inspect.getsource(tfl.promote))                  # … `promote`, the deliberate path into it
+        self.assertIn('return (root or ART) / "runs" / RUN_STAMP', inspect.getsource(tfl.run_dir))   # everything else derives the run dir FROM the root
+        drive = inspect.getsource(tfl._drive_intake)
+        self.assertEqual(drive.count("write_artifact("), 2)                                 # the plan and the screenshots …
+        self.assertNotIn("write_artifact(f\"{tag}-{name}.png\", page.screenshot(full_page=True), ", drive)   # … neither names a root: both land in the run dir
+        main = inspect.getsource(tfl.main)
+        self.assertLess(main.index("ensure_artifact_root()"), main.index('REPORT["run_dir"] = str(run_dir().relative_to(ROOT))'))
+        self.assertLess(main.index('REPORT["run_dir"]'), main.index("_policy()"))
+        self.assertIn("e2e/artifacts/test-feature-live/runs/", (tfl.ROOT / ".gitignore").read_text())   # scratch until promoted
+
+    def test_a_blocked_preflight_invocation_leaves_the_root_fixtures_untouched(self):
+        """The real entry point, end to end, against a fake healthy daemon whose preflight never
+        clears (an active run): `main()` runs LT-1 to `blocked-preflight`, writes ITS report under
+        `runs/<stamp>/`, and the root's report.json / plan / screenshot are byte-identical after."""
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as d:
+            repo, art = self._repo(Path(d))
+
+            def fake_http(method, url, timeout=30):
+                if url.endswith("/health"):
+                    return 200, {"ok": True, "version": "fake"}
+                if url.endswith("/diagnostics"):
+                    return 200, {"components": {"daemon": "fake"}}
+                if url.endswith("/repos"):
+                    return 200, {"repos": [{"id": "wicked-studio"}]}
+                if url.endswith("/runs"):
+                    return 200, {"runs": [{"session": {"id": "busy", "status": "executing"}}]}
+                return 404, {"error": url}
+            out = io.StringIO()
+            with mock.patch.object(tfl, "ROOT", repo), mock.patch.object(tfl, "ART", art), mock.patch.object(tfl, "http_json", fake_http), \
+                    mock.patch.object(tfl, "verify_testids", lambda: None), mock.patch.object(tfl, "PREFLIGHT_MAX_S", 0), \
+                    mock.patch.object(tfl, "readings", lambda: reading(swap_pct=50.0, active_runs=["busy"])), \
+                    mock.patch.object(tfl.time, "sleep", lambda *_: (_ for _ in ()).throw(AssertionError("must not sleep"))), \
+                    mock.patch.dict(os.environ, {"ONLY": "LT-1"}), contextlib.redirect_stdout(out):
+                tfl.main()
+                rd = tfl.run_dir()
+                self.assertEqual(rd, art / "runs" / tfl.RUN_STAMP)
+            self._root_untouched(art)                                                        # the historical evidence: byte-identical
+            report = json.loads((rd / "report.json").read_text())
+            self.assertEqual(report["run_dir"], f"e2e/artifacts/test-feature-live/runs/{tfl.RUN_STAMP}")
+            self.assertEqual(report["scenarios"]["LT-1"]["result"], "blocked-preflight")
+            self.assertFalse(report["scenarios"]["LT-1"]["harness_ok"])
+            self.assertTrue(report["blockers"][0].startswith("preflight never cleared for LT-1"))
+            self.assertEqual(report["daemon"], {"ok": True, "version": "fake"})
+            self.assertNotIn("aborted", report)
+            self.assertEqual(sorted(p.name for p in rd.iterdir()), ["report.json"])          # no temp file, no stray
+            self.assertEqual(json.loads(out.getvalue()), report)                             # printed to stdout, as before
+            # a second invocation (another stamp) gets another directory — nothing collides, nothing at the root moves
+            with mock.patch.object(tfl, "ROOT", repo), mock.patch.object(tfl, "ART", art), mock.patch.object(tfl, "RUN_STAMP", "20260909T000000Z-1"):
+                tfl.write_report({"second": True})
+                self.assertEqual(json.loads((art / "runs" / "20260909T000000Z-1" / "report.json").read_text()), {"second": True})
+            self._root_untouched(art)
+            self.assertEqual(json.loads((rd / "report.json").read_text()), report)
+            # the historical report at the root is still the fixture the self-tests re-derive from
+            self.assertEqual(json.loads((art / "report.json").read_text())["historical"], True)
+
+    def test_promote_copies_one_run_into_the_root_deliberately_and_nothing_else_does(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo, art = self._repo(Path(d))
+            with mock.patch.object(tfl, "ROOT", repo), mock.patch.object(tfl, "ART", art):
+                rd = tfl.ensure_artifact_root()
+                tfl.write_report({"scenarios": {"LT-1": {"result": "fail"}}, "run_dir": f"e2e/artifacts/test-feature-live/runs/{tfl.RUN_STAMP}"})
+                tfl.write_artifact("LT-1-plan-abcdef01.md", "# a new plan\n")
+                tfl.write_artifact("LT-1-03-gate-card.png", b"\x89PNG new")
+                tfl.write_artifact("LT-1-05-gate-2.png", b"\x89PNG later gate")
+                (rd / "notes.txt").write_text("stray")                                       # not evidence: never promoted
+                (rd / ".launch.lock").write_text("stray")
+                self._root_untouched(art)                                                    # writing a run touches nothing at the root
+                # promote by directory …
+                copied = tfl.promote(rd)
+                self.assertEqual(copied, ["LT-1-03-gate-card.png", "LT-1-05-gate-2.png", "LT-1-plan-abcdef01.md", "report.json"])
+                self.assertEqual((art / "LT-1-03-gate-card.png").read_bytes(), b"\x89PNG new")      # the chosen run REPLACES the fixture — deliberately
+                self.assertEqual((art / "LT-1-05-gate-2.png").read_bytes(), b"\x89PNG later gate")
+                self.assertEqual((art / "LT-1-plan-abcdef01.md").read_text(), "# a new plan\n")
+                self.assertEqual((art / "LT-1-plan-d293f4d7.md").read_bytes(), self.FIXTURES["LT-1-plan-d293f4d7.md"])   # other fixtures untouched
+                promoted = json.loads((art / "report.json").read_text())
+                self.assertEqual(promoted["scenarios"], {"LT-1": {"result": "fail"}})
+                self.assertEqual(promoted["promoted_from"], f"e2e/artifacts/test-feature-live/runs/{tfl.RUN_STAMP}")
+                self.assertRegex(promoted["promoted_at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+                self.assertFalse((art / "notes.txt").exists())
+                self.assertEqual(sorted(p.name for p in art.iterdir()),
+                                 ["LT-1-03-gate-card.png", "LT-1-05-gate-2.png", "LT-1-plan-abcdef01.md", "LT-1-plan-d293f4d7.md", "report.json", "runs"])
+                self.assertNotIn("promoted_from", json.loads((rd / "report.json").read_text()))   # the run's own copy is untouched
+                # … or by stamp, through the CLI
+                tfl.write_report({"scenarios": {"LT-1": {"result": "pass"}}})
+                tfl.cli(["--promote", tfl.RUN_STAMP])
+                self.assertEqual(json.loads((art / "report.json").read_text())["scenarios"], {"LT-1": {"result": "pass"}})
+                # refusals: usage, an unknown argument, a missing run, a path escape, a symlink planted in the run dir
+                for argv in (["--promote"], ["--promote", "a", "b"], ["--bogus"], ["LT-1"]):
+                    with self.assertRaises(SystemExit, msg=argv):
+                        tfl.cli(argv)
+                with self.assertRaises(SystemExit) as cm:
+                    tfl.promote("20260101T000000Z-1")
+                self.assertIn("does not exist", str(cm.exception))
+                for bad in ("../../etc", "..", ".", "", "a/b"):
+                    with self.assertRaises(SystemExit, msg=bad):
+                        tfl.promote(bad)
+                (Path(d) / "victim.md").write_text("keep")
+                (rd / "LT-1-plan-evil.md").symlink_to(Path(d) / "victim.md")
+                with self.assertRaises(SystemExit) as cm:
+                    tfl.promote(rd)
+                self.assertIn("without following a link", str(cm.exception))
+                self.assertFalse((art / "LT-1-plan-evil.md").exists())
+                (rd / "LT-1-plan-evil.md").unlink()
+                # an empty run dir has nothing to promote
+                empty = art / "runs" / "20260909T000001Z-2"
+                empty.mkdir()
+                with self.assertRaises(SystemExit) as cm:
+                    tfl.promote(empty)
+                self.assertIn("nothing promotable", str(cm.exception))
+        src = inspect.getsource(tfl.promote)
+        self.assertIn("os.open(entry, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=sfd)", src)     # read through the run dir's descriptor …
+        self.assertIn("write_artifact(entry, data, root)", src)                            # … written through the one fd-anchored writer
+        self.assertIn("open_artifact_root(src_dir, create=False)", src)
+        self.assertEqual(tfl.PROMOTABLE_RE.fullmatch("report.json").group(0), "report.json")
+        for ok in ("LT-1-plan-d293f4d7-1e45-4346-809a-d6f2107c6b18.md", "LT-2-08-scoreboard.png", "LT-3-03-launch-aborted-by-preflight.png"):
+            self.assertIsNotNone(tfl.PROMOTABLE_RE.fullmatch(ok), ok)
+        for no in ("notes.txt", ".launch.lock", ".report.json.1.deadbeef.tmp", "LT-1-plan.md", "x.png", "report.json.bak"):
+            self.assertIsNone(tfl.PROMOTABLE_RE.fullmatch(no), no)
+
+
+# ── Item 10: the two Copilot threads ──────────────────────────────────────────────────────────
+
+
+class RepoFilesAndLaunchAnswer(unittest.TestCase):
+    def setUp(self):
+        self._saved_index, self._saved_run = tfl._REPO_INDEX, tfl.subprocess.run
+        tfl._REPO_INDEX = None
+
+    def tearDown(self):
+        tfl._REPO_INDEX, tfl.subprocess.run = self._saved_index, self._saved_run
+
+    def test_git_failure_is_a_named_exit_not_an_empty_repo(self):
+        def fail(argv, **kw):
+            raise subprocess.CalledProcessError(128, argv, stderr="fatal: not a git repository")
+        tfl.subprocess.run = fail
+        with self.assertRaises(SystemExit) as cm:
+            tfl.repo_files()
+        self.assertIn("git", str(cm.exception))
+        self.assertIn("fatal: not a git repository", str(cm.exception))
+        self.assertIsNone(tfl._REPO_INDEX)
+
+        def missing(argv, **kw):
+            raise FileNotFoundError("git")
+        tfl.subprocess.run = missing
+        with self.assertRaises(SystemExit):
+            tfl.repo_files()
+        tfl.subprocess.run = lambda argv, **kw: types.SimpleNamespace(stdout="", returncode=0)
+        with self.assertRaises(SystemExit) as cm:
+            tfl.repo_files()
+        self.assertIn("no tracked files", str(cm.exception))
+
+    def test_git_ls_files_is_checked(self):
+        src = inspect.getsource(tfl.repo_files)
+        self.assertIn("check=True", src)
+        self.assertNotIn(", capture_output=True, text=True).stdout", src)
+
+    def test_launched_run_ids(self):
+        self.assertEqual(tfl.launched_run_ids({"runIds": ["a", "b"], "runId": "a"}), ["a", "b"])
+        self.assertEqual(tfl.launched_run_ids({"runId": "a"}), ["a"])
+        self.assertEqual(tfl.launched_run_ids({"runIds": [], "runId": "a"}), ["a"])
+        for shape in ({}, {"runIds": []}, {"runIds": [None, ""]}, {"runId": ""}, {"campaign": "x"}, "a string", None, ["a"]):
+            self.assertEqual(tfl.launched_run_ids(shape), [], repr(shape))
+
+    def test_unexpected_launch_answer_is_recorded_not_indexed(self):
+        src = inspect.getsource(tfl._drive_intake)
+        self.assertIn("run_ids = launched_run_ids(answer)", src)
+        self.assertLess(src.index("if not run_ids:"), src.index("run_id = run_ids[0]"))
+        self.assertIn('m["measured"]["launch_answer_unexpected"] = True', src)
+        self.assertIn('shot(page, "03-launch-answer-unexpected")', src)
+        self.assertNotIn('answer.get("runIds") or ([answer["runId"]]', src)
+
+
+class CopilotRound7Guards(Isolated):
+    """The three Copilot threads on the round-7 diff (f1c65b8): `/repos` read as `get(...)["repos"]`,
+    `/ws` frames decoded with a bare `json.loads`, the launch answer read with `resp.json()` — each
+    could crash the harness mid-scenario without a typed record. Now each is recorded and the
+    harness continues."""
+
+    def test_repos_listing_is_a_typed_list(self):
+        saved = tfl.http_json
+        sink: list = []
+        tfl.set_fetch_sink(sink)
+        try:
+            tfl.http_json = lambda m, u, timeout=30: (200, {"repos": [{"id": "wicked-studio"}, {"id": "other"}]})
+            self.assertEqual([r["id"] for r in tfl.list_repos()], ["wicked-studio", "other"])
+            for body in (None, [], {}, {"repos": None}, {"repos": "x"}, "str", 7):
+                with self.assertRaises(tfl.FetchError, msg=repr(body)) as cm:
+                    tfl.http_json = lambda m, u, timeout=30, body=body: (200, body)
+                    tfl.list_repos()
+                self.assertEqual((cm.exception.miss["endpoint"], cm.exception.miss["status"]), ("/repos", 200))
+                self.assertIn("no `repos` list", cm.exception.miss["error"])
+            self.assertEqual(len(sink), 7)
+        finally:
+            tfl.http_json = saved
+            tfl.set_fetch_sink(None)
+        src = inspect.getsource(tfl.main)
+        self.assertIn("list_repos()", src)
+        self.assertNotIn('get("/repos")["repos"]', src)
+        self.assertIn("except FetchError", src)                                            # a typed miss on /repos is a named exit, not a traceback …
+        self.assertLess(src.index("try:"), src.index("list_repos()"))                      # … and the aborted report still lands (finally: write_report)
+
+    def test_an_undecodable_ws_frame_is_a_recorded_placeholder_and_the_socket_keeps_listening(self):
+        seen: dict = {}
+        n = len(tfl.REPORT["findings"])
+        self.assertEqual(tfl.decode_ws_frame('{"type": "awaitingHuman", "ord": 1}', "LT-1", seen), {"type": "awaitingHuman", "ord": 1})
+        bad = tfl.decode_ws_frame("{not json", "LT-1", seen)
+        self.assertEqual((bad["type"], bad["head"], bad["n"]), ("<undecodable>", "{not json", 1))
+        self.assertIn("JSONDecodeError", bad["error"])
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 1)
+        self.assertIn("LT-1: ws_frame_undecodable", tfl.REPORT["findings"][-1])
+        bad2 = tfl.decode_ws_frame("{", "LT-1", seen)
+        self.assertEqual((bad2["type"], bad2["n"]), ("<undecodable>", 2))
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 1)                                # reported ONCE per scenario, counted after
+        self.assertEqual(seen, {"count": 2})
+        self.assertEqual(tfl.decode_ws_frame("{}", "LT-1", seen), {})                       # a valid JSON object passes through
+        self.assertEqual(tfl.decode_ws_frame('{"a": 1}', "LT-1", seen)["a"], 1)
+        self.assertEqual(tfl.decode_ws_frame("[1, 2]", "LT-1", seen), {"type": "<non-json>"})   # does not start with `{`: the old placeholder
+        self.assertEqual(tfl.decode_ws_frame("ping", "LT-1", seen), {"type": "<non-json>"})
+        self.assertEqual(tfl.decode_ws_frame(b"\x00\x01", "LT-1", seen), {"type": "<non-json>"})
+        self.assertEqual(tfl.decode_ws_frame(b'{"type": "x"}', "LT-1", seen), {"type": "x"})   # a binary frame is decoded as UTF-8 first
+        self.assertEqual(tfl.decode_ws_frame(None, "LT-1", seen), {"type": "<non-json>"})
+        self.assertEqual(seen, {"count": 2})
+        json.dumps([bad, bad2])                                                              # serializes into report.json
+        # every frame reaches the list — the callback never raises
+        frames = [tfl.decode_ws_frame(p, "LT-2", {}) for p in ('{"type": "unitPlanned"}', "{oops", "[]", "", '{"type": "sessionCompleted"}')]
+        self.assertEqual([f.get("type") for f in frames], ["unitPlanned", "<undecodable>", "<non-json>", "<non-json>", "sessionCompleted"])
+        src = inspect.getsource(tfl._drive_intake)
+        self.assertIn("decode_ws_frame(payload, tag, ws_bad)", src)
+        self.assertNotIn("json.loads(payload)", src)
+        self.assertIn('m["measured"]["ws_frames_undecodable"] = ws_bad.get("count", 0)', src)
+
+    def test_a_non_json_2xx_launch_answer_is_recorded_raw_with_a_finding(self):
+        n = len(tfl.REPORT["findings"])
+        self.assertEqual(tfl.parse_launch_answer(201, True, '{"runId": "a", "runIds": ["a"], "campaign": "c"}', "LT-1"),
+                         {"runId": "a", "runIds": ["a"], "campaign": "c"})
+        self.assertEqual(tfl.parse_launch_answer(500, False, "internal error", "LT-1"), {"status": 500, "text": "internal error"})
+        self.assertEqual(tfl.parse_launch_answer(500, False, None, "LT-1"), {"status": 500, "text": ""})
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 0)
+        out = tfl.parse_launch_answer(200, True, "<html><body>gateway</body></html>", "LT-1")
+        self.assertEqual((out["raw"], out["status"]), ("<html><body>gateway</body></html>", 200))
+        self.assertIn("JSONDecodeError", out["parse_error"])
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 1)
+        self.assertIn("LT-1: the launch answered 200 with a body that is not JSON", tfl.REPORT["findings"][-1])
+        self.assertEqual(tfl.launched_run_ids(out), [])                                     # → recorded as launch_answer_unexpected, never indexed
+        self.assertEqual(tfl.parse_launch_answer(200, True, "", "LT-1")["raw"], "")           # an empty 2xx body
+        self.assertEqual(len(tfl.parse_launch_answer(200, True, "x" * 2000, "LT-1")["raw"]), 500)
+        self.assertIsNone(tfl.parse_launch_answer(200, True, "null", "LT-1"))                 # JSON null IS JSON — launched_run_ids then finds nothing
+        self.assertEqual(tfl.launched_run_ids(None), [])
+        json.dumps(out)
+        src = inspect.getsource(tfl._drive_intake)
+        self.assertIn("answer = parse_launch_answer(resp.status, resp.ok, resp.text(), tag)", src)
+        self.assertNotIn("resp.json()", src)
+        self.assertLess(src.index("answer = parse_launch_answer("), src.index("run_ids = launched_run_ids(answer)"))
+
+
+class LaunchPostBody(Isolated):
+    """Copilot on 5ca59f0 (`post_body`, :1446): `json.loads(resp.request.post_data or "{}")` raised
+    `JSONDecodeError` on an empty / non-JSON body and crashed the scenario unrecorded — the body is
+    evidence for the report, so a parse failure is recorded raw and the harness continues."""
+
+    def test_valid_json_object_is_parsed(self):
+        self.assertEqual(tfl.parse_post_body('{"problem": "x", "repoRefs": ["wicked-studio"]}', "T"), {"problem": "x", "repoRefs": ["wicked-studio"]})
+        self.assertEqual(tfl.parse_post_body(None, "T"), {})
+        self.assertEqual(tfl.parse_post_body("", "T"), {})
+        self.assertEqual(tfl.parse_post_body(b'{"problem": "bytes"}', "T"), {"problem": "bytes"})
+        self.assertEqual(tfl.REPORT["findings"], self._saved["findings"])   # nothing to report
+
+    def test_non_json_body_is_recorded_raw_with_the_parse_error_and_a_finding(self):
+        n = len(tfl.REPORT["findings"])
+        out = tfl.parse_post_body("problem=x&repoRefs=wicked-studio", "LT-1")
+        self.assertEqual(set(out), {"raw", "parse_error"})
+        self.assertEqual(out["raw"], "problem=x&repoRefs=wicked-studio")
+        self.assertIn("Expecting value", out["parse_error"])
+        self.assertEqual(len(tfl.REPORT["findings"]) - n, 1)
+        self.assertIn("LT-1: the launch POST body was not JSON", tfl.REPORT["findings"][-1])
+        long = "x" * 2000
+        self.assertEqual(len(tfl.parse_post_body(long, "T")["raw"]), 500)          # clipped to 500 chars
+        self.assertEqual(tfl.parse_post_body('{"a": ', "T")["raw"], '{"a": ')       # truncated JSON
+        # a JSON value that is not an object is not the wire contract either — recorded raw, finding
+        out = tfl.parse_post_body("[1, 2]", "T")
+        self.assertEqual(out["raw"], "[1, 2]")
+        self.assertIn("not a JSON object (list)", out["parse_error"])
+        json.dumps(out)                                                              # serializes into report.json as-is
+
+    def test_the_launch_uses_the_guarded_parser(self):
+        src = inspect.getsource(tfl._drive_intake)
+        self.assertIn("post_body = parse_post_body(resp.request.post_data, tag)", src)
+        self.assertNotIn('post_body = json.loads(resp.request.post_data or "{}")', src)
+
+
+if __name__ == "__main__":
+    unittest.main()
