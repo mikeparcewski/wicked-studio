@@ -21,6 +21,7 @@ import { RepositoriesPanel } from './components/RepositoriesPanel.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
+import { SkillsPage } from './components/SkillsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
 import { GovernanceDashboard } from './components/GovernanceDashboard.js';
@@ -523,6 +524,18 @@ export function App(): React.ReactElement {
             search={search}
             runs={runs}
           />
+        </div>
+      );
+    }
+    // `/skills` — the skills file manager over the daemon's effective plugin root (the skills
+    // keystone): the catalog + KPI band, a drawer per skill (skill + support file trees, textarea
+    // editor, enable/disable, reset, replace), and the page-level Publish that writes the snapshot
+    // workers spawn with. `?skill=<name>` deep-links a drawer open. Same two-column shell as
+    // Steering — the page owns its own scrolling column, so no page-level scroll wrapper.
+    if (panel === 'skills') {
+      return (
+        <div className="flex flex-1 overflow-hidden">
+          <SkillsPage navigate={navigate} search={search} />
         </div>
       );
     }

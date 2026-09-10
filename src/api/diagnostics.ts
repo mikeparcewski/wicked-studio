@@ -17,6 +17,9 @@
 
 import { apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
+// Through the Skills surface module (which re-exports the contract block), so the release swap of
+// the mirror for `wicked-crew-api-types` touches `skills.ts` alone.
+import type { DiagnosticsSkills } from './skills.js';
 
 /** One CLI's ACP health, folded from the durable run event logs. */
 export interface DiagnosticsAcpCli {
@@ -59,6 +62,10 @@ export interface Diagnostics {
   /** Bounded tail, newest first. */
   recentErrors: DiagnosticsError[];
   acp: { byCli: Record<string, DiagnosticsAcpCli> };
+  /** The skills seam's last outcome (api-types 0.27.0, crew#480 — mirrored in `./skills-wire.ts`):
+   *  whether the engine is being handed a verified snapshot (`state`), which one (`current`,
+   *  `engineInput`) and, if not, why (`findings`). ABSENT on a daemon that predates the seam. */
+  skills?: DiagnosticsSkills;
 }
 
 /** `GET /diagnostics` — the daemon's self-description. Read-only. */

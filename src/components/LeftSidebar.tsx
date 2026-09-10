@@ -8,6 +8,7 @@ import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
 import { memoriesPath, policiesPath, steeringDashboardPath, STEERING_SECTIONS, STEERING_SECTION_LABELS, type SteeringSection } from '../api/steering.js';
+import { skillsPath } from '../api/skills.js';
 import { testingLaunchPath, testingPath } from '../api/testing.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
@@ -73,7 +74,7 @@ const S = {
 
 // ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-export type PathKey = 'projects' | 'execute' | 'test' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'steering' | 'settings';
+export type PathKey = 'projects' | 'execute' | 'test' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'skills' | 'steering' | 'settings';
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
  *  links `/system` in the collapsed column — it has no dashboard). `noun` is
@@ -106,11 +107,16 @@ const P_TESTING: PathSpec  = { key: 'testing',  title: 'Evals',        noun: 'Ev
 // placed immediately BEFORE Settings. The nav-reorg moved its Dashboard from a sub-row to the
 // heading's ▦ (dash → the dashboard, same affordance Projects/Execute/Chat/Repos use); it keeps
 // NO ＋. Its accordion rows are the TWO management sub-sections (Policies / Memories).
+// Skills (the skills keystone): the file manager over the daemon's effective plugin root — the
+// skills its workers actually run. A SYSTEM section placed immediately BEFORE Steering, wearing the
+// Steering/Evals grammar: ▦ (the catalog) and NO ＋ — a skill is added from the page's own verb,
+// with the daemon's guards, never from a bare rail affordance.
+const P_SKILLS: PathSpec   = { key: 'skills',   title: 'Skills',       noun: 'Skill',      glyph: '◆', dash: skillsPath(), collapsedHref: skillsPath() };
 const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: steeringDashboardPath(), collapsedHref: steeringDashboardPath() };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
 // Order (nav-reorg): Execute / Vibe / Demo replace Make and sit before Evals; Chat / Repos /
-// Steering / Settings tail.
-const PATHS: PathSpec[] = [P_PROJECTS, P_EXECUTE, P_TEST, P_VIBE, P_DEMO, P_CHAT, P_REPOS, P_STEERING, P_TESTING, P_SETTINGS];
+// Skills / Steering / Settings tail.
+const PATHS: PathSpec[] = [P_PROJECTS, P_EXECUTE, P_TEST, P_VIBE, P_DEMO, P_CHAT, P_REPOS, P_SKILLS, P_STEERING, P_TESTING, P_SETTINGS];
 
 // `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
 // retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
@@ -139,6 +145,8 @@ export function headingForPath(pathname: string): PathKey | null {
   // retired flat `/campaigns` addresses (which redirect onto `/testing/campaigns`) map to Test.
   if (first === 'campaigns') return 'test';
   if (first === 'testing') return second === 'campaigns' ? 'test' : 'testing';
+  // `/skills` (+ any sub-address) is the skills file manager — a system section beside Steering.
+  if (first === 'skills') return 'skills';
   // The retired `/wiki` + `/rules` + `/policies` panels AND the retired standalone `/proposals`
   // queue redirect into Steering (proposals now live inside its two sub-sections) — map them
   // there too, so the rail never flashes Settings open on the pre-redirect tick.
@@ -518,6 +526,27 @@ function TestRailRows({ navigate }: { navigate: (p: string) => void }): React.Re
   );
 }
 
+/** The Skills accordion's single shortcut row: Skills has no persistent per-item list worth
+ *  mirroring on the rail (the catalog is ~140 skills — a dashboard, not a shortcut list), so the
+ *  accordion is one "Browse skills" shortcut into the file manager (the ▦ links the same page).
+ *  Same grammar as {@link EvalsRailRows}. */
+function SkillsRailRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+  return (
+    <div role="menu" className="flex flex-col pt-0.5">
+      <button
+        type="button"
+        role="menuitem"
+        data-testid="rail-skills-browse"
+        onClick={() => navigate(skillsPath())}
+        className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
+        style={{ color: 'var(--ink-muted)' }}
+      >
+        Browse skills
+      </button>
+    </div>
+  );
+}
+
 /** The Steering accordion's rows: one per MANAGEMENT sub-section (Policies / Memories), each a
  *  navigate() shortcut to its page — the SettingsShortcutRows grammar. The nav-reorg moved the
  *  Dashboard from a sub-row to the heading's ▦ (same affordance Projects/Execute/Chat/Repos use),
@@ -868,6 +897,17 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
           {/* ── The work/system boundary (usability wave): a bar separating the work sections above
                  from the governance/system sections (Steering, Evals) below. ── */}
           <div aria-hidden data-testid="rail-divider" style={{ borderTop: '1px solid var(--surface-raised)', margin: '8px 12px' }} />
+
+          {/* ── Skills — the file manager over the daemon's effective plugin root (the skills its
+                workers run): browse, edit, enable/disable, reset. Sits before Steering. ── */}
+          <RailHeading
+            path={P_SKILLS}
+            open={openHeading === 'skills'}
+            onToggle={() => toggle('skills')}
+            navigate={navigate}
+          >
+            <SkillsRailRows navigate={navigate} />
+          </RailHeading>
 
           {/* ── Steering — the governed-knowledge home. Its three rows: Dashboard (the review-forward
                 home, on the ▦) + the Policies / Memories deep-dives. ─ */}
