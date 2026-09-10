@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.3",
   "counts": {
-    "files": 137,
-    "occurrences": 1146,
-    "static": 984,
+    "files": 138,
+    "occurrences": 1154,
+    "static": 992,
     "dynamic": 57,
     "computed": 6
   },
@@ -1404,6 +1404,12 @@
       ]
     },
     {
+      "testId": "doc-format",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
       "testId": "doc-gate",
       "files": [
         "src/components/DocumentThread.tsx"
@@ -1467,6 +1473,48 @@
       "testId": "doc-picker-row",
       "files": [
         "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-error",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-loading",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-nogrounding",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-none",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-repo",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
+      ]
+    },
+    {
+      "testId": "doc-subject-retry",
+      "files": [
+        "src/components/DocSubjectPicker.tsx"
       ]
     },
     {

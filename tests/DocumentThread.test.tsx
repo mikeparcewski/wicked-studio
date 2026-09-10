@@ -21,6 +21,8 @@ const postEvent = vi.fn();
 const getVersions = vi.fn();
 
 vi.mock('../src/api/interactive.js', () => ({
+  // The launch composer's subject picker reads the Unfiled mount id from this module (F-046).
+  UNFILED_MOUNT: 'default',
   createDoc: (...a: unknown[]) => createDoc(...a),
   // Slice U (§6.2): the REAL binding rule, mirrored — real projects bind.
   docBinding: (pid: string) => (pid === 'default' ? {} : { project: pid }),
@@ -37,6 +39,20 @@ vi.mock('../src/api/interactive.js', () => ({
   getVersions: (...a: unknown[]) => getVersions(...a),
   interactiveUrl: (p: string, path: string) => `/api/v1/projects/${p}/interactive${path}`,
 }));
+
+// F-046: the launch composer discovers the project's repositories; a repo-less project keeps
+// these composer tests' submit path exactly as it was (nothing to pick, submit allowed).
+vi.mock('../src/api/client.js', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('../src/api/client.js')>();
+  return {
+    ...orig,
+    api: {
+      ...orig.api,
+      listProjectMembers: async () => ({ members: [] }),
+      listRepos: async () => ({ repos: [] }),
+    },
+  };
+});
 
 const navigate = vi.fn();
 

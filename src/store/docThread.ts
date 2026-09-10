@@ -117,9 +117,9 @@ function pick(bag: Record<string, unknown>, ...keys: string[]): string | null {
   return null;
 }
 
-interface Frame { key: string; type: string; payload: Record<string, unknown> }
+interface Frame { docId: string; projectId: string | null; type: string; payload: Record<string, unknown> }
 
-/** A relayed interactive frame, reduced to `(thread key, event type, payload)`.
+/** A relayed interactive frame, reduced to `(doc, stated project or null, event type, payload)`.
  *
  *  Project resolution (the round-2 first-generation fix): the bridge stamps
  *  `project_id` on every payload of a doc BOUND to a crew project (serviceEmit
@@ -128,7 +128,20 @@ interface Frame { key: string; type: string; payload: Record<string, unknown> }
  *  doc-naming frame with no project is not ambiguous, it is the Unfiled mount's:
  *  dropping it (the pre-fix behavior) left every Unfiled doc's thread deaf —
  *  the canvas kept the v0 "Building…" placeholder after v1 landed, the
- *  generating chip never resolved, and the manifest never re-read. */
+ *  generating chip never resolved, and the manifest never re-read.
+ *
+ *  BELT AND BRACES (acceptance finding F-045): not every producer stamps the
+ *  project. Crew's own seams narrated their governed runs with `document_id`
+ *  alone, so every heartbeat was filed under `default:<doc>` while the
+ *  project-bound thread heard nothing and, 90 s in, told the user "the
+ *  generation service may be down" over a run that was executing. Crew stamps
+ *  `project_id` now — and independently, `ingest` files a frame that names a doc
+ *  but no project under the project a DocumentThread is MOUNTED for that doc
+ *  (`bindings`, registered by the component while it shows the doc — never
+ *  derived from retained history, which a previous same-slug thread would
+ *  poison), HOLDS it while no thread is mounted yet (the bus can beat the
+ *  create's navigation by a few ms), and files it under Unfiled only when the
+ *  hold expires — the legacy home of a doc nobody has open. */
 function frameOf(event: CoreEvent): Frame | null {
   if (event.type !== 'interactiveEvent') return null;
   const ev = event.event as Record<string, unknown> | undefined;
@@ -137,11 +150,38 @@ function frameOf(event: CoreEvent): Frame | null {
   const payload = (typeof ev.payload === 'object' && ev.payload !== null ? ev.payload : ev) as Record<string, unknown>;
   const docId = pick(payload, 'document_id', 'doc_id', 'document');
   if (type === null || docId === null) return null;
-  const projectId = pick(payload, 'project_id', 'project')
-    ?? pick(ev, 'project_id', 'project')
-    ?? UNFILED_MOUNT;
-  return { key: threadKey(projectId, docId), type, payload };
+  const projectId = pick(payload, 'project_id', 'project') ?? pick(ev, 'project_id', 'project');
+  return { docId, projectId, type, payload };
 }
+
+/** How long a bare frame (no project stated) waits for its doc's thread to mount before it is
+ *  filed under Unfiled — the create's own navigation mounts the thread within milliseconds, so
+ *  this only ever runs out for a doc this page is not showing. */
+export const BARE_FRAME_HOLD_MS = 10_000;
+
+/** One registration of a doc under a project: MOUNTED (a DocumentThread shows it) or PENDING (the
+ *  composer sent the create and owns the name until the thread mounts — codex on #241). */
+export interface DocBinding { projectId: string; pending: boolean }
+
+/** The ONE project a doc is currently bound under, or `null` when none — or several DISTINCT ones
+ *  (the same slug open under two projects is ambiguous, and a guess would be a wrong thread). */
+export function boundProjectOf(bindings: Record<string, DocBinding[]>, docId: string): string | null {
+  const projects = [...new Set((bindings[docId] ?? []).map((b) => b.projectId))];
+  return projects.length === 1 ? (projects[0] ?? null) : null;
+}
+
+/** A copy of a bare frame with `project_id` stamped where `frameOf` reads it — so a held frame
+ *  rides the standard fold once its project is known. Never mutates the original. */
+function stamped(event: CoreEvent, projectId: string): CoreEvent {
+  const ev = event.event as Record<string, unknown>;
+  const inner = typeof ev.payload === 'object' && ev.payload !== null
+    ? { ...ev, payload: { ...(ev.payload as Record<string, unknown>), project_id: projectId } }
+    : { ...ev, project_id: projectId };
+  return { ...event, event: inner } as unknown as CoreEvent;
+}
+
+/** Bare frames parked for one doc, and the timer that files them under Unfiled if nothing mounts. */
+export interface HeldFrames { events: CoreEvent[]; timer: ReturnType<typeof setTimeout> }
 
 /** The one spelling of a thread's identity. Thread id = the doc's lineage (§2.4). */
 export function threadKey(projectId: string, docId: string): string {
@@ -196,6 +236,26 @@ interface DocThreadStore {
    * A thread that has never heard anything has no entry.
    */
   lastSignalAt: Record<string, number>;
+  /**
+   * Document→project bindings (F-045): `docId → registrations` — MOUNTED (a DocumentThread is
+   * showing the doc; `bindDoc` → the returned unbind on unmount) or PENDING (the composer sent the
+   * create for this name and owns it until the thread mounts, which ADOPTS it — codex on #241).
+   * Never inferred from retained history. A bare frame files under the doc's one project; with
+   * none (or several distinct) it is held, see `held`.
+   */
+  bindings: Record<string, DocBinding[]>;
+  /** Bare frames (no project stated) waiting for a binding, per doc — released exactly once: onto
+   *  the thread that binds, or under Unfiled when `BARE_FRAME_HOLD_MS` runs out with no binding
+   *  at all (a pending create keeps them from expiring). */
+  held: Record<string, HeldFrames>;
+  /**
+   * Register a doc→project binding and file its held frames there; returns the matching unbind.
+   * `pending: true` is the composer's create-time claim: a later mounted `bindDoc` of the same pair
+   * ADOPTS it (one registration, now mounted), so the pending unbind — a create failure, or the
+   * composer tidying up — is a no-op once the thread owns the doc, and the mount's unbind releases it.
+   */
+  bindDoc: (projectId: string, docId: string, opts?: { pending?: boolean }) => () => void;
+  unbindDoc: (projectId: string, docId: string, opts?: { pending?: boolean }) => void;
   /** Deferred continuation dividers (§7.10, the J3 bookkeeping pin), per thread:
    *  each waits for the wire to show its version exists. See `expectDivider`. */
   expectedDividers: Record<string, { msgId: string; version: number }[]>;
@@ -297,7 +357,47 @@ function persistSendStates(key: string): void {
   writeSendStates(key, out);
 }
 
-export const useDocThreadStore = create<DocThreadStore>((set) => ({
+export const useDocThreadStore = create<DocThreadStore>((set, get) => {
+  /** Park a bare frame until its doc's thread mounts, or the hold expires (→ Unfiled, the legacy home). */
+  function hold(docId: string, event: CoreEvent): void {
+    const s = get();
+    const existing = s.held[docId];
+    if (existing !== undefined) {
+      set({ held: { ...s.held, [docId]: { ...existing, events: [...existing.events, event] } } });
+      return;
+    }
+    const timer = setTimeout(() => expireHeld(docId), BARE_FRAME_HOLD_MS);
+    set({ held: { ...s.held, [docId]: { events: [event], timer } } });
+  }
+
+  /** The hold ran out. With NO binding at all the frames go to Unfiled (the legacy home of a doc
+   *  nobody has open); while any binding exists — a pending create still answering, two threads
+   *  still both open — they wait another window rather than expire onto the wrong thread. */
+  function expireHeld(docId: string): void {
+    const entry = get().held[docId];
+    if (entry === undefined) return;
+    if ((get().bindings[docId] ?? []).length === 0) {
+      releaseHeld(docId, UNFILED_MOUNT);
+      return;
+    }
+    const timer = setTimeout(() => expireHeld(docId), BARE_FRAME_HOLD_MS);
+    set((s) => ({ held: { ...s.held, [docId]: { events: entry.events, timer } } }));
+  }
+
+  /** File every held frame for `docId` under `projectId` — exactly once (the entry is dropped first). */
+  function releaseHeld(docId: string, projectId: string): void {
+    const entry = get().held[docId];
+    if (entry === undefined) return;
+    clearTimeout(entry.timer);
+    set((s) => {
+      const held = { ...s.held };
+      delete held[docId];
+      return { held };
+    });
+    for (const event of entry.events) get().ingest(stamped(event, projectId));
+  }
+
+  return {
   messages: {},
   genState: {},
   pending: {},
@@ -306,12 +406,55 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
   landings: [],
   lastError: {},
   lastSignalAt: {},
+  bindings: {},
+  held: {},
   expectedDividers: {},
+
+  bindDoc: (projectId, docId, opts) => {
+    const pending = opts?.pending === true;
+    set((s) => {
+      const current = s.bindings[docId] ?? [];
+      const existing = current.find((b) => b.projectId === projectId);
+      let next: DocBinding[];
+      if (existing === undefined) next = [...current, { projectId, pending }];
+      // A mount ADOPTS the composer's pending claim; a pending claim never demotes a mount.
+      else if (existing.pending && !pending) next = current.map((b) => (b === existing ? { projectId, pending: false } : b));
+      else next = current;
+      return { bindings: { ...s.bindings, [docId]: next } };
+    });
+    const sole = boundProjectOf(get().bindings, docId);
+    if (sole !== null) releaseHeld(docId, sole);
+    return () => get().unbindDoc(projectId, docId, { pending });
+  },
+
+  unbindDoc: (projectId, docId, opts) => {
+    const pending = opts?.pending === true;
+    set((s) => {
+      // A pending unbind removes only a still-PENDING registration (an adopted one is the mount's
+      // to release); a mounted unbind removes the registration whatever its state.
+      const current = (s.bindings[docId] ?? []).filter((b) => !(b.projectId === projectId && (!pending || b.pending)));
+      const bindings = { ...s.bindings };
+      if (current.length === 0) delete bindings[docId];
+      else bindings[docId] = current;
+      return { bindings };
+    });
+    // An unbind can make the doc UNIQUELY bound again (two threads open, one unmounts): frames
+    // held during the ambiguity belong to the thread that remains (Copilot on #241).
+    const sole = boundProjectOf(get().bindings, docId);
+    if (sole !== null) releaseHeld(docId, sole);
+  },
 
   ingest: (event) => {
     const frame = frameOf(event);
     if (frame === null) return;
-    const { key, type, payload } = frame;
+    // A stated project always wins; a bare frame files under the doc's ONE mounted thread, or waits.
+    const projectId = frame.projectId ?? boundProjectOf(get().bindings, frame.docId);
+    if (projectId === null) {
+      hold(frame.docId, event);
+      return;
+    }
+    const key = threadKey(projectId, frame.docId);
+    const { type, payload } = frame;
     // §6.1 honesty budget: every parsed frame for this thread is a liveness
     // signal — stamp it before the fold, whatever the fold does with the frame.
     set((s) => ({ lastSignalAt: { ...s.lastSignalAt, [key]: Date.now() } }));
@@ -704,7 +847,13 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
 
   setGenState: (key, state) => set((s) => ({ genState: { ...s.genState, [key]: state } })),
 
-  clear: (key) =>
+  clear: (key) => {
+    // A cleared thread drops the frames HELD for its doc too — the doc grammar has no `:`, so the
+    // id is the key's tail — and their timer, or a held frame could fire into Unfiled (or a later
+    // mount) after the thread it belonged to was cleared (Copilot on #241).
+    const docId = key.slice(key.lastIndexOf(':') + 1);
+    const heldEntry = get().held[docId];
+    if (heldEntry !== undefined) clearTimeout(heldEntry.timer);
     set((s) => {
       const messages = { ...s.messages }; delete messages[key];
       const genState = { ...s.genState }; delete genState[key];
@@ -714,6 +863,9 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
       const lastError = { ...s.lastError }; delete lastError[key];
       const lastSignalAt = { ...s.lastSignalAt }; delete lastSignalAt[key];
       const expectedDividers = { ...s.expectedDividers }; delete expectedDividers[key];
-      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers };
-    }),
-}));
+      const held = { ...s.held }; delete held[docId];
+      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers, held };
+    });
+  },
+  };
+});

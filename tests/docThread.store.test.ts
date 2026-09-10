@@ -6,8 +6,8 @@
 //   3. Authorship (§2.5): review verdicts and export completions are ORDINARY messages.
 //   4. Version anchors (§7.6, client half): a landed version tags the message that
 //      triggered it, so slice 9's strip has something to scroll to.
-import { beforeEach, describe, expect, it } from 'vitest';
-import { nextMsgId, threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BARE_FRAME_HOLD_MS, nextMsgId, threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
 import { isWhimsy } from '../src/store/narration.js';
 import { docActivityOf } from '../src/store/runtime.js';
 import type { CoreEvent } from '../src/api/types.js';
@@ -42,8 +42,173 @@ function state(): string | undefined {
 
 beforeEach(() => {
   useDocThreadStore.setState({
-    messages: {}, genState: {}, pending: {}, hydrated: {},
-    lastSignalAt: {}, expectedDividers: {},
+    messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastError: {},
+    lastSignalAt: {}, expectedDividers: {}, bindings: {}, held: {},
+  });
+});
+
+describe('F-045 belt and braces: a frame naming a doc but NO project files under the doc\'s MOUNTED thread', () => {
+  /** A frame as crew's seams emitted it before F-045 — `document_id` only. */
+  function bareFrame(eventType: string, payload: Record<string, unknown>): CoreEvent {
+    return {
+      type: 'interactiveEvent',
+      event: { event_type: eventType, payload: { document_id: DOC, ...payload } },
+    } as unknown as CoreEvent;
+  }
+  const status = (message: string): CoreEvent => bareFrame('wicked.interactive.status.posted', { state: 'working', message });
+  const messagesOf = (key: string): DocMsg[] => useDocThreadStore.getState().messages[key] ?? [];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('files it under the thread a DocumentThread is MOUNTED for that doc — the generating chip hears the heartbeat; never the Unfiled mount', () => {
+    const unbind = useDocThreadStore.getState().bindDoc(PROJECT, DOC);
+    const before = Date.now();
+    ingest(status('Convening a 5-seat council…'));
+    expect(texts()).toEqual(['Convening a 5-seat council…']);
+    expect(useDocThreadStore.getState().lastSignalAt[KEY]).toBeGreaterThanOrEqual(before);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    expect(useDocThreadStore.getState().held[DOC]).toBeUndefined();
+    unbind();
+  });
+
+  it('RETAINED HISTORY never claims a frame: an old same-slug thread under another project has messages, only the mounted project gets the frame (codex on #241)', () => {
+    // A previous session left proj-a's thread for this slug in the store (messages, genState, a signal clock).
+    useDocThreadStore.getState().setGenState(threadKey('proj-a', DOC), 'terminal');
+    useDocThreadStore.getState().addNarration(threadKey('proj-a', DOC), 'old news');
+    useDocThreadStore.setState((s) => ({ lastSignalAt: { ...s.lastSignalAt, [threadKey('proj-a', DOC)]: 1 } }));
+    // The user now has the SAME slug open under proj-b.
+    const unbind = useDocThreadStore.getState().bindDoc('proj-b', DOC);
+    ingest(status('for b'));
+    expect(messagesOf(threadKey('proj-b', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['for b']);
+    expect(messagesOf(threadKey('proj-a', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['old news']);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    unbind();
+  });
+
+  it('BUS BEFORE CREATE: a bare frame with no mounted thread is HELD — nothing filed anywhere — and lands on the project thread exactly once when it mounts', () => {
+    ingest(status('picked up'));
+    ingest(status('council convened'));
+    expect(Object.keys(useDocThreadStore.getState().messages)).toEqual([]); // no default:<doc>, no guess
+    expect(useDocThreadStore.getState().held[DOC]?.events).toHaveLength(2);
+    const unbind = useDocThreadStore.getState().bindDoc(PROJECT, DOC);
+    expect(texts()).toEqual(['picked up', 'council convened']);
+    expect(state()).toBe('generating');
+    expect(useDocThreadStore.getState().held[DOC]).toBeUndefined();
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    // Binding the same pair again, or rebinding after an unbind, replays NOTHING.
+    useDocThreadStore.getState().bindDoc(PROJECT, DOC);
+    unbind();
+    useDocThreadStore.getState().bindDoc(PROJECT, DOC);
+    expect(texts()).toEqual(['picked up', 'council convened']);
+    // The hold timer is gone: time passing files nothing under Unfiled.
+    vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+  });
+
+  it('a doc NOBODY has open: the hold expires and the frames file under Unfiled, exactly as before', () => {
+    ingest(status('hello'));
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+    expect(messagesOf(threadKey('default', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['hello']);
+    expect(useDocThreadStore.getState().held[DOC]).toBeUndefined();
+  });
+
+  it('the SAME slug mounted under TWO projects is ambiguous — held (never a guess) and never expired while bound; the thread that REMAINS gets the frames, Unfiled only once nothing is bound', () => {
+    const a = useDocThreadStore.getState().bindDoc('proj-a', DOC);
+    const b = useDocThreadStore.getState().bindDoc('proj-b', DOC);
+    ingest(status('hello'));
+    expect(messagesOf(threadKey('proj-a', DOC))).toEqual([]);
+    expect(messagesOf(threadKey('proj-b', DOC))).toEqual([]);
+    vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]); // still bound → still held, not expired
+    // proj-a unmounts: the doc is uniquely proj-b's now, and the held frame lands there (Copilot on #241).
+    a();
+    expect(messagesOf(threadKey('proj-b', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['hello']);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    b();
+    // A frame arriving with NOTHING bound is held, then Unfiled — the legacy home.
+    ingest(status('nobody home'));
+    vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+    expect(messagesOf(threadKey('default', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['nobody home']);
+  });
+
+  it('after UNMOUNT the binding is gone: a later bare frame is held again, not filed under the stale key', () => {
+    const unbind = useDocThreadStore.getState().bindDoc(PROJECT, DOC);
+    unbind();
+    ingest(status('late'));
+    expect(messages()).toEqual([]);
+    expect(useDocThreadStore.getState().held[DOC]?.events).toHaveLength(1);
+  });
+
+  it('a frame that DOES name its project always files there, whatever is mounted', () => {
+    const unbind = useDocThreadStore.getState().bindDoc('proj-other', DOC);
+    ingest(frame('wicked.interactive.status.posted', { state: 'working', message: 'stated' }));
+    expect(texts()).toEqual(['stated']);
+    expect(messagesOf(threadKey('proj-other', DOC))).toEqual([]);
+    unbind();
+  });
+
+  it('clear(key) drops the frames HELD for that doc and their timer — nothing fires into Unfiled after a thread was cleared (Copilot on #241)', () => {
+    ingest(status('late'));
+    expect(useDocThreadStore.getState().held[DOC]?.events).toHaveLength(1);
+    useDocThreadStore.getState().clear(KEY);
+    expect(useDocThreadStore.getState().held[DOC]).toBeUndefined();
+    vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    expect(messages()).toEqual([]);
+    // …and a later mount replays nothing either.
+    const unbind = useDocThreadStore.getState().bindDoc(PROJECT, DOC);
+    expect(messages()).toEqual([]);
+    unbind();
+  });
+
+  it('a PENDING create-time binding files bare frames on the project thread and keeps them from expiring; the mount ADOPTS it and the pending release is then a no-op (codex on #241)', () => {
+    // The composer sent the create: the name is claimed for this project before any answer.
+    const releasePending = useDocThreadStore.getState().bindDoc(PROJECT, DOC, { pending: true });
+    ingest(status('picked up before the answer'));
+    expect(texts()).toEqual(['picked up before the answer']);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    // The thread mounts on navigation: ONE registration, now mounted.
+    const unmount = useDocThreadStore.getState().bindDoc(PROJECT, DOC);
+    expect(useDocThreadStore.getState().bindings[DOC]).toEqual([{ projectId: PROJECT, pending: false }]);
+    // The composer's pending release no longer removes anything — the mount owns the doc.
+    releasePending();
+    expect(useDocThreadStore.getState().bindings[DOC]).toEqual([{ projectId: PROJECT, pending: false }]);
+    ingest(status('still mine'));
+    expect(texts()).toEqual(['picked up before the answer', 'still mine']);
+    unmount();
+    expect(useDocThreadStore.getState().bindings[DOC]).toBeUndefined();
+  });
+
+  it('a failed create RELEASES its pending claim; held frames then wait, and never expire while ANY binding exists', () => {
+    const release = useDocThreadStore.getState().bindDoc(PROJECT, DOC, { pending: true });
+    release();
+    expect(useDocThreadStore.getState().bindings[DOC]).toBeUndefined();
+    // Ambiguous — two projects mounted — frames are held and do NOT expire into Unfiled while bound.
+    const a = useDocThreadStore.getState().bindDoc('proj-a', DOC);
+    const b = useDocThreadStore.getState().bindDoc('proj-b', DOC);
+    ingest(status('held while ambiguous'));
+    vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+    expect(messagesOf(threadKey('default', DOC))).toEqual([]);
+    expect(useDocThreadStore.getState().held[DOC]?.events).toHaveLength(1);
+    // One thread unmounts → the doc is uniquely bound again → the held frames land THERE (Copilot on #241).
+    a();
+    expect(messagesOf(threadKey('proj-b', DOC)).map((m) => ('text' in m ? m.text : ''))).toEqual(['held while ambiguous']);
+    expect(useDocThreadStore.getState().held[DOC]).toBeUndefined();
+    b();
+  });
+
+  it('the binding is by exact doc id — `deck` mounted does not claim `launch-deck` frames', () => {
+    const unbind = useDocThreadStore.getState().bindDoc(PROJECT, 'deck');
+    ingest(status('hello'));
+    expect(messagesOf(threadKey(PROJECT, 'deck'))).toEqual([]);
+    expect(useDocThreadStore.getState().held[DOC]?.events).toHaveLength(1);
+    unbind();
   });
 });
 
@@ -405,9 +570,8 @@ describe('the signal clock (§6.1 honesty budget)', () => {
 // ── Round-3 J3: unbound-doc frames key to the Unfiled mount ───────────────────
 
 describe('unbound-doc frames (the round-2 first-generation fix)', () => {
-  it('a doc-naming frame with NO project keys to the Unfiled (default) mount, never dropped', () => {
-    const key = threadKey('default', DOC);
-    ingest({
+  const unfiledLanding = (): CoreEvent =>
+    ({
       type: 'interactiveEvent',
       event: {
         event_type: 'wicked.interactive.version.created',
@@ -416,9 +580,30 @@ describe('unbound-doc frames (the round-2 first-generation fix)', () => {
         // leaving the open canvas on the v0 placeholder after v1 landed.
         payload: { document_id: DOC, version: 1, parent: 0, kind: 'generated' },
       },
-    } as unknown as CoreEvent);
+    }) as unknown as CoreEvent;
+
+  it('a doc-naming frame with NO project keys to the Unfiled (default) mount the canvas has open, never dropped', () => {
+    const key = threadKey('default', DOC);
+    // The Unfiled canvas IS a mounted thread — the studio serves unbound docs through `default`.
+    const unbind = useDocThreadStore.getState().bindDoc('default', DOC);
+    ingest(unfiledLanding());
     expect(useDocThreadStore.getState().landed[key]).toBe(1);
     expect(useDocThreadStore.getState().lastSignalAt[key]).toBeGreaterThan(0);
+    unbind();
+  });
+
+  it('with NO thread open for the doc the frame is held, then keys to the Unfiled mount when the hold runs out (F-045: never guessed onto a project)', () => {
+    vi.useFakeTimers();
+    try {
+      const key = threadKey('default', DOC);
+      ingest(unfiledLanding());
+      expect(useDocThreadStore.getState().landed[key]).toBeUndefined();
+      vi.advanceTimersByTime(BARE_FRAME_HOLD_MS + 1);
+      expect(useDocThreadStore.getState().landed[key]).toBe(1);
+      expect(useDocThreadStore.getState().lastSignalAt[key]).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a frame naming no document is still dropped — the fallback never invents a doc', () => {

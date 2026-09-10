@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
 import { parseCreateAsk } from '../interactive/createAsk.js';
+import { docSlug } from '../interactive/docSlug.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DemoWizard } from './DemoWizard.js';
+import { DocSubjectPicker, NO_GROUNDING_NARRATION, type DocFormat, type SubjectStatus } from './DocSubjectPicker.js';
 import { recordFromThread } from '../interactive/demoWire.js';
 import { runExport } from '../interactive/exportWire.js';
 import { retryBatchInject } from '../interactive/feedbackBatch.js';
@@ -480,6 +482,13 @@ export interface DocumentThreadProps {
 
 export function DocumentThread({ projectId, docId, selectedVersion, navigate, mode = 'document' }: DocumentThreadProps): React.ReactElement {
   const key = docId === null ? null : threadKey(projectId, docId);
+  // F-045: while this thread shows a doc, the store knows which project it is mounted under, so a
+  // relayed frame that names the doc but no project files HERE — never guessed from retained
+  // history — and frames that arrived before this mount are released onto it exactly once.
+  useEffect(() => {
+    if (docId === null) return;
+    return useDocThreadStore.getState().bindDoc(projectId, docId);
+  }, [projectId, docId]);
   const messages = useDocThreadStore((s) => (key === null ? EMPTY : s.messages[key] ?? EMPTY));
   const streamed = useDocThreadStore((s) => (key === null ? undefined : s.genState[key]));
   // §6.1: the send FIFO — head is being worked, the rest are queued behind it.
@@ -522,6 +531,32 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // F-046 (studio half): what the next document is ABOUT (the project's repos, sent as
+  // `repo_refs` — crew validates them and grounds the run on THOSE, never the first member) and
+  // its format (`style`; '' lets crew infer it from the brief's format words).
+  const [repoRefs, setRepoRefs] = useState<string[]>([]);
+  const [format, setFormat] = useState<DocFormat>('');
+  // Repository discovery can FAIL (codex on #241): the composer will not submit a launch while the
+  // list is loading or after a failed read — unless the user explicitly chooses to create without
+  // repository grounding, which the thread then records.
+  const [subjectStatus, setSubjectStatus] = useState<SubjectStatus>('loading');
+  const [noGrounding, setNoGrounding] = useState(false);
+  // The picks belong to ONE launch context. This component is not remounted when the route moves
+  // (App.tsx), so a selection made for project A would otherwise ride the next create in project
+  // B — a 400 `repo_not_in_project` at best, a silently wrong subject at worst (Copilot on #241).
+  // Reset whenever the context changes; a successful create resets too (below).
+  useEffect(() => {
+    setRepoRefs([]);
+    setFormat('');
+    setNoGrounding(false);
+  }, [projectId, docId, mode]);
+  const launching = docId === null || key === null;
+  /** The launch composer refuses to send while the repositories are unknown, except by explicit choice. */
+  const subjectBlocks = launching && (subjectStatus === 'loading' || (subjectStatus === 'error' && !noGrounding));
+  /** The thread line a no-grounding create leaves — only when discovery FAILED and the user chose to go on. */
+  const noteNoGrounding = (threadKeyOf: string): void => {
+    if (subjectStatus === 'error' && noGrounding) useDocThreadStore.getState().addNarration(threadKeyOf, NO_GROUNDING_NARRATION);
+  };
   // The demo path's ordered disclosure (§4.1), seeded by the message that opened it. The
   // anchor id is minted BEFORE the wizard so the version it lands tags the same message
   // the transcript shows (§7.6) — the wizard is a longer way to write case 1, not a
@@ -561,7 +596,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
 
   async function submit(): Promise<void> {
     const body = text.trim();
-    if (body === '' || busy) return;
+    if (body === '' || busy || subjectBlocks) return;
     const store = useDocThreadStore.getState();
     const msgId = nextMsgId();
     setBusy(true);
@@ -586,16 +621,42 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         // create lands in the catch below — the visible composer error,
         // never a silent close (the loud-502 contract, §8.4.1 probe 3).
         const parsed = parseCreateAsk(body);
-        const created = await createDoc(projectId, {
-          name: parsed?.name ?? docName(body), kind: 'source',
-          brief: parsed?.brief ?? body, ...docBinding(projectId),
-          source_message_id: msgId,
-        });
+        const name = parsed?.name ?? docName(body);
+        // F-045: claim the doc for THIS project the moment the create is sent (codex on #241) —
+        // the bridge emits doc.created before it answers, so crew's first frames can arrive before
+        // the response, let alone before the thread mounts; a pending binding files them here and
+        // the mount adopts it. Claimed under the CANONICAL id — the bridge's own slug of `name`,
+        // which is what every frame carries (codex r3) — released on failure, and re-pointed in the
+        // unexpected case that the bridge answers with yet another spelling.
+        const expectedId = docSlug(name);
+        let releasePending = expectedId !== '' ? store.bindDoc(projectId, expectedId, { pending: true }) : (): void => undefined;
+        let created;
+        try {
+          created = await createDoc(projectId, {
+            name, kind: 'source',
+            brief: parsed?.brief ?? body, ...docBinding(projectId),
+            source_message_id: msgId,
+            // F-046: the subject repos and the format ride the create; both omitted when unset.
+            ...(repoRefs.length > 0 ? { repo_refs: repoRefs } : {}),
+            ...(format !== '' ? { style: format } : {}),
+          });
+        } catch (e) {
+          releasePending();
+          throw e;
+        }
+        if (created.name !== expectedId) {
+          releasePending();
+          releasePending = store.bindDoc(projectId, created.name, { pending: true });
+        }
         const opened = threadKey(projectId, created.name);
         store.addUserMsg(opened, msgId, body);
         store.addNarration(opened, `Generating “${created.name}” from your brief.`);
         store.setGenState(opened, 'generating');
+        noteNoGrounding(opened);
         setText('');
+        setRepoRefs([]); // the picks were for THIS document — the next launch starts clean
+        setFormat('');
+        setNoGrounding(false);
         navigate(versionPath(projectId, created.name, null));
         return;
       }
@@ -762,9 +823,14 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
           projectId={projectId}
           seed={wizard.seed}
           msgId={wizard.msgId}
+          repoRefs={repoRefs}
+          {...(format !== '' ? { style: format } : {})}
           onCancel={() => setWizard(null)}
           onCreated={(name) => {
             setWizard(null);
+            noteNoGrounding(threadKey(projectId, name));
+            setRepoRefs([]);
+            setNoGrounding(false);
             // The demo exists with its spec and no recording — so the surface it opens on
             // is the one that OFFERS to record it (§3.3: the control beside the statement).
             navigate(modePath(projectId, 'video', name));
@@ -902,6 +968,22 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             </p>
           );
         })()}
+        {/* F-046: on the LAUNCH composer, what the document (or demo) is about — the project's
+            repositories as toggles (sent as repo_refs; a demo's spec is grounded on the app's own
+            source the same way) — and, for a document, its format (the bridge's styles). */}
+        {launching && (
+          <DocSubjectPicker
+            projectId={projectId}
+            mode={mode}
+            repoRefs={repoRefs}
+            onRepoRefs={setRepoRefs}
+            format={format}
+            onFormat={setFormat}
+            noGrounding={noGrounding}
+            onNoGrounding={setNoGrounding}
+            onStatus={setSubjectStatus}
+          />
+        )}
         {/* §5.3's composer contract, worn by every mode: --surface-raised at
             --radius-xl, the wk-composer focus ring (--accent-dim via
             :focus-within — never the full accent), an accent-filled submit. */}
@@ -936,7 +1018,12 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             type="button"
             data-testid="doc-composer-submit"
             onClick={() => void submit()}
-            disabled={busy || wizard !== null || text.trim() === ''}
+            disabled={busy || wizard !== null || text.trim() === '' || subjectBlocks}
+            title={subjectBlocks
+              ? (subjectStatus === 'loading'
+                ? 'waiting for the project’s repositories'
+                : 'the repositories could not be listed — retry, or choose to create without repository grounding')
+              : undefined}
             className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
             style={{ background: S.accent, color: 'var(--accent-fg)', border: 'none',
                      cursor: 'pointer', fontFamily: 'var(--font-sans)' }}

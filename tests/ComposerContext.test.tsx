@@ -33,6 +33,7 @@ vi.mock('../src/api/interactive.js', async (importOriginal) => {
     ServiceHintError: actual.ServiceHintError,
     BridgeUnavailableError: actual.BridgeUnavailableError,
     docBinding: actual.docBinding, // slice U (§6.2): the real binding rule
+    UNFILED_MOUNT: actual.UNFILED_MOUNT, // F-046: the launch composer's subject picker reads the Unfiled mount id
 
     requestThemeLearn: (...a: unknown[]) => requestThemeLearn(...a),
     attachSource: (...a: unknown[]) => attachSource(...a),
@@ -46,6 +47,20 @@ vi.mock('../src/api/interactive.js', async (importOriginal) => {
         payload: { role: 'user', text, document_id: d, source_message_id: id },
       }),
     interactiveUrl: (p: string, path: string) => `/api/v1/projects/${p}/interactive${path}`,
+  };
+});
+
+// F-046: the launch composer discovers the project's repositories; a repo-less project keeps
+// this suite's submit path exactly as it was (nothing to pick, submit allowed).
+vi.mock('../src/api/client.js', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('../src/api/client.js')>();
+  return {
+    ...orig,
+    api: {
+      ...orig.api,
+      listProjectMembers: async () => ({ members: [] }),
+      listRepos: async () => ({ repos: [] }),
+    },
   };
 });
 

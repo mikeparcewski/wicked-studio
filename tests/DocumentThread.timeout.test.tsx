@@ -18,6 +18,8 @@ const KEY = threadKey(PROJECT, DOC);
 const postEvent = vi.fn();
 
 vi.mock('../src/api/interactive.js', () => ({
+  // The launch composer's subject picker reads the Unfiled mount id from this module (F-046).
+  UNFILED_MOUNT: 'default',
   createDoc: vi.fn(),
   docBinding: () => ({}),
   postFork: vi.fn(),
