@@ -1846,8 +1846,10 @@ class Rig:
         if clone.returncode != 0:
             raise SetupFailure("repo_clone", f"git clone failed: {clone.stderr[-800:]}")
         head = subprocess.run(["git", "-C", str(self.repo_root), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
-        # wicked-studio TRACKS `.codegraph/estate.db` (a code graph of the main checkout); onboarding
-        # indexes into exactly that path and its collision guard refuses a graph naming another root.
+        # wicked-studio TRACKED `.codegraph/estate.db` (a code graph of the main checkout) until #220
+        # untracked it; a pre-wicked-core#406 engine indexed into exactly that path and its collision
+        # guard refused a graph naming another root. Kept as a defensive scrub: a clone of a checkout
+        # that still carries the file must not hand onboarding a foreign graph.
         inherited_graph = self.repo_root / ".codegraph"
         shutil.rmtree(inherited_graph, ignore_errors=True)
         self.report["setup"]["repo_clone"] = {
