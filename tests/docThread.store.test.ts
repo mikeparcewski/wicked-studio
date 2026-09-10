@@ -47,6 +47,64 @@ beforeEach(() => {
   });
 });
 
+describe('F-045 belt and braces: a frame naming a doc but NO project files under the doc\'s sole open thread', () => {
+  /** A frame as crew's seams emitted it before F-045 — `document_id` only. */
+  function bareFrame(eventType: string, payload: Record<string, unknown>): CoreEvent {
+    return {
+      type: 'interactiveEvent',
+      event: { event_type: eventType, payload: { document_id: DOC, ...payload } },
+    } as unknown as CoreEvent;
+  }
+
+  it('files it under the ONE thread open for that doc — the generating chip hears the heartbeat', () => {
+    // The composer opened this doc under its project (create → setGenState).
+    useDocThreadStore.getState().setGenState(KEY, 'generating');
+    const before = Date.now();
+    ingest(bareFrame('wicked.interactive.status.posted', { state: 'working', message: 'Convening a 5-seat council…' }));
+    expect(texts()).toEqual(['Convening a 5-seat council…']);
+    expect(useDocThreadStore.getState().lastSignalAt[KEY]).toBeGreaterThanOrEqual(before);
+    // …and NOT under the Unfiled mount.
+    expect(useDocThreadStore.getState().messages[threadKey('default', DOC)]).toBeUndefined();
+    expect(useDocThreadStore.getState().lastSignalAt[threadKey('default', DOC)]).toBeUndefined();
+  });
+
+  it('a hydrated (already-open) thread counts as open too', () => {
+    useDocThreadStore.setState({ hydrated: { [KEY]: true } });
+    ingest(bareFrame('wicked.interactive.status.posted', { state: 'complete', message: 'First draft is in.' }));
+    expect(texts()).toEqual(['First draft is in.']);
+    expect(state()).toBe('terminal');
+  });
+
+  it('with NO thread open it is the Unfiled mount\'s, exactly as before', () => {
+    ingest(bareFrame('wicked.interactive.status.posted', { state: 'working', message: 'hello' }));
+    expect(useDocThreadStore.getState().messages[threadKey('default', DOC)]?.length).toBe(1);
+    expect(messages()).toEqual([]);
+  });
+
+  it('with the SAME doc name open under TWO projects it is ambiguous — Unfiled, never a guess', () => {
+    useDocThreadStore.getState().setGenState(threadKey('proj-a', DOC), 'generating');
+    useDocThreadStore.getState().setGenState(threadKey('proj-b', DOC), 'generating');
+    ingest(bareFrame('wicked.interactive.status.posted', { state: 'working', message: 'hello' }));
+    expect(useDocThreadStore.getState().messages[threadKey('proj-a', DOC)]).toBeUndefined();
+    expect(useDocThreadStore.getState().messages[threadKey('proj-b', DOC)]).toBeUndefined();
+    expect(useDocThreadStore.getState().messages[threadKey('default', DOC)]?.length).toBe(1);
+  });
+
+  it('a frame that DOES name its project always files there, whatever else is open', () => {
+    useDocThreadStore.getState().setGenState(threadKey('proj-other', DOC), 'generating');
+    ingest(frame('wicked.interactive.status.posted', { state: 'working', message: 'stated' }));
+    expect(texts()).toEqual(['stated']);
+    expect(useDocThreadStore.getState().messages[threadKey('proj-other', DOC)]).toBeUndefined();
+  });
+
+  it('the suffix match never straddles a doc name — `deck` open does not claim `launch-deck` frames', () => {
+    useDocThreadStore.getState().setGenState(threadKey(PROJECT, 'deck'), 'generating');
+    ingest(bareFrame('wicked.interactive.status.posted', { state: 'working', message: 'hello' }));
+    expect(useDocThreadStore.getState().messages[threadKey(PROJECT, 'deck')]).toBeUndefined();
+    expect(useDocThreadStore.getState().messages[threadKey('default', DOC)]?.length).toBe(1);
+  });
+});
+
 describe('composer state mapping (§2.2)', () => {
   it('a status while working puts the thread in GENERATING', () => {
     ingest(frame('wicked.interactive.status.posted', { state: 'working', message: 'Planning 4 slides' }));

@@ -128,8 +128,17 @@ interface Frame { key: string; type: string; payload: Record<string, unknown> }
  *  doc-naming frame with no project is not ambiguous, it is the Unfiled mount's:
  *  dropping it (the pre-fix behavior) left every Unfiled doc's thread deaf —
  *  the canvas kept the v0 "Building…" placeholder after v1 landed, the
- *  generating chip never resolved, and the manifest never re-read. */
-function frameOf(event: CoreEvent): Frame | null {
+ *  generating chip never resolved, and the manifest never re-read.
+ *
+ *  BELT AND BRACES (acceptance finding F-045): not every producer stamps the
+ *  project. Crew's own seams narrated their governed runs with `document_id`
+ *  alone, so every heartbeat was filed under `default:<doc>` while the
+ *  project-bound thread heard nothing and, 90 s in, told the user "the
+ *  generation service may be down" over a run that was executing. Crew stamps
+ *  `project_id` now — and independently, a frame that names a doc but no project
+ *  is filed under the ONE thread this page has open for that doc (`known`),
+ *  falling back to Unfiled only when none (or several) is open. */
+function frameOf(event: CoreEvent, known: (docId: string) => string | null = () => null): Frame | null {
   if (event.type !== 'interactiveEvent') return null;
   const ev = event.event as Record<string, unknown> | undefined;
   if (typeof ev !== 'object' || ev === null) return null;
@@ -139,8 +148,27 @@ function frameOf(event: CoreEvent): Frame | null {
   if (type === null || docId === null) return null;
   const projectId = pick(payload, 'project_id', 'project')
     ?? pick(ev, 'project_id', 'project')
+    ?? known(docId)
     ?? UNFILED_MOUNT;
   return { key: threadKey(projectId, docId), type, payload };
+}
+
+/** The project of the ONE thread this page has open for `docId` — a key in any of
+ *  the store's per-thread maps — or `null` when none or more than one is. The
+ *  doc-name grammar has no `:`, so the suffix match cannot straddle the separator. */
+export function soleThreadProject(
+  s: Pick<DocThreadStore, 'messages' | 'genState' | 'hydrated' | 'pending' | 'lastSignalAt'>,
+  docId: string,
+): string | null {
+  const suffix = `:${docId}`;
+  const projects = new Set<string>();
+  for (const bag of [s.messages, s.genState, s.hydrated, s.pending, s.lastSignalAt]) {
+    for (const key of Object.keys(bag)) {
+      if (key.endsWith(suffix)) projects.add(key.slice(0, -suffix.length));
+    }
+  }
+  if (projects.size !== 1) return null;
+  return [...projects][0] ?? null;
 }
 
 /** The one spelling of a thread's identity. Thread id = the doc's lineage (§2.4). */
@@ -297,7 +325,7 @@ function persistSendStates(key: string): void {
   writeSendStates(key, out);
 }
 
-export const useDocThreadStore = create<DocThreadStore>((set) => ({
+export const useDocThreadStore = create<DocThreadStore>((set, get) => ({
   messages: {},
   genState: {},
   pending: {},
@@ -309,7 +337,7 @@ export const useDocThreadStore = create<DocThreadStore>((set) => ({
   expectedDividers: {},
 
   ingest: (event) => {
-    const frame = frameOf(event);
+    const frame = frameOf(event, (docId) => soleThreadProject(get(), docId));
     if (frame === null) return;
     const { key, type, payload } = frame;
     // §6.1 honesty budget: every parsed frame for this thread is a liveness

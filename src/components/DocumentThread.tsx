@@ -3,6 +3,7 @@ import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, p
 import { parseCreateAsk } from '../interactive/createAsk.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DemoWizard } from './DemoWizard.js';
+import { DocSubjectPicker, type DocFormat } from './DocSubjectPicker.js';
 import { recordFromThread } from '../interactive/demoWire.js';
 import { runExport } from '../interactive/exportWire.js';
 import { retryBatchInject } from '../interactive/feedbackBatch.js';
@@ -522,6 +523,11 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // F-046 (studio half): what the next document is ABOUT (the project's repos, sent as
+  // `repo_refs` — crew validates them and grounds the run on THOSE, never the first member) and
+  // its format (`style`; '' lets crew infer it from the brief's format words).
+  const [repoRefs, setRepoRefs] = useState<string[]>([]);
+  const [format, setFormat] = useState<DocFormat>('');
   // The demo path's ordered disclosure (§4.1), seeded by the message that opened it. The
   // anchor id is minted BEFORE the wizard so the version it lands tags the same message
   // the transcript shows (§7.6) — the wizard is a longer way to write case 1, not a
@@ -590,6 +596,9 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
           name: parsed?.name ?? docName(body), kind: 'source',
           brief: parsed?.brief ?? body, ...docBinding(projectId),
           source_message_id: msgId,
+          // F-046: the subject repos and the format ride the create; both omitted when unset.
+          ...(repoRefs.length > 0 ? { repo_refs: repoRefs } : {}),
+          ...(format !== '' ? { style: format } : {}),
         });
         const opened = threadKey(projectId, created.name);
         store.addUserMsg(opened, msgId, body);
@@ -902,6 +911,17 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             </p>
           );
         })()}
+        {/* F-046: on the LAUNCH composer, what the document is about and in what format —
+            the project's repositories as toggles (sent as repo_refs) and the bridge's formats. */}
+        {(docId === null || key === null) && mode !== 'video' && (
+          <DocSubjectPicker
+            projectId={projectId}
+            repoRefs={repoRefs}
+            onRepoRefs={setRepoRefs}
+            format={format}
+            onFormat={setFormat}
+          />
+        )}
         {/* §5.3's composer contract, worn by every mode: --surface-raised at
             --radius-xl, the wk-composer focus ring (--accent-dim via
             :focus-within — never the full accent), an accent-filled submit. */}

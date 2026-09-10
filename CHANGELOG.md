@@ -12,6 +12,28 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **Document thread — status frames file by `document_id` when the producer names no project
+  (acceptance finding F-045, belt and braces).** Crew's own interactive seams narrated their governed
+  runs with `document_id` alone, so every heartbeat was filed under the Unfiled mount while the
+  project-bound thread heard nothing and, 90 s into a live run, showed "no worker has picked this up —
+  the generation service may be down" with a Retry that would have injected a duplicate. Crew now stamps
+  `project_id` on every seam emit (wicked-crew, F-045); independently, `docThread.ingest` files a
+  frame that names a doc but no project under the ONE thread this page has open for that doc
+  (`soleThreadProject`), falling back to Unfiled only when none — or more than one — is open. The
+  stall banner therefore appears only after a genuine 90 s silence.
+
+### Added
+- **Launch composer — what the document is ABOUT and in what format (F-046, studio half).**
+  `DocSubjectPicker` offers the project's `crew.repo` members by name as toggles (sent on the create as
+  `repo_refs`; crew validates them against the project and grounds the governed draft/demo run on
+  THOSE repositories instead of the project's first member) and the bridge's four formats (sent as
+  `style`; "from the brief" sends nothing and lets crew infer it from the brief's format words, so a
+  print/A4 brief reaches the bridge's print instructions). The Unfiled mount offers the format only.
+  `CreateDocBody` gains `repo_refs`. Depends on wicked-crew's F-046 change for the refs to have any
+  effect (an older crew relays them to the bridge, which ignores unknown fields).
+
+
 ## [0.5.2] — 2026-09-09
 
 ### Added

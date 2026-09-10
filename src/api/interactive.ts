@@ -112,6 +112,14 @@ export interface CreateDocBody {
   /** Crew project binding. Registration is the authority: a doc that cannot be
    *  filed is a loud error with no doc created (DES-PROJECT-001 §2.3). */
   project?: string;
+  /**
+   * The repositories this document is ABOUT (acceptance finding F-046) — repo ids from the
+   * project's `crew.repo` members. Crew's proxy validates them against the project BEFORE the
+   * bridge sees the create (a miss is a 400 `{code:"repo_not_in_project"}` with nothing
+   * created), strips them from the forwarded body, and grounds the governed draft/demo run on
+   * THOSE repositories instead of the project's first member. Unfiled docs cannot name one.
+   */
+  repo_refs?: string[];
   /** The thread message this generation came from (§7.6). The bridge writes it into
    *  the version's `meta.sourceMessageId` at commit; the client only supplies it. */
   source_message_id?: string;
