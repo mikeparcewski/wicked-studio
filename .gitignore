@@ -28,3 +28,7 @@ e2e/artifacts/**/*.png
 e2e/artifacts/test-feature-live/runs/
 e2e/artifacts/**/.launch.lock
 e2e/artifacts/**/.*.tmp
+
+# Per-checkout code graph an older wicked-core indexed in-tree (#220). The live graph is built by
+# `wicked-estate index` under the daemon state home (wicked-core#406); nothing here is source.
+.codegraph/

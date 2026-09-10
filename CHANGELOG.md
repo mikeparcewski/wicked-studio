@@ -12,6 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **`.codegraph/estate.db` is no longer tracked** (#220). A fresh clone shipped the operator repo's code-graph
+  identity, so onboarding the clone failed with `REPO COLLISION` (and an older wicked-core wrote into the
+  tracked file); the graph is per-checkout, built by `wicked-estate index` under the daemon state home
+  (wicked-core#406). The file is untracked (local copies are left on disk) and `.codegraph/` is ignored.
+
 ## [0.5.4] — 2026-09-10
 
 ### Fixed
