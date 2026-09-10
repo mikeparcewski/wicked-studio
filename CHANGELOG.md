@@ -12,7 +12,24 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-09-09
+
 ### Added
+- **Repositories section on the project page (#208, closes #207).** `ProjectRepositories` lists a
+  project's `crew.repo` members and attaches / detaches them from the surface an operator actually
+  lands on (`/p/:id`; also the legacy `/projects/:id`, whose generic Members list now shows only the
+  non-repo members): a registered-repo picker over the one session repo cache (fetched on the field's
+  first focus, never on mount; already-attached repos excluded) that sends the pinned
+  `AttachMemberBody` (`POST /projects/:id/members` `{kind:'crew.repo', ref, attachedBy:'studio'}`),
+  an inline-confirmed detach (`DELETE /projects/:id/members/:mid`), one `busy` lock shared by attach
+  and detach (both derive the next membership from the members they closed over, so two in flight
+  would report from a stale base), failures surfaced in `project-repo-error` — never swallowed — an
+  empty state that names the consequence (a project-scoped test cannot launch until a repo is
+  attached), and the section omitted for the synthesized `default` project. The dashboard's bound-repo
+  chips render from the same membership read, so an attach lights the chip with no second fetch.
+  Before this a UI-created project could never launch a project-scoped test: nothing in the product
+  called `attachProjectMember` with `kind:'crew.repo'`, and crew's multiscope resolver 400s a
+  project-only launch over zero repository members.
 - **Skills section (#209).** `/skills` — the file manager over the daemon's one effective
   garden-shaped plugin root (the skills keystone, crew#480): the KPI band and catalog with
   kind / provenance / core / claude-only / upgrade / conflict / unpublished badges, the enabled
@@ -25,17 +42,66 @@ npm publish dates. Every version listed here exists on
   2xx `{verdict, findings, revision}` envelope (a `blocked` verdict is a normal answer with
   nothing written); a 409 — exclusively a stale `expectedRevision` — freezes the page behind the
   reload prompt.
-- **Engine line on `/skills`.** `GET /diagnostics` → `skills` (api-types 0.27.0) rendered under the
-  snapshot line: the state vocabulary `published | fallback | blocked | config-error | disabled`
-  with its findings — whether the engine is actually being handed a verified snapshot, and why not.
+- **Engine line on `/skills`.** `GET /diagnostics` → `skills` (the api-types 0.28.0
+  `diagnostics.skills` block, mirrored) rendered under the snapshot line: the state vocabulary
+  `published | fallback | blocked | config-error | disabled` with its findings — whether the engine
+  is actually being handed a verified snapshot, and why not.
+- **Tests-feature deterministic test layer (#210).** T1–T20 / T24 of the Tests-feature test plan
+  (council run `1aba96f6`; the codex REVISE's required changes applied), the scenario id in every
+  test name: the launch wire's presence gate and its negative guarantee — named 404 / 400 /
+  strict-zod 400 / 500 / 501 / transport rethrown after ONE call, never retried over `/runs`
+  (`tests/testingLaunch.wire.test.ts`); the four `POST /runs/:id/gate` bodies and the bodyless
+  cancel (`tests/gateWire.test.ts`); the launch panel's scope matrix, locked chips, picker, consent,
+  double-submit → one POST, and gate arrival before/after the response (`tests/TestingLaunch.test.tsx`);
+  the page's probing → populated states and the `?new=` intent (`tests/CampaignsPage.test.tsx`);
+  route wiring through the project shell (`tests/ProjectCampaignsView.test.tsx`); and **T30**, a
+  rename-consistency guard over every rendered string — text, `title`, `aria-label`, `placeholder` —
+  on the Test surfaces (`tests/renameConsistency.test.tsx` + `tests/renameGuard.ts`). The revised
+  plan ships in-repo (`docs/testing/tests-feature-test-plan.md`: T21–T23 rewritten as non-launching
+  probes, T25–T29 governed / Playwright left as documented next steps).
+- **Seed-surfaces E2E suite (#211).** `e2e/seed_surfaces_test.py` seeds and exercises every studio
+  surface through the real UI (Playwright) against a disposable, hermetic daemon — own port, scratch
+  HOME / TMPDIR, every `WICKED_*` store pinned into the temp dir, the bridge pinned to
+  `wicked-interactive@0.8.1` and resolved offline — with persistence + scoping assertions, product
+  gaps as narrowly scoped `xfail` rows carrying their issue numbers (studio#212 / #213 / #214 / #216,
+  crew#472), one governed scenario proven from durable events, and an isolation proof that the rig
+  wrote nothing identifiable into the live daemon or the operator's stores. Certified run 12:
+  52 rows — 36 pass · 0 fail · 15 xfail · 0 xpass · 0 skip · 1 blocked (DEM-REC, studio#217).
+  `--self-test` runs 229 in-process checks of the rig's own guards; `--rescrub-report` re-derives the
+  committed report deterministically. Rig, coverage matrix, findings and known limitations in
+  `docs/testing/seed-surfaces-plan.md`; the scrubbed report in `docs/testing/seed-surfaces-report.json`.
+- **Live Test-feature run (#215).** `e2e/test_feature_live.py` drives "Run recon" / "New test"
+  through the studio UI on the dogfood daemon (crew 0.7.25 / studio 0.5.1): three governed runs
+  serialized behind a preflight, the intake gate approved on the real SteeringGate card, every testid
+  it uses verified against `testid-inventory.json`, no deliver / push / PR gate ever taken, nothing
+  registered, modified or deleted. Write-up in `docs/testing/test-feature-live-report.md`; raw
+  measurements in `e2e/artifacts/test-feature-live/report.json`. What worked end to end: the launch
+  UX (verb → picker → chip → submit posts exactly the pinned `TestingReconBody`; the gate on the panel
+  card over `/ws` in 67–80 s; approve → `POST /runs/:id/gate` 200; runs reach terminal state). Findings
+  recorded for follow-up: the approved plan is never executed (0 sibling runs, 0 campaigns — crew#473),
+  the only human gate is pre-execution, a one-sentence brief plans 3 units every time (core#393), two
+  plans for the same brief share 0 % of scenario ids, and studio-side operator-view defects (a dangling
+  `campaign` label when `campaignRegistered:false`, the Test landing never showing single-repo recon
+  runs, rename leftovers).
 
 ### Fixed
-- **The Skills API layer speaks the real crew#480 wire (`wicked-crew-api-types` 0.27.0) — fix
-  pass 4 of #209.** Against the integrated bundle `/skills` rendered an error: studio's hand-mirrored
-  types expected a `manifest.support` map, string `revision`/`expectedRevision`, hash-carrying file
-  entries and a `SkillFileContent.hash`, none of which exist in the contract. Every declaration
-  is now a byte-for-byte MIRROR of the contract's skills block (`src/api/skills-wire.ts`, pinned
-  by `tests/skillsWire.test.ts` against a vendored fixture of the same line ranges), and every
+- **Campaign → Test rename regression (#210, closes #203).** 15 rendered "Campaign" strings — the
+  rail ＋ label, the project-shell crumb, the chat group-attach pill, the Needs-You row text and verb,
+  the scoreboard not-found / loading / attached tooltip, the launch panel's fan-out and resolved copy
+  and link, the landing's probing / unsupported copy, `TESTING_UNSUPPORTED_COPY`, the "+N older" chip
+  title and the "No tests match" line — now speak the Test vocabulary; backend / route / store-key /
+  testid vocabulary stays `campaign` by design. **The Test rail ＋ now creates**: it used to land on
+  the Tests page with nothing open; a `?new=test` / `?new=recon` arrival intent (`testingLaunchPath` /
+  `readLaunchIntent` in `src/api/testing.ts`) opens that panel on mount and is consumed with one
+  `replace` navigation, and the rail's "Run recon" row rides `?new=recon`. The project-scoped view
+  moved out of `App.tsx` into `ProjectCampaignsView.tsx` (`project-campaigns-crumb`);
+  `testid-inventory.json` regenerated.
+- **The Skills API layer speaks the real crew#480 wire — fix pass 4 of #209.** Against the
+  integrated bundle `/skills` rendered an error: studio's hand-mirrored types expected a
+  `manifest.support` map, string `revision`/`expectedRevision`, hash-carrying file entries and a
+  `SkillFileContent.hash`, none of which exist in the contract. Every declaration is now a
+  byte-for-byte MIRROR of the contract's skills block (`src/api/skills-wire.ts`, pinned by
+  `tests/skillsWire.test.ts` against a vendored fixture of the same line ranges), and every
   reader/writer consumes it: numeric revisions, `manifest.files` records (support files are the
   records no skill owns; the DEEPEST registered skill dir owns a file), `SkillFileTree` rows
   `{path, size, record}`, `SkillReadResult {content|null, size, truncated, binary}` (Save disabled
@@ -45,9 +111,11 @@ npm publish dates. Every version listed here exists on
   its skill, the skill it is against (core-marked), `file:line`, evidence and explanation. A
   **503** (unseeded root / corrupt `current` / no seam) renders the named unavailable state with
   the daemon's sentence — never an empty catalog; the bare 404 stays the "predates" state.
-  The package pin stays `^0.25.0` (0.27.0 is unpublished); swap the mirror for
-  `export type { … } from 'wicked-crew-api-types'` when it — or its re-minted successor after the
-  #475/#480 collision — publishes.
+  **Contract pin:** the mirror pins the skills block that `wicked-crew-api-types` **0.28.0** carries
+  (crew#480 — re-minted from 0.27.0 after the #475/#480 collision; the block is content-identical,
+  only the version token moved). The package pin stays `^0.25.0` in this release; the swap to
+  `export type { … } from 'wicked-crew-api-types'` (deleting the fixture + pin test) follows once the
+  pin can move to the published 0.28.0.
 
 ## [0.5.1] — 2026-09-08
 
@@ -439,7 +507,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.15...v0.5.0
 [0.4.15]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.14...v0.4.15
