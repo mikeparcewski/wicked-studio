@@ -95,6 +95,9 @@ describe('ProjectDashboard — the full-width project command surface', () => {
       expect(screen.getByTestId(`dashboard-mode-${m}`)).toHaveAttribute('href', `/p/proj-1/${m}`);
     }
     expect(screen.getByTestId('dashboard-do-work')).toHaveAttribute('href', '/p/proj-1/build/new');
+    // studio#214: the management page link must carry the real /projects/:id href so
+    // it is keyboard-accessible and middle-clickable, not just a JS onClick.
+    expect(screen.getByTestId('dashboard-manage')).toHaveAttribute('href', '/projects/proj-1');
 
     // The meta line: last activity + open runs. NO cost — the wire carries none.
     expect(screen.getByTestId('dashboard-meta')).toHaveTextContent(/last activity .* · 0 open runs/);
