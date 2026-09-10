@@ -86,9 +86,32 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
     }
   }
 
+  // Optimistic exclusion: IDs archived locally before the WS reconcile removes them from `runs`.
+  const [locallyArchived, setLocallyArchived] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (locallyArchived.size === 0) return;
+    const unarchivedRunIds = new Set(
+      runs.filter((v) => v.session.archived_at == null).map((v) => v.session.id),
+    );
+    const next = new Set([...locallyArchived].filter((id) => unarchivedRunIds.has(id)));
+    if (next.size !== locallyArchived.size) setLocallyArchived(next);
+  }, [runs, locallyArchived]);
+  async function archive(id: string): Promise<void> {
+    try {
+      await api.archiveRun(id, true);
+      setLocallyArchived((prev) => new Set([...prev, id]));
+    } catch {
+      /* surfaced on next fetch; the row simply stays */
+    }
+  }
+
   const allWorkRuns = useMemo(
-    () => runs.filter((v) => !!v.session.workflow_id && v.session.workflow_id !== 'chat'),
-    [runs],
+    () => runs.filter((v) =>
+      !!v.session.workflow_id &&
+      v.session.workflow_id !== 'chat' &&
+      v.session.archived_at == null &&
+      !locallyArchived.has(v.session.id)),
+    [runs, locallyArchived],
   );
 
   const windowedRuns = useMemo(() => filterByRange(allWorkRuns), [allWorkRuns, filterByRange]);
@@ -370,7 +393,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
               <>
                 <GroupLabel>Completed</GroupLabel>
                 {completedGroup.map(v => (
-                  <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                  <TerminalRunRow key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} onArchive={archive} />
                 ))}
               </>
             )}
@@ -378,7 +401,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
               <>
                 <GroupLabel>Failed</GroupLabel>
                 {failedGroup.map(v => (
-                  <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                  <TerminalRunRow key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} onArchive={archive} />
                 ))}
               </>
             )}
@@ -386,7 +409,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
               <>
                 <GroupLabel>Cancelled</GroupLabel>
                 {cancelledGroup.map(v => (
-                  <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                  <TerminalRunRow key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} onArchive={archive} />
                 ))}
               </>
             )}
@@ -397,7 +420,9 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
             {filtered.length === 0 ? (
               <EmptyState query={query} tab={tab} hidden={hiddenByRange} />
             ) : (
-              filtered.map(v => (
+              filtered.map(v => isTerminal(v.session.status) ? (
+                <TerminalRunRow key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} onArchive={archive} />
+              ) : (
                 <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
               ))
             )}
@@ -465,5 +490,31 @@ function EmptyState({ query, tab, hidden = 0 }: { query: string; tab?: StatusTab
     <p className="px-3 py-6 text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
       {msg}
     </p>
+  );
+}
+
+function TerminalRunRow({ view, selectedRunId, onSelect, onArchive }: {
+  view: SessionView;
+  selectedRunId: string | null;
+  onSelect: (id: string) => void;
+  onArchive: (id: string) => void;
+}): React.ReactElement {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 min-w-0">
+        <RunLink view={view} selectedRunId={selectedRunId} onSelect={onSelect} />
+      </div>
+      {view.session.archived_at == null && (
+        <button
+          type="button"
+          data-run-id={view.session.id}
+          onClick={() => void onArchive(view.session.id)}
+          className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
+          style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+        >
+          Archive
+        </button>
+      )}
+    </div>
   );
 }

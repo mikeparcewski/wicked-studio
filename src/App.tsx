@@ -239,6 +239,19 @@ export function App(): React.ReactElement {
     [refresh],
   );
 
+  const onArchive = useCallback(
+    async (id: string) => {
+      try {
+        await api.archiveRun(id, true);
+        refresh();
+        onNavigateBack();
+      } catch {
+        // non-fatal: stays on the detail page so the user can retry
+      }
+    },
+    [refresh, onNavigateBack],
+  );
+
   const selected = runs.find((v) => v.session.id === runId) ?? null;
 
   // ── DES-FEEDBACK-002 §1.2 (slice G): shortcut registry + command palette ────
@@ -369,6 +382,7 @@ export function App(): React.ReactElement {
         onNavigateBack={onNavigateBack}
         onRefresh={refresh}
         onKill={onKill}
+        onArchive={onArchive}
         navigate={navigate}
         launchProjectId={launchProjectId}
         // Slice Z (§7.6): the route names a run the index has not resolved —

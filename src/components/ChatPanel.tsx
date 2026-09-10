@@ -37,6 +37,7 @@ interface Props {
   onNavigateBack: () => void;
   onRefresh: () => void;
   onKill?: (runId: string) => void | Promise<void>;
+  onArchive?: (runId: string) => void | Promise<void>;
   /** App-level route navigation — threaded to ChatInput's seat sign-in warning (→ /system). */
   navigate?: (path: string) => void;
   /**
@@ -610,6 +611,7 @@ function RunChat({
   onNavigateBack,
   onRefresh,
   onKill,
+  onArchive,
   navigate,
 }: {
   view: SessionView;
@@ -619,6 +621,7 @@ function RunChat({
   onNavigateBack: () => void;
   onRefresh: () => void;
   onKill?: (runId: string) => void | Promise<void>;
+  onArchive?: (runId: string) => void | Promise<void>;
   navigate?: (path: string) => void;
 }): React.ReactElement {
   const { session, units } = view;
@@ -776,6 +779,18 @@ function RunChat({
         {isTerminal && <InspectMenu lens={runTab} onSelect={setRunTab} />}
         <ModePill mode={mode} onChange={onModeChange} readOnly={isTerminal} />
         <ExportEvidenceButton runId={session.id} disabled={!isTerminal} />
+        {isTerminal && session.archived_at == null && onArchive && (
+          <button
+            type="button"
+            data-run-id={session.id}
+            onClick={() => void onArchive(session.id)}
+            title="Archive this run — removes it from the active dashboard"
+            className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
+            style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)' }}
+          >
+            Archive
+          </button>
+        )}
         {!isTerminal && onKill && (
           <button
             type="button"
@@ -1032,7 +1047,7 @@ function NewRunView({
   );
 }
 
-export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefresh, onKill, navigate, launchProjectId = null, pendingRunId = null, runsLoaded = false }: Props): React.ReactElement {
+export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefresh, onKill, onArchive, navigate, launchProjectId = null, pendingRunId = null, runsLoaded = false }: Props): React.ReactElement {
   const [mode, setMode] = useState<RunMode>('balanced');
 
   if (view) {
@@ -1061,6 +1076,7 @@ export function ChatPanel({ view, chatMode, onLaunched, onNavigateBack, onRefres
         onNavigateBack={onNavigateBack}
         onRefresh={onRefresh}
         {...(onKill !== undefined ? { onKill } : {})}
+        {...(onArchive !== undefined ? { onArchive } : {})}
         {...(navigate !== undefined ? { navigate } : {})}
       />
     );

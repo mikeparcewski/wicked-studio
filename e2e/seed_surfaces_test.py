@@ -89,11 +89,11 @@ What this rig is, and what it is not:
     the suite runs AND the self-tests drive.
   - RUN MANAGEMENT IS COVERED OVER TST-1's TERMINAL RUN, no second governed launch: RUN-DET (the
     detail after a full reload: cancelled status, the rejected gate narrated before `Run cancelled`,
-    nothing actionable, the raw wire view == `GET /runs/:id/events`), RUN-ARC (archive — a
-    `[SUBSTITUTE]` over `POST /runs/:id/archive`, because the studio mounts NO archive control:
-    WorkPage's only `archiveRun` call is Unarchive — then the UI proves it left A's dashboard and
-    /work's active list and sits under the Archived toggle, on two full loads), RUN-UNARC (the
-    mounted Unarchive control restores it; wire + reload agree).
+    nothing actionable, the raw wire view == `GET /runs/:id/events`), RUN-ARC (archive — the UI
+    Archive button on a terminal WorkPage row (`TerminalRunRow`) or the run header (`ChatPanel
+    onArchive`) — then the UI proves it left A's dashboard and /work's active list and sits under
+    the Archived toggle, on two full loads), RUN-UNARC (the mounted Unarchive control restores it;
+    wire + reload agree).
   - Steps the UI cannot yet perform are performed over the daemon API and LABELLED
     `[SUBSTITUTE]` in the report (certify the journey, not the proxy). Memories and proposals
     have NO UI author path (agents are the only producer), so their seeds use a SUBSTITUTE
@@ -4211,6 +4211,10 @@ def run_scenarios(rig: Rig, page) -> None:
         group (WorkPage.tsx: `<div class="flex …"><div class="flex-1"><RunLink/></div><button>Unarchive`)."""
         return page.locator(f"xpath=//*[@data-testid='run-link' and @data-run-id='{rid}']/ancestor::div[1]/following-sibling::button[normalize-space()='Unarchive']")
 
+    def archive_button(rid: str):
+        """The accessible Archive action on either a WorkPage terminal row or the run header."""
+        return page.locator(f"xpath=//button[@data-run-id='{rid}' and normalize-space()='Archive']")
+
     def show_archived(rid: str | None = None) -> None:
         toggle = page.get_by_role("button", name=re.compile(r"^Archived"))
         toggle.wait_for(timeout=15_000)
@@ -4285,11 +4289,13 @@ def run_scenarios(rig: Rig, page) -> None:
     suite.run("RUN-DET", "Run detail after reload: cancelled status, rejected gate narrated, raw events == API", rundet, requires=("TST-1",))
 
     def runarc() -> str:
-        """RUN-ARC: archive TST-1's terminal run and prove it through the UI. The studio mounts NO
-        archive control (WorkPage.tsx: `api.archiveRun(id, false)` — Unarchive — is the only caller),
-        so the archive itself is a `[SUBSTITUTE]` over `POST /runs/:id/archive`; the UI then verifies:
-        the run leaves the active surfaces (A's dashboard `dashboard-run`, the /work list) and appears
-        under /work's Archived toggle with its Unarchive control — after a FULL reload, twice."""
+        """RUN-ARC: archive TST-1's terminal run via the UI Archive control and prove it through the UI.
+        The Archive button is present on terminal unarchived runs: on WorkPage rows (WorkPage.tsx
+        `archive()` → `TerminalRunRow`) and in the run header (ChatPanel.tsx `onArchive`).
+        This journey prefers the WorkPage row control; if the run has no workflow_id and is absent from
+        /work, it falls back to the run header on the detail page. The run leaves the active surfaces
+        (A's dashboard `dashboard-run`, the /work list) and appears under /work's Archived toggle with
+        its Unarchive control — after a FULL reload, twice."""
         rid, A = ctx["test_run"], ctx["A"]
         goto(page, f"/p/{quote(A)}")
         tid(page, "dashboard-run", run_id=rid).wait_for(timeout=30_000)
@@ -4297,9 +4303,22 @@ def run_scenarios(rig: Rig, page) -> None:
         listed_before = tid(page, "run-link", run_id=rid).count() > 0
         show_archived()
         assert archived_row_unarchive(rid).count() == 0, "the run is already under Archived before the archive step"
-        # [SUBSTITUTE] — no UI control archives a run (WorkPage mounts Unarchive only).
-        st, body = api("POST", f"/runs/{quote(rid)}/archive", {"archived": True, "note": f"seed-surfaces {STAMP}: RUN-ARC write-off of the rejected TST-1 run"})
-        assert st == 200 and body == {"runId": rid, "archived": True}, f"POST /runs/{rid}/archive → {st} {body}"
+        # Drive the UI Archive control — /work row button if listed, run header otherwise
+        work_page()
+        archive_btn = archive_button(rid)
+        surface = "WorkPage row"
+        if archive_btn.count() == 0:
+            # Run absent from /work (no workflow_id) — drive from the run header (ChatPanel.tsx)
+            goto(page, f"/runs/{quote(rid)}")
+            page.wait_for_url(re.compile(rf"/p/{re.escape(quote(A))}/build/{re.escape(quote(rid))}$"), timeout=20_000)
+            tid(page, "run-header").wait_for(timeout=30_000)
+            archive_btn = archive_button(rid)
+            surface = "run header"
+        archive_btn.wait_for(timeout=15_000)
+        with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith(f"/runs/{quote(rid)}/archive"), timeout=15_000) as ack:
+            archive_btn.click()
+        assert ack.value.status == 200, f"POST /runs/:id/archive (archive) → HTTP {ack.value.status}"
+        archive_btn.wait_for(state="detached", timeout=15_000)
         view = run_view(rid)
         assert view["session"].get("archived_at"), f"the run view carries no archived_at after the archive: {view['session'].get('archived_at')!r}"
         assert rid not in {v["session"]["id"] for v in list_runs()}, "the default GET /runs still lists the archived run"
@@ -4321,12 +4340,12 @@ def run_scenarios(rig: Rig, page) -> None:
         show_archived()
         archived_row_unarchive(rid).wait_for(timeout=15_000)
         ctx["run_archived"] = True
-        return (f"[SUBSTITUTE] run {rid} archived over POST /runs/:id/archive (the studio mounts no archive control — WorkPage.tsx's only "
-                f"`archiveRun` call is Unarchive); wire: archived_at set, default GET /runs excludes it, ?include=archived carries it; UI after a full reload: "
-                f"A's dashboard no longer lists it, /work's active list does not ({'it was listed there before' if listed_before else 'it was not in /work''s active list before either — no workflow_id'}), "
+        return (f"run {rid} archived via the UI Archive button ({surface}; POST /runs/:id/archive 200); "
+                f"wire: archived_at set, default GET /runs excludes it, ?include=archived carries it; UI after a full reload: "
+                f"A's dashboard no longer lists it, /work's active list does not ({'it was listed there before' if listed_before else 'it was not in /work active list — no workflow_id'}), "
                 f"the Archived toggle shows it (status cancelled) with its Unarchive control — again after a second full load")
 
-    suite.run("RUN-ARC", "Archive the terminal run ([SUBSTITUTE] API — no UI control) → leaves active surfaces, listed under Archived; reload persists", runarc, requires=("RUN-DET",))
+    suite.run("RUN-ARC", "Archive the terminal run (UI Archive button) → leaves active surfaces, listed under Archived; reload persists", runarc, requires=("RUN-DET",))
 
     def rununarc() -> str:
         """RUN-UNARC: the mounted UI control — WorkPage's Unarchive beside the archived row — restores
