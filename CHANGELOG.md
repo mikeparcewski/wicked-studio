@@ -12,6 +12,8 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-09-10
+
 ### Fixed
 - **Launch composer: a multi-repo project must be told which repo a build run works in (F-028).**
   Choosing a project auto-attached every one of its repos as chips and the launch body took
@@ -542,7 +544,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.4.15...v0.5.0
