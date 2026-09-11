@@ -1,4 +1,6 @@
 import type { SessionView, SessionWithDelivery } from '../api/types.js';
+import { canDeliver } from '../components/delivery.js';
+import type { IsSystemWorkflow } from '../components/runMode.js';
 import { outcomeOf } from './metrics.js';
 import { RANGE_LIMITS, rangeWord, type TimeRange } from '../hooks/useTimeRange.js';
 
@@ -243,20 +245,35 @@ export interface DeliveryCounts {
   delivered: number;
   /** `stranded` — completed work nobody lifted: needs review (recoverable). */
   stranded: number;
-  /** `vacuous` — completed with nothing liftable: needs a retry. */
+  /**
+   * `vacuous` — a run that was EXPECTED to deliver completed with no change to deliver. Counted
+   * only under {@link canDeliver}'s licence (a deliver unit on the run, or a workflow positively
+   * known not to be a system one): the daemon stamps `'vacuous'` on every completed repo-scoped
+   * run whose worktree is untouched, which is the DESIGNED outcome of `onboarding`, `survey-repo`
+   * and the other system workflows (wicked-studio#250, F-3R2-018 — nine onboarding runs read
+   * "9 Vacuous — needs retry" and buried the one real signal). Those are not a delivery finding
+   * and never count here.
+   */
   vacuous: number;
 }
 
-/** Count the three delivery outcomes across live runs — the deck's verified/needs-review strip and
- *  the ATTENTION "review" tile read the SAME fold, so they can never disagree. */
-export function deliveryCounts(runs: SessionView[]): DeliveryCounts {
+/**
+ * Count the three delivery outcomes across live runs — the deck's verified/needs-review strip and
+ * the ATTENTION "review" tile read the SAME fold, so they can never disagree.
+ *
+ * `isSystemWorkflow` is the app's `is_system` lookup (`store/workflowCache.useIsSystemWorkflow`),
+ * passed through to {@link canDeliver} for the `vacuous` licence. It can only ever WITHHOLD: with
+ * no lookup (or one that answers `undefined`, e.g. a materialised per-run def) a run with no
+ * deliver unit is not counted vacuous — the same trade the Delivery section makes, spelled once.
+ */
+export function deliveryCounts(runs: SessionView[], isSystemWorkflow?: IsSystemWorkflow): DeliveryCounts {
   const c: DeliveryCounts = { delivered: 0, stranded: 0, vacuous: 0 };
   for (const v of runs) {
     if (v.session.archived_at != null) continue;
     const d = wireDelivery(v);
     if (d === 'delivered') c.delivered += 1;
     else if (d === 'stranded') c.stranded += 1;
-    else if (d === 'vacuous') c.vacuous += 1;
+    else if (d === 'vacuous' && canDeliver(v, isSystemWorkflow)) c.vacuous += 1;
   }
   return c;
 }

@@ -1,13 +1,16 @@
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { api, type GateDecision } from '../api/client.js';
-import type { CoverageReport } from '../api/types.js';
+import type { CoreEvent, CoverageReport, WorkUnit } from '../api/types.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useSteerPrefixes } from '../hooks/useSteerPrefixes.js';
 import { useAnnotationStore } from '../store/annotations.js';
+import { useRunEventStore } from '../store/events.js';
 import { durableGuidance, useGuidanceStore } from '../store/guidance.js';
 import { useGateStore } from '../store/gates.js';
 import { useSteeringStore, type SteeringAction } from '../store/steering.js';
 import { GATE_HASH } from './GateChip.js';
+import { GateVerdict } from './GateVerdict.js';
+import { gateVerdict, phaseLabel } from './gateVerdictModel.js';
 
 interface Props {
   runId: string;
@@ -18,8 +21,14 @@ interface Props {
   guidance?: string | undefined;
   /** When present, fetches coverage stats for inline display at the gate card. */
   repoRef?: string;
+  /** The run's units (snapshot) — names the phase the evaluator verdict on the card is about
+   *  (wicked-studio#250, F-3R2-006). Absent ⇒ the verdict says `unit N`. */
+  units?: readonly WorkUnit[];
   onResolved?: () => void;
 }
+
+const EMPTY_EVENTS: CoreEvent[] = [];
+const EMPTY_UNITS: WorkUnit[] = [];
 
 /** Strip the bracketed architectural footnote from a workflow gate prompt. */
 function cleanPrompt(raw: string): { headline: string; footnote: string | null } {
@@ -38,9 +47,16 @@ function coverageLabel(r: CoverageReport): string {
   return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
 }
 
-export function SteeringGate({ runId, ord, prompt, guidance, repoRef, onResolved }: Props): React.ReactElement {
+export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
+  // The evaluator's record for THIS gate (wicked-studio#250, F-3R2-006): a pure view over the
+  // run's event log — already hydrated by the run page and fed live by /ws — so the card states
+  // what the operator is approving (the fix phase's verdict, criterion, the checks that ran) or
+  // rejecting (which layer denied, the engine's remedy) instead of the bare prompt. Zero fetches;
+  // an un-hydrated or evaluation-less log renders no block, never a verdict made up from the prompt.
+  const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
+  const verdict = useMemo(() => gateVerdict(events, ord), [events, ord]);
   // Slice BD (DES-UX-002 §4.3, EC51): gate arrival pre-populates the steer
   // textarea — the gate card MOUNTING is the arrival on this surface. Slice BE
   // added the durable layer (CREW-UX-7): pre-population order is the run DTO's
@@ -239,6 +255,14 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, onResolved
       >
         {headline}
       </p>
+
+      {/* The evaluator verdict this gate is about (F-3R2-006): pass/deny, criterion, the judge's
+          reasoning, the repo-checks floor per check, and on a denial the layer + the engine's
+          remedy verbatim. Rendered BETWEEN the question and the answer controls, so the decision
+          is informed on the card itself — not in an expandable thread line. */}
+      {verdict !== null && (
+        <GateVerdict view={verdict} phase={phaseLabel(runId, units ?? EMPTY_UNITS, verdict.ord)} />
+      )}
 
       {/* Coverage stats — shown when evaluator gate fails and we have repo coverage data */}
       {isCoverageFail && coverage && (

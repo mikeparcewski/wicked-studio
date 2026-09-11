@@ -61,6 +61,7 @@ export function ApprovalDock({
           runId={id}
           guidance={guidance}
           {...(gate ? { ord: gate.ord, prompt: gate.prompt } : {})}
+          {...(view !== undefined ? { units: view.units } : {})}
           onResolved={onResolved}
         />
       )}
