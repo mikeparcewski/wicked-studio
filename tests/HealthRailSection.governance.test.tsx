@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { ApiError } from '../src/api/errors.js';
 import type { DiagnosticsGovernance } from '../src/api/types.js';
