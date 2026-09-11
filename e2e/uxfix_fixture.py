@@ -307,6 +307,16 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # ARRIVAL (the desktop-notification trigger), distinct from the
          # cached-gate GET a page load reconciles.
          "extra_gates": [],
+         # run-lifecycle e2e (tests/PLAN-run-lifecycle.md companion):
+         #   lc_archived_runs — GET /runs?include=archived appends one archived
+         #                      run (lc-old-1 / "campaign leftover") to the
+         #                      normal corpus, letting the WorkPage Archived chip
+         #                      scenario turn the row on and off without touching
+         #                      the standing W2 corpus.
+         #   lc_register_ok   — POST /repos answers 201 {repo, onboardRunId} so
+         #                      the RepositoriesPanel register form can submit.
+         "lc_archived_runs": False,
+         "lc_register_ok": False,
          # Slice R (DES-UX-001 §1): the failure-forensics corpus — see the
          # module docstring. Default False: no standing rig's failed runs
          # change shape.
@@ -574,6 +584,10 @@ RUNS = [
 ]
 ORPHAN = session("r-orphan", "executing", "stranded work from another client",
                  "stranded work from another client")
+
+# Lifecycle e2e corpus — one archived run for the lc_archived_runs switch.
+LC_ARCHIVED_RUN = session("lc-old-1", "failed", "campaign leftover", "campaign leftover")
+LC_ARCHIVED_RUN["session"]["archived_at"] = NOW0 - 1_000_000
 
 # ── Fix slice J4/J5: the outcome-partition corpus, behind `j5_runs` ───────────
 #
@@ -2130,7 +2144,14 @@ class W2Handler(SimpleHTTPRequestHandler):
             self.wfile.write(LOGO_TEST_SVG)
             return True
         if path == "/api/v1/runs":
-            self._json(200, {"runs": assemble_runs()})
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            include_archived = "archived" in (q.get("include") or [])
+            with state_lock:
+                lc_arch = state["lc_archived_runs"]
+            runs = assemble_runs()
+            if include_archived and lc_arch:
+                runs = runs + [json.loads(json.dumps(LC_ARCHIVED_RUN))]
+            self._json(200, {"runs": runs})
             return True
         # Slice V: GET /runs/<id> — one run's detail (`{run: SessionView}`), the
         # real daemon contract useRunModel re-hydrates on. Same corpus assembly
@@ -3088,6 +3109,26 @@ class W2Handler(SimpleHTTPRequestHandler):
                                  if body.get("description") else {}))
                 created_projects.append(row)
             return self._json(201, {"project": row})
+        # POST /api/v1/repos — register a local repo (lifecycle e2e, lc_register_ok
+        # switch). Returns the daemon's real 201 {repo, onboardRunId} wire shape so
+        # RepositoriesPanel's submit path can navigate to the new repo detail.
+        if path == "/api/v1/repos":
+            with state_lock:
+                register_on = state["lc_register_ok"]
+            if not register_on:
+                return self._json(404, {"error": "w2 fixture: lc_register_ok not set"})
+            name = str(body.get("name") or "lc-repo").strip() or "lc-repo"
+            return self._json(201, {
+                "repo": {
+                    "id": f"lc-{name}", "name": name,
+                    "root_path": str(body.get("rootPath", "/tmp/lc")),
+                    "default_branch": "main",
+                    "registered_at": NOW0,
+                    "git_url": None,
+                    "code_graph_db": None,
+                },
+                "onboardRunId": "r-lc-onboard",
+            })
         # POST /api/v1/runs — the REAL launch (slice S, project_dto only): the
         # daemon's `{runId}` answer; `body.projectId` files the run atomically
         # (LaunchSchema, routes.ts:148 — "never a silent unfiled run"), and the
@@ -3139,6 +3180,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # awaiting between the selection and the fan-out.
                 return self._json(409, {"error": "not awaiting a human gate"})
             return self._json(200, {"status": "resumed"})
+        # POST /api/v1/runs/<id>/archive — archive / unarchive a terminal run
+        # (crew#265, lifecycle e2e). Returns the daemon's real wire: {runId, archived}.
+        if len(parts) == 6 and parts[3] == "runs" and parts[5] == "archive":
+            rid = urllib.parse.unquote(parts[4])
+            return self._json(200, {"runId": rid, "archived": bool(body.get("archived", True))})
         # POST /api/v1/chats — open a chat: warm the asked-for seats (or the whole
         # roster when `clis` is omitted, matching the daemon), instantly.
         # Fix J4 round 2 — the STRICT roster contract, always on: the real
