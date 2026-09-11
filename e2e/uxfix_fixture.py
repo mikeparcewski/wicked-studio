@@ -255,6 +255,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   chat_scope_501 — POST /chats answers crew's 501 "engine predates chat
          #                   scope" for any SCOPED open (default False).
          "repo_findings": False, "governance": None, "chat_scope": False, "chat_scope_501": False,
+         #   chat_admit_subset — with `clis` omitted on a scoped open the pre-filter admits ONLY
+         #                   claude (a strict subset of the chat-capable set), so a rig can prove
+         #                   the header shows exactly the admitted seats (W3S-253-09). Default False.
+         "chat_admit_subset": False,
          # Fix slice J4/J5 (BRIEF-UX-001 re-review): the outcome-partition
          # corpus — cancelled runs in AND out of the 24h window plus undatable
          # terminal runs (no attach clock anywhere), so a rig can prove
@@ -3152,6 +3156,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 scope_on = state["chat_scope"]
                 scope_501 = state["chat_scope_501"]
+                admit_subset = state["chat_admit_subset"]
                 repo_on = state["repo"]
                 repo_member_on = state["repo_member"]
             scope = None
@@ -3193,7 +3198,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # is passed through as asked. The fixture's stand-in for "governed" is the
                 # chat-capable set (the same seats chat_ensure admits).
                 if scope["kind"] != "none" and not body.get("clis"):
-                    clis = list(CHAT_CAPABLE_KEYS)
+                    clis = ["claude"] if admit_subset else list(CHAT_CAPABLE_KEYS)
             # Slice AB (§7.9-4): seats named by `chat_reject_seats` answer the
             # daemon's real per-seat shape — ok:false with an error the chip
             # must wear as failed-with-reason. Only accepted seats warm.

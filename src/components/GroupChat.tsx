@@ -211,6 +211,9 @@ function clearStoredChatId(repoId?: string | null): void {
 /** The create-flow scope control's position. */
 export type ChatScopeMode = 'project' | 'repos' | 'none';
 
+/** `ChatOpenBody.repoRefs` takes 1–32 entries (api-types 0.32.0). */
+export const MAX_SCOPE_REPOS = 32;
+
 /**
  * Why a send may NOT open the chat yet — the scope it would resolve to is the
  * silent `none` (an Unfiled chat with no repos chosen and no explicit Unscoped),
@@ -484,7 +487,9 @@ export function GroupChat({
 
   function toggleScopeRepo(id: string): void {
     setScopeGap(null);
-    setScopeRepoIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    // The wire takes 1–32 `repoRefs`: the pick stops appending at the cap (removal stays open).
+    setScopeRepoIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= MAX_SCOPE_REPOS ? prev : [...prev, id]);
   }
 
   /** The project switcher's selection: a project makes `none` meaningless (the
@@ -927,10 +932,12 @@ export function GroupChat({
         }
         // The daemon STATES the scope it resolved (crew#502); an older daemon's
         // 201 carries none — said as "not stated", never invented.
-        const stated = (answer as { scope?: ChatScope }).scope;
+        const stated = (answer as { scope?: ChatScope | null }).scope;
         if (chatIdRef.current === id) {
+          // `null` is off-contract on a 201 (the field is non-null) — it reads like the pre-0.32
+          // omission: "not stated", never a guessed scope.
           setScope(stated ?? null);
-          setScopeUnstated(stated === undefined);
+          setScopeUnstated(stated == null);
         }
         // A repo switch mid-arm resets `chatIdRef` (the mount effect) — re-check
         // after the await so nothing is attributed to a repo we already left.
@@ -953,11 +960,20 @@ export function GroupChat({
               if (state === 'failed' && !opened.some((s) => s.cliKey === k)) delete next[k];
             }
           }
+          if (daemonPicksSeats) {
+            // The 201 IS the audience (review W3S-253-09): the optimistic pass painted every
+            // default chip `connecting`, but a seat the daemon's pre-filter did not admit was
+            // never warmed and will never answer — left in place it is a phantom amber chip and
+            // keeps `chatStatus` on "connecting" after the turn. Drop the unadmitted ones.
+            for (const [k, state] of Object.entries(prev)) {
+              if (state === 'connecting' && !opened.some((s) => s.cliKey === k)) delete next[k];
+            }
+          }
           return { ...next, ...st };
         });
         setSeatErrors((prev) => {
           const next = { ...prev };
-          if (ready.length > 0) {
+          if (ready.length > 0 || daemonPicksSeats) {
             for (const k of Object.keys(prev)) {
               if (!opened.some((s) => s.cliKey === k)) delete next[k];
             }
@@ -1762,17 +1778,19 @@ export function GroupChat({
                 ) : (
                   scopeRepos.map((r) => {
                     const checked = scopeRepoIds.includes(r.id);
+                    const atCap = !checked && scopeRepoIds.length >= MAX_SCOPE_REPOS;
                     return (
                       <label
                         key={r.id}
                         data-testid="chat-scope-repo-option"
                         data-repo-id={r.id}
                         data-checked={checked}
-                        title={r.root_path}
-                        className="flex items-center gap-2 text-[11px] font-mono cursor-pointer"
+                        data-at-cap={atCap}
+                        title={atCap ? `a chat scopes at most ${MAX_SCOPE_REPOS} repositories — remove one to add another` : r.root_path}
+                        className={`flex items-center gap-2 text-[11px] font-mono ${atCap ? 'opacity-50' : 'cursor-pointer'}`}
                         style={{ color: checked ? 'var(--ink-high)' : 'var(--ink-muted)' }}
                       >
-                        <input type="checkbox" checked={checked} onChange={() => toggleScopeRepo(r.id)} />
+                        <input type="checkbox" checked={checked} disabled={atCap} onChange={() => toggleScopeRepo(r.id)} />
                         <span>{r.name}</span>
                         <span className="truncate" style={{ color: 'var(--ink-dim)', minWidth: 0 }}>{r.root_path}</span>
                       </label>

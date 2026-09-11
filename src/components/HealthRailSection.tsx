@@ -151,10 +151,11 @@ function GovernanceRows({ read }: { read: GovernanceRead }): React.ReactElement 
   const dl = g.deadletters;
   const errors = g.findings.filter((f) => f.severity === 'error').length;
   const state = g.store === null || errors > 0 ? 'error' : g.findings.length > 0 ? 'warning' : 'ok';
-  const records =
-    g.records.total === null
-      ? 'engine cannot count'
-      : `${g.records.total} record${g.records.total === 1 ? '' : 's'}${g.records.sinceBoot === null ? '' : ` · ${g.records.sinceBoot} since boot`}`;
+  // `total` and `sinceBoot` are independently nullable — each field states itself.
+  const records = [
+    g.records.total === null ? 'total: engine cannot count' : `${g.records.total} record${g.records.total === 1 ? '' : 's'}`,
+    g.records.sinceBoot === null ? null : `${g.records.sinceBoot} since boot`,
+  ].filter((x): x is string => x !== null).join(' · ');
   const range =
     dl.oldestTs !== null && dl.newestTs !== null ? `${stamp(dl.oldestTs)} → ${stamp(dl.newestTs)}` : null;
   return (
@@ -167,7 +168,7 @@ function GovernanceRows({ read }: { read: GovernanceRead }): React.ReactElement 
           <DetailLine testId="rail-governance-store-path" label="path" value={g.store.path} />
         </>
       )}
-      <CheckRow label="records" ok={g.records.total === null ? null : true} detail={records} />
+      <CheckRow label="records" ok={g.records.total === null && g.records.sinceBoot === null ? null : true} detail={records} />
       <CheckRow
         label="dead letters"
         ok={dl.count === 0}

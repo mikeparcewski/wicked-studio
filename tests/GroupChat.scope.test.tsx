@@ -275,6 +275,25 @@ describe('the create-flow scope control', () => {
     expect(graph).toHaveAttribute('title', SCOPE_REPOS_NO_GRAPH.graph.reason);
   });
 
+  it('the pick stops at the contract\'s 32 repoRefs — the 33rd option is disabled and titled with the cap; removal stays open', async () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ ...REPO_CLEAN, id: `r${i}`, name: `repo-${i}`, root_path: `/w2/repos/r${i}` }));
+    listRepos.mockResolvedValue({ repos: many });
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-repos'));
+    const options = await screen.findAllByTestId('chat-scope-repo-option');
+    expect(options).toHaveLength(40);
+    for (const o of options) fireEvent.click(within(o).getByRole('checkbox'));
+    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-repo-count', '32');
+    const capped = screen.getAllByTestId('chat-scope-repo-option').filter((o) => o.getAttribute('data-at-cap') === 'true');
+    expect(capped).toHaveLength(8);
+    expect(within(capped[0]!).getByRole('checkbox')).toBeDisabled();
+    expect(capped[0]!.getAttribute('title')).toContain('at most 32 repositories');
+    // Removing one re-opens a slot.
+    fireEvent.click(within(options[0]!).getByRole('checkbox'));
+    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-repo-count', '31');
+    expect(screen.getAllByTestId('chat-scope-repo-option').filter((o) => o.getAttribute('data-at-cap') === 'true')).toHaveLength(0);
+  });
+
   it('dangling project members are surfaced as a warning, never silently dropped', async () => {
     openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_PROJECT_DANGLING)));
     render(<GroupChat repoId={null} onBack={() => undefined} projectId="auth-refactor" />);
@@ -331,6 +350,23 @@ describe('seat admissibility on a scoped open (review W3S-253-01)', () => {
     expect(byAgent['codex']!.textContent).toContain(REFUSED);
   });
 
+  it('the daemon admits a STRICT SUBSET of the default chips: exactly the admitted seats render, no phantom connecting chip, and the now-bar is not stuck on connecting (W3S-253-09)', async () => {
+    // Two chat-capable seats by default; the daemon's pre-filter admits only claude.
+    setCachedRoster([{ key: 'claude', enabled_for_council: true }, { key: 'pi', enabled_for_council: true }] as unknown as RosterSeat[]);
+    openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_PROJECT, ['claude'])));
+    render(<GroupChat repoId={null} onBack={() => undefined} projectId="api-migration" />);
+    expect(screen.getAllByTestId('agent-chip').map((c) => c.dataset['agent'])).toEqual(['claude', 'pi']);
+    await typeAndSend('subset');
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect('clis' in lastBody()).toBe(false);
+    await waitFor(() => expect(screen.getAllByTestId('seat-chip').map((c) => c.dataset['agent'])).toEqual(['claude']));
+    // Give any late optimistic state a tick to surface — it must not.
+    await new Promise((r) => setTimeout(r, 50));
+    const states = screen.getAllByTestId('seat-chip').map((c) => c.dataset['state']);
+    expect(states).not.toContain('connecting');
+    expect(screen.getByTestId('now-bar-status').textContent).not.toBe('Connecting agents…');
+  });
+
   it('an EDITED selection is the operator\'s word — clis rides the scoped open as asked', async () => {
     openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_PROJECT, body.clis ?? ['claude'])));
     const user = userEvent.setup();
@@ -364,6 +400,16 @@ describe('the scope statement on older daemons and rejoins', () => {
     const line = await screen.findByTestId('chat-scope');
     expect(line).toHaveAttribute('data-kind', 'unknown');
     expect(within(line).getByTestId('chat-scope-unstated').textContent).toContain('not stated by the daemon');
+  });
+
+  it('a 201 carrying `scope: null` (off-contract) reads like the omission — "not stated"', async () => {
+    openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve({ chatId: body.chatId, seats: [{ cliKey: 'claude', ok: true }], scope: null }));
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await typeAndSend();
+    const line = await screen.findByTestId('chat-scope');
+    expect(line).toHaveAttribute('data-kind', 'unknown');
+    expect(within(line).getByTestId('chat-scope-unstated')).toBeInTheDocument();
   });
 
   it('a rejoin states the ChatDetailResponse.scope; a null scope (chat this daemon did not open) is "not stated"', async () => {

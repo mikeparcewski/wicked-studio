@@ -143,6 +143,15 @@ describe('a boot that resolved NO store', () => {
   });
 });
 
+describe('records — the two counts state themselves independently', () => {
+  it('an uncountable total beside a counted sinceBoot shows both facts', async () => {
+    withGovernance({ ...GOVERNANCE_HEALTHY, records: { total: null, sinceBoot: 5 } });
+    render(<Harness />);
+    const gov = await screen.findByTestId('rail-governance');
+    expect(gov.textContent).toContain('total: engine cannot count · 5 since boot');
+  });
+});
+
 describe('the pre-fix HOME outbox', () => {
   it('renders the legacy outbox path + bytes and the warning finding; heart degrades to amber, no fail dot', async () => {
     withGovernance(GOVERNANCE_LEGACY_OUTBOX);

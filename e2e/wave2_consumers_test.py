@@ -226,6 +226,33 @@ with sync_playwright() as p:
     page.screenshot(path=str(VSHOTS / "wave2-chat-scope.png"))
     page.locator(TID("chat-close")).click()
 
+    # W3S-253-09: the daemon admits a STRICT SUBSET of the default chips — the header shows
+    # exactly the admitted seats (no phantom `connecting` chip) and the now-bar is not stuck
+    # on "connecting" once the turn is out.
+    set_fixture(ORIGIN, chat_admit_subset=True)
+    page.goto(f"{ORIGIN}/chat/new")
+    page.locator(TID("chat-scope-row")).wait_for(timeout=15000)
+    page.locator(TID("chat-scope-repos")).click()
+    option = page.locator('[data-testid="chat-scope-repo-option"][data-repo-id="studio-api"]')
+    option.wait_for(timeout=10000)
+    option.locator('input[type="checkbox"]').check()
+    default_chips = page.locator(TID("agent-chip")).count()
+    composer = page.locator("textarea")
+    composer.fill("who is admitted?")
+    composer.press("Enter")
+    page.locator(TID("chat-scope")).wait_for(timeout=10000)
+    page.wait_for_timeout(2500)
+    chips = page.locator(TID("seat-chip"))
+    agents = [chips.nth(i).get_attribute("data-agent") for i in range(chips.count())]
+    states = [chips.nth(i).get_attribute("data-state") for i in range(chips.count())]
+    status = page.locator(TID("now-bar-status")).inner_text() if page.locator(TID("now-bar-status")).count() else ""
+    check("admitted_subset_renders_exactly_the_admitted_seats",
+          default_chips >= 2 and agents == ["claude"] and "connecting" not in states
+          and "connecting" not in status.lower(),
+          default_chips=default_chips, agents=agents, states=states, status=status)
+    page.locator(TID("chat-close")).click()
+    set_fixture(ORIGIN, chat_admit_subset=False)
+
     # crew#502's 501: the engine predates chat scope — stated inline, Unscoped offered.
     set_fixture(ORIGIN, chat_scope_501=True)
     page.goto(f"{ORIGIN}/chat/new")

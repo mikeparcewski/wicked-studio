@@ -772,6 +772,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     findings={repo.findings}
                     onRerunOnboarding={() => void rerunOnboarding(repo.id)}
                     rerunning={isRerunning}
+                    disabled={capturing[repo.id] ?? false}
                     testId="repo-card-findings"
                   />
 
