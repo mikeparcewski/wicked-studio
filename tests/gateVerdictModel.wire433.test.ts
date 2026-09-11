@@ -54,8 +54,9 @@ describe('gateVerdict — the judge seat (F-3R2-007)', () => {
     const v = gateVerdict(G5_RESTORE_FAILED_EVENTS, 4)!;
     expect(v.judgeCli).toBeNull();
     expect(v.judgeDistinct).toBeNull();
-    // A non-boolean distinct flag is unknown, not false.
-    const odd: CoreEvent[] = [{ type: 'gateEvaluated', session: GATE_RUN, ord: 1, combined: true, judgeCli: 'pi', judgeDistinct: 'yes' }];
+    // A non-boolean distinct flag is unknown, not false. A bag on purpose: 0.33.0 declares the field
+    // `boolean | null`, and this probes a frame that violates the declaration.
+    const odd: CoreEvent[] = [{ type: 'gateEvaluated', session: GATE_RUN, ord: 1, combined: true, judgeCli: 'pi', judgeDistinct: 'yes' } as unknown as CoreEvent];
     expect(gateVerdict(odd, 1)!.judgeDistinct).toBeNull();
     expect(gateVerdict(odd, 1)!.judgeCli).toBe('pi');
   });

@@ -45,8 +45,10 @@ npm publish dates. Every version listed here exists on
     (`acpFallback.fallbackKind: 'read_only_requires_wrapped'` — routing, not a failure); every other
     `acpFallback` kind stays silent as before.
   - Tests: unit suites over synthetic frames in the wire's exact spelling (`tests/fixtures/wire433.ts`,
-    mirroring wicked-crew's wire-contract literals) for each surface; the loopback rig
-    `e2e/wire433_test.py` (fixture switch `wire433`) drives the three surfaces in a real browser.
+    mirroring wicked-crew's wire-contract literals) for each surface — every frame declared `satisfies`
+    its 0.33.0 named type, and `tests/wire433.shapes.test.ts` re-derives the key-set and union diff
+    against the installed `index.d.ts` at run time; the loopback rig `e2e/wire433_test.py` (fixture
+    switch `wire433`) drives the three surfaces in a real browser.
 
 
 ## [0.5.5] — 2026-09-11

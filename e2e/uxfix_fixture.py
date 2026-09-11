@@ -1335,7 +1335,7 @@ WIRE433_AUTH_EVENTS = [
      "conflicts": ["testid-inventory.json"], "note": None,
      "ts": WIRE433_A0 + 5 * MIN + 4 * SEC, "seq": 15},
     {"type": "stepFailed", "session": "r-auth", "ord": 2, "attempt": 0, "detail": WIRE433_LIFT_REFUSAL,
-     "ts": WIRE433_A0 + 5 * MIN + 4 * SEC, "seq": 16},
+     "failureKind": "workerError", "ts": WIRE433_A0 + 5 * MIN + 4 * SEC, "seq": 16},
     {"type": "failureTriaged", "session": "r-auth", "ord": 2, "decision": "escalate",
      "analysis": "the engine refused the deliver: a git state, not a worker error",
      "ts": WIRE433_A0 + 5 * MIN + 5 * SEC, "seq": 17},

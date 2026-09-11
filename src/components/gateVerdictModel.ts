@@ -5,7 +5,7 @@ import type { CoreEvent, RepoCheckRun, UnitDenial, WorkUnit, WorktreeChangedPath
  * event log (wicked-studio#250, F-3R2-006 — the UI half of wicked-core F-036/F-039).
  *
  * The gate card asked "Approve unit 4 before it runs: verify" and, one denial later, "Unit 4
- * verdict is NOT PASS — confirm to retry the phase, or reject to cancel the run" — and nothing
+ * verdict is NOT PASS — …" (the pre-0.33.0 retry-or-reject wording) — and nothing
  * else. The verdict the operator was really answering (the `fix` phase PASSED its floor and its
  * judge; the `verify` phase was DENIED because it changed the worktree it was reviewing, here is
  * the path, here is the restore command) sat on the wire the whole time, in `gateEvaluated`,

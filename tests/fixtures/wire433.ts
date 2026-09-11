@@ -1,4 +1,15 @@
-import type { CoreEvent } from '../../src/api/types.js';
+import type {
+  AcpFallbackEvent,
+  CoreEvent,
+  DeliverLiftEvaluatedEvent,
+  EvaluatorMutatedWorktreeEvent,
+  EvaluatorToolCallDeniedEvent,
+  GateEvaluatedEvent,
+  RepoChecksEvaluatedEvent,
+  RunBaseResolvedEvent,
+  StepFailedEvent,
+  WorktreeRestoredEvent,
+} from '../../src/api/types.js';
 import { G4_EVENTS, GATE_RUN, TREE_AFTER, TREE_BEFORE } from './gateEvidence.js';
 
 /**
@@ -14,6 +25,13 @@ import { G4_EVENTS, GATE_RUN, TREE_AFTER, TREE_BEFORE } from './gateEvidence.js'
  * `denial_reason`, `deliver_lift.rs`, `actor.rs`'s mutation-gate prompt) with the placeholders
  * filled — byte-for-byte the sentences a 0.7.19 engine emits for these inputs.
  */
+
+/** A frame as the daemon relays it: the engine's `event_to_json` shape plus the `seq` / `ts` envelope
+ *  crew stamps on every CoreEvent. Every #431 frame below is declared `satisfies` its 0.33.0 named
+ *  type, so a drifted key, a wrong nullability or a token outside the declared union fails `tsc` —
+ *  the fixtures ARE the declared shapes, not a studio-side guess (`tests/wire433.shapes.test.ts`
+ *  re-derives the same diff at run time against the installed `index.d.ts`). */
+export type Wire<T> = T & { seq: number; ts: number };
 
 const T10 = (id: string): string => id.slice(0, 10);
 const T7 = (id: string): string => id.slice(0, 7);
@@ -53,7 +71,7 @@ export const RESTORED_PROMPT =
   "the creator's verified tree restored. Approve to retry the phase against the restored tree, or reject to cancel the run";
 export const LEGACY_PROMPT = 'Unit 4 verdict is NOT PASS — confirm to retry the phase, or reject to cancel the run';
 
-export const MUTATION_RESTORED: CoreEvent = {
+export const MUTATION_RESTORED = {
   type: 'evaluatorMutatedWorktree',
   session: GATE_RUN,
   ord: 4,
@@ -68,9 +86,9 @@ export const MUTATION_RESTORED: CoreEvent = {
   changed: [{ path: 'src/App.tsx', status: 'M' }],
   restored: true,
   restoreError: null,
-};
+} satisfies Wire<EvaluatorMutatedWorktreeEvent>;
 
-export const WORKTREE_RESTORED: CoreEvent = {
+export const WORKTREE_RESTORED = {
   type: 'worktreeRestored',
   session: GATE_RUN,
   ord: 4,
@@ -83,10 +101,10 @@ export const WORKTREE_RESTORED: CoreEvent = {
   head: null,
   discarded: [{ path: 'src/App.tsx', status: 'M' }],
   suggestionRef: SUGGESTION_REF,
-};
+} satisfies Wire<WorktreeRestoredEvent>;
 
 /** The worktree-guard denial with the judge NAMED (a distinct seat) and the restored prose. */
-export const GATE_DENY_RESTORED: CoreEvent = {
+export const GATE_DENY_RESTORED = {
   type: 'gateEvaluated',
   session: GATE_RUN,
   ord: 4,
@@ -104,7 +122,7 @@ export const GATE_DENY_RESTORED: CoreEvent = {
   combined: false,
   judgeCli: 'codex',
   judgeDistinct: true,
-};
+} satisfies Wire<GateEvaluatedEvent>;
 
 function escalation(seq: number, prompt: string): CoreEvent[] {
   return [
@@ -170,8 +188,8 @@ export const G4_SAME_SEAT_EVENTS: CoreEvent[] = G4_EVENTS.map((e) =>
 const REPO_CHECKS_CRITERION =
   "the repository's own checks pass in the run's worktree (every detected check exits 0 — done is re-derived by running them, never asserted)";
 
-function lift(seq: number, over: Record<string, unknown>): CoreEvent {
-  return {
+function lift(seq: number, over: Partial<DeliverLiftEvaluatedEvent>): Wire<DeliverLiftEvaluatedEvent> {
+  const unchanged = {
     type: 'deliverLiftEvaluated',
     session: GATE_RUN,
     ord: 5,
@@ -186,8 +204,8 @@ function lift(seq: number, over: Record<string, unknown>): CoreEvent {
     treeAfter: TREE_BEFORE,
     conflicts: [],
     note: null,
-    ...over,
-  };
+  } satisfies Wire<DeliverLiftEvaluatedEvent>;
+  return { ...unchanged, ...over };
 }
 
 export const DISPATCH_5: CoreEvent[] = [
@@ -195,23 +213,23 @@ export const DISPATCH_5: CoreEvent[] = [
   { type: 'unitDispatched', session: GATE_RUN, ord: 5, seq: 308, ts: 1789082000308, attempt: 0 },
 ];
 
-export const LIFT_UNCHANGED: CoreEvent = lift(310, {});
-export const LIFT_LIFTED: CoreEvent = lift(310, { outcome: 'lifted', baseAfter: BASE_AFTER, treeAfter: TREE_LIFTED });
-export const LIFT_CONFLICT: CoreEvent = lift(310, {
+export const LIFT_UNCHANGED = lift(310, {});
+export const LIFT_LIFTED = lift(310, { outcome: 'lifted', baseAfter: BASE_AFTER, treeAfter: TREE_LIFTED });
+export const LIFT_CONFLICT = lift(310, {
   outcome: 'conflict', baseAfter: BASE_AFTER, treeAfter: null, conflicts: ['testid-inventory.json'],
 });
-export const LIFT_SKIPPED: CoreEvent = lift(310, {
+export const LIFT_SKIPPED = lift(310, {
   outcome: 'skipped', baseRef: null, baseBefore: BASE_BEFORE, baseAfter: null, treeBefore: null, treeAfter: null,
   note: 'no remote default branch resolved (origin/HEAD is unset and origin/main does not exist)',
 });
-export const LIFT_FAILED: CoreEvent = lift(310, {
+export const LIFT_FAILED = lift(310, {
   outcome: 'failed', baseAfter: BASE_AFTER, treeAfter: null,
   note: 'git read-tree -m -u exited 128 after the merge-tree succeeded',
 });
 
 /** A lifted tree's re-verify — the deliver ord's `repoChecksEvaluated`; the lockfile moved with the
  *  base, so a frozen `--ignore-scripts` install ran first and says so in its `source`. */
-export const DELIVER_REVERIFY_PASS: CoreEvent = {
+export const DELIVER_REVERIFY_PASS = {
   type: 'repoChecksEvaluated',
   session: GATE_RUN,
   ord: 5,
@@ -227,10 +245,10 @@ export const DELIVER_REVERIFY_PASS: CoreEvent = {
     { name: 'test', argv: ['npm', 'run', 'test'], source: 'package.json scripts.test', exitCode: 0, timedOut: false, spawnError: null, durationMs: 79191, stdoutTail: '', stderrTail: '' },
   ],
   skipped: [],
-};
+} satisfies Wire<RepoChecksEvaluatedEvent>;
 
 /** The deliver unit's own `gateEvaluated` after a passing re-verify: the floor is the repo checks. */
-export const GATE_DELIVER_PASS: CoreEvent = {
+export const GATE_DELIVER_PASS = {
   type: 'gateEvaluated',
   session: GATE_RUN,
   ord: 5,
@@ -248,30 +266,37 @@ export const GATE_DELIVER_PASS: CoreEvent = {
   combined: true,
   judgeCli: null,
   judgeDistinct: null,
-};
+} satisfies Wire<GateEvaluatedEvent>;
 
 /** A FAILED re-verify: lint exited 1 on the lifted tree, test skipped. */
-export const DELIVER_REVERIFY_FAIL: CoreEvent = {
+export const DELIVER_REVERIFY_FAIL = {
   ...DELIVER_REVERIFY_PASS,
   passed: false,
   checks: [
-    (DELIVER_REVERIFY_PASS.checks as Array<Record<string, unknown>>)[0]!,
-    (DELIVER_REVERIFY_PASS.checks as Array<Record<string, unknown>>)[1]!,
-    { ...(DELIVER_REVERIFY_PASS.checks as Array<Record<string, unknown>>)[2]!, exitCode: 1, durationMs: 5402 },
+    DELIVER_REVERIFY_PASS.checks[0]!,
+    DELIVER_REVERIFY_PASS.checks[1]!,
+    { ...DELIVER_REVERIFY_PASS.checks[2]!, exitCode: 1, durationMs: 5402 },
   ],
   skipped: ['test'],
-};
+} satisfies Wire<RepoChecksEvaluatedEvent>;
 
 /** A failed POST-CHECK PROOF: every check exited 0 but the tree moved while they ran — `passed:
  *  false` with three green rows (wicked-core F-433-002). */
-export const DELIVER_REVERIFY_CHANGED_TREE: CoreEvent = {
+export const DELIVER_REVERIFY_CHANGED_TREE = {
   ...DELIVER_REVERIFY_PASS,
   passed: false,
-  checks: (DELIVER_REVERIFY_PASS.checks as Array<Record<string, unknown>>).slice(1),
-};
+  checks: DELIVER_REVERIFY_PASS.checks.slice(1),
+} satisfies Wire<RepoChecksEvaluatedEvent>;
 
-function stepFailed(seq: number, detail: string): CoreEvent {
-  return { type: 'stepFailed', session: GATE_RUN, ord: 5, seq, ts: 1789082100000 + seq, attempt: 0, detail };
+/** The deliver unit's failure frame. Every `deliver:` refusal reaches the operator by the
+ *  unrecognized-failure route (`actor.rs`: `StepFailed` fires at once, then failure triage
+ *  escalates), which stamps `failureKind: "workerError"` — the engine's token for "the unit's
+ *  process ended non-zero", not a judgement on the seat. Declared `string` on the wire; the
+ *  engine's three tokens are `workerError` / `environmentRefused` / `substanceRejected`. */
+function stepFailed(seq: number, detail: string) {
+  return {
+    type: 'stepFailed', session: GATE_RUN, ord: 5, seq, ts: 1789082100000 + seq, attempt: 0, detail, failureKind: 'workerError',
+  } satisfies Wire<StepFailedEvent>;
 }
 
 /** `deliver_lift.rs` — the engine's refusals, format strings filled. */
@@ -298,11 +323,11 @@ export const REFUSAL_CHANGED_TREE =
   'a check script that edits tracked files, moves HEAD or switches the branch leaves a tree nobody verified. ' +
   "Nothing was pushed. Inspect the worktree, fix or ignore the check's writes, and approve to retry.";
 
-export const STEP_FAILED_CONFLICT: CoreEvent = stepFailed(311, REFUSAL_CONFLICT);
-export const STEP_FAILED_APPLY: CoreEvent = stepFailed(311, REFUSAL_APPLY_FAILED);
-export const STEP_FAILED_WRONG_HEAD: CoreEvent = stepFailed(311, REFUSAL_WRONG_HEAD);
-export const STEP_FAILED_REVERIFY: CoreEvent = stepFailed(322, REFUSAL_REVERIFY_FAILED);
-export const STEP_FAILED_CHANGED_TREE: CoreEvent = stepFailed(322, REFUSAL_CHANGED_TREE);
+export const STEP_FAILED_CONFLICT = stepFailed(311, REFUSAL_CONFLICT);
+export const STEP_FAILED_APPLY = stepFailed(311, REFUSAL_APPLY_FAILED);
+export const STEP_FAILED_WRONG_HEAD = stepFailed(311, REFUSAL_WRONG_HEAD);
+export const STEP_FAILED_REVERIFY = stepFailed(322, REFUSAL_REVERIFY_FAILED);
+export const STEP_FAILED_CHANGED_TREE = stepFailed(322, REFUSAL_CHANGED_TREE);
 
 /** The retry gate the engine opens on the refused deliver unit (failure triage → escalate). */
 export const DELIVER_RETRY_PROMPT = 'Unit 5 failed — approve to retry the deliver phase, or reject to cancel the run';
@@ -328,7 +353,7 @@ export const DELIVER_CHANGED_TREE_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_LIFTE
 
 // ── (4) the run base ─────────────────────────────────────────────────────────────────────────────
 
-export const RUN_BASE_LIFTED: CoreEvent = {
+export const RUN_BASE_LIFTED = {
   type: 'runBaseResolved',
   session: GATE_RUN,
   seq: 2,
@@ -340,24 +365,24 @@ export const RUN_BASE_LIFTED: CoreEvent = {
   fetched: true,
   lifted: true,
   note: null,
-};
-export const RUN_BASE_AT_TIP: CoreEvent = { ...RUN_BASE_LIFTED, baseCommit: BASE_BEFORE, behind: 0, lifted: false };
-export const RUN_BASE_LOCAL_KEPT: CoreEvent = {
+} satisfies Wire<RunBaseResolvedEvent>;
+export const RUN_BASE_AT_TIP = { ...RUN_BASE_LIFTED, baseCommit: BASE_BEFORE, behind: 0, lifted: false } satisfies Wire<RunBaseResolvedEvent>;
+export const RUN_BASE_LOCAL_KEPT = {
   ...RUN_BASE_LIFTED, baseCommit: BASE_BEFORE, behind: 0, lifted: false,
   note: "the registered clone's HEAD is ahead of origin/main by 2 commit(s) (local unpushed work) — kept as the base",
-};
-export const RUN_BASE_NO_REMOTE: CoreEvent = {
+} satisfies Wire<RunBaseResolvedEvent>;
+export const RUN_BASE_NO_REMOTE = {
   ...RUN_BASE_LIFTED, baseRef: null, baseCommit: BASE_BEFORE, behind: 0, lifted: false,
   note: 'no remote default branch resolved (origin/HEAD is unset)',
-};
-export const RUN_BASE_FETCH_FAILED: CoreEvent = {
+} satisfies Wire<RunBaseResolvedEvent>;
+export const RUN_BASE_FETCH_FAILED = {
   ...RUN_BASE_LIFTED, baseCommit: BASE_BEFORE, behind: 0, fetched: false, lifted: false,
   note: 'git fetch origin failed (exit 128: could not resolve host) — cached refs used',
-};
+} satisfies Wire<RunBaseResolvedEvent>;
 
 // ── (5) the feed: a refused write, a deliberate reroute ──────────────────────────────────────────
 
-export const TOOL_DENIED: CoreEvent = {
+export const TOOL_DENIED = {
   type: 'evaluatorToolCallDenied',
   session: GATE_RUN,
   ord: 4,
@@ -370,12 +395,12 @@ export const TOOL_DENIED: CoreEvent = {
   kind: 'edit',
   path: 'src/App.tsx',
   reason: 'write-class tool call from an executes_code:false phase',
-};
-// `kind: null` is the 0.33.0 spelling (`CoreEvent.kind` widened to `string | null` for this frame);
-// the installed 0.32.0 types still say `string`, hence the bag — the pin bump makes it a plain literal.
-export const TOOL_DENIED_KINDLESS: CoreEvent = { ...TOOL_DENIED, kind: null, path: null } as unknown as CoreEvent;
+} satisfies Wire<EvaluatorToolCallDeniedEvent>;
+/** `kind: null` / `path: null` — the 0.33.0 spelling for a denied call the adapter could not classify
+ *  (`CoreEvent.kind` is `string | null` since that pin, so this is a plain literal — no cast). */
+export const TOOL_DENIED_KINDLESS = { ...TOOL_DENIED, kind: null, path: null } satisfies Wire<EvaluatorToolCallDeniedEvent>;
 
-export const READ_ONLY_REROUTE: CoreEvent = {
+export const READ_ONLY_REROUTE = {
   type: 'acpFallback',
   session: GATE_RUN,
   seq: 204,
@@ -383,4 +408,4 @@ export const READ_ONLY_REROUTE: CoreEvent = {
   cliKey: 'pi',
   reason: 'executes_code:false unit on an ACP seat not admitted to input governance',
   fallbackKind: 'read_only_requires_wrapped',
-};
+} satisfies Wire<AcpFallbackEvent>;

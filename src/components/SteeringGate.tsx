@@ -235,8 +235,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
     prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.',
   );
 
-  // Both mutation-gate prompts the engine has shipped — the pre-0.33.0 "confirm to retry the phase"
-  // and wicked-core#431's "… Approve to retry the phase against the restored tree …" — carry
+  // Both mutation-gate prompts the engine has shipped — the pre-0.33.0 retry-or-reject wording and
+  // wicked-core#431's "… Approve to retry the phase against the restored tree …" — carry
   // "NOT PASS", so this match holds across the wording change (re-checked for api-types 0.33.0).
   const isCoverageFail = headline.toLowerCase().includes('not pass') || headline.toLowerCase().includes('coverage');
 
