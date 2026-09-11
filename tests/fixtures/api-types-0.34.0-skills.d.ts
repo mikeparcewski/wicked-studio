@@ -1,4 +1,4 @@
-// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts (crew#531; PROVISIONAL until 0.34.0 publishes: the 0.32.0 block at :1502-1874 + the additive SkillPortability shape) — the skills block
+// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts:1716-2134 (crew#531 via PR #532) — the skills block
 // ── Skills — the daemon-owned garden plugin root, published as immutable snapshots (api-types 0.28.0) ──
 //
 // api-types 0.29.0 (design amendment v3.6, crew #490): the installer-managed copy
@@ -71,24 +71,37 @@ export interface SkillBaselineRecord {
   venv: SkillVenvState;
 }
 
-/** WHY a skill is not portable — the publisher's per-reason verdict (api-types 0.34.0, F-079). The
- *  five AUTHORING reasons are defects in the skill's text an author can fix without touching the
- *  harness: `plugin-root` = resolves `${CLAUDE_PLUGIN_ROOT}`; `skill-dir-var` = resolves
- *  `${CLAUDE_SKILL_DIR}`; `cwd-script` = invokes a script relative to the cwd (`python3 scripts/x.py`,
- *  `./scripts/x`); `relative-link` = a `../` link to a sibling; `cross-skill-path` = a path into
- *  another skill's directory. `requires-harness:claude` is different in kind: the skill's MECHANICS
- *  need the Claude harness (hooks, the plugin catalogs) — nothing to rewrite. */
+/**
+ * Why a skill's text cannot be followed on a non-Claude CLI (F-079, api-types 0.34.0; design W4
+ * §5.1 — the same tokens wicked-garden's own lint reports):
+ *
+ *   - `plugin-root` — the text contains `${CLAUDE_PLUGIN_ROOT}` (only Claude Code substitutes it);
+ *   - `skill-dir-var` — the text contains `${CLAUDE_SKILL_DIR}` (likewise Claude-only);
+ *   - `cwd-script` — an interpreter invokes a plugin script by a path relative to the worktree cwd
+ *     (`python3 scripts/domain/extract_loop.py`) instead of the `wicked-garden run …` launcher;
+ *   - `relative-link` — a `../` link whose target exists in the bundle (the flat `<name>/SKILL.md`
+ *     layout of every non-Claude install cannot follow it);
+ *   - `cross-skill-path` — a path (plugin-root or `../`) that lands in ANOTHER skill's directory;
+ *     the portable form names that skill (`wicked-garden-<x>`) instead;
+ *   - `requires-harness:claude` — the author declared `metadata.requires-harness: claude` in the
+ *     frontmatter: the skill genuinely needs the Claude harness (not an authoring defect).
+ */
 export type SkillPortabilityReason =
-  | 'plugin-root' | 'skill-dir-var' | 'cwd-script' | 'relative-link' | 'cross-skill-path'
+  | 'plugin-root'
+  | 'skill-dir-var'
+  | 'cwd-script'
+  | 'relative-link'
+  | 'cross-skill-path'
   | 'requires-harness:claude';
 
-/** The publisher's portability verdict for one skill (api-types 0.34.0). */
+/** Per-reason portability of a skill (F-079, api-types 0.34.0) — reported beside `portable`. */
 export interface SkillPortability {
-  /** Same value as SkillEntry.portable — reasons.length === 0. */
+  /** The same value as `SkillEntry.portable`: `reasons.length === 0`. */
   portable: boolean;
   /** Sorted, unique. Empty when portable. */
   reasons: SkillPortabilityReason[];
-  /** Up to N anchors, `<plugin-relative file>:<line>`, for the drawer/hover. */
+  /** Up to five anchors, `<plugin-relative file>:<line>`, one per hit in file order — where the
+   *  offending text sits (the drawer's "why" and the operator's path to the line). */
   evidence?: string[];
 }
 
@@ -101,13 +114,16 @@ export interface SkillEntry {
    *  daemon knows (core drop-ins, crew-generated, user-registered) or a skill one of those names in
    *  its SKILL.md (repo-learn → search, mem). Disabling or renaming it is blocking. */
   core: boolean;
-  /** `false` when the skill's files resolve `${CLAUDE_PLUGIN_ROOT}`, invoke a script relative to
-   *  the cwd (`python3 -u scripts/x.py`, `./scripts/x`, …), or link `../` — Claude-only by nature:
-   *  excluded from the snapshot's `views/copilot/` and from the per-launch skill lists core builds
-   *  for the other CLIs. `portable` is the admission key for every non-Claude view (design v3.2). */
+  /** `false` when the skill's files carry any `SkillPortabilityReason` — Claude-only: excluded from
+   *  the snapshot's `views/copilot/` and from the per-launch skill lists core builds for the other
+   *  CLIs. `portable` is the admission key for every non-Claude view (design v3.2); the reasons
+   *  are reported per token in `portability` (api-types 0.34.0). wicked-garden ≥ 12.33 authors
+   *  every skill portably, so a non-portable row there is either an older garden or a skill that
+   *  declares `requires-harness: claude`. */
   portable: boolean;
-  /** WHY `portable` is false, per reason with `file:line` evidence (api-types 0.34.0, F-079).
-   *  Absent from a daemon that predates the field — readers fall back to `portable` alone. */
+  /** Per-reason portability (F-079, api-types 0.34.0): `portable` again, the sorted unique
+   *  `reasons`, and up to five `file:line` anchors. Absent on manifests written by a daemon older
+   *  than 0.7.30 — treat absence as "reasons unknown". */
   portability?: SkillPortability;
   /** Manifest state, orthogonal to content: a disabled skill's files stay in `effective/` and are
    *  excluded from the next published snapshot. Reset never flips it. */
@@ -227,6 +243,9 @@ export type SkillFindingKind =
   | 'core-rename'
   | 'core-missing'
   | 'support-file-edit'
+  /** A write made (or would make) the skill non-portable — a WARNING, one finding PER REASON per
+   *  file (api-types 0.34.0), anchored `file:line` at the first hit and carrying the token in
+   *  `portabilityReason`. The skill leaves every non-Claude delivery view. */
   | 'non-portable'
   /** A `${CLAUDE_PLUGIN_ROOT}/<p>` or `../<p>` reference in an enabled skill's files that does not
    *  resolve inside the would-be snapshot. Severity follows the TARGET (design v3.4 §1): a reference
@@ -312,6 +331,9 @@ export interface SkillConflictFinding {
   evidence: string;
   /** Why it matters. */
   explanation: string;
+  /** On a `non-portable` finding: WHICH reason this finding reports (one finding per reason per
+   *  file). Absent on every other kind (api-types 0.34.0). */
+  portabilityReason?: SkillPortabilityReason;
 }
 
 /** `POST /skills/analyze` 200 body (a PURE dry run of the publish validation: nothing persisted,
@@ -398,7 +420,7 @@ export interface ReplaceSkillBody {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts (crew#531; PROVISIONAL until 0.34.0 publishes: the 0.32.0 block at :3844-3893) — the diagnostics skills block
+// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts:4106-4155 (crew#531 via PR #532) — the diagnostics skills block
 /** The skills seam's state as `GET /diagnostics` reports it (skills keystone, api-types 0.28.0). */
 export type DiagnosticsSkillsState = 'published' | 'fallback' | 'blocked' | 'config-error' | 'disabled';
 
