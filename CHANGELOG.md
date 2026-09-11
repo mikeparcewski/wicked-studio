@@ -11,6 +11,13 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+
+## [0.5.6] — 2026-09-11
+_The published bundle is built against `wicked-crew-api-types` **0.34.0** — the exact
+devDependency pin on this cut, and the wire the bundle's mirrors and `satisfies` checks are typed
+against. The crew#533 roster fields named below (`auth` / `free_tier` / `council_eligible` /
+`council_ineligible_reason`, api-types 0.35.0) are read defensively when a daemon sends them;
+the pin itself moves in a later release._
 ### Added
 - **Reassign to <seat> + retry on a failure-escalation gate** (phase7-r2 acceptance finding
   F-7R2-007, HIGH). At every "Unit N failed and triage escalated" gate the card offered Approve — a
@@ -841,7 +848,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.6...HEAD
+[0.5.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.2...v0.5.3
