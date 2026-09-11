@@ -24,10 +24,14 @@ import { makeUnit, makeView } from './factories.js';
 import { G4_EVENTS, G4_GATE, GATE_RUN, GATE_UNITS } from './fixtures/gateEvidence.js';
 import type { SessionView } from '../src/api/types.js';
 
+/** `GET /runs/:id/events`, swappable per test — the gate inbox backfills it for open-gate runs. */
+const getRunEvents = vi.hoisted(() => vi.fn<(id: string) => Promise<{ events: unknown[] }>>(async () => ({ events: [] })));
+
 vi.mock('../src/api/client.js', () => ({
   api: {
     confirmGate: vi.fn(async () => ({})),
     injectMessage: vi.fn(async () => ({})),
+    getRunEvents: (id: string) => getRunEvents(id),
   },
 }));
 
@@ -57,6 +61,8 @@ function units(done: number, total: number, sid = 'run-1') {
 beforeEach(() => {
   useGateStore.setState({ gates: {} });
   useRunEventStore.setState({ byRun: {} });
+  getRunEvents.mockReset();
+  getRunEvents.mockImplementation(async () => ({ events: [] }));
 });
 
 describe('the purpose statement (F7)', () => {
@@ -199,6 +205,26 @@ describe('the gate inbox (W4, §2.7 rule 5)', () => {
     expect(card).toHaveTextContent('Evaluator verdict — fix · PASS');
     expect(screen.getByTestId('gate-verdict-criterion')).toHaveTextContent('the run left a change in its worktree');
     expect(screen.getByTestId('gate-verdict-judge')).toHaveTextContent('judge: pass');
+  });
+
+  it('after a reload the inbox backfills the open-gate run\'s event log ONCE, so a persisted verdict still renders (Copilot on #252)', async () => {
+    // Nothing in the store (a landing reload), the durable log holds the G4 frames.
+    getRunEvents.mockImplementation(async (id) => ({ events: id === GATE_RUN ? G4_EVENTS : [] }));
+    useGateStore.setState({
+      gates: {
+        [GATE_RUN]: { runId: GATE_RUN, ord: G4_GATE.ord, prompt: G4_GATE.prompt, lifecycle: 'open', receivedAt: 1 },
+      },
+    });
+    dash([
+      makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS),
+      // A run with no gate is never backfilled by this surface — the budget is O(open gates).
+      makeView({ id: 'r-quiet', problem: 'quiet work', status: 'executing' }),
+    ]);
+    const card = await screen.findByTestId('gate-verdict');
+    expect(card).toHaveAttribute('data-verdict', 'pass');
+    expect(card).toHaveTextContent('Evaluator verdict — fix · PASS');
+    expect(getRunEvents).toHaveBeenCalledTimes(1);
+    expect(getRunEvents).toHaveBeenCalledWith(GATE_RUN);
   });
 
   it('the inbox card renders NO verdict block when the run has no evaluation in its log yet', () => {

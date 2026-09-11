@@ -99,6 +99,18 @@ describe('ApprovalDock — pinned, never scrolls away', () => {
     expect(card).not.toHaveTextContent('stray');
   });
 
+  it('daemon-restart fallback: the cursor indexes units in ORD order, whatever order the DTO arrived in (Copilot on #252)', () => {
+    // The same paused run, its units array UNSORTED (build first): `unit_ix` 1 must still resolve
+    // to the unit with ord 2, not to whichever unit happens to sit at index 1.
+    renderPanel(
+      makeView({ status: 'awaiting_human', unit_ix: 1 }, [
+        makeUnit({ id: 'run-1:build', ord: 2, stage: 'build', status: 'distributed', assigned_cli: 'claude' }),
+        makeUnit({ id: 'run-1:survey', ord: 1, stage: 'recon', status: 'done', assigned_cli: 'claude' }),
+      ]),
+    );
+    expect(screen.getByTestId('steering-gate')).toHaveTextContent('before unit #2');
+  });
+
   it('docks an open MCP elicitation the same way', () => {
     act(() => {
       useElicitationStore.getState().setElicitation({

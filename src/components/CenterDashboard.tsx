@@ -984,6 +984,32 @@ export function CenterDashboard({
     return all.filter((g) => mine.has(g.runId));
   }, [gates, projectId, scopedRuns]);
 
+  // Backfill the event log for OPEN-GATE runs whose frames are not in the store (a landing or
+  // project reload: `useRuns` restores the run list and the gate prompt, but only the run page's
+  // route hydrates `/runs/:id/events`) — else the inbox card's verdict block, which reads that
+  // log, would be empty for an evaluation that is durably recorded (Copilot on #252). Bounded the
+  // way `useBoardModel`'s failed-run backfill is: once per run id per mount, and only for runs
+  // that currently hold a gate (a paused run has exactly one), so the list surface's request
+  // budget stays O(open gates), not O(rows). Degrades silently — an api surface without
+  // `getRunEvents`, a 503 (no event-log binding) or an empty history leaves the card promptless,
+  // never wrong; `hydrate` merges live frames by fingerprint, so nothing is double-counted.
+  const gateBackfilled = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const g of openGates) {
+      const id = g.runId;
+      if (gateBackfilled.current.has(id) || (byRun[id] ?? []).length > 0) continue;
+      gateBackfilled.current.add(id);
+      try {
+        api
+          .getRunEvents(id)
+          .then(({ events }) => useRunEventStore.getState().hydrate(id, events))
+          .catch(() => { /* no event-log binding, or no persisted history — no backfill */ });
+      } catch {
+        /* an api surface without getRunEvents — nothing to backfill from */
+      }
+    }
+  }, [openGates, byRun]);
+
   /** The last recorded `sessionFailed` message for a run, if the store holds one. */
   const failReasonOf = useCallback(
     (runId: string): string | undefined => {

@@ -49,13 +49,15 @@ export function ApprovalDock({
   // (§3.3: status says awaiting_human, the transient cache is empty) — derived from the run's own
   // cursor the way `useRunModel.pendingGate` does: `unit_ix` is a 0-based INDEX and a gate's ord is
   // the unit it sits before, so resolve it through the snapshot (`units[unit_ix].ord`, else
-  // `unit_ix + 1`). Trusted run state, never a guess — it keeps the card's verdict lookup BOUNDED
-  // when the prompt itself was lost (Copilot on #252). Undefined only with no run view at all.
+  // `unit_ix + 1`). The cursor indexes units in ORD order and the DTO's array is not guaranteed
+  // to arrive sorted, so sort first (the contract ChatPanel's render already states). Trusted run
+  // state, never a guess — it keeps the card's verdict lookup BOUNDED when the prompt itself was
+  // lost (Copilot on #252). Undefined only with no run view at all.
   const ord: number | undefined =
     gate !== undefined
       ? gate.ord
       : view !== undefined
-        ? (view.units[view.session.unit_ix]?.ord ?? view.session.unit_ix + 1)
+        ? ([...view.units].sort((a, b) => a.ord - b.ord)[view.session.unit_ix]?.ord ?? view.session.unit_ix + 1)
         : undefined;
 
   return (
