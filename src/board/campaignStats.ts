@@ -6,6 +6,7 @@ import type {
   RunGroup,
 } from '../api/campaigns.js';
 import type { SessionView } from '../api/types.js';
+import { testSetOf, type TestSetRegistration } from '../api/wave6-wire.js';
 import { isPrUrl } from '../components/delivery.js';
 import { healthOf, type Health } from './windowStats.js';
 
@@ -254,6 +255,12 @@ export interface CampaignCardModel {
   runningNow: boolean;
   /** ≥ 1 member run inside the current recency window (positional, over the live list). */
   inWindow: boolean;
+  /** The produced test set a member `qe-author-tests` run registered (wave 6, api-types 0.36.0 —
+   *  F-7R2-014); `null` when the wire carries none. */
+  testSet: TestSetRegistration | null;
+  /** The distinct workflow ids of the member runs the live list knows (`session.workflow_id`) —
+   *  how a card says "qe-author-tests" before any registration lands. */
+  workflowIds: string[];
 }
 
 export type CampaignChip = 'all' | 'needs-you' | 'running' | 'failing' | 'quiet';
@@ -268,7 +275,7 @@ export function matchesCampaignChip(m: CampaignCardModel, chip: CampaignChip): b
 }
 
 function withLiveJoin(
-  m: Omit<CampaignCardModel, 'waiting' | 'inWindow'>,
+  m: Omit<CampaignCardModel, 'waiting' | 'inWindow' | 'workflowIds'>,
   runsById: ReadonlyMap<string, SessionView>,
   windowIds: ReadonlySet<string>,
 ): CampaignCardModel {
@@ -279,6 +286,8 @@ function withLiveJoin(
     ...m,
     waiting: members.filter((v) => v.session.status === 'awaiting_human'),
     inWindow: m.memberRunIds.some((id) => windowIds.has(id)),
+    // Distinct, live-list order — `chat` is a system workflow, not a test's.
+    workflowIds: [...new Set(members.map((v) => v.session.workflow_id).filter((w) => typeof w === 'string' && w !== '' && w !== 'chat'))],
   };
 }
 
@@ -312,6 +321,7 @@ export function campaignCards(
       memberRunIds: campaignMemberRunIds(c),
       failing: n.failed > 0,
       runningNow: n.running > 0,
+      testSet: testSetOf(c),
     }, runsById, windowIds));
   }
   for (const g of groups) {
@@ -332,6 +342,7 @@ export function campaignCards(
       memberRunIds: g.runs.map((r) => r.runId),
       failing: n.failed > 0,
       runningNow: n.running > 0,
+      testSet: testSetOf(g),
     }, runsById, windowIds));
   }
   return models.sort((a, b) =>

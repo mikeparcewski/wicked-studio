@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.6",
   "counts": {
-    "files": 144,
-    "occurrences": 1259,
-    "static": 1082,
+    "files": 146,
+    "occurrences": 1281,
+    "static": 1104,
     "dynamic": 59,
     "computed": 7
   },
@@ -578,6 +578,30 @@
       ]
     },
     {
+      "testId": "campaign-card-testset",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-card-testset-plan",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-card-testset-unverified",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaign-card-workflow",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
       "testId": "campaign-delivery-rollup",
       "files": [
         "src/components/CampaignScoreboard.tsx"
@@ -669,6 +693,12 @@
     },
     {
       "testId": "campaigns-empty-filter",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-header-copy",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
@@ -2094,6 +2124,12 @@
       ]
     },
     {
+      "testId": "files-empty",
+      "files": [
+        "src/components/RightPanel.tsx"
+      ]
+    },
+    {
       "testId": "files-full-diff",
       "files": [
         "src/components/RightPanel.tsx"
@@ -2643,6 +2679,30 @@
       "testId": "install-gate-recheck",
       "files": [
         "src/components/InstallGate.tsx"
+      ]
+    },
+    {
+      "testId": "intake-plan",
+      "files": [
+        "src/components/IntakePlan.tsx"
+      ]
+    },
+    {
+      "testId": "intake-plan-seat",
+      "files": [
+        "src/components/IntakePlan.tsx"
+      ]
+    },
+    {
+      "testId": "intake-plan-skill",
+      "files": [
+        "src/components/IntakePlan.tsx"
+      ]
+    },
+    {
+      "testId": "intake-plan-unit",
+      "files": [
+        "src/components/IntakePlan.tsx"
       ]
     },
     {
@@ -4167,6 +4227,12 @@
       "testId": "run-chip",
       "files": [
         "src/components/ProjectCard.tsx"
+      ]
+    },
+    {
+      "testId": "run-degraded",
+      "files": [
+        "src/components/RunDegradedNote.tsx"
       ]
     },
     {
@@ -5869,7 +5935,19 @@
       ]
     },
     {
+      "testId": "testing-launch-dropped",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
       "testId": "testing-launch-error",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-fan-note",
       "files": [
         "src/components/TestingLaunchPanel.tsx"
       ]
@@ -5899,7 +5977,31 @@
       ]
     },
     {
+      "testId": "testing-launch-launched",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-launched-plain",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-launched-workflow",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
       "testId": "testing-launch-panel",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-plain-banner",
       "files": [
         "src/components/TestingLaunchPanel.tsx"
       ]
@@ -5941,6 +6043,24 @@
       ]
     },
     {
+      "testId": "testing-launch-restore",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-route",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-single",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
       "testId": "testing-launch-submit",
       "files": [
         "src/components/TestingLaunchPanel.tsx"
@@ -5960,6 +6080,12 @@
     },
     {
       "testId": "testing-launch-waiting",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-workflow",
       "files": [
         "src/components/TestingLaunchPanel.tsx"
       ]
@@ -6221,6 +6347,12 @@
     },
     {
       "testId": "verdict-detail",
+      "files": [
+        "src/components/VerdictDetail.tsx"
+      ]
+    },
+    {
+      "testId": "verdict-ungated",
       "files": [
         "src/components/VerdictDetail.tsx"
       ]

@@ -201,6 +201,179 @@ export const MULTI_SCOPE_UNSUPPORTED_COPY =
   'This daemon predates multi-codebase launches — it accepts one repository per launch. ' +
   'Clear the project and extra repositories, keep a single one, and launch again (or upgrade wicked-crew).';
 
+// ── The GOVERNED test launch (wave 6 — the `qe-author-tests` workflow) ────────────────────────
+
+/** The intake gate every governed test launch pauses at: approve the plan before unit 1 runs
+ *  (crew's `RECON_INTAKE_GATE_TOKEN`, spelled once here for the client-side fan). */
+export const INTAKE_GATE = 'before:1';
+
+/**
+ * Which wire the launch actually rode — stated on the panel, never implied:
+ *  - `testing-author`          — `POST /testing/author` (the wave-6 route for the QE workflow);
+ *  - `testing-recon-workflow`  — `POST /testing/recon` with the additive `workflow` key;
+ *  - `runs-fan`                — one `POST /runs {workflow, repoRef, projectId, humanConfirm}` per
+ *                                resolved repo (the SHIPPING wire — `projectId` files, `repoRef`
+ *                                scopes — used when the operator NARROWED a project (F-076: the
+ *                                recon route unions `projectId`'s members back in) or when the
+ *                                daemon lists the workflow but its testing routes predate it);
+ *  - `testing-recon-plain`     — today's free-text recon: the daemon has no governed test workflow.
+ */
+export type GovernedLaunchRoute = 'testing-author' | 'testing-recon-workflow' | 'runs-fan' | 'testing-recon-plain';
+
+/** The panel's scope, as the operator composed it — the pure input `launchGovernedTest` plans from. */
+export interface GovernedLaunchScope {
+  /** The framed problem statement (the intent prefix + the operator's brief). */
+  problem: string;
+  projectId: string | null;
+  /** The selected project's resolved `crew.repo` members (what `projectId` would union in). */
+  projectRepos: string[];
+  /** Project members the operator DROPPED from the scope (F-076 / F-7R2-010). */
+  excluded: string[];
+  /** Explicit attachments (deduped, insertion order). */
+  explicit: string[];
+  /** The governed workflow id when `GET /workflows` lists it; `null` = plain free-text recon. */
+  workflow: string | null;
+  /** The label studio mints for a client-side fan of ≥ 2 runs (`LaunchRunBody.groupLabel`). */
+  groupLabel: string;
+}
+
+export interface GovernedLaunchResult extends TestingLaunchResult {
+  route: GovernedLaunchRoute;
+  /** The workflow every launched run carries, or `null` for a plain run. */
+  workflow: string | null;
+  campaignRegistered: boolean;
+}
+
+/** The repos the launch will actually cover: explicit attachments ∪ (project members − dropped). */
+export function effectiveRepos(scope: Pick<GovernedLaunchScope, 'projectId' | 'projectRepos' | 'excluded' | 'explicit'>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (r: string): void => { if (!seen.has(r)) { seen.add(r); out.push(r); } };
+  for (const r of scope.explicit) push(r);
+  if (scope.projectId !== null) for (const r of scope.projectRepos) if (!scope.excluded.includes(r)) push(r);
+  return out;
+}
+
+/** Whether the operator narrowed the selected project — the case the pinned recon body cannot
+ *  express (its `projectId` unions every member back in). */
+export function isNarrowedProject(scope: Pick<GovernedLaunchScope, 'projectId' | 'excluded'>): boolean {
+  return scope.projectId !== null && scope.excluded.length > 0;
+}
+
+/** A strict-schema 400 that names `key` as unrecognized — the wire of a daemon whose route predates
+ *  the additive field (crew's schemas are `.strict()`; the error names the offending key). */
+export function isUnrecognizedKey(e: unknown, key: string): boolean {
+  if (!(e instanceof ApiError) || e.status !== 400) return false;
+  const wire = e.wire.toLowerCase();
+  return /unrecognized key/.test(wire) && wire.includes(key.toLowerCase());
+}
+
+/** The panel's mint for a client-side fan label — `test-<base36 clock>-<random>` (1–200 chars). */
+export function mintGroupLabel(now: number = Date.now(), rand: string = Math.random().toString(36).slice(2, 10)): string {
+  return `test-${now.toString(36)}-${rand}`;
+}
+
+function normalizeRecon(raw: TestingLaunchResult, route: GovernedLaunchRoute, workflow: string | null): GovernedLaunchResult {
+  const ids = launchedRunIds(raw);
+  return {
+    ...raw,
+    runIds: ids,
+    ...(ids.length > 0 ? { runId: ids[0]! } : {}),
+    route,
+    workflow: typeof raw['workflow'] === 'string' && raw['workflow'] !== '' ? (raw['workflow'] as string) : workflow,
+    campaignRegistered: raw['campaignRegistered'] === true,
+  };
+}
+
+/**
+ * One `POST /runs` per repo — the shipping wire, where `repoRef` SCOPES and `projectId` FILES (the
+ * §2.2 semantics), with the intake gate on every run and a shared `groupLabel` when there are two
+ * or more (they render as one group on `GET /campaigns`). Sequential, so a mid-fan refusal names
+ * what already launched. No repo at all ⇒ one repo-less run (the daemon decides what that means
+ * for the workflow).
+ */
+async function launchRunsFan(scope: GovernedLaunchScope, repos: string[]): Promise<GovernedLaunchResult> {
+  const targets: Array<string | null> = repos.length > 0 ? repos : [null];
+  const runIds: string[] = [];
+  const label = targets.length >= 2 ? scope.groupLabel : null;
+  for (const repo of targets) {
+    const body: Record<string, unknown> = { problem: scope.problem, humanConfirm: INTAKE_GATE };
+    if (scope.workflow !== null) body['workflow'] = scope.workflow;
+    if (repo !== null) body['repoRef'] = repo;
+    if (scope.projectId !== null) body['projectId'] = scope.projectId;
+    if (label !== null) body['groupLabel'] = label;
+    try {
+      const r = await apiFetch<{ runId?: string }>('/runs', { method: 'POST', body: JSON.stringify(body) });
+      if (typeof r.runId === 'string' && r.runId !== '') runIds.push(r.runId);
+    } catch (e) {
+      if (runIds.length > 0) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(`launch fan-out failed on ${repo ?? '(unscoped)'} after ${runIds.length} run(s) launched (${runIds.join(', ')}): ${msg}`);
+      }
+      throw e;
+    }
+  }
+  return {
+    runIds,
+    ...(runIds.length > 0 ? { runId: runIds[0]! } : {}),
+    ...(label !== null ? { campaign: label } : {}),
+    route: 'runs-fan',
+    workflow: scope.workflow,
+    campaignRegistered: false,
+  };
+}
+
+/**
+ * Launch a governed test over the operator's scope (wave 6 — F-075 / F-7R2-003 / F-076).
+ *
+ * The chain, in order, each step taken only when the previous one's wire is ABSENT (never on a
+ * named refusal — a 404 naming a bad ref, a 400 about the scope, a 409, a 500 all surface as
+ * answers):
+ *  1. a NARROWED project (members dropped) ⇒ the per-repo `POST /runs` fan over the remaining
+ *     members ∪ explicit, `projectId` kept for filing — the recon body's `projectId` would union the
+ *     dropped members back in; an empty remainder is refused HERE, before any wire call;
+ *  2. the workflow is listed ⇒ `POST /testing/author` (route absent ⇒ 3);
+ *  3. `POST /testing/recon` + `workflow` (a strict schema naming `workflow` unrecognized ⇒ 4);
+ *  4. the per-repo `POST /runs` fan with `workflow` (the shipping wire carries a workflow id);
+ *  5. no workflow listed ⇒ today's plain recon ({@link launchTestingRun}) — the panel has already
+ *     said "this daemon has no governed test workflow — plain run".
+ */
+export async function launchGovernedTest(scope: GovernedLaunchScope): Promise<GovernedLaunchResult> {
+  const repos = effectiveRepos(scope);
+  if (isNarrowedProject(scope)) {
+    if (repos.length === 0) {
+      throw new Error('every repository of the project was dropped — keep at least one, attach a codebase, or clear the project');
+    }
+    return launchRunsFan(scope, repos);
+  }
+  const pinned: TestingLaunchBody = { problem: scope.problem };
+  if (scope.projectId !== null) pinned.projectId = scope.projectId;
+  if (scope.explicit.length >= 1) pinned.repoRefs = [...new Set(scope.explicit)];
+  if (scope.workflow === null) {
+    return normalizeRecon(await launchTestingRun(pinned), 'testing-recon-plain', null);
+  }
+  try {
+    const r = await apiFetch<TestingLaunchResult>('/testing/author', { method: 'POST', body: JSON.stringify(pinned) });
+    return normalizeRecon(r, 'testing-author', scope.workflow);
+  } catch (e) {
+    if (!isRouteAbsent(e)) throw e;
+  }
+  try {
+    const r = await apiFetch<TestingLaunchResult>('/testing/recon', {
+      method: 'POST',
+      body: JSON.stringify({ ...pinned, workflow: scope.workflow }),
+    });
+    return normalizeRecon(r, 'testing-recon-workflow', scope.workflow);
+  } catch (e) {
+    if (!isUnrecognizedKey(e, 'workflow') && !isRouteAbsent(e)) throw e;
+  }
+  return launchRunsFan(scope, repos);
+}
+
+/** The honest copy for a daemon whose `GET /workflows` lists no governed test workflow. */
+export const NO_GOVERNED_WORKFLOW_COPY =
+  'this daemon has no governed test workflow — plain run';
+
 // ── Eval samples (shared by the run report and the corpus import) ─────────────────────────────
 
 /** The recall signals one sample carries — what the engine's recall query is built from. */

@@ -222,12 +222,14 @@ describe('the launch wire — the pinned body on POST /testing/recon, exactly', 
 
     await user.selectOptions(select, 'proj-a');
     expect(listProjectMembers).toHaveBeenCalledWith('proj-a');
-    // Pre-selected: the project's crew.repo members, as locked chips (union semantics — a
-    // project-carried repo cannot be subtracted while projectId is on the wire).
+    // Pre-selected: the project's crew.repo members as via-project chips — each DROPPABLE (F-076 /
+    // F-7R2-010: attach the project, drop repos); none dropped here, so projectId rides ALONE.
     const chips = await within(panel).findAllByTestId('testing-launch-chip');
     expect(chips.map((c) => c.dataset.repo)).toEqual(['r-1', 'r-2']);
     expect(chips.every((c) => c.dataset.source === 'project')).toBe(true);
-    expect(within(panel).queryByTestId('testing-launch-chip-remove')).toBeNull();
+    const drops = within(panel).getAllByTestId('testing-launch-chip-remove');
+    expect(drops.map((d) => [d.dataset.repo, d.dataset.source])).toEqual([['r-1', 'project'], ['r-2', 'project']]);
+    expect(drops[0]).toHaveAttribute('aria-label', 'Drop r-1 from this test');
 
     await user.type(within(panel).getByTestId('testing-launch-instructions'), 'Regression pass');
     await user.click(within(panel).getByTestId('testing-launch-submit'));
@@ -558,9 +560,9 @@ describe('T7 — an explicit attachment the project ALSO carries (attached FIRST
     expect(within(panel).getByTestId('testing-launch-chip-remove')).toHaveAttribute('data-repo', 'r-1');
 
     await pick(user, panel, 'proj-a', 'alpha');
-    // ONE chip, locked — no explicit twin, no remove button.
+    // ONE chip — via project (no explicit twin); its one button is the F-076 DROP, not a detach.
     await waitFor(() => expect(chipsOf(panel)).toEqual([['r-1', 'project']]));
-    expect(within(panel).queryByTestId('testing-launch-chip-remove')).toBeNull();
+    expect(within(panel).getByTestId('testing-launch-chip-remove')).toHaveAttribute('data-source', 'project');
     // The picker will not offer it again — it is in scope through the project.
     await user.type(within(panel).getByTestId('testing-launch-repo-search'), 'repo-one');
     expect(within(panel).queryByTestId('testing-launch-repo-option')).toBeNull();

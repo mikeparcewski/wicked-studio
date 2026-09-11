@@ -193,13 +193,16 @@ export function useMakeRedirect(pathname: string, navigate: Navigate): void {
  *    surface MOVED under Testing) rewrite onto `/testing/campaigns[...]` — the path tail rides
  *    along verbatim, so a bookmarked scoreboard lands on the same campaign;
  *  - a page-less `/testing` address — the bare parent AND the RETIRED `/testing/harness`
- *    (the Harness folded into the eval runner's creation verbs, testing-UX wave) — normalizes
- *    onto Evals: the nav-reorg renamed the section Evals and Evals IS `/testing`'s home now
- *    (Campaigns moved into the project shell), so the bare parent lands there, not on Campaigns.
+ *    (the Harness folded into the Test landing's creation verbs, testing-UX wave) — normalizes
+ *    onto the TEST landing (`/testing/campaigns`), as `src/api/testing.ts` has documented all
+ *    along ("Campaigns IS the landing"). Acceptance finding F-075 / F-7R2-009: for two releases
+ *    this sent both addresses to Evals (the steering-rule eval runner), so "build tests for a
+ *    repo" was not findable by name — a customer typing `/testing` landed on rule evals. Evals
+ *    keeps its own address (`/testing/evals`) as a sub-page.
  *
  * REPLACE, like every redirect in this module, so Back never re-enters the dead address; the
- * parse already lands both on `panel: 'testing'`, so the page renders instantly on the
- * pre-redirect tick and nothing flashes.
+ * parse already lands both on `panel: 'testing'` with the Test landing as the page-less default,
+ * so the page renders instantly on the pre-redirect tick and nothing flashes.
  */
 export function useTestingRedirect(
   panel: string,
@@ -213,6 +216,6 @@ export function useTestingRedirect(
       navigate(`/testing${pathname}`, { replace: true });
       return;
     }
-    if (testingPage === null) navigate(testingPath('evals'), { replace: true });
+    if (testingPage === null) navigate(testingPath('campaigns'), { replace: true });
   }, [panel, testingPage, pathname, navigate]);
 }

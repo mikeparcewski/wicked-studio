@@ -11,6 +11,73 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+### Added
+- **New test launches the governed `qe-author-tests` workflow; the Test landing shows the produced
+  set; honest UNGATED / degraded gates; a files view once the worktree is gone** (wave 6 — the
+  governed testing journey: acceptance findings F-075 / F-076 / F-7R2-003 / -005 / -006 / -008 /
+  -009 / -010 / -011 / -012 / -013 / -014 / -017, studio half). Develops against a PROVISIONAL wire
+  mirror (`src/api/wave6-wire.ts`) spelled exactly as the wave-6 briefs name the fields; every
+  reader is null-safe, so an older daemon changes nothing. `tests/wave6Wire.test.ts` pins the
+  posture: a pin bump to ≥ 0.36.0 without a VERBATIM re-vendor fails the suite (the #257 pattern).
+  - *Routes* (F-075 / F-7R2-009): `/testing` and the retired `/testing/harness` land on the TEST
+    landing (`/testing/campaigns`), as `src/api/testing.ts` documented all along; Evals keeps
+    `/testing/evals` as a sub-page; the rail heading follows. Home's "Run recon" verb is now
+    **New test** and opens the launch panel (`?new=test`). "Add with chat" on the landing is
+    labelled **Add testing rules** — it authors testing STEERING RULES, not tests.
+  - *New test is governed* (F-7R2-003 / -004 / -012): the panel reads `GET /workflows` on mount;
+    a daemon that lists `qe-author-tests` gets the governed launch (the chip names the five
+    phases: recon → author → verify → review → deliver — the ENGINE's deliver phase opens the PR,
+    never the worker), and `launchGovernedTest` walks the wire ladder, each step only when the
+    previous wire is ABSENT: `POST /testing/author` → `POST /testing/recon` + `workflow` (a strict
+    schema naming it unrecognized ⇒) → one `POST /runs {workflow, repoRef, projectId,
+    humanConfirm: 'before:1'[, groupLabel]}` per resolved repo. A daemon that lists no such
+    workflow shows the honest banner **"this daemon has no governed test workflow — plain run"**
+    BEFORE the launch and takes today's free-text recon. Every named refusal surfaces untouched.
+  - *Project chips are droppable* (F-076 / F-7R2-010): "attach the project, drop repos". A
+    narrowed project launches one `POST /runs` per remaining repo — `repoRef` scopes, `projectId`
+    FILES — so an explicit single repo keeps its `project_id` (the pinned recon body's `projectId`
+    would union the dropped members back in); the dropped line names them and offers "restore
+    all"; every member dropped is refused on the button, before any wire call.
+  - *After launch* (F-7R2-011): the panel LINKS every launched run (`testing-launch-fanout-run`,
+    the single run too), names the workflow, the wire it rode (`testing-launch-route`) and the
+    test/group label, then the waiting line; the intake gate arrives on the app's one /ws fold.
+  - *The intake card shows the PLAN* (F-7R2-008): on the pre-run gate for the run's first unit —
+    the panel's copy of the card and the run page's — `IntakePlan` lists every planned phase with
+    its executor (agent / tool), skill, `writes code`, `evaluator ≠ creator`, and seat (the one
+    routed, else "council picks from <pool>"), read once off `GET /runs/:id` when the gate arrives.
+  - *The Test landing shows the produced set* (F-7R2-014): a card's `test_set` (the campaign
+    registration a completed run lands) renders "N test files · T tests · E executed · P passed ·
+    F failed" — the counts the VERIFY phase re-derived, with "K never executed" when
+    `executed < tests` — plus the PLAN path; the workflow chip reads `qe-author-tests` off the live
+    runs from launch. A pre-0.36 row renders no counts (absence, never a fabricated zero). The
+    empty state says what fills it.
+  - *Honest UNGATED gates* (F-7R2-005 / -017): `gateEvaluated.ungated` / `ungatedReason` win over
+    the card's fold — the gate card reads **"UNGATED — no eligible judge seat"** (the floor that DID
+    run is still listed; the judge axis is said not held), the run-page verdict card carries the
+    same line, and the narrator says "Gate UNGATED on <phase> — <reason>; repository checks ran,
+    no distinct judge" — never "Checks ran — pass" for a judge-less gate.
+  - *Degraded councils* (F-7R2-006 / F-4R2-007): `unitDistributed.degradedReason` renders on the
+    run head (`run-degraded`: "council degraded: 4 of 5 seats benched: …", with the affected-unit
+    count) and on the routing line in the feed. The narrator now reads the camelCase
+    `agreementPct` the engine actually emits (api-types ≤ 0.35.0 declared `agreement_pct`, which
+    the wire never carried — so the pct was always missing); the snake_case read stays as the
+    fallback until the 0.36.0 pin declares camelCase.
+  - *The remote-write fence* (F-7R2-012): a `workerToolCallDenied` (a creator/evaluator seat's
+    `git push` / `gh pr create` …) renders in the feed with the seat, role, the refused command as
+    code and the remedy — the engine's, or "delivery is performed by the run's deliver phase".
+  - *Files view once the worktree is gone* (F-7R2-013): `GET /runs/:id/diff` answering
+    `source: "branch"` is labelled as the run branch vs its base (committed work shown; an empty
+    branch says so); a pre-0.36 daemon's 409 cause card names the run branch and the upgrade. The
+    run page's Files section offers **Full diff** on EVERY state — the empty one included, which
+    was exactly the completed run with no files view.
+  - Tests: the launch ladder (22), the panel (14), the gate model + cards (9), the narrator (13),
+    the files view (6), the landing card (8), the run head (6), the mirror posture (7); the
+    Playwright loopback rig `e2e/governed_testing_test.py` (fixture switch `governed_testing` /
+    `governed_testing_workflow_absent`: GET /workflows, POST /testing/author + the intake gate
+    over /ws, GET /campaigns with `test_set`, the completed run's degraded / UNGATED / refused-write
+    trail, the branch-source diff) at 1440x700 and 400px; testid inventory regenerated. Wire gaps
+    recorded for the crew PR: the recon body's `projectId` cannot express a narrowed project; the
+    campaign registration shape (`test_set`) and the `/testing/author` route are provisional names.
 
 ## [0.5.6] — 2026-09-11
 _The published bundle is built against `wicked-crew-api-types` **0.34.0** — the exact

@@ -24,6 +24,7 @@
 
 import { apiFetch } from './client.js';
 import type { SessionStatus } from './types.js';
+import type { TestSetRegistration } from './wave6-wire.js';
 
 /** Per-node lifecycle status. Terminal = `completed` | `failed` | `blocked` | `cancelled`. */
 export type CampaignNodeStatus =
@@ -127,6 +128,13 @@ export interface Campaign {
    * scheduler ignores them; provenance only. Absent from a pre-0.19 daemon; `[]` when none.
    */
   attached_runs?: AttachedRunView[];
+  /**
+   * The produced TEST SET a completed `qe-author-tests` run registered here (wave 6, api-types
+   * 0.36.0 — acceptance finding F-7R2-014): daemon-joined like `node_delivery`, with the counts the
+   * verify phase re-derived. Absent from a daemon that predates the wave; `null` when the run has
+   * registered nothing yet. Read through `testSetOf` (`./wave6-wire.ts`), never bare.
+   */
+  test_set?: TestSetRegistration | null;
   [k: string]: unknown;
 }
 
@@ -138,6 +146,8 @@ export interface Campaign {
 export interface RunGroup {
   label: string;
   runs: AttachedRunView[];
+  /** The produced test set, when a member `qe-author-tests` run registered one (wave 6). */
+  test_set?: TestSetRegistration | null;
 }
 
 /** `GET /campaigns` 200 body — `groups` is ADDITIVE (a pre-0.19 daemon sends only campaigns). */

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { GovernanceClaim, RepoEntry, SessionView } from '../api/types.js';
 import type { Diagnostics } from '../api/diagnostics.js';
+import { testingLaunchPath } from '../api/testing.js';
 import type { WikiRuleEvidenceRow } from '../api/wiki.js';
 import type { SteeringRule } from '../api/steering.js';
 import { recentActivity } from '../board/homeActivity.js';
@@ -83,7 +84,10 @@ export function HomeVerbs({ navigate, onOpenAsk, prominent = false }: {
       </button>
       {verb('New chat', '/chat/new', 'home-verb-chat')}
       {verb('Register repo', '/repos/new', 'home-verb-repo')}
-      {verb('Run recon', '/testing/campaigns', 'home-verb-recon')}
+      {/* F-075 / F-7R2-009: the Home door launches the governed test flow — the Test landing with the
+          New test panel OPEN (`?new=test`), where "New test" runs the `qe-author-tests` workflow when
+          the daemon lists it. The testid stays `home-verb-recon` for one release (rig continuity). */}
+      {verb('New test', testingLaunchPath('campaign'), 'home-verb-recon')}
       {/* The board-level Ask invite — the SAME dock the rail button opens
           (onOpenAsk is App's setAskOpen), never a second dock or rail fork. */}
       <button

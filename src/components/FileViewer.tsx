@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { api, apiWire, isRouteAbsent } from '../api/client.js';
 import type { RunDiff, RunFileContent } from '../api/types.js';
+import { diffSource, type RunDiffSource } from '../api/wave6-wire.js';
 import { classifyDiff, isDimLine } from '../viewer/colorize.js';
 import type { DiffLineKind } from '../viewer/colorize.js';
 
@@ -412,11 +413,11 @@ function DiffCauseCard({ cause, onClose }: {
   const body =
     cause === 'no-repo'
       ? 'The run executed without a workdir, so there is no worktree to diff. Its captured unit transcripts are the record of what it did.'
-      : 'The worktree was cleaned up after the run ended. The captured unit transcripts and evidence remain the durable record.';
+      : 'The worktree was cleaned up after the run ended. The captured unit transcripts and evidence remain the durable record — and the run branch (wicked/<run id>) still holds the committed work; a daemon with the wave-6 diff route serves that branch here instead of this refusal (upgrade wicked-crew).';
   const remediation =
     cause === 'no-repo'
       ? 'Attach a repository at launch to make future runs reviewable — for this one, review the captured transcripts on the run page.'
-      : 'Review the captured transcripts on the run page.';
+      : 'Review the captured transcripts on the run page, or the run branch in the repository.';
   return (
     <div
       data-testid="diff-named-cause"
@@ -440,19 +441,26 @@ function DiffCauseCard({ cause, onClose }: {
 }
 
 /**
- * The honest interim baseline label (DES-UX-001 §8.1): until CREW-UX-1 lands a
- * branch-vs-base diff, the daemon diffs the working tree against HEAD — so a
- * run's COMMITTED work is invisible here by construction. Say so, always,
- * rather than letting "no changes" read as "did nothing".
+ * The honest baseline label (DES-UX-001 §8.1), keyed on WHERE the daemon read the diff
+ * (`RunDiff.source`, api-types 0.36.0 — acceptance finding F-7R2-013):
+ *  - `branch`   — the worktree is gone (reaped at completion) and the daemon served the RUN
+ *                 BRANCH vs its base commit, so committed work IS shown; say so.
+ *  - `worktree` / absent (a pre-0.36 daemon) — the working tree vs HEAD: a run's COMMITTED work is
+ *                 invisible here by construction. Say so, always, rather than letting "no changes"
+ *                 read as "did nothing".
  */
-function BaselineNote(): React.ReactElement {
+function BaselineNote({ source }: { source: RunDiffSource | null }): React.ReactElement {
+  const branch = source === 'branch';
   return (
     <p
       data-testid="diff-baseline-note"
+      data-source={source ?? 'worktree'}
       className="px-3 py-1.5 text-[10px] font-mono shrink-0"
       style={{ color: 'var(--ink-dim)', borderBottom: '1px solid var(--surface-raised)' }}
     >
-      showing uncommitted changes vs HEAD; committed work is not shown here
+      {branch
+        ? 'showing the run branch vs its base — the worktree is gone, so this is the committed work the run left on its branch'
+        : 'showing uncommitted changes vs HEAD; committed work is not shown here'}
     </p>
   );
 }
@@ -487,15 +495,21 @@ function DiffBody({ diff, narrowed, onRetry, onClose }: {
   if (diff.state === 'cause') return <DiffCauseCard cause={diff.cause} onClose={onClose} />;
   if (diff.state === 'error') return <ErrorPane message={diff.message} />;
   const { diff: text, truncated } = diff.data;
+  const source = diffSource(diff.data);
 
   if (text === '') {
     // `diff: ""` is a real answer (clean tree), not an error (§3.3) — but under
-    // the HEAD baseline it only means "no UNCOMMITTED changes" (§8.1).
+    // the HEAD baseline it only means "no UNCOMMITTED changes" (§8.1); under the
+    // branch baseline (F-7R2-013) it means the run branch carries no commit.
     return (
       <div className="flex-1 min-h-0 flex flex-col">
-        <BaselineNote />
+        <BaselineNote source={source} />
         <p data-testid="viewer-clean-tree" className="p-4 text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
-          {narrowed ? 'no changes to this file.' : 'clean tree — no changes.'}
+          {narrowed
+            ? 'no changes to this file.'
+            : source === 'branch'
+              ? 'the run branch carries no change over its base.'
+              : 'clean tree — no changes.'}
         </p>
       </div>
     );
@@ -504,7 +518,7 @@ function DiffBody({ diff, narrowed, onRetry, onClose }: {
   const lines = classifyDiff(text);
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <BaselineNote />
+      <BaselineNote source={source} />
       {truncated && (
         <TruncationBanner text="diff truncated at 1 MB — narrow to a single file for the rest" />
       )}

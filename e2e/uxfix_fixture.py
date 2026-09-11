@@ -507,6 +507,20 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   before its version lands (0 = instant). >0 lets a rig witness the
          #   record button's point-of-action pending state (EC37).
          "demo_record_ms": 0,
+         # ── Wave 6 (the governed testing journey, e2e/governed_testing_test.py) ──
+         # governed_testing — the api-types 0.36.0 wire, switch-gated so no standing rig's
+         #   wires change: GET /workflows lists `qe-author-tests` (five phases);
+         #   POST /testing/author launches ONE run that pauses at its intake gate (the
+         #   awaitingHuman frame rides /ws, GET /runs/:id serves its planned units +
+         #   pool); GET /campaigns serves the COMPLETED run's registration with its
+         #   `test_set` counts; the completed run's events carry `degradedReason`,
+         #   `workerToolCallDenied` and an UNGATED gateEvaluated; its diff answers
+         #   200 `source: "branch"` (the worktree is gone). Default False: GET
+         #   /workflows and GET /campaigns keep answering the unknown-route 404.
+         # governed_testing_workflow_absent — with the switch on, GET /workflows lists
+         #   NO `qe-author-tests` (a daemon predating the wave): the panel shows the
+         #   plain-run banner and POST /testing/recon takes the launch.
+         "governed_testing": False, "governed_testing_workflow_absent": False,
          }
 state_lock = threading.Lock()
 
@@ -1190,6 +1204,153 @@ FORENSICS_DIFF_HANG_SECONDS = 30
 #    failed with the engine's `deliver: LIFT-CONFLICT — …` refusal, nothing
 #    rebased or pushed, and the run failed.
 
+# ── Wave 6: the governed testing journey (api-types 0.36.0, e2e/governed_testing_test.py) ────
+#
+# Every name below is spelled EXACTLY as the wave-6 briefs give it (camelCase as the engine
+# emits): `qe-author-tests`, `degradedReason`, `ungated` / `ungatedReason`,
+# `workerToolCallDenied {role, command, remedy}`, `diff.source: "branch"`, the campaign's
+# `test_set`. Synthetic — 0.36.0 was unpublished when written; re-vendor at the pin bump.
+GT_RUN = "r-gt-done"                     # the COMPLETED New test (registered its set)
+GT_PROBLEM = "New test: cover the run lifecycle UI — launch form, gate answering, archive"
+GT_INTAKE_PROMPT = ("Approve unit 1 before it runs: recon — read the repository and its "
+                    "existing tests, then plan the behaviour tests to write")
+GT_DEGRADED_REASON = "4 of 5 seats benched: codex, pi, copilot (signed out), opencode (dispatch budget)"
+GT_UNGATED_REASON = "no eligible judge seat"
+GT_REFUSED_COMMAND = 'gh pr create --title "test(run-lifecycle): gap tests" --body-file /tmp/body.md'
+GT_REMEDY = "delivery is performed by the run's deliver phase"
+GT_WORKFLOW_DEF = {
+    "id": "qe-author-tests",
+    "phases": [
+        {"id": "recon", "kind": "recon", "gate_type": None, "gate": "auto", "executes_code": False,
+         "verified_evidence": False, "required_deliverables": [], "depends_on": [], "role": "neutral",
+         "skill_ref": "wicked-garden-qe", "allowed_skills": [], "validator_pin": None},
+        {"id": "author", "kind": "build", "gate_type": None, "gate": "auto", "executes_code": True,
+         "verified_evidence": False, "required_deliverables": ["tests/"], "depends_on": ["recon"],
+         "role": "creator", "skill_ref": "wicked-garden-qe", "allowed_skills": [], "validator_pin": None},
+        {"id": "verify", "kind": "test", "executor": {"type": "tool", "cmd": ["wicked-core", "repo-checks"]},
+         "gate_type": None, "gate": "auto", "executes_code": False, "verified_evidence": True,
+         "required_deliverables": [], "depends_on": ["author"], "role": "neutral", "skill_ref": None,
+         "allowed_skills": [], "validator_pin": None},
+        {"id": "review", "kind": "review", "gate_type": None, "gate": "auto", "executes_code": False,
+         "verified_evidence": False, "required_deliverables": [], "depends_on": ["verify"],
+         "role": "evaluator", "skill_ref": "wicked-garden-qe", "allowed_skills": [], "validator_pin": None},
+        {"id": "deliver", "kind": "build", "executor": {"type": "tool", "cmd": ["node", "deliver.js"]},
+         "gate_type": None, "gate": "auto", "executes_code": False, "verified_evidence": False,
+         "required_deliverables": [], "depends_on": ["review"], "role": "neutral", "skill_ref": None,
+         "allowed_skills": [], "validator_pin": None},
+    ],
+}
+GT_WORKFLOWS_ELSE = [{"id": "feature", "phases": []}, {"id": "bug", "phases": []},
+                     {"id": "chat", "phases": [], "is_system": True}]
+
+
+def _gt_unit(rid: str, ord_: int, phase: str, stage: str, status: str, **extra) -> dict:
+    u = {"id": f"{rid}:{phase}", "session_id": rid, "ord": ord_, "description": f"{phase} — {GT_PROBLEM}",
+         "stage": stage, "assigned_cli": None, "assigned_invocation": None, "council_task_ref": None,
+         "routing": None, "denial_reason": None, "phase_ref": phase, "conformance_ref": None,
+         "phase_status": None, "collection_scope": None, "status": status}
+    u.update(extra)
+    return u
+
+
+def gt_units(rid: str, done: bool) -> list:
+    """The five planned units — at the intake gate only recon has a seat; completed, every one does."""
+    seat = (lambda s: s) if done else (lambda s: None)
+    st = "done" if done else "pending"
+    return [
+        _gt_unit(rid, 1, "recon", "recon", st, assigned_cli="claude", skill_ref="wicked-garden-qe", role="neutral"),
+        _gt_unit(rid, 2, "author", "build", st, assigned_cli=seat("claude"), skill_ref="wicked-garden-qe",
+                 role="creator", executes_code=True,
+                 routing={"method": "council", "winner": "claude", "agreement_pct": 100, "returned": 1,
+                          "seated": 5, "dissent": 0} if done else None),
+        _gt_unit(rid, 3, "verify", "test", st, assigned_cli=None, tool_cmd=["wicked-core", "repo-checks"]),
+        _gt_unit(rid, 4, "review", "review", st, assigned_cli=seat("claude"), skill_ref="wicked-garden-qe", role="evaluator"),
+        _gt_unit(rid, 5, "deliver", "build", st, assigned_cli=None, tool_cmd=["node", "deliver.js"]),
+    ]
+
+
+def gt_done_run() -> dict:
+    r = session(GT_RUN, "completed", GT_PROBLEM, "author — write the behaviour tests")
+    r["session"]["workflow_id"] = "qe-author-tests"
+    r["session"]["repo_ref"] = REPO_ID
+    r["session"]["clis"] = ["claude", "codex", "pi", "copilot", "opencode"]
+    r["session"]["human_confirm"] = "before:1"
+    r["session"]["unit_ix"] = 5
+    r["session"]["delivery"] = "delivered"
+    r["session"]["deliverUrl"] = "https://github.com/example/studio-api/pull/999"
+    r["units"] = gt_units(GT_RUN, done=True)
+    return r
+
+
+GT_EVENTS = [
+    {"type": "sessionStarted", "session": GT_RUN, "problem": GT_PROBLEM, "workflow_id": "qe-author-tests",
+     "cli_count": 5, "governed": True, "entity_mode": "shared", "seq": 1, "ts": NOW0 - 40 * MIN},
+    {"type": "workflowSelected", "session": GT_RUN, "workflowId": "qe-author-tests", "unitCount": 5,
+     "seq": 2, "ts": NOW0 - 40 * MIN},
+    {"type": "unitDistributed", "session": GT_RUN, "ord": 1, "cli": "claude", "routingMethod": "council",
+     "agreementPct": 100, "returned": 1, "seated": 5, "dissent": 0, "degradedReason": GT_DEGRADED_REASON,
+     "seq": 3, "ts": NOW0 - 39 * MIN},
+    {"type": "unitDispatched", "session": GT_RUN, "ord": 1, "attempt": 0, "cli": "claude", "seq": 4, "ts": NOW0 - 39 * MIN},
+    {"type": "unitDone", "session": GT_RUN, "ord": 1, "seq": 5, "ts": NOW0 - 35 * MIN},
+    {"type": "unitDistributed", "session": GT_RUN, "ord": 2, "cli": "claude", "routingMethod": "council",
+     "agreementPct": 100, "returned": 1, "seated": 5, "dissent": 0, "degradedReason": GT_DEGRADED_REASON,
+     "seq": 6, "ts": NOW0 - 35 * MIN},
+    {"type": "unitDispatched", "session": GT_RUN, "ord": 2, "attempt": 0, "cli": "claude", "seq": 7, "ts": NOW0 - 35 * MIN},
+    {"type": "workerToolCallDenied", "session": GT_RUN, "ord": 2, "attempt": 0, "cli": "claude", "role": "creator",
+     "command": GT_REFUSED_COMMAND, "reason": "remote write refused for a creator seat: gh pr create",
+     "remedy": GT_REMEDY, "seq": 8, "ts": NOW0 - 20 * MIN},
+    {"type": "repoChecksEvaluated", "session": GT_RUN, "ord": 2, "attempt": 0, "passed": True,
+     "criterion": "repository checks: npm run typecheck, npm test",
+     "checks": [{"name": "typecheck", "argv": ["npm", "run", "typecheck"], "source": "package.json",
+                 "exitCode": 0, "timedOut": False, "spawnError": None, "durationMs": 4200,
+                 "stdoutTail": None, "stderrTail": None},
+                {"name": "test", "argv": ["npm", "test"], "source": "package.json", "exitCode": 0,
+                 "timedOut": False, "spawnError": None, "durationMs": 61000, "stdoutTail": None, "stderrTail": None}],
+     "skipped": [], "seq": 9, "ts": NOW0 - 18 * MIN},
+    {"type": "gateEvaluated", "session": GT_RUN, "ord": 2, "criterion": "repository checks: npm run typecheck, npm test",
+     "hasDeterministicFloor": True, "deterministicPass": True, "agentVerdict": None, "agentReasoning": None,
+     "evaluatorPass": True, "evaluatorPolicies": [], "denialReason": None, "denial": None, "combined": True,
+     "judgeCli": None, "judgeDistinct": None, "ungated": True, "ungatedReason": GT_UNGATED_REASON,
+     "seq": 10, "ts": NOW0 - 18 * MIN},
+    {"type": "unitDone", "session": GT_RUN, "ord": 2, "seq": 11, "ts": NOW0 - 18 * MIN},
+    {"type": "unitDone", "session": GT_RUN, "ord": 3, "seq": 12, "ts": NOW0 - 15 * MIN},
+    {"type": "unitDone", "session": GT_RUN, "ord": 4, "seq": 13, "ts": NOW0 - 10 * MIN},
+    {"type": "unitDone", "session": GT_RUN, "ord": 5, "seq": 14, "ts": NOW0 - 5 * MIN},
+    {"type": "sessionCompleted", "session": GT_RUN, "seq": 15, "ts": NOW0 - 5 * MIN},
+]
+
+GT_TEST_SET = {
+    "runId": GT_RUN, "workflow": "qe-author-tests",
+    "files": ["tests/run-lifecycle.test.tsx", "e2e/run_lifecycle_test.py"],
+    "counts": {"files": 2, "tests": 11, "executed": 11, "passed": 11, "failed": 0},
+    "plan": "tests/PLAN-run-lifecycle.md",
+    "prUrl": "https://github.com/example/studio-api/pull/999",
+}
+GT_CAMPAIGN = {
+    "id": "qe-tests-studio-api", "def_id": "qe-tests-studio-api", "status": "completed",
+    "def": {"id": "qe-tests-studio-api", "name": "Tests · studio-api · run lifecycle",
+            "nodes": [{"node_id": "author", "run_spec": {"problem": GT_PROBLEM, "repo_ref": "studio-api",
+                                                          "workflow_id": "qe-author-tests"}}]},
+    "node_status": {"author": "completed"}, "node_run_id": {"author": GT_RUN}, "node_attempt": {"author": 0},
+    "pending_decision_amend": {}, "pending_failure_gates": [], "fail_fast_tripped": False,
+    "node_delivery": {"author": {"delivery": "delivered", "deliverUrl": "https://github.com/example/studio-api/pull/999"}},
+    "attached_runs": [], "test_set": GT_TEST_SET,
+}
+GT_BRANCH_DIFF = """\
+diff --git a/tests/run-lifecycle.test.tsx b/tests/run-lifecycle.test.tsx
+new file mode 100644
+--- /dev/null
++++ b/tests/run-lifecycle.test.tsx
+@@ -0,0 +1,4 @@
++import { it, expect } from 'vitest';
++it('the gate error surfaces on the card', () => {
++  expect(true).toBe(true);
++});
+"""
+# Runs launched through POST /testing/author this lifetime — each pauses at its intake gate.
+gt_launched: list = []
+gt_launched_seq = [0]
+
 WIRE433_TREE_BEFORE = "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0"
 WIRE433_TREE_AFTER = "f0e1d2c3b4a5f0e1d2c3b4a5f0e1d2c3b4a5f0e1"
 WIRE433_BASE_BEFORE = "1432c96e0f1a2b3c4d5e6f708192a3b4c5d6e7f8"
@@ -1870,6 +2031,10 @@ def assemble_runs() -> list:
                 f"/w5/state/interactive-drafts/{bound['doc']}"]
             bound_run["session"]["project_id"] = bound["pid"]
             runs = runs + [bound_run]
+        # Wave 6: the completed governed test + every New test launched this lifetime
+        # (each awaiting its intake gate) ride BOTH wires (list + detail).
+        if state["governed_testing"] and not state["no_runs"]:
+            runs = runs + [gt_done_run()] + json.loads(json.dumps(gt_launched))
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -2399,6 +2564,28 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/runs":
             self._json(200, {"runs": assemble_runs()})
             return True
+        # Wave 6: GET /workflows — the QE workflow the panel reads before it launches (switch-gated:
+        # off, the unknown-route 404 standing rigs see; on, the def list with — or, under
+        # `governed_testing_workflow_absent`, WITHOUT — `qe-author-tests`).
+        if path == "/api/v1/workflows":
+            with state_lock:
+                gt_on = state["governed_testing"]
+                absent = state["governed_testing_workflow_absent"]
+            if not gt_on:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            else:
+                self._json(200, {"workflows": GT_WORKFLOWS_ELSE + ([] if absent else [GT_WORKFLOW_DEF])})
+            return True
+        # Wave 6: GET /campaigns — the completed New test's registration with its `test_set` counts
+        # (F-7R2-014). Off ⇒ the standing unknown-route 404 (the landing's "unsupported" state).
+        if path == "/api/v1/campaigns":
+            with state_lock:
+                gt_on = state["governed_testing"]
+            if not gt_on:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            else:
+                self._json(200, {"campaigns": [GT_CAMPAIGN], "groups": []})
+            return True
         # Slice V: GET /runs/<id> — one run's detail (`{run: SessionView}`), the
         # real daemon contract useRunModel re-hydrates on. Same corpus assembly
         # as the list, so the switches decorate both wires identically; an
@@ -2646,6 +2833,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"runId": rid, "ord": 3, "lifecycle": "open",
                                  "prompt": GATE_NOW_PROMPT,
                                  "receivedAt": iso(NOW0), "options": None})
+            elif any(r["session"]["id"] == rid for r in gt_launched):
+                # Wave 6: every New test launched this lifetime pauses at its intake gate
+                # (`before:1`) — the cached record a page load reconciles against.
+                self._json(200, {"runId": rid, "ord": 1, "lifecycle": "open",
+                                 "prompt": GT_INTAKE_PROMPT, "receivedAt": iso(NOW0), "options": None})
             else:
                 self._json(404, {"error": f"no gate cached for {rid}"})
             return True
@@ -2682,6 +2874,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 events = list(WIRE433_API_EVENTS)
             if wire433_on and rid == "r-auth":
                 events = list(WIRE433_AUTH_EVENTS)
+            # Wave 6: the completed governed test's recorded trail — degraded council, the
+            # remote-write fence, the UNGATED gate.
+            with state_lock:
+                gt_on = state["governed_testing"]
+            if gt_on and rid == GT_RUN:
+                events = list(GT_EVENTS)
             # Slice BC: the chain tip's durable tail — the current-state
             # strip's criterion/workflow derivation reads exactly this.
             with state_lock:
@@ -2724,6 +2922,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             viewer_on = state["viewer"] and state["file_routes"]
             orphan_on = state["orphan"]
             forensics_on = state["forensics"]
+            gt_on = state["governed_testing"]
+        # Wave 6 (F-7R2-013): the completed governed test's worktree is GONE, and the wave-6
+        # daemon serves the RUN BRANCH vs its base — 200 with `source: "branch"` — instead of the
+        # pre-0.36 409 "workdir no longer exists". Lit by its own switch, whole-run only.
+        if gt_on and rid == GT_RUN and leaf == "diff":
+            self._json(200, {"diff": GT_BRANCH_DIFF, "truncated": False, "source": "branch"})
+            return
         # Slice R: the forensics corpus lights these routes for the two failed
         # runs on its own — r-auth's evidence file + REAL workdir-less 409, and
         # r-legacy's hanging diff — without dragging the whole viewer corpus in.
@@ -3419,6 +3624,39 @@ class W2Handler(SimpleHTTPRequestHandler):
                                  if body.get("description") else {}))
                 created_projects.append(row)
             return self._json(201, {"project": row})
+        # Wave 6: POST /testing/author — the governed New test (api-types 0.36.0). Switch-gated:
+        # off ⇒ the unknown-route 404 (the panel's chain then tries /testing/recon + `workflow`);
+        # on ⇒ ONE run per resolved repo (this fixture resolves nothing server-side: one run),
+        # `qe-author-tests` on the DTO, paused at its intake gate — the awaitingHuman frame rides
+        # the /ws one-shot queue so the panel's gate card appears the way it does in production.
+        if path == "/api/v1/testing/author":
+            with state_lock:
+                gt_on = state["governed_testing"]
+                if not gt_on:
+                    return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+                problem = str(body.get("problem") or "")
+                if not problem:
+                    return self._json(400, {"error": "Invalid author body: problem must be a non-empty string"})
+                refs = body.get("repoRefs") or []
+                if any(r != REPO_ID for r in refs):
+                    bad = next(r for r in refs if r != REPO_ID)
+                    return self._json(404, {"error": f"repoRefs names a repo that is not registered: {bad}"})
+                gt_launched_seq[0] += 1
+                rid = f"r-gt-{gt_launched_seq[0]}"
+                run = session(rid, "awaiting_human", problem, "recon — read the repository and its tests")
+                run["session"]["workflow_id"] = "qe-author-tests"
+                run["session"]["repo_ref"] = REPO_ID if refs else None
+                run["session"]["clis"] = ["claude", "codex", "pi"]
+                run["session"]["human_confirm"] = "before:1"
+                run["session"]["unit_ix"] = 0
+                pid = body.get("projectId")
+                run["session"]["project_id"] = pid if pid else None
+                run["units"] = gt_units(rid, done=False)
+                gt_launched.append(run)
+                state["extra_gates"].append({"session": rid, "ord": 1, "prompt": GT_INTAKE_PROMPT})
+                campaign = f"author-{rid}"
+            return self._json(201, {"runId": rid, "runIds": [rid], "campaign": campaign,
+                                    "campaignRegistered": False, "workflow": "qe-author-tests"})
         # POST /api/v1/runs — the REAL launch (slice S, project_dto only): the
         # daemon's `{runId}` answer; `body.projectId` files the run atomically
         # (LaunchSchema, routes.ts:148 — "never a silent unfiled run"), and the

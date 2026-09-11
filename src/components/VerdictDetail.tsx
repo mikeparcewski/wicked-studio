@@ -1,5 +1,6 @@
 import type { CoreEvent, WorkUnit } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
+import { gateUngated, gateUngatedReason } from '../api/wave6-wire.js';
 import { phaseLabel } from './gateVerdictModel.js';
 
 /**
@@ -45,10 +46,15 @@ interface GateEvalView {
   evaluatorPolicies: string[];
   denialReason: string | null;
   combined: boolean;
+  /** Wave 6 (api-types 0.36.0): the engine SAYS no judge seat could be convened — and why. */
+  ungated: boolean;
+  ungatedReason: string | null;
 }
 
 function toView(ev: CoreEvent): GateEvalView {
   return {
+    ungated: gateUngated(ev),
+    ungatedReason: gateUngatedReason(ev),
     ord: typeof ev.ord === 'number' ? ev.ord : null,
     criterion: typeof ev.criterion === 'string' ? ev.criterion : null,
     hasDeterministicFloor: ev.hasDeterministicFloor === true,
@@ -155,6 +161,17 @@ export function VerdictDetail({ runId, units }: Props): React.ReactElement {
                 deciding.evaluatorPolicies.length === 1 ? 'policy' : 'policies'
               })`}
       </p>
+      {/* Wave 6 (F-7R2-005 / -017): the engine's own word that no judge could be convened. */}
+      {deciding.ungated && (
+        <p
+          className="text-[11px] font-mono font-semibold"
+          data-testid="verdict-ungated"
+          {...(deciding.ungatedReason !== null ? { 'data-ungated-reason': deciding.ungatedReason } : {})}
+          style={{ color: 'var(--status-gate)' }}
+        >
+          UNGATED — {deciding.ungatedReason ?? 'the engine convened no judge'}; evaluator ≠ creator was not held on this verdict
+        </p>
+      )}
     </div>
   );
 }
