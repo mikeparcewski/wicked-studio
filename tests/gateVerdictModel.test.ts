@@ -168,6 +168,16 @@ describe('gateVerdict helpers', () => {
     expect(formatDuration(120000)).toBe('2m');
   });
 
+  it('formatDuration: rounds to the unit BEFORE choosing the format — never sixty of a smaller unit (Copilot on #252)', () => {
+    expect(formatDuration(59_999)).toBe('1m'); // not "60.0s"
+    expect(formatDuration(59_949)).toBe('59.9s');
+    expect(formatDuration(119_500)).toBe('2m'); // not "1m 60s"
+    expect(formatDuration(119_499)).toBe('1m 59s');
+    expect(formatDuration(999.6)).toBe('1.0s'); // not "1000ms"
+    expect(formatDuration(999.4)).toBe('999ms');
+    expect(formatDuration(-5)).toBe('0ms');
+  });
+
   it('splitBackticks: odd indices are the quoted commands', () => {
     const parts = splitBackticks(WORKTREE_GUARD_REASON);
     expect(parts.filter((_, i) => i % 2 === 1)).toEqual([

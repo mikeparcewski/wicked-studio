@@ -269,12 +269,19 @@ export function checkOutcome(c: GateFloorCheck): { word: string; ok: boolean } {
   return { word: c.exitCode === 0 ? 'exit 0' : `exit ${c.exitCode}`, ok: c.exitCode === 0 };
 }
 
-/** `6893` → `6.9s`, `79191` → `1m 19s`, `420` → `420ms`. */
+/**
+ * `6893` → `6.9s`, `79191` → `1m 19s`, `420` → `420ms`. Rounds to the UNIT it is about to print
+ * BEFORE choosing the format, so a boundary value never shows sixty of a smaller unit: 59,999 ms is
+ * `1m` (not `60.0s`), 119,500 ms is `2m` (not `1m 60s`), 999.6 ms is `1.0s` (Copilot on #252).
+ */
 export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  const m = Math.floor(ms / 60_000);
-  const s = Math.round((ms - m * 60_000) / 1000);
+  const wholeMs = Math.max(0, Math.round(ms));
+  if (wholeMs < 1000) return `${wholeMs}ms`;
+  const tenths = Math.round(ms / 100);
+  if (tenths < 600) return `${(tenths / 10).toFixed(1)}s`;
+  const totalSecs = Math.round(ms / 1000);
+  const m = Math.floor(totalSecs / 60);
+  const s = totalSecs % 60;
   return s === 0 ? `${m}m` : `${m}m ${s}s`;
 }
 
