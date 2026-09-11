@@ -4,7 +4,7 @@
 import { render, screen, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DeckKpiRibbon } from '../src/components/DeckKpiRibbon.js';
-import { makeView } from './factories.js';
+import { makeUnit, makeView } from './factories.js';
 
 const NOW = 1_760_000_000_000;
 const DAY = 86_400_000;
@@ -45,7 +45,12 @@ describe('DeckKpiRibbon — real created_at windows', () => {
     ribbon([
       makeView({ id: 'a', status: 'completed', created_at: secs(NOW - DAY), delivery: 'delivered' }),
       makeView({ id: 'b', status: 'completed', created_at: secs(NOW - DAY), delivery: 'stranded' }),
-      makeView({ id: 'c', status: 'completed', created_at: secs(NOW - DAY), delivery: 'vacuous' }),
+      // A REAL vacuous run — its deliver phase ran and found nothing (F-3R2-018: the fold counts
+      // vacuous only for runs expected to deliver; a bare `vacuous` stamp on an unlicensed run is not one).
+      makeView(
+        { id: 'c', status: 'completed', created_at: secs(NOW - DAY), repo_ref: 'org/repo', delivery: 'vacuous' },
+        [makeUnit({ id: 'c:deliver', session_id: 'c', ord: 5, status: 'rejected', denial_reason: 'nothing to deliver' })],
+      ),
       makeView({ id: 'd', status: 'completed', created_at: secs(NOW - DAY), retry_of: 'a' }),
     ]);
     expect(screen.getByTestId('home-kpi-review')).toHaveAttribute('data-value', '2'); // stranded + vacuous

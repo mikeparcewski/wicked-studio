@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.4",
   "counts": {
-    "files": 138,
-    "occurrences": 1154,
-    "static": 992,
+    "files": 139,
+    "occurrences": 1164,
+    "static": 1002,
     "dynamic": 57,
     "computed": 6
   },
@@ -1923,6 +1923,66 @@
       "testId": "gate-toast-overflow",
       "files": [
         "src/components/GateNotifications.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-check",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-criterion",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-denial",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-floor",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-judge",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-layers",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-mutation",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-skipped",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-ungated",
+      "files": [
+        "src/components/GateVerdict.tsx"
       ]
     },
     {
