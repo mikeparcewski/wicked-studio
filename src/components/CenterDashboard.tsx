@@ -990,14 +990,19 @@ export function CenterDashboard({
   // log, would be empty for an evaluation that is durably recorded (Copilot on #252). Bounded the
   // way `useBoardModel`'s failed-run backfill is: once per run id per mount, and only for runs
   // that currently hold a gate (a paused run has exactly one), so the list surface's request
-  // budget stays O(open gates), not O(rows). Degrades silently — an api surface without
-  // `getRunEvents`, a 503 (no event-log binding) or an empty history leaves the card promptless,
-  // never wrong; `hydrate` merges live frames by fingerprint, so nothing is double-counted.
+  // budget stays O(open gates), not O(rows). No "already has frames" shortcut: after a reconnect
+  // the live slice may hold only the new `awaitingHuman` while the `gateEvaluated` that opened it
+  // was recorded before the socket came up, so presence of a frame proves nothing about the
+  // history — the once-per-id guard alone bounds the requests, and `hydrate` merges live frames
+  // by fingerprint, so nothing is double-counted. Depends on `openGates` only (the store is read
+  // inside), so a busy dashboard does not rescan its gates on every structured frame. Degrades
+  // silently — an api surface without `getRunEvents`, a 503 (no event-log binding) or an empty
+  // history leaves the card promptless, never wrong.
   const gateBackfilled = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const g of openGates) {
       const id = g.runId;
-      if (gateBackfilled.current.has(id) || (byRun[id] ?? []).length > 0) continue;
+      if (gateBackfilled.current.has(id)) continue;
       gateBackfilled.current.add(id);
       try {
         api
@@ -1008,7 +1013,7 @@ export function CenterDashboard({
         /* an api surface without getRunEvents — nothing to backfill from */
       }
     }
-  }, [openGates, byRun]);
+  }, [openGates]);
 
   /** The last recorded `sessionFailed` message for a run, if the store holds one. */
   const failReasonOf = useCallback(

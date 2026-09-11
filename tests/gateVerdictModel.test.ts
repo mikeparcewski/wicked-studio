@@ -138,6 +138,19 @@ describe('gateVerdict — which evaluation answers the gate', () => {
     });
   });
 
+  it('a structured denial spelled snake_case (claim_id / rule_ids / denied_tool) keeps its ids on the card (Copilot on #252)', () => {
+    const events: CoreEvent[] = [
+      {
+        type: 'gateEvaluated', session: GATE_RUN, ord: 2, combined: false,
+        denialReason: 'a steering rule fired',
+        denial: { source: 'governance', reason: 'a steering rule fired', claim_id: 'boundary-deny:unit-2', rule_ids: ['sec-001'], denied_tool: 'Bash', phase: 'unit-2' },
+      },
+    ];
+    expect(gateVerdict(events, 2)!.denial).toEqual({
+      source: 'governance', reason: 'a steering rule fired', claimId: 'boundary-deny:unit-2', ruleIds: ['sec-001'], deniedTool: 'Bash', phase: 'unit-2',
+    });
+  });
+
   it('malformed evidence frames are narrowed, never trusted: a check without a name is dropped, a non-array `changed` reads as none', () => {
     const events: CoreEvent[] = [
       { type: 'evaluatorMutatedWorktree', session: GATE_RUN, ord: 1, cli: 'pi', phase: 'verify', changed: 'nope' },

@@ -227,6 +227,31 @@ describe('the gate inbox (W4, §2.7 rule 5)', () => {
     expect(getRunEvents).toHaveBeenCalledWith(GATE_RUN);
   });
 
+  it('after a RECONNECT the live slice may hold only the new awaitingHuman — the backfill still runs, so the persisted verdict renders (Copilot on #252)', async () => {
+    // The socket came up after the gateEvaluated was recorded: the store has one live frame for
+    // the run (the gate itself) and none of the history. Presence of a frame proves nothing about
+    // the history, so the once-per-id guard alone bounds the fetch.
+    getRunEvents.mockImplementation(async (id) => ({ events: id === GATE_RUN ? G4_EVENTS : [] }));
+    // The live copy of the same emission: identical to the recorded frame minus `ts`/`seq` (the
+    // two fields only the durable log stamps) — which is exactly what the store's fingerprint
+    // merge de-duplicates on.
+    useRunEventStore.setState({
+      byRun: { [GATE_RUN]: [{ type: 'awaitingHuman', session: GATE_RUN, ord: G4_GATE.ord, prompt: G4_GATE.prompt, reviewingOrd: null }] },
+    });
+    useGateStore.setState({
+      gates: {
+        [GATE_RUN]: { runId: GATE_RUN, ord: G4_GATE.ord, prompt: G4_GATE.prompt, lifecycle: 'open', receivedAt: 1 },
+      },
+    });
+    dash([makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS)]);
+    const card = await screen.findByTestId('gate-verdict');
+    expect(card).toHaveAttribute('data-verdict', 'pass');
+    expect(getRunEvents).toHaveBeenCalledTimes(1);
+    // The live frame that raced the backfill is still in the merged log exactly once (fingerprint merge).
+    const merged = useRunEventStore.getState().byRun[GATE_RUN] ?? [];
+    expect(merged.filter((e) => e.type === 'awaitingHuman' && e.ord === G4_GATE.ord)).toHaveLength(1);
+  });
+
   it('the inbox card renders NO verdict block when the run has no evaluation in its log yet', () => {
     useGateStore.setState({
       gates: { 'r-gate': { runId: 'r-gate', ord: 1, prompt: 'Approve unit 1 before it runs?', lifecycle: 'open', receivedAt: 1 } },

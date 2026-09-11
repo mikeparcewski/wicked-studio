@@ -105,13 +105,16 @@ const strings = (v: unknown): string[] =>
 function denialOf(ev: CoreEvent): GateDenialView | null {
   const raw = ev.denial;
   if (isRecord(raw) && typeof raw.reason === 'string') {
+    // Either casing survives the wire (api-types 0.31.0 spells it camelCase; earlier engines and
+    // the unit-record twin spell `claim_id` / `rule_ids` — the same tolerance `denialCopy.ts`
+    // already keeps), so a snake_case denial never drops its rule ids from the card.
     const d = raw as Partial<UnitDenial> & Record<string, unknown>;
     return {
       source: str(d.source),
       reason: d.reason as string,
-      claimId: str(d.claimId),
-      ruleIds: strings(d.ruleIds),
-      deniedTool: str(d.deniedTool),
+      claimId: str(d.claimId) ?? str(d['claim_id']),
+      ruleIds: strings(d.ruleIds ?? d['rule_ids']),
+      deniedTool: str(d.deniedTool) ?? str(d['denied_tool']),
       phase: str(d.phase),
     };
   }
