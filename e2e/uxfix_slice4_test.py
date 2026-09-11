@@ -243,6 +243,9 @@ with sync_playwright() as p:
     added_count = page.evaluate(
         """() => document.querySelector('[data-testid="agent-chips-bar"]')?.dataset.count ?? null""")
 
+    _scope_none = page.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page.locator("textarea").fill("warm the whole selection")
     page.keyboard.press("Enter")
     page.locator('[data-testid="chat-close"]').wait_for(timeout=30000)
@@ -282,6 +285,9 @@ with sync_playwright() as p:
     page2.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page2.add_style_tag(content=HIDE_GATE_TOASTS)
 
+    _scope_none = page2.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page2.locator("textarea").fill("make me a deck")
     page2.keyboard.press("Enter")
     page2.locator('[data-testid="chat-close"]').wait_for(timeout=30000)

@@ -207,6 +207,9 @@ with sync_playwright() as p:
 
     # AC 1 — the send connects EXACTLY the displayed chips: the open names the
     # capable defaults + the explicit addition; no gesture-time roster fetch.
+    _scope_none = page.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page.locator("textarea").fill(MSG1)
     page.keyboard.press("Enter")
     page.wait_for_function(
@@ -232,6 +235,9 @@ with sync_playwright() as p:
 
     # AC 3 setup — turn 2 opens BEFORE turn 1's chunks arrive (chat_deltas
     # buffers them until the flush): the splice scenario, live.
+    _scope_none = page.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page.locator("textarea").fill(MSG2)
     page.keyboard.press("Enter")
     page.wait_for_function(
@@ -259,6 +265,9 @@ with sync_playwright() as p:
 
     # AC 2 — a refused fan-out keeps the draft and renders inline retry.
     set_fixture(ORIGIN, chat_send_fail=True)
+    _scope_none = page.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page.locator("textarea").fill(MSG3)
     page.keyboard.press("Enter")
     page.locator('[data-testid="chat-send-failed"]').wait_for(timeout=30000)

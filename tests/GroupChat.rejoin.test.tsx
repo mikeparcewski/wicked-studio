@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat } from '../src/components/GroupChat.js';
 
@@ -357,6 +357,7 @@ describe('GroupChat — the routed session URL (J4/C6)', () => {
       <GroupChat repoId={null} onBack={() => undefined} routedChatId="gone-1" reflectUrl navigate={navigate} />,
     );
     await screen.findByTestId('chat-session-ended');
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await user.type(screen.getByRole('textbox'), 'start over');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
@@ -372,6 +373,7 @@ describe('GroupChat — the routed session URL (J4/C6)', () => {
     const user = userEvent.setup();
     const navigate = vi.fn();
     render(<GroupChat repoId={null} onBack={() => undefined} reflectUrl navigate={navigate} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const mintedId = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
@@ -382,6 +384,7 @@ describe('GroupChat — the routed session URL (J4/C6)', () => {
   it('the reflection navigation does not reset the live transcript (routedChatId → own id)', async () => {
     const user = userEvent.setup();
     const view = render(<GroupChat repoId={null} onBack={() => undefined} reflectUrl />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await armViaFirstSend(user);
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const mintedId = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;

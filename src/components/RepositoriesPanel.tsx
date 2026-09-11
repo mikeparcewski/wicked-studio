@@ -18,6 +18,7 @@ import {
 import { NewProjectModal } from './NewProjectModal.js';
 import { ago } from './ProjectCard.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
+import { RepoFindings } from './RepoFindings.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -763,6 +764,17 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   >
                     {graphStateWord(m, attachedAt, now)}
                   </p>
+
+                  {/* studio#251: the engine's checkout findings (wicked-core#406), compact —
+                      "Re-run onboarding" rides the card's EXISTING onboard wire. Silent when none. */}
+                  <RepoFindings
+                    compact
+                    findings={repo.findings}
+                    onRerunOnboarding={() => void rerunOnboarding(repo.id)}
+                    rerunning={isRerunning}
+                    disabled={capturing[repo.id] ?? false}
+                    testId="repo-card-findings"
+                  />
 
                   {/* Stats row — the window's counts, the honest clocks */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>

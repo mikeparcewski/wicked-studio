@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { GovernanceClaim, SessionView } from '../api/types.js';
+import type { DiagnosticsGovernance, GovernanceClaim, SessionView } from '../api/types.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { governedRuns } from '../board/steeringUsage.js';
 import { observedSpend } from '../board/metrics.js';
@@ -43,13 +43,17 @@ interface Props {
   runs: SessionView[];
   /** `GET /governance/claims`, or null when the daemon does not serve it. */
   claims: GovernanceClaim[] | null;
+  /** `GET /diagnostics`.governance (crew#495 / studio#246), or null/absent when not served: a boot
+   *  that resolved NO store, or any error finding (dead letters), means governance evidence is
+   *  NOT landing — the Governed tile must not read as a clean percentage over it. */
+  governance?: DiagnosticsGovernance | null | undefined;
   /** THE needs-you fold's count — the ribbon shows exactly what the feed lists. */
   needCount: number;
   navigate: Navigate;
   now?: number;
 }
 
-export function DeckKpiRibbon({ runs, claims, needCount, navigate, now }: Props): React.ReactElement {
+export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navigate, now }: Props): React.ReactElement {
   const at = now ?? Date.now();
   const logs = useRuntimeStore((s) => s.logs);
   // The `is_system` lookup licenses the vacuous count (wicked-studio#250, F-3R2-018) — the same
@@ -98,6 +102,21 @@ export function DeckKpiRibbon({ runs, claims, needCount, navigate, now }: Props)
 
   const go = (path: string) => (e: React.MouseEvent) => { e.preventDefault(); navigate(path); };
 
+  // #246: the Governed tile degrades when the daemon says its governance evidence is not landing
+  // — the same signal the Health rail's heart reads (a null store, or an error finding such as
+  // `governance.deadletter`). The percentage stays (it is what the claims say), painted in the
+  // fail token with the reason underneath; nothing else about the tile changes.
+  const govError = governance !== null && (governance.store === null || governance.findings.some((f) => f.severity === 'error'));
+  const govWhy = governance === null
+    ? null
+    : governance.store === null
+      ? 'no governance store resolved — evidence is not landing (see Health)'
+      : governance.findings.find((f) => f.severity === 'error')?.kind === 'governance.deadletter'
+        ? `${governance.deadletters.count}${governance.deadletters.truncated ? '+' : ''} governance events dead-lettered (see Health)`
+        : governance.findings.some((f) => f.severity === 'error')
+          ? 'governance evidence is not landing (see Health)'
+          : null;
+
   return (
     <section className="deck-ribbon" data-testid="home-kpis" aria-label="Key metrics">
       {/* ── FLOW ── */}
@@ -141,9 +160,11 @@ export function DeckKpiRibbon({ runs, claims, needCount, navigate, now }: Props)
           <Tile testId="home-kpi-governed" lead label="Governed"
             value={model.governed !== null && model.governed.pct !== null ? String(model.governed.pct) : '—'}
             unit={model.governed !== null && model.governed.pct !== null ? '%' : ''}
+            valueColor={govError ? 'var(--status-fail)' : undefined}
+            state={govError ? 'governance-error' : undefined}
             href="/steering" onGo={go('/steering')}
             bar={model.governed?.pct ?? null}
-            sub={model.governed === null ? 'not served' : `${model.governed.governed}/${model.governed.total} runs`} />
+            sub={govError && govWhy !== null ? govWhy : model.governed === null ? 'not served' : `${model.governed.governed}/${model.governed.total} runs`} />
           <Tile testId="home-kpi-spend" label="Spend · session"
             value={model.spend.frames === 0 ? '—' : `$${model.spend.total.toFixed(2)}`}
             href="/work" onGo={go('/work')}
@@ -158,7 +179,7 @@ export function DeckKpiRibbon({ runs, claims, needCount, navigate, now }: Props)
 }
 
 /** One ribbon tile — the deck's luminous mono metric, delta pill, optional sparkline or bar. */
-function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, sub, spark, bar, lead, href, onGo }: {
+function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, state, sub, spark, bar, lead, href, onGo }: {
   testId: string;
   label: string;
   value: string;
@@ -166,6 +187,8 @@ function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, 
   delta?: StatDelta;
   deltaBadUp?: boolean;
   valueColor?: string | undefined;
+  /** A named degraded state the tile is in (rendered as `data-state`), or undefined. */
+  state?: string | undefined;
   sub?: string;
   spark?: readonly number[];
   bar?: number | null;
@@ -187,6 +210,7 @@ function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, 
       // (with its unit) and whether a real prior-window delta exists.
       data-value={`${value}${unit}`}
       data-delta={hasDelta ? dir : 'none'}
+      data-state={state}
       href={href}
       onClick={onGo}
     >

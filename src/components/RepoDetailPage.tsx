@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { RepoFindings } from './RepoFindings.js';
 import { CommitCadence } from './CommitCadence.js';
 import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
@@ -213,6 +214,18 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
             <p className="text-xs font-mono mt-1 break-all" style={{ color: 'var(--ink-dim)' }}>
               {repo.root_path}
             </p>
+            {/* studio#251: the engine's checkout findings (wicked-core#406) — an ignored in-tree
+                graph, a graph-less repo — with "Re-run onboarding" wired to THIS page's onboarding
+                trigger. Silent when the record carries none (or predates the field). */}
+            {(repo.findings?.length ?? 0) > 0 && (
+              <div className="mt-2">
+                <RepoFindings
+                  findings={repo.findings}
+                  onRerunOnboarding={() => void startOnboarding()}
+                  rerunning={onboarding}
+                />
+              </div>
+            )}
             {repo.git_url && (
               /^https?:\/\//i.test(repo.git_url) ? (
                 <a

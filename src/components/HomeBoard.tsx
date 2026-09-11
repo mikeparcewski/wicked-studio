@@ -381,7 +381,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
           {/* ── The KPI ribbon: the hero, full-width — FLOW / ATTENTION / TRUST&SPEND on the real
                  created_at clock (the command-deck redesign). ── */}
           <div style={{ flexShrink: 0, padding: '0 var(--space-6)' }}>
-            <DeckKpiRibbon runs={runs} claims={wires.claims} needCount={needRows.length} navigate={navigate} now={now} />
+            <DeckKpiRibbon runs={runs} claims={wires.claims} governance={wires.diag?.governance ?? null} needCount={needRows.length} navigate={navigate} now={now} />
           </div>
 
           {/* ── The command center: the needs-you queue (spine, left) + the live-pulse column. ── */}

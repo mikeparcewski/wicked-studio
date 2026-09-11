@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { Project, RosterSeat } from '../api/types.js';
+import { apiStatus, apiWire } from '../api/errors.js';
+import type { ChatOpenBody, ChatScope, Project, RepoEntry, RosterSeat } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { pinAwaiting } from '../store/awaitingPins.js';
+import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
@@ -156,6 +158,19 @@ const SEAT_DOT: Record<SeatState, string> = {
  */
 const CHAT_ID_KEY = (repoId?: string | null): string => `wicked.chat.${repoId ?? '_'}`;
 
+/**
+ * The per-surface storage key (Copilot on #253): a repo-entry chat is keyed by its repo, a
+ * PROJECT-SHELL chat by its project (`project:<id>`) — never the flat `_` key every shell would
+ * otherwise share, which let project B rejoin project A's chat (now a SCOPE leak, crew#502: no
+ * new POST rides a rejoin, so B's `projectId` was never applied). The flat `/chat/*` routes keep
+ * the historical `_` key.
+ */
+function chatStorageKey(repoId: string | null | undefined, projectId: string | null | undefined): string | null {
+  if (repoId) return repoId;
+  if (projectId) return `project:${projectId}`;
+  return null;
+}
+
 /** All three wrapped: sessionStorage throws in private-mode/blocked-cookie browsers, and a chat
  *  the operator cannot open is a worse outcome than a chat that leaks. Degrades to mint-per-mount,
  *  which is exactly the pre-fix behaviour — no new failure, just no improvement. */
@@ -180,6 +195,89 @@ function clearStoredChatId(repoId?: string | null): void {
   } catch {
     /* non-fatal — see above */
   }
+}
+
+// ── Scope (crew#502 / F-067, studio#248) ─────────────────────────────────────
+//
+// A chat is SCOPED by the daemon: its seats run in a private scratch root with the
+// scoped repositories as READ roots and, where a graph binds, a read-only estate
+// MCP over it. `POST /chats` decides the scope from the body — explicit `repoRefs`
+// win; else `projectId` means EVERY `crew.repo` member of the project; else NONE
+// (the seats see only their scratch root). The create flow therefore carries a
+// scope control, `kind: 'none'` is an EXPLICIT choice (never the silent default a
+// forgotten Unfiled field would produce), and the opened chat STATES the scope
+// the daemon resolved (`ChatOpenResponse.scope` / `ChatDetailResponse.scope`).
+
+/** The create-flow scope control's position. */
+export type ChatScopeMode = 'project' | 'repos' | 'none';
+
+/** `ChatOpenBody.repoRefs` takes 1–32 entries (api-types 0.32.0). */
+export const MAX_SCOPE_REPOS = 32;
+
+/**
+ * Why a send may NOT open the chat yet — the scope it would resolve to is the
+ * silent `none` (an Unfiled chat with no repos chosen and no explicit Unscoped),
+ * or "repos" with nothing picked. `null` = the scope is a real choice; go.
+ * `repoId` (the repo-entry chat) is a scope of its own and never blocks.
+ */
+export function chatScopeGap(input: {
+  repoId: string | null | undefined;
+  mode: ChatScopeMode;
+  projectId: string | null;
+  repoIds: readonly string[];
+}): string | null {
+  if (input.repoId) return null;
+  if (input.mode === 'repos') {
+    return input.repoIds.length === 0
+      ? 'Pick at least one repository for the agents to read — or choose another scope.'
+      : null;
+  }
+  if (input.mode === 'none') return null;
+  return input.projectId !== null
+    ? null
+    : 'Unfiled chats give the agents nothing to read. Pick a project (all its repositories), choose repositories, or continue unscoped.';
+}
+
+/**
+ * The operator sentence for a refused `POST /chats` (crew#502's own status
+ * codes): 404 = a named ref is not registered (every missing one is in the
+ * daemon's sentence); 400 "ambiguous" = a NAME two checkouts share (name it by
+ * id); 409 = a daemon-side conflict (scratch-base overlap, an id still closing,
+ * an archived project); 501 = the installed engine cannot ground a scoped chat
+ * (predates chat scope) — the Unscoped fallback is offered beside it. Anything
+ * else keeps the translated message as-is.
+ */
+export function describeChatOpenRefusal(status: number | null, wire: string | null, fallback: string): string {
+  if (status === 404 && wire !== null) {
+    // Only a REPO 404 (`Repo 'x', 'y' not found` — chat-scope.ts) gets the repo remedy; the route
+    // also answers 404 `Project <id> not found` (routes.ts), which reads plain.
+    return /^Repo /.test(wire)
+      ? `Scope refused — ${wire}. Name repositories that are registered (by id, or a name only one repo carries) and send again.`
+      : wire;
+  }
+  if (status === 400 && wire !== null && /ambiguous/i.test(wire)) {
+    return `Scope refused — ${wire}`;
+  }
+  if (status === 409 && wire !== null) {
+    return `The daemon refused to open this chat — ${wire}`;
+  }
+  if (status === 501 && wire !== null) {
+    return `This daemon cannot open a SCOPED chat — ${wire}`;
+  }
+  return fallback;
+}
+
+/**
+ * Whether a refused `POST /chats` is one the daemon answered BEFORE opening anything — crew#502's
+ * 400 (bad body / ambiguous name), 404 (missing refs), 409 (a conflict that opened nothing) and
+ * 501 (a scoped chat the engine cannot hold — closed again by the daemon). The one 409 that names
+ * a LIVE chat ("already open on this daemon") is excluded: that id exists and must not be dropped.
+ * Transport failures and 5xx (`status` null / ≥500) are unknown — the id is retained (FINDING-027).
+ */
+export function chatOpenedNothing(status: number | null, wire: string | null): boolean {
+  if (status === 400 || status === 404 || status === 501) return true;
+  if (status === 409) return !(wire !== null && /already open/i.test(wire));
+  return false;
 }
 
 interface Props {
@@ -216,12 +314,16 @@ interface Props {
 export function GroupChat({
   repoId, onBack, projectId = null, navigate, routedChatId = null, reflectUrl = false,
 }: Props): React.ReactElement {
+  /** Where this surface remembers its live chat id — by repo, by project, or the flat `_` key. */
+  const storageKey = chatStorageKey(repoId, projectId);
   const [chatId, setChatId] = useState<string | null>(null);
   const [seats, setSeats] = useState<Record<string, SeatState>>({});
   const [seatErrors, setSeatErrors] = useState<Record<string, string>>({});
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [openError, setOpenError] = useState<string | null>(null);
+  /** The refused open's HTTP status (crew#502 refusals render by code); null when none / not a wire refusal. */
+  const [openErrorStatus, setOpenErrorStatus] = useState<number | null>(null);
   const [ended, setEnded] = useState(false);
   /** An arm (warm) in flight — guards the two opt-in paths against double fire. */
   const [arming, setArming] = useState(false);
@@ -339,6 +441,94 @@ export function GroupChat({
   const projectsRequested = useRef(false);
   const selectedProjectRef = useRef<string | null>(null);
   selectedProjectRef.current = selectedProjectId;
+
+  // ── Scope control (crew#502 / studio#248) ───────────────────────────────────
+  // `project` = every `crew.repo` member of the bound project (the daemon's own
+  // default when `projectId` rides the open); `repos` = an explicit `repoRefs`
+  // list picked from the registry; `none` = the EXPLICIT unscoped chat. The
+  // registry loads on the picker's first OPEN (a gesture — §2.4: zero on mount),
+  // through the ONE session repo cache the palette and rail share.
+  const [scopeMode, setScopeMode] = useState<ChatScopeMode>('project');
+  const scopeModeRef = useRef<ChatScopeMode>('project');
+  scopeModeRef.current = scopeMode;
+  const [scopeRepoIds, setScopeRepoIds] = useState<string[]>([]);
+  const scopeRepoIdsRef = useRef<string[]>([]);
+  scopeRepoIdsRef.current = scopeRepoIds;
+  const [scopeRepos, setScopeRepos] = useState<RepoEntry[] | null>(getCachedRepos);
+  const [scopeReposError, setScopeReposError] = useState<string | null>(null);
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
+  /** The blocked-send reason (`chatScopeGap`), shown on the scope row until a choice is made. */
+  const [scopeGap, setScopeGap] = useState<string | null>(null);
+  /** The scope the daemon RESOLVED for the live chat (the 201 / the rejoin probe). */
+  const [scope, setScope] = useState<ChatScope | null>(null);
+  /** The live chat answered WITHOUT a scope — a daemon predating crew#502, or a
+   *  chat this daemon did not open (restart). Stated, never guessed. */
+  const [scopeUnstated, setScopeUnstated] = useState(false);
+
+  function chooseScopeMode(mode: ChatScopeMode): void {
+    setScopeMode(mode);
+    setScopeGap(null);
+    if (mode !== 'repos') setScopePickerOpen(false);
+  }
+
+  /** "Choose repos…": the mode AND the picker; the registry loads on this gesture. */
+  function openScopePicker(): void {
+    setScopeMode('repos');
+    setScopeGap(null);
+    setScopePickerOpen((v) => !v || scopeModeRef.current !== 'repos');
+    if (scopeRepos !== null) return;
+    setScopeReposError(null);
+    // Through a resolved promise so a mocked/missing client throws as a rejection, not a render error.
+    Promise.resolve()
+      .then(() => fetchReposCached())
+      .then(setScopeRepos)
+      .catch((e: unknown) => setScopeReposError(e instanceof Error ? e.message : String(e)));
+  }
+
+  function toggleScopeRepo(id: string): void {
+    setScopeGap(null);
+    // The wire takes 1–32 `repoRefs`: the pick stops appending at the cap (removal stays open).
+    setScopeRepoIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= MAX_SCOPE_REPOS ? prev : [...prev, id]);
+  }
+
+  /** The project switcher's selection: a project makes `none` meaningless (the
+   *  daemon scopes to the project whenever `projectId` rides the open). */
+  function selectProject(id: string | null): void {
+    const changed = id !== selectedProjectRef.current;
+    setSelectedProjectId(id);
+    setScopeGap(null);
+    if (changed) {
+      // A project change is a scope change: the previous project's repo pick and picker do not
+      // carry over (Copilot on #253) — the new project's default is "all its repos", and an
+      // Unfiled switch is back to the explicit-choice state.
+      setScopeMode('project');
+      setScopeRepoIds([]);
+      setScopePickerOpen(false);
+    } else if (id !== null && scopeModeRef.current === 'none') {
+      setScopeMode('project');
+    }
+  }
+
+  /**
+   * The 501 remedy the daemon names ("open the chat without projectId/repoRefs"):
+   * drop the scope, forget the refused id (the daemon parks it as closing — a
+   * reuse would 409), and let the next send mint an UNSCOPED chat. Only outside
+   * the project shell — there the context IS the project and cannot be dropped.
+   */
+  function fallbackUnscoped(): void {
+    setScopeMode('none');
+    setScopeRepoIds([]);
+    setSelectedProjectId(null);
+    setOpenError(null);
+    setOpenErrorStatus(null);
+    setScopeGap(null);
+    clearStoredChatId(storageKey);
+    setChatId(null);
+    chatIdRef.current = null;
+    setSeats({});
+    setSeatErrors({});
+  }
 
   function loadProjects(): void {
     if (projectsRequested.current) return;
@@ -478,6 +668,15 @@ export function GroupChat({
     chatIdRef.current = null;
     setRejoined(false);
     setRoutedGone(false);
+    setScope(null);
+    setScopeUnstated(false);
+    // The create-flow scope choice belongs to the surface it was made on (Copilot on
+    // #253): a repo pick made for one route must not ride the next route's open.
+    setScopeMode('project');
+    setScopeRepoIds([]);
+    setScopePickerOpen(false);
+    setScopeGap(null);
+    setOpenErrorStatus(null);
 
     // A stored id is a claim, not a fact — the daemon reaps idle chats and enforces a pool cap,
     // so it may have reclaimed this one underneath us. Ask before trusting it. With nothing
@@ -485,7 +684,7 @@ export function GroupChat({
     // Read SYNCHRONOUSLY, and park the opt-ins while the probe runs (see `resolving`).
     // J4: a URL-routed id WINS over the per-repo stored id — the operator asked
     // for THAT session by address; the stored id is only the tab's memory.
-    const stored = routedChatId ?? readStoredChatId(repoId);
+    const stored = routedChatId ?? readStoredChatId(storageKey);
     setResolving(stored !== null);
 
     void (async () => {
@@ -497,7 +696,9 @@ export function GroupChat({
       // warm and burns the one id that could have reached it.
       const probe = await api
         .getChat(stored)
-        .then(({ seats }) => ({ seats }))
+        // `scope` is additive (crew#502): absent on an older daemon, `null` for a chat this
+        // daemon did not open — both read as "not stated", never as a guessed scope.
+        .then((detail) => ({ seats: detail.seats, scope: (detail as { scope?: ChatScope | null }).scope ?? null }))
         .catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
       if (cancelled) return;
 
@@ -516,13 +717,17 @@ export function GroupChat({
         chatIdRef.current = stored;
         // A routed rejoin becomes THIS tab's session for the repo too — /chats
         // → row → send → navigate away → back must land on the same session.
-        writeStoredChatId(repoId, stored);
+        writeStoredChatId(storageKey, stored);
         // Warm seats only — the transcript is not persisted server-side, so a rejoined chat
         // starts with an empty log. The SESSIONS carry the conversation memory, which is the
         // expensive part; re-minting would have thrown that away as well as leaking it.
         // J4/C6: that boundary is STATED in the thread (`rejoined`), never a
         // silent blank pretending the conversation never happened.
         setSeats(Object.fromEntries(probe.seats.map((k) => [k, 'ready' as SeatState])));
+        // The rejoined chat STATES what its seats can see (studio#248) — or that
+        // the daemon did not say.
+        setScope(probe.scope);
+        setScopeUnstated(probe.scope === null);
         // The rejoined boundary note already covers these seats — mark them
         // announced so a trailing ready frame does not re-speak "joined".
         for (const k of probe.seats) announcedRef.current.set(k, 'ready');
@@ -537,7 +742,7 @@ export function GroupChat({
       // ended (`routedGone`) — the honest boundary, never a wordless empty.
       // Either way warming stays the user's call and the next opt-in mints fresh.
       if (routedChatId !== null) setRoutedGone(true);
-      if (readStoredChatId(repoId) === stored) clearStoredChatId(repoId);
+      if (readStoredChatId(storageKey) === stored) clearStoredChatId(storageKey);
       setResolving(false);
       // (On the cancelled path `resolving` is deliberately left alone: the next effect
       // run has already set its own value for the new repo.)
@@ -548,7 +753,7 @@ export function GroupChat({
     };
     // (The exhaustive-deps suppression that used to sit here is gone: the effect closes over
     // nothing but `repoId`/`routedChatId` and module-scope helpers — the list is complete.)
-  }, [repoId, routedChatId]);
+  }, [repoId, routedChatId, projectId, storageKey]);
 
   // J4/C6 — the URL names the session the moment it exists. Mint, rejoin, or
   // routed: on the flat chat routes the live id is REFLECTED into `/chat/:id`
@@ -669,6 +874,7 @@ export function GroupChat({
     // Each arm attempt is a fresh claim: a stale open-failure banner from the
     // previous attempt must not sit beside this one's outcome (J4 finding 3).
     setOpenError(null);
+    setOpenErrorStatus(null);
     try {
       // The chat id is minted CLIENT-side and set before the open call: seats warm
       // serially (~2-3s each), and their chatSessionReady events arrive BEFORE the
@@ -678,7 +884,7 @@ export function GroupChat({
         id = crypto.randomUUID();
         setChatId(id);
         chatIdRef.current = id;
-        writeStoredChatId(repoId, id);
+        writeStoredChatId(storageKey, id);
       }
       // Optimistic chips: each seat being warmed shows as connecting while the open is
       // in flight; ready/failed events (and the open response) correct them as truth arrives.
@@ -691,16 +897,48 @@ export function GroupChat({
         ),
       }));
       try {
-        const body: { chatId: string; repoRef?: string; clis?: string[]; projectId?: string } = { chatId: id };
+        const body: ChatOpenBody = { chatId: id };
         if (repoId) body.repoRef = repoId;
         // §5.1/§4.3: the binding rides the OPEN — shell context wins, then the
         // switcher's selection; Unfiled omits the key (the backend default).
         const boundProject = projectId ?? selectedProjectRef.current;
         if (boundProject) body.projectId = boundProject;
-        // An empty selection omits `clis` — the daemon warms its own default
+        // studio#248: an explicit repo list narrows the scope (`repoRefs`, ids);
+        // `project` mode sends nothing extra — `projectId` alone scopes the chat
+        // to every member — and `none` is the explicit unscoped open.
+        if (scopeModeRef.current === 'repos' && scopeRepoIdsRef.current.length > 0) {
+          body.repoRefs = [...scopeRepoIdsRef.current];
+        }
+        // Admissibility (crew#502 / review W3S-253-01): a SCOPED chat admits only governed seats
+        // — crew pre-filters its DEFAULT roster to seats with `acp_input_governance` / `os_sandbox`
+        // ONLY when `clis` is omitted; an explicit list is passed through and the engine refuses
+        // the inadmissible seats one by one (red chips with a sentence, no rule stated). So while
+        // the chips are UNTOUCHED (the default selection) and the scope is not `none`, the open
+        // omits `clis` and lets the daemon pick; the 201's `seats` then re-seed the chips so the
+        // audience shown is the audience the daemon admitted. An EDITED selection is the
+        // operator's word and rides as asked (refused seats say why); an unscoped open keeps the
+        // pre-existing rule (the displayed chips ARE the audience — EC44).
+        const scoped =
+          Boolean(repoId) || Boolean(boundProject) ||
+          (scopeModeRef.current === 'repos' && scopeRepoIdsRef.current.length > 0);
+        const daemonPicksSeats = scoped && !chipsTouchedRef.current;
+        // Otherwise an empty selection omits `clis` — the daemon warms its own default
         // roster (the pre-existing wire semantics for an absent array).
-        if (agents.length > 0) body.clis = agents;
-        const { seats: opened } = await api.openChat(body);
+        if (!daemonPicksSeats && agents.length > 0) body.clis = agents;
+        const answer = await api.openChat(body);
+        const opened = answer.seats;
+        if (daemonPicksSeats && chatIdRef.current === id) {
+          setSelectedAgents(opened.map((s) => s.cliKey));
+        }
+        // The daemon STATES the scope it resolved (crew#502); an older daemon's
+        // 201 carries none — said as "not stated", never invented.
+        const stated = (answer as { scope?: ChatScope | null }).scope;
+        if (chatIdRef.current === id) {
+          // `null` is off-contract on a 201 (the field is non-null) — it reads like the pre-0.32
+          // omission: "not stated", never a guessed scope.
+          setScope(stated ?? null);
+          setScopeUnstated(stated == null);
+        }
         // A repo switch mid-arm resets `chatIdRef` (the mount effect) — re-check
         // after the await so nothing is attributed to a repo we already left.
         if (chatIdRef.current !== id) return { ready: [], failure: null };
@@ -722,11 +960,20 @@ export function GroupChat({
               if (state === 'failed' && !opened.some((s) => s.cliKey === k)) delete next[k];
             }
           }
+          if (daemonPicksSeats) {
+            // The 201 IS the audience (review W3S-253-09): the optimistic pass painted every
+            // default chip `connecting`, but a seat the daemon's pre-filter did not admit was
+            // never warmed and will never answer — left in place it is a phantom amber chip and
+            // keeps `chatStatus` on "connecting" after the turn. Drop the unadmitted ones.
+            for (const [k, state] of Object.entries(prev)) {
+              if (state === 'connecting' && !opened.some((s) => s.cliKey === k)) delete next[k];
+            }
+          }
           return { ...next, ...st };
         });
         setSeatErrors((prev) => {
           const next = { ...prev };
-          if (ready.length > 0) {
+          if (ready.length > 0 || daemonPicksSeats) {
             for (const k of Object.keys(prev)) {
               if (!opened.some((s) => s.cliKey === k)) delete next[k];
             }
@@ -757,11 +1004,27 @@ export function GroupChat({
         if (ready.length > 0) useLiveChatsStore.getState().upsert(id, ready);
         return { ready, failure: null };
       } catch (e: unknown) {
-        // The id stays stored on purpose: an open that failed at the HTTP layer may still have
-        // warmed seats server-side, and dropping the id here would orphan exactly what
-        // FINDING-027 exists to stop orphaning. The next mount re-checks it and clears it if dead.
-        const failure = e instanceof Error ? e.message : String(e);
-        if (chatIdRef.current === id) setOpenError(failure);
+        const status = apiStatus(e);
+        const failure = describeChatOpenRefusal(status, apiWire(e), e instanceof Error ? e.message : String(e));
+        if (chatIdRef.current === id) {
+          setOpenError(failure);
+          setOpenErrorStatus(status);
+          if (chatOpenedNothing(status, apiWire(e))) {
+            // A NAMED refusal (crew#502): the daemon validated the scope before any seat warmed
+            // and opened nothing — so the provisional id points at no chat, and keeping it would
+            // hide the create controls (the scope row) behind a failed pick the operator could
+            // not correct (Copilot on #253). Drop it; the next send mints fresh.
+            clearStoredChatId(storageKey);
+            setChatId(null);
+            chatIdRef.current = null;
+            setSeats({});
+            setSeatErrors({});
+          }
+          // Otherwise the id stays stored on purpose: an open that failed at the HTTP layer may
+          // still have warmed seats server-side, and dropping the id here would orphan exactly
+          // what FINDING-027 exists to stop orphaning. The next mount re-checks it and clears
+          // it if dead.
+        }
         return { ready: [], failure };
       }
     } finally {
@@ -778,6 +1041,21 @@ export function GroupChat({
     // `resolving` waits out the rejoin probe: until it answers, "no chat id" does NOT
     // mean first-run, and treating it as one would mint over the stored id (FINDING-027).
     if (text === '' || ended || arming || resolving || sendingRef.current) return;
+    // studio#248: a chat is CREATED by its first send, and the scope is decided
+    // then. An Unfiled chat with no repos chosen would resolve to `kind: 'none'`
+    // silently — so the send waits for an explicit choice (Unscoped is one).
+    if (chatIdRef.current === null) {
+      const gap = chatScopeGap({
+        repoId,
+        mode: scopeModeRef.current,
+        projectId: projectId ?? selectedProjectRef.current,
+        repoIds: scopeRepoIdsRef.current,
+      });
+      if (gap !== null) {
+        setScopeGap(gap);
+        return;
+      }
+    }
     let warm = Object.entries(seats)
       .filter(([, st]) => WARM_STATES.has(st))
       .map(([k]) => k);
@@ -894,7 +1172,13 @@ export function GroupChat({
     // Forget the id FIRST. If the DELETE fails we still must not rejoin a chat the operator has
     // ended — and the daemon's idle reaper will collect it either way. The reverse order would
     // leave a "live" id pointing at a chat the UI has already walked away from.
-    clearStoredChatId(repoId);
+    clearStoredChatId(storageKey);
+    // The next chat on this surface starts from the scope default, never from the
+    // closed chat's repo pick (Copilot on #253).
+    setScopeMode('project');
+    setScopeRepoIds([]);
+    setScopePickerOpen(false);
+    setScopeGap(null);
     if (chatId !== null) {
       useLiveChatsStore.getState().remove(chatId);
       try {
@@ -1032,6 +1316,14 @@ export function GroupChat({
   // in the shell the context IS the project (§4.3) and rides `projectId` silently.
   const showProjectField = projectId == null && chatId === null && !resolving && !ended;
   const currentProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+  // studio#248: the scope control lives in the SAME create window as the project
+  // field (the scope is decided at open) — in the shell too, where it narrows the
+  // project default to a repo list.
+  const showScopeField = chatId === null && !resolving && !ended;
+  const boundProjectId = projectId ?? selectedProjectId;
+  const effectiveScopeMode: ChatScopeMode = repoId ? 'repos' : scopeMode;
+  // The scope STATEMENT: what the daemon said the live chat's seats can see.
+  const showScopeLine = chatId !== null && !ended && (scope !== null || scopeUnstated);
 
   // ── The §11.4 now-bar: what is happening RIGHT NOW, pinned above the thread.
   // The census wears the SAME display overlay as the chips (E4): a seat whose
@@ -1160,6 +1452,69 @@ export function GroupChat({
         )}
       </div>
 
+      {/* studio#248: the scope STATEMENT — what the daemon resolved for this chat
+          (`ChatOpenResponse.scope` / the rejoin's `ChatDetailResponse.scope`): the
+          repositories (names; paths on hover), read-only, whether a graph grounds
+          the seats and why not, and any project member the registry no longer
+          knows. A daemon that said nothing is reported as exactly that. */}
+      {showScopeLine && (
+        <div
+          data-testid="chat-scope"
+          data-kind={scope?.kind ?? 'unknown'}
+          data-graph-bound={scope === null ? 'unknown' : String(scope.graph.bound)}
+          data-dangling={scope?.dangling.length ?? 0}
+          className="px-6 py-1.5 border-b shrink-0 flex items-center gap-2 flex-wrap text-[11px] font-mono"
+          style={{ borderColor: 'var(--surface-raised)', color: 'var(--ink-muted)' }}
+        >
+          <span className="uppercase tracking-widest text-[10px]" style={{ color: 'var(--ink-dim)' }}>Scope</span>
+          {scope === null ? (
+            <span data-testid="chat-scope-unstated" style={{ color: 'var(--status-gate)' }}>
+              not stated by the daemon — it predates chat scope, or this chat was opened before its
+              restart; what the agents can read is unknown
+            </span>
+          ) : scope.kind === 'none' ? (
+            <span>unscoped — the agents see only their private scratch root: no repositories, no code graph</span>
+          ) : (
+            <>
+              <span>
+                {scope.kind === 'project' ? 'project' : 'repos'} · {scope.repos.length} repositor{scope.repos.length === 1 ? 'y' : 'ies'} · read-only
+              </span>
+              {scope.repos.map((r) => (
+                <span
+                  key={r.id}
+                  data-testid="chat-scope-repo"
+                  data-repo-id={r.id}
+                  title={r.rootPath}
+                  className="rounded-full px-2"
+                  style={{ border: '1px solid var(--surface-overlay)', color: 'var(--ink-body)' }}
+                >
+                  {r.name}
+                </span>
+              ))}
+            </>
+          )}
+          {scope !== null && (
+            <span
+              data-testid="chat-scope-graph"
+              data-bound={scope.graph.bound}
+              title={scope.graph.reason}
+              style={{ color: scope.graph.bound ? 'var(--status-run)' : 'var(--status-gate)' }}
+            >
+              {scope.graph.bound ? 'code graph bound' : `no code graph — ${scope.graph.reason}`}
+            </span>
+          )}
+          {scope !== null && scope.dangling.length > 0 && (
+            <span
+              data-testid="chat-scope-dangling"
+              title={scope.dangling.join(', ')}
+              style={{ color: 'var(--status-gate)' }}
+            >
+              {scope.dangling.length} project member{scope.dangling.length === 1 ? '' : 's'} not readable — no longer in the repo registry: {scope.dangling.join(', ')}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* The pinned now-bar (§11.4): what is happening RIGHT NOW — outside the
           scroll region, so it is visible by construction; "Latest ↓" jumps the
           thread to its live tail; the chip collects the artifacts replies name. */}
@@ -1180,7 +1535,22 @@ export function GroupChat({
         className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-3"
       >
         {openError !== null && (
-          <p className="text-[12px] font-mono" style={{ color: 'var(--status-fail)' }}>Could not open chat: {openError}</p>
+          <div data-testid="chat-open-error" data-status={openErrorStatus ?? 'none'} className="flex flex-col gap-1">
+            <p className="text-[12px] font-mono" style={{ color: 'var(--status-fail)' }}>Could not open chat: {openError}</p>
+            {/* crew#502's 501: the engine cannot hold a scoped chat — the daemon's own
+                remedy is an UNSCOPED open, offered here (outside the project shell). */}
+            {openErrorStatus === 501 && projectId == null && !repoId && (
+              <button
+                type="button"
+                data-testid="chat-scope-fallback-none"
+                onClick={fallbackUnscoped}
+                className="self-start text-[11px] px-2.5 py-1 rounded-lg"
+                style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)', border: '1px solid var(--surface-overlay)' }}
+              >
+                Continue unscoped — the agents read no repositories
+              </button>
+            )}
+          </div>
         )}
         {/* J4/C6 — the honest boundary for a routed session that is gone: the
             daemon holds sessions only while they live, and transcripts are not
@@ -1227,6 +1597,13 @@ export function GroupChat({
             <p data-testid="chat-firstrun-instruction" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)', fontFamily: 'var(--font-sans)', margin: 0, maxWidth: '480px' }}>
               No run, no gates — just talk. Ask for a deck or some code and I’ll switch
               you to the right mode.
+            </p>
+            {/* studio#248: what the agents will be able to SEE is a choice made below,
+                before the first send — said here so the scope row reads as intended. */}
+            <p data-testid="chat-firstrun-scope" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-sans)', margin: 0, maxWidth: '480px' }}>
+              The agents read only the repositories in scope — read-only, grounded on the
+              project’s code graph when one is indexed. Choose the scope below: a project
+              (all its repositories), a repo list, or unscoped.
             </p>
           </div>
         )}
@@ -1291,11 +1668,137 @@ export function GroupChat({
             <ProjectSwitcher
               current={currentProject}
               projects={projects}
-              onSelect={setSelectedProjectId}
+              onSelect={selectProject}
               onNewProject={() => setShowNewProject(true)}
               onOpen={loadProjects}
               dropUp
             />
+          </div>
+        )}
+        {/* studio#248: the scope control — decided at open, so it lives in the
+            create window with the project field. Three positions; `none` is an
+            explicit click (the send waits otherwise — `chatScopeGap`). */}
+        {showScopeField && (
+          <div
+            data-testid="chat-scope-row"
+            data-mode={effectiveScopeMode}
+            data-blocked={scopeGap !== null}
+            data-repo-count={effectiveScopeMode === 'repos' ? (repoId ? 1 : scopeRepoIds.length) : undefined}
+            className="flex flex-col gap-1.5 pb-2"
+          >
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'var(--ink-dim)' }}>
+                Scope
+              </span>
+              {repoId ? (
+                <span data-testid="chat-scope-fixed" className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                  this repository · read-only
+                </span>
+              ) : (
+                <>
+                  <div
+                    role="group"
+                    aria-label="What the agents can read"
+                    className="inline-flex items-center gap-0.5"
+                    style={{ border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)', padding: '1px' }}
+                  >
+                    {([
+                      ['project', 'chat-scope-project', boundProjectId !== null ? 'All project repos' : 'Project repos',
+                        boundProjectId !== null
+                          ? 'Every repository attached to the project, read-only, grounded on the project graph'
+                          : 'Pick a project first — its repositories become the scope'],
+                      ['repos', 'chat-scope-repos', `Choose repos…${scopeMode === 'repos' && scopeRepoIds.length > 0 ? ` ${scopeRepoIds.length}` : ''}`,
+                        'Name the repositories the agents may read (by registry id)'],
+                      ['none', 'chat-scope-none', 'Unscoped',
+                        boundProjectId !== null
+                          ? 'A chat filed into a project is scoped to it — unfile it (Unfiled) to chat unscoped'
+                          : 'No repositories, no code graph — the agents see only their private scratch root'],
+                    ] as const).map(([mode, tid, label, title]) => {
+                      const active = scopeMode === mode;
+                      const disabled = (mode === 'project' && boundProjectId === null) || (mode === 'none' && boundProjectId !== null);
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          data-testid={tid}
+                          aria-pressed={active}
+                          disabled={disabled}
+                          title={title}
+                          onClick={() => (mode === 'repos' ? openScopePicker() : chooseScopeMode(mode))}
+                          className="text-[11px] px-2 py-0.5 rounded disabled:opacity-40"
+                          style={{
+                            background: active ? 'var(--surface-raised)' : 'transparent',
+                            color: active ? 'var(--ink-high)' : 'var(--ink-muted)',
+                            border: 'none',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <span data-testid="chat-scope-summary" className="text-[11px]" style={{ color: scopeMode === 'project' && boundProjectId === null ? 'var(--status-gate)' : 'var(--ink-muted)' }}>
+                    {scopeMode === 'project'
+                      ? boundProjectId !== null
+                        ? 'every repository of the project · read-only · project graph when indexed'
+                        : 'no project selected — the agents would have nothing to read'
+                      : scopeMode === 'repos'
+                        ? scopeRepoIds.length === 0
+                          ? 'pick the repositories below'
+                          : `${scopeRepoIds.length} repositor${scopeRepoIds.length === 1 ? 'y' : 'ies'} · read-only${boundProjectId !== null ? ' · project graph when indexed' : scopeRepoIds.length === 1 ? ' · its own graph when indexed' : ' · no graph for several repos without a project'}`
+                        : 'unscoped — no repositories, no code graph; the agents see only their scratch root'}
+                  </span>
+                </>
+              )}
+            </div>
+            {(repoId || (scopeMode === 'repos' ? scopeRepoIds.length > 0 : boundProjectId !== null)) && (
+              <p data-testid="chat-scope-admission" className="text-[11px]" style={{ color: 'var(--ink-dim)', margin: 0 }}>
+                a scoped chat admits only governed seats — refused seats say why
+              </p>
+            )}
+            {scopeGap !== null && (
+              <p data-testid="chat-scope-gap" className="text-[11px] font-mono" style={{ color: 'var(--status-fail)', margin: 0 }}>
+                {scopeGap}
+              </p>
+            )}
+            {!repoId && scopeMode === 'repos' && scopePickerOpen && (
+              <div
+                data-testid="chat-scope-picker"
+                className="flex flex-col gap-1 rounded-lg px-3 py-2"
+                style={{ border: '1px solid var(--surface-raised)', maxHeight: '160px', overflowY: 'auto' }}
+              >
+                {scopeReposError !== null ? (
+                  <span data-testid="chat-scope-picker-error" className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
+                    registered repositories unreadable — {scopeReposError}
+                  </span>
+                ) : scopeRepos === null ? (
+                  <span data-testid="chat-scope-picker-loading" className="text-[11px] font-mono" style={{ color: 'var(--ink-dim)' }}>loading registered repositories…</span>
+                ) : scopeRepos.length === 0 ? (
+                  <span data-testid="chat-scope-picker-empty" className="text-[11px] font-mono" style={{ color: 'var(--ink-dim)' }}>no repositories registered — register one on Repositories first</span>
+                ) : (
+                  scopeRepos.map((r) => {
+                    const checked = scopeRepoIds.includes(r.id);
+                    const atCap = !checked && scopeRepoIds.length >= MAX_SCOPE_REPOS;
+                    return (
+                      <label
+                        key={r.id}
+                        data-testid="chat-scope-repo-option"
+                        data-repo-id={r.id}
+                        data-checked={checked}
+                        data-at-cap={atCap}
+                        title={atCap ? `a chat scopes at most ${MAX_SCOPE_REPOS} repositories — remove one to add another` : r.root_path}
+                        className={`flex items-center gap-2 text-[11px] font-mono ${atCap ? 'opacity-50' : 'cursor-pointer'}`}
+                        style={{ color: checked ? 'var(--ink-high)' : 'var(--ink-muted)' }}
+                      >
+                        <input type="checkbox" checked={checked} disabled={atCap} onChange={() => toggleScopeRepo(r.id)} />
+                        <span>{r.name}</span>
+                        <span className="truncate" style={{ color: 'var(--ink-dim)', minWidth: 0 }}>{r.root_path}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
         )}
         {showNewProject && (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { RosterSeat } from '../api/types.js';
+import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
+import type { DiagnosticsGovernance, DiagnosticsGovernanceFinding, RosterSeat } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 
@@ -26,6 +27,19 @@ import { setCachedRoster } from '../store/rosterCache.js';
  * `health` is OPTIONAL on the wire (additive, absent on a daemon predating
  * crew#274): an absent `health` renders a dim `·` glyph and no message — never
  * a fabricated "active".
+ *
+ * GOVERNANCE (studio#246, crew#495 / F-022): the same expand also reads
+ * `GET /diagnostics` and renders its `governance` block as a third registry
+ * group — the store the engine's emit seam writes to (path + which rule chose
+ * it), the record counts (`null` = "engine cannot count", never 0), the folded
+ * dead-letter outbox (count, by type / by reason, the timestamp range,
+ * `truncated`, the pre-fix HOME outbox) and every finding as a severity-styled
+ * row whose message carries the `wicked-crew governance replay …` recipe.
+ * Null-safe by construction: a daemon predating the block (no `governance`
+ * key, or no `/diagnostics` at all) renders one honest "not reported" row; a
+ * daemon reporting `store: null` is NOT shown as governed — that is the
+ * `governance.store` error row. The header heart/dot fold the findings in:
+ * an error finding (or a null store) reads unhealthy, a warning degraded.
  */
 
 interface HealthInfo {
@@ -83,6 +97,124 @@ function SeatRow({ seat }: { seat: RosterSeat }): React.ReactElement {
   );
 }
 
+/** What the expand learned about governance (studio#246). */
+type GovernanceRead =
+  | { kind: 'loading' }
+  | { kind: 'absent'; why: 'no-route' | 'no-block' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ok'; governance: DiagnosticsGovernance };
+
+const FINDING_COLOR: Record<DiagnosticsGovernanceFinding['severity'], string> = {
+  error: 'var(--status-fail)',
+  warning: 'var(--status-gate)',
+};
+
+/** Sub-rows under a check row: `label · value`, dim mono. */
+function DetailLine({ label, value, color, testId }: { label: string; value: string; color?: string; testId?: string }): React.ReactElement {
+  return (
+    <div data-testid={testId} style={{ display: 'flex', gap: 'var(--space-2)', paddingLeft: '20px', marginBottom: '3px', minWidth: 0 }}>
+      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{label}</span>
+      <span className="truncate" title={value} style={{ fontSize: 'var(--text-2xs)', color: color ?? 'var(--ink-muted)', fontFamily: 'var(--font-mono)', minWidth: 0 }}>{value}</span>
+    </div>
+  );
+}
+
+function tally(rec: Record<string, number>): string {
+  const entries = Object.entries(rec);
+  return entries.length === 0 ? 'none' : entries.map(([k, n]) => `${k} ×${n}`).join(' · ');
+}
+
+function stamp(ms: number): string {
+  return new Date(ms).toISOString().replace('T', ' ').slice(0, 19) + 'Z';
+}
+
+/** The governance registry group — one CheckRow per question, the findings as banners. */
+function GovernanceRows({ read }: { read: GovernanceRead }): React.ReactElement {
+  if (read.kind === 'loading') return <CheckRow label="governance" ok={null} detail="checking…" />;
+  if (read.kind === 'error') {
+    return (
+      <div data-testid="rail-governance" data-state="error">
+        <CheckRow label="governance" ok={false} detail="unreachable" />
+        <DetailLine testId="rail-governance-error" label="why" value={read.message} color="var(--status-fail)" />
+      </div>
+    );
+  }
+  if (read.kind === 'absent') {
+    return (
+      <div data-testid="rail-governance" data-state="absent" data-why={read.why}>
+        <CheckRow label="governance" ok={null} detail="not reported by this daemon" />
+        <DetailLine label="why" value={read.why === 'no-route' ? 'no /diagnostics route — upgrade wicked-crew' : 'no governance block on /diagnostics — upgrade wicked-crew to see where governance events land'} />
+      </div>
+    );
+  }
+  const g = read.governance;
+  const dl = g.deadletters;
+  const errors = g.findings.filter((f) => f.severity === 'error').length;
+  const state = g.store === null || errors > 0 ? 'error' : g.findings.length > 0 ? 'warning' : 'ok';
+  // `total` and `sinceBoot` are independently nullable — each field states itself.
+  const records = [
+    g.records.total === null ? 'total: engine cannot count' : `${g.records.total} record${g.records.total === 1 ? '' : 's'}`,
+    g.records.sinceBoot === null ? null : `${g.records.sinceBoot} since boot`,
+  ].filter((x): x is string => x !== null).join(' · ');
+  const range =
+    dl.oldestTs !== null && dl.newestTs !== null ? `${stamp(dl.oldestTs)} → ${stamp(dl.newestTs)}` : null;
+  return (
+    <div data-testid="rail-governance" data-state={state} data-deadletters={dl.count} data-store={g.store === null ? 'none' : g.store.source}>
+      {g.store === null ? (
+        <CheckRow label="store" ok={false} detail="none resolved — emits dead-letter" />
+      ) : (
+        <>
+          <CheckRow label="store" ok detail={`via ${g.store.source}`} />
+          <DetailLine testId="rail-governance-store-path" label="path" value={g.store.path} />
+        </>
+      )}
+      <CheckRow label="records" ok={g.records.total === null && g.records.sinceBoot === null ? null : true} detail={records} />
+      <CheckRow
+        label="dead letters"
+        ok={dl.count === 0}
+        detail={dl.count === 0 ? 'none' : `${dl.count}${dl.truncated ? '+' : ''}`}
+      />
+      {dl.count > 0 && (
+        <>
+          <DetailLine testId="rail-governance-by-type" label="by type" value={tally(dl.byType)} />
+          <DetailLine testId="rail-governance-by-reason" label="by reason" value={tally(dl.byReason)} />
+          <DetailLine
+            testId="rail-governance-range"
+            label="when"
+            value={
+              (range ?? 'no timestamps') +
+              (dl.untimestamped > 0 ? ` · ${dl.untimestamped} untimestamped` : '') +
+              (dl.truncated ? ' · fold truncated at its size cap — count is a floor' : '')
+            }
+          />
+        </>
+      )}
+      {dl.path !== null && <DetailLine testId="rail-governance-outbox" label="outbox" value={dl.path} />}
+      {dl.legacyOutbox !== null && (
+        <DetailLine testId="rail-governance-legacy" label="legacy outbox" value={`${dl.legacyOutbox.path} · ${dl.legacyOutbox.bytes} bytes`} color="var(--status-gate)" />
+      )}
+      {g.findings.map((f, i) => (
+        <p
+          key={`${f.kind}-${i}`}
+          data-testid="rail-governance-finding"
+          data-kind={f.kind}
+          data-severity={f.severity}
+          style={{
+            margin: '2px 0 5px', padding: '4px 8px', borderLeft: `2px solid ${FINDING_COLOR[f.severity]}`,
+            background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)',
+            fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
+            overflowWrap: 'anywhere', whiteSpace: 'pre-wrap',
+          }}
+        >
+          <span style={{ color: FINDING_COLOR[f.severity], fontWeight: 'var(--weight-bold)' }}>{f.severity} · {f.kind}</span>
+          {' — '}
+          {f.message}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 interface Props {
   /** Controlled by the rail so the chrome dot can expand this section (§6.2). */
   open: boolean;
@@ -95,6 +227,10 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
   const [healthError, setHealthError] = useState(false);
   const [roster, setRoster] = useState<RosterSeat[] | null>(null);
   const [rosterError, setRosterError] = useState(false);
+  const [governance, setGovernance] = useState<GovernanceRead>({ kind: 'loading' });
+  /** The expand generation a diagnostics read belongs to — a completion from an earlier
+   *  expand must not overwrite a later one (the findings drive the heart and the dot). */
+  const governanceGen = useRef(0);
   const ref = useRef<HTMLDivElement>(null);
 
   // EC30: the expand IS the fetch gesture — one GET /health + one GET /roster
@@ -110,6 +246,24 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
     api.getRoster()
       .then(({ roster: seats }) => { setRoster(seats); setCachedRoster(seats); })
       .catch(() => setRosterError(true));
+    // studio#246: the same gesture reads the governance block. Absence is a
+    // named state (older daemon), never an invented healthy store.
+    setGovernance({ kind: 'loading' });
+    const gen = ++governanceGen.current;
+    // Through a resolved promise so a client that cannot serve the read at all
+    // (a partial mock, a missing export) becomes the honest error row, not a throw.
+    // Only the CURRENT expand's answer lands (Copilot on #253): a slow earlier read
+    // resolving after a re-expand would otherwise paint stale governance health.
+    Promise.resolve()
+      .then(() => getDiagnostics())
+      .then((d) => {
+        if (governanceGen.current !== gen) return;
+        setGovernance(d.governance === undefined ? { kind: 'absent', why: 'no-block' } : { kind: 'ok', governance: d.governance });
+      })
+      .catch((e: unknown) => {
+        if (governanceGen.current !== gen) return;
+        setGovernance(isDiagnosticsUnsupported(e) ? { kind: 'absent', why: 'no-route' } : { kind: 'error', message: e instanceof Error ? e.message : String(e) });
+      });
     // Opened from the chrome dot: bring the foot into view (§6.2).
     ref.current?.scrollIntoView({ block: 'nearest' });
   }, [open]);
@@ -118,13 +272,21 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
   const pillLabel = wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Connecting' : 'Disconnected';
   // The passive header summary (§6.2): fail-red if any seat is inactive or the
   // socket is down — the rail's foot says "look inside" without being opened.
-  const sick = wsDown || (roster ?? []).some((s) => s.health?.status === 'inactive');
+  // studio#246: a null store or an error finding (dead letters, no store) is a
+  // health failure — the board must not read "Governed" over it.
+  const govErrors =
+    governance.kind === 'ok' &&
+    (governance.governance.store === null || governance.governance.findings.some((f) => f.severity === 'error'));
+  const govWarnings =
+    governance.kind === 'error' ||
+    (governance.kind === 'ok' && governance.governance.findings.some((f) => f.severity === 'warning'));
+  const sick = wsDown || govErrors || (roster ?? []).some((s) => s.health?.status === 'inactive');
   // The ♥ glyph is colored by health (nav-ui-tweaks): red when unhealthy (a
   // seat down or the socket gone), amber when degraded (socket still connecting,
   // a probe errored, or the API server not reporting ok), green otherwise. It
   // reads the same signals the section already computes — no new data source.
   const degraded =
-    wsStatus === 'connecting' || healthError || rosterError || (health !== null && health.status !== 'ok');
+    wsStatus === 'connecting' || healthError || rosterError || govWarnings || (health !== null && health.status !== 'ok');
   const heartState = sick ? 'unhealthy' : degraded ? 'degraded' : 'healthy';
   const heartColor = sick
     ? 'var(--status-fail)'
@@ -207,6 +369,14 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
           ) : (
             roster.map((seat) => <SeatRow key={seat.key} seat={seat} />)
           )}
+          <p
+            aria-hidden
+            className="select-none"
+            style={{ margin: '2px 0 5px', fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
+          >
+            ── governance ────────
+          </p>
+          <GovernanceRows read={governance} />
         </div>
       )}
     </div>

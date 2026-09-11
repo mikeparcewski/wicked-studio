@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat, chatCapable, defaultSelection, rosterSpeaksAcp } from '../src/components/GroupChat.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
@@ -129,6 +129,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
       () => new Promise<{ roster: RosterSeat[] }>((res) => { release = res; }),
     );
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     // Before the resolve lands: the honest resolving state, ZERO chips —
     // never the writer/reviewer/planner trio dressed as seats.
@@ -163,6 +164,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
   it('WARM cache: chips render synchronously — roster-true, capability-filtered, zero requests', async () => {
     setCachedRoster(ROSTER);
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     expect(chipKeys()).toEqual(CAPABLE);
     expect(screen.getByTestId('agent-chips-bar')).toHaveAttribute('data-count', '2');
@@ -177,6 +179,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
     const user = userEvent.setup();
     setCachedRoster(ROSTER);
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     const displayed = chipKeys();
     await user.type(screen.getByRole('textbox'), 'hello seats');
@@ -191,6 +194,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
     const user = userEvent.setup();
     getRoster.mockRejectedValueOnce(new Error('daemon unreachable'));
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     const failedRow = await screen.findByTestId('agent-chips-unresolved');
     expect(failedRow).toHaveTextContent(/couldn’t load the agent roster/);
@@ -211,6 +215,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
     const user = userEvent.setup();
     setCachedRoster(ROSTER);
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     await user.click(screen.getByRole('button', { name: 'Remove claude' }));
     expect(screen.getByTestId('agent-chips-bar')).toHaveAttribute('data-count', '1');
@@ -226,6 +231,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
     const user = userEvent.setup();
     setCachedRoster(ROSTER);
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     await user.click(screen.getByTestId('add-agent'));
     const options = await screen.findAllByTestId('agent-picker-option');
@@ -256,6 +262,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
     ] as unknown as RosterSeat[]);
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     expect(screen.queryAllByTestId('agent-chip')).toHaveLength(0);
     expect(screen.getByTestId('agent-chips-empty-note')).toHaveTextContent(/no agent has a chat \(ACP\) config/);
@@ -279,6 +286,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
       ] as unknown as RosterSeat[],
     });
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await waitFor(() => expect(screen.getAllByTestId('agent-chip').length).toBeGreaterThan(0));
     await user.click(screen.getByTestId('add-agent'));
 
@@ -309,6 +317,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
       }),
     );
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     // The edit PINS the selection (§7.9-1) — no roster re-seed rides the send.
     await user.click(screen.getByRole('button', { name: 'Remove claude' }));

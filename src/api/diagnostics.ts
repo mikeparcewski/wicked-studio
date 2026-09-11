@@ -20,6 +20,7 @@ import { ApiError, isRouteAbsent } from './errors.js';
 // Through the Skills surface module (which re-exports the contract block), so the release swap of
 // the mirror for `wicked-crew-api-types` touches `skills.ts` alone.
 import type { DiagnosticsSkills } from './skills.js';
+import type { DiagnosticsGovernance } from './types.js';
 
 /** One CLI's ACP health, folded from the durable run event logs. */
 export interface DiagnosticsAcpCli {
@@ -66,6 +67,12 @@ export interface Diagnostics {
    *  whether the engine is being handed a verified snapshot (`state`), which one (`current`,
    *  `engineInput`) and, if not, why (`findings`). ABSENT on a daemon that predates the seam. */
   skills?: DiagnosticsSkills;
+  /** Whether the engine's governance evidence is LANDING (api-types 0.31.0, crew#495 / F-022):
+   *  the resolved store (`null` = a boot that resolved none — every emit dead-letters), the record
+   *  counts (`null` = the engine cannot count, never a fabricated 0), the folded dead-letter outbox
+   *  and the findings whose messages carry the `wicked-crew governance replay …` recipe. ABSENT on
+   *  a daemon predating crew#495 — the Health rail says so rather than inventing a healthy store. */
+  governance?: DiagnosticsGovernance;
 }
 
 /** `GET /diagnostics` — the daemon's self-description. Read-only. */

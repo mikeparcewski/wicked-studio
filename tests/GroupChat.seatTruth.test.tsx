@@ -16,7 +16,7 @@
 //     message log the feed narrates from — so the two can never disagree.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat } from '../src/components/GroupChat.js';
 import { retainOnFinalize } from '../src/components/ChatThread.js';
@@ -90,6 +90,7 @@ describe('collapse retention — expanding restores every streamed byte', () => 
   it('a >collapse-threshold stream survives a SHORTER terminal reply; collapse → expand is byte-equal', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'plan it');
 
     // Stream well past CHAT_TURN_MAX_CHARS (1400) in several deltas — one line,
@@ -147,6 +148,7 @@ describe('one source for seat truth — the chip reads the feed’s own log', ()
   it('a not-ok reply shows FAILED on the header chip (with the turn’s reason), never "replied" (E4)', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'plan it');
 
     act(() => {
@@ -174,6 +176,7 @@ describe('one source for seat truth — the chip reads the feed’s own log', ()
   it('a seat streaming its next turn is WORKING again — the posture heals forward', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'plan it');
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'nope', ok: false });
