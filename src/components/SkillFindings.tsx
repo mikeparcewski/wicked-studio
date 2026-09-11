@@ -1,4 +1,4 @@
-import type { SkillConflictFinding, SkillGuardResult, SkillVerdict } from '../api/skills.js';
+import { portabilityReasonCopy, type SkillConflictFinding, type SkillGuardResult, type SkillVerdict } from '../api/skills.js';
 
 /**
  * The guard envelope of ONE write / enable / publish / analyze (`{verdict, findings, revision}` —
@@ -8,7 +8,10 @@ import type { SkillConflictFinding, SkillGuardResult, SkillVerdict } from '../ap
  * its `kind` (the contract's `SkillFindingKind` grows; nothing here enumerates it): the guard that
  * fired, its severity, the skill it is about, the OTHER skill it is against (a collision, a core
  * guard — marked when that one is core), the `file:line` the daemon cited, the concrete EVIDENCE
- * (names, paths, the parse error) and the explanation of why it matters.
+ * (names, paths, the parse error) and the explanation of why it matters. A `non-portable` finding
+ * that names WHICH reason it reports (`portabilityReason`, api-types 0.34.0 — one finding per reason
+ * per file) wears that token as a chip whose hover is the reason's one-clause "why"; absent on every
+ * other kind, and on older daemons.
  */
 
 export const VERDICT_COLOR: Record<SkillVerdict, string> = {
@@ -88,6 +91,17 @@ export function SkillFindings({ verb, result, testId }: {
                   )}
                   {location !== null && (
                     <code data-testid="skills-finding-location" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{location}</code>
+                  )}
+                  {f.portabilityReason != null && (
+                    <span
+                      data-testid="skills-finding-reason"
+                      data-reason={f.portabilityReason}
+                      title={portabilityReasonCopy(f.portabilityReason)}
+                      className="rounded px-1.5 text-[10px] font-mono"
+                      style={{ background: 'var(--status-gate-dim)', color: 'var(--ink-high)', border: '1px solid var(--status-gate)' }}
+                    >
+                      {f.portabilityReason}
+                    </span>
                   )}
                 </span>
                 {f.evidence !== '' && (

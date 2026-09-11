@@ -112,6 +112,9 @@ export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, fro
                     // drawer is open on", and `data-selected` is the styling/test hook.
                     aria-current={selected ? 'true' : undefined}
                     data-selected={selected}
+                    // A `portability` verdict that disagrees with `portable` (F-1) — observable here even
+                    // when no badge renders (a portable row carrying reasons); the drawer says it in words.
+                    data-contradiction={skillPortability(r).contradiction ?? undefined}
                     onClick={() => onSelect(r.name)}
                     className="cursor-pointer align-middle transition-colors"
                     style={{

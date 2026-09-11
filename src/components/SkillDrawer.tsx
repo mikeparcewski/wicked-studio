@@ -494,6 +494,16 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
             upstream ships this name at {skill.upstreamDir}
           </span>
         )}
+        {reach.contradiction !== null && (
+          <span
+            data-testid="skills-drawer-portability-hint"
+            role="note"
+            style={{ color: 'var(--status-gate)' }}
+            title="the daemon's portability verdict disagrees with its portable flag; the badge and the counts follow `portable` (the admission key core reads) — worth reporting to wicked-crew"
+          >
+            {reach.contradiction}
+          </span>
+        )}
       </div>
 
       {reach.reach !== 'portable' && (
@@ -531,8 +541,9 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
               className="flex min-w-0 flex-col gap-0.5 font-mono text-[10px]"
               style={{ color: 'var(--ink-high)' }}
             >
-              {reach.evidence.map((anchor) => (
-                <li key={anchor} data-testid="skills-drawer-portability-anchor" className="min-w-0 whitespace-normal break-all">{anchor}</li>
+              {reach.evidence.map((anchor, i) => (
+                // One anchor per HIT in file order — two hits on one line share a `file:line`, so the key is positional.
+                <li key={`${i}:${anchor}`} data-testid="skills-drawer-portability-anchor" className="min-w-0 whitespace-normal break-all">{anchor}</li>
               ))}
             </ul>
           )}

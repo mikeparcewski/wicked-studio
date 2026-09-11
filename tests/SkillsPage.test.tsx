@@ -1511,6 +1511,8 @@ describe('SkillsPage — the page verbs: Add, Refresh baseline, Analyze, Publish
       findings: [
         finding({ kind: 'unresolved-ref', severity: 'blocking', skill: EXTRACTOR, file: 'skills/domain/extractor/SKILL.md', line: 42, explanation: '${CLAUDE_PLUGIN_ROOT}/scripts/domain/extract_loop.py escapes the plugin root' }),
         finding({ kind: 'name-collision', severity: 'blocking', skill: MINE, againstSkill: A11Y, explanation: 'frontmatter name collides with a disabled skill' }),
+        // 0.34.0: a `non-portable` finding names WHICH reason it reports — rendered as a chip with the reason's copy.
+        finding({ kind: 'non-portable', severity: 'warning', skill: EXTRACTOR, file: 'skills/domain/extractor/SKILL.md', line: 41, portabilityReason: 'cwd-script', evidence: 'python3 scripts/domain/extract_loop.py', explanation: 'invokes a script relative to the cwd' }),
       ],
     };
     wire({
@@ -1523,11 +1525,18 @@ describe('SkillsPage — the page verbs: Add, Refresh baseline, Analyze, Publish
 
     const findings = await screen.findByTestId('skills-page-findings');
     expect(findings.dataset.verdict).toBe('blocked');
-    expect(findings).toHaveTextContent('Publish blocked — nothing was written (2 findings).');
+    expect(findings).toHaveTextContent('Publish blocked — nothing was written (3 findings).');
     const rows = within(findings).getAllByTestId('skills-finding');
-    expect(rows.map((r) => r.dataset.kind)).toEqual(['unresolved-ref', 'name-collision']);
+    expect(rows.map((r) => r.dataset.kind)).toEqual(['unresolved-ref', 'name-collision', 'non-portable']);
     expect(within(rows[0]!).getByTestId('skills-finding-location')).toHaveTextContent('skills/domain/extractor/SKILL.md:42');
     expect(within(rows[1]!).queryByTestId('skills-finding-location')).toBeNull();
+    // The reason chip rides only the finding that carries `portabilityReason` (F-5); its hover is the reason's copy.
+    expect(within(rows[0]!).queryByTestId('skills-finding-reason')).toBeNull();
+    expect(within(rows[1]!).queryByTestId('skills-finding-reason')).toBeNull();
+    const chip = within(rows[2]!).getByTestId('skills-finding-reason');
+    expect(chip).toHaveTextContent('cwd-script');
+    expect(chip.dataset.reason).toBe('cwd-script');
+    expect(chip.title).toContain('invokes a script relative to the cwd');
     expect(calls('GET', '/skills')).toBe(1);
     expect(screen.queryByTestId('skills-note')).toBeNull();
     expect(screen.getByTestId('skills-snapshot').dataset.generation).toBe('3');
@@ -2103,5 +2112,67 @@ describe('SkillsPage — portability per KIND of reason (F-079, api-types 0.34.0
     expect(line).toHaveTextContent(`Portability — ${GENERIC_NOT_PORTABLE_TITLE}`);
     expect(within(line).queryAllByTestId('skills-drawer-portability-reason')).toEqual([]);
     expect(within(line).queryAllByTestId('skills-drawer-portability-anchor')).toEqual([]);
+  });
+});
+
+describe('SkillsPage — a contradictory `portability` verdict is made visible, never swallowed (F-1)', () => {
+  it('a PORTABLE row carrying reasons renders no badge (portable decides), but the row carries data-contradiction and the drawer says it in words', async () => {
+    wire({
+      'GET /skills': () => Promise.resolve(catalog({
+        skills: { [REPO_LEARN]: entry({ dir: 'skills/repo-learn', kind: 'router', core: true, portable: true, portability: { portable: true, reasons: ['plugin-root'], evidence: ['skills/repo-learn/SKILL.md:9'] } }) },
+      })),
+      ...fileHandlers(REPO_LEARN),
+    });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+
+    const learn = row(REPO_LEARN);
+    expect(within(learn).queryByTestId('skills-claude-only-badge')).toBeNull();
+    expect(within(learn).queryByTestId('skills-not-portable-badge')).toBeNull();
+    expect(learn.dataset.contradiction).toBe('daemon reported inconsistent portability: 1 reason(s) reported on a portable skill');
+    // Consistent rows carry no attribute at all.
+    expect(row(EXTRACTOR).dataset.contradiction).toBeUndefined();
+    expect(row(MINE).dataset.contradiction).toBeUndefined();
+    // Counted as portable — the KPI follows `portable` too.
+    expect(screen.getByTestId('skills-kpi-portable').dataset.value).toBe('3');
+
+    const drawer = await openDrawer(REPO_LEARN);
+    const hint = within(drawer).getByTestId('skills-drawer-portability-hint');
+    expect(hint).toHaveTextContent('daemon reported inconsistent portability: 1 reason(s) reported on a portable skill');
+    expect(hint).toHaveAttribute('role', 'note');
+    // No Portability box for a portable row — the hint is the whole story.
+    expect(within(drawer).queryByTestId('skills-drawer-portability')).toBeNull();
+  });
+
+  it('a NON-portable row whose verdict says portable:true renders the generic badge with data-contradiction on the wrapper; the drawer shows the hint above its Portability box', async () => {
+    wire({
+      'GET /skills': () => Promise.resolve(catalog({
+        skills: { [EXTRACTOR]: entry({ dir: 'skills/domain/extractor', kind: 'fork-worker', core: true, portable: false, portability: { portable: true, reasons: [] }, provenance: 'override' }) },
+      })),
+      ...fileHandlers(EXTRACTOR),
+    });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+
+    const extractor = row(EXTRACTOR);
+    const wrapper = within(extractor).getByTestId('skills-claude-only-badge');
+    expect(wrapper.dataset.reach).toBe('not-portable');
+    expect(wrapper.dataset.contradiction).toBe('daemon reported inconsistent portability: portability.portable is true while portable is false; no reasons reported on a non-portable skill');
+    expect(within(extractor).getByTestId('skills-not-portable-badge').dataset.detailed).toBe('false');
+    expect(extractor.dataset.contradiction).toBe(wrapper.dataset.contradiction);
+
+    const drawer = await openDrawer(EXTRACTOR);
+    expect(within(drawer).getByTestId('skills-drawer-portability-hint')).toHaveTextContent('daemon reported inconsistent portability');
+    expect(within(drawer).getByTestId('skills-drawer-portability').dataset.detailed).toBe('false');
+  });
+
+  it('a consistent catalog carries no contradiction anywhere — no attribute on any row or badge, no hint in any drawer', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog()), ...fileHandlers(EXTRACTOR) });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+    for (const r of screen.getAllByTestId('skills-row')) expect(r.dataset.contradiction).toBeUndefined();
+    expect(within(row(EXTRACTOR)).getByTestId('skills-claude-only-badge').dataset.contradiction).toBeUndefined();
+    const drawer = await openDrawer(EXTRACTOR);
+    expect(within(drawer).queryByTestId('skills-drawer-portability-hint')).toBeNull();
   });
 });

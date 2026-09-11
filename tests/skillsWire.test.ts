@@ -20,6 +20,12 @@ import { describe, expect, it } from 'vitest';
 
 const MIRROR = fileURLToPath(new URL('../src/api/skills-wire.ts', import.meta.url));
 const FIXTURE = fileURLToPath(new URL('./fixtures/api-types-0.34.0-skills.d.ts', import.meta.url));
+const INSTALLED = fileURLToPath(new URL('../node_modules/wicked-crew-api-types/index.d.ts', import.meta.url));
+const INSTALLED_PKG = fileURLToPath(new URL('../node_modules/wicked-crew-api-types/package.json', import.meta.url));
+const PINNED_PKG = fileURLToPath(new URL('../package.json', import.meta.url));
+
+/** `wicked-crew-api-types@<version> index.d.ts:<from>-<to> …` — the version and 1-based line range a label names. */
+const LABEL = /^wicked-crew-api-types@(\S+) index\.d\.ts:(\d+)-(\d+) /;
 
 const BEGIN = /^\/\/ >>> VERBATIM (.+)$/;
 const END = '// <<< VERBATIM';
@@ -89,6 +95,24 @@ describe('src/api/skills-wire.ts — a byte-for-byte mirror of the 0.34.0 skills
     expect(skills).toContain('revision: number;');
     expect(skills).toContain('expectedRevision: number;');
     expect(skills).toContain("export type SkillVerdict = 'clear' | 'warnings' | 'blocked';");
+  });
+
+  it('every region is ALSO byte-equal to the INSTALLED package at the labelled line range, and the label names the pinned version — a re-vendor from the wrong version, or a pin bump without a re-vendor, fails here', () => {
+    const installed = JSON.parse(readFileSync(INSTALLED_PKG, 'utf8')) as { version: string };
+    const pinned = (JSON.parse(readFileSync(PINNED_PKG, 'utf8')) as { devDependencies: Record<string, string> }).devDependencies['wicked-crew-api-types'];
+    expect(pinned, 'the devDependency is an exact pin').toBe(installed.version);
+    const lines = readFileSync(INSTALLED, 'utf8').split('\n');
+    const fixture = regions(FIXTURE);
+    expect(fixture.length).toBe(2);
+    for (const { label, body } of fixture) {
+      const m = LABEL.exec(label);
+      expect(m, `label names a version and a line range: ${label}`).not.toBeNull();
+      const [, version, from, to] = m!;
+      expect(version, label).toBe(installed.version);
+      const slice = lines.slice(Number(from) - 1, Number(to)).join('\n');
+      // Same bytes as the package studio actually installs — the fixture can never quietly lag a pin bump.
+      expect(body, label).toBe(slice);
+    }
   });
 
   it('0.34.0 is additive: the per-reason portability shape (§5.2) rides SkillEntry as an OPTIONAL field, `portable` stays', () => {

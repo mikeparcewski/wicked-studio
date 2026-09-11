@@ -80,7 +80,11 @@ npm publish dates. Every version listed here exists on
   to the 0.34.0 block (picking up the 0.29.0 `installer-copy` source kind and the `skills.source` /
   `skills.manifest` diagnostics findings the 0.27.0 mirror lagged). The Reach KPI group is as wide
   as the two-tile groups so the context line never ellipsizes, the badge's ink is `--ink-high` on the
-  amber fill so it reads in both themes, and the page header + verbs wrap at phone width.
+  amber fill so it reads in both themes, and the page header + verbs wrap at phone width. Review
+  follow-through: a `non-portable` analyze/publish finding wears its `portabilityReason` as a chip
+  (hover = the reason's one clause), and a `portability` verdict that disagrees with `portable` is
+  named — `data-contradiction` on the row and badge, a hint line in the drawer — never swallowed and
+  never a different badge (`portable` stays the admission key).
 
 ## [0.5.5] — 2026-09-11
 ### Added

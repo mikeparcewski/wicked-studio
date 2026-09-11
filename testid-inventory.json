@@ -11,8 +11,8 @@
   "studioVersion": "0.5.5",
   "counts": {
     "files": 142,
-    "occurrences": 1226,
-    "static": 1052,
+    "occurrences": 1228,
+    "static": 1054,
     "dynamic": 59,
     "computed": 7
   },
@@ -4486,6 +4486,12 @@
       ]
     },
     {
+      "testId": "skills-drawer-portability-hint",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
       "testId": "skills-drawer-portability-reason",
       "files": [
         "src/components/SkillDrawer.tsx"
@@ -4680,6 +4686,12 @@
     },
     {
       "testId": "skills-finding-location",
+      "files": [
+        "src/components/SkillFindings.tsx"
+      ]
+    },
+    {
+      "testId": "skills-finding-reason",
       "files": [
         "src/components/SkillFindings.tsx"
       ]

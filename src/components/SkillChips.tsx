@@ -1,4 +1,5 @@
 import {
+  HARNESS_REASON,
   SKILL_KIND_LABELS,
   SKILL_PROVENANCE_LABELS,
   SKILL_REACH_LABELS,
@@ -94,6 +95,10 @@ export function portabilityTitle(view: SkillPortabilityView): string {
   if (view.reach === 'needs-claude') {
     return `${SKILL_REACH_LABELS['needs-claude']} — ${view.reasons.join(', ')}${where}: ${portabilityReasonCopy('requires-harness:claude')}; ${EXCLUDED} by design`;
   }
+  if (view.reasons.includes(HARNESS_REASON)) {
+    // Mixed case: fixing the text is necessary but not sufficient — the harness reason keeps it out.
+    return `${SKILL_REACH_LABELS['not-portable']} — ${view.reasons.join(', ')}${where}; an authoring defect AND a harness requirement: fix the skill text; it also needs the Claude harness, so it stays ${EXCLUDED} after the fix`;
+  }
   return `${SKILL_REACH_LABELS['not-portable']} — ${view.reasons.join(', ')}${where}; an authoring defect: ${EXCLUDED} until the skill text is fixed`;
 }
 
@@ -117,7 +122,7 @@ export function PortabilityBadge({ portability, portable }: {
   const title = portabilityTitle(view);
   const needsClaude = view.reach === 'needs-claude';
   return (
-    <span data-testid="skills-claude-only-badge" data-reach={view.reach} className="inline-flex shrink-0">
+    <span data-testid="skills-claude-only-badge" data-reach={view.reach} data-contradiction={view.contradiction ?? undefined} className="inline-flex shrink-0">
       <span
         data-testid={needsClaude ? 'skills-needs-claude-badge' : 'skills-not-portable-badge'}
         data-reasons={view.reasons.join(' ')}

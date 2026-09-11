@@ -5,6 +5,7 @@ import {
   HARNESS_REASON,
   SKILL_PORTABILITY_REASONS,
   isAuthoringReason,
+  portabilityContradiction,
   portabilityReasonCopy,
   skillPortability,
   type SkillPortability,
@@ -47,6 +48,7 @@ import {
   type SkillsManifestResponse,
 } from '../src/api/skills.js';
 import { findingLocation } from '../src/components/SkillFindings.js';
+import { portabilityTitle } from '../src/components/SkillChips.js';
 import { filterSkills, SKILL_CHIPS, SKILLS_FACETS_DEFAULT } from '../src/components/SkillsGrid.js';
 
 vi.mock('../src/api/client.js', () => ({ apiFetch: vi.fn() }));
@@ -464,8 +466,8 @@ describe('skillPortability — the fold behind the badge, the chips and the KPI 
   });
 
   it('portable: nothing to say — the reach is portable whatever else rides along', () => {
-    expect(skillPortability({ portable: true })).toEqual({ reach: 'portable', reasons: [], evidence: [], detailed: false });
-    expect(skillPortability({ portable: true, portability: { portable: true, reasons: [] } })).toEqual({ reach: 'portable', reasons: [], evidence: [], detailed: true });
+    expect(skillPortability({ portable: true })).toEqual({ reach: 'portable', reasons: [], evidence: [], detailed: false, contradiction: null });
+    expect(skillPortability({ portable: true, portability: { portable: true, reasons: [] } })).toEqual({ reach: 'portable', reasons: [], evidence: [], detailed: true, contradiction: null });
   });
 
   it('any AUTHORING reason → not-portable (detailed), the reasons and anchors carried as sent — the harness reason beside them does not change the badge', () => {
@@ -474,22 +476,61 @@ describe('skillPortability — the fold behind the badge, the chips and the KPI 
       reasons: ['cwd-script', 'plugin-root', 'relative-link', 'requires-harness:claude'],
       evidence: ['skills/domain/extractor/SKILL.md:41', 'skills/domain/extractor/refs/loop.md:7'],
       detailed: true,
+      contradiction: null,
     });
     expect(skillPortability({ portable: false, portability: { portable: false, reasons: ['cross-skill-path'] } })).toEqual({
-      reach: 'not-portable', reasons: ['cross-skill-path'], evidence: [], detailed: true,
+      reach: 'not-portable', reasons: ['cross-skill-path'], evidence: [], detailed: true, contradiction: null,
     });
   });
 
   it('the harness reason ALONE → needs-claude (by design, nothing to fix)', () => {
     expect(skillPortability({ portable: false, portability: { portable: false, reasons: ['requires-harness:claude'], evidence: ['skills/domain/SKILL.md:3'] } })).toEqual({
-      reach: 'needs-claude', reasons: ['requires-harness:claude'], evidence: ['skills/domain/SKILL.md:3'], detailed: true,
+      reach: 'needs-claude', reasons: ['requires-harness:claude'], evidence: ['skills/domain/SKILL.md:3'], detailed: true, contradiction: null,
     });
   });
 
   it('an older daemon (no `portability`), or a verdict with no reasons, falls back to `portable` alone: generic not-portable, never a fabricated reason', () => {
-    expect(skillPortability({ portable: false })).toEqual({ reach: 'not-portable', reasons: [], evidence: [], detailed: false });
-    expect(skillPortability({ portable: false, portability: undefined })).toEqual({ reach: 'not-portable', reasons: [], evidence: [], detailed: false });
-    expect(skillPortability({ portable: false, portability: { portable: false, reasons: [] } })).toEqual({ reach: 'not-portable', reasons: [], evidence: [], detailed: false });
+    expect(skillPortability({ portable: false })).toEqual({ reach: 'not-portable', reasons: [], evidence: [], detailed: false, contradiction: null });
+    expect(skillPortability({ portable: false, portability: undefined })).toEqual({ reach: 'not-portable', reasons: [], evidence: [], detailed: false, contradiction: null });
+    // A verdict that says "not portable" but names no reason is generic too — and, being internally
+    // inconsistent (reasons.length === 0 ⇔ portable), it is named as a contradiction beside the badge.
+    expect(skillPortability({ portable: false, portability: { portable: false, reasons: [] } })).toEqual({
+      reach: 'not-portable', reasons: [], evidence: [], detailed: false,
+      contradiction: 'daemon reported inconsistent portability: no reasons reported on a non-portable skill',
+    });
+  });
+
+  it('a contradictory verdict is named, never swallowed — and never changes which badge `portable` chose (F-1)', () => {
+    // No verdict at all is not a contradiction (an older daemon): nothing to compare.
+    expect(skillPortability({ portable: false }).contradiction).toBeNull();
+    expect(skillPortability({ portable: true }).contradiction).toBeNull();
+    // portable:true carrying reasons → still portable (no badge), the disagreement named.
+    const portableWithReasons = skillPortability({ portable: true, portability: { portable: true, reasons: ['plugin-root'] } });
+    expect(portableWithReasons.reach).toBe('portable');
+    expect(portableWithReasons.contradiction).toBe('daemon reported inconsistent portability: 1 reason(s) reported on a portable skill');
+    // portable:false with a verdict that says portable:true and no reasons → generic badge, both disagreements named.
+    const flagsDisagree = skillPortability({ portable: false, portability: { portable: true, reasons: [] } });
+    expect(flagsDisagree).toMatchObject({ reach: 'not-portable', detailed: false });
+    expect(flagsDisagree.contradiction).toBe('daemon reported inconsistent portability: portability.portable is true while portable is false; no reasons reported on a non-portable skill');
+    // portable:false with the verdict flag wrong but reasons present → the reasons still drive the badge.
+    const flagOnly = skillPortability({ portable: false, portability: { portable: true, reasons: ['requires-harness:claude'] } });
+    expect(flagOnly).toMatchObject({ reach: 'needs-claude', detailed: true });
+    expect(flagOnly.contradiction).toBe('daemon reported inconsistent portability: portability.portable is true while portable is false');
+    // Consistent verdicts carry null.
+    expect(skillPortability({ portable: false, portability: EXTRACTOR_PORTABILITY }).contradiction).toBeNull();
+    expect(portabilityContradiction(true, { portable: true, reasons: [] })).toBeNull();
+  });
+
+  it('the hover sentence: authoring-only says "until the skill text is fixed"; authoring + harness says BOTH — fix the text, and it still needs the harness (F-2)', () => {
+    const authoringOnly = portabilityTitle(skillPortability({ portable: false, portability: { portable: false, reasons: ['cwd-script', 'plugin-root'], evidence: ['skills/x/SKILL.md:4'] } }));
+    expect(authoringOnly).toBe('not portable — cwd-script, plugin-root (first at skills/x/SKILL.md:4); an authoring defect: excluded from the snapshot\'s copilot view and the other CLIs\' per-launch skill lists until the skill text is fixed');
+    const mixed = portabilityTitle(skillPortability({ portable: false, portability: EXTRACTOR_PORTABILITY }));
+    expect(mixed).toContain('not portable — cwd-script, plugin-root, relative-link, requires-harness:claude (first at skills/domain/extractor/SKILL.md:41)');
+    expect(mixed).toContain('fix the skill text; it also needs the Claude harness, so it stays excluded');
+    expect(mixed).not.toContain('until the skill text is fixed');
+    const harnessOnly = portabilityTitle(skillPortability({ portable: false, portability: { portable: false, reasons: ['requires-harness:claude'] } }));
+    expect(harnessOnly).toContain('needs Claude harness — requires-harness:claude:');
+    expect(harnessOnly).toContain('by design');
   });
 });
 

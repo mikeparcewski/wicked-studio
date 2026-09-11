@@ -175,6 +175,25 @@ export interface SkillPortabilityView {
   /** `true` when the daemon sent `portability` with at least one reason — the badge can say WHY;
    *  `false` = fall back to `portable` alone (an older daemon, or a verdict with no reasons). */
   detailed: boolean;
+  /** The daemon's verdict disagrees with its own admission key ({@link portabilityContradiction});
+   *  `null` when the signals agree or no verdict was sent. The badge still follows `portable`. */
+  contradiction: string | null;
+}
+
+/**
+ * The ONE sentence naming how a `portability` verdict disagrees with `portable`, or `null` when the
+ * three signals the contract says are one value agree (`portable`, `portability.portable`, and
+ * `reasons.length === 0`). Surfaced as `data-contradiction` on the row and the badge wrapper and as
+ * the drawer's hint — never a console warning, never a different badge: `portable` is what core
+ * admits by, so the badge follows it and the disagreement is made visible beside it.
+ */
+export function portabilityContradiction(portable: boolean, verdict: SkillPortability): string | null {
+  const issues: string[] = [];
+  if (verdict.portable !== portable) issues.push(`portability.portable is ${verdict.portable} while portable is ${portable}`);
+  if ((verdict.reasons.length === 0) !== portable) {
+    issues.push(portable ? `${verdict.reasons.length} reason(s) reported on a portable skill` : 'no reasons reported on a non-portable skill');
+  }
+  return issues.length === 0 ? null : `daemon reported inconsistent portability: ${issues.join('; ')}`;
 }
 
 /**
@@ -189,9 +208,10 @@ export function skillPortability(entry: { portable: boolean; portability?: Skill
   const verdict: SkillPortability | undefined = entry.portability;
   const reasons: readonly SkillPortabilityReason[] = verdict?.reasons ?? [];
   const evidence: readonly string[] = verdict?.evidence ?? [];
-  if (entry.portable) return { reach: 'portable', reasons, evidence, detailed: verdict !== undefined };
-  if (reasons.length === 0) return { reach: 'not-portable', reasons, evidence, detailed: false };
-  return { reach: reasons.some(isAuthoringReason) ? 'not-portable' : 'needs-claude', reasons, evidence, detailed: true };
+  const contradiction = verdict === undefined ? null : portabilityContradiction(entry.portable, verdict);
+  if (entry.portable) return { reach: 'portable', reasons, evidence, detailed: verdict !== undefined, contradiction };
+  if (reasons.length === 0) return { reach: 'not-portable', reasons, evidence, detailed: false, contradiction };
+  return { reach: reasons.some(isAuthoringReason) ? 'not-portable' : 'needs-claude', reasons, evidence, detailed: true, contradiction };
 }
 
 /** The `diagnostics.skills.state` vocabulary (0.27.0), read as operator copy: whether the engine is
