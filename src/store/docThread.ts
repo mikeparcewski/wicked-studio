@@ -18,7 +18,9 @@ import {
 } from '../interactive/threadStopgap.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
 import type { ConversationEntry, ExportFormat } from '../api/interactive.js';
-import type { CoreEvent } from '../api/types.js';
+import { describeExportReport, exportReportOf } from '../interactive/exportReport.js';
+import { parseRunFailure } from '../interactive/runFailure.js';
+import type { CoreEvent, SessionStatus, SessionView } from '../api/types.js';
 
 // ── Transcript ───────────────────────────────────────────────────────────────
 
@@ -72,10 +74,19 @@ export type DocMsg =
   | { kind: 'user';      id: string; text: string; version?: number;
       items?: FeedbackItem[]; notRecorded?: boolean; failed?: boolean; refused?: boolean;
       restored?: boolean; sentAt?: number }
-  | { kind: 'narration'; id: string; text: string }
+  // F-4R2-005: crew's seams re-emit the CURRENT narration on a ≤15 s heartbeat, so one
+  // phase reads as N identical rows. A repeat of the newest narration is FOLDED into it:
+  // `repeats` counts the heartbeats folded in, `firstAt`/`lastAt` bound the span (arrival
+  // clocks — the frame carries none) so the row can show how long the phase has held.
+  | { kind: 'narration'; id: string; text: string; repeats?: number; firstAt?: number; lastAt?: number }
   // `href` + `file` make an agent message DOWNLOADABLE (§4.4): an export is an ordinary
   // message from the service, carrying its artifact — never a toast, never a second origin.
   | { kind: 'agent';     id: string; author: string; text: string; href?: string; file?: string }
+  // F-4R2-014: the crew seams' "The crew run answering … failed (run <id>). Reason: …" line,
+  // read for a human (`parseRunFailure`): the run it names (linked, never a quoted GET), a
+  // one-sentence summary, and the raw dump kept whole behind a fold. `text` is the line verbatim.
+  | { kind: 'run-failed'; id: string; text: string; runId: string; cancelled: boolean;
+      summary: string; reason: string }
   // §3.3's actionable kind: what happened, the fix NAMED verbatim, and — where the action
   // repeats — what to retry. An error with no next action is banned, so `hint` is required.
   | { kind: 'actionable'; id: string; text: string; hint: string; retry?: ExportRetry }
@@ -207,10 +218,73 @@ export interface VersionLanding { projectId: string; version: number; kind: stri
 /** Ring cap on the observed-landings list — a lens over recent activity, not a ledger. */
 const LANDINGS_CAP = 200;
 
+/**
+ * The governed run a thread is bound to (F-4R2-006), as the runs wire last described it. Crew's
+ * interactive frames carry no run id, so this is learned from `GET /runs` (`runBinding.ts`
+ * matches the run's declared write root to the doc) — on doc open, so a reload mid-run restores
+ * the in-flight state from the run record instead of showing `terminal` until the next heartbeat.
+ */
+export interface BoundRun { runId: string; status: SessionStatus }
+
+/** Run statuses that mean the run is still working (or waiting on a human) — the thread stays live. */
+export const LIVE_RUN: ReadonlySet<SessionStatus> = new Set<SessionStatus>(['planning', 'distributing', 'executing', 'awaiting_human']);
+
+/** The line the thread adds when a reload finds its run still executing (client-authored, §3.3). */
+export const RESTORED_RUN_NARRATION =
+  'Still in progress — a governed run picked this up before the page reloaded and is executing now.';
+
+/**
+ * F-4R2-005: fold a status line into the newest narration when it repeats it verbatim — the
+ * heartbeat's re-emission — instead of appending another identical row. Returns the thread
+ * unchanged-in-length with the newest row's `repeats`/`lastAt` advanced, or `null` when the
+ * line is NOT a repeat (the caller appends). Only the NEWEST message counts: an identical line
+ * after something else happened is a new phase saying the same words, not a heartbeat.
+ */
+function foldRepeat(thread: DocMsg[], text: string, at: number): DocMsg[] | null {
+  const last = thread[thread.length - 1];
+  if (last === undefined || last.kind !== 'narration' || last.text !== text) return null;
+  const folded: DocMsg = {
+    ...last,
+    repeats: (last.repeats ?? 0) + 1,
+    firstAt: last.firstAt ?? at,
+    lastAt: at,
+  };
+  return [...thread.slice(0, -1), folded];
+}
+
+/** A status line as a message: the crew run-failure line becomes the actionable `run-failed`
+ *  kind (F-4R2-014); everything else stays narration. */
+function statusMessage(text: string, at: number): DocMsg {
+  const failure = parseRunFailure(text);
+  if (failure !== null) {
+    return {
+      kind: 'run-failed', id: nextMsgId(), text, runId: failure.runId, cancelled: failure.cancelled,
+      summary: failure.summary, reason: failure.reason,
+    };
+  }
+  return { kind: 'narration', id: nextMsgId(), text, firstAt: at, lastAt: at };
+}
+
 interface DocThreadStore {
   messages: Record<string, DocMsg[]>;
   /** What the stream last said the generation is doing, per thread. */
   genState: Record<string, GenState>;
+  /** The governed run each thread is bound to, when the runs wire named one (F-4R2-006). */
+  boundRun: Record<string, BoundRun>;
+  /**
+   * Adopt the run record the runs wire holds for this thread (F-4R2-006): remember it, and —
+   * when it is still LIVE while the thread believes nothing is in flight — flip the composer
+   * to `generating` and say why in one client-authored line, so a reload mid-run never shows
+   * `terminal` over an executing run. A terminal record only updates the binding. `null` drops it.
+   */
+  adoptRun: (key: string, run: SessionView | null) => void;
+  /**
+   * The bound run's lifecycle frame said it ended (F-4R2-006, belt and braces): record the
+   * terminal status and, when nothing is still queued behind it, retire a `generating` composer
+   * — the seam's own `status.posted {complete|error}` normally does this first; this catches the
+   * one it never sends to this thread.
+   */
+  markRunEnded: (key: string, status: SessionStatus) => void;
   /** The newest `status.posted {state:"error"}` line, per thread — what the
    *  brand-learn poll (learnPoll.ts) reads to surface the bridge's ASYNC
    *  refusals (the SSRF guard's, a failed grab) while it waits on the
@@ -400,6 +474,7 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
   return {
   messages: {},
   genState: {},
+  boundRun: {},
   pending: {},
   hydrated: {},
   landed: {},
@@ -409,6 +484,43 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
   bindings: {},
   held: {},
   expectedDividers: {},
+
+  adoptRun: (key, run) => {
+    if (run === null) {
+      set((s) => {
+        const boundRun = { ...s.boundRun };
+        delete boundRun[key];
+        return { boundRun };
+      });
+      return;
+    }
+    const status = run.session.status;
+    set((s) => {
+      const bound = { boundRun: { ...s.boundRun, [key]: { runId: run.session.id, status } } };
+      const believedIdle = (s.genState[key] ?? 'terminal') === 'terminal';
+      if (!LIVE_RUN.has(status) || !believedIdle) return bound;
+      // The run record outranks the thread's silence: it IS executing. Said once, in words.
+      const thread = s.messages[key] ?? [];
+      const already = thread.some((m) => m.kind === 'narration' && m.text === RESTORED_RUN_NARRATION);
+      return {
+        ...bound,
+        genState: { ...s.genState, [key]: 'generating' },
+        ...(already ? {} : {
+          messages: append(s.messages, key, { kind: 'narration', id: nextMsgId(), text: RESTORED_RUN_NARRATION }),
+        }),
+      };
+    });
+  },
+
+  markRunEnded: (key, status) =>
+    set((s) => {
+      const bound = s.boundRun[key];
+      if (bound === undefined) return s;
+      const boundRun = { ...s.boundRun, [key]: { ...bound, status } };
+      const queued = (s.pending[key] ?? []).length > 0;
+      if (queued || (s.genState[key] ?? 'terminal') !== 'generating') return { boundRun };
+      return { boundRun, genState: { ...s.genState, [key]: 'terminal' } };
+    }),
 
   bindDoc: (projectId, docId, opts) => {
     const pending = opts?.pending === true;
@@ -525,11 +637,22 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
         if (text === null || isFiller(text)) {
           return { messages: base, genState: { ...s.genState, [key]: next }, ...failed, ...pending };
         }
+        // F-4R2-005: a heartbeat re-emitting the newest narration folds into it (one row, a
+        // repeat count and a span) — never a second identical row. A run that ended takes the
+        // thread's live binding with it (F-4R2-006): the record it left is terminal.
+        const at = Date.now();
+        const folded = done ? null : foldRepeat(base[key] ?? [], text, at);
+        const bound = done && s.boundRun[key] !== undefined
+          ? { boundRun: { ...s.boundRun, [key]: { ...s.boundRun[key]!, status: (state === 'error' ? 'failed' : 'completed') as SessionStatus } } }
+          : {};
         return {
-          messages: append(base, key, { kind: 'narration', id: nextMsgId(), text }),
+          messages: folded !== null
+            ? { ...base, [key]: folded }
+            : append(base, key, statusMessage(text, at)),
           genState: { ...s.genState, [key]: next },
           ...failed,
           ...pending,
+          ...bound,
         };
       }
 
@@ -567,7 +690,10 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
         if (href !== null && (messages[key] ?? []).some(
           (m) => m.kind === 'agent' && m.href === href,
         )) return s;
-        const text = `${format.toUpperCase()} export ready — ${file}`;
+        // F-4R2-016 / interactive#219: the additive layout report rides the event too —
+        // rendered when present, silent on an older bridge.
+        const report = describeExportReport(exportReportOf(payload));
+        const text = `${format.toUpperCase()} export ready — ${file}${report === null ? '' : ` · ${report}`}`;
         // Round-3 minor: the announce history carries no exports, so the entry is
         // ALSO recorded in the session stopgap — the reload restores the download.
         if (href !== null) exportEntry = { text, href, file };
@@ -777,8 +903,17 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
           pushRefused(ord);
         } else if (!isFiller(text)) {
           // Agent narration (including error states) at the same seam live frames
-          // cross: filler is dropped here too — one rule, both sources (§3.2).
-          restored.push({ kind: 'narration', id: nextMsgId(), text });
+          // cross: filler is dropped here too — one rule, both sources (§3.2). The
+          // heartbeat's repeats fold the same way (F-4R2-005), and the crew run-failure
+          // line becomes the same actionable card it is live (F-4R2-014). The transcript's
+          // `ts` is the closest clock a restored span has; absent, the span is unknown.
+          const at = typeof e.ts === 'number' ? e.ts : typeof e.ts === 'string' ? Date.parse(e.ts) || 0 : 0;
+          const folded = foldRepeat(restored, text, at);
+          if (folded !== null) {
+            restored.splice(0, restored.length, ...folded);
+          } else {
+            restored.push(statusMessage(text, at));
+          }
         }
       }
       // Round-3 minor: the transcript's export downloads, restored at the tail —
@@ -864,7 +999,8 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
       const lastSignalAt = { ...s.lastSignalAt }; delete lastSignalAt[key];
       const expectedDividers = { ...s.expectedDividers }; delete expectedDividers[key];
       const held = { ...s.held }; delete held[docId];
-      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers, held };
+      const boundRun = { ...s.boundRun }; delete boundRun[key];
+      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers, held, boundRun };
     });
   },
   };

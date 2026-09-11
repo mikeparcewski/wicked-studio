@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { apiStatus } from '../api/errors.js';
 import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
 import { parseCreateAsk } from '../interactive/createAsk.js';
 import { docSlug } from '../interactive/docSlug.js';
+import { useRunEventStore } from '../store/events.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DemoWizard } from './DemoWizard.js';
 import { DocSubjectPicker, NO_GROUNDING_NARRATION, type DocFormat, type SubjectStatus } from './DocSubjectPicker.js';
@@ -10,8 +12,10 @@ import { runExport } from '../interactive/exportWire.js';
 import { retryBatchInject } from '../interactive/feedbackBatch.js';
 import { scrollToWid } from '../interactive/widScroller.js';
 import { scrollStripToVersion } from './threadAnchor.js';
-import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
-import { GENERATING_SILENCE_BUDGET_MS, nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState } from '../store/docThread.js';
+import { modePath, runTimelinePath, versionPath, type Navigate } from '../hooks/useRoute.js';
+import {
+  GENERATING_SILENCE_BUDGET_MS, LIVE_RUN, nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState,
+} from '../store/docThread.js';
 
 // Document mode's half of the ONE conversation (DES-MERGE-001 §2, §6.3 slice 10).
 //
@@ -102,8 +106,123 @@ export function growComposer(el: HTMLTextAreaElement): void {
   el.style.overflowY = fit > max ? 'auto' : 'hidden';
 }
 
+/** A span in words: `48s`, `2m 15s`, `1h 04m`. */
+export function fmtSpan(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+}
+
+/**
+ * F-4R2-005: one narration row, with the heartbeats it absorbed. Crew re-emits the current
+ * phase's line every ≤15 s; the store folds each repeat into the newest row (`repeats`,
+ * `firstAt`/`lastAt`), and this row shows the phase ONCE with how long it has held — a live
+ * counter while it is the newest line of a generating thread, the recorded span otherwise.
+ */
+function NarrationRow({ msg, live }: { msg: Extract<DocMsg, { kind: 'narration' }>; live: boolean }): React.ReactElement {
+  const repeats = msg.repeats ?? 0;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live || repeats === 0 || msg.firstAt === undefined) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => { clearInterval(timer); };
+  }, [live, repeats, msg.firstAt]);
+  const span = msg.firstAt === undefined
+    ? null
+    : live ? now - msg.firstAt : (msg.lastAt ?? msg.firstAt) - msg.firstAt;
+  return (
+    // Narration is data: the mono, body ink (§2.8); the dot is the run-emerald.
+    <div className="flex items-start gap-2 text-xs font-mono" data-testid="doc-narration" data-repeats={repeats} style={{ color: S.body }}>
+      <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: S.live }} />
+      <span>
+        {msg.text}
+        {repeats > 0 && span !== null && (
+          <span
+            data-testid="doc-narration-elapsed"
+            title={`the crew has reported this ${repeats + 1} times — the phase has held for ${fmtSpan(span)}`}
+            style={{ color: S.faint, marginLeft: '6px' }}
+          >
+            · {live ? 'for ' : ''}{fmtSpan(span)}{live ? '' : ` · ×${repeats + 1}`}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * F-4R2-014: the crew run-failure line, for a human. The failure stands — the deliverable floor
+ * did its job — but the customer reads ONE sentence (what did not happen, and that nothing in
+ * the document changed), a link to the run page instead of a quoted GET, and a Retry that
+ * re-sends the same ask. The raw dump (absolute paths, issue ids, the API URL) stays whole
+ * behind a collapsed "details" — moved, never paraphrased away.
+ */
+function RunFailedCard({
+  msg, retryText, busy, onResend, navigate,
+}: {
+  msg: Extract<DocMsg, { kind: 'run-failed' }>;
+  /** The ask this run was answering (the nearest user message above), or null when unknown. */
+  retryText: string | null;
+  busy: boolean;
+  onResend: (text: string) => void;
+  navigate: Navigate | undefined;
+}): React.ReactElement {
+  const runPath = runTimelinePath(msg.runId);
+  return (
+    <div
+      data-testid="doc-run-failed"
+      data-run-id={msg.runId}
+      data-cancelled={msg.cancelled}
+      className="self-start max-w-[90%] rounded-xl px-3.5 py-3 flex flex-col gap-2"
+      style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)' }}
+    >
+      <p data-testid="doc-run-failed-summary" className="text-sm leading-relaxed" style={{ color: S.ink, margin: 0, fontFamily: 'var(--font-sans)' }}>
+        {msg.summary}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          data-testid="doc-run-failed-run"
+          href={runPath}
+          onClick={(e) => { if (navigate !== undefined) { e.preventDefault(); navigate(runPath); } }}
+          className="text-xs font-mono underline"
+          style={{ color: S.accent }}
+        >
+          open the run
+        </a>
+        {retryText !== null && (
+          <button
+            type="button"
+            data-testid="doc-actionable-retry"
+            data-kind="resend"
+            disabled={busy}
+            title="Send the same ask again — a new governed run answers it"
+            onClick={() => onResend(retryText)}
+            className="rounded-lg px-2.5 py-1 text-xs font-medium disabled:opacity-40"
+            style={{ background: S.danger, color: 'var(--surface-base)', border: 'none',
+                     cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+          >
+            {busy ? 'Sending…' : 'Retry — send the same ask again'}
+          </button>
+        )}
+      </div>
+      <details data-testid="doc-run-failed-details" className="text-[11px] font-mono" style={{ color: S.muted }}>
+        <summary style={{ cursor: 'pointer' }}>details — the run's own report</summary>
+        <pre
+          data-testid="doc-run-failed-raw"
+          className="mt-1 whitespace-pre-wrap"
+          style={{ margin: 0, fontSize: '10px', color: S.muted, overflowWrap: 'anywhere' }}
+        >
+          {msg.text}
+        </pre>
+      </details>
+    </div>
+  );
+}
+
 function Bubble({
-  msg, projectId, docId, onShowVersion, sendState, onRetrySend,
+  msg, projectId, docId, onShowVersion, sendState, onRetrySend, live = false, retryText = null, onResend, navigate, busy = false,
 }: {
   msg: DocMsg; projectId: string; docId: string | null;
   /** The tag's cross-link (DES-UXFIX-001 §2.6 rule 2): show this version on the strip. */
@@ -112,6 +231,13 @@ function Bubble({
   sendState?: SendState | undefined;
   /** Re-arm a refused send — §6.1's "visible failure with a retry". */
   onRetrySend?: (msg: Extract<DocMsg, { kind: 'user' }>) => void;
+  /** F-4R2-005: this narration is the thread's newest line while it generates — its span ticks. */
+  live?: boolean;
+  /** F-4R2-014: the ask a failed run was answering, for the card's Retry. */
+  retryText?: string | null;
+  onResend?: (text: string) => void;
+  navigate?: Navigate | undefined;
+  busy?: boolean;
 }): React.ReactElement | null {
   if (msg.kind === 'user') {
     return (
@@ -254,12 +380,17 @@ function Bubble({
     );
   }
   if (msg.kind === 'narration') {
-    // Narration is data: the mono, body ink (§2.8); the dot is the run-emerald.
+    return <NarrationRow msg={msg} live={live} />;
+  }
+  if (msg.kind === 'run-failed') {
     return (
-      <div className="flex items-start gap-2 text-xs font-mono" data-testid="doc-narration" style={{ color: S.body }}>
-        <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: S.live }} />
-        <span>{msg.text}</span>
-      </div>
+      <RunFailedCard
+        msg={msg}
+        retryText={retryText}
+        busy={busy}
+        onResend={(text) => onResend?.(text)}
+        navigate={navigate}
+      />
     );
   }
   if (msg.kind === 'divider') {
@@ -531,6 +662,32 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // F-4R2-003: the document's NAME, shown before Create — derived from the brief (the bridge's
+  // own slug of the quoted name or the first six words) until the operator edits it. A 409
+  // "already exists" is then preventable, and when it still happens the collision names the
+  // document (with a link) and offers a different name inline.
+  const [nameDraft, setNameDraft] = useState('');
+  const [nameEdited, setNameEdited] = useState(false);
+  const [collision, setCollision] = useState<{ name: string; wire: string } | null>(null);
+  const nameEl = useRef<HTMLInputElement>(null);
+  // F-4R2-006: the governed run this thread is bound to (the runs wire's record, adopted on doc
+  // open) — the chip links it, and its lifecycle frames end the live state if the seam's own
+  // terminal frame never reaches this thread.
+  const boundRun = useDocThreadStore((s) => (key === null ? undefined : s.boundRun[key]));
+  const boundLive = boundRun !== undefined && LIVE_RUN.has(boundRun.status);
+  const boundEnded = useRunEventStore((s) => {
+    if (boundRun === undefined) return null;
+    const ended = (s.byRun[boundRun.runId] ?? []).find((e) =>
+      e.type === 'sessionCompleted' || e.type === 'sessionFailed' || e.type === 'runCancelled');
+    return ended === undefined ? null : ended.type;
+  });
+  useEffect(() => {
+    if (key === null || boundRun === undefined || boundEnded === null || !boundLive) return;
+    useDocThreadStore.getState().markRunEnded(
+      key,
+      boundEnded === 'sessionCompleted' ? 'completed' : boundEnded === 'sessionFailed' ? 'failed' : 'cancelled',
+    );
+  }, [key, boundRun, boundEnded, boundLive]);
   // F-046 (studio half): what the next document is ABOUT (the project's repos, sent as
   // `repo_refs` — crew validates them and grounds the run on THOSE, never the first member) and
   // its format (`style`; '' lets crew infer it from the brief's format words).
@@ -549,8 +706,16 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     setRepoRefs([]);
     setFormat('');
     setNoGrounding(false);
+    setNameDraft('');
+    setNameEdited(false);
+    setCollision(null);
   }, [projectId, docId, mode]);
   const launching = docId === null || key === null;
+  /** The launch composer's parse of the ask — a quoted name (§7.3) or null. */
+  const parsedAsk = launching && mode !== 'video' ? parseCreateAsk(text) : null;
+  /** The id the bridge WILL mint for this brief — what the name field shows until edited. */
+  const derivedName = text.trim() === '' ? '' : docSlug(parsedAsk?.name ?? docName(text));
+  const shownName = nameEdited ? nameDraft : derivedName;
   /** The launch composer refuses to send while the repositories are unknown, except by explicit choice. */
   const subjectBlocks = launching && (subjectStatus === 'loading' || (subjectStatus === 'error' && !noGrounding));
   /** The thread line a no-grounding create leaves — only when discovery FAILED and the user chose to go on. */
@@ -601,6 +766,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     const msgId = nextMsgId();
     setBusy(true);
     setError(null);
+    setCollision(null);
     try {
       // 1 — LAUNCH, the demo path (§4.5): the ask names the demo, and the wizard collects
       // the steps it is made of, in order. Nothing is created until the wizard submits.
@@ -621,7 +787,9 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         // create lands in the catch below — the visible composer error,
         // never a silent close (the loud-502 contract, §8.4.1 probe 3).
         const parsed = parseCreateAsk(body);
-        const name = parsed?.name ?? docName(body);
+        // F-4R2-003: an edited name field wins; otherwise the derivation the field showed.
+        const typedName = nameEdited ? nameDraft.trim() : '';
+        const name = typedName !== '' ? typedName : (parsed?.name ?? docName(body));
         // F-045: claim the doc for THIS project the moment the create is sent (codex on #241) —
         // the bridge emits doc.created before it answers, so crew's first frames can arrive before
         // the response, let alone before the thread mounts; a pending binding files them here and
@@ -642,6 +810,14 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
           });
         } catch (e) {
           releasePending();
+          // F-4R2-003: a name collision is NAMED — which document, with a way out — never only
+          // the daemon's sentence. Matched on the status (the typed field), with the wire's
+          // words as the fallback for a refusal that arrived untyped.
+          const wire = e instanceof Error ? e.message : String(e);
+          if (apiStatus(e) === 409 || /\b409\b|already exists/i.test(wire)) {
+            setCollision({ name: expectedId, wire });
+            return;
+          }
           throw e;
         }
         if (created.name !== expectedId) {
@@ -657,6 +833,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         setRepoRefs([]); // the picks were for THIS document — the next launch starts clean
         setFormat('');
         setNoGrounding(false);
+        setNameDraft('');
+        setNameEdited(false);
         navigate(versionPath(projectId, created.name, null));
         return;
       }
@@ -770,6 +948,44 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     }
   }
 
+  /**
+   * F-4R2-014's Retry: send the SAME ask again as a new message — the plain continue wire
+   * (`chat.posted`), enqueued at the tail like any send, failing visibly like any send. A
+   * new governed run answers it; the failed card above stays as the record of the first.
+   */
+  async function resendAsk(askText: string): Promise<void> {
+    if (docId === null || key === null || busy) return;
+    const store = useDocThreadStore.getState();
+    const msgId = nextMsgId();
+    setBusy(true);
+    try {
+      store.addUserMsg(key, msgId, askText);
+      store.setGenState(key, 'generating');
+      try {
+        await injectDocMessage(projectId, docId, askText, msgId);
+      } catch {
+        failVisibly(msgId);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** F-4R2-003: the next free-looking name — `brochure` → `brochure-2`, `brochure-2` → `brochure-3`. */
+  function nextName(name: string): string {
+    const m = /^(.*)-(\d+)$/.exec(name);
+    return m !== null ? `${m[1]}-${Number(m[2]) + 1}` : `${name}-2`;
+  }
+
+  /** F-4R2-003's way out of a collision: a different name, in the field, focused. */
+  function useDifferentName(): void {
+    if (collision === null) return;
+    setNameEdited(true);
+    setNameDraft(nextName(collision.name));
+    setCollision(null);
+    nameEl.current?.focus();
+  }
+
   /** Where a user message sits in its §6.1 lifecycle (see `SendState`). */
   function sendStateOf(msg: DocMsg): SendState | undefined {
     if (msg.kind !== 'user') return undefined;
@@ -802,9 +1018,19 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     : placeholder;
   // Honesty for the working chip (VIDEO-FB: "steering the live demo run" showed
   // with nothing running anywhere): claiming a LIVE run requires having heard
-  // one — any interactive frame for this thread. Before the first signal the
-  // chip says what is actually known: the send is out, nothing has spoken yet.
-  const heardSignal = lastSignal > 0;
+  // one — any interactive frame for this thread, or the runs wire's own record of
+  // the run executing (F-4R2-006). Before either the chip says what is actually
+  // known: the send is out, nothing has spoken yet.
+  const heardSignal = lastSignal > 0 || boundLive;
+  /** F-4R2-014: the ask a failed run was answering — the nearest user message above its card. */
+  const retryTextFor = (index: number): string | null => {
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (m?.kind === 'user') return m.text;
+    }
+    return null;
+  };
+  const newestIndex = messages.length - 1;
 
   return (
     <div
@@ -869,7 +1095,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
               : `Ask for a change and it lands as a new version. Everything the agent says about this ${noun} appears here.`}
           </p>
         )}
-        {messages.map((m) =>
+        {messages.map((m, i) =>
           m.kind === 'gate'
             ? (docId !== null && key !== null && (
                 <GateCard
@@ -889,6 +1115,11 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
                   onShowVersion={showVersion}
                   sendState={sendStateOf(m)}
                   onRetrySend={(msg) => void retrySend(msg)}
+                  live={i === newestIndex && state === 'generating'}
+                  retryText={m.kind === 'run-failed' ? retryTextFor(i) : null}
+                  onResend={(askText) => void resendAsk(askText)}
+                  navigate={navigate}
+                  busy={busy}
                 />
               ),
         )}
@@ -937,6 +1168,20 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             {heardSignal
               ? `steering the live ${noun} run`
               : `sent — waiting for the ${noun} service to pick this up`}
+            {/* F-4R2-006: the run the runs wire bound this thread to — one click to its page. */}
+            {boundRun !== undefined && (
+              <a
+                data-testid="doc-bound-run"
+                data-run-id={boundRun.runId}
+                data-run-status={boundRun.status}
+                href={runTimelinePath(boundRun.runId)}
+                onClick={(e) => { e.preventDefault(); navigate(runTimelinePath(boundRun.runId)); }}
+                className="underline"
+                style={{ color: S.live }}
+              >
+                open run
+              </a>
+            )}
           </span>
         )}
         {/* §6.1 (J3): past the honesty budget the composer must not claim a live
@@ -954,20 +1199,54 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         {/* §7.3 (slice X2): the parse, SHOWN before submit — a quoted name in a
             create ask becomes the doc's name, the rest stays the brief. Renders
             only on the launch composer (no doc yet) when a quoted name parses. */}
-        {(docId === null || key === null) && mode !== 'video' && (() => {
-          const parsed = parseCreateAsk(text);
-          if (parsed === null) return null;
-          return (
-            <p
-              data-testid="create-parse"
-              className="text-[10px] font-mono"
-              style={{ color: 'var(--ink-dim)', margin: 0 }}
-            >
-              will create <span style={{ color: 'var(--ink-muted)' }}>“{parsed.name}”</span>
-              {' '}— brief: {parsed.brief}
-            </p>
-          );
-        })()}
+        {parsedAsk !== null && (
+          <p
+            data-testid="create-parse"
+            className="text-[10px] font-mono"
+            style={{ color: 'var(--ink-dim)', margin: 0 }}
+          >
+            will create <span style={{ color: 'var(--ink-muted)' }}>“{parsedAsk.name}”</span>
+            {' '}— brief: {parsedAsk.brief}
+          </p>
+        )}
+        {/* F-4R2-003: the document's NAME, before Create — the id the bridge will mint (derived
+            from the brief, live) until the operator edits it. Visible on the launch composer
+            only; a demo's name rides the wizard. */}
+        {launching && mode !== 'video' && (
+          <label
+            data-testid="doc-name-row"
+            data-derived={!nameEdited}
+            className="flex items-center gap-2 text-[10px] font-mono"
+            style={{ color: 'var(--ink-dim)' }}
+          >
+            <span>name</span>
+            <input
+              ref={nameEl}
+              data-testid="doc-name"
+              value={shownName}
+              placeholder="derived from your brief"
+              spellCheck={false}
+              onChange={(e) => { setNameEdited(true); setNameDraft(e.target.value); setCollision(null); }}
+              title={nameEdited
+                ? 'the name this document is created under'
+                : 'derived from your brief — edit to choose your own; the bridge slugifies it'}
+              className="flex-1 min-w-0 bg-transparent outline-none text-[10px] font-mono"
+              style={{ color: 'var(--ink-muted)', border: `1px solid ${S.border}`,
+                       borderRadius: 'var(--radius-sm)', padding: '1px 6px' }}
+            />
+            {nameEdited && (
+              <button
+                type="button"
+                data-testid="doc-name-reset"
+                onClick={() => { setNameEdited(false); setNameDraft(''); setCollision(null); }}
+                className="underline"
+                style={{ background: 'transparent', border: 'none', color: 'var(--ink-dim)', cursor: 'pointer', padding: 0 }}
+              >
+                use the derived name
+              </button>
+            )}
+          </label>
+        )}
         {/* F-046: on the LAUNCH composer, what the document (or demo) is about — the project's
             repositories as toggles (sent as repo_refs; a demo's spec is grounded on the app's own
             source the same way) — and, for a document, its format (the bridge's styles). */}
@@ -1034,6 +1313,40 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         {error !== null && (
           <p data-testid="doc-composer-error" className="text-[11px] font-mono" style={{ color: S.danger, margin: 0 }}>
             {error} — nothing was sent; edit and try again.
+          </p>
+        )}
+        {/* F-4R2-003: a name collision names the document (linked) and offers the way out
+            inline; the daemon's own sentence stays, dimmed — carried whole, never paraphrased. */}
+        {collision !== null && (
+          <p
+            data-testid="doc-composer-error"
+            data-status="409"
+            data-collides-with={collision.name}
+            className="text-[11px] font-mono"
+            style={{ color: S.danger, margin: 0 }}
+          >
+            A document named “{collision.name}” already exists —{' '}
+            <a
+              data-testid="doc-composer-open-existing"
+              href={versionPath(projectId, collision.name, null)}
+              onClick={(e) => { e.preventDefault(); navigate(versionPath(projectId, collision.name, null)); }}
+              className="underline"
+              style={{ color: S.danger }}
+            >
+              open it
+            </a>
+            {' '}or{' '}
+            <button
+              type="button"
+              data-testid="doc-composer-rename"
+              onClick={useDifferentName}
+              className="underline"
+              style={{ background: 'transparent', border: 'none', color: S.danger, cursor: 'pointer', padding: 0, font: 'inherit' }}
+            >
+              use a different name
+            </button>
+            . Nothing was created.{' '}
+            <span style={{ color: S.faint }}>({collision.wire})</span>
           </p>
         )}
       </div>

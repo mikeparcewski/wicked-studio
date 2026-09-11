@@ -11,6 +11,50 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+### Fixed
+- **Document thread hardening** (phase4-r2 acceptance findings F-4R2-003 / -005 / -006 / -014 / -016).
+  - *Export bar — readiness per format* (F-4R2-016): `ExportMenu` looked up the FIRST ready answer for
+    the version, so an un-consumed HTML download shadowed the PDF that finished after it — the PDF
+    button spun for 120 s while the file already sat in the thread. Each format button now asks for
+    its own (version, format) answer and flips the moment its own reply lands. The bridge's additive
+    layout report (wicked-interactive#219: `layout`, `layout_source`, `page_size`, `pages`) is read
+    null-safely off the export response AND the `export.generated` echo and rendered where present —
+    "PDF ready — 2 pages · A4 portrait" under the row, on the anchor's hover text, and on the thread
+    line; an older bridge that sends none of it changes nothing.
+  - *Heartbeat narration* (F-4R2-005): crew's seams re-emit the current phase's line every ≤15 s, so
+    one draft read as 39 narration rows ("Crew phase 2/3: writing the draft (draft)…" ×16). A repeat
+    of the NEWEST narration now folds into it — one row, a repeat count and a span that ticks live
+    while the thread generates — live and on the restored transcript alike. The same words after
+    another line are a new phase, not a fold. (Keying narration on the unit ord needs the wire: the
+    seams' `status.posted` frames carry no `unit_ord` / `run_id` — recorded as a crew wire gap.)
+  - *Reload mid-run* (F-4R2-006): the composer read `terminal` for up to one heartbeat interval over
+    an executing run, because neither the frames nor the announce history carry a run id. On doc open
+    the thread now reads `GET /runs` once and adopts the run whose declared write root names the doc
+    (`interactive-drafts/<doc>`, `interactive-chats/<doc>-m-…`, `interactive-edits/<doc>-v…`,
+    `interactive-demos/<doc>`): a LIVE run flips the composer to `generating` with one honest line
+    ("Still in progress — a governed run picked this up before the page reloaded…") and an "open run"
+    link on the chip; the run's lifecycle frame ends the live state if the seam's terminal frame
+    never reaches the thread.
+  - *Deliverable-floor failure, for a human* (F-4R2-014): the crew seams' "The crew run answering
+    your ask failed (run …). Reason: [wicked-crew] deliverable floor: … EXPECTED: /abs/path … Inspect
+    it via the crew API (GET …)" line rendered verbatim in the document chat. It is now a card: one
+    sentence derived from the floor's own EXPECTED path ("The revise step produced no file, so this
+    turn did not land — nothing changed in your document"), a link to the run page, a **Retry** that
+    re-sends the same ask as a new message (`doc-actionable-retry[data-kind=resend]`), and the raw
+    dump — absolute paths, issue ids, the API URL — whole behind a collapsed "details" fold. The
+    failure itself is unchanged: the floor did its job.
+  - *Document name before Create* (F-4R2-003): the launch composer shows the id the bridge will mint
+    (its own slug of the quoted name or the brief's first six words), live and editable, so a 409
+    "doc already exists" is preventable; when one still happens the copy names the colliding document
+    with a link ("open it") and offers "use a different name" inline (the next free-looking name in
+    the field), with the daemon's own sentence kept, dimmed.
+  - Tests: `runFailure`, `runBinding`, `docThread.collapse`, `exportReport` unit suites; the
+    `DocumentThread.runFailed` / `DocumentThread.name` component suites; `ExportMenu` gains the
+    two-formats case; the loopback rig `e2e/ux5_document_hardening_test.py` (fixture switches
+    `export_report`, `doc_fail_floor`, `doc_heartbeat_ms`, `doc_bound_run`, `create_409_existing`)
+    drives the export chip, the failure card's Retry, the folded heartbeat, the reload restore and
+    the 409 way-out in a real browser.
+
 ### Added
 - **Reassign to <seat> + retry on a failure-escalation gate** (phase7-r2 acceptance finding
   F-7R2-007, HIGH). At every "Unit N failed and triage escalated" gate the card offered Approve — a

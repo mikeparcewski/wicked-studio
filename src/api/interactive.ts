@@ -85,6 +85,16 @@ export interface ExportResult {
   path: string;
   file: string;
   download: string;
+  /**
+   * The additive layout report (wicked-interactive #219): what the export actually printed.
+   * Every field is optional — an older bridge sends none — and read null-safely
+   * (`exportReportOf`). `page_size` is measured from the produced PDF (`A4 portrait`,
+   * `16:9 (960 × 540 pt)`); `layout_source` says why that layout was chosen.
+   */
+  layout?: 'document' | 'deck' | string;
+  layout_source?: string;
+  page_size?: string;
+  pages?: number;
 }
 
 /**
