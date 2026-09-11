@@ -112,13 +112,13 @@ describe('the route→heading map (§3.2)', () => {
       expect(headingForPath(p)).toBe('steering');
     }
     // The /testing surface splits: Test owns campaigns/recon (+ the retired flat /campaigns
-    // addresses), Evals (key stays `testing`) owns the eval runner + bare /testing + the retired harness.
-    for (const p of ['/testing/campaigns', '/testing/campaigns/c-1', '/campaigns', '/campaigns/c-1']) {
+    // addresses) AND the page-less addresses — bare /testing and the retired harness — which
+    // `useTestingRedirect` lands on the Test landing (F-075 / F-7R2-009); Evals (key stays
+    // `testing`) owns only the eval runner.
+    for (const p of ['/testing/campaigns', '/testing/campaigns/c-1', '/campaigns', '/campaigns/c-1', '/testing', '/testing/harness']) {
       expect(headingForPath(p)).toBe('test');
     }
-    for (const p of ['/testing', '/testing/harness', '/testing/evals']) {
-      expect(headingForPath(p)).toBe('testing');
-    }
+    expect(headingForPath('/testing/evals')).toBe('testing');
     // Skills owns `/skills` and any sub-address (the file manager is one flat page; a skill's
     // drawer rides `?skill=`), and it is its OWN heading — never Steering's.
     for (const p of ['/skills', '/skills/', '/skills/wicked-garden-repo-learn']) {

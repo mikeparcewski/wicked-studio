@@ -13,6 +13,7 @@ import { leadMovingRun } from '../board/phaseProgress.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { modePath, projectPath, runTimelinePath, type Navigate } from '../hooks/useRoute.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
+import { useDocsCache } from '../store/docsCache.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { BatchGateBar } from './BatchGateBar.js';
@@ -299,7 +300,24 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     onClick: (e) => { e.preventDefault(); navigate(path); },
   });
 
-  const docsCount = useMemo(() => items.reduce((a, i) => a + i.docs.length, 0), [items]);
+  // F-A45-008, bounded by the independent review of #263 (F-1): the landing NEVER fans out — a
+  // per-project docs GET cold-starts a `wicked-interactive` bridge per project. The Vibe door counts
+  // what is ALREADY cached (the board model's root-guarded reads, surfaces opened this session)
+  // plus, when the daemon offers it, the cheap daemon-wide index (`GET /interactive/docs`, served
+  // from the ledgers, no bridge spawn; presence-checked, absent on a pre-0.36 daemon). The door's
+  // word says which census it counts.
+  const byProject = useDocsCache((s) => s.byProject);
+  const docsCensus = useDocsCache((s) => s.census);
+  useEffect(() => {
+    void useDocsCache.getState().loadIndex();
+  }, []);
+  const docsCount = useMemo(() => {
+    const seen = new Set<string>();
+    let n = 0;
+    for (const [pid, docs] of Object.entries(byProject)) { seen.add(pid); n += docs.length; }
+    for (const i of items) if (!seen.has(i.project.id)) n += i.docs.length;
+    return n;
+  }, [items, byProject]);
 
   // The section-doors strip (redesign): the Execute/Test/Vibe/Demo/Evals/Steering breakout made
   // legible on the landing, each with a live count (absent counts show no number, never a zero).
@@ -308,12 +326,14 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     return [
       { key: 'execute', label: 'Execute', glyph: '▸', count: plural(runs.length, 'run'), href: '/execute', color: 'var(--status-run)' },
       { key: 'test', label: 'Test', glyph: '✓', count: wires.campaigns === null ? null : plural(wires.campaigns.length, 'test'), href: '/testing/campaigns', color: 'var(--section-test)' },
-      { key: 'vibe', label: 'Vibe', glyph: '▤', count: plural(docsCount, 'document'), href: '/vibe', color: 'var(--section-vibe)' },
+      // F-1/F-2: the census the count covers is said — "N documents" only once the daemon-wide index
+      // (or an explicit fan-out) has answered for every project; otherwise "in opened projects".
+      { key: 'vibe', label: 'Vibe', glyph: '▤', count: docsCensus === 'opened' ? `${plural(docsCount, 'document')} in opened projects` : plural(docsCount, 'document'), href: '/vibe', color: 'var(--section-vibe)' },
       { key: 'demo', label: 'Demo', glyph: '▶', count: null, href: '/demo', color: 'var(--section-demo)' },
       { key: 'evals', label: 'Evals', glyph: '◈', count: wires.evalCount === null ? null : plural(wires.evalCount, 'run'), href: '/testing/evals', color: 'var(--status-gate)' },
       { key: 'steering', label: 'Steering', glyph: '☸', count: wires.rules === null ? null : plural(wires.rules.length, 'rule'), href: '/steering/dashboard', color: 'var(--accent)' },
     ];
-  }, [runs.length, docsCount, wires.campaigns, wires.evalCount, wires.rules]);
+  }, [runs.length, docsCount, docsCensus, wires.campaigns, wires.evalCount, wires.rules]);
 
   // The fresh-install welcome (§6): verbs + Ask, prominent — and NOTHING
   // measured, because nothing has ever run (no fabricated zeros).

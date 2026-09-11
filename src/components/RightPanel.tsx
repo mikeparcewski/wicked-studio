@@ -360,11 +360,57 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
   const hasAny = allFiles.size > 0;
   const isActive = !['completed', 'cancelled', 'failed'].includes(model.session.status);
 
+  // The whole-run diff affordance (§3.4) — rendered on EVERY Files state, the empty one included
+  // (acceptance finding F-7R2-013): a completed run whose units recorded no `dataUsed` frames
+  // still has a changeset on its branch, and the daemon's diff route (worktree, or the run branch
+  // once the worktree is reaped — api-types 0.36.0 `source: "branch"`) is how it is read.
+  const fullDiff = (
+    <>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          ref={fullDiffBtnRef}
+          data-testid="files-full-diff"
+          onClick={() => { setFullDiffUnsupported(false); setFullDiffOpen(true); }}
+          className="text-[10px] font-mono px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
+          style={{ color: 'var(--accent)', background: 'var(--accent-subtle)' }}
+        >
+          Full diff
+        </button>
+        {fullDiffUnsupported && (
+          <span className="text-[9px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+            diff unavailable — this daemon predates the diff route
+          </span>
+        )}
+      </div>
+      {fullDiffOpen && (
+        <FileViewer
+          runId={runId}
+          defaultTab="diff"
+          onClose={() => { setFullDiffOpen(false); fullDiffBtnRef.current?.focus(); }}
+          onUnsupported={() => {
+            setFullDiffOpen(false);
+            setFullDiffUnsupported(true);
+            fullDiffBtnRef.current?.focus();
+          }}
+        />
+      )}
+    </>
+  );
+
   if (!hasAny) {
     return (
-      <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
-        {isActive ? 'No files changed yet.' : 'No files changed.'}
-      </p>
+      <div className="flex flex-col gap-2" data-testid="files-empty">
+        <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
+          {isActive ? 'No files changed yet.' : 'No files recorded by the units.'}
+        </p>
+        {!isActive && (
+          <p className="text-[10px] font-mono leading-snug" style={{ color: 'var(--ink-dim)' }}>
+            the units recorded no file reads — the run&apos;s changeset, if any, is on its branch: open the full diff
+          </p>
+        )}
+        {fullDiff}
+      </div>
     );
   }
 
@@ -386,23 +432,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
       </p>
 
       {/* Panel header: the whole-run diff affordance (§3.4) */}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          ref={fullDiffBtnRef}
-          data-testid="files-full-diff"
-          onClick={() => { setFullDiffUnsupported(false); setFullDiffOpen(true); }}
-          className="text-[10px] font-mono px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
-          style={{ color: 'var(--accent)', background: 'var(--accent-subtle)' }}
-        >
-          Full diff
-        </button>
-        {fullDiffUnsupported && (
-          <span className="text-[9px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-            diff unavailable — this daemon predates the diff route
-          </span>
-        )}
-      </div>
+      {fullDiff}
 
       {/* Modified / Created section */}
       {(hasModified || isActive) && (
@@ -444,19 +474,6 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
       <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
         {allFiles.size} file{allFiles.size !== 1 ? 's' : ''} total
       </p>
-
-      {fullDiffOpen && (
-        <FileViewer
-          runId={runId}
-          defaultTab="diff"
-          onClose={() => { setFullDiffOpen(false); fullDiffBtnRef.current?.focus(); }}
-          onUnsupported={() => {
-            setFullDiffOpen(false);
-            setFullDiffUnsupported(true);
-            fullDiffBtnRef.current?.focus();
-          }}
-        />
-      )}
     </div>
   );
 }

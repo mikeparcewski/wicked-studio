@@ -269,6 +269,55 @@ function CampaignCard({ m, narration, navigate }: {
         </div>
       )}
 
+      {/* ── The produced test set (wave 6, F-7R2-014) — the counts the VERIFY phase re-derived, off
+             the campaign registration; the workflow chip reads the live runs' `workflow_id` so the
+             card says "qe-author-tests" from launch, before any registration lands. ── */}
+      {(m.workflowIds.length > 0 || m.testSet !== null) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {m.workflowIds.map((w) => (
+            <span
+              key={w}
+              data-testid="campaign-card-workflow"
+              data-workflow={w}
+              title={w === 'qe-author-tests'
+                ? 'The governed test-authoring workflow: recon → author → verify → review → deliver'
+                : `Workflow ${w}`}
+              style={{
+                ...CARD_STAT, color: w === 'qe-author-tests' ? S.accent : S.muted,
+                border: `1px solid ${S.border}`, borderRadius: 'var(--radius-full)', padding: '1px 8px',
+              }}
+            >
+              {w}
+            </span>
+          ))}
+          {m.testSet !== null && (
+            <span
+              data-testid="campaign-card-testset"
+              data-tests={m.testSet.counts.tests}
+              data-executed={m.testSet.counts.executed}
+              data-passed={m.testSet.counts.passed}
+              data-failed={m.testSet.counts.failed}
+              title={m.testSet.files.length > 0 ? m.testSet.files.join('\n') : 'no file list on the registration'}
+              style={{ ...CARD_STAT, color: m.testSet.counts.failed > 0 ? 'var(--status-fail)' : S.ink, whiteSpace: 'normal' }}
+            >
+              {m.testSet.counts.files} test file{m.testSet.counts.files === 1 ? '' : 's'} · {m.testSet.counts.tests} test{m.testSet.counts.tests === 1 ? '' : 's'}
+              {' · '}
+              {m.testSet.counts.executed} executed · {m.testSet.counts.passed} passed · {m.testSet.counts.failed} failed
+              {m.testSet.counts.executed < m.testSet.counts.tests && (
+                <span data-testid="campaign-card-testset-unverified" style={{ color: 'var(--status-gate)' }}>
+                  {' '}· {m.testSet.counts.tests - m.testSet.counts.executed} never executed
+                </span>
+              )}
+            </span>
+          )}
+          {m.testSet !== null && m.testSet.plan !== null && (
+            <span data-testid="campaign-card-testset-plan" style={{ ...CARD_STAT, color: S.faint }} title="The PLAN the author phase wrote">
+              plan: {m.testSet.plan}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ── Live narration — the freshest member-run frame, narrator-spoken ── */}
       {narration !== null && <CardNarration line={narration.line} runId={narration.runId} />}
 
@@ -424,9 +473,11 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   const header = (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <p style={{ flex: 1, minWidth: 0, fontSize: '13px', color: S.muted, margin: 0 }}>
-          Test your codebases — recon proposes, you approve at the gate, sibling runs land the work.
-          Works with or without a project.
+        <p data-testid="campaigns-header-copy" style={{ flex: 1, minWidth: 0, fontSize: '13px', color: S.muted, margin: 0 }}>
+          Test your codebases — <strong style={{ color: S.ink, fontWeight: 600 }}>New test</strong> runs the governed{' '}
+          <span className="font-mono" style={{ color: S.ink }}>qe-author-tests</span> workflow: recon → author → verify
+          (runs what it wrote) → review (a distinct judge) → deliver (the engine opens the PR). You approve the plan at
+          the intake gate; the produced set lands below with its counts. Works with or without a project.
         </p>
         <button
           type="button"
@@ -446,13 +497,16 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
           data-testid="testing-author-open"
           aria-expanded={panel === 'author'}
           onClick={() => openPanel('author')}
+          // F-075 (2): this verb authors TESTING STEERING RULES (the AuthorPanel), not tests — the
+          // label says so, so a customer who wants tests does not get a policy-authoring run.
+          title="Draft testing steering rules with chat — policy for how tests are written and judged, not a test run"
           style={{
             background: 'transparent', color: S.muted, border: `1px solid ${S.border}`,
             borderRadius: '7px', padding: '8px 14px', fontSize: '12px', fontWeight: 600,
             cursor: 'pointer', flexShrink: 0,
           }}
         >
-          Add with chat
+          Add testing rules
         </button>
         <button
           type="button"
@@ -628,7 +682,8 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             No tests yet
           </p>
           <p style={{ fontSize: '12px', color: S.faint, margin: 0 }}>
-            Tests appear when you run recon over a codebase — start one here.
+            A test appears here the moment New test launches it (one card per launch, its runs inside) and
+            fills in with the produced set — files, tests, executed / passed / failed — when the run finishes.
           </p>
           <button
             type="button"

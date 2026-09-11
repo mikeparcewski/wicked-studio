@@ -1,4 +1,7 @@
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
+import {
+  distributionAgreementPct, distributionDegradedReason, gateUngated, gateUngatedReason, WORKER_REMOTE_WRITE_REMEDY,
+} from '../api/wave6-wire.js';
 import { isPrUrl } from './delivery.js';
 import { shortId } from './gateVerdictModel.js';
 import { runBaseLine, runBaseOf } from './runBaseModel.js';
@@ -146,11 +149,17 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
     case 'councilSeatFailed':
       return line(`Seat ${str(event.cli) || '?'} did not vote (${str(event.kind) || 'unreported'})`, 'fail');
     case 'unitDistributed': {
-      const pct = num(event.agreement_pct);
-      return line(
-        `${phase} routed to ${str(event.cli) || '?'}${pct !== null ? ` — council ${pct}%` : ''}`,
-        'info',
-      );
+      // The engine emits camelCase (`agreementPct`, `degradedReason`); api-types ≤ 0.35.0 declared
+      // the snake_case names, which the live wire never carries — both spellings are read
+      // (`wave6-wire.ts`) until the 0.36.0 pin declares camelCase, then the snake_case read goes.
+      const pct = distributionAgreementPct(event);
+      const degraded = distributionDegradedReason(event);
+      const routed = `${phase} routed to ${str(event.cli) || '?'}${pct !== null ? ` — council ${pct}%` : ''}`;
+      // F-7R2-006 / wave 6: a council smaller than the configured seats is a story beat, in the
+      // gate tone — "4 of 5 seats benched: codex, pi (signed out)" is why one seat decided alone.
+      return degraded !== null
+        ? line(`${routed} — council degraded: ${clip(degraded)}`, 'gate')
+        : line(routed, 'info');
     }
     case 'unitDispatched': {
       const attempt = num(event.attempt) ?? 0;
@@ -191,7 +200,21 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
           ? line(`Gate denied on ${phase}${why ? `: ${why}` : ''} — no repository checks ran`, 'fail')
           : line(`Checks ran on ${phase} — deny${why ? `: ${why}` : ''}`, 'fail');
       }
-      if (!noFloor) return line(`Checks ran on ${phase} — pass`, 'work');
+      // Wave 6 (F-7R2-005 / F-7R2-017, api-types 0.36.0): the engine SAYS no judge seat could be
+      // convened — the phase is UNGATED on the evaluator axis and the line says why, whether or not
+      // the repository checks ran ("Checks ran" alone would dress a judge-less pass as verified).
+      if (gateUngated(event)) {
+        const reason = gateUngatedReason(event) ?? 'no judge convened';
+        return noFloor
+          ? line(`Gate UNGATED on ${phase} — ${reason}; no repository checks ran`, 'gate')
+          : line(`Gate UNGATED on ${phase} — ${reason}; repository checks ran, no distinct judge`, 'gate');
+      }
+      // F-5 (independent review of #263): the common single-seat case — the default floor ran, the
+      // engine SAYS `judgeCli: null` (the 0.33.0 key is present) and does not call it ungated — is a
+      // pass whose judge axis is silent; say "no distinct judge" so evaluator ≠ creator is never
+      // implied. A frame WITHOUT the key (a pre-0.33 engine) claims nothing either way.
+      const judgeSilent = 'judgeCli' in event && event.judgeCli === null && !judged;
+      if (!noFloor) return line(`Checks ran on ${phase} — pass${judgeSilent ? ' — no distinct judge' : ''}`, 'work');
       if (judged) return line(`Judge passed ${phase} — no repository checks ran`, 'work');
       if (policed) return line(`Evaluator policy passed ${phase} — no repository checks ran`, 'work');
       return line(`Gate passed without checks on ${phase} (ungated)`, 'info');
@@ -279,6 +302,20 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
         `Refused a write by ${str(event.cli) || 'the seat'} during ${phase} — ${str(event['tool']) || 'a write tool'}${str(event['path']) ? ` on ${str(event['path'])}` : ''} (a read-only phase may not edit)`,
         'fail',
       );
+    // ── wave 6 (api-types 0.36.0, F-7R2-012): the remote-write fence ─────────
+    case 'workerToolCallDenied': {
+      // A creator/evaluator seat asked for a REMOTE write (`git push`, `gh pr create`, …) and the
+      // fence refused it — delivery is the ENGINE's job. The remedy rides the line, the engine's when
+      // the frame carries one, the platform's own sentence otherwise.
+      const role = str(event['role']);
+      const tool = str(event['tool']);
+      const command = clip(str(event['command']), 100);
+      const remedy = str(event['remedy']) || WORKER_REMOTE_WRITE_REMEDY;
+      return line(
+        `Refused a remote write by ${str(event.cli) || 'the seat'}${role ? ` (${role})` : ''} during ${phase} — ${tool ? `${tool}: ` : ''}\`${command || 'a remote-writing command'}\` — ${remedy}`,
+        'fail',
+      );
+    }
     case 'acpFallback':
       // The one deliberate reroute the feed speaks: a read-only phase on an ACP seat whose adapter
       // cannot enforce the write lock moves to the wrapped carrier BEFORE any turn. Routing, not a

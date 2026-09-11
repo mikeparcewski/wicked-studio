@@ -18,6 +18,7 @@ import { FollowUpComposer } from './FollowUpComposer.js';
 import { Markdown } from './Markdown.js';
 import { NarratorFeed, phaseName, unitKey } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
+import { RunDegradedNote } from './RunDegradedNote.js';
 import { deriveArtifacts, lastNarration, type NarratorContext } from './narrator.js';
 import { runTitle } from './runIdentity.js';
 import { RunTimeline } from './RunTimeline.js';
@@ -869,6 +870,10 @@ function RunChat({
             the wire's `POST /runs/:id/cancel`; the run index refreshes on success. */}
         {!isTerminal && <RunCancelControl runId={session.id} onCancelled={onRefresh} />}
       </div>
+
+      {/* Wave 6 (F-7R2-006 studio half): the council seated fewer seats than configured — said on
+          the run head, once, off `unitDistributed.degradedReason`; nothing on a full council. */}
+      <RunDegradedNote events={events} />
 
       {/* Process stepper — the run's map: every phase, in order, with its state at a glance. */}
       <ProcessStepper runId={session.id} units={ordered} executingUnitOrd={executingUnitOrd} />

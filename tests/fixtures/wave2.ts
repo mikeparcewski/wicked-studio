@@ -135,7 +135,8 @@ export const GOVERNANCE_LEGACY_OUTBOX: DiagnosticsGovernance = {
   records: { total: 12, sinceBoot: null },
   deadletters: {
     path: GOV_OUTBOX, count: 0, byType: {}, byReason: {}, timestamped: 0, untimestamped: 0,
-    oldestTs: null, newestTs: null, truncated: false, legacyOutbox: { path: LEGACY_OUTBOX, bytes: 48_213 },
+    // api-types 0.35.0: the legacy outbox names WHOSE it is — the pre-fix HOME outbox is the daemon's own.
+    oldestTs: null, newestTs: null, truncated: false, legacyOutbox: { path: LEGACY_OUTBOX, bytes: 48_213, scope: 'own' },
   },
   findings: [{
     kind: 'governance.legacy-outbox', severity: 'warning',

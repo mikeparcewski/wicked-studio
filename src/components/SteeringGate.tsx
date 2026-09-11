@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { api, type GateDecision } from '../api/client.js';
-import type { CoreEvent, CoverageReport, WorkUnit } from '../api/types.js';
+import type { CoreEvent, CoverageReport, WorkUnit, WorkflowDef } from '../api/types.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useSteerPrefixes } from '../hooks/useSteerPrefixes.js';
 import { useAnnotationStore } from '../store/annotations.js';
@@ -13,6 +13,7 @@ import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
 import { gateVerdictFor, isFailureEscalation, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { IntakePlan, isIntakeGate } from './IntakePlan.js';
 import { ReassignControl } from './ReassignControl.js';
 
 interface Props {
@@ -30,6 +31,9 @@ interface Props {
   /** The run's seat pool (`session.clis`) — the seats a failure-escalation gate may reassign the
    *  unit to (F-7R2-007). Absent ⇒ the card offers no reassign. */
   clis?: readonly string[];
+  /** The workflow def the run was planned from, when the host knows it (`GET /workflows`) — the
+   *  intake plan (F-7R2-008) reads executor / skill / role vocabulary off it. */
+  workflow?: WorkflowDef | null;
   onResolved?: () => void;
 }
 
@@ -53,9 +57,12 @@ function coverageLabel(r: CoverageReport): string {
   return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
 }
 
-export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, onResolved }: Props): React.ReactElement {
+export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, workflow, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
+  // F-7R2-008: the intake gate — the engine's pre-run gate on the run's FIRST unit — renders the
+  // planned phases + seats above the prompt, so "approve" is an informed act over the plan.
+  const intake = isIntakeGate(prompt, ord, units ?? EMPTY_UNITS);
   // The evaluator's record for THIS gate (wicked-studio#250, F-3R2-006): a pure view over the
   // run's event log — already hydrated by the run page and fed live by /ws — so the card states
   // what the operator is approving (the fix phase's verdict, criterion, the checks that ran) or
@@ -312,6 +319,13 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       >
         {headline}
       </p>
+
+      {/* The intake gate's PLAN (F-7R2-008): on the pre-run gate for the run's FIRST unit, every
+          planned phase with its executor, skill and seat — what "approve" launches — instead of the
+          brief echoed back. Read off the run's units snapshot (+ the def when the host knows it). */}
+      {intake && (
+        <IntakePlan runId={runId} units={units ?? EMPTY_UNITS} clis={pool ?? undefined} workflow={workflow ?? null} />
+      )}
 
       {/* The evaluator verdict this gate is about (F-3R2-006): pass/deny, criterion, the judge's
           reasoning, the repo-checks floor per check, and on a denial the layer + the engine's

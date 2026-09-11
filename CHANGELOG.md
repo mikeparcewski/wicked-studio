@@ -11,6 +11,152 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+### Added
+- **New test launches the governed `qe-author-tests` workflow; the Test landing shows the produced
+  set; honest UNGATED / degraded gates; a files view once the worktree is gone** (wave 6 — the
+  governed testing journey: acceptance findings F-075 / F-076 / F-7R2-003 / -005 / -006 / -008 /
+  -009 / -010 / -011 / -012 / -013 / -014 / -017, studio half). Develops against a PROVISIONAL wire
+  mirror (`src/api/wave6-wire.ts`) spelled exactly as the wave-6 briefs name the fields; every
+  reader is null-safe, so an older daemon changes nothing. `tests/wave6Wire.test.ts` pins the
+  posture: a pin bump to ≥ 0.36.0 without a VERBATIM re-vendor fails the suite (the #257 pattern).
+  - *Routes* (F-075 / F-7R2-009): `/testing` and the retired `/testing/harness` land on the TEST
+    landing (`/testing/campaigns`), as `src/api/testing.ts` documented all along; Evals keeps
+    `/testing/evals` as a sub-page; the rail heading follows. Home's "Run recon" verb is now
+    **New test** and opens the launch panel (`?new=test`). "Add with chat" on the landing is
+    labelled **Add testing rules** — it authors testing STEERING RULES, not tests.
+  - *New test is governed* (F-7R2-003 / -004 / -012): the panel reads `GET /workflows` on mount;
+    a daemon that lists `qe-author-tests` gets the governed launch (the chip names the five
+    phases: recon → author → verify → review → deliver — the ENGINE's deliver phase opens the PR,
+    never the worker), and `launchGovernedTest` walks the wire ladder, each step only when the
+    previous wire is ABSENT: `POST /testing/author` → `POST /testing/recon` + `workflow` (a strict
+    schema naming it unrecognized ⇒) → one `POST /runs {workflow, repoRef, projectId,
+    humanConfirm: 'before:1'[, groupLabel]}` per resolved repo. A daemon that lists no such
+    workflow shows the honest banner **"this daemon has no governed test workflow — plain run"**
+    BEFORE the launch and takes today's free-text recon. Every named refusal surfaces untouched.
+  - *Project chips are droppable* (F-076 / F-7R2-010): "attach the project, drop repos". A
+    narrowed project launches one `POST /runs` per remaining repo — `repoRef` scopes, `projectId`
+    FILES — so an explicit single repo keeps its `project_id` (the pinned recon body's `projectId`
+    would union the dropped members back in); the dropped line names them and offers "restore
+    all"; every member dropped is refused on the button, before any wire call.
+  - *After launch* (F-7R2-011): the panel LINKS every launched run (`testing-launch-fanout-run`,
+    the single run too), names the workflow, the wire it rode (`testing-launch-route`) and the
+    test/group label, then the waiting line; the intake gate arrives on the app's one /ws fold.
+  - *The intake card shows the PLAN* (F-7R2-008): on the pre-run gate for the run's first unit —
+    the panel's copy of the card and the run page's — `IntakePlan` lists every planned phase with
+    its executor (agent / tool), skill, `writes code`, `evaluator ≠ creator`, and seat (the one
+    routed, else "council picks from <pool>"), read once off `GET /runs/:id` when the gate arrives.
+  - *The Test landing shows the produced set* (F-7R2-014): a card's `test_set` (the campaign
+    registration a completed run lands) renders "N test files · T tests · E executed · P passed ·
+    F failed" — the counts the VERIFY phase re-derived, with "K never executed" when
+    `executed < tests` — plus the PLAN path; the workflow chip reads `qe-author-tests` off the live
+    runs from launch. A pre-0.36 row renders no counts (absence, never a fabricated zero). The
+    empty state says what fills it.
+  - *Honest UNGATED gates* (F-7R2-005 / -017): `gateEvaluated.ungated` / `ungatedReason` win over
+    the card's fold — the gate card reads **"UNGATED — no eligible judge seat"** (the floor that DID
+    run is still listed; the judge axis is said not held), the run-page verdict card carries the
+    same line, and the narrator says "Gate UNGATED on <phase> — <reason>; repository checks ran,
+    no distinct judge" — never "Checks ran — pass" for a judge-less gate.
+  - *Degraded councils* (F-7R2-006 / F-4R2-007): `unitDistributed.degradedReason` renders on the
+    run head (`run-degraded`: "council degraded: 4 of 5 seats benched: …", with the affected-unit
+    count) and on the routing line in the feed. The narrator now reads the camelCase
+    `agreementPct` the engine actually emits (api-types ≤ 0.35.0 declared `agreement_pct`, which
+    the wire never carried — so the pct was always missing); the snake_case read stays as the
+    fallback until the 0.36.0 pin declares camelCase.
+  - *The remote-write fence* (F-7R2-012): a `workerToolCallDenied` (a creator/evaluator seat's
+    `git push` / `gh pr create` …) renders in the feed with the seat, role, the refused command as
+    code and the remedy — the engine's, or "delivery is performed by the run's deliver phase".
+  - *Files view once the worktree is gone* (F-7R2-013): `GET /runs/:id/diff` answering
+    `source: "branch"` is labelled as the run branch vs its base (committed work shown; an empty
+    branch says so); a pre-0.36 daemon's 409 cause card names the run branch and the upgrade. The
+    run page's Files section offers **Full diff** on EVERY state — the empty one included, which
+    was exactly the completed run with no files view.
+  - Tests: the launch ladder (22), the panel (14), the gate model + cards (9), the narrator (13),
+    the files view (6), the landing card (8), the run head (6), the mirror posture (7); the
+    Playwright loopback rig `e2e/governed_testing_test.py` (fixture switch `governed_testing` /
+    `governed_testing_workflow_absent`: GET /workflows, POST /testing/author + the intake gate
+    over /ws, GET /campaigns with `test_set`, the completed run's degraded / UNGATED / refused-write
+    trail, the branch-source diff) at 1440x700 and 400px; testid inventory regenerated. Wire gaps
+    recorded for the crew PR: the recon body's `projectId` cannot express a narrowed project; the
+    campaign registration shape (`test_set`) and the `/testing/author` route are provisional names.
+  - *Pin*: `wicked-crew-api-types` **0.35.0** exact (crew#533 — published while this landed; 0.36.0,
+    the wave-6 wire, was not). The skills mirror + `tests/fixtures/api-types-0.35.0-skills.d.ts` are
+    re-vendored by label (the 0.34.0 skills and `diagnostics.skills` blocks are byte-identical in
+    0.35.0, shifted to `index.d.ts:1768-2186` / `4223-4272`); two additive catch-ups — the Health
+    rail names the widened `info` finding severity, the wave-2 fixture's `legacyOutbox` carries the
+    new required `scope`. The wave-6 mirror stays PROVISIONAL under 0.35.0 (none of its names are
+    declared there — `tests/wave6Wire.test.ts` asserts exactly that).
+  - *Skills page recovery from `GET /skills` 503* (acceptance findings F-A45-001 HIGH / F-A45-002
+    MEDIUM — the F-083 stale-rules refusal "current does not point at a valid published snapshot …
+    re-publish or remove the link"). The unavailable card used to offer only Refresh (a second 503);
+    the remedy the finding names was unreachable. It now carries the engine's word — `GET
+    /diagnostics` → `skills.state` + every `findings[]` message (`skills-recovery-finding`) — and two
+    controls with pending/result states: **Refresh baseline** (`POST /skills/refresh-baseline`) and
+    **Publish** (`POST /skills/publish`). Every mutation is CAS-guarded by the revision the 503
+    withholds, so the page learns it through `POST /skills/analyze` (the dry run reads the MANIFEST,
+    not `current`) and says so when analyze 503s too (the manifest itself is unreadable — the
+    daemon host's job). After a Refresh the baseline is STAGED and the catalog still answers 503
+    until Publish: the result renders inline ("garden 12.33.0 staged (… taken · kept · added ·
+    removed · conflicts) — publish to activate"), the engine line is re-read, the catalog is NOT
+    (F-A45-002). A Publish that writes a snapshot re-reads the catalog and flips the page to the
+    loaded state with the note; a blocked publish renders its findings on the card. A 409 says the
+    catalog moved and re-learns the revision on the next click.
+  - *One roster story on the composer and the rail* (F-A45-006 studio half). The composer's seat
+    warning derived from the `signed_in` file/env heuristic alone, so it said "codex + opencode
+    aren't signed in" while the Health rail — reading crew#533's `auth` / `council_eligible` /
+    `free_tier` — showed opencode green "no sign-in needed". Both now read the rail's
+    `seatStandingWord`: `auth: not_required` is never a sign-in problem, `auth: signed_out` warns
+    even when the heuristic is null, a daemon-declared `council_eligible: false` gets its own
+    sentence with the daemon's reason (`ineligible-warning`); a pre-0.35 roster keeps the heuristic.
+  - *`/vibe` and the Home door count what the daemon serves — without spawning a bridge per project*
+    (F-A45-008 MEDIUM, bounded by the independent review of #263, F-1/F-2). The corpus listed only
+    "projects opened this session" (the docs cache's deposits), so a fresh browser on a daemon holding
+    three documents read "DOCUMENTS 0" and Home said "Vibe 0 documents". A per-project docs GET
+    (`GET /projects/:id/interactive/api/docs`, the only per-project route) MATERIALIZES the project's
+    partition and cold-starts one `wicked-interactive` bridge (~60 s) — so NOTHING fans out on mount.
+    The one request the corpus surfaces and Home make on their own is the CHEAP daemon-wide index
+    `GET /interactive/docs` (api-types 0.36.0, the wave-6 crew PR — served from the state-home doc
+    ledgers, no bridge; presence-checked: a pre-0.36 daemon answers 404 and the corpus stays "documents
+    in opened projects (k of N)" — the honest word, never "all N projects" on the strength of unasked
+    bridges). The per-project fan-out is the operator's explicit `[load for all projects]` gesture:
+    SEQUENTIAL (one bridge at a time), the project being asked named in the progress line,
+    cancellable (`cancel` stops after the current project answers; what landed stays). A project
+    whose bridge cannot answer (503 `bridge_unavailable`) is recorded as UNREACHABLE with the daemon's
+    sentence — the label reads "N projects · M unreachable", the count excludes it, the button stays
+    live for it — never counted as "no documents". The per-project view is a FILTER chip (`All
+    projects` / one per project with live counts), the CURRENT project — read off the router's
+    pathname, so it follows navigation — first; with no project named the corpus is newest-first.
+    Home's Vibe door says "N documents in opened projects" until a census (the index, or the gesture)
+    has answered for every project. The docsCache header is amended accordingly.
+  - *Independent review of #263 (REVISE → fixes, one bundled commit)*: F-1/F-2 above; F-3 the launch
+    button is disabled ("resolving workflows…") while `GET /workflows` is pending — a click could
+    launch a silent plain run — and a failed read shows the banner before enabling the plain run as
+    an explicit choice; F-4 a NARROWED project launches through `POST /testing/author` (projectId +
+    the exact `repoRefs`) when the daemon has it, the per-run `POST /runs` fan only as the
+    route-absent fallback (recorded wire gap: that fan's `deliver: 'pr'` default appends a second
+    deliver phase to a def that already ends in one); F-5 a PASS whose frame says `judgeCli: null`
+    (the single-seat floor-only case) appends "no distinct judge reviewed this verdict (floor only)"
+    on the gate card and "— no distinct judge" in the feed; F-6 the mirror-posture test also guards
+    studio's own spellings (`test_set`, `testing/author`, `TestSetCounts`) and requires every wave-6
+    declaration inside a VERBATIM region at the pin; F-7 the mirror's `workerToolCallDenied` carries
+    `carrier` and `tool` (the feed names the tool); F-8 `ApiError.body` keeps a refusal's JSON, so a
+    skills 409's `revision` is adopted and the next click needs no second analyze; F-9 the governed
+    rig's drop-chip scene is real (the fixture project carries a `crew.repo` member); F-10 the fan
+    note says "each pauses at its own intake gate; approve them one at a time"; F-11 the degraded
+    count is distinct ords; F-12 the current project follows the router; F-13 the inventory scan
+    has a 30 s budget. *r2 (APPROVE)*: R2-1 the `/testing/author` narrowing is stated as a
+    REQUIREMENT on the crew PR (projectId = filing, repoRefs = the exact scope — not the recon
+    route's union) and guarded — an answer with more `runIds` than requested repos renders "the
+    daemon launched N runs for M requested repositories — it did not honour the narrowed scope"
+    (`testing-launch-scope-note`) and the scope is never claimed; R2-2 the Vibe tile title follows
+    the census word; R2-3 the fixture answers the daemon-wide index with Fastify's bare `Not Found`
+    so the rig exercises the presence-check's `absent` branch; R2-4 the gesture never falls back
+    to "all" silently — "every project is already listed — reload" when nothing is unknown.
+  - Tests: `SkillsPage.recovery` (9), `ChatInput.seatStanding` (5), `MadeDashboard.corpus` (12 — no
+    fan-out on mount, the index, the sequential + cancellable gesture, unreachable bridges); the
+    `/vibe` + Home loopback rig `e2e/vibe_corpus_test.py` (4/4 steps — the fresh page asks no bridge
+    beyond the board model's rooted reads, the gesture never has two docs GETs in flight); both rigs
+    accept `PLAYWRIGHT_CHANNEL` (e.g. `chrome`) to run on an installed browser when the Playwright
+    cache is absent (review R2-6 — a rig never installs anything); testid inventory regenerated.
 
 ## [0.5.6] — 2026-09-11
 _The published bundle is built against `wicked-crew-api-types` **0.34.0** — the exact

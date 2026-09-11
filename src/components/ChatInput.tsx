@@ -11,6 +11,7 @@ import { useProvenanceStore } from '../store/provenance.js';
 import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill } from '../store/retryPrefill.js';
 import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
+import { seatStandingWord } from './HealthRailSection.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { ContextPopover } from './ContextPopover.js';
 import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
@@ -836,12 +837,18 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           status: 'active', scope: `project:${lockedProjectId}`, created_at: 0, updated_at: 0 }
       : null);
 
-  // Seats routed to by this launch that the daemon observed as NOT signed in.
-  // Strictly `=== false` — `null`/absent means "unknowable cheaply", not a problem.
+  // Seats routed to by this launch that the roster says will NOT answer — read through the SAME
+  // fold the Health rail uses (`seatStandingWord`: crew#533's `auth` / `council_eligible` /
+  // `free_tier` first, the `signed_in` heuristic as the fallback — acceptance finding F-A45-006):
+  // a seat the daemon marks `auth: not_required` (opencode on its provider free tier) is NOT a
+  // sign-in problem, however `signed_in` reads, so the composer and the rail tell one story.
   // A warning only: fallbacks exist, so the launch is never blocked on it.
-  const unsignedSelected = roster.filter(
-    (s) => selectedClis.has(s.key) && s.signed_in === false,
-  );
+  const selectedStanding = roster
+    .filter((s) => selectedClis.has(s.key))
+    .map((s) => ({ seat: s, standing: seatStandingWord(s) }));
+  const unsignedSelected = selectedStanding.filter((x) => x.standing.kind === 'signed-out').map((x) => x.seat);
+  /** Seats the daemon SAYS a council would not seat (its reason, its words) — a separate sentence. */
+  const ineligibleSelected = selectedStanding.filter((x) => x.standing.kind === 'ineligible');
 
   // Delivery verdict, said out loud BEFORE the send (studio#123): with the
   // preference ON the operator must be able to READ — not hover — whether this
@@ -1154,7 +1161,26 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         </div>
       )}
 
-      {/* Seat sign-in warning — selected seats observed as signed_in === false */}
+      {/* F-A45-006: the daemon SAYS a council would not seat these — its reason, the rail's words. */}
+      {ineligibleSelected.length > 0 && (
+        <div
+          data-testid="ineligible-warning"
+          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
+          style={{
+            background: 'var(--status-gate-dim)',
+            border: '1px solid var(--status-gate-dim)',
+            color: 'var(--status-gate)',
+          }}
+        >
+          <span className="flex-1">
+            ⚠ {ineligibleSelected.map((x) => `${x.seat.key}: ${x.standing.detail}`).join(' · ')} — a council benches
+            {ineligibleSelected.length === 1 ? ' it' : ' them'}; the other seats carry the run.
+          </span>
+        </div>
+      )}
+
+      {/* Seat sign-in warning — selected seats the roster reads as signed out (the rail's fold; a
+          `not_required` seat never lands here) */}
       {unsignedSelected.length > 0 && (
         <div
           data-testid="signin-warning"

@@ -144,7 +144,10 @@ export function headingForPath(pathname: string): PathKey | null {
   // Steering). Both are still panel `testing`; the rail heading is chosen by the sub-page. The
   // retired flat `/campaigns` addresses (which redirect onto `/testing/campaigns`) map to Test.
   if (first === 'campaigns') return 'test';
-  if (first === 'testing') return second === 'campaigns' ? 'test' : 'testing';
+  // Bare `/testing` and the retired `/testing/harness` are page-less addresses `useTestingRedirect`
+  // lands on the TEST landing (F-075 / F-7R2-009) — so the rail heading follows: only `/testing/evals`
+  // is Evals.
+  if (first === 'testing') return second === 'evals' ? 'testing' : 'test';
   // `/skills` (+ any sub-address) is the skills file manager — a system section beside Steering.
   if (first === 'skills') return 'skills';
   // The retired `/wiki` + `/rules` + `/policies` panels AND the retired standalone `/proposals`

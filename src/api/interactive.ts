@@ -11,8 +11,9 @@
 // Path shapes mirror the bridge's own routing (ADR-0015): the doc registry and
 // the bus-emit bridge are top-level, while per-document state/commands live
 // under a `/d/<docId>` prefix.
-import { apiBase } from './client.js';
-import { ApiError } from './errors.js';
+import { apiBase, apiFetch } from './client.js';
+import { ApiError, isRouteAbsent } from './errors.js';
+import { docsIndexOf, type InteractiveDocsIndexRow } from './wave6-wire.js';
 import type {
   InteractiveDemoStepDraft,
   InteractiveDocCreateRequest,
@@ -270,6 +271,23 @@ const jsonPost = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.s
 /** `GET /api/docs` — the doc registry, most-recently-updated first. */
 export function listDocs(projectId: string): Promise<DocSummary[]> {
   return iFetch<DocSummary[]>(`${interactiveBase(projectId)}/api/docs`);
+}
+
+/**
+ * `GET /interactive/docs` — the DAEMON-WIDE document index (api-types 0.36.0, the wave-6 crew PR):
+ * every project's docs from the state-home doc ledgers, served by the daemon itself — no project
+ * root is resolved, no bridge is spawned (independent review of #263, F-1). Presence-checked: a
+ * pre-0.36 daemon answers the unknown-route 404 and this resolves `null` ("the index is not
+ * served"); a named refusal surfaces. PROVISIONAL row spelling — see `wave6-wire.ts`.
+ */
+export async function listAllDocs(): Promise<InteractiveDocsIndexRow[] | null> {
+  try {
+    const body = await apiFetch<unknown>('/interactive/docs');
+    return docsIndexOf(body);
+  } catch (e) {
+    if (isRouteAbsent(e)) return null;
+    throw e;
+  }
 }
 
 /** `GET /d/:docId/api/versions` — the version manifest (head + lineage). */

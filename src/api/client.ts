@@ -81,16 +81,20 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   if (!res.ok) {
     const text = await res.text();
     let msg: string;
+    let parsed: unknown;
     try {
       const body = JSON.parse(text) as { error?: unknown; message?: unknown };
+      parsed = body;
       const raw = body.error ?? body.message ?? text;
       msg = typeof raw === 'string' ? raw : JSON.stringify(raw);
     } catch { msg = text; }
     if (!msg) msg = res.statusText;
     // EC33 (DES-UX-001 §7.10): the raw `API NNN:` framing never reaches the
     // DOM — ApiError's message is the translated operator sentence; matchers
-    // read the typed `status`/`wire` fields instead of parsing a prefix.
-    throw new ApiError(res.status, msg);
+    // read the typed `status`/`wire` fields instead of parsing a prefix. The
+    // parsed body rides along for the fields a refusal carries beside its
+    // sentence (a skills 409's `revision`).
+    throw new ApiError(res.status, msg, parsed);
   }
   return res.json() as Promise<T>;
 }

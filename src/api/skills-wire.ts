@@ -1,5 +1,5 @@
 /**
- * MIRROR of wicked-crew-api-types 0.34.0 skills block (crew#531) — replace with imports from the
+ * MIRROR of wicked-crew-api-types 0.35.0 skills block (crew#531) — replace with imports from the
  * published package at release.
  *
  * Studio pins `wicked-crew-api-types` exactly; the skills contract lives in the package's skills
@@ -7,10 +7,12 @@
  * two regions copied VERBATIM from the package's `index.d.ts` between the `>>> VERBATIM` /
  * `<<< VERBATIM` markers. Nothing inside a marked region is studio's wording, and nothing may be
  * edited there: `tests/skillsWire.test.ts` pins each region byte-for-byte against the vendored
- * fixture `tests/fixtures/api-types-0.34.0-skills.d.ts`, so any drift — a hand edit here, or a
+ * fixture `tests/fixtures/api-types-0.35.0-skills.d.ts`, so any drift — a hand edit here, or a
  * re-vendored fixture from a re-minted contract — fails the suite until both sides agree again.
  *
- * 0.34.0 (F-079, crew#531, published by PR #532) is ADDITIVE over the 0.33.0 block: `SkillPortabilityReason`
+ * 0.35.0 (crew#533) carries the 0.34.0 skills block UNCHANGED — byte-identical, shifted by the wave-5 roster
+ * and chat additions above it — so this mirror is re-vendored by label only (line ranges). 0.34.0 (F-079,
+ * crew#531, published by PR #532) is ADDITIVE over the 0.33.0 block: `SkillPortabilityReason`
  * + `SkillPortability` and the optional `SkillEntry.portability` — the publisher's per-reason
  * verdict (five authoring reasons an author can fix, plus `requires-harness:claude`) with
  * `<file>:<line>` evidence. `portable` stays the admission key core reads; an older daemon simply
@@ -26,7 +28,7 @@
  * is EXCLUSIVELY a stale `expectedRevision`.
  */
 
-// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts:1716-2134 (crew#531 via PR #532) — the skills block
+// >>> VERBATIM wicked-crew-api-types@0.35.0 index.d.ts:1768-2186 (crew#531 via PR #532) — the skills block
 // ── Skills — the daemon-owned garden plugin root, published as immutable snapshots (api-types 0.28.0) ──
 //
 // api-types 0.29.0 (design amendment v3.6, crew #490): the installer-managed copy
@@ -448,7 +450,7 @@ export interface ReplaceSkillBody {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts:4106-4155 (crew#531 via PR #532) — the diagnostics skills block
+// >>> VERBATIM wicked-crew-api-types@0.35.0 index.d.ts:4223-4272 (crew#531 via PR #532) — the diagnostics skills block
 /** The skills seam's state as `GET /diagnostics` reports it (skills keystone, api-types 0.28.0). */
 export type DiagnosticsSkillsState = 'published' | 'fallback' | 'blocked' | 'config-error' | 'disabled';
 

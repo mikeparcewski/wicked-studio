@@ -595,7 +595,7 @@ export function App(): React.ReactElement {
     if (panel === 'execute' || panel === 'vibe' || panel === 'demo') {
       return (
         <div className="flex-1 overflow-y-auto" data-testid={`${panel}-dashboard`}>
-          <MadeDashboard mode={panel} runs={runs} navigate={navigate} runPath={runPath} />
+          <MadeDashboard mode={panel} runs={runs} navigate={navigate} runPath={runPath} pathname={pathname} search={search} />
         </div>
       );
     }

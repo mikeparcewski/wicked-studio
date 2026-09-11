@@ -80,16 +80,19 @@ describe('useRoute — /testing/:page', () => {
 });
 
 describe('useTestingRedirect', () => {
-  it('REPLACES a page-less testing address with the Evals landing (the renamed section home)', () => {
+  // F-075 / F-7R2-009: for two releases both page-less addresses landed on Evals (the steering-rule
+  // eval runner), so "build tests for a repo" was not findable by name. The TEST landing is the home.
+  it('REPLACES a page-less testing address with the TEST landing (/testing/campaigns), never Evals', () => {
     const navigate = vi.fn();
     renderHook(() => useTestingRedirect('testing', null, '/testing', navigate));
-    expect(navigate).toHaveBeenCalledWith('/testing/evals', { replace: true });
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns', { replace: true });
+    expect(navigate).not.toHaveBeenCalledWith('/testing/evals', expect.anything());
   });
 
-  it('REPLACES the retired /testing/harness with the Evals landing (the folded-in Harness)', () => {
+  it('REPLACES the retired /testing/harness with the TEST landing (the folded-in Harness)', () => {
     const navigate = vi.fn();
     renderHook(() => useTestingRedirect('testing', null, '/testing/harness', navigate));
-    expect(navigate).toHaveBeenCalledWith('/testing/evals', { replace: true });
+    expect(navigate).toHaveBeenCalledWith('/testing/campaigns', { replace: true });
   });
 
   it('REWRITES the retired flat campaign addresses onto /testing/campaigns, tail intact', () => {

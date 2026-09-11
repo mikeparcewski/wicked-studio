@@ -97,7 +97,10 @@ describe('T24 — the §1.5 probe states', () => {
     listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
     page();
     await waitFor(() => expect(screen.getByTestId('campaigns-empty')).toBeInTheDocument());
-    expect(screen.getByTestId('campaigns-empty').textContent).toContain('run recon over a codebase');
+    // Wave 6 (F-7R2-014): the empty state says what fills it — a New test's launch, then the
+    // produced set's counts — not "run recon".
+    expect(screen.getByTestId('campaigns-empty').textContent).toContain('New test launches it');
+    expect(screen.getByTestId('campaigns-empty').textContent).toContain('executed / passed / failed');
     fireEvent.click(screen.getByTestId('campaigns-empty-cta'));
     expect(await screen.findByTestId('testing-launch-panel')).toHaveAttribute('data-intent', 'campaign');
   });

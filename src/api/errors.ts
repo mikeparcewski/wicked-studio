@@ -41,12 +41,24 @@ export class ApiError extends Error {
   readonly status: number;
   /** The daemon's raw sentence, verbatim — matching + quoting only, never rendered bare. */
   readonly wire: string;
-  constructor(status: number, wire: string) {
+  /** The parsed JSON body of the refusal, when it was one — for the fields a refusal carries
+   *  BESIDE its sentence (crew's skills 409 `{error, revision}`: the live revision a CAS retry needs;
+   *  independent review of #263, F-8). `undefined` for a non-JSON body or a bare status. */
+  readonly body: unknown;
+  constructor(status: number, wire: string, body?: unknown) {
     super(translateWireError(status, wire));
     this.name = 'ApiError';
     this.status = status;
     this.wire = wire;
+    this.body = body;
   }
+}
+
+/** The `revision` a crew skills 409 body carries (`{error, revision}`), or `null`. */
+export function apiRevision(e: unknown): number | null {
+  if (!(e instanceof ApiError) || typeof e.body !== 'object' || e.body === null) return null;
+  const r = (e.body as Record<string, unknown>)['revision'];
+  return typeof r === 'number' && Number.isFinite(r) ? r : null;
 }
 
 /** The refusal's HTTP status, or null when `e` is not a wire refusal. */

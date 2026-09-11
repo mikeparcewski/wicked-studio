@@ -164,6 +164,8 @@ type GovernanceRead =
 const FINDING_COLOR: Record<DiagnosticsGovernanceFinding['severity'], string> = {
   error: 'var(--status-fail)',
   warning: 'var(--status-gate)',
+  // api-types 0.35.0 (crew#533) widened the union with `info` — a disclosed fact, not a warning.
+  info: 'var(--ink-muted)',
 };
 
 /** Sub-rows under a check row: `label · value`, dim mono. */

@@ -267,11 +267,32 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
             : `evaluator: ${view.evaluatorPass ? 'pass' : 'fail'} (${view.evaluatorPolicies.length} ${
                 view.evaluatorPolicies.length === 1 ? 'policy' : 'policies'
               })`}
+        {/* F-5 (independent review of #263): a PASS whose frame SAYS `judgeCli: null` — the default
+            floor ran, no distinct judge — is not evaluator ≠ creator; say so on the layers line. */}
+        {outcome === 'pass' && view.judgeReported && view.judgeCli === null && (
+          <span data-testid="gate-verdict-no-judge"> · no distinct judge reviewed this verdict (floor only)</span>
+        )}
       </p>
 
+      {/* Wave 6 (F-7R2-005, api-types 0.36.0): when the engine SAYS why the unit went ungated
+          (`ungatedReason` — "no eligible judge seat"), the line says exactly that; a floor that ran
+          is still listed above, and the judge axis is stated as not held. Older engines keep the
+          fold's own copy. */}
       {outcome === 'ungated' && (
-        <p className="text-[11px]" data-testid="gate-verdict-ungated" style={{ color: 'var(--ink-muted)' }}>
-          nothing gated this phase — it was approved by default, not verified
+        <p
+          className="text-[11px]"
+          data-testid="gate-verdict-ungated"
+          {...(view.ungatedReason !== null ? { 'data-ungated-reason': view.ungatedReason } : {})}
+          style={{ color: view.ungated ? 'var(--status-gate)' : 'var(--ink-muted)' }}
+        >
+          {view.ungated
+            ? <>
+                <span className="font-semibold">UNGATED — {view.ungatedReason ?? 'the engine convened no judge'}</span>
+                {view.hasDeterministicFloor
+                  ? ' · the repository checks above ran; no distinct judge reviewed the work, so evaluator ≠ creator is not held on this verdict'
+                  : ' · no repository checks ran and no judge reviewed the work — approved by default, not verified'}
+              </>
+            : 'nothing gated this phase — it was approved by default, not verified'}
         </p>
       )}
     </div>
