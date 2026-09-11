@@ -24,6 +24,32 @@
 
 export type RunFailureSeam = 'ask' | 'document' | 'edit' | 'demo';
 
+/**
+ * Whether the SAME ask can be re-sent from the thread for this seam (F-4R2-014, review F3). Only the
+ * chat seam listens on the wire the composer speaks (`chat.posted`); an edit batch re-posts on its
+ * own wire (`feedback.submitted`, when the thread still holds the items); a draft is launched by
+ * `doc.created` and a demo's spec by the demo surface — neither can be re-sent as a message, and
+ * re-posting the brief as a chat ask fails again with a path in the message (crew's chat seam
+ * refuses: "Crew could not read the document's current version (missing <path>)").
+ */
+export function seamRetry(seam: RunFailureSeam): 'ask' | 'batch' | 'none' {
+  return seam === 'ask' ? 'ask' : seam === 'edit' ? 'batch' : 'none';
+}
+
+/** The way back for a seam whose ask cannot be re-sent from here — said instead of a dead Retry. */
+export function seamWayBack(seam: RunFailureSeam): string | null {
+  switch (seam) {
+    case 'document':
+      return 'A draft cannot be re-sent from here — start the document again from the launch composer (your brief is above; copy it).';
+    case 'demo':
+      return 'The demo\'s spec cannot be re-sent from here — start the demo again from the launch composer, or re-record once a spec exists.';
+    case 'edit':
+      return 'Re-send the feedback from the canvas — click the block and comment again.';
+    default:
+      return null;
+  }
+}
+
 export interface RunFailure {
   /** The run the seam named — `null` never happens for a matching line, kept nullable for callers. */
   runId: string;
@@ -40,14 +66,18 @@ export interface RunFailure {
 }
 
 // The four seams' spellings (crew `interactive/*-events.ts`), one regex. The uuid is the run.
+//   chat  "The crew run answering your ask {failed|was cancelled} (run <id>).…"      (chat-events.ts)
+//   draft "The crew run answering this document {failed|was cancelled} (run <id>).…" (draft-events.ts)
+//   edit  "The crew run answering this edit {failed|was cancelled} (run <id>).…"     (edit-events.ts)
+//   demo  "The crew run authoring this demo's spec {failed|was cancelled} (run <id>).…" (demo-events.ts —
+//         a different VERB and object; the studio's own earlier spelling never matched it, F-review)
 const HEAD =
-  /^The crew run answering (your ask|this document|this edit|this demo) (failed|was cancelled) \(run ([0-9a-fA-F-]{8,})\)\.\s*(.*)$/s;
+  /^The crew run (?:answering (your ask|this document|this edit)|(authoring) this demo's spec) (failed|was cancelled) \(run ([0-9a-fA-F-]{8,})\)\.\s*(.*)$/s;
 
 const SEAM: Record<string, RunFailureSeam> = {
   'your ask': 'ask',
   'this document': 'document',
   'this edit': 'edit',
-  'this demo': 'demo',
 };
 
 /** What each seam's deliverable is called in the summary — the noun the customer used. */
@@ -96,10 +126,10 @@ export function summarize(seam: RunFailureSeam, cancelled: boolean, reason: stri
 export function parseRunFailure(text: string): RunFailure | null {
   const m = HEAD.exec(text.trim());
   if (m === null) return null;
-  const seam = SEAM[m[1] ?? ''] ?? 'ask';
-  const cancelled = m[2] === 'was cancelled';
-  const runId = m[3] ?? '';
-  let reason = (m[4] ?? '').trim();
+  const seam: RunFailureSeam = m[2] === 'authoring' ? 'demo' : (SEAM[m[1] ?? ''] ?? 'ask');
+  const cancelled = m[3] === 'was cancelled';
+  const runId = m[4] ?? '';
+  let reason = (m[5] ?? '').trim();
   reason = reason.replace(/^Reason:\s*/i, '').replace(REMEDY_TAIL, '').trim();
   const expected = EXPECTED.exec(reason)?.[1] ?? null;
   const step = stepOf(expected);

@@ -174,12 +174,13 @@ export function ExportMenu({
             Export v{version}
           </span>
         )}
-        {EXPORT_FORMATS.map((format) => (
+        {EXPORT_FORMATS.map((format) => {
           // §7.2 READY: the control that was clicked IS the download now — a real
           // anchor with the artifact's name, at the click site. The thread message
           // remains; this is the click site answering (EC37). Per format (F-4R2-016).
-          readyHere(format) !== undefined ? (
-            readyAnchor(readyHere(format)!, false)
+          const ready = readyHere(format);
+          return ready !== undefined ? (
+            readyAnchor(ready, false)
           ) : (
             <button
               key={format}
@@ -200,8 +201,8 @@ export function ExportMenu({
                 ? <span data-testid="export-pending" className="animate-pulse">{format}…</span>
                 : compact ? format : format.toUpperCase()}
             </button>
-          )
-        ))}
+          );
+        })}
         {/* VIDEO-FB: the recording is already an artifact — no render step, so it
             is a download from the start, same-origin through the project proxy. */}
         {recording !== null && (

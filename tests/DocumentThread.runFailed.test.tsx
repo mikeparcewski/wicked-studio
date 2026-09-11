@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import type { CoreEvent } from '../src/api/types.js';
 
 const postEvent = vi.fn();
+const getVersions = vi.fn();
 
 vi.mock('../src/api/interactive.js', () => ({
   UNFILED_MOUNT: 'default',
@@ -18,7 +19,7 @@ vi.mock('../src/api/interactive.js', () => ({
       event_type: 'wicked.interactive.chat.posted',
       payload: { role: 'user', text, document_id: d, source_message_id: id },
     }),
-  getVersions: vi.fn(),
+  getVersions: (...a: unknown[]) => getVersions(...a),
   interactiveUrl: (p: string, path: string) => `/api/v1/projects/${p}/interactive${path}`,
 }));
 
@@ -61,6 +62,7 @@ function mount(): void {
 beforeEach(() => {
   vi.clearAllMocks();
   postEvent.mockResolvedValue({ ok: true, event_id: 'e1', correlation_id: 'c1' });
+  getVersions.mockResolvedValue({ head: 3, versions: [] });
   useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastSignalAt: {}, boundRun: {} });
   useRunEventStore.setState({ byRun: {} });
 });
@@ -93,6 +95,10 @@ describe('the run-failed card (F-4R2-014)', () => {
     expect(visible).not.toContain('/w5/state');
     expect(visible).not.toContain('GET /api/v1/runs');
 
+    // Review F5: ONE retry affordance — the bubble above the card wears no "send failed · retry".
+    expect(screen.queryByTestId('thread-send-failed')).toBeNull();
+    expect(screen.queryByTestId('thread-send-retry')).toBeNull();
+
     // Retry — the SAME ask goes out again as a new send on the inject wire.
     const retry = within(card).getByTestId('doc-actionable-retry');
     expect(retry).toHaveAttribute('data-kind', 'resend');
@@ -114,6 +120,80 @@ describe('the run-failed card (F-4R2-014)', () => {
     const card = screen.getByTestId('doc-run-failed');
     expect(within(card).getByTestId('doc-run-failed-run')).toBeInTheDocument();
     expect(within(card).queryByTestId('doc-actionable-retry')).toBeNull();
+  });
+
+  // Review F3: Retry rides the wire that failed. A DRAFT-seam failure (the brief is the user
+  // line above) must not re-post the brief as a chat ask — crew's chat seam refuses with a path.
+  it('a draft-seam failure offers NO Retry and says the way back; the brief above wears no failed chip', () => {
+    const DRAFT_LINE =
+      `The crew run answering this document failed (run ${RUN}). Reason: [wicked-crew] deliverable floor: ` +
+      `[wicked-crew] EXPECTED: /w5/state/interactive-drafts/${DOC}/${DOC}-v1.html [wicked-crew] FOUND: (nothing). ` +
+      `Inspect it via the crew API (GET /api/v1/runs/${RUN}); the assist loop can still take over.`;
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, 'm-1', 'a two-page A4 brochure about the studio');
+    store.setGenState(KEY, 'generating');
+    store.ingest(status(DRAFT_LINE, 'error'));
+    mount();
+    const card = screen.getByTestId('doc-run-failed');
+    expect(within(card).getByTestId('doc-run-failed-summary')).toHaveTextContent('The draft step produced no file');
+    expect(within(card).queryByTestId('doc-actionable-retry')).toBeNull();
+    const way = within(card).getByTestId('doc-run-failed-wayback');
+    expect(way).toHaveAttribute('data-seam', 'document');
+    expect(way).toHaveTextContent('start the document again from the launch composer');
+    expect(screen.queryByTestId('thread-send-failed')).toBeNull();
+    expect(postEvent).not.toHaveBeenCalled();
+  });
+
+  it('a demo-seam failure (crew\'s real "authoring this demo\'s spec" sentence) renders the card, not the raw dump', () => {
+    const DEMO_LINE =
+      `The crew run authoring this demo's spec failed (run ${RUN}). Reason: worker exited 137. ` +
+      `Inspect it via the crew API (GET /api/v1/runs/${RUN}); no recording was triggered.`;
+    useDocThreadStore.getState().ingest(status(DEMO_LINE, 'error'));
+    mount();
+    const card = screen.getByTestId('doc-run-failed');
+    expect(within(card).getByTestId('doc-run-failed-summary')).toHaveTextContent('nothing changed in your demo');
+    expect(within(card).getByTestId('doc-run-failed-wayback')).toHaveAttribute('data-seam', 'demo');
+    expect(screen.queryByTestId('doc-narration')).toBeNull();
+  });
+
+  it('an edit-seam failure re-sends the SAME feedback batch on the batch wire — never as plain chat', async () => {
+    const EDIT_LINE =
+      `The crew run answering this edit failed (run ${RUN}). Reason: [wicked-crew] deliverable floor: ` +
+      `[wicked-crew] EXPECTED: /w5/state/interactive-edits/${DOC}-v3/edited-fragments.json [wicked-crew] FOUND: (nothing). ` +
+      `Inspect it via the crew API (GET /api/v1/runs/${RUN}); the assist loop can still take over.`;
+    const items = [{ wid: 'section-4', text: 'Remove the CI note', mode: 'comment' as const }];
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, 'm-1', 'Feedback on 1 place in this document:\n1. [section-4] Remove the CI note', items);
+    store.setGenState(KEY, 'generating');
+    store.ingest(status(EDIT_LINE, 'error'));
+    mount();
+    const card = screen.getByTestId('doc-run-failed');
+    const retry = within(card).getByTestId('doc-actionable-retry');
+    expect(retry).toHaveAttribute('data-kind', 'resend-batch');
+    expect(retry).toHaveTextContent('send the same feedback again (1 place)');
+    await act(async () => { fireEvent.click(retry); });
+    // Write 1: the batch event, on the head version, with the same anchors; write 2: the inject.
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(getVersions).toHaveBeenCalledWith(PROJECT, DOC);
+    const batch = postEvent.mock.calls.find((c) => (c[1] as { event_type: string }).event_type === 'wicked.interactive.feedback.submitted');
+    expect(batch).toBeDefined();
+    expect((batch![1] as { payload: Record<string, unknown> }).payload).toMatchObject({ document_id: DOC, version: 3 });
+    expect(JSON.stringify((batch![1] as { payload: Record<string, unknown> }).payload.items)).toContain('section-4');
+    const inject = postEvent.mock.calls.find((c) => (c[1] as { event_type: string }).event_type === 'wicked.interactive.chat.posted');
+    expect(inject).toBeDefined();
+    expect(useDocThreadStore.getState().genState[KEY]).toBe('generating');
+  });
+
+  it('an edit-seam failure whose batch items the thread no longer holds (a restored transcript) says the way back instead', () => {
+    const EDIT_LINE = `The crew run answering this edit failed (run ${RUN}). Reason: worker exited 1. Inspect it via the crew API (GET /api/v1/runs/${RUN}); the assist loop can still take over.`;
+    useDocThreadStore.getState().hydrate(KEY, [
+      { role: 'user', text: 'Feedback on 1 place in this document:\n1. [section-4] Remove the CI note', ts: 1 },
+      { role: 'agent', text: EDIT_LINE, ts: 2, state: 'error' },
+    ], []);
+    mount();
+    const card = screen.getByTestId('doc-run-failed');
+    expect(within(card).queryByTestId('doc-actionable-retry')).toBeNull();
+    expect(within(card).getByTestId('doc-run-failed-wayback')).toHaveTextContent('click the block and comment again');
   });
 });
 

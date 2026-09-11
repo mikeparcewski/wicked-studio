@@ -9,12 +9,14 @@ import { DemoWizard } from './DemoWizard.js';
 import { DocSubjectPicker, NO_GROUNDING_NARRATION, type DocFormat, type SubjectStatus } from './DocSubjectPicker.js';
 import { recordFromThread } from '../interactive/demoWire.js';
 import { runExport } from '../interactive/exportWire.js';
-import { retryBatchInject } from '../interactive/feedbackBatch.js';
+import { retryBatchInject, submitFeedbackBatch } from '../interactive/feedbackBatch.js';
+import { seamRetry, seamWayBack } from '../interactive/runFailure.js';
 import { scrollToWid } from '../interactive/widScroller.js';
 import { scrollStripToVersion } from './threadAnchor.js';
 import { modePath, runTimelinePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import {
-  GENERATING_SILENCE_BUDGET_MS, LIVE_RUN, nextMsgId, threadKey, useDocThreadStore, type DocMsg, type GenState,
+  GENERATING_SILENCE_BUDGET_MS, LIVE_RUN, nextMsgId, threadKey, useDocThreadStore,
+  type DocMsg, type FeedbackItem, type GenState,
 } from '../store/docThread.js';
 
 // Document mode's half of the ONE conversation (DES-MERGE-001 §2, §6.3 slice 10).
@@ -156,20 +158,28 @@ function NarrationRow({ msg, live }: { msg: Extract<DocMsg, { kind: 'narration' 
  * F-4R2-014: the crew run-failure line, for a human. The failure stands — the deliverable floor
  * did its job — but the customer reads ONE sentence (what did not happen, and that nothing in
  * the document changed), a link to the run page instead of a quoted GET, and a Retry that
- * re-sends the same ask. The raw dump (absolute paths, issue ids, the API URL) stays whole
+ * re-sends the same ask ON THE WIRE THAT FAILED (review F3): a chat ask re-posts as a chat ask;
+ * an edit batch re-posts as a batch when the thread still holds its items; a draft or a demo
+ * spec cannot be re-sent as a message, so the card says the way back instead of offering a
+ * Retry that would fail again. The raw dump (absolute paths, issue ids, the API URL) stays whole
  * behind a collapsed "details" — moved, never paraphrased away.
  */
 function RunFailedCard({
-  msg, retryText, busy, onResend, navigate,
+  msg, retry, busy, onResend, onResendBatch, navigate,
 }: {
   msg: Extract<DocMsg, { kind: 'run-failed' }>;
   /** The ask this run was answering (the nearest user message above), or null when unknown. */
-  retryText: string | null;
+  retry: { text: string; items: FeedbackItem[] | null } | null;
   busy: boolean;
   onResend: (text: string) => void;
+  onResendBatch: (items: FeedbackItem[]) => void;
   navigate: Navigate | undefined;
 }): React.ReactElement {
   const runPath = runTimelinePath(msg.runId);
+  const mode = seamRetry(msg.seam);
+  const canResendAsk = mode === 'ask' && retry !== null;
+  const canResendBatch = mode === 'batch' && retry !== null && retry.items !== null && retry.items.length > 0;
+  const wayBack = canResendAsk || canResendBatch ? null : seamWayBack(msg.seam);
   return (
     <div
       data-testid="doc-run-failed"
@@ -191,14 +201,14 @@ function RunFailedCard({
         >
           open the run
         </a>
-        {retryText !== null && (
+        {canResendAsk && (
           <button
             type="button"
             data-testid="doc-actionable-retry"
             data-kind="resend"
             disabled={busy}
             title="Send the same ask again — a new governed run answers it"
-            onClick={() => onResend(retryText)}
+            onClick={() => onResend(retry.text)}
             className="rounded-lg px-2.5 py-1 text-xs font-medium disabled:opacity-40"
             style={{ background: S.danger, color: 'var(--surface-base)', border: 'none',
                      cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
@@ -206,7 +216,27 @@ function RunFailedCard({
             {busy ? 'Sending…' : 'Retry — send the same ask again'}
           </button>
         )}
+        {canResendBatch && (
+          <button
+            type="button"
+            data-testid="doc-actionable-retry"
+            data-kind="resend-batch"
+            disabled={busy}
+            title="Send the same feedback again, on the same anchors — a new governed run answers it"
+            onClick={() => onResendBatch(retry.items ?? [])}
+            className="rounded-lg px-2.5 py-1 text-xs font-medium disabled:opacity-40"
+            style={{ background: S.danger, color: 'var(--surface-base)', border: 'none',
+                     cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+          >
+            {busy ? 'Sending…' : `Retry — send the same feedback again (${retry.items?.length ?? 0} place${(retry.items?.length ?? 0) === 1 ? '' : 's'})`}
+          </button>
+        )}
       </div>
+      {wayBack !== null && (
+        <p data-testid="doc-run-failed-wayback" data-seam={msg.seam} className="text-xs" style={{ color: S.muted, margin: 0, fontFamily: 'var(--font-sans)' }}>
+          {wayBack}
+        </p>
+      )}
       <details data-testid="doc-run-failed-details" className="text-[11px] font-mono" style={{ color: S.muted }}>
         <summary style={{ cursor: 'pointer' }}>details — the run's own report</summary>
         <pre
@@ -222,7 +252,7 @@ function RunFailedCard({
 }
 
 function Bubble({
-  msg, projectId, docId, onShowVersion, sendState, onRetrySend, live = false, retryText = null, onResend, navigate, busy = false,
+  msg, projectId, docId, onShowVersion, sendState, onRetrySend, live = false, retry = null, onResend, onResendBatch, navigate, busy = false,
 }: {
   msg: DocMsg; projectId: string; docId: string | null;
   /** The tag's cross-link (DES-UXFIX-001 §2.6 rule 2): show this version on the strip. */
@@ -233,9 +263,10 @@ function Bubble({
   onRetrySend?: (msg: Extract<DocMsg, { kind: 'user' }>) => void;
   /** F-4R2-005: this narration is the thread's newest line while it generates — its span ticks. */
   live?: boolean;
-  /** F-4R2-014: the ask a failed run was answering, for the card's Retry. */
-  retryText?: string | null;
+  /** F-4R2-014: the ask a failed run was answering (text + batch items when it was a batch), for the card's Retry. */
+  retry?: { text: string; items: FeedbackItem[] | null } | null;
   onResend?: (text: string) => void;
+  onResendBatch?: (items: FeedbackItem[]) => void;
   navigate?: Navigate | undefined;
   busy?: boolean;
 }): React.ReactElement | null {
@@ -386,9 +417,10 @@ function Bubble({
     return (
       <RunFailedCard
         msg={msg}
-        retryText={retryText}
+        retry={retry}
         busy={busy}
         onResend={(text) => onResend?.(text)}
+        onResendBatch={(items) => onResendBatch?.(items)}
         navigate={navigate}
       />
     );
@@ -971,6 +1003,26 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     }
   }
 
+  /**
+   * F-4R2-014's Retry for an EDIT-seam failure (review F3): the same feedback again, on the
+   * same anchors, over the batch wire it originally rode (`feedback.submitted` + the inject) —
+   * never re-posted as plain chat, which would lose the anchors. The batch is feedback ON the
+   * head version, read at retry time.
+   */
+  async function resendBatch(items: FeedbackItem[]): Promise<void> {
+    if (docId === null || key === null || busy || items.length === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { head } = await getVersions(projectId, docId);
+      await submitFeedbackBatch({ projectId, docId, version: head, items });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   /** F-4R2-003: the next free-looking name — `brochure` → `brochure-2`, `brochure-2` → `brochure-3`. */
   function nextName(name: string): string {
     const m = /^(.*)-(\d+)$/.exec(name);
@@ -1022,11 +1074,12 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   // the run executing (F-4R2-006). Before either the chip says what is actually
   // known: the send is out, nothing has spoken yet.
   const heardSignal = lastSignal > 0 || boundLive;
-  /** F-4R2-014: the ask a failed run was answering — the nearest user message above its card. */
-  const retryTextFor = (index: number): string | null => {
+  /** F-4R2-014: the ask a failed run was answering — the nearest user message above its card,
+   *  with its batch items when it was a feedback batch (the edit seam's retry needs them). */
+  const retryFor = (index: number): { text: string; items: FeedbackItem[] | null } | null => {
     for (let i = index - 1; i >= 0; i -= 1) {
       const m = messages[i];
-      if (m?.kind === 'user') return m.text;
+      if (m?.kind === 'user') return { text: m.text, items: m.items ?? null };
     }
     return null;
   };
@@ -1116,8 +1169,9 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
                   sendState={sendStateOf(m)}
                   onRetrySend={(msg) => void retrySend(msg)}
                   live={i === newestIndex && state === 'generating'}
-                  retryText={m.kind === 'run-failed' ? retryTextFor(i) : null}
+                  retry={m.kind === 'run-failed' ? retryFor(i) : null}
                   onResend={(askText) => void resendAsk(askText)}
+                  onResendBatch={(items) => void resendBatch(items)}
                   navigate={navigate}
                   busy={busy}
                 />

@@ -3,7 +3,7 @@
 // sentence derived from the floor's own EXPECTED path, the run id for a link, and the dump
 // kept whole for the details fold. Anything else parses to null and stays plain narration.
 import { describe, expect, it } from 'vitest';
-import { parseRunFailure, stepOf, summarize } from '../src/interactive/runFailure.js';
+import { parseRunFailure, seamRetry, seamWayBack, stepOf, summarize } from '../src/interactive/runFailure.js';
 
 const RUN = '37f020cc-e42c-48aa-b3ec-aa18ec6f9f63';
 
@@ -43,11 +43,24 @@ describe('parseRunFailure — the seams\' spelling', () => {
     expect(draft?.summary).toContain('The draft step produced no file');
     expect(draft?.summary).toContain('in your document.');
 
+    // The demo seam's REAL sentence (crew demo-events.ts): a different verb and object —
+    // "authoring this demo's spec" — the studio's earlier "answering this demo" never matched it
+    // (review F2), so a demo failure stayed the raw dump.
     const demo = parseRunFailure(
-      `The crew run answering this demo failed (run ${RUN}). Reason: deliverable floor: EXPECTED: ` +
+      `The crew run authoring this demo's spec failed (run ${RUN}). Reason: deliverable floor: EXPECTED: ` +
       `/w5/state/interactive-demos/checkout-demo-v2/demo.spec.mjs FOUND: (nothing). ` +
       `Inspect it via the crew API (GET /api/v1/runs/${RUN}); no recording was triggered.`);
+    expect(demo).not.toBeNull();
     expect(demo?.seam).toBe('demo');
+    expect(demo?.runId).toBe(RUN);
+    // …and the cancelled spelling of the same seam, with no `Reason:` at all.
+    const demoCancelled = parseRunFailure(
+      `The crew run authoring this demo's spec was cancelled (run ${RUN}). Inspect it via the crew API (GET /api/v1/runs/${RUN}); no recording was triggered.`);
+    expect(demoCancelled?.seam).toBe('demo');
+    expect(demoCancelled?.cancelled).toBe(true);
+    expect(demoCancelled?.summary).toBe('The run was cancelled before it produced anything — nothing changed in your demo.');
+    // The studio's own invented spelling is NOT a crew sentence and must not parse.
+    expect(parseRunFailure(`The crew run answering this demo failed (run ${RUN}).`)).toBeNull();
     expect(demo?.step).toBe('demo spec');
     expect(demo?.summary).toContain('in your demo.');
 
@@ -67,6 +80,17 @@ describe('parseRunFailure — the seams\' spelling', () => {
     // A floor that names no EXPECTED path still says the honest generic thing.
     expect(summarize('ask', false, 'deliverable floor: nothing declared', null))
       .toBe('The run finished without producing the new version, so this turn did not land — nothing changed in your document.');
+  });
+
+  it('Retry is routed to the wire that failed: chat re-posts, an edit re-posts its batch, a draft/demo says the way back (review F3)', () => {
+    expect(seamRetry('ask')).toBe('ask');
+    expect(seamRetry('edit')).toBe('batch');
+    expect(seamRetry('document')).toBe('none');
+    expect(seamRetry('demo')).toBe('none');
+    expect(seamWayBack('ask')).toBeNull();
+    expect(seamWayBack('document')).toContain('start the document again from the launch composer');
+    expect(seamWayBack('demo')).toContain('start the demo again');
+    expect(seamWayBack('edit')).toContain('click the block and comment again');
   });
 
   it('any other narration is NOT a run failure', () => {

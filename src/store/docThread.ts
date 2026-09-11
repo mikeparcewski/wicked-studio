@@ -19,7 +19,7 @@ import {
 import { UNFILED_MOUNT } from '../api/interactive.js';
 import type { ConversationEntry, ExportFormat } from '../api/interactive.js';
 import { describeExportReport, exportReportOf } from '../interactive/exportReport.js';
-import { parseRunFailure } from '../interactive/runFailure.js';
+import { parseRunFailure, type RunFailureSeam } from '../interactive/runFailure.js';
 import type { CoreEvent, SessionStatus, SessionView } from '../api/types.js';
 
 // ── Transcript ───────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ export type DocMsg =
   // read for a human (`parseRunFailure`): the run it names (linked, never a quoted GET), a
   // one-sentence summary, and the raw dump kept whole behind a fold. `text` is the line verbatim.
   | { kind: 'run-failed'; id: string; text: string; runId: string; cancelled: boolean;
-      summary: string; reason: string }
+      summary: string; reason: string; seam: RunFailureSeam }
   // §3.3's actionable kind: what happened, the fix NAMED verbatim, and — where the action
   // repeats — what to retry. An error with no next action is banned, so `hint` is required.
   | { kind: 'actionable'; id: string; text: string; hint: string; retry?: ExportRetry }
@@ -232,6 +232,15 @@ export const LIVE_RUN: ReadonlySet<SessionStatus> = new Set<SessionStatus>(['pla
 /** The line the thread adds when a reload finds its run still executing (client-authored, §3.3). */
 export const RESTORED_RUN_NARRATION =
   'Still in progress — a governed run picked this up before the page reloaded and is executing now.';
+/** …and when the run is parked at a human gate: it is waiting, not executing (review F4). */
+export const RESTORED_RUN_GATED_NARRATION =
+  'Still in progress — a governed run picked this up before the page reloaded and is waiting at a gate (open run).';
+
+/** The restored line for a live status — worded per status, never "executing" over a gated run. */
+export function restoredRunNarration(status: SessionStatus): string {
+  return status === 'awaiting_human' ? RESTORED_RUN_GATED_NARRATION : RESTORED_RUN_NARRATION;
+}
+const RESTORED_RUN_LINES: ReadonlySet<string> = new Set([RESTORED_RUN_NARRATION, RESTORED_RUN_GATED_NARRATION]);
 
 /**
  * F-4R2-005: fold a status line into the newest narration when it repeats it verbatim — the
@@ -259,7 +268,7 @@ function statusMessage(text: string, at: number): DocMsg {
   if (failure !== null) {
     return {
       kind: 'run-failed', id: nextMsgId(), text, runId: failure.runId, cancelled: failure.cancelled,
-      summary: failure.summary, reason: failure.reason,
+      summary: failure.summary, reason: failure.reason, seam: failure.seam,
     };
   }
   return { kind: 'narration', id: nextMsgId(), text, firstAt: at, lastAt: at };
@@ -499,14 +508,15 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
       const bound = { boundRun: { ...s.boundRun, [key]: { runId: run.session.id, status } } };
       const believedIdle = (s.genState[key] ?? 'terminal') === 'terminal';
       if (!LIVE_RUN.has(status) || !believedIdle) return bound;
-      // The run record outranks the thread's silence: it IS executing. Said once, in words.
+      // The run record outranks the thread's silence: it IS live. Said once, in words — worded
+      // per status (a run parked at a human gate is waiting, not executing; review F4).
       const thread = s.messages[key] ?? [];
-      const already = thread.some((m) => m.kind === 'narration' && m.text === RESTORED_RUN_NARRATION);
+      const already = thread.some((m) => m.kind === 'narration' && RESTORED_RUN_LINES.has(m.text));
       return {
         ...bound,
         genState: { ...s.genState, [key]: 'generating' },
         ...(already ? {} : {
-          messages: append(s.messages, key, { kind: 'narration', id: nextMsgId(), text: RESTORED_RUN_NARRATION }),
+          messages: append(s.messages, key, { kind: 'narration', id: nextMsgId(), text: restoredRunNarration(status) }),
         }),
       };
     });
@@ -609,7 +619,15 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
         // pending resolves to the VISIBLE failed state (with its retry) rather than
         // a chip that generates forever. Probe 4 (§8.4.1): the death is one
         // doc-scoped `status.posted {state:"error"}`; nothing else will answer them.
-        const backlog = state === 'error' ? new Set(s.pending[key] ?? []) : null;
+        // F-4R2-014 (review F5): when the error IS a crew run-failure line, the HEAD send did
+        // not fail — its run did, and the card that lands carries the one retry. The head
+        // resolves as answered (no `send failed` chip beside the card's Retry); only the sends
+        // queued BEHIND it — never worked — wear the failed state.
+        const runFailure = state === 'error' && text !== null && parseRunFailure(text) !== null;
+        const queueAtError = s.pending[key] ?? [];
+        const backlog = state === 'error'
+          ? new Set(runFailure ? queueAtError.slice(1) : queueAtError)
+          : null;
         const base = backlog === null || backlog.size === 0
           ? messages
           : {
@@ -625,7 +643,7 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
         // this up" at the budget). The head send resolves here, UN-TAGGED: there
         // is no landing to tag, and nothing else will answer it.
         const queue = s.pending[key] ?? [];
-        const pending = backlog !== null && backlog.size > 0
+        const pending = state === 'error' && queue.length > 0
           ? { pending: { ...s.pending, [key]: [] } }
           : state === 'complete' && queue.length > 0
             ? { pending: { ...s.pending, [key]: queue.slice(1) } }

@@ -105,19 +105,33 @@ describe('the crew run-failure line becomes the actionable run-failed kind (F-4R
     `[wicked-crew] DELIVERABLE FLOOR FAILED — the run reported done without producing the artifact(s). ` +
     `Inspect it via the crew API (GET /api/v1/runs/${RUN}), then resend the message.`;
 
-  it('live: the error frame lands as run-failed with the run id, the summary and the raw text; the send fails visibly', () => {
+  it('live: the error frame lands as run-failed with the run id, seam, summary and raw text; the HEAD send resolves (the card carries the one retry), a QUEUED send fails visibly', () => {
     useDocThreadStore.getState().addUserMsg(KEY, 'm-1', 'make the palette teal');
+    useDocThreadStore.getState().addUserMsg(KEY, 'm-2', 'and then the fonts');
     useDocThreadStore.getState().setGenState(KEY, 'generating');
     ingest(status(LINE, 'error'));
     const card = messages().find((m) => m.kind === 'run-failed') as Extract<DocMsg, { kind: 'run-failed' }>;
     expect(card).toBeDefined();
     expect(card.runId).toBe(RUN);
+    expect(card.seam).toBe('ask');
     expect(card.summary).toBe('The revise step produced no file, so this turn did not land — nothing changed in your document.');
     expect(card.text).toBe(LINE);
     expect(useDocThreadStore.getState().genState[KEY]).toBe('terminal');
-    expect((messages()[0] as Extract<DocMsg, { kind: 'user' }>).failed).toBe(true);
+    // Review F5: the head send did not fail — its RUN did; one retry, on the card, never a second
+    // "send failed · retry" chip on the bubble above it. The send queued behind it was never worked.
+    expect((messages()[0] as Extract<DocMsg, { kind: 'user' }>).failed).toBeUndefined();
+    expect((messages()[1] as Extract<DocMsg, { kind: 'user' }>).failed).toBe(true);
+    expect(useDocThreadStore.getState().pending[KEY]).toEqual([]);
     // The error is still indexed as the thread's newest failure (the brand-learn poll reads it).
     expect(useDocThreadStore.getState().lastError[KEY]?.text).toBe(LINE);
+  });
+
+  it('a plain error line (not a crew run failure) still fails the whole backlog visibly (EC36 unchanged)', () => {
+    useDocThreadStore.getState().addUserMsg(KEY, 'm-1', 'make the palette teal');
+    useDocThreadStore.getState().setGenState(KEY, 'generating');
+    ingest(status('Crew could not start a run for this document: engine busy.', 'error'));
+    expect((messages()[0] as Extract<DocMsg, { kind: 'user' }>).failed).toBe(true);
+    expect(messages().some((m) => m.kind === 'run-failed')).toBe(false);
   });
 
   it('a bound run that the seam reports failed is recorded as such', () => {

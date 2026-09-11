@@ -91,7 +91,8 @@ export interface ExportResult {
    * (`exportReportOf`). `page_size` is measured from the produced PDF (`A4 portrait`,
    * `16:9 (960 × 540 pt)`); `layout_source` says why that layout was chosen.
    */
-  layout?: 'document' | 'deck' | string;
+  /** `'document'` | `'deck'` today; typed open because a newer bridge may name another layout. */
+  layout?: string;
   layout_source?: string;
   page_size?: string;
   pages?: number;

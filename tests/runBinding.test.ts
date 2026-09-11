@@ -10,7 +10,7 @@ const listRuns = vi.fn<() => Promise<{ runs: SessionView[] }>>();
 vi.mock('../src/api/client.js', () => ({ api: { listRuns: () => listRuns() } }));
 
 const { clearRunRestores, docRunOf, isDocRun, restoreDocRun } = await import('../src/interactive/runBinding.js');
-const { RESTORED_RUN_NARRATION, threadKey, useDocThreadStore } = await import('../src/store/docThread.js');
+const { RESTORED_RUN_GATED_NARRATION, RESTORED_RUN_NARRATION, threadKey, useDocThreadStore } = await import('../src/store/docThread.js');
 
 const PROJECT = 'proj_178902523421000000';
 const DOC = 'wicked-studio-brochure-r2';
@@ -78,6 +78,19 @@ describe('restoreDocRun — adopting the record on doc open', () => {
     // Once per doc per session — a second open does not re-read the runs wire.
     await restoreDocRun(PROJECT, DOC);
     expect(listRuns).toHaveBeenCalledTimes(1);
+  });
+
+  it('a run parked at a human gate restores as "waiting at a gate", never "executing now" (review F4)', async () => {
+    listRuns.mockResolvedValue({ runs: [run('r-gated', `${STATE}/interactive-drafts/${DOC}`, 'awaiting_human')] });
+    await restoreDocRun(PROJECT, DOC);
+    const s = useDocThreadStore.getState();
+    expect(s.genState[KEY]).toBe('generating');
+    expect(s.messages[KEY]?.map((m) => ('text' in m ? m.text : m.kind))).toEqual([RESTORED_RUN_GATED_NARRATION]);
+    expect(RESTORED_RUN_GATED_NARRATION).toContain('waiting at a gate');
+    expect(RESTORED_RUN_GATED_NARRATION).not.toContain('executing');
+    // A second adoption never doubles either spelling.
+    s.adoptRun(KEY, run('r-gated', `${STATE}/interactive-drafts/${DOC}`, 'executing'));
+    expect(useDocThreadStore.getState().messages[KEY]?.filter((m) => m.kind === 'narration')).toHaveLength(1);
   });
 
   it('a terminal record only binds — the composer stays terminal and no line is added', async () => {

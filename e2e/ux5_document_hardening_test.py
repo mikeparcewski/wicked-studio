@@ -216,7 +216,12 @@ with sync_playwright() as p:
     set_fixture(ORIGIN, doc_run_ms=0, doc_heartbeat_ms=0)
 
     # ── Scene 4 (F-4R2-006): a fresh context restores generating from the run ──
-    set_fixture(ORIGIN, doc_run_ms=60000)
+    # The finding's condition is a run the thread has NOT heard: the doc is created with an
+    # instant (silent) run — v1 lands at create time, nothing narrates afterwards — while the
+    # runs wire says an executing run is bound to it. A narrating run (doc_run_ms > 0) would
+    # flip the thread to generating over WS BEFORE `GET /runs` answers, and `adoptRun` then —
+    # correctly — adds no second "Still in progress" line (review F1: the rig, not the product).
+    set_fixture(ORIGIN, doc_run_ms=0)
     doc4 = api_create_doc("w5-reload", "a brief whose run is still executing")["name"]
     set_fixture(ORIGIN, doc_bound_run={"pid": PID, "doc": doc4})
     fresh = browser.new_context(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
