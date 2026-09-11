@@ -152,6 +152,27 @@ describe('the NARROWED project (F-076 / F-7R2-010) — the fan, never the pinned
     expect(r).toMatchObject({ route: 'testing-author', workflow: 'qe-author-tests', runIds: ['r-a'] });
   });
 
+  it('R2-1: a /testing/author answer with MORE runIds than the narrowed repoRefs carries an honest scopeNote — the narrowing is never claimed', async () => {
+    wire({ '/testing/author': { runId: 'r-1', runIds: ['r-1', 'r-2', 'r-3', 'r-4'], campaign: 'author-x', campaignRegistered: true, workflow: 'qe-author-tests' } });
+    const r = await launchGovernedTest({
+      ...base, projectId: 'wicked-platform',
+      projectRepos: ['wicked-studio', 'wicked-crew', 'wicked-core', 'wicked-garden'],
+      excluded: ['wicked-crew', 'wicked-core', 'wicked-garden'],
+    });
+    expect(r.route).toBe('testing-author');
+    expect(r.scopeNote).toBe('the daemon launched 4 runs for 1 requested repository — it did not honour the narrowed scope (its /testing/author unions the project\'s members); the dropped repositories were launched too');
+  });
+
+  it('R2-1: an answer that matches the narrowed request (or fewer runs) carries no note; the fan and the plain routes never do', async () => {
+    wire({ '/testing/author': { runId: 'r-1', runIds: ['r-1'], campaign: 'a', campaignRegistered: false } });
+    const r = await launchGovernedTest({ ...base, projectId: 'p', projectRepos: ['a', 'b'], excluded: ['b'] });
+    expect(r.scopeNote).toBeNull();
+    wire({ '/runs': { runId: 'r-f' } });
+    expect((await launchGovernedTest({ ...base, projectId: 'p', projectRepos: ['a', 'b'], excluded: ['b'] })).scopeNote).toBeNull();
+    wire({ '/testing/recon': { runId: 'r-p', runIds: ['r-p'], campaign: 'x', campaignRegistered: false } });
+    expect((await launchGovernedTest({ ...base, workflow: null, explicit: ['a'] })).scopeNote).toBeNull();
+  });
+
   it('members dropped, the route ABSENT ⇒ POST /runs per REMAINING member ∪ explicit, projectId kept for filing; /testing/recon is never tried (its projectId would union the dropped members back in)', async () => {
     let n = 0;
     wire({ '/runs': () => ({ runId: `r-${++n}` }), '/testing/recon': new Error('must not be called') });

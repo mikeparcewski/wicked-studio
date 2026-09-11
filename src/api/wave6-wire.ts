@@ -44,10 +44,17 @@ import type { CoreEvent, RunDiff } from './types.js';
 export const QE_AUTHOR_TESTS_WORKFLOW_ID = 'qe-author-tests';
 
 /**
- * `POST /testing/author` body — launch the `qe-author-tests` workflow over the pinned multi-codebase
- * scope (`repoRefs` and/or `projectId`, the same fields and semantics as `TestingReconBody`) with
- * the operator's intent as the problem statement. Every sibling pauses at its intake gate
- * (`before:1`) by default; the intake card shows the planned phases + seats.
+ * `POST /testing/author` body — launch the `qe-author-tests` workflow with the operator's intent as
+ * the problem statement. Every sibling pauses at its intake gate (`before:1`) by default; the intake
+ * card shows the planned phases + seats.
+ *
+ * SCOPE SEMANTICS — a REQUIREMENT on the wave-6 crew PR, NOT the recon route's union (independent
+ * review of #263, R2-1): `repoRefs` WITH `projectId` is the EXACT set of repositories to launch over
+ * — `projectId` FILES the runs into the project and never adds its other members back in. That is
+ * what lets a narrowed project ("attach the project, drop repos", F-076) launch in ONE call with the
+ * engine's own deliver phase. `repoRefs` alone = those repos, unfiled; `projectId` alone = every
+ * member, filed (as today). Studio guards the answer: a route that returns more `runIds` than repos
+ * requested did not honour the narrowing, and the panel says so instead of claiming the scope.
  */
 export interface TestingAuthorBody {
   problem: string;

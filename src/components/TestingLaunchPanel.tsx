@@ -160,6 +160,8 @@ interface Launched {
   campaignRegistered: boolean;
   route: GovernedLaunchRoute;
   workflow: string | null;
+  /** R2-1: the daemon's answer did not honour the narrowed scope — said, never hidden. */
+  scopeNote: string | null;
 }
 
 /** The launched run's snapshot, read ONCE when its intake gate arrives — the plan's units + pool. */
@@ -342,6 +344,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
         campaignRegistered: result.campaignRegistered,
         route: result.route,
         workflow: result.workflow,
+        scopeNote: result.scopeNote,
       });
       onLaunched?.(ids);
     } catch (e) {
@@ -601,6 +604,11 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
             </p>
             {launched.ids.length > 1 && (
               <div className="flex flex-wrap gap-2">{launched.ids.map(runLink)}</div>
+            )}
+            {launched.scopeNote !== null && (
+              <p data-testid="testing-launch-scope-note" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}>
+                ⚠ {launched.scopeNote}
+              </p>
             )}
             <p data-testid="testing-launch-route" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
               {launched.workflow !== null ? (

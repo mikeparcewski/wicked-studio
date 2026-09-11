@@ -11,8 +11,8 @@
   "studioVersion": "0.5.6",
   "counts": {
     "files": 146,
-    "occurrences": 1294,
-    "static": 1115,
+    "occurrences": 1295,
+    "static": 1116,
     "dynamic": 61,
     "computed": 7
   },
@@ -6116,6 +6116,12 @@
     },
     {
       "testId": "testing-launch-route",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-scope-note",
       "files": [
         "src/components/TestingLaunchPanel.tsx"
       ]

@@ -511,12 +511,16 @@ function CorpusDashboard({ mode, navigate, pathname, search }: {
 
   // The explicit gesture: ask every project the cache does not know (or, once a census ran, every
   // project again) — SEQUENTIALLY, one bridge at a time.
+  /** Nothing left to ask: every project is listed and no census ran yet (R2-4) — the button says so. */
+  const unknownProjects = projectIds.filter((pid) => !(pid in byProject));
+  const gestureIsReload = fanoutDone || census === 'daemon' || unknownProjects.length === 0;
   const fanout = (): void => {
     const known = useDocsCache.getState();
-    const targets = known.fanoutDone || known.census === 'daemon'
-      ? projectIds
-      : projectIds.filter((pid) => !(pid in known.byProject));
-    void known.loadAll(targets.length > 0 ? targets : projectIds);
+    // A reload asks EVERY project again; a first pass asks only the projects not listed yet — exactly
+    // what the button's label and title promise (R2-4: no silent fallback to "all").
+    const targets = gestureIsReload ? projectIds : projectIds.filter((pid) => !(pid in known.byProject));
+    if (targets.length === 0) return;
+    void known.loadAll(targets);
   };
 
   const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
@@ -593,7 +597,13 @@ function CorpusDashboard({ mode, navigate, pathname, search }: {
             label={isDemo ? 'Demos' : 'Documents'}
             value={docRows.length}
             context={censusWord}
-            title={`Everything the daemon serves — every project's bridge is asked once per session (${censusWord})`}
+            title={censusKind === 'opened'
+              ? `Documents in the projects some surface opened this session (${censusWord}). "load for all projects" asks each project's bridge, one at a time.`
+              : censusKind === 'loading'
+                ? `Asking each project's bridge, one at a time — ${censusWord}`
+                : censusKind === 'partial'
+                  ? `Every project asked; the unreachable ones are named below and not counted (${censusWord})`
+                  : `Every project's documents (${censusWord})`}
             onOpen={() => { setQuery(''); setProjectChip('all'); }}
           />
         </KpiGroup>
@@ -678,14 +688,14 @@ function CorpusDashboard({ mode, navigate, pathname, search }: {
             data-testid={`${mode}-load-all`}
             data-census={fanoutDone ? 'done' : 'pending'}
             onClick={fanout}
-            title={`Ask each project's bridge for its ${isDemo ? 'demos' : 'documents'} — sequentially, one bridge cold start (~60 s) at a time; cancellable. ${fanoutDone || census === 'daemon' ? 'Asks every project again.' : 'Asks only projects not listed yet this session.'}`}
+            title={`Ask each project's bridge for its ${isDemo ? 'demos' : 'documents'} — sequentially, one bridge cold start (~60 s) at a time; cancellable. ${gestureIsReload ? 'Asks every project again.' : `Asks only the ${unknownProjects.length} project${unknownProjects.length === 1 ? '' : 's'} not listed yet this session.`}`}
             className="rounded px-2 py-0.5 transition-opacity hover:opacity-80"
             style={{
               background: 'transparent', border: '1px solid var(--surface-raised)',
               fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)', cursor: 'pointer',
             }}
           >
-            {fanoutDone ? 'reload all projects' : census === 'daemon' ? 'ask every bridge anyway' : 'load for all projects'}
+            {fanoutDone ? 'reload all projects' : census === 'daemon' ? 'ask every bridge anyway' : unknownProjects.length === 0 ? 'every project is already listed — reload' : 'load for all projects'}
           </button>
         )}
         {unreachable.length > 0 && fanoutProgress === null && (

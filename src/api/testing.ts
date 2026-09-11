@@ -242,6 +242,14 @@ export interface GovernedLaunchResult extends TestingLaunchResult {
   /** The workflow every launched run carries, or `null` for a plain run. */
   workflow: string | null;
   campaignRegistered: boolean;
+  /**
+   * An honest note about the SCOPE the daemon actually launched, when it differs from the one asked
+   * for (independent review of #263, R2-1): a `/testing/author` answer with more `runIds` than the
+   * narrowed `repoRefs` did not honour the narrowing (it unioned the project's members back in). The
+   * panel renders it beside the launched runs — the narrowed scope is never claimed. `null` when the
+   * answer matches the request.
+   */
+  scopeNote: string | null;
 }
 
 /** The repos the launch will actually cover: explicit attachments ∪ (project members − dropped). */
@@ -282,7 +290,19 @@ function normalizeRecon(raw: TestingLaunchResult, route: GovernedLaunchRoute, wo
     route,
     workflow: typeof raw['workflow'] === 'string' && raw['workflow'] !== '' ? (raw['workflow'] as string) : workflow,
     campaignRegistered: raw['campaignRegistered'] === true,
+    scopeNote: null,
   };
+}
+
+/**
+ * R2-1: the `/testing/author` answer to a NARROWED request must cover exactly the repos asked for. A
+ * daemon that unioned the project's members back in answers MORE `runIds` than repos — that is the
+ * F-076 regression arriving silently, so the note says it and the panel never claims the narrowing.
+ */
+export function narrowedScopeNote(result: GovernedLaunchResult, repos: readonly string[]): string | null {
+  const ids = result.runIds ?? [];
+  if (ids.length <= repos.length) return null;
+  return `the daemon launched ${ids.length} runs for ${repos.length} requested repositor${repos.length === 1 ? 'y' : 'ies'} — it did not honour the narrowed scope (its /testing/author unions the project's members); the dropped repositories were launched too`;
 }
 
 /**
@@ -320,6 +340,7 @@ async function launchRunsFan(scope: GovernedLaunchScope, repos: string[]): Promi
     route: 'runs-fan',
     workflow: scope.workflow,
     campaignRegistered: false,
+    scopeNote: null,
   };
 }
 
@@ -355,7 +376,9 @@ export async function launchGovernedTest(scope: GovernedLaunchScope): Promise<Go
           method: 'POST',
           body: JSON.stringify({ problem: scope.problem, projectId: scope.projectId, repoRefs: repos }),
         });
-        return normalizeRecon(r, 'testing-author', scope.workflow);
+        const out = normalizeRecon(r, 'testing-author', scope.workflow);
+        // R2-1: more runs than repos ⇒ the route unioned the members back in; say so, never claim the scope.
+        return { ...out, scopeNote: narrowedScopeNote(out, repos) };
       } catch (e) {
         if (!isRouteAbsent(e)) throw e;
       }

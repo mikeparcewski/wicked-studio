@@ -2910,6 +2910,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 return True
             self._json(200, served)
             return True
+        # Wave 6 (review R2-3): the daemon-wide document index (`GET /interactive/docs`, api-types
+        # 0.36.0) is ABSENT on this fixture the way it is on a pre-0.36 daemon — Fastify's BARE
+        # unknown-route body, the exact shape `isRouteAbsent` recognises — so the studio's
+        # presence-check takes its `absent` branch here, not the named-refusal one.
+        if path == "/api/v1/interactive/docs":
+            self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
+            return True
         if path.startswith("/api/v1/"):
             self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             return True

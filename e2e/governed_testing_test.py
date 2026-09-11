@@ -31,7 +31,7 @@ Captures (device_scale_factor=1) into e2e/shots/governed-testing/:
 Prereqs: Python Playwright with Chromium installed (never installed here). Builds
 dist-sameorigin/ itself unless SKIP_STUDIO_BUILD=1 — ensure_build CACHES: delete a stale
 dist-sameorigin/ when the source changed. Env knobs: FEEDBACK_PORT (default 4436),
-SKIP_STUDIO_BUILD. Prints a JSON report to stdout; exit 0/1.
+SKIP_STUDIO_BUILD, PLAYWRIGHT_CHANNEL (e.g. `chrome`). Prints a JSON report to stdout; exit 0/1.
 """
 
 import json
@@ -89,7 +89,10 @@ def text(page, selector: str) -> str:
 
 
 with sync_playwright() as p:
-    browser = p.chromium.launch()
+    # PLAYWRIGHT_CHANNEL (review R2-6): run on an installed browser channel (`chrome`, `msedge`)
+    # when the Playwright browser cache is absent on the host — nothing is installed by a rig.
+    channel = os.environ.get("PLAYWRIGHT_CHANNEL")
+    browser = p.chromium.launch(channel=channel) if channel else p.chromium.launch()
     ctx = browser.new_context(viewport={"width": 1440, "height": 700}, device_scale_factor=1)
     page = ctx.new_page()
     posted: list = []

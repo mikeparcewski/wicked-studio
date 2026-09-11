@@ -143,12 +143,20 @@ npm publish dates. Every version listed here exists on
     rig's drop-chip scene is real (the fixture project carries a `crew.repo` member); F-10 the fan
     note says "each pauses at its own intake gate; approve them one at a time"; F-11 the degraded
     count is distinct ords; F-12 the current project follows the router; F-13 the inventory scan
-    has a 30 s budget.
+    has a 30 s budget. *r2 (APPROVE)*: R2-1 the `/testing/author` narrowing is stated as a
+    REQUIREMENT on the crew PR (projectId = filing, repoRefs = the exact scope — not the recon
+    route's union) and guarded — an answer with more `runIds` than requested repos renders "the
+    daemon launched N runs for M requested repositories — it did not honour the narrowed scope"
+    (`testing-launch-scope-note`) and the scope is never claimed; R2-2 the Vibe tile title follows
+    the census word; R2-3 the fixture answers the daemon-wide index with Fastify's bare `Not Found`
+    so the rig exercises the presence-check's `absent` branch; R2-4 the gesture never falls back
+    to "all" silently — "every project is already listed — reload" when nothing is unknown.
   - Tests: `SkillsPage.recovery` (9), `ChatInput.seatStanding` (5), `MadeDashboard.corpus` (12 — no
     fan-out on mount, the index, the sequential + cancellable gesture, unreachable bridges); the
     `/vibe` + Home loopback rig `e2e/vibe_corpus_test.py` (4/4 steps — the fresh page asks no bridge
-    beyond the board model's rooted reads, the gesture never has two docs GETs in flight); testid
-    inventory regenerated.
+    beyond the board model's rooted reads, the gesture never has two docs GETs in flight); both rigs
+    accept `PLAYWRIGHT_CHANNEL` (e.g. `chrome`) to run on an installed browser when the Playwright
+    cache is absent (review R2-6 — a rig never installs anything); testid inventory regenerated.
 
 ## [0.5.6] — 2026-09-11
 _The published bundle is built against `wicked-crew-api-types` **0.34.0** — the exact
