@@ -78,6 +78,13 @@ npm publish dates. Every version listed here exists on
     trail, the branch-source diff) at 1440x700 and 400px; testid inventory regenerated. Wire gaps
     recorded for the crew PR: the recon body's `projectId` cannot express a narrowed project; the
     campaign registration shape (`test_set`) and the `/testing/author` route are provisional names.
+  - *Pin*: `wicked-crew-api-types` **0.35.0** exact (crew#533 — published while this landed; 0.36.0,
+    the wave-6 wire, was not). The skills mirror + `tests/fixtures/api-types-0.35.0-skills.d.ts` are
+    re-vendored by label (the 0.34.0 skills and `diagnostics.skills` blocks are byte-identical in
+    0.35.0, shifted to `index.d.ts:1768-2186` / `4223-4272`); two additive catch-ups — the Health
+    rail names the widened `info` finding severity, the wave-2 fixture's `legacyOutbox` carries the
+    new required `scope`. The wave-6 mirror stays PROVISIONAL under 0.35.0 (none of its names are
+    declared there — `tests/wave6Wire.test.ts` asserts exactly that).
 
 ## [0.5.6] — 2026-09-11
 _The published bundle is built against `wicked-crew-api-types` **0.34.0** — the exact

@@ -1,4 +1,4 @@
-// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts:1716-2134 (crew#531 via PR #532) — the skills block
+// >>> VERBATIM wicked-crew-api-types@0.35.0 index.d.ts:1768-2186 (crew#531 via PR #532) — the skills block
 // ── Skills — the daemon-owned garden plugin root, published as immutable snapshots (api-types 0.28.0) ──
 //
 // api-types 0.29.0 (design amendment v3.6, crew #490): the installer-managed copy
@@ -420,7 +420,7 @@ export interface ReplaceSkillBody {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts:4106-4155 (crew#531 via PR #532) — the diagnostics skills block
+// >>> VERBATIM wicked-crew-api-types@0.35.0 index.d.ts:4223-4272 (crew#531 via PR #532) — the diagnostics skills block
 /** The skills seam's state as `GET /diagnostics` reports it (skills keystone, api-types 0.28.0). */
 export type DiagnosticsSkillsState = 'published' | 'fallback' | 'blocked' | 'config-error' | 'disabled';
 
