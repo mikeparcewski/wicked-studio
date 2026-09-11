@@ -988,22 +988,26 @@ export function CenterDashboard({
   // project reload: `useRuns` restores the run list and the gate prompt, but only the run page's
   // route hydrates `/runs/:id/events`) — else the inbox card's verdict block, which reads that
   // log, would be empty for an evaluation that is durably recorded (Copilot on #252). Bounded the
-  // way `useBoardModel`'s failed-run backfill is: once per run id per mount, and only for runs
-  // that currently hold a gate (a paused run has exactly one), so the list surface's request
-  // budget stays O(open gates), not O(rows). No "already has frames" shortcut: after a reconnect
-  // the live slice may hold only the new `awaitingHuman` while the `gateEvaluated` that opened it
-  // was recorded before the socket came up, so presence of a frame proves nothing about the
-  // history — the once-per-id guard alone bounds the requests, and `hydrate` merges live frames
-  // by fingerprint, so nothing is double-counted. Depends on `openGates` only (the store is read
-  // inside), so a busy dashboard does not rescan its gates on every structured frame. Degrades
-  // silently — an api surface without `getRunEvents`, a 503 (no event-log binding) or an empty
-  // history leaves the card promptless, never wrong.
+  // way `useBoardModel`'s failed-run backfill is: once per GATE INSTANCE (run id + ord + the
+  // moment it opened) per mount, and only for runs that currently hold a gate (a paused run has
+  // exactly one), so the list surface's request budget stays O(gates opened), not O(rows) — and a
+  // run that opens a second gate while the dashboard stays mounted (a retry of the same ord
+  // included) refreshes its durable prefix, so a reconnect gap between the two can never leave the
+  // earlier attempt's verdict standing under the new gate. No "already has frames" shortcut: after
+  // a reconnect the live slice may hold only the new `awaitingHuman` while the `gateEvaluated` that
+  // opened it was recorded before the socket came up, so presence of a frame proves nothing about
+  // the history — the per-instance guard alone bounds the requests, and `hydrate` merges live
+  // frames by fingerprint, so nothing is double-counted. Depends on `openGates` only (the store
+  // is read inside), so a busy dashboard does not rescan its gates on every structured frame.
+  // Degrades silently — an api surface without `getRunEvents`, a 503 (no event-log binding) or
+  // an empty history leaves the card promptless, never wrong.
   const gateBackfilled = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const g of openGates) {
       const id = g.runId;
-      if (gateBackfilled.current.has(id)) continue;
-      gateBackfilled.current.add(id);
+      const instance = `${id}:${g.ord}:${g.receivedAt}`;
+      if (gateBackfilled.current.has(instance)) continue;
+      gateBackfilled.current.add(instance);
       try {
         api
           .getRunEvents(id)

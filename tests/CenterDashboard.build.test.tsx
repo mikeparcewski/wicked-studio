@@ -11,7 +11,7 @@
  *   - the gate inbox appears only when a gate is pending (W4).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import {
   BUILD_PURPOSE,
   CenterDashboard,
@@ -250,6 +250,25 @@ describe('the gate inbox (W4, §2.7 rule 5)', () => {
     // The live frame that raced the backfill is still in the merged log exactly once (fingerprint merge).
     const merged = useRunEventStore.getState().byRun[GATE_RUN] ?? [];
     expect(merged.filter((e) => e.type === 'awaitingHuman' && e.ord === G4_GATE.ord)).toHaveLength(1);
+  });
+
+  it('the backfill is keyed by GATE INSTANCE: a second gate on the same run re-fetches once, a re-render of the same gate never (Copilot on #252)', async () => {
+    getRunEvents.mockImplementation(async (id) => ({ events: id === GATE_RUN ? G4_EVENTS : [] }));
+    const first = { runId: GATE_RUN, ord: G4_GATE.ord, prompt: G4_GATE.prompt, lifecycle: 'open', receivedAt: 1 };
+    useGateStore.setState({ gates: { [GATE_RUN]: first } });
+    dash([makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS)]);
+    await screen.findByTestId('gate-verdict');
+    expect(getRunEvents).toHaveBeenCalledTimes(1);
+
+    // The same gate, re-set (a store rebuild / a re-render): no second fetch.
+    act(() => useGateStore.setState({ gates: { [GATE_RUN]: { ...first } } }));
+    expect(getRunEvents).toHaveBeenCalledTimes(1);
+
+    // The run answers and opens ANOTHER gate — the retry of the same ord, later — while the
+    // dashboard stays mounted: a fresh instance, so the durable prefix is refreshed exactly once
+    // more (a reconnect gap between the two gates can never leave the old verdict standing).
+    act(() => useGateStore.setState({ gates: { [GATE_RUN]: { ...first, receivedAt: 2 } } }));
+    expect(getRunEvents).toHaveBeenCalledTimes(2);
   });
 
   it('the inbox card renders NO verdict block when the run has no evaluation in its log yet', () => {
