@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.5",
   "counts": {
-    "files": 142,
-    "occurrences": 1228,
-    "static": 1054,
+    "files": 143,
+    "occurrences": 1237,
+    "static": 1063,
     "dynamic": 59,
     "computed": 7
   },
@@ -5264,6 +5264,60 @@
       "testId": "steering-provenance-ui",
       "files": [
         "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign-benched",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign-error",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign-none",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign-option",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign-retry",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign-row",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign-seat",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign-status",
+      "files": [
+        "src/components/ReassignControl.tsx"
       ]
     },
     {

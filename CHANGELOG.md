@@ -18,29 +18,19 @@ npm publish dates. Every version listed here exists on
   `POST /api/v1/runs/:id/reassign {cli}` by hand, five times, racing the re-dispatch window. Both
   gate cards (the run page's `SteeringGate`, the landing inbox's card) now carry `ReassignControl`:
   the run's OTHER seats (`session.clis` minus the seat that failed the unit) with the roster's word
-  on each — signed-in first, signed-out labelled "will be benched", inactive last — and one
-  action that approves the retry (the steer text rides it), waits for the run to resume
-  (`GET /runs/:id` until `executing`, bounded — the daemon reassigns only an executing run), then
-  calls the existing `POST /runs/:id/reassign {cli}` (`api.reassignRun`). Every step is stated
+  on each — signed-in first, a seat with no sign-in observed hedged as "may fail or be benched"
+  (today's roster carries no council-eligibility field; crew#533's `auth` / `council_eligible` /
+  `council_ineligible_reason` / `free_tier` are read when a daemon sends them — `seatStanding`),
+  inactive last, daemon-declared ineligible after that — and one action that approves the retry
+  (the steer text rides it), waits for the run to resume (`GET /runs/:id` until `executing`, 30 s
+  bounded — the daemon reassigns only an executing run), then calls the existing
+  `POST /runs/:id/reassign {cli}` (`api.reassignRun`). Every step is stated
   (`steering-reassign-status`); a refused reassign leaves the approve standing, shows the daemon's
   sentence and offers the reassign alone again. Plain Approve is relabelled "Approve (retry on
-  <seat>)" on that gate. Recorded on the steering timeline as `reassign`. (Wire gap, recorded: the
-  reassign route refuses an `awaiting_human` run, so the approve must precede it.)
-
-### Fixed
-- **The gate card's verdict block is about THIS gate's unit** (F-7R2-018): on an escalation gate
-  about unit N the block rendered the LAST `gateEvaluated` at or below N — unit N−1's vacuous pass
-  under a card about the unit that failed. `gateVerdictFor` keys an escalation gate ("Unit N failed
-  and triage escalated" / "Unit N verdict is NOT PASS") on unit N's own evaluation and renders no
-  block when there is none; a pre-run gate keeps the previous phase's verdict (F-3R2-006).
-- **Narration never says "Checks ran" without a floor** (F-7R2-017): a `gateEvaluated` with
-  `hasDeterministicFloor: false` reads "Gate passed without checks on <phase> (ungated)" (no judge,
-  no policy), "Judge passed <phase> — no repository checks ran", or "Evaluator policy passed …";
-  a denial without a floor reads "Gate denied on <phase>: … — no repository checks ran". A frame
-  without the field (an older engine) keeps the legacy wording.
-- Tests: `gateVerdictModel.escalation`, `SteeringGate.reassign`, `CenterDashboard.reassign`;
-  `narrator.test` gains the floor/no-floor cases.
-
+  <seat>)" on that gate. A host without the run view (the steering-author and testing-launch panels)
+  reads the run once for its pool on a failure escalation only. Recorded on the steering timeline as
+  `reassign`. (Wire gap, recorded: the reassign route refuses an `awaiting_human` run, so the approve
+  must precede it.)
 - **The wicked-core#431 wire on the gate, the delivery card, the run head and the feed** (#250/#431
   consumer follow-through — pins `wicked-crew-api-types` 0.33.0, the wire wicked-crew#527 publishes).
   Every field is read off the frames the daemon sends and rendered only when present, so an older
@@ -114,6 +104,22 @@ npm publish dates. Every version listed here exists on
   (hover = the reason's one clause), and a `portability` verdict that disagrees with `portable` is
   named — `data-contradiction` on the row and badge, a hint line in the drawer — never swallowed and
   never a different badge (`portable` stays the admission key).
+
+### Fixed
+- **The gate card's verdict block is about THIS gate's unit** (F-7R2-018): on an escalation gate
+  about unit N the block rendered the LAST `gateEvaluated` at or below N — unit N−1's vacuous pass
+  under a card about the unit that failed. `gateVerdictFor` keys an escalation gate ("Unit N failed
+  and triage escalated" / "Unit N verdict is NOT PASS") on unit N's own evaluation AND its latest
+  attempt (the last `unitDispatched` for N — an earlier attempt's denial is not this gate's) and
+  renders no block when there is none; a pre-run gate keeps the previous phase's verdict
+  (F-3R2-006). The block carries `data-phase-attempt`.
+- **Narration never says "Checks ran" without a floor** (F-7R2-017): a `gateEvaluated` with
+  `hasDeterministicFloor: false` reads "Gate passed without checks on <phase> (ungated)" (no judge,
+  no policy), "Judge passed <phase> — no repository checks ran", or "Evaluator policy passed …";
+  a denial without a floor reads "Gate denied on <phase>: … — no repository checks ran". A frame
+  without the field (an older engine) keeps the legacy wording.
+- Tests: `gateVerdictModel.escalation`, `SteeringGate.reassign`, `CenterDashboard.reassign`;
+  `narrator.test` gains the floor/no-floor cases.
 
 ## [0.5.5] — 2026-09-11
 ### Added
@@ -608,7 +614,6 @@ npm publish dates. Every version listed here exists on
   `/policies` redirects to `/steering`), and the context-free **Domain** and **Coverage**
   Settings panels (`/domain` and `/coverage` redirect to `/system`; per-run coverage evidence
   keeps its home in the run view; the project-scoped successor is tracked in #157/#158) (#156).
-
 
 ## [0.4.2] — 2026-08-30
 

@@ -140,6 +140,13 @@ export interface GateVerdictView {
   judgeCli: string | null;
   /** Whether that judge seat was identity-distinct from the work's author; `null` when unknown. */
   judgeDistinct: boolean | null;
+  /**
+   * The ATTEMPT this evaluation judged — the `attempt` of the nearest `unitDispatched` for the same
+   * ord before it (`gateEvaluated` itself carries none). `null` when no dispatch frame precedes it
+   * in the log. An escalation gate is about the LATEST attempt (F-7R2-018): an earlier attempt's
+   * verdict is not this gate's.
+   */
+  attempt: number | null;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
@@ -254,6 +261,17 @@ function nearestBefore(events: readonly CoreEvent[], before: number, type: strin
  * evaluation in the log), with its floor and mutation evidence attached. `null` when the log
  * holds no qualifying `gateEvaluated`.
  */
+/** The `attempt` of the nearest `unitDispatched` for `ord` BEFORE index `before` (exclusive; the whole
+ *  log when `before` is omitted), or `null` when none precedes — which attempt a frame at `before`
+ *  belongs to. */
+export function attemptBefore(events: readonly CoreEvent[], ord: number, before: number = events.length): number | null {
+  for (let i = Math.min(before, events.length) - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.type === 'unitDispatched' && e.ord === ord && typeof e.attempt === 'number') return e.attempt;
+  }
+  return null;
+}
+
 export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): GateVerdictView | null {
   let idx = -1;
   for (let i = 0; i < events.length; i++) {
@@ -304,6 +322,7 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
     restore: restoreFrame === null ? null : restoreOf(restoreFrame),
     judgeCli: str(ev.judgeCli),
     judgeDistinct: typeof ev.judgeDistinct === 'boolean' ? ev.judgeDistinct : null,
+    attempt: ord === null ? null : attemptBefore(events, ord, idx),
   };
 }
 
@@ -327,13 +346,20 @@ export function escalationUnit(prompt: string | undefined): number | null {
  * worker failure leaves no `gateEvaluated` for N and the last-at-or-below lookup fell through
  * to N-1. A pre-run gate ("Approve unit N before it runs") keeps the previous phase's verdict —
  * that IS what the operator is approving (F-3R2-006). No verdict for THAT unit ⇒ no block.
+ *
+ * Keyed on ord AND attempt: an escalation is about the LATEST attempt of unit N (the last
+ * `unitDispatched` for N), so a verdict that judged an EARLIER attempt — attempt 1 denied, attempt 2's
+ * worker then failed — is not this gate's either, and is dropped the same way.
  */
 export function gateVerdictFor(events: readonly CoreEvent[], gateOrd: number | undefined, prompt: string | undefined): GateVerdictView | null {
   if (typeof gateOrd !== 'number') return null;
   const view = gateVerdict(events, gateOrd);
   if (view === null) return null;
   const unit = escalationUnit(prompt);
-  if (unit !== null && view.ord !== unit) return null;
+  if (unit === null) return view;
+  if (view.ord !== unit) return null;
+  const latest = attemptBefore(events, unit);
+  if (latest !== null && view.attempt !== null && view.attempt !== latest) return null;
   return view;
 }
 
@@ -356,18 +382,53 @@ export interface ReassignCandidate {
   cli: string;
   /** The roster's display name, or the seat key when the roster is cold. */
   label: string;
-  /** `ready` (signed in, not inactive) · `unknown` (no roster word) · `signed-out` (a council benches it) · `inactive`. */
-  state: 'ready' | 'unknown' | 'signed-out' | 'inactive';
+  /** `ready` (signed in, or no sign-in needed; not inactive) · `unknown` (no roster word) ·
+   *  `signed-out` (no sign-in observed — may fail or be benched) · `inactive` · `ineligible` (the
+   *  daemon SAYS a council would not seat it — api-types 0.35.0 `council_eligible: false`). */
+  state: 'ready' | 'unknown' | 'signed-out' | 'inactive' | 'ineligible';
   /** The suffix the picker shows after the name — empty when nothing follows from the roster. */
   note: string;
 }
 
-const CANDIDATE_RANK: Record<ReassignCandidate['state'], number> = { ready: 0, unknown: 1, 'signed-out': 2, inactive: 3 };
+const CANDIDATE_RANK: Record<ReassignCandidate['state'], number> = { ready: 0, unknown: 1, 'signed-out': 2, inactive: 3, ineligible: 4 };
+
+/**
+ * The seat's standing as far as the wire SAYS it (never inferred): today's roster carries
+ * `signed_in` (a file/env heuristic) and `health`; crew#533 (api-types 0.35.0) adds `auth`
+ * (`signed_in | signed_out | not_required | unknown`), `free_tier`, `council_eligible` and
+ * `council_ineligible_reason` — read off the seat bag when present, so a daemon that states what a
+ * council would do is believed and one that does not gets the hedged words. The wire pinned by the
+ * phase2-r2 rig is the reason for the hedge: opencode read `signed_in:false` and still answered a
+ * chat on its provider free tier — "councils bench this seat" is not a fact today's roster carries.
+ */
+export function seatStanding(seat: RosterSeat | undefined): { state: ReassignCandidate['state']; note: string } {
+  if (seat === undefined) return { state: 'unknown', note: '' };
+  if (seat.health?.status === 'inactive') {
+    return { state: 'inactive', note: `inactive${seat.health.message ? `: ${seat.health.message}` : ''}` };
+  }
+  const bag = seat as Record<string, unknown>;
+  const eligible = bag['council_eligible'];
+  const auth = bag['auth'];
+  const reason = bag['council_ineligible_reason'];
+  if (eligible === false) {
+    return { state: 'ineligible', note: typeof reason === 'string' && reason !== '' ? reason : 'a council would not seat it' };
+  }
+  if (auth === 'not_required') {
+    const tier = bag['free_tier'];
+    return { state: 'ready', note: `no sign-in needed${typeof tier === 'string' && tier !== '' ? ` (${tier})` : ''}` };
+  }
+  if (auth === 'signed_in' || seat.signed_in === true) return { state: 'ready', note: '' };
+  if (auth === 'signed_out' || seat.signed_in === false) {
+    return { state: 'signed-out', note: eligible === true ? 'no sign-in observed — still council-eligible' : 'no sign-in observed — may fail or be benched' };
+  }
+  return { state: 'unknown', note: '' };
+}
 
 /**
  * The run's OTHER seats, ordered by what the roster says: signed-in seats first, then seats the
- * roster cannot vouch for, then signed-out seats ("will be benched" — the council rule), then
- * inactive ones. The failed seat is excluded: re-dispatching to it is what plain Approve does.
+ * roster cannot vouch for, then seats with no sign-in observed (hedged — see `seatStanding`), then
+ * inactive, then seats the daemon says a council would not seat. The failed seat is excluded:
+ * re-dispatching to it is what plain Approve does.
  */
 export function reassignCandidates(
   pool: readonly string[],
@@ -380,13 +441,7 @@ export function reassignCandidates(
     if (cli === failedCli || seen.has(cli)) continue;
     seen.add(cli);
     const seat = roster?.find((s) => s.key === cli);
-    const inactive = seat?.health?.status === 'inactive';
-    const state: ReassignCandidate['state'] = inactive
-      ? 'inactive'
-      : seat?.signed_in === true ? 'ready' : seat?.signed_in === false ? 'signed-out' : 'unknown';
-    const note = state === 'inactive'
-      ? `inactive${seat?.health?.message ? `: ${seat.health.message}` : ''}`
-      : state === 'signed-out' ? 'signed out — will be benched' : '';
+    const { state, note } = seatStanding(seat);
     out.push({ cli, label: seat?.display_name ?? cli, state, note });
   }
   return out.sort((a, b) => CANDIDATE_RANK[a.state] - CANDIDATE_RANK[b.state] || pool.indexOf(a.cli) - pool.indexOf(b.cli));

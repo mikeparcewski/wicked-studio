@@ -50,6 +50,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       data-testid="gate-verdict"
       data-verdict={outcome}
       {...(view.ord !== null ? { 'data-phase-ord': view.ord } : {})}
+      {...(view.attempt !== null ? { 'data-phase-attempt': view.attempt } : {})}
       {...(view.denial !== null && view.denial.source !== null ? { 'data-denial-source': view.denial.source } : {})}
       className="rounded-lg p-2.5 mb-3 flex flex-col gap-1 font-mono"
       style={{ background: toneDim, border: `1px solid ${toneDim}` }}

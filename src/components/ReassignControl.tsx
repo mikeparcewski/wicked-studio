@@ -23,7 +23,10 @@ import { reassignCandidates } from './gateVerdictModel.js';
  * Every step is stated on the card as it happens; a reassign that the daemon refuses leaves the
  * approve standing (it already happened — said so), shows the daemon's sentence and offers the
  * reassign alone again. The seat list is the run's OWN pool minus the failed seat, each with the
- * roster's word (signed in first; signed-out seats say "will be benched" — the council rule).
+ * roster's word (signed in first; a seat with no sign-in observed says "may fail or be benched" —
+ * hedged, because today's roster carries no council-eligibility field and the phase2-r2 rig saw a
+ * "signed out" seat answer on a free tier; crew#533's `council_eligible` / `auth` are read when a
+ * daemon sends them — `seatStanding`).
  *
  * Wire gap, recorded: the reassign route only targets an `executing` run, so the approve must
  * precede it and the window between the two is the engine's re-dispatch — crew letting
@@ -47,8 +50,10 @@ export interface ReassignControlProps {
 
 type Phase = 'idle' | 'approving' | 'waiting' | 'reassigning' | 'done' | 'failed';
 
-/** How many status reads the resume wait makes before giving up (× the poll interval). */
-export const RESUME_POLLS = 24;
+/** How many status reads the resume wait makes before giving up (× the poll interval): 60 × 500 ms =
+ *  30 s — a council spike can hold the approve→executing hop past 10 s, and a give-up costs the
+ *  operator the "reassign again" click. */
+export const RESUME_POLLS = 60;
 
 /** The resume wait's poll interval — one knob, so tests do not wait real seconds. */
 export const reassignPolling = { intervalMs: 500 };
@@ -187,9 +192,11 @@ export function ReassignControl({
           {busy ? 'Reassigning…' : `Reassign to ${chosen?.label ?? seat} + retry`}
         </button>
       </div>
-      {chosen !== undefined && chosen.state === 'signed-out' && phase === 'idle' && (
-        <p data-testid="steering-reassign-benched" style={{ ...mono, color: 'var(--status-gate)', margin: 0 }}>
-          {chosen.label} is signed out — a council benches it; the retry may fall back or fail there.
+      {chosen !== undefined && (chosen.state === 'signed-out' || chosen.state === 'ineligible') && phase === 'idle' && (
+        <p data-testid="steering-reassign-benched" data-state={chosen.state} style={{ ...mono, color: 'var(--status-gate)', margin: 0 }}>
+          {chosen.state === 'ineligible'
+            ? `${chosen.label}: the daemon says a council would not seat it (${chosen.note}) — the retry may be refused there.`
+            : `${chosen.label}: no sign-in observed — the retry may fail at spawn or be benched there; a provider free tier may still answer (the roster cannot tell yet).`}
         </p>
       )}
       {statusWord[phase] !== null && (

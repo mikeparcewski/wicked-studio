@@ -75,6 +75,21 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // a rebase conflict), which is why the control is also gated on `lift === null` at the render.
   const escalation = isFailureEscalation(prompt, verdict);
   const failedCli = typeof ord === 'number' ? (units ?? EMPTY_UNITS).find((u) => u.ord === ord)?.assigned_cli ?? null : null;
+  // A host without the run view (the steering-author and testing-launch panels hold only the run
+  // id + the gate) reads the run ONCE for its seat pool when — and only when — the gate is a failure
+  // escalation the lever applies to. Zero reads on every other gate; a failed read offers no lever.
+  const [fetchedClis, setFetchedClis] = useState<readonly string[] | null>(null);
+  const wantsPool = escalation && clis === undefined;
+  useEffect(() => {
+    if (!wantsPool) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getRun(runId))
+      .then(({ run }) => { if (!cancelled) setFetchedClis(Array.isArray(run.session.clis) ? run.session.clis : []); })
+      .catch(() => { /* no pool known — the card keeps Approve / Reject / Cancel, nothing invented */ });
+    return () => { cancelled = true; };
+  }, [wantsPool, runId]);
+  const pool = clis ?? fetchedClis;
   // The deliver lift's story for THIS ord (wicked-core#431 / F-3R2-013): a gate opened on a deliver
   // unit the engine refused (LIFT-CONFLICT, a failed re-verify, a HEAD off the run branch) renders
   // what the lift did and the engine's remedy on the card. A pre-run deliver gate has no deliver-ord
@@ -370,18 +385,17 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       {/* F-7R2-007: on a failure escalation, the seat lever — approve the retry, then move the
           unit to a seat that is not the one that just failed (crew's reassign route). The steer
           text rides the approve here too. */}
-      {escalation && clis !== undefined && lift === null && (
+      {escalation && pool !== null && lift === null && (
         <ReassignControl
           runId={runId}
           ord={ord}
-          pool={clis}
+          pool={pool}
           failedCli={failedCli}
           amend={amend}
-          onDone={(cli) => {
+          onDone={() => {
             useAnnotationStore.getState().clearDraft(runId);
             clearGate(runId);
             onResolved?.();
-            void cli;
           }}
         />
       )}

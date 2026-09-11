@@ -179,8 +179,9 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
       // F-7R2-017: "Checks ran" only when the frame SAYS a deterministic floor ran
       // (`hasDeterministicFloor: true` — the repository checks). An explicit `false` means no
       // check ran: a judge verdict or an evaluator policy may still have gated the phase; with
-      // neither, the phase was approved by default and the line says so (ungated). A frame
-      // without the field (an older engine) keeps the legacy wording — nothing is inferred.
+      // neither, the phase was approved by default and the line says so (ungated). The wire type
+      // declares the field required; a frame that nonetheless lacks it (a daemon predating it)
+      // is read with the legacy wording — nothing is inferred either way.
       const noFloor = event.hasDeterministicFloor === false;
       const judged = str(event.agentVerdict) !== '' || str(event.judgeCli) !== '';
       const policed = Array.isArray(event.evaluatorPolicies) && event.evaluatorPolicies.length > 0;

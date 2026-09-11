@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CoreEvent, RosterSeat } from '../src/api/types.js';
 import {
-  escalationUnit, gateVerdictFor, isFailureEscalation, reassignCandidates,
+  attemptBefore, escalationUnit, gateVerdictFor, isFailureEscalation, reassignCandidates, seatStanding,
 } from '../src/components/gateVerdictModel.js';
 import { G4_EVENTS, G4_GATE, G5_EVENTS, G5_GATE, GATE_RUN } from './fixtures/gateEvidence.js';
 
@@ -59,7 +59,34 @@ describe('gateVerdictFor — the block is about THIS gate\'s unit (F-7R2-018)', 
     ] as unknown as CoreEvent[];
     const view = gateVerdictFor(later, 3, TRIAGE_PROMPT);
     expect(view?.ord).toBe(3);
+    expect(view?.attempt).toBe(0);
     expect(view?.denial?.source).toBe('worker_failure');
+  });
+
+  it('keyed on ord AND attempt: attempt 0\'s denial is not the verdict of the attempt-1 escalation', () => {
+    const DENY_0 = {
+      type: 'gateEvaluated', session: RUN, ord: 3, criterion: 'x', hasDeterministicFloor: true, deterministicPass: false,
+      agentVerdict: null, agentReasoning: null, evaluatorPass: true, evaluatorPolicies: [],
+      denialReason: 'repository checks failed: lint exited 1', denial: { source: 'repo_checks', reason: 'repository checks failed: lint exited 1' }, combined: false,
+    };
+    const twoAttempts: CoreEvent[] = [
+      { type: 'unitDispatched', session: RUN, ord: 3, cli: 'codex', attempt: 0 },
+      DENY_0,
+      { type: 'gateDecided', session: RUN, ord: 3, allow: true },
+      { type: 'unitDispatched', session: RUN, ord: 3, cli: 'codex', attempt: 1 },
+      { type: 'stepFailed', session: RUN, ord: 3, detail: 'codex exited 137' },
+      { type: 'awaitingHuman', session: RUN, ord: 3, prompt: TRIAGE_PROMPT, reviewingOrd: null },
+    ] as unknown as CoreEvent[];
+    expect(attemptBefore(twoAttempts, 3)).toBe(1);
+    expect(attemptBefore(twoAttempts, 3, 2)).toBe(0);
+    expect(attemptBefore(twoAttempts, 9)).toBeNull();
+    // The unbounded model still reports attempt 0's verdict, stamped with its attempt…
+    expect(gateVerdictFor(twoAttempts, 3, 'Approve unit 3 before it runs: build')?.attempt).toBe(0);
+    // …but the escalation card about attempt 1 renders none of it.
+    expect(gateVerdictFor(twoAttempts, 3, TRIAGE_PROMPT)).toBeNull();
+    // Attempt 1's own later evaluation is this gate's.
+    const withOwn: CoreEvent[] = [...twoAttempts, { ...DENY_0, denialReason: 'Worker FAILED on unit 3: exit 137' } as unknown as CoreEvent];
+    expect(gateVerdictFor(withOwn, 3, TRIAGE_PROMPT)?.attempt).toBe(1);
   });
 });
 
@@ -89,13 +116,36 @@ describe('reassignCandidates — the run\'s other seats, in the roster\'s order'
     { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: false },
   ];
 
-  it('excludes the failed seat, puts signed-in first, labels signed-out as "will be benched", inactive last', () => {
+  it('excludes the failed seat, puts signed-in first, hedges a seat with no sign-in observed, inactive last', () => {
     const out = reassignCandidates(['codex', 'pi', 'opencode', 'agy', 'claude'], 'codex', ROSTER);
     expect(out.map((c) => c.cli)).toEqual(['claude', 'agy', 'pi', 'opencode']);
     expect(out[0]).toMatchObject({ label: 'Claude Code', state: 'ready', note: '' });
     expect(out[1]).toMatchObject({ label: 'agy', state: 'unknown', note: '' });
-    expect(out[2]).toMatchObject({ label: 'pi', state: 'signed-out', note: 'signed out — will be benched' });
+    // Today's roster carries no council-eligibility field, so the consequence is hedged.
+    expect(out[2]).toMatchObject({ label: 'pi', state: 'signed-out', note: 'no sign-in observed — may fail or be benched' });
+    expect(out[2]!.note).not.toMatch(/will be benched/);
     expect(out[3]).toMatchObject({ label: 'OpenCode', state: 'inactive', note: 'inactive: quota' });
+  });
+
+  it('reads crew#533\'s auth / council_eligible (api-types 0.35.0) when a daemon sends them — believed, not inferred', () => {
+    const seat = (extra: Record<string, unknown>): RosterSeat =>
+      ({ key: 'x', display_name: 'X', binary: 'x', enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: false, ...extra });
+    expect(seatStanding(seat({ auth: 'not_required', free_tier: 'OpenCode Zen' }))).toEqual({ state: 'ready', note: 'no sign-in needed (OpenCode Zen)' });
+    expect(seatStanding(seat({ auth: 'signed_out', council_eligible: false, council_ineligible_reason: 'signed out' })))
+      .toEqual({ state: 'ineligible', note: 'signed out' });
+    expect(seatStanding(seat({ auth: 'signed_out', council_eligible: true })))
+      .toEqual({ state: 'signed-out', note: 'no sign-in observed — still council-eligible' });
+    expect(seatStanding(seat({ auth: 'signed_in' }))).toEqual({ state: 'ready', note: '' });
+    expect(seatStanding(seat({ auth: 'unknown', signed_in: null }))).toEqual({ state: 'unknown', note: '' });
+    // Inactive health outranks every auth reading.
+    expect(seatStanding(seat({ auth: 'signed_in', health: { status: 'inactive', message: 'quota', since: 'x' } }))).toEqual({ state: 'inactive', note: 'inactive: quota' });
+    expect(seatStanding(undefined)).toEqual({ state: 'unknown', note: '' });
+    // Ordering: an ineligible seat sorts last.
+    const out = reassignCandidates(['a', 'b'], null, [
+      seat({ key: 'a', display_name: 'A', council_eligible: false, council_ineligible_reason: 'signed out' }),
+      seat({ key: 'b', display_name: 'B', signed_in: true }),
+    ]);
+    expect(out.map((c) => c.cli)).toEqual(['b', 'a']);
   });
 
   it('a cold roster offers the pool by key, unlabelled — never an invented state', () => {

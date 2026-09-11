@@ -77,7 +77,7 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     const options = within(row).getAllByTestId('steering-reassign-option');
     expect(options.map((o) => o.getAttribute('value'))).toEqual(['claude', 'pi', 'opencode']);
     expect(options[0]!.textContent).toBe('Claude Code');
-    expect(options[1]!.textContent).toBe('pi — signed out — will be benched');
+    expect(options[1]!.textContent).toBe('pi — no sign-in observed — may fail or be benched');
     expect(options[1]).toHaveAttribute('data-state', 'signed-out');
     expect(screen.getByTestId('steering-reassign')).toHaveTextContent('Reassign to Claude Code + retry');
     expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve (retry on codex)');
@@ -112,7 +112,9 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
       .mockResolvedValueOnce({ status: 'ok', ord: 3, cli: 'pi' });
     const onResolved = mount();
     fireEvent.change(screen.getByTestId('steering-reassign-seat'), { target: { value: 'pi' } });
-    expect(screen.getByTestId('steering-reassign-benched')).toHaveTextContent('pi is signed out — a council benches it');
+    // Hedged: the roster carries no council-eligibility field, and the rig saw a "signed out" seat answer.
+    expect(screen.getByTestId('steering-reassign-benched')).toHaveTextContent('pi: no sign-in observed — the retry may fail at spawn or be benched there');
+    expect(screen.getByTestId('steering-reassign-benched').textContent).not.toMatch(/benches it|will be benched/);
     fireEvent.click(screen.getByTestId('steering-reassign'));
 
     const err = await screen.findByTestId('steering-reassign-error');
@@ -138,16 +140,30 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     expect(client.api.reassignRun).not.toHaveBeenCalled();
   });
 
-  it('no lever on a pre-run gate, nor without the pool; an empty pool says so', () => {
+  it('no lever on a pre-run gate; an empty pool says so', () => {
     cleanup();
+    vi.spyOn(client.api, 'getRun').mockRejectedValue(new Error('not in this case'));
     render(<SteeringGate runId={RUN} ord={3} prompt="Approve unit 3 before it runs: build — the intent" units={UNITS} clis={POOL} />);
     expect(screen.queryByTestId('steering-reassign-row')).toBeNull();
     expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve');
-    cleanup();
-    render(<SteeringGate runId={RUN} ord={3} prompt={PROMPT} units={UNITS} />);
-    expect(screen.queryByTestId('steering-reassign-row')).toBeNull();
+    expect(client.api.getRun).not.toHaveBeenCalled(); // a pre-run gate never reads the run for a pool
     cleanup();
     render(<SteeringGate runId={RUN} ord={3} prompt={PROMPT} units={UNITS} clis={['codex']} />);
     expect(screen.getByTestId('steering-reassign-none')).toHaveTextContent('no other seat in this run\'s pool (only codex, which failed)');
+  });
+
+  it('a host without the run view (the author / testing-launch panels) reads the run ONCE for its pool on a failure escalation; a failed read offers no lever', async () => {
+    const getRun = vi.spyOn(client.api, 'getRun').mockResolvedValue({ run: makeView({ id: RUN, status: 'awaiting_human', clis: POOL }, UNITS) });
+    render(<SteeringGate runId={RUN} ord={3} prompt={PROMPT} units={UNITS} />);
+    const row = await screen.findByTestId('steering-reassign-row');
+    expect(getRun).toHaveBeenCalledTimes(1);
+    expect(getRun).toHaveBeenCalledWith(RUN);
+    expect(within(row).getAllByTestId('steering-reassign-option').map((o) => o.getAttribute('value'))).toEqual(['claude', 'pi', 'opencode']);
+    cleanup();
+    vi.spyOn(client.api, 'getRun').mockRejectedValue(new Error('offline'));
+    render(<SteeringGate runId={RUN} ord={3} prompt={PROMPT} units={UNITS} />);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(screen.queryByTestId('steering-reassign-row')).toBeNull();
+    expect(screen.getByTestId('steering-approve')).toBeInTheDocument();
   });
 });
