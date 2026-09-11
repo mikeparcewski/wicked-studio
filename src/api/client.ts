@@ -2,6 +2,10 @@ import type {
   ActivityPage,
   AttachMemberBody,
   AuditPage,
+  ChatDetailResponse,
+  ChatListResponse,
+  ChatOpenBody,
+  ChatOpenResponse,
   CoreEvent,
   CreateProjectBody,
   DeliverRunResult,
@@ -228,9 +232,12 @@ export const api = {
   /** A unit's captured transcript (string, or `null`). Pass the unit key (the suffix after `<run>:`). */
   // ── Chat sessions (crew#165): warm seats + group fan-out ─────────────────
   /** `projectId` files the chat into a project at open time (`crew.chat`
-   *  membership, DES-PROJECT-001) — omitted = unfiled, the backend default. */
-  openChat: (body: { chatId?: string; clis?: string[]; repoRef?: string; projectId?: string }) =>
-    apiFetch<{ chatId: string; seats: { cliKey: string; ok: boolean; error?: string }[] }>(`/chats`, {
+   *  membership, DES-PROJECT-001) — omitted = unfiled, the backend default.
+   *  Since crew#502 (api-types 0.32.0) the body also SCOPES the chat: `repoRefs`
+   *  (ids or names) or the project's `crew.repo` members become the seats' read
+   *  roots, and the 201 states the resolved `scope` (studio#248). */
+  openChat: (body: ChatOpenBody) =>
+    apiFetch<ChatOpenResponse>(`/chats`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -243,11 +250,12 @@ export const api = {
     }),
   closeChat: (chatId: string) =>
     apiFetch<{ ok: boolean }>(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' }),
-  /** A chat's warm seats. Empty means the chat is gone — the daemon does not 404 an unknown id. */
+  /** A chat's warm seats (+ the scope recorded at open, `null` for a chat this daemon did not
+   *  open — crew#502). Empty seats mean the chat is gone — the daemon does not 404 an unknown id. */
   getChat: (chatId: string) =>
-    apiFetch<{ chatId: string; seats: string[] }>(`/chats/${encodeURIComponent(chatId)}`),
+    apiFetch<ChatDetailResponse>(`/chats/${encodeURIComponent(chatId)}`),
   /** Every live chat (FINDING-027). `idleSecs` is `number | null` — see the route's adapter. */
-  listChats: () => apiFetch<{ chats: { chatId: string; seats: string[]; idleSecs: number | null }[] }>(`/chats`),
+  listChats: () => apiFetch<ChatListResponse>(`/chats`),
 
   /**
    * A unit's stored transcript.

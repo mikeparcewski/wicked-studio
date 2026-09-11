@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat } from '../src/components/GroupChat.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
@@ -87,6 +87,7 @@ describe('§7.9-2 — a failed send never clears the composer', () => {
     const user = userEvent.setup();
     sendChatMessage.mockRejectedValueOnce(new Error('daemon refused the fan-out'));
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     await user.type(screen.getByRole('textbox'), 'first ask');
     await user.keyboard('{Enter}');
@@ -115,6 +116,7 @@ describe('§7.9-3 — chunk routing keys on seat+turn (per-seat FIFO)', () => {
   it('a still-streaming turn keeps its chunks when a second send opens the next turn — no mid-word splice', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     await sendText(user, 'first ask');
     await user.type(screen.getByRole('textbox'), 'second ask');
@@ -145,6 +147,7 @@ describe('§7.9-3 — chunk routing keys on seat+turn (per-seat FIFO)', () => {
   it('an orphan chunk opens its own bubble — streamed text is never silently dropped', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'ask');
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'done', ok: true });
@@ -160,6 +163,7 @@ describe('§7.9-4 / EC44 — explicit seat states', () => {
   it('working while a reply is pending, replied when it lands', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'ask');
 
     const chip = (agent: string): HTMLElement =>
@@ -187,6 +191,7 @@ describe('§7.9-4 / EC44 — explicit seat states', () => {
     );
     const user2 = user;
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user2, 'ask');
 
     const failed = document.querySelector('[data-testid="seat-chip"][data-agent="codex"]') as HTMLElement;
@@ -201,6 +206,7 @@ describe('the conversation→action bridge (§7.9)', () => {
     const user = userEvent.setup();
     const navigate = vi.fn();
     render(<GroupChat repoId={null} onBack={() => undefined} navigate={navigate} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'sketch the uploader');
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'start with the seams', ok: true });

@@ -16,12 +16,19 @@ const getHealth = vi.fn(() => Promise.resolve({ status: 'ok', version: '0.6.0', 
 let rosterAnswer: RosterSeat[] = [];
 const getRoster = vi.fn(() => Promise.resolve({ roster: rosterAnswer }));
 
+// `GET /diagnostics` rides the same expand (studio#246); this suite pins the seat
+// registry, so the daemon here answers a diagnostics body WITHOUT a governance
+// block (predates crew#495) — the honest "not reported" row, never degraded.
+// The governance rows themselves are pinned in HealthRailSection.governance.test.
+const apiFetch = vi.fn(() => Promise.resolve({}));
+
 vi.mock('../src/api/client.js', () => ({
   api: {
     getHealth: () => getHealth(),
     getRoster: () => getRoster(),
     listRepos: () => Promise.resolve({ repos: [] }),
   },
+  apiFetch: (...a: unknown[]) => apiFetch(...(a as [])),
 }));
 
 vi.mock('../src/hooks/useBoardModel.js', () => ({

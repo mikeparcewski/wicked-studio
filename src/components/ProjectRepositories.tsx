@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { ProjectMember, RepoEntry } from '../api/types.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
+import { RepoFindings } from './RepoFindings.js';
 
 /**
  * The project's repositories — the one UI path that attaches a `crew.repo`
@@ -147,6 +148,10 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
   /** The last registry (picker) fetch failure, kept apart from the mutation error
    *  so the retry gesture clears exactly the one that just went stale. */
   const [registryError, setRegistryError] = useState<string | null>(null);
+  /** studio#251: the repo id whose onboarding re-run is in flight, or null. */
+  const [reonboarding, setReonboarding] = useState<string | null>(null);
+  /** studio#251: the outcome of the last re-run per repo id — the started run, or the refusal. */
+  const [reonboardNote, setReonboardNote] = useState<Record<string, { text: string; failed: boolean }>>({});
 
   /**
    * ONE mutation at a time. The lock keeps a second row's Detach from re-pointing
@@ -260,6 +265,27 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
     }
   }
 
+  /**
+   * studio#251: the "Re-run onboarding" remedy the engine names on an in-tree-ignored repo with no
+   * live graph — the EXISTING onboard wire (`POST /repos/:id/onboard`, what the Repositories page's
+   * Onboard button posts). This section has no run navigation, so the started run is STATED inline.
+   */
+  async function rerunOnboarding(repo: RepoEntry): Promise<void> {
+    if (reonboarding !== null) return;
+    const stillMine = beginMutation();
+    setReonboarding(repo.id);
+    try {
+      const { runId } = await api.rerunOnboarding(repo.id);
+      if (!stillMine()) return;
+      setReonboardNote((prev) => ({ ...prev, [repo.id]: { text: `onboarding run ${runId} started — the live graph is rebuilt when it completes`, failed: false } }));
+    } catch (e) {
+      if (!stillMine()) return;
+      setReonboardNote((prev) => ({ ...prev, [repo.id]: { text: `re-run refused: ${e instanceof Error ? e.message : String(e)}`, failed: true } }));
+    } finally {
+      if (stillMine()) setReonboarding(null);
+    }
+  }
+
   async function detach(member: ProjectMember): Promise<void> {
     if (busy) return;
     const forProject = projectId;
@@ -298,8 +324,10 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
             const repo = repoOf(m.member_ref, repos);
             const label = repo?.name ?? m.member_ref;
             const isConfirming = confirming === m.id;
+            const note = repo !== undefined ? reonboardNote[repo.id] : undefined;
             return (
-              <div key={m.id} data-testid="project-repo-row" data-repo={m.member_ref} style={CSS.row}>
+              <div key={m.id} style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <div data-testid="project-repo-row" data-repo={m.member_ref} style={CSS.row}>
                 <span aria-hidden style={{ color: 'var(--ink-dim)' }}>⬡</span>
                 <span style={CSS.repoName} title={m.member_ref}>{label}</span>
                 <span style={CSS.repoPath} title={repo?.root_path}>{repo?.root_path ?? ''}</span>
@@ -344,6 +372,26 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
                     </button>
                   </>
                 )}
+              </div>
+              {/* studio#251: the engine's checkout findings for this member (wicked-core#406) —
+                  known once the registry cache is warm (the picker's gesture), silent otherwise
+                  and silent for a clean checkout. */}
+              {repo !== undefined && (
+                <div style={{ padding: '0 10px 6px 30px', minWidth: 0 }}>
+                  <RepoFindings
+                    compact
+                    findings={repo.findings}
+                    onRerunOnboarding={() => void rerunOnboarding(repo)}
+                    rerunning={reonboarding === repo.id}
+                    testId="project-repo-findings"
+                  />
+                  {note !== undefined && (
+                    <p data-testid="project-repo-reonboard-note" data-failed={note.failed} style={note.failed ? CSS.error : CSS.hint}>
+                      {note.text}
+                    </p>
+                  )}
+                </div>
+              )}
               </div>
             );
           })}

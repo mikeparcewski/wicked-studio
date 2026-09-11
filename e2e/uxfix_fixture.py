@@ -237,6 +237,24 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #               resolves), giving §4.4's runs-per-repo / failing-
          #               repos tiles something true to group. Default False.
          "chat_runs": False, "repo_refs": False,
+         # Wave-2 consumers (studio#251 / #246 / #248, api-types 0.32.0):
+         #   repo_findings — the studio-api RepoEntry carries the wicked-core#406
+         #                   `in_tree_code_graph_ignored` finding in its NO-LIVE-GRAPH
+         #                   form (the re-onboard remedy) and POST /repos/<id>/onboard
+         #                   answers {runId}. Default False.
+         #   governance    — GET /api/v1/diagnostics answers a body whose `governance`
+         #                   block is the F-022 dead-letter case (crew#495). Default
+         #                   None = the route is ABSENT (Fastify's unknown-route 404,
+         #                   a daemon predating diagnostics); "healthy" serves the
+         #                   clean block instead.
+         #   chat_scope    — POST /api/v1/chats resolves and STATES a scope (crew#502)
+         #                   from the body (repoRefs → repos; projectId → project;
+         #                   else none), 404s unknown refs naming every missing one,
+         #                   and GET /chats/<id> carries the recorded scope. Default
+         #                   False: the standing chat rigs see the pre-scope 201.
+         #   chat_scope_501 — POST /chats answers crew's 501 "engine predates chat
+         #                   scope" for any SCOPED open (default False).
+         "repo_findings": False, "governance": None, "chat_scope": False, "chat_scope_501": False,
          # Fix slice J4/J5 (BRIEF-UX-001 re-review): the outcome-partition
          # corpus — cancelled runs in AND out of the 24h window plus undatable
          # terminal runs (no attach clock anywhere), so a rig can prove
@@ -1339,6 +1357,76 @@ REPO_ENTRY = {
     "code_graph_db": "/tmp/w2/studio-api/.wicked-estate/code_graph.db",
 }
 
+# ── Wave 2 (studio#251 / #246 / #248) — the api-types 0.32.0 shapes ───────────
+STATE_HOME_GRAPH = "/tmp/w2/state/repo-graphs/studio-api-9c1e/estate.db"
+# wicked-core#406's finding, in its NO-LIVE-GRAPH form (core `repo.rs` sentence verbatim,
+# scrubbed paths) — the case whose remedy is the onboarding re-run.
+REPO_FINDING_NO_LIVE = {
+    "code": "in_tree_code_graph_ignored",
+    "message": ("/tmp/w2/studio-api/.codegraph exists in the checkout — a code graph an older wicked-core "
+                "indexed IN the working tree. It is ignored (no graph has been indexed under the state home yet "
+                f"— re-run onboarding (POST /repos/{REPO_ID}/onboard) to build {STATE_HOME_GRAPH}; never inside "
+                "the repository). Delete `.codegraph/` from the checkout — and `git rm --cached` it if the "
+                "repository tracks it — to clear this finding (core#406)."),
+    "path": "/tmp/w2/studio-api/.codegraph",
+}
+
+
+def repo_entry_wire(findings_on: bool) -> dict:
+    """The studio-api record as the wire carries it: with `repo_findings` the graph path moves
+    under the state home (core#406) and the finding rides along; otherwise the standing shape."""
+    if not findings_on:
+        return REPO_ENTRY
+    return {**REPO_ENTRY, "code_graph_db": STATE_HOME_GRAPH, "findings": [REPO_FINDING_NO_LIVE]}
+
+
+onboard_posts: list = []  # POST /repos/<id>/onboard receipts (studio#251's remedy, tapped by the rig)
+
+GOV_STORE = "/tmp/w2/state/core.db.governance/governance.db"
+GOV_OUTBOX = "/tmp/w2/state/core.db.governance/emit-outbox.ndjson"
+DIAGNOSTICS_BASE = {
+    "components": {"crew": "w2-fixture", "studioBundle": None, "coreTs": None, "engineBinaries": {}},
+    "daemon": {"uptimeMs": 60_000, "startedAt": NOW0 - 60 * SEC, "port": 7701},
+    "stores": [], "recentErrors": [], "acp": {"byCli": {}},
+}
+GOVERNANCE_BLOCKS = {
+    "healthy": {
+        "store": {"path": GOV_STORE, "source": "core-db-sidecar"},
+        "records": {"total": 412, "sinceBoot": 37},
+        "deadletters": {"path": GOV_OUTBOX, "count": 0, "byType": {}, "byReason": {}, "timestamped": 0,
+                        "untimestamped": 0, "oldestTs": None, "newestTs": None, "truncated": False,
+                        "legacyOutbox": None},
+        "findings": [],
+    },
+    # F-022: every governance event dead-lettered; the finding names the replay (crew#495).
+    "deadletters": {
+        "store": {"path": GOV_STORE, "source": "flag"},
+        "records": {"total": 0, "sinceBoot": 0},
+        "deadletters": {"path": GOV_OUTBOX, "count": 128,
+                        "byType": {"wicked.crew.governance.conformance_recorded": 96,
+                                   "wicked.crew.governance.decision_recorded": 32},
+                        "byReason": {"no shared store (WICKED_ESTATE_DB unset)": 128},
+                        "timestamped": 120, "untimestamped": 8,
+                        "oldestTs": NOW0 - 2 * HOUR, "newestTs": NOW0 - 5 * MIN, "truncated": True,
+                        "legacyOutbox": None},
+        "findings": [{"kind": "governance.deadletter", "severity": "error",
+                      "message": (f"128 governance event(s) dead-lettered to {GOV_OUTBOX} (at least — the fold "
+                                  "stopped at its size cap) — the store refused or was unset when they were emitted "
+                                  "(no shared store (WICKED_ESTATE_DB unset)); replay them with wicked-crew governance "
+                                  f"replay {GOV_OUTBOX} --governance-db {GOV_STORE}")}],
+    },
+}
+
+CHAT_SCRATCH = "/tmp/w2/wicked-crew-chats/4242-9f3a1c2b/{}"
+CHAT_SCOPE_501 = ("the installed wicked-core-ts predates chat scope (wicked-core#410): it cannot ground a scoped "
+                  "chat or hold its read roots read-only — upgrade the engine, or open the chat without "
+                  "projectId/repoRefs.")
+chat_scopes: dict = {}  # chatId → the ChatScope recorded at open (crew#502), under chat_state_lock
+
+
+def scope_repo(r: dict) -> dict:
+    return {"id": r["id"], "name": r["name"], "rootPath": r["root_path"]}
+
 
 def _graph_node(i: int, name: str, kind: str, file: str, lang: str,
                 in_deg: int, out_deg: int) -> dict:
@@ -2101,7 +2189,18 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/repos":
             with state_lock:
                 repo_on = state["repo"]
-            self._json(200, {"repos": [REPO_ENTRY] if repo_on else []})
+                findings_on = state["repo_findings"]
+            self._json(200, {"repos": [repo_entry_wire(findings_on)] if repo_on else []})
+            return True
+        # Wave 2 (studio#246): GET /diagnostics — ABSENT (the unknown-route 404 a daemon
+        # predating the route answers) unless the `governance` switch names a block.
+        if path == "/api/v1/diagnostics":
+            with state_lock:
+                gov = state["governance"]
+            if gov is None:
+                self._json(404, {"error": "not found"})
+            else:
+                self._json(200, {**DIAGNOSTICS_BASE, "governance": GOVERNANCE_BLOCKS[gov]})
             return True
         # The slice-E repo profile reads (all real crew routes, switch-gated).
         m = re.match(r"^/api/v1/repos/([^/]+)/(graph|git-history|contributors)$", path)
@@ -2155,7 +2254,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             with chat_state_lock:
                 seats = [k for k in chat_warm_seats.get(cid, [])
                          if k not in chat_dead_seats.get(cid, set())]
-            self._json(200, {"chatId": cid, "seats": seats})
+                scope = chat_scopes.get(cid)
+            with state_lock:
+                scope_on = state["chat_scope"]
+            detail = {"chatId": cid, "seats": seats}
+            if scope_on:
+                detail["scope"] = scope  # None = a chat this daemon did not open (crew#502)
+            self._json(200, detail)
             return True
         parts = path.split("/")
         # /api/v1/projects/<id>/members
@@ -3042,6 +3147,47 @@ class W2Handler(SimpleHTTPRequestHandler):
             clis = body.get("clis") or [s["key"] for s in ROSTER]
             chat_id = body.get("chatId") or "fixture-chat"
             known = {s["key"] for s in ROSTER}
+            # Wave 2 (studio#248, crew#502): resolve the scope BEFORE any seat warms —
+            # a refused scope warms nothing. Real status codes + sentences.
+            with state_lock:
+                scope_on = state["chat_scope"]
+                scope_501 = state["chat_scope_501"]
+                repo_on = state["repo"]
+                repo_member_on = state["repo_member"]
+            scope = None
+            if scope_on:
+                refs = ([body["repoRef"]] if body.get("repoRef") else []) + list(body.get("repoRefs") or [])
+                registry = [REPO_ENTRY] if repo_on else []
+                if refs:
+                    found = [r for r in registry if r["id"] in refs or r["name"] in refs]
+                    missing = [ref for ref in refs if not any(r["id"] == ref or r["name"] == ref for r in registry)]
+                    if missing:
+                        return self._json(404, {"error": "Repo " + ", ".join(f"'{m}'" for m in missing) + " not found",
+                                                "missing": missing})
+                    scope = {"kind": "repos", "repos": [scope_repo(r) for r in found], "cwd": CHAT_SCRATCH.format(chat_id),
+                             "graph": {"bound": False,
+                                       "reason": f"'{found[0]['name']}' has no resolvable code graph (not indexed yet); this chat gets none."},
+                             "dangling": []}
+                    if body.get("projectId"):
+                        scope["projectId"] = body["projectId"]
+                elif body.get("projectId"):
+                    pid = body["projectId"]
+                    members = [REPO_ENTRY] if (repo_on and repo_member_on and pid == "upload-endpoint") else []
+                    scope = {"kind": "project", "projectId": pid, "repos": [scope_repo(r) for r in members],
+                             "cwd": CHAT_SCRATCH.format(chat_id),
+                             "graph": ({"bound": True, "reason": f"bound to project '{pid}'s co-located code graph."}
+                                       if members else
+                                       {"bound": False, "reason": "the project graph has never been built. "
+                                                                  f"POST /api/v1/projects/{pid}/graph/refresh fixes it."}),
+                             "dangling": []}
+                else:
+                    scope = {"kind": "none", "repos": [], "cwd": CHAT_SCRATCH.format(chat_id),
+                             "graph": {"bound": False,
+                                       "reason": "the chat names no project and no repos, so its seats see only their own "
+                                                 "scratch root and no code graph; pass projectId or repoRefs to scope it."},
+                             "dangling": []}
+                if scope_501 and scope["kind"] != "none":
+                    return self._json(501, {"error": CHAT_SCOPE_501})
             # Slice AB (§7.9-4): seats named by `chat_reject_seats` answer the
             # daemon's real per-seat shape — ok:false with an error the chip
             # must wear as failed-with-reason. Only accepted seats warm.
@@ -3073,7 +3219,23 @@ class W2Handler(SimpleHTTPRequestHandler):
                             chat_warm_seats[chat_id].append(k)
                     chat_dead_seats.setdefault(chat_id, set())
                     chat_send_count.setdefault(chat_id, 0)
-            return self._json(201, {"chatId": chat_id, "seats": seats})
+                if scope is not None:
+                    chat_scopes[chat_id] = scope
+            opened = {"chatId": chat_id, "seats": seats}
+            if scope is not None:
+                opened["scope"] = scope
+            return self._json(201, opened)
+        # Wave 2 (studio#251): the re-onboard remedy's wire, POST /repos/<id>/onboard → {runId}.
+        m = re.match(r"^/api/v1/repos/([^/]+)/onboard$", path)
+        if m:
+            with state_lock:
+                findings_on = state["repo_findings"]
+            rid = urllib.parse.unquote(m.group(1))
+            if not findings_on or rid != REPO_ID:
+                return self._json(404, {"error": f"Repo {rid} not found"})
+            with chat_state_lock:
+                onboard_posts.append(rid)
+            return self._json(200, {"runId": "r-reonboard"})
         # POST /api/v1/chats/<id>/messages — accept the fan-out; replies would
         # stream over /ws, which this fixture leaves to the narration loop —
         # UNLESS the slice-K `chat_replies` switch is on: then each send queues

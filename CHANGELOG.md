@@ -12,6 +12,38 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **Wave-2 consumers: the repo card renders the engine's findings, the Health rail renders
+  `diagnostics.governance`, and New Chat carries a scope control** (#251, #246, #248 — pins
+  `wicked-crew-api-types` 0.32.0, the wave-2 crew release).
+  - *Repo findings* (#251, wicked-core#406 via crew#517): `RepoEntry.findings[]` renders on the
+    Repositories fleet card, the repo detail header and the project page's repo rows — one labelled
+    row per finding with the engine's own message. An in-tree `.codegraph/` beside a live graph is a
+    tidy-up warning; an in-tree graph with NO live graph (the F-024 checkouts after the upgrade) is an
+    error whose row carries **Re-run onboarding**, wired to each surface's existing onboard trigger
+    (`POST /repos/:id/onboard`); `code_graph_root_unresolvable` is an error naming the daemon-
+    environment fault. Silent for a clean checkout and for a daemon that predates the field.
+  - *Governance in Health* (#246, crew#495 / F-022): expanding the rail's Health section also reads
+    `GET /diagnostics` and renders the `governance` block — the store path and which rule chose it,
+    the record counts (an honest "engine cannot count" for `null`, never 0), the dead-letter fold
+    (count as a floor when truncated, by type / by reason, the timestamp range, the outbox, the
+    pre-fix HOME outbox) and every finding as a severity-styled row whose message carries the
+    `wicked-crew governance replay …` recipe. A `store: null` boot and any error finding turn the
+    heart red (and show the collapsed-header dot); a warning degrades it to amber. A daemon without
+    the block, or without the route, reads "not reported by this daemon".
+  - *Scoped New Chat* (#248, crew#502 / F-067): the create window carries a **Scope** control —
+    *All project repos* (the default once a project is bound: `projectId` alone rides the open and
+    the daemon scopes to every `crew.repo` member), *Choose repos…* (a multi-select from
+    `GET /repos`, loaded on that gesture; sends `repoRefs` by id) and *Unscoped* (an explicit click).
+    An Unfiled chat with no choice does not open on send — the gap is stated on the row, nothing is
+    posted, the draft stays. The opened chat states `ChatOpenResponse.scope` under the header: the
+    repositories (names; paths on hover), read-only, whether a code graph grounds the seats and the
+    daemon's reason when not, and any project member the registry no longer knows; a rejoin states
+    `ChatDetailResponse.scope`, and a daemon that said nothing is reported as "not stated". The
+    route's refusals render as inline sentences by status — 404 (every missing ref named), 400
+    (an ambiguous name → name it by id), 409 (a daemon-side conflict), 501 (the engine predates chat
+    scope, with a **Continue unscoped** fallback that mints a fresh unscoped chat outside the shell).
+
 ### Fixed
 - **`.codegraph/estate.db` is no longer tracked** (#220). A fresh clone shipped the operator repo's code-graph
   identity, so onboarding the clone failed with `REPO COLLISION` (and an older wicked-core wrote into the

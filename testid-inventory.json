@@ -10,11 +10,11 @@
   "version": 1,
   "studioVersion": "0.5.4",
   "counts": {
-    "files": 138,
-    "occurrences": 1154,
-    "static": 992,
-    "dynamic": 57,
-    "computed": 6
+    "files": 139,
+    "occurrences": 1180,
+    "static": 1012,
+    "dynamic": 59,
+    "computed": 7
   },
   "static": [
     {
@@ -758,6 +758,12 @@
       ]
     },
     {
+      "testId": "chat-firstrun-scope",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
       "testId": "chat-layout-toggle",
       "files": [
         "src/components/GroupChat.tsx"
@@ -779,6 +785,12 @@
       "testId": "chat-needs-you",
       "files": [
         "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
+      "testId": "chat-open-error",
+      "files": [
+        "src/components/GroupChat.tsx"
       ]
     },
     {
@@ -821,6 +833,96 @@
       "testId": "chat-run-title",
       "files": [
         "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-dangling",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-fallback-none",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-fixed",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-gap",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-graph",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-picker",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-picker-empty",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-picker-error",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-picker-loading",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-repo",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-repo-option",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-row",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-summary",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-unstated",
+      "files": [
+        "src/components/GroupChat.tsx"
       ]
     },
     {
@@ -3215,6 +3317,12 @@
       ]
     },
     {
+      "testId": "project-repo-reonboard-note",
+      "files": [
+        "src/components/ProjectRepositories.tsx"
+      ]
+    },
+    {
       "testId": "project-repo-row",
       "files": [
         "src/components/ProjectRepositories.tsx"
@@ -3470,6 +3578,18 @@
       "testId": "rail-evals-run",
       "files": [
         "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "testId": "rail-governance",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-governance-finding",
+      "files": [
+        "src/components/HealthRailSection.tsx"
       ]
     },
     {
@@ -6125,6 +6245,18 @@
       ]
     },
     {
+      "pattern": "*-reonboard",
+      "files": [
+        "src/components/RepoFindings.tsx"
+      ]
+    },
+    {
+      "pattern": "*-row",
+      "files": [
+        "src/components/RepoFindings.tsx"
+      ]
+    },
+    {
       "pattern": "*-search",
       "files": [
         "src/components/dashboardKit.tsx"
@@ -6369,9 +6501,11 @@
         "src/components/DashboardTiles.tsx",
         "src/components/DeckKpiRibbon.tsx",
         "src/components/FacetAutocomplete.tsx",
+        "src/components/HealthRailSection.tsx",
         "src/components/HomeCommand.tsx",
         "src/components/MetricTile.tsx",
         "src/components/ProvenanceLine.tsx",
+        "src/components/RepoFindings.tsx",
         "src/components/RunSparkline.tsx",
         "src/components/RunsBottomPanel.tsx",
         "src/components/SkillChips.tsx",
@@ -6393,6 +6527,12 @@
         "src/components/SteeringRuleDrawer.tsx",
         "src/components/SteeringRuleForm.tsx",
         "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "expression": "tid",
+      "files": [
+        "src/components/GroupChat.tsx"
       ]
     },
     {

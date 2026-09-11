@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat } from '../src/components/GroupChat.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
@@ -75,6 +75,7 @@ beforeEach(() => {
 describe('GroupChat — first-run teaches, nothing warms (§2.4 + §6 + EC44)', () => {
   it('mounts cold: teaching state, NO painted chips (resolving row), the ONE named roster request, no Close — the AC verbatim', async () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     // The teaching state is on screen…
     const teach = screen.getByTestId('chat-firstrun');
@@ -106,6 +107,7 @@ describe('GroupChat — first-run teaches, nothing warms (§2.4 + §6 + EC44)', 
   it('the first send warms EXACTLY the displayed chips — typing is the opt-in, no hidden fan-out', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await waitFor(() => expect(chipAgents()).toEqual(CAPABLE));
 
     await user.type(screen.getByRole('textbox'), 'make me a deck');
@@ -133,6 +135,7 @@ describe('GroupChat — first-run teaches, nothing warms (§2.4 + §6 + EC44)', 
     const user = userEvent.setup();
     getRoster.mockRejectedValueOnce(new Error('daemon unreachable'));
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     const row = await screen.findByTestId('agent-chips-unresolved');
     expect(row).toHaveTextContent(/couldn’t load the agent roster/);
@@ -163,6 +166,7 @@ describe('GroupChat — first-run teaches, nothing warms (§2.4 + §6 + EC44)', 
   it('[+ Add] opens the roster picker and the addition joins the send', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await waitFor(() => expect(chipAgents()).toEqual(CAPABLE));
     expect(getRoster).toHaveBeenCalledTimes(1); // the mount resolve
 
@@ -191,6 +195,7 @@ describe('GroupChat — first-run teaches, nothing warms (§2.4 + §6 + EC44)', 
   it('a roster deposited by ANOTHER surface before the resolve lands seeds a PRISTINE selection — no duplicate fetch consumed', async () => {
     setCachedRoster(ROSTER);
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     // Warm cache: chips render synchronously and the mount resolve is skipped.
     expect(chipAgents()).toEqual(CAPABLE);
     await waitFor(() => expect(screen.getByTestId('chat-firstrun')).toBeInTheDocument());
@@ -205,6 +210,7 @@ describe('GroupChat — first-run teaches, nothing warms (§2.4 + §6 + EC44)', 
   it('Send is enabled by text alone once the roster is known — typing is the opt-in', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     const send = screen.getByRole('button', { name: 'Send' });
     expect(send).toBeDisabled();

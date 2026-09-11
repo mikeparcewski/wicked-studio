@@ -20,7 +20,7 @@
  *     keep those pinned; this file is the visual-language contract only.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat } from '../src/components/GroupChat.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
@@ -73,6 +73,7 @@ beforeEach(() => {
 describe('GroupChat — the §5.3 visual language', () => {
   it('the first-run instruction reads sans / --ink-body', () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     const instruction = screen.getByTestId('chat-firstrun-instruction');
     expect(instruction.style.fontFamily).toBe('var(--font-sans)');
     expect(instruction.style.color).toBe('var(--ink-body)');
@@ -81,6 +82,7 @@ describe('GroupChat — the §5.3 visual language', () => {
 
   it('the composer: --surface-raised, --radius-xl, and the wk-composer focus-ring hook', () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     const composer = screen.getByRole('textbox') as HTMLTextAreaElement;
     expect(composer.className).toContain('wk-composer');
     expect(composer.style.background).toBe('var(--surface-raised)');
@@ -90,6 +92,7 @@ describe('GroupChat — the §5.3 visual language', () => {
 
   it('the default chips wear §6.3 anatomy in tokens; [+ Add] is dashed --ink-dim; Send is accent-filled', () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     const chip = screen.getAllByTestId('agent-chip')[0]!;
     expect(chip.style.background).toBe('var(--surface-raised)');
     expect(chip.style.borderRadius).toBe('var(--radius-full)');
@@ -120,6 +123,7 @@ describe('GroupChat — the §5.3 visual language', () => {
   it('user messages are transparent; agent bubbles sit on --surface-card; chips disclose with wk-disclose', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     await user.type(screen.getByRole('textbox'), 'make me a deck');
     await user.keyboard('{Enter}');
