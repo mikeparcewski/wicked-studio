@@ -175,10 +175,27 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
       return line(`Gate approaching — ${clip(str(event['condition'])) || 'a check escalated to you'}`, 'gate');
     case 'awaitingHuman':
       return line(`Gate: waiting on you${str(event.prompt) ? ` — ${promptHeadline(str(event.prompt))}` : ''}`, 'gate');
-    case 'gateEvaluated':
-      return event.combined === false
-        ? line(`Checks ran on ${phase} — deny${str(event.denialReason ?? '') ? `: ${clip(str(event.denialReason ?? ''))}` : ''}`, 'fail')
-        : line(`Checks ran on ${phase} — pass`, 'work');
+    case 'gateEvaluated': {
+      // F-7R2-017: "Checks ran" only when the frame SAYS a deterministic floor ran
+      // (`hasDeterministicFloor: true` — the repository checks). An explicit `false` means no
+      // check ran: a judge verdict or an evaluator policy may still have gated the phase; with
+      // neither, the phase was approved by default and the line says so (ungated). The wire type
+      // declares the field required; a frame that nonetheless lacks it (a daemon predating it)
+      // is read with the legacy wording — nothing is inferred either way.
+      const noFloor = event.hasDeterministicFloor === false;
+      const judged = str(event.agentVerdict) !== '' || str(event.judgeCli) !== '';
+      const policed = Array.isArray(event.evaluatorPolicies) && event.evaluatorPolicies.length > 0;
+      const why = clip(str(event.denialReason ?? ''));
+      if (event.combined === false) {
+        return noFloor
+          ? line(`Gate denied on ${phase}${why ? `: ${why}` : ''} — no repository checks ran`, 'fail')
+          : line(`Checks ran on ${phase} — deny${why ? `: ${why}` : ''}`, 'fail');
+      }
+      if (!noFloor) return line(`Checks ran on ${phase} — pass`, 'work');
+      if (judged) return line(`Judge passed ${phase} — no repository checks ran`, 'work');
+      if (policed) return line(`Evaluator policy passed ${phase} — no repository checks ran`, 'work');
+      return line(`Gate passed without checks on ${phase} (ungated)`, 'info');
+    }
     case 'gateDecided':
       return event.allow === true ? line('Gate: approved', 'work') : line('Gate: denied', 'fail');
     case 'unitReworkAmended':

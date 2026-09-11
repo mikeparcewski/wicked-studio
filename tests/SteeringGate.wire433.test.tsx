@@ -236,8 +236,10 @@ describe('SteeringGate — the deliver lift on a gate opened on the deliver unit
 
   it("a LIFT-CONFLICT retry gate renders the lift block — outcome, files, the remedy — and the refusal ONCE: the engine's escalate prompt already quotes it", () => {
     mount([...G6_EVENTS, ...DELIVER_CONFLICT_TAIL], deliverRetryGate(REFUSAL_CONFLICT));
-    // The deciding evaluation is still the ord-4 PASS — the deliver unit never reached a verdict.
-    expect(screen.getByTestId('gate-verdict')).toHaveAttribute('data-verdict', 'pass');
+    // F-7R2-018: the deliver unit never reached a verdict, and this card is ABOUT unit 5 — the
+    // ord-4 PASS is the previous phase's and must not render under it. The lift block below is
+    // the deliver unit's own story.
+    expect(screen.queryByTestId('gate-verdict')).toBeNull();
     // The engine's prompt, format string filled (actor.rs TriageDecision::Escalate): it QUOTES the failure.
     expect(screen.getByTestId('steering-prompt')).toHaveTextContent('Unit 5 failed and triage escalated');
     expect(screen.getByTestId('steering-prompt')).toHaveTextContent('Failure output: "deliver: LIFT-CONFLICT');

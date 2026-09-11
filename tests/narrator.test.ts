@@ -40,6 +40,13 @@ describe('narrate — the event → status-line templates (§4)', () => {
     [{ type: 'awaitingHuman', session: 'r', ord: 3, prompt: 'Approve the design phase? [internals]' }, 'Gate: waiting on you — Approve the design phase?', 'gate'],
     [{ type: 'gateEvaluated', session: 'r', ord: 2, combined: true }, 'Checks ran on phase-2 — pass', 'work'],
     [{ type: 'gateEvaluated', session: 'r', ord: 2, combined: false, denialReason: 'no tests' }, 'Checks ran on phase-2 — deny: no tests', 'fail'],
+    // F-7R2-017: "Checks ran" only when the frame says a floor ran. An explicit `hasDeterministicFloor:
+    // false` with no judge and no policy is a default-allow — said as such, never as checks.
+    [{ type: 'gateEvaluated', session: 'r', ord: 2, combined: true, hasDeterministicFloor: true, agentVerdict: 'pass' }, 'Checks ran on phase-2 — pass', 'work'],
+    [{ type: 'gateEvaluated', session: 'r', ord: 2, combined: true, hasDeterministicFloor: false, agentVerdict: null, evaluatorPolicies: [] }, 'Gate passed without checks on phase-2 (ungated)', 'info'],
+    [{ type: 'gateEvaluated', session: 'r', ord: 2, combined: true, hasDeterministicFloor: false, agentVerdict: 'pass', judgeCli: 'codex' }, 'Judge passed phase-2 — no repository checks ran', 'work'],
+    [{ type: 'gateEvaluated', session: 'r', ord: 2, combined: true, hasDeterministicFloor: false, agentVerdict: null, evaluatorPolicies: ['POL-1'] }, 'Evaluator policy passed phase-2 — no repository checks ran', 'work'],
+    [{ type: 'gateEvaluated', session: 'r', ord: 2, combined: false, hasDeterministicFloor: false, denialReason: 'Worker FAILED on unit 2' }, 'Gate denied on phase-2: Worker FAILED on unit 2 — no repository checks ran', 'fail'],
     [{ type: 'gateDecided', session: 'r', ord: 2, allow: true }, 'Gate: approved', 'work'],
     [{ type: 'gateDecided', session: 'r', ord: 2, allow: false }, 'Gate: denied', 'fail'],
     [{ type: 'unitReworkAmended', session: 'r', ord: 2, amendment: 'focus on x' }, 'You amended phase-2 — re-dispatching with your note', 'human'],

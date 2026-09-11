@@ -12,7 +12,8 @@ import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
-import { gateVerdict, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { gateVerdictFor, isFailureEscalation, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { ReassignControl } from './ReassignControl.js';
 
 interface Props {
   runId: string;
@@ -26,6 +27,9 @@ interface Props {
   /** The run's units (snapshot) — names the phase the evaluator verdict on the card is about
    *  (wicked-studio#250, F-3R2-006). Absent ⇒ the verdict says `unit N`. */
   units?: readonly WorkUnit[];
+  /** The run's seat pool (`session.clis`) — the seats a failure-escalation gate may reassign the
+   *  unit to (F-7R2-007). Absent ⇒ the card offers no reassign. */
+  clis?: readonly string[];
   onResolved?: () => void;
 }
 
@@ -49,7 +53,7 @@ function coverageLabel(r: CoverageReport): string {
   return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
 }
 
-export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onResolved }: Props): React.ReactElement {
+export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, onResolved }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
   // The evaluator's record for THIS gate (wicked-studio#250, F-3R2-006): a pure view over the
@@ -62,7 +66,30 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
   // (Copilot on #252). Every caller has one: the gate record's, or ApprovalDock's derivation from
   // the run's own cursor when the daemon-restart fallback lost the prompt.
   const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
-  const verdict = useMemo(() => (typeof ord === 'number' ? gateVerdict(events, ord) : null), [events, ord]);
+  // F-7R2-018: an ESCALATION gate about unit N shows only unit N's own evaluation — never the
+  // previous phase's pass under a card about the unit that failed (`gateVerdictFor`).
+  const verdict = useMemo(() => gateVerdictFor(events, ord, prompt), [events, ord, prompt]);
+  // F-7R2-007: a failure-escalation gate offers to move the unit to another seat — plain Approve
+  // re-dispatches the seat that just failed. Not on a deliver-lift escalation (a LIFT-CONFLICT or
+  // a refused lift is the engine's story, told by the lift block below — another seat cannot fix
+  // a rebase conflict), which is why the control is also gated on `lift === null` at the render.
+  const escalation = isFailureEscalation(prompt, verdict);
+  const failedCli = typeof ord === 'number' ? (units ?? EMPTY_UNITS).find((u) => u.ord === ord)?.assigned_cli ?? null : null;
+  // A host without the run view (the steering-author and testing-launch panels hold only the run
+  // id + the gate) reads the run ONCE for its seat pool when — and only when — the gate is a failure
+  // escalation the lever applies to. Zero reads on every other gate; a failed read offers no lever.
+  const [fetchedClis, setFetchedClis] = useState<readonly string[] | null>(null);
+  const wantsPool = escalation && clis === undefined;
+  useEffect(() => {
+    if (!wantsPool) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getRun(runId))
+      .then(({ run }) => { if (!cancelled) setFetchedClis(Array.isArray(run.session.clis) ? run.session.clis : []); })
+      .catch(() => { /* no pool known — the card keeps Approve / Reject / Cancel, nothing invented */ });
+    return () => { cancelled = true; };
+  }, [wantsPool, runId]);
+  const pool = clis ?? fetchedClis;
   // The deliver lift's story for THIS ord (wicked-core#431 / F-3R2-013): a gate opened on a deliver
   // unit the engine refused (LIFT-CONFLICT, a failed re-verify, a HEAD off the run branch) renders
   // what the lift did and the engine's remedy on the card. A pre-run deliver gate has no deliver-ord
@@ -355,6 +382,24 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
         </p>
       )}
 
+      {/* F-7R2-007: on a failure escalation, the seat lever — approve the retry, then move the
+          unit to a seat that is not the one that just failed (crew's reassign route). The steer
+          text rides the approve here too. */}
+      {escalation && pool !== null && lift === null && (
+        <ReassignControl
+          runId={runId}
+          ord={ord}
+          pool={pool}
+          failedCli={failedCli}
+          amend={amend}
+          onDone={() => {
+            useAnnotationStore.getState().clearDraft(runId);
+            clearGate(runId);
+            onResolved?.();
+          }}
+        />
+      )}
+
       {/* Four-button layout (2×2): Approve / Approve+steer / Reject / Cancel run */}
       <div className="grid grid-cols-2 gap-2">
         <button
@@ -364,8 +409,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
           style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
           {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
+          {...(escalation && failedCli !== null && !restoredRetry
+            ? { title: `retries the unit on ${failedCli} — the seat that just failed; use Reassign to move it` }
+            : {})}
         >
-          {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
+          {restoredRetry ? 'Retry against the restored tree' : escalation && failedCli !== null ? `Approve (retry on ${failedCli})` : 'Approve'}
         </button>
         <button
           data-testid="steering-approve-steer"

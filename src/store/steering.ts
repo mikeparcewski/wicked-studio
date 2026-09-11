@@ -9,7 +9,8 @@ import { create } from 'zustand';
  * not an engine-derived outcome.
  */
 
-export type SteeringAction = 'approve' | 'approve-with-steer' | 'reject' | 'cancel';
+/** `reassign` (F-7R2-007): the operator approved the retry AND moved the unit to another seat. */
+export type SteeringAction = 'approve' | 'approve-with-steer' | 'reject' | 'cancel' | 'reassign';
 
 export interface SteeringEntry {
   /** Monotonic order key. */
@@ -20,6 +21,8 @@ export interface SteeringEntry {
   action: SteeringAction;
   /** The amend text for an approve-with-steer, verbatim (the steered instruction). */
   amend?: string;
+  /** The seat a `reassign` moved the unit to. */
+  cli?: string;
   ts: number;
 }
 
