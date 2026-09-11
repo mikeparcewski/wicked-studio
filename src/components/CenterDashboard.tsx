@@ -20,8 +20,10 @@ import { usageTotals, WINDOW_LABEL_STYLE } from '../board/metrics.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useRunEventStore } from '../store/events.js';
+import { deliverLift } from './deliverLiftModel.js';
 import { GateVerdict } from './GateVerdict.js';
-import { gateVerdict, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { gateVerdictFor, isFailureEscalation, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { ReassignControl } from './ReassignControl.js';
 import { useSteeringStore } from '../store/steering.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { chroniclePath, modePath } from '../hooks/useRoute.js';
@@ -275,6 +277,7 @@ const FEED_META: Record<string, FeedMeta> = {
 
 const NO_EVENTS: CoreEvent[] = [];
 const NO_UNITS: WorkUnit[] = [];
+const NO_CLIS: string[] = [];
 
 /** One open gate as an INSTANCE: the same run can open several while the dashboard stays mounted
  *  (a retry of the same ord included), and each must fetch and prove its own history. */
@@ -302,6 +305,8 @@ interface GateCardProps {
   events: readonly CoreEvent[];
   /** The run's units (snapshot) — names the verdict's phase. */
   units: readonly WorkUnit[];
+  /** The run's seat pool (`session.clis`) — the reassign offer on a failure escalation (F-7R2-007). */
+  clis: readonly string[];
   /** True once THIS gate instance's durable history has been fetched and merged (see the
    *  dashboard's backfill). Until then the block is withheld: the store may hold only an earlier
    *  attempt's evaluation plus this gate's `awaitingHuman`, and a same-ord retry would otherwise
@@ -318,6 +323,7 @@ function GateActionCard({
   sessionLbl,
   events,
   units,
+  clis,
   ready,
   onApprove,
   onReject,
@@ -325,14 +331,21 @@ function GateActionCard({
   const [amend, setAmend] = useState('');
   const [loading, setLoading] = useState(false);
   const [steerOpen, setSteerOpen] = useState(false);
+  const clearGate = useGateStore((s) => s.clearGate);
   // The same verdict block the run page's gate card renders (F-3R2-006): a gate answered from
   // this inbox must show what it is approving too. Bounded on the gate's ord — with none known,
   // no block, never an unbounded historical evaluation dressed as this gate's — and only once
-  // this gate instance's history is KNOWN (`ready`): never the previous slice's verdict.
+  // this gate instance's history is KNOWN (`ready`): never the previous slice's verdict. And on
+  // an ESCALATION gate about unit N, only unit N's own evaluation (F-7R2-018).
   const verdict = useMemo(
-    () => (ready && typeof ord === 'number' ? gateVerdict(events, ord) : null),
-    [events, ord, ready],
+    () => (ready ? gateVerdictFor(events, ord, prompt) : null),
+    [events, ord, prompt, ready],
   );
+  // F-7R2-007: the same seat lever the run page's card offers, from the same predicates — and,
+  // like there, not on a deliver-lift escalation (another seat cannot fix a rebase conflict).
+  const escalation = isFailureEscalation(prompt, verdict)
+    && (typeof ord !== 'number' || deliverLift(events, ord) === null);
+  const failedCli = typeof ord === 'number' ? units.find((u) => u.ord === ord)?.assigned_cli ?? null : null;
   // wicked-core#431 (F-3R2-010 / F-255-01): the SAME relabel the run page's gate card applies, from
   // the same predicate — an open gate must not read "Retry against the restored tree" there and
   // "Approve" here. Approve on the restored-tree denial retries the phase against the creator's
@@ -440,6 +453,19 @@ function GateActionCard({
         <GateVerdict view={verdict} phase={phaseLabel(runId, units, verdict.ord)} />
       )}
 
+      {/* F-7R2-007: the seat lever on a failure escalation — see SteeringGate. */}
+      {escalation && (
+        <ReassignControl
+          runId={runId}
+          ord={ord}
+          pool={clis}
+          failedCli={failedCli}
+          amend={amend}
+          compact
+          onDone={() => clearGate(runId)}
+        />
+      )}
+
       {/* Steer textarea — visible only when "Approve + steer" is toggled */}
       {steerOpen && (
         <textarea
@@ -474,7 +500,11 @@ function GateActionCard({
           type="button"
           disabled={loading}
           onClick={() => void run(() => onApprove(runId))}
-          {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
+          {...(restoredRetry
+            ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" }
+            : escalation && failedCli !== null
+              ? { title: `retries the unit on ${failedCli} — the seat that just failed; use Reassign to move it` }
+              : {})}
           style={{
             background: 'var(--status-run-dim)',
             color: 'var(--status-run)',
@@ -488,7 +518,7 @@ function GateActionCard({
             opacity: loading ? 0.5 : 1,
           }}
         >
-          {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
+          {restoredRetry ? 'Retry against the restored tree' : escalation && failedCli !== null ? `Approve (retry on ${failedCli})` : 'Approve'}
         </button>
         <button
           type="button"
@@ -1174,6 +1204,7 @@ export function CenterDashboard({
                     sessionLbl={lbl}
                     events={byRun[gate.runId] ?? NO_EVENTS}
                     units={v?.units ?? NO_UNITS}
+                    clis={v?.session.clis ?? NO_CLIS}
                     ready={gateReady.has(gateInstanceKey(gate))}
                     onApprove={handleApprove}
                     onReject={handleReject}

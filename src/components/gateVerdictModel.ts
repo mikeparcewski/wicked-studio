@@ -1,4 +1,5 @@
-import type { CoreEvent, RepoCheckRun, UnitDenial, WorkUnit, WorktreeChangedPath } from '../api/types.js';
+import type { CoreEvent, RepoCheckRun, RosterSeat, UnitDenial, WorkUnit, WorktreeChangedPath } from '../api/types.js';
+import { parseDenial } from './denialCopy.js';
 
 /**
  * gateVerdict — the evaluator's record for the gate the operator is answering, read off the run's
@@ -304,6 +305,91 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
     judgeCli: str(ev.judgeCli),
     judgeDistinct: typeof ev.judgeDistinct === 'boolean' ? ev.judgeDistinct : null,
   };
+}
+
+/**
+ * The unit an ESCALATION gate is about, read off the engine's own prompt spellings — the
+ * triage escalation ("Unit N failed and triage escalated: …") and the verdict escalation
+ * ("Unit N verdict is NOT PASS — …"). `null` for a pre-run gate ("Approve unit N before it
+ * runs: …") and for any prompt this cannot read — the pre-run rule then stands.
+ */
+export function escalationUnit(prompt: string | undefined): number | null {
+  if (prompt === undefined) return null;
+  const m = /^\s*Unit\s+(\d+)\s+(?:failed and triage escalated|verdict is NOT PASS)/i.exec(prompt);
+  return m === null ? null : Number(m[1]);
+}
+
+/**
+ * The verdict block a gate card may show (acceptance finding F-7R2-018): {@link gateVerdict}
+ * bounded on the gate's ord, AND — for an escalation gate about unit N — only unit N's OWN
+ * evaluation. The phase7-r2 rig's "Unit 3 failed and triage escalated" card rendered unit 2's
+ * vacuous pass ("Evaluator verdict — build · UNGATED") under a card about unit 3, because a
+ * worker failure leaves no `gateEvaluated` for N and the last-at-or-below lookup fell through
+ * to N-1. A pre-run gate ("Approve unit N before it runs") keeps the previous phase's verdict —
+ * that IS what the operator is approving (F-3R2-006). No verdict for THAT unit ⇒ no block.
+ */
+export function gateVerdictFor(events: readonly CoreEvent[], gateOrd: number | undefined, prompt: string | undefined): GateVerdictView | null {
+  if (typeof gateOrd !== 'number') return null;
+  const view = gateVerdict(events, gateOrd);
+  if (view === null) return null;
+  const unit = escalationUnit(prompt);
+  if (unit !== null && view.ord !== unit) return null;
+  return view;
+}
+
+/**
+ * Whether this gate is a FAILURE escalation — the unit's worker failed (or triage gave up on it)
+ * and the engine escalated to a human (F-7R2-007): the gate whose plain Approve re-dispatches the
+ * SAME dead seat. Read off the engine's prompt spelling, or the deciding denial's kind (crew's
+ * `worker_failure` layer, the `triage escalation:` / `Worker FAILED` prose `denialCopy` knows).
+ */
+export function isFailureEscalation(prompt: string | undefined, view: GateVerdictView | null): boolean {
+  if (prompt !== undefined && /^\s*Unit\s+\d+\s+failed and triage escalated/i.test(prompt)) return true;
+  if (view === null || view.outcome !== 'fail' || view.denial === null) return false;
+  if (view.denial.source === 'worker_failure') return true;
+  const kind = parseDenial(view.denial.reason, view.denial.source === null ? null : { source: view.denial.source }).kind;
+  return kind === 'triage' || kind === 'worker-failed';
+}
+
+/** One seat the operator may move a failed unit to, with the roster's word on it (F-7R2-007). */
+export interface ReassignCandidate {
+  cli: string;
+  /** The roster's display name, or the seat key when the roster is cold. */
+  label: string;
+  /** `ready` (signed in, not inactive) · `unknown` (no roster word) · `signed-out` (a council benches it) · `inactive`. */
+  state: 'ready' | 'unknown' | 'signed-out' | 'inactive';
+  /** The suffix the picker shows after the name — empty when nothing follows from the roster. */
+  note: string;
+}
+
+const CANDIDATE_RANK: Record<ReassignCandidate['state'], number> = { ready: 0, unknown: 1, 'signed-out': 2, inactive: 3 };
+
+/**
+ * The run's OTHER seats, ordered by what the roster says: signed-in seats first, then seats the
+ * roster cannot vouch for, then signed-out seats ("will be benched" — the council rule), then
+ * inactive ones. The failed seat is excluded: re-dispatching to it is what plain Approve does.
+ */
+export function reassignCandidates(
+  pool: readonly string[],
+  failedCli: string | null,
+  roster: readonly RosterSeat[] | null,
+): ReassignCandidate[] {
+  const seen = new Set<string>();
+  const out: ReassignCandidate[] = [];
+  for (const cli of pool) {
+    if (cli === failedCli || seen.has(cli)) continue;
+    seen.add(cli);
+    const seat = roster?.find((s) => s.key === cli);
+    const inactive = seat?.health?.status === 'inactive';
+    const state: ReassignCandidate['state'] = inactive
+      ? 'inactive'
+      : seat?.signed_in === true ? 'ready' : seat?.signed_in === false ? 'signed-out' : 'unknown';
+    const note = state === 'inactive'
+      ? `inactive${seat?.health?.message ? `: ${seat.health.message}` : ''}`
+      : state === 'signed-out' ? 'signed out — will be benched' : '';
+    out.push({ cli, label: seat?.display_name ?? cli, state, note });
+  }
+  return out.sort((a, b) => CANDIDATE_RANK[a.state] - CANDIDATE_RANK[b.state] || pool.indexOf(a.cli) - pool.indexOf(b.cli));
 }
 
 /**

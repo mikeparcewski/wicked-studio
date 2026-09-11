@@ -77,7 +77,7 @@ export function ApprovalDock({
           guidance={guidance}
           {...(ord !== undefined ? { ord } : {})}
           {...(gate ? { prompt: gate.prompt } : {})}
-          {...(view !== undefined ? { units: view.units } : {})}
+          {...(view !== undefined ? { units: view.units, clis: view.session.clis } : {})}
           onResolved={onResolved}
         />
       )}

@@ -633,4 +633,17 @@ export const api = {
     const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
     return apiFetch<ActivityPage>(`/projects/${encodeURIComponent(id)}/activity${qs}`);
   },
+
+  /**
+   * `POST /runs/:id/reassign` — the manual seat lever (crew#442; acceptance finding F-7R2-007):
+   * recycle the run's CURSOR unit onto `cli` through the engine's `reassignUnit` (the same path the
+   * stall watchdog's automatic escalation takes); `cli` omitted lets the council re-pick. The
+   * daemon accepts it only while the run is `executing` (409 otherwise — an awaiting-human run
+   * must be approved first), and `cli` must be in the run's own pool (`session.clis`; 400).
+   */
+  reassignRun: (id: string, cli?: string) =>
+    apiFetch<{ status: string; ord: number; cli?: string }>(`/runs/${encodeURIComponent(id)}/reassign`, {
+      method: 'POST',
+      body: JSON.stringify(cli === undefined ? {} : { cli }),
+    }),
 };

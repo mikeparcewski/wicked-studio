@@ -12,6 +12,35 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 ### Added
+- **Reassign to <seat> + retry on a failure-escalation gate** (phase7-r2 acceptance finding
+  F-7R2-007, HIGH). At every "Unit N failed and triage escalated" gate the card offered Approve — a
+  retry on the SAME dead seat — Approve + steer, Reject and Cancel; recovery was
+  `POST /api/v1/runs/:id/reassign {cli}` by hand, five times, racing the re-dispatch window. Both
+  gate cards (the run page's `SteeringGate`, the landing inbox's card) now carry `ReassignControl`:
+  the run's OTHER seats (`session.clis` minus the seat that failed the unit) with the roster's word
+  on each — signed-in first, signed-out labelled "will be benched", inactive last — and one
+  action that approves the retry (the steer text rides it), waits for the run to resume
+  (`GET /runs/:id` until `executing`, bounded — the daemon reassigns only an executing run), then
+  calls the existing `POST /runs/:id/reassign {cli}` (`api.reassignRun`). Every step is stated
+  (`steering-reassign-status`); a refused reassign leaves the approve standing, shows the daemon's
+  sentence and offers the reassign alone again. Plain Approve is relabelled "Approve (retry on
+  <seat>)" on that gate. Recorded on the steering timeline as `reassign`. (Wire gap, recorded: the
+  reassign route refuses an `awaiting_human` run, so the approve must precede it.)
+
+### Fixed
+- **The gate card's verdict block is about THIS gate's unit** (F-7R2-018): on an escalation gate
+  about unit N the block rendered the LAST `gateEvaluated` at or below N — unit N−1's vacuous pass
+  under a card about the unit that failed. `gateVerdictFor` keys an escalation gate ("Unit N failed
+  and triage escalated" / "Unit N verdict is NOT PASS") on unit N's own evaluation and renders no
+  block when there is none; a pre-run gate keeps the previous phase's verdict (F-3R2-006).
+- **Narration never says "Checks ran" without a floor** (F-7R2-017): a `gateEvaluated` with
+  `hasDeterministicFloor: false` reads "Gate passed without checks on <phase> (ungated)" (no judge,
+  no policy), "Judge passed <phase> — no repository checks ran", or "Evaluator policy passed …";
+  a denial without a floor reads "Gate denied on <phase>: … — no repository checks ran". A frame
+  without the field (an older engine) keeps the legacy wording.
+- Tests: `gateVerdictModel.escalation`, `SteeringGate.reassign`, `CenterDashboard.reassign`;
+  `narrator.test` gains the floor/no-floor cases.
+
 - **The wicked-core#431 wire on the gate, the delivery card, the run head and the feed** (#250/#431
   consumer follow-through — pins `wicked-crew-api-types` 0.33.0, the wire wicked-crew#527 publishes).
   Every field is read off the frames the daemon sends and rendered only when present, so an older
