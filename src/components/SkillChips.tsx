@@ -1,14 +1,20 @@
 import {
+  HARNESS_REASON,
   SKILL_KIND_LABELS,
   SKILL_PROVENANCE_LABELS,
+  SKILL_REACH_LABELS,
+  portabilityReasonCopy,
+  skillPortability,
   type SkillKind,
+  type SkillPortability,
+  type SkillPortabilityView,
   type SkillProvenance,
   type SkillRow,
 } from '../api/skills.js';
 
-/** The Skills surface's shared chip grammar — kind, provenance, the core / Claude-only / upgrade /
+/** The Skills surface's shared chip grammar — kind, provenance, the core / portability / upgrade /
  *  conflict / unpublished badges and the enabled switch: one spelling for the catalog rows and the
- *  drawer. Every word here is the contract's (api-types 0.27.0 `SkillEntry`). */
+ *  drawer. Every word here is the contract's (api-types 0.34.0 `SkillEntry`). */
 
 export const KIND_COLOR: Record<SkillKind, string> = {
   router: 'var(--accent)',
@@ -73,18 +79,66 @@ export function CoreBadge(): React.ReactElement {
   );
 }
 
-/** Not portable: the skill's files resolve `${CLAUDE_PLUGIN_ROOT}`, invoke a cwd-relative script or
- *  link `../` — Claude-only by nature; excluded from the snapshot's `views/copilot/` and from the
- *  per-launch skill lists core builds for the other CLIs (design v3.2). */
-export function ClaudeOnlyBadge(): React.ReactElement {
+/** The pre-0.34.0 sentence — what the badge says when the daemon reports `portable: false` and no
+ *  reasons (it predates `portability`, or sent an empty verdict). */
+export const GENERIC_NOT_PORTABLE_TITLE =
+  'not portable — depends on the plugin root, cwd-relative scripts or sibling links; Claude-only, excluded from the snapshot\'s copilot view and the other CLIs\' per-launch skill lists';
+
+const EXCLUDED = 'excluded from the snapshot\'s copilot view and the other CLIs\' per-launch skill lists';
+
+/** The hover / accessible sentence for one non-portable row: the reasons joined, the first evidence
+ *  anchor, and what the exclusion means — or the generic sentence when the daemon sent no reasons. */
+export function portabilityTitle(view: SkillPortabilityView): string {
+  if (!view.detailed) return GENERIC_NOT_PORTABLE_TITLE;
+  const first = view.evidence[0];
+  const where = first === undefined ? '' : ` (first at ${first})`;
+  if (view.reach === 'needs-claude') {
+    return `${SKILL_REACH_LABELS['needs-claude']} — ${view.reasons.join(', ')}${where}: ${portabilityReasonCopy('requires-harness:claude')}; ${EXCLUDED} by design`;
+  }
+  if (view.reasons.includes(HARNESS_REASON)) {
+    // Mixed case: fixing the text is necessary but not sufficient — the harness reason keeps it out.
+    return `${SKILL_REACH_LABELS['not-portable']} — ${view.reasons.join(', ')}${where}; an authoring defect AND a harness requirement: fix the skill text; it also needs the Claude harness, so it stays ${EXCLUDED} after the fix`;
+  }
+  return `${SKILL_REACH_LABELS['not-portable']} — ${view.reasons.join(', ')}${where}; an authoring defect: ${EXCLUDED} until the skill text is fixed`;
+}
+
+/**
+ * WHY a skill does not reach the non-Claude seats — one badge per KIND of reason (F-079, api-types
+ * 0.34.0): any AUTHORING reason (`plugin-root`, `skill-dir-var`, `cwd-script`, `relative-link`,
+ * `cross-skill-path`) → **not portable** — the text is fixable, the title lists the reasons and the
+ * first `file:line`; `requires-harness:claude` alone → **needs Claude harness** — by design, the
+ * title is the reason. `portable` (the admission key core reads) decides whether anything renders;
+ * a daemon without `portability` (or a verdict with no reasons) gets the generic **not portable**
+ * badge with the pre-0.34.0 sentence. The wrapper keeps `skills-claude-only-badge` for one release
+ * so existing selectors keep resolving; the inner badge carries the per-kind testid, the reach and
+ * the reasons as data attributes, and its sentence as the accessible name.
+ */
+export function PortabilityBadge({ portability, portable }: {
+  portability: SkillPortability | undefined;
+  portable: boolean;
+}): React.ReactElement | null {
+  const view = skillPortability({ portable, portability });
+  if (view.reach === 'portable') return null;
+  const title = portabilityTitle(view);
+  const needsClaude = view.reach === 'needs-claude';
   return (
-    <span
-      data-testid="skills-claude-only-badge"
-      title="not portable — depends on the plugin root, cwd-relative scripts or sibling links; Claude-only, excluded from the snapshot's copilot view and the other CLIs' per-launch skill lists"
-      className={BADGE}
-      style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}
-    >
-      claude-only
+    <span data-testid="skills-claude-only-badge" data-reach={view.reach} data-contradiction={view.contradiction ?? undefined} className="inline-flex shrink-0">
+      <span
+        data-testid={needsClaude ? 'skills-needs-claude-badge' : 'skills-not-portable-badge'}
+        data-reasons={view.reasons.join(' ')}
+        data-detailed={view.detailed}
+        role="note"
+        aria-label={title}
+        title={title}
+        className={BADGE}
+        // Amber = actionable (the text is fixable); the ink stays `--ink-high` so the badge reads in
+        // BOTH themes (the light theme keeps `--status-gate` pale — only its `-dim` fill is re-tuned).
+        style={needsClaude
+          ? { background: 'var(--surface-raised)', color: 'var(--ink-muted)' }
+          : { background: 'var(--status-gate-dim)', color: 'var(--ink-high)', border: '1px solid var(--status-gate)' }}
+      >
+        {SKILL_REACH_LABELS[view.reach]}
+      </span>
     </span>
   );
 }
@@ -139,7 +193,7 @@ export function SkillFlags({ skill }: { skill: SkillRow }): React.ReactElement {
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
       {skill.core && <CoreBadge />}
-      {!skill.portable && <ClaudeOnlyBadge />}
+      <PortabilityBadge portability={skill.portability} portable={skill.portable} />
       {skill.upgradeAvailable && <UpgradeBadge />}
       {skill.conflict && <ConflictBadge />}
       {skill.unpublished && <UnpublishedBadge />}

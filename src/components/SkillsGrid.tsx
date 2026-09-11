@@ -1,10 +1,10 @@
-import { SKILL_KINDS, isSkillKind, type SkillRow } from '../api/skills.js';
+import { SKILL_KINDS, isSkillKind, skillPortability, type SkillRow } from '../api/skills.js';
 import { FilterStrip } from './dashboardKit.js';
 import { EnabledToggle, KindChip, ProvenanceChip, SkillFlags } from './SkillChips.js';
 
 /**
  * The skills CATALOG — one row per skill in the manifest: name · kind · provenance · flags (core /
- * claude-only / conflict / unpublished) · the enabled switch. A row click opens the drawer (the
+ * not portable · needs Claude harness / conflict / unpublished) · the enabled switch. A row click opens the drawer (the
  * SteeringGrid row/drawer-open idiom); the switch is the ONE inline write — it flips through the
  * daemon's guards and the row shows the manifest's answer, never an optimistic one.
  *
@@ -13,8 +13,9 @@ import { EnabledToggle, KindChip, ProvenanceChip, SkillFlags } from './SkillChip
  * rows.
  */
 
-/** The facet chips — the three kinds plus the state cuts the KPI tiles are doors into. */
-export const SKILL_CHIPS = ['all', ...SKILL_KINDS, 'enabled', 'disabled', 'overridden', 'core', 'portable', 'claude-only'] as const;
+/** The facet chips — the three kinds plus the state cuts the KPI tiles are doors into. The reach
+ *  split (`portable` · `not-portable` · `needs-claude`, 0.34.0 / F-079) replaces `claude-only`. */
+export const SKILL_CHIPS = ['all', ...SKILL_KINDS, 'enabled', 'disabled', 'overridden', 'core', 'portable', 'not-portable', 'needs-claude'] as const;
 
 export type SkillChip = (typeof SKILL_CHIPS)[number];
 
@@ -36,7 +37,8 @@ export function filterSkills(rows: readonly SkillRow[], f: SkillsFacets): SkillR
     if (f.chip === 'overridden' && r.provenance !== 'override') return false;
     if (f.chip === 'core' && !r.core) return false;
     if (f.chip === 'portable' && !r.portable) return false;
-    if (f.chip === 'claude-only' && r.portable) return false;
+    if (f.chip === 'not-portable' && skillPortability(r).reach !== 'not-portable') return false;
+    if (f.chip === 'needs-claude' && skillPortability(r).reach !== 'needs-claude') return false;
     if (q !== '' && !r.name.toLowerCase().includes(q) && !r.dir.toLowerCase().includes(q)) return false;
     return true;
   });
@@ -110,6 +112,9 @@ export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, fro
                     // drawer is open on", and `data-selected` is the styling/test hook.
                     aria-current={selected ? 'true' : undefined}
                     data-selected={selected}
+                    // A `portability` verdict that disagrees with `portable` (F-1) — observable here even
+                    // when no badge renders (a portable row carrying reasons); the drawer says it in words.
+                    data-contradiction={skillPortability(r).contradiction ?? undefined}
                     onClick={() => onSelect(r.name)}
                     className="cursor-pointer align-middle transition-colors"
                     style={{

@@ -2,6 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, isRouteUnsupported } from '../src/api/errors.js';
 import { apiFetch } from '../src/api/client.js';
 import {
+  HARNESS_REASON,
+  SKILL_PORTABILITY_REASONS,
+  isAuthoringReason,
+  portabilityContradiction,
+  portabilityReasonCopy,
+  skillPortability,
+  type SkillPortability,
   addSkill,
   analyzeSkills,
   currentBaseline,
@@ -41,6 +48,7 @@ import {
   type SkillsManifestResponse,
 } from '../src/api/skills.js';
 import { findingLocation } from '../src/components/SkillFindings.js';
+import { portabilityTitle } from '../src/components/SkillChips.js';
 import { filterSkills, SKILL_CHIPS, SKILLS_FACETS_DEFAULT } from '../src/components/SkillsGrid.js';
 
 vi.mock('../src/api/client.js', () => ({ apiFetch: vi.fn() }));
@@ -68,7 +76,10 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: vi.fn() }));
  *  - `isSkillsUnsupported` is the bare unknown-route 404 (a named 404 is an answer);
  *    `isSkillsUnavailable` is the 503 (no catalog to serve); `isSkillsConflict` is the CAS 409 and
  *    nothing else;
- *  - `skillCounts` is the five-tile KPI fold; `filterSkills` the catalog predicate the chips count with;
+ *  - `skillCounts` is the five-tile KPI fold — `portable` split by KIND of reason into `notPortable`
+ *    (authoring) and `needsClaude` (`requires-harness:claude`); `filterSkills` the catalog predicate
+ *    the chips count with; `skillPortability` the fold behind both (0.34.0 `portability`, older
+ *    daemons fall back to `portable` alone);
  *  - `parseFilesMap` is the Add/Replace modal's live validation — every key under the ROUTE
  *    BUILDER's segment rules (`skillFilePathIssue`, one rule for both); `findingLocation` the
  *    `file:line` cite; `SKILLS_ENGINE_STATE_COPY` spells every `DiagnosticsSkillsState`.
@@ -89,6 +100,13 @@ function entry(over: Partial<SkillEntry> = {}): SkillEntry {
     ...over,
   };
 }
+
+/** The publisher's verdict for the extractor: three authoring reasons + the harness one, two anchors. */
+const EXTRACTOR_PORTABILITY: SkillPortability = {
+  portable: false,
+  reasons: ['cwd-script', 'plugin-root', 'relative-link', 'requires-harness:claude'],
+  evidence: ['skills/domain/extractor/SKILL.md:41', 'skills/domain/extractor/refs/loop.md:7'],
+};
 
 function record(over: Partial<SkillFileRecord> = {}): SkillFileRecord {
   return { baselineHash: 'a'.repeat(8), effectiveHash: 'a'.repeat(8), lastPublishedHash: 'a'.repeat(8), conflict: false, ...over };
@@ -112,8 +130,10 @@ const MANIFEST: SkillManifest = {
   skills: {
     'wicked-garden-repo-learn': entry({ dir: 'skills/repo-learn', kind: 'router', core: true }),
     // A PARENT skill with a nested child: the parent owns `vendor/`, the child owns its own subtree.
-    'wicked-garden-domain': entry({ dir: 'skills/domain', kind: 'router', core: true, portable: false }),
-    'wicked-garden-domain-extractor': entry({ dir: 'skills/domain/extractor', kind: 'fork-worker', core: true, portable: false, provenance: 'override', conflict: true, upgradeAvailable: true }),
+    // Excluded BY DESIGN: the only reason is the harness one → "needs Claude harness".
+    'wicked-garden-domain': entry({ dir: 'skills/domain', kind: 'router', core: true, portable: false, portability: { portable: false, reasons: ['requires-harness:claude'], evidence: ['skills/domain/SKILL.md:3'] } }),
+    // Excluded for AUTHORING reasons (the harness one too) → "not portable" — the text is fixable.
+    'wicked-garden-domain-extractor': entry({ dir: 'skills/domain/extractor', kind: 'fork-worker', core: true, portable: false, provenance: 'override', conflict: true, upgradeAvailable: true, portability: EXTRACTOR_PORTABILITY }),
     'wicked-garden-qe-a11y-test-engineer': entry({ dir: 'skills/qe/a11y-test-engineer', kind: 'fork-worker', enabled: false }),
     'my-team-skill': entry({ dir: 'skills/my-team-skill', provenance: 'user-added', upstreamDir: 'skills/team-skill' }),
   },
@@ -413,9 +433,104 @@ describe('skillRows / skillCounts — the KPI fold agrees with the catalog', () 
     expect(rows[2]!.upgradeAvailable).toBe(true);
   });
 
-  it('counts total · enabled · overridden · core · portable', () => {
-    expect(skillCounts(skillRows(MANIFEST))).toEqual({ total: 5, enabled: 4, overridden: 1, core: 3, portable: 3 });
-    expect(skillCounts([])).toEqual({ total: 0, enabled: 0, overridden: 0, core: 0, portable: 0 });
+  it('counts total · enabled · overridden · core · portable — and splits the rest by KIND of reason', () => {
+    expect(skillCounts(skillRows(MANIFEST))).toEqual({ total: 5, enabled: 4, overridden: 1, core: 3, portable: 3, notPortable: 1, needsClaude: 1 });
+    expect(skillCounts([])).toEqual({ total: 0, enabled: 0, overridden: 0, core: 0, portable: 0, notPortable: 0, needsClaude: 0 });
+  });
+
+  it('the reach split is exhaustive: portable + notPortable + needsClaude === total, with or without the 0.34.0 field', () => {
+    const detailed = skillCounts(skillRows(MANIFEST));
+    expect(detailed.portable + detailed.notPortable + detailed.needsClaude).toBe(detailed.total);
+    // An older daemon: the same manifest with every `portability` stripped → the two non-portable rows are generic "not portable".
+    const older: SkillManifest = {
+      ...MANIFEST,
+      skills: Object.fromEntries(Object.entries(MANIFEST.skills).map(([n, e]) => {
+        const rest: SkillEntry = { ...e };
+        delete rest.portability;
+        return [n, rest];
+      })),
+    };
+    expect(skillCounts(skillRows(older))).toEqual({ total: 5, enabled: 4, overridden: 1, core: 3, portable: 3, notPortable: 2, needsClaude: 0 });
+  });
+});
+
+describe('skillPortability — the fold behind the badge, the chips and the KPI split (0.34.0 `portability`)', () => {
+  it('the six reasons are the wire\'s, in order; every one but the harness reason is an authoring reason with its own copy', () => {
+    expect(SKILL_PORTABILITY_REASONS).toEqual(['plugin-root', 'skill-dir-var', 'cwd-script', 'relative-link', 'cross-skill-path', 'requires-harness:claude']);
+    expect(HARNESS_REASON).toBe('requires-harness:claude');
+    expect(SKILL_PORTABILITY_REASONS.filter(isAuthoringReason)).toEqual(['plugin-root', 'skill-dir-var', 'cwd-script', 'relative-link', 'cross-skill-path']);
+    for (const r of SKILL_PORTABILITY_REASONS) expect(portabilityReasonCopy(r).length).toBeGreaterThan(10);
+    // A token this build does not know: authoring by default (never "needs Claude harness"), neutral copy.
+    expect(isAuthoringReason('some-future-reason')).toBe(true);
+    expect(portabilityReasonCopy('some-future-reason')).toContain('does not know');
+  });
+
+  it('portable: nothing to say — the reach is portable whatever else rides along', () => {
+    expect(skillPortability({ portable: true })).toEqual({ reach: 'portable', reasons: [], evidence: [], detailed: false, contradiction: null });
+    expect(skillPortability({ portable: true, portability: { portable: true, reasons: [] } })).toEqual({ reach: 'portable', reasons: [], evidence: [], detailed: true, contradiction: null });
+  });
+
+  it('any AUTHORING reason → not-portable (detailed), the reasons and anchors carried as sent — the harness reason beside them does not change the badge', () => {
+    expect(skillPortability({ portable: false, portability: EXTRACTOR_PORTABILITY })).toEqual({
+      reach: 'not-portable',
+      reasons: ['cwd-script', 'plugin-root', 'relative-link', 'requires-harness:claude'],
+      evidence: ['skills/domain/extractor/SKILL.md:41', 'skills/domain/extractor/refs/loop.md:7'],
+      detailed: true,
+      contradiction: null,
+    });
+    expect(skillPortability({ portable: false, portability: { portable: false, reasons: ['cross-skill-path'] } })).toEqual({
+      reach: 'not-portable', reasons: ['cross-skill-path'], evidence: [], detailed: true, contradiction: null,
+    });
+  });
+
+  it('the harness reason ALONE → needs-claude (by design, nothing to fix)', () => {
+    expect(skillPortability({ portable: false, portability: { portable: false, reasons: ['requires-harness:claude'], evidence: ['skills/domain/SKILL.md:3'] } })).toEqual({
+      reach: 'needs-claude', reasons: ['requires-harness:claude'], evidence: ['skills/domain/SKILL.md:3'], detailed: true, contradiction: null,
+    });
+  });
+
+  it('an older daemon (no `portability`), or a verdict with no reasons, falls back to `portable` alone: generic not-portable, never a fabricated reason', () => {
+    expect(skillPortability({ portable: false })).toEqual({ reach: 'not-portable', reasons: [], evidence: [], detailed: false, contradiction: null });
+    expect(skillPortability({ portable: false, portability: undefined })).toEqual({ reach: 'not-portable', reasons: [], evidence: [], detailed: false, contradiction: null });
+    // A verdict that says "not portable" but names no reason is generic too — and, being internally
+    // inconsistent (reasons.length === 0 ⇔ portable), it is named as a contradiction beside the badge.
+    expect(skillPortability({ portable: false, portability: { portable: false, reasons: [] } })).toEqual({
+      reach: 'not-portable', reasons: [], evidence: [], detailed: false,
+      contradiction: 'daemon reported inconsistent portability: no reasons reported on a non-portable skill',
+    });
+  });
+
+  it('a contradictory verdict is named, never swallowed — and never changes which badge `portable` chose (F-1)', () => {
+    // No verdict at all is not a contradiction (an older daemon): nothing to compare.
+    expect(skillPortability({ portable: false }).contradiction).toBeNull();
+    expect(skillPortability({ portable: true }).contradiction).toBeNull();
+    // portable:true carrying reasons → still portable (no badge), the disagreement named.
+    const portableWithReasons = skillPortability({ portable: true, portability: { portable: true, reasons: ['plugin-root'] } });
+    expect(portableWithReasons.reach).toBe('portable');
+    expect(portableWithReasons.contradiction).toBe('daemon reported inconsistent portability: 1 reason(s) reported on a portable skill');
+    // portable:false with a verdict that says portable:true and no reasons → generic badge, both disagreements named.
+    const flagsDisagree = skillPortability({ portable: false, portability: { portable: true, reasons: [] } });
+    expect(flagsDisagree).toMatchObject({ reach: 'not-portable', detailed: false });
+    expect(flagsDisagree.contradiction).toBe('daemon reported inconsistent portability: portability.portable is true while portable is false; no reasons reported on a non-portable skill');
+    // portable:false with the verdict flag wrong but reasons present → the reasons still drive the badge.
+    const flagOnly = skillPortability({ portable: false, portability: { portable: true, reasons: ['requires-harness:claude'] } });
+    expect(flagOnly).toMatchObject({ reach: 'needs-claude', detailed: true });
+    expect(flagOnly.contradiction).toBe('daemon reported inconsistent portability: portability.portable is true while portable is false');
+    // Consistent verdicts carry null.
+    expect(skillPortability({ portable: false, portability: EXTRACTOR_PORTABILITY }).contradiction).toBeNull();
+    expect(portabilityContradiction(true, { portable: true, reasons: [] })).toBeNull();
+  });
+
+  it('the hover sentence: authoring-only says "until the skill text is fixed"; authoring + harness says BOTH — fix the text, and it still needs the harness (F-2)', () => {
+    const authoringOnly = portabilityTitle(skillPortability({ portable: false, portability: { portable: false, reasons: ['cwd-script', 'plugin-root'], evidence: ['skills/x/SKILL.md:4'] } }));
+    expect(authoringOnly).toBe('not portable — cwd-script, plugin-root (first at skills/x/SKILL.md:4); an authoring defect: excluded from the snapshot\'s copilot view and the other CLIs\' per-launch skill lists until the skill text is fixed');
+    const mixed = portabilityTitle(skillPortability({ portable: false, portability: EXTRACTOR_PORTABILITY }));
+    expect(mixed).toContain('not portable — cwd-script, plugin-root, relative-link, requires-harness:claude (first at skills/domain/extractor/SKILL.md:41)');
+    expect(mixed).toContain('fix the skill text; it also needs the Claude harness, so it stays excluded');
+    expect(mixed).not.toContain('until the skill text is fixed');
+    const harnessOnly = portabilityTitle(skillPortability({ portable: false, portability: { portable: false, reasons: ['requires-harness:claude'] } }));
+    expect(harnessOnly).toContain('needs Claude harness — requires-harness:claude:');
+    expect(harnessOnly).toContain('by design');
   });
 });
 
@@ -512,7 +627,7 @@ describe('filterSkills — the chip predicate', () => {
   const names = (chip: (typeof SKILL_CHIPS)[number], query = ''): string[] =>
     filterSkills(rows, { query, chip }).map((r) => r.name);
 
-  it('all shows everything; kinds, enabled/disabled, overridden, core, portable and claude-only cut it', () => {
+  it('all shows everything; kinds, enabled/disabled, overridden, core, portable, not-portable and needs-claude cut it', () => {
     expect(names('all')).toHaveLength(5);
     expect(names('router')).toEqual(['wicked-garden-domain', 'wicked-garden-repo-learn']);
     expect(names('fork-worker')).toEqual(['wicked-garden-domain-extractor', 'wicked-garden-qe-a11y-test-engineer']);
@@ -522,7 +637,11 @@ describe('filterSkills — the chip predicate', () => {
     expect(names('overridden')).toEqual(['wicked-garden-domain-extractor']);
     expect(names('core')).toEqual(['wicked-garden-domain', 'wicked-garden-domain-extractor', 'wicked-garden-repo-learn']);
     expect(names('portable')).toEqual(['my-team-skill', 'wicked-garden-qe-a11y-test-engineer', 'wicked-garden-repo-learn']);
-    expect(names('claude-only')).toEqual(['wicked-garden-domain', 'wicked-garden-domain-extractor']);
+    expect(names('not-portable')).toEqual(['wicked-garden-domain-extractor']);
+    expect(names('needs-claude')).toEqual(['wicked-garden-domain']);
+    // The three reach chips partition the catalog.
+    expect([...names('portable'), ...names('not-portable'), ...names('needs-claude')].sort()).toEqual(names('all').sort());
+    expect(SKILL_CHIPS).not.toContain('claude-only');
   });
 
   it('the query matches name OR dir, case-insensitively, and composes with the chip', () => {

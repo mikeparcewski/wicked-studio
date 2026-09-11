@@ -11,8 +11,8 @@
   "studioVersion": "0.5.5",
   "counts": {
     "files": 142,
-    "occurrences": 1221,
-    "static": 1046,
+    "occurrences": 1228,
+    "static": 1054,
     "dynamic": 59,
     "computed": 7
   },
@@ -4468,6 +4468,36 @@
       ]
     },
     {
+      "testId": "skills-drawer-portability",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drawer-portability-anchor",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drawer-portability-evidence",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drawer-portability-hint",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drawer-portability-reason",
+      "files": [
+        "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
       "testId": "skills-drawer-upstream",
       "files": [
         "src/components/SkillDrawer.tsx"
@@ -4661,6 +4691,12 @@
       ]
     },
     {
+      "testId": "skills-finding-reason",
+      "files": [
+        "src/components/SkillFindings.tsx"
+      ]
+    },
+    {
       "testId": "skills-finding-skill",
       "files": [
         "src/components/SkillFindings.tsx"
@@ -4700,6 +4736,18 @@
       "testId": "skills-loading",
       "files": [
         "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-needs-claude-badge",
+      "files": [
+        "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skills-not-portable-badge",
+      "files": [
+        "src/components/SkillChips.tsx"
       ]
     },
     {

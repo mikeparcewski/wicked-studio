@@ -59,6 +59,32 @@ npm publish dates. Every version listed here exists on
     the 450/750 excerpt, `denial_reason` framed as `Worker FAILED on unit N …`); the loopback rig
     `e2e/wire433_test.py` (fixture switch `wire433`) drives the three surfaces in a real browser.
 
+### Changed
+- **Skills page: a badge per KIND of portability reason, and the claude-only KPI split** (#256,
+  F-079 — pins `wicked-crew-api-types` 0.34.0, whose additive `SkillEntry.portability`
+  `{portable, reasons[], evidence?[]}` is the publisher's per-reason verdict, crew#531). The one
+  `claude-only` badge lumped "the author used a Claude-only path" together with "this skill needs
+  the Claude harness" and hid the fix. Now any AUTHORING reason (`plugin-root`, `skill-dir-var`,
+  `cwd-script`, `relative-link`, `cross-skill-path`) renders **not portable**
+  (`skills-not-portable-badge`; the hover title lists the reasons and the first `file:line`
+  anchor, and is the badge's accessible name) while `requires-harness:claude` alone renders
+  **needs Claude harness** (`skills-needs-claude-badge`; title = the reason). The wrapper keeps
+  `skills-claude-only-badge` for one release so existing selectors resolve; a daemon that predates
+  the field (no `portability`) falls back to `portable` alone — the generic **not portable** badge
+  with the previous sentence, never a fabricated reason. The Portable tile's context reads
+  `N not portable · M need Claude harness` (the value stays the portable count); the chips
+  `not-portable` + `needs-claude` replace `claude-only`; the drawer gains a **Portability** line —
+  every reason with one clause of "why", and every `file:line` anchor as monospace text that wraps
+  at phone width. `skillCounts` gains `notPortable` / `needsClaude` (`portable + notPortable +
+  needsClaude === total`). The wire mirror (`src/api/skills-wire.ts`) and its parity fixture move
+  to the 0.34.0 block (picking up the 0.29.0 `installer-copy` source kind and the `skills.source` /
+  `skills.manifest` diagnostics findings the 0.27.0 mirror lagged). The Reach KPI group is as wide
+  as the two-tile groups so the context line never ellipsizes, the badge's ink is `--ink-high` on the
+  amber fill so it reads in both themes, and the page header + verbs wrap at phone width. Review
+  follow-through: a `non-portable` analyze/publish finding wears its `portabilityReason` as a chip
+  (hover = the reason's one clause), and a `portability` verdict that disagrees with `portable` is
+  named — `data-contradiction` on the row and badge, a hint line in the drawer — never swallowed and
+  never a different badge (`portable` stays the admission key).
 
 ## [0.5.5] — 2026-09-11
 ### Added
