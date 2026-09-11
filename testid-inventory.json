@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.5",
   "counts": {
-    "files": 140,
-    "occurrences": 1192,
-    "static": 1023,
+    "files": 142,
+    "occurrences": 1221,
+    "static": 1046,
     "dynamic": 59,
     "computed": 7
   },
@@ -1140,6 +1140,12 @@
       ]
     },
     {
+      "testId": "copy-command",
+      "files": [
+        "src/components/CopyButton.tsx"
+      ]
+    },
+    {
       "testId": "create-first-project",
       "files": [
         "src/components/HomeBoard.tsx"
@@ -1305,6 +1311,78 @@
       "testId": "decisions-ledger",
       "files": [
         "src/components/DecisionsLedger.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-changed-tree",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-check",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-check-tail",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-conflicts",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-failure",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-failure-elided",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-floor",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-note",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-remedy",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-skipped",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-summary",
+      "files": [
+        "src/components/DeliverLift.tsx"
       ]
     },
     {
@@ -1992,6 +2070,12 @@
       ]
     },
     {
+      "testId": "gate-inbox-card",
+      "files": [
+        "src/components/CenterDashboard.tsx"
+      ]
+    },
+    {
       "testId": "gate-inbox-pill",
       "files": [
         "src/components/CenterDashboard.tsx"
@@ -2046,6 +2130,12 @@
       ]
     },
     {
+      "testId": "gate-verdict-check-tail",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
       "testId": "gate-verdict-criterion",
       "files": [
         "src/components/GateVerdict.tsx"
@@ -2070,6 +2160,18 @@
       ]
     },
     {
+      "testId": "gate-verdict-judge-same-seat",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-judge-seat",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
       "testId": "gate-verdict-layers",
       "files": [
         "src/components/GateVerdict.tsx"
@@ -2082,7 +2184,25 @@
       ]
     },
     {
+      "testId": "gate-verdict-restore-failed",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-restored",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
       "testId": "gate-verdict-skipped",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-suggestion-hint",
       "files": [
         "src/components/GateVerdict.tsx"
       ]
@@ -3879,6 +3999,12 @@
       "testId": "routing-provenance",
       "files": [
         "src/components/RoutingProvenance.tsx"
+      ]
+    },
+    {
+      "testId": "run-base-detail",
+      "files": [
+        "src/components/RunTimeline.tsx"
       ]
     },
     {
@@ -5800,6 +5926,12 @@
       ]
     },
     {
+      "testId": "tool-call-denied-detail",
+      "files": [
+        "src/components/RunTimeline.tsx"
+      ]
+    },
+    {
       "testId": "triage-hint",
       "files": [
         "src/components/HomeBoard.tsx"
@@ -6178,6 +6310,12 @@
       "testId": "worker-root-invalid",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "worktree-restored-detail",
+      "files": [
+        "src/components/RunTimeline.tsx"
       ]
     }
   ],
@@ -6577,6 +6715,7 @@
         "src/components/SkillChips.tsx",
         "src/components/SkillFindings.tsx",
         "src/components/SkillsPage.tsx",
+        "src/components/WhatWhere.tsx",
         "src/components/dashboardKit.tsx"
       ]
     },

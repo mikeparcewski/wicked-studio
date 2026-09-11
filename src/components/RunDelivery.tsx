@@ -1,8 +1,11 @@
-import { useEffect } from 'react';
-import type { SessionView } from '../api/types.js';
+import { useEffect, useMemo } from 'react';
+import type { CoreEvent, SessionView } from '../api/types.js';
 import { useDeliveryStore } from '../store/delivery.js';
+import { useRunEventStore } from '../store/events.js';
 import { usePostHocDeliverStore } from '../store/postHocDeliver.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
+import { DeliverLift } from './DeliverLift.js';
+import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import {
   DELIVERY_COLOR,
   DELIVERY_LABEL,
@@ -12,6 +15,8 @@ import {
   type DeliveryClaim,
 } from './delivery.js';
 import { compactPath } from './WhatWhere.js';
+
+const EMPTY_EVENTS: CoreEvent[] = [];
 
 /**
  * The Delivery views (wicked-studio#122, slice DA) — what a run PRODUCED, in the
@@ -26,6 +31,12 @@ import { compactPath } from './WhatWhere.js';
  *    accent and the link arrive together with the url or not at all.
  *  - The deliver phase opens a PR and STOPS. Nothing here says "shipped" and
  *    nothing says "merged" — merge stays human.
+ *
+ * wicked-core#431 (api-types 0.33.0): the rail body ALSO renders the deliver lift's story off the
+ * run's already-hydrated event log ({@link DeliverLift} — what the engine did to the work before
+ * letting the phase push, the re-verify on the tree that would ship, the engine's refusal verbatim).
+ * Still zero requests: the event store is what the run page hydrated. The badge and the chips stay
+ * DTO-only.
  */
 
 interface Props {
@@ -251,6 +262,20 @@ export function RunDelivery({ view }: Props): React.ReactElement {
 
   const workdir = view.session.workdir;
 
+  // The deliver lift (wicked-core#431 / F-3R2-013): the deliver unit's newest attempt, off the log.
+  // Keyed on the deliver unit's ORD — `deliverLift` scopes to it, so a verify phase's floor is never
+  // read as the deliver re-verify — and `null` without a deliver unit (the post-hoc path has none).
+  const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
+  const deliverOrd = unitId === null ? null : (view.units.find((u) => u.id === unitId)?.ord ?? null);
+  const lift = useMemo(() => (deliverOrd === null ? null : deliverLift(events, deliverOrd)), [events, deliverOrd]);
+  // A rejected deliver unit's `denial_reason` (rendered VERBATIM below) carries the engine's refusal
+  // the lift view also holds as `failure` — FRAMED (`Worker FAILED on unit N: …`) and excerpted
+  // differently from `stepFailed.detail` (actor.rs: 300/500 vs 150/250 head+tail) — so the lift block
+  // omits its copy when every segment the detail kept is already in the reason (`textCarriesFailure`,
+  // F-255-02/04). `reason` is `null` unless the claim is failed / nothing-to-deliver — exactly when it
+  // renders — so the omission can never hide a refusal the card is not otherwise showing.
+  const liftOmitsFailure = lift !== null && lift.failure !== null && textCarriesFailure(reason, lift.failure);
+
   // The licence — for the remedy line, and (in the caller) for the whole `'none'`
   // arm this body would otherwise open with "This run has no deliver phase":
   // `is_system === false`, a def IN HAND that carries no flag (the daemon omits
@@ -390,6 +415,12 @@ export function RunDelivery({ view }: Props): React.ReactElement {
             : 'launch with deliver: pr to have the run open a PR from its worktree'}
         </p>
       )}
+
+      {/* What the engine did before the push — and, when it refused, why (wicked-core#431). Last, so
+        * a failed claim's "Crew recorded:" reads straight into the unit's own reason and the lift
+        * card then explains it (the remedy included); absent entirely on a daemon that never sent a
+        * deliver-ord frame. */}
+      {lift !== null && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
     </div>
   );
 }

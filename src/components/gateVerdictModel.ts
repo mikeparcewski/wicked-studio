@@ -5,7 +5,7 @@ import type { CoreEvent, RepoCheckRun, UnitDenial, WorkUnit, WorktreeChangedPath
  * event log (wicked-studio#250, F-3R2-006 — the UI half of wicked-core F-036/F-039).
  *
  * The gate card asked "Approve unit 4 before it runs: verify" and, one denial later, "Unit 4
- * verdict is NOT PASS — confirm to retry the phase, or reject to cancel the run" — and nothing
+ * verdict is NOT PASS — …" (the pre-0.33.0 retry-or-reject wording) — and nothing
  * else. The verdict the operator was really answering (the `fix` phase PASSED its floor and its
  * judge; the `verify` phase was DENIED because it changed the worktree it was reviewing, here is
  * the path, here is the restore command) sat on the wire the whole time, in `gateEvaluated`,
@@ -34,8 +34,20 @@ import type { CoreEvent, RepoCheckRun, UnitDenial, WorkUnit, WorktreeChangedPath
  *
  * Never overclaimed (FINDING-025): an evaluation with no floor, no judge verdict and no evaluator
  * policy is `'ungated'` — a default-allow the card labels as "nothing gated this phase", not a
- * pass. The judge SEAT is not on this wire (api-types 0.31.0 `gateEvaluated` carries no seat),
- * so no view field exists for it — render nothing rather than infer one from `unitDispatched`.
+ * pass.
+ *
+ * wicked-core#431 (api-types 0.33.0) put three more facts on the same frames, all read here and
+ * all `null` when an older daemon does not send them:
+ *  - `gateEvaluated.judgeCli` / `judgeDistinct` — WHO rendered `agentVerdict`, and whether that
+ *    seat was identity-distinct from the work's author (evaluator ≠ creator is the doctrine;
+ *    `false` means the judge fell back to the single default runner and its independence is
+ *    prompt-only). Read off the frame, never inferred from `unitDispatched`.
+ *  - `evaluatorMutatedWorktree.restored` / `restoreError` — whether the engine already put the
+ *    creator's tree back after the mutation, so a human's Approve now means a retry against the
+ *    VERIFIED tree, not adoption of the evaluator's edit.
+ *  - `worktreeRestored` (a new frame between the mutation record and the verdict) — what was
+ *    discarded and where the discarded edit was pinned (`refs/wicked/suggestions/<run>/<ord>/<attempt>`,
+ *    `null` when the pin failed), attached as `restore`.
  */
 
 export type GateOutcome = 'pass' | 'fail' | 'ungated';
@@ -49,6 +61,11 @@ export interface GateFloorCheck {
   timedOut: boolean;
   spawnError: string | null;
   durationMs: number;
+  /** The last 4 KiB of the check's stdout / stderr as the engine recorded them (`RepoCheckRun`, on the
+   *  wire since api-types 0.31.0) — the evidence behind a failed check, verbatim. `null` when the
+   *  stream was empty or the frame predates the field, so no surface paints an empty box (F-255-03). */
+  stdoutTail: string | null;
+  stderrTail: string | null;
 }
 
 /** The F-039 floor as `repoChecksEvaluated` reported it. */
@@ -68,6 +85,26 @@ export interface GateMutationView {
   afterTree: string;
   headMoved: boolean;
   changed: WorktreeChangedPath[];
+  /** wicked-core#431: whether the engine restored the creator's tree right after the mutation.
+   *  `null` when the frame predates the field (an older engine) — the card then keeps the manual
+   *  `git read-tree` remedy the denial prose carries and says nothing about a restore. */
+  restored: boolean | null;
+  /** Why the restore failed or was not attempted, when `restored === false`. */
+  restoreError: string | null;
+}
+
+/** The `worktreeRestored` record (wicked-core#431, api-types 0.33.0): what the engine put back and
+ *  what it threw away. Follows `evaluatorMutatedWorktree` when `restored` is `true`. */
+export interface GateRestoreView {
+  /** The tree id the worktree was restored to (the creator's baseline). */
+  tree: string;
+  /** The commit `HEAD` was reset to when the phase had moved it; `null` when it had not. */
+  head: string | null;
+  /** Exactly what the evaluator's edit was — the same list the mutation event carried as `changed`. */
+  discarded: WorktreeChangedPath[];
+  /** Where the discarded edit was pinned (`refs/wicked/suggestions/<run>/<ord>/<attempt>`), so
+   *  `git show <ref>` reads it back; `null` when the pin failed. */
+  suggestionRef: string | null;
 }
 
 /** The winning denial: structured when the wire carries `denial`, prose-only from an older engine. */
@@ -95,10 +132,19 @@ export interface GateVerdictView {
   denial: GateDenialView | null;
   floor: GateFloorView | null;
   mutation: GateMutationView | null;
+  /** The `worktreeRestored` record for this fold, when the engine restored the creator's tree. */
+  restore: GateRestoreView | null;
+  /** The council seat key the layer-2 judge ran under (`codex`, `pi`, …); `null` when no judge ran,
+   *  on the bus-mediated path, and from a daemon that predates api-types 0.33.0. */
+  judgeCli: string | null;
+  /** Whether that judge seat was identity-distinct from the work's author; `null` when unknown. */
+  judgeDistinct: boolean | null;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+/** A recorded stream tail: a non-blank string, else `null` — an empty stream is nothing to show. */
+const tail = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 
@@ -134,10 +180,14 @@ function checkOf(raw: unknown): GateFloorCheck | null {
     timedOut: c.timedOut === true,
     spawnError: str(c.spawnError),
     durationMs: typeof c.durationMs === 'number' ? c.durationMs : 0,
+    stdoutTail: tail(c.stdoutTail),
+    stderrTail: tail(c.stderrTail),
   };
 }
 
-function floorOf(ev: CoreEvent): GateFloorView {
+/** The F-039 floor off a `repoChecksEvaluated` frame — shared with the deliver re-verify
+ *  (`deliverLiftModel.ts`), which is the same frame emitted for the deliver ord. */
+export function floorOf(ev: CoreEvent): GateFloorView {
   return {
     passed: ev.passed === true,
     criterion: str(ev.criterion) ?? '',
@@ -147,19 +197,36 @@ function floorOf(ev: CoreEvent): GateFloorView {
   };
 }
 
-function mutationOf(ev: CoreEvent): GateMutationView {
-  const changed = Array.isArray(ev.changed)
-    ? ev.changed.filter(
+/** Narrow a wire `ChangedPath[]` — anything that is not `{path, status}` strings is dropped. */
+function changedPaths(v: unknown): WorktreeChangedPath[] {
+  return Array.isArray(v)
+    ? v.filter(
         (p): p is WorktreeChangedPath => isRecord(p) && typeof p.path === 'string' && typeof p.status === 'string',
       )
     : [];
+}
+
+function mutationOf(ev: CoreEvent): GateMutationView {
   return {
     cli: str(ev.cli) ?? '',
     phase: str(ev.phase) ?? '',
     beforeTree: str(ev.beforeTree) ?? '',
     afterTree: str(ev.afterTree) ?? '',
     headMoved: ev.headMoved === true,
-    changed,
+    changed: changedPaths(ev.changed),
+    // Absent (an older engine) is `null`, never `false`: `false` is the engine SAYING the restore
+    // failed, and the card renders that as a warning it must not fabricate.
+    restored: typeof ev.restored === 'boolean' ? ev.restored : null,
+    restoreError: str(ev.restoreError),
+  };
+}
+
+function restoreOf(ev: CoreEvent): GateRestoreView {
+  return {
+    tree: str(ev.tree) ?? '',
+    head: str(ev.head),
+    discarded: changedPaths(ev.discarded),
+    suggestionRef: str(ev.suggestionRef),
   };
 }
 
@@ -216,6 +283,9 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
 
   const floorFrame = nearestBefore(events, idx, 'repoChecksEvaluated', ord);
   const mutationFrame = nearestBefore(events, idx, 'evaluatorMutatedWorktree', ord);
+  // The restore record rides the same fold: emitted AFTER the mutation frame and BEFORE the verdict
+  // (wicked-core#431), so the same bounded look-back finds it and a retry never inherits it.
+  const restoreFrame = nearestBefore(events, idx, 'worktreeRestored', ord);
 
   return {
     ord,
@@ -230,6 +300,9 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
     denial,
     floor: floorFrame === null ? null : floorOf(floorFrame),
     mutation: mutationFrame === null ? null : mutationOf(mutationFrame),
+    restore: restoreFrame === null ? null : restoreOf(restoreFrame),
+    judgeCli: str(ev.judgeCli),
+    judgeDistinct: typeof ev.judgeDistinct === 'boolean' ? ev.judgeDistinct : null,
   };
 }
 
@@ -276,6 +349,42 @@ export function checkOutcome(c: GateFloorCheck): { word: string; ok: boolean } {
 }
 
 /**
+ * The recorded stream tails of a check that did NOT pass, stderr first — what a collapsed `<details>`
+ * per stream renders on the gate card's floor and on the deliver lift (F-255-03). Empty for a passing
+ * check (its output is not evidence of anything the card claims) and for a check whose streams the
+ * engine recorded as empty.
+ */
+export function checkTails(c: GateFloorCheck): Array<{ stream: 'stderr' | 'stdout'; text: string }> {
+  if (checkOutcome(c).ok) return [];
+  const out: Array<{ stream: 'stderr' | 'stdout'; text: string }> = [];
+  if (c.stderrTail !== null) out.push({ stream: 'stderr', text: c.stderrTail });
+  if (c.stdoutTail !== null) out.push({ stream: 'stdout', text: c.stdoutTail });
+  return out;
+}
+
+/**
+ * Whether Approve on the gate for `gateOrd` means "retry against the restored tree" (wicked-core#431 /
+ * F-3R2-010): the deciding evaluation is THIS unit's, it failed, the WORKTREE GUARD is the layer that
+ * denied it, and the engine reports the creator's tree restored. That is the engine's own condition
+ * for sending the restored-tree prompt (`actor.rs`: `denial.source == "worktree_guard" &&
+ * mutation.restored`) — in a dual-deny another layer wins, the engine keeps the legacy prompt and this
+ * keeps "Approve" (F-255-05). ONE predicate for every gate card — the run page's `SteeringGate` and the
+ * landing inbox's card (F-255-01) — so an open gate never reads "Retry" on one surface and "Approve"
+ * on the other. Keyed on the evidence frames, never on the prompt text; a prose-only denial from an
+ * older engine (`source: null`) cannot be shown to be the guard's and stays "Approve".
+ */
+export function isRestoredRetry(view: GateVerdictView | null, gateOrd: number | null | undefined): boolean {
+  return (
+    view !== null &&
+    typeof gateOrd === 'number' &&
+    view.ord === gateOrd &&
+    view.outcome === 'fail' &&
+    view.denial?.source === 'worktree_guard' &&
+    view.mutation?.restored === true
+  );
+}
+
+/**
  * `6893` → `6.9s`, `79191` → `1m 19s`, `420` → `420ms`. Rounds to the UNIT it is about to print
  * BEFORE choosing the format, so a boundary value never shows sixty of a smaller unit: 59,999 ms is
  * `1m` (not `60.0s`), 119,500 ms is `2m` (not `1m 60s`), 999.6 ms is `1.0s` (Copilot on #252).
@@ -297,4 +406,10 @@ export function formatDuration(ms: number): string {
  */
 export function splitBackticks(text: string): string[] {
   return text.split('`');
+}
+
+/** A git object id cut for display: the first `n` hex chars (trees 10, as the card already prints
+ *  them; commits 7, git's own default). Anything shorter than `n` is shown whole. */
+export function shortId(id: string, n = 10): string {
+  return id.length > n ? id.slice(0, n) : id;
 }

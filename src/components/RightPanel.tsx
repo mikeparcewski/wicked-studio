@@ -679,10 +679,12 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
                 {openId === id ? '▲' : '▼'}
               </span>
             </button>
-            {/* Delivery derives from the `view` prop alone (zero events, zero
+            {/* Delivery derives its CLAIM from the `view` prop alone (zero
                 model), so it never waits on the snapshot the other bodies need
                 — a run that opened a PR says so on the first paint of the
-                section, not after the re-hydrate lands. */}
+                section, not after the re-hydrate lands. The deliver-lift block
+                it also renders (wicked-core#431) reads the run event store the
+                page already hydrated — still zero requests of its own. */}
             {openId === id && id === 'delivery' && (
               <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
                 <RunDelivery view={view} />

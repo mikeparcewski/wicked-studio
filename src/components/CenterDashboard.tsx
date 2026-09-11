@@ -21,7 +21,7 @@ import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useRunEventStore } from '../store/events.js';
 import { GateVerdict } from './GateVerdict.js';
-import { gateVerdict, phaseLabel } from './gateVerdictModel.js';
+import { gateVerdict, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 import { useSteeringStore } from '../store/steering.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { chroniclePath, modePath } from '../hooks/useRoute.js';
@@ -333,6 +333,11 @@ function GateActionCard({
     () => (ready && typeof ord === 'number' ? gateVerdict(events, ord) : null),
     [events, ord, ready],
   );
+  // wicked-core#431 (F-3R2-010 / F-255-01): the SAME relabel the run page's gate card applies, from
+  // the same predicate — an open gate must not read "Retry against the restored tree" there and
+  // "Approve" here. Approve on the restored-tree denial retries the phase against the creator's
+  // verified tree, and the button says so.
+  const restoredRetry = isRestoredRetry(verdict, ord);
 
   const run = useCallback(
     async (action: () => Promise<void>): Promise<void> => {
@@ -352,6 +357,8 @@ function GateActionCard({
 
   return (
     <div
+      data-testid="gate-inbox-card"
+      {...(restoredRetry ? { 'data-retry-restored': 'true' } : {})}
       style={{
         background: 'var(--surface-card)',
         border: `1px solid ${meta.borderColor}`,
@@ -467,6 +474,7 @@ function GateActionCard({
           type="button"
           disabled={loading}
           onClick={() => void run(() => onApprove(runId))}
+          {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
           style={{
             background: 'var(--status-run-dim)',
             color: 'var(--status-run)',
@@ -480,7 +488,7 @@ function GateActionCard({
             opacity: loading ? 0.5 : 1,
           }}
         >
-          Approve
+          {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
         </button>
         <button
           type="button"
@@ -505,7 +513,7 @@ function GateActionCard({
             opacity: loading ? 0.5 : 1,
           }}
         >
-          {steerOpen && amend.trim() ? 'Send steer' : 'Approve + steer'}
+          {steerOpen && amend.trim() ? 'Send steer' : restoredRetry ? 'Retry + steer' : 'Approve + steer'}
         </button>
         <button
           type="button"

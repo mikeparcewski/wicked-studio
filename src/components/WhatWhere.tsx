@@ -1,7 +1,13 @@
+import { useMemo } from 'react';
+import type { CoreEvent } from '../api/types.js';
 import type { RunModel } from '../hooks/useRunModel.js';
+import { useRunEventStore } from '../store/events.js';
 import type { Provenance } from '../store/provenance.js';
 import { ProvenanceLine } from './ProvenanceLine.js';
+import { runBase, runBaseLine } from './runBaseModel.js';
 import { RunTimes } from './runIdentity.js';
+
+const EMPTY_EVENTS: CoreEvent[] = [];
 
 interface Props {
   model: RunModel;
@@ -12,11 +18,11 @@ interface Props {
   onSelectRun?: (id: string) => void;
 }
 
-function Row({ label, value, mono, title }: {
-  label: string; value: string; mono?: boolean; title?: string;
+function Row({ label, value, mono, title, testId }: {
+  label: string; value: string; mono?: boolean; title?: string; testId?: string;
 }): React.ReactElement {
   return (
-    <div className="flex gap-2 text-[11px]">
+    <div className="flex gap-2 text-[11px]" {...(testId !== undefined ? { 'data-testid': testId } : {})}>
       <span className="w-20 shrink-0 font-mono" style={{ color: 'var(--ink-dim)' }}>{label}</span>
       <span
         className={mono ? 'font-mono break-all' : ''}
@@ -42,6 +48,11 @@ export function compactPath(p: string): string {
 
 export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props): React.ReactElement {
   const { session } = model;
+  // wicked-core#431 (api-types 0.33.0): the run's base — "origin/main @ <commit> · N behind · lifted
+  // to the tip" — off the `runBaseResolved` frame the engine emits once per freshly minted worktree.
+  // A resumed run and a pre-0.33.0 daemon send none: the row is then absent, never a guessed base.
+  const events = useRunEventStore((s) => s.byRun[session.id]) ?? EMPTY_EVENTS;
+  const base = useMemo(() => runBase(events), [events]);
 
   return (
     <div data-testid="what-where" className="flex flex-col gap-1.5">
@@ -72,6 +83,15 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
         mono
         {...(session.workdir !== undefined && session.workdir !== null ? { title: session.workdir } : {})}
       />
+      {base !== null && (
+        <Row
+          label="base"
+          value={runBaseLine(base)}
+          mono
+          testId="run-base"
+          {...(base.note !== null ? { title: base.note } : {})}
+        />
+      )}
       <Row label="roster" value={session.clis.length > 0 ? session.clis.join(', ') : '—'} mono />
       <Row label="entity" value={session.entity_mode} />
     </div>

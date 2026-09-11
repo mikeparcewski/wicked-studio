@@ -8,9 +8,11 @@ import { useRunEventStore } from '../store/events.js';
 import { durableGuidance, useGuidanceStore } from '../store/guidance.js';
 import { useGateStore } from '../store/gates.js';
 import { useSteeringStore, type SteeringAction } from '../store/steering.js';
+import { DeliverLift } from './DeliverLift.js';
+import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
-import { gateVerdict, phaseLabel } from './gateVerdictModel.js';
+import { gateVerdict, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 
 interface Props {
   runId: string;
@@ -61,6 +63,26 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
   // the run's own cursor when the daemon-restart fallback lost the prompt.
   const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
   const verdict = useMemo(() => (typeof ord === 'number' ? gateVerdict(events, ord) : null), [events, ord]);
+  // The deliver lift's story for THIS ord (wicked-core#431 / F-3R2-013): a gate opened on a deliver
+  // unit the engine refused (LIFT-CONFLICT, a failed re-verify, a HEAD off the run branch) renders
+  // what the lift did and the engine's remedy on the card. A pre-run deliver gate has no deliver-ord
+  // frames yet and renders nothing; so does every non-deliver gate.
+  const lift = useMemo(() => (typeof ord === 'number' ? deliverLift(events, ord) : null), [events, ord]);
+  // wicked-core#431 (F-3R2-010): when the deciding denial is THIS unit's WORKTREE-GUARD denial and the
+  // engine restored the creator's tree, Approve no longer means "adopt the evaluator's edit and retry"
+  // — it means a retry against the restored, verified tree, and the button says so. The engine's
+  // `awaitingHuman.prompt` changed with it ("… its edit was discarded and the creator's verified tree
+  // restored. Approve to retry the phase against the restored tree …"); the relabel keys on the
+  // EVIDENCE frames, not on that prose, so a daemon that sends the frames with any prompt relabels and
+  // one that predates them never does. ONE predicate for every gate card — the landing inbox's card
+  // uses the same `isRestoredRetry` — mirroring the engine's own guard (`denial.source ==
+  // "worktree_guard" && mutation.restored`), so no surface relabels where the engine kept the legacy prompt.
+  const restoredRetry = isRestoredRetry(verdict, ord);
+  // The engine's triage-escalate prompt already QUOTES the deliver refusal (`Unit N failed and triage
+  // escalated: … Failure output: "<excerpt>". Approve to retry …`), so the lift block omits its copy
+  // when the prompt carries it — the refusal reads ONCE on the card (F-255-02). A prompt that does
+  // not (the daemon-restart fallback, an older engine's wording) leaves the block to say it.
+  const liftOmitsFailure = lift !== null && lift.failure !== null && textCarriesFailure(prompt, lift.failure);
   // Slice BD (DES-UX-002 §4.3, EC51): gate arrival pre-populates the steer
   // textarea — the gate card MOUNTING is the arrival on this surface. Slice BE
   // added the durable layer (CREW-UX-7): pre-population order is the run DTO's
@@ -219,6 +241,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
     prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.',
   );
 
+  // Both mutation-gate prompts the engine has shipped — the pre-0.33.0 retry-or-reject wording and
+  // wicked-core#431's "… Approve to retry the phase against the restored tree …" — carry
+  // "NOT PASS", so this match holds across the wording change (re-checked for api-types 0.33.0).
   const isCoverageFail = headline.toLowerCase().includes('not pass') || headline.toLowerCase().includes('coverage');
 
   return (
@@ -236,6 +261,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
       }}
       data-testid="steering-gate"
       data-run-id={runId}
+      {...(restoredRetry ? { 'data-retry-restored': 'true' } : {})}
     >
       <div className="flex items-center gap-2 mb-2">
         <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--status-gate)' }} />
@@ -267,6 +293,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
       {verdict !== null && (
         <GateVerdict view={verdict} phase={phaseLabel(runId, units ?? EMPTY_UNITS, verdict.ord)} />
       )}
+
+      {/* The deliver lift + the engine's refusal for a gate on the deliver unit (wicked-core#431). */}
+      {lift !== null && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
 
       {/* Coverage stats — shown when evaluator gate fails and we have repo coverage data */}
       {isCoverageFail && coverage && (
@@ -334,8 +363,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
           disabled={loading}
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
           style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+          {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
         >
-          Approve
+          {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
         </button>
         <button
           data-testid="steering-approve-steer"
@@ -344,7 +374,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
           style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
         >
-          Approve + steer
+          {restoredRetry ? 'Retry + steer' : 'Approve + steer'}
         </button>
         <button
           data-testid="steering-reject"
@@ -369,7 +399,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
       {/* Mode-selector note: workflow gates are always HITL regardless of run-level human_confirm */}
       <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
         Workflow-declared gate — run-level human_confirm setting does not apply here.
-        {' '}· a approve · r reject while this card holds focus
+        {' '}· a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
       </p>
     </div>
   );

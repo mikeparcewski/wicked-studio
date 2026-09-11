@@ -1,7 +1,10 @@
+import { CopyButton } from './CopyButton.js';
 import {
   checkOutcome,
+  checkTails,
   denialSourceLabel,
   formatDuration,
+  shortId,
   splitBackticks,
   type GateVerdictView,
 } from './gateVerdictModel.js';
@@ -22,8 +25,16 @@ import {
  *
  * The repo-checks floor (F-039) lists every check that ran — name, exit code, duration, the
  * manifest line it came from — and what was skipped, so "checks passed" is the exit codes the
- * engine observed, not the seat's account of them. The judge SEAT is not on the wire (api-types
- * 0.31.0), so no line claims one.
+ * engine observed, not the seat's account of them.
+ *
+ * wicked-core#431 (api-types 0.33.0) adds, each only when the frame carries it:
+ *  - the judge SEAT (`judgeCli`) on the header line, and — when `judgeDistinct` is `false` — a
+ *    warning that the judge was the same seat as the creator (evaluator ≠ creator is the doctrine;
+ *    a same-seat judge's independence is prompt-only). A frame without the field claims no seat.
+ *  - the restore state on a worktree-guard denial: `restored: true` says the evaluator's edit was
+ *    discarded and the creator's verified tree restored, lists the discarded paths from the
+ *    `worktreeRestored` record, and — when the edit was pinned — gives `git show <suggestionRef>`
+ *    as copyable code; `restored: false` says the restore failed and the manual remedy stands.
  *
  * Own testids (`gate-verdict-*`): the run page's `verdict-detail` card keeps its selector.
  */
@@ -45,7 +56,31 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
     >
       <p className="text-xs font-semibold" style={{ color: tone }}>
         Evaluator verdict — {phase} · {word}
+        {view.judgeCli !== null && (
+          <span
+            data-testid="gate-verdict-judge-seat"
+            data-judge-cli={view.judgeCli}
+            data-judge-distinct={view.judgeDistinct === null ? 'unknown' : String(view.judgeDistinct)}
+            style={{ color: 'var(--ink-muted)' }}
+            title={
+              view.judgeDistinct === true
+                ? 'the judge ran on a seat identity-distinct from the creator (the rotation pick)'
+                : view.judgeDistinct === false
+                  ? 'the judge fell back to the single default runner — the same seat as the creator'
+                  : 'which seat rendered the judge verdict'
+            }
+          >
+            {' · '}judge: {view.judgeCli}
+          </span>
+        )}
       </p>
+
+      {view.judgeCli !== null && view.judgeDistinct === false && (
+        <p className="text-[11px]" data-testid="gate-verdict-judge-same-seat" style={{ color: 'var(--status-gate)' }}>
+          same seat as the creator — evaluator ≠ creator is not held on this verdict: the judge fell back to the
+          single default runner, so its independence is prompt-only
+        </p>
+      )}
 
       {view.criterion !== null && (
         <p className="text-[11px]" data-testid="gate-verdict-criterion" style={{ color: 'var(--ink-muted)' }}>
@@ -101,6 +136,59 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
         </p>
       )}
 
+      {/* wicked-core#431 (F-3R2-010): the engine already ran the remedy. Say so, list exactly what was
+          thrown away (the worktreeRestored record; the mutation's own list when that frame is absent),
+          and hand over the pinned ref so the discarded edit can still be read. */}
+      {view.mutation !== null && view.mutation.restored === true && (
+        <p
+          className="text-[11px]"
+          data-testid="gate-verdict-restored"
+          {...(view.restore !== null && view.restore.suggestionRef !== null ? { 'data-suggestion-ref': view.restore.suggestionRef } : {})}
+          style={{ color: 'var(--ink-body)', overflowWrap: 'anywhere' }}
+        >
+          <span className="font-semibold" style={{ color: 'var(--status-done)' }}>
+            the evaluator&apos;s edit was discarded and the creator&apos;s verified tree restored
+          </span>
+          {' — discarded: '}
+          {(() => {
+            const paths = view.restore !== null ? view.restore.discarded : view.mutation.changed;
+            return paths.length === 0 ? 'no path listed' : paths.map((c) => `${c.status} ${c.path}`).join(', ');
+          })()}
+          {view.restore !== null && view.restore.tree !== '' && (
+            <span style={{ color: 'var(--ink-dim)' }}> (tree {shortId(view.restore.tree)})</span>
+          )}
+          {view.restore !== null && view.restore.head !== null && ` · HEAD reset to ${shortId(view.restore.head, 7)}`}
+          {view.restore !== null && view.restore.suggestionRef !== null && (
+            <>
+              {' · the edit is kept at '}
+              <code className="px-1 rounded" style={{ background: 'var(--surface-rail)', color: 'var(--ink-high)' }}>
+                {view.restore.suggestionRef}
+              </code>
+              {' — read it back with '}
+              <code
+                data-testid="gate-verdict-suggestion-hint"
+                className="px-1 rounded"
+                title="click to select, then copy"
+                style={{ background: 'var(--surface-rail)', color: 'var(--ink-high)', userSelect: 'all' }}
+              >
+                git show {view.restore.suggestionRef}
+              </code>{' '}
+              <CopyButton command={`git show ${view.restore.suggestionRef}`} />
+            </>
+          )}
+          {view.restore !== null && view.restore.suggestionRef === null && ' · the discarded edit was not pinned (no suggestion ref) — only the paths above record it'}
+          {view.restore === null && ' (paths from the mutation record — no restore record in the log)'}
+        </p>
+      )}
+
+      {view.mutation !== null && view.mutation.restored === false && (
+        <p className="text-[11px]" data-testid="gate-verdict-restore-failed" style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }}>
+          the creator&apos;s tree was NOT restored
+          {view.mutation.restoreError !== null && `: ${view.mutation.restoreError}`}
+          {' — the manual remedy in the denial stands; approving retries against the tree as it is'}
+        </p>
+      )}
+
       {view.floor !== null && (
         <div
           data-testid="gate-verdict-floor"
@@ -137,6 +225,21 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
                     {' · '}
                     {formatDuration(c.durationMs)}
                     {c.source !== '' && <span style={{ color: 'var(--ink-dim)' }}> · {c.source}</span>}
+                  
+                    {/* The evidence behind a red row (F-255-03): the stream tails the engine recorded, collapsed. */}
+                    {checkTails(c).map((t) => (
+                      <details key={t.stream} data-testid="gate-verdict-check-tail" data-stream={t.stream} className="mt-0.5">
+                        <summary className="cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
+                          {t.stream} tail — the check&apos;s own output, verbatim
+                        </summary>
+                        <pre
+                          className="mt-1 p-1.5 rounded overflow-auto text-[10px] leading-snug"
+                          style={{ maxHeight: '12rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: 'var(--surface-rail)', color: 'var(--ink-high)' }}
+                        >
+                          {t.text}
+                        </pre>
+                      </details>
+                    ))}
                   </li>
                 );
               })}
