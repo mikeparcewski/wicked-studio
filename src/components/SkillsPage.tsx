@@ -38,7 +38,8 @@ import type { SkillsWriter } from './skillsWriter.js';
  * crew#480):
  *
  *  - the KPI band (total · enabled · overridden · core · portable) over the manifest, each tile a
- *    door into the matching catalog filter;
+ *    door into the matching catalog filter — the Portable tile's context splits the rest by KIND of
+ *    reason (`N not portable · M need Claude harness`, api-types 0.34.0 / F-079);
  *  - the CATALOG (SkillsGrid): one row per skill with kind / provenance / flags and the enabled
  *    switch — the one inline write, through the daemon's guards;
  *  - the DRAWER (SkillDrawer) a row opens: skill files + support files under tabs, the textarea
@@ -510,7 +511,7 @@ export function SkillsPage({ navigate, search = '' }: {
                   testId="skills-kpi-portable"
                   label="Portable"
                   value={counts.portable}
-                  context={`${counts.total - counts.portable} claude-only`}
+                  context={`${counts.notPortable} not portable · ${counts.needsClaude} need Claude harness`}
                   onOpen={() => setFacets({ ...facets, chip: 'portable' })}
                 />
               </KpiGroup>

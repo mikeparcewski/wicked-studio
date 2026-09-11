@@ -9,7 +9,7 @@
  * writes an immutable snapshot generation that every worker spawn then receives.
  *
  * THE TYPES ARE THE CONTRACT'S. Every wire shape here is imported from `./skills-wire.ts` — a
- * byte-for-byte mirror of the `wicked-crew-api-types@0.27.0` skills block (crew#480), pinned by
+ * byte-for-byte mirror of the `wicked-crew-api-types@0.34.0` skills block (crew#480, crew#531), pinned by
  * `tests/skillsWire.test.ts` against a vendored fixture until the package publishes and the mirror
  * becomes a re-export. This module adds only what the UI folds from it (rows, counts, ownership,
  * route identity, the adoption / CAS seams) — never a shape of its own for something the wire spells.
@@ -49,6 +49,8 @@ import type {
   SkillKind,
   SkillManifest,
   SkillMutationResult,
+  SkillPortability,
+  SkillPortabilityReason,
   SkillProvenance,
   SkillPublishResult,
   SkillReadResult,
@@ -76,6 +78,8 @@ export type {
   SkillKind,
   SkillManifest,
   SkillMutationResult,
+  SkillPortability,
+  SkillPortabilityReason,
   SkillProvenance,
   SkillPublishedRecord,
   SkillPublishResult,
@@ -114,6 +118,81 @@ export const SKILL_PROVENANCE_LABELS: Record<SkillProvenance, string> = {
   override: 'overridden',
   'user-added': 'user-added',
 };
+
+/** The publisher's portability reasons (`SkillPortabilityReason`, 0.34.0 / F-079), in the wire's
+ *  order: five AUTHORING reasons — defects in the skill's text an author can fix — and ONE reason
+ *  different in kind, `requires-harness:claude`: the skill's mechanics need the Claude harness. */
+export const SKILL_PORTABILITY_REASONS: readonly SkillPortabilityReason[] = [
+  'plugin-root', 'skill-dir-var', 'cwd-script', 'relative-link', 'cross-skill-path', 'requires-harness:claude',
+];
+
+/** The one reason that is NOT an authoring defect. */
+export const HARNESS_REASON: SkillPortabilityReason = 'requires-harness:claude';
+
+/** An authoring reason: anything the publisher reports that is not the harness reason — a token this
+ *  build does not know is treated as authoring too (the honest default: "not portable", the token
+ *  shown), never as "needs Claude harness". */
+export function isAuthoringReason(reason: string): boolean {
+  return reason !== HARNESS_REASON;
+}
+
+/** Operator copy per reason — the "why" behind the badge, one clause each (the wire's own words:
+ *  `SkillEntry.portable` / `SkillPortabilityReason`). */
+export const SKILL_PORTABILITY_REASON_COPY: Record<SkillPortabilityReason, string> = {
+  'plugin-root': 'resolves ${CLAUDE_PLUGIN_ROOT}, which only the Claude harness sets',
+  'skill-dir-var': 'resolves ${CLAUDE_SKILL_DIR}, which only the Claude harness sets',
+  'cwd-script': 'invokes a script relative to the cwd (python3 scripts/x.py, ./scripts/x) instead of the skill directory',
+  'relative-link': 'links a sibling with ../ — a path outside the skill directory',
+  'cross-skill-path': 'reaches into another skill\'s directory',
+  'requires-harness:claude': 'the skill\'s mechanics need the Claude harness itself (hooks, plugin catalogs) — nothing in the text to rewrite',
+};
+
+/** The copy for a reason, or a neutral clause for a token this build does not know (a newer daemon). */
+export function portabilityReasonCopy(reason: string): string {
+  return (SKILL_PORTABILITY_REASON_COPY as Record<string, string | undefined>)[reason] ?? 'a reason this build of studio does not know — the token is the publisher\'s';
+}
+
+/** How a skill reaches the non-Claude seats — the fold behind the badge, the chips and the KPI split:
+ *  `portable` = the admission key is true; `not-portable` = at least one AUTHORING reason (or an
+ *  older daemon that reports none — generic); `needs-claude` = the ONLY reason is
+ *  `requires-harness:claude` (by design, nothing to fix). */
+export type SkillReach = 'portable' | 'not-portable' | 'needs-claude';
+
+export const SKILL_REACH_LABELS: Record<SkillReach, string> = {
+  portable: 'portable',
+  'not-portable': 'not portable',
+  'needs-claude': 'needs Claude harness',
+};
+
+/** One row's portability, folded for the badge, the drawer line and the counts. */
+export interface SkillPortabilityView {
+  reach: SkillReach;
+  /** The publisher's reasons as sent (sorted, unique); empty for a portable row and for a daemon
+   *  that predates the field. */
+  reasons: readonly SkillPortabilityReason[];
+  /** `<plugin-relative file>:<line>` anchors; the first is the hover's. Empty when none were sent. */
+  evidence: readonly string[];
+  /** `true` when the daemon sent `portability` with at least one reason — the badge can say WHY;
+   *  `false` = fall back to `portable` alone (an older daemon, or a verdict with no reasons). */
+  detailed: boolean;
+}
+
+/**
+ * The portability fold. `portable` — the admission key core reads for every non-Claude view — decides
+ * WHETHER a row is excluded; the optional `portability` verdict (0.34.0) decides WHICH badge and its
+ * words. Authoring reasons win over the harness reason when both are present (the text is fixable,
+ * so that is the badge to show; the title still lists every reason). A daemon without the field, or
+ * one that sends `portable: false` with no reasons, gets the generic "not portable" — never a
+ * fabricated reason.
+ */
+export function skillPortability(entry: { portable: boolean; portability?: SkillPortability | undefined }): SkillPortabilityView {
+  const verdict: SkillPortability | undefined = entry.portability;
+  const reasons: readonly SkillPortabilityReason[] = verdict?.reasons ?? [];
+  const evidence: readonly string[] = verdict?.evidence ?? [];
+  if (entry.portable) return { reach: 'portable', reasons, evidence, detailed: verdict !== undefined };
+  if (reasons.length === 0) return { reach: 'not-portable', reasons, evidence, detailed: false };
+  return { reach: reasons.some(isAuthoringReason) ? 'not-portable' : 'needs-claude', reasons, evidence, detailed: true };
+}
 
 /** The `diagnostics.skills.state` vocabulary (0.27.0), read as operator copy: whether the engine is
  *  being handed a verified snapshot, and if not, why. */
@@ -254,16 +333,24 @@ export interface SkillCounts {
   overridden: number;
   core: number;
   portable: number;
+  /** Excluded for an AUTHORING reason (or by an older daemon that reports none) — fixable in the text. */
+  notPortable: number;
+  /** Excluded because the skill needs the Claude harness (`requires-harness:claude` and nothing else). */
+  needsClaude: number;
 }
 
-/** The KPI fold over the manifest — pinned by test so the band agrees with the list. */
+/** The KPI fold over the manifest — pinned by test so the band agrees with the list. The reach split
+ *  is exhaustive: `portable + notPortable + needsClaude === total`. */
 export function skillCounts(rows: readonly SkillRow[]): SkillCounts {
-  const counts: SkillCounts = { total: rows.length, enabled: 0, overridden: 0, core: 0, portable: 0 };
+  const counts: SkillCounts = { total: rows.length, enabled: 0, overridden: 0, core: 0, portable: 0, notPortable: 0, needsClaude: 0 };
   for (const r of rows) {
     if (r.enabled) counts.enabled += 1;
     if (r.provenance === 'override') counts.overridden += 1;
     if (r.core) counts.core += 1;
-    if (r.portable) counts.portable += 1;
+    const { reach } = skillPortability(r);
+    if (reach === 'portable') counts.portable += 1;
+    else if (reach === 'not-portable') counts.notPortable += 1;
+    else counts.needsClaude += 1;
   }
   return counts;
 }

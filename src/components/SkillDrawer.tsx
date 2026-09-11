@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   listSkillFiles,
+  portabilityReasonCopy,
   readSkillFile,
   readSupportFile,
+  skillPortability,
   writeSkillFile,
   writeSupportFile,
   type SkillMutationResult,
@@ -11,7 +13,7 @@ import {
   type SkillTreeRow,
 } from '../api/skills.js';
 import { useModalEscape } from './Modal.js';
-import { EnabledToggle, KindChip, ProvenanceChip, SkillFlags } from './SkillChips.js';
+import { EnabledToggle, KindChip, ProvenanceChip, SkillFlags, portabilityTitle } from './SkillChips.js';
 import { SkillConfirmModal } from './SkillConfirmModal.js';
 import { SkillFilesMapModal } from './SkillFilesMapModal.js';
 import { SkillFindings } from './SkillFindings.js';
@@ -453,6 +455,10 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
   const hasBaseline = canReset || skill.upstreamDir !== null;
   const verbsDisabled = busy || saving;
   const treeLocked = dirty || fileLoading;
+  // WHY this skill does not reach the non-Claude seats (0.34.0 `portability`): the reasons and the
+  // publisher's `file:line` anchors — the operator's path to the offending line. Nothing renders
+  // for a portable skill.
+  const reach = skillPortability(skill);
 
   return (
     <aside
@@ -489,6 +495,49 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           </span>
         )}
       </div>
+
+      {reach.reach !== 'portable' && (
+        <div
+          data-testid="skills-drawer-portability"
+          data-reach={reach.reach}
+          data-detailed={reach.detailed}
+          className="flex min-w-0 flex-col gap-1 rounded px-2 py-1.5 text-[11px]"
+          style={{
+            background: 'var(--surface-rail)',
+            border: `1px solid ${reach.reach === 'needs-claude' ? 'var(--surface-raised)' : 'var(--status-gate)'}`,
+            color: 'var(--ink-muted)',
+          }}
+        >
+          <span className="min-w-0 break-words">
+            <span className="font-semibold" style={{ color: reach.reach === 'needs-claude' ? 'var(--ink-high)' : 'var(--status-gate)' }}>Portability</span>
+            {' — '}
+            {portabilityTitle(reach)}
+          </span>
+          {reach.detailed && (
+            <ul className="flex min-w-0 flex-col gap-0.5" aria-label="Portability reasons">
+              {reach.reasons.map((r) => (
+                <li key={r} data-testid="skills-drawer-portability-reason" data-reason={r} className="min-w-0 break-words">
+                  <span className="font-mono text-[10px] font-semibold" style={{ color: 'var(--ink-high)' }}>{r}</span>
+                  {' — '}
+                  {portabilityReasonCopy(r)}
+                </li>
+              ))}
+            </ul>
+          )}
+          {reach.evidence.length > 0 && (
+            <ul
+              data-testid="skills-drawer-portability-evidence"
+              aria-label="Portability evidence (file:line)"
+              className="flex min-w-0 flex-col gap-0.5 font-mono text-[10px]"
+              style={{ color: 'var(--ink-high)' }}
+            >
+              {reach.evidence.map((anchor) => (
+                <li key={anchor} data-testid="skills-drawer-portability-anchor" className="min-w-0 whitespace-normal break-all">{anchor}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <label className="inline-flex items-center gap-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>

@@ -11,11 +11,13 @@ import type {
   SkillFileRecord,
   SkillFileTree,
   SkillMutationResult,
+  SkillPortability,
   SkillPublishResult,
   SkillReadResult,
   SkillRefreshResult,
   SkillsCatalog,
 } from '../src/api/skills.js';
+import { GENERIC_NOT_PORTABLE_TITLE } from '../src/components/SkillChips.js';
 
 /**
  * The Skills file manager (`/skills`, the skills keystone — design v3) over a MOCKED `/skills`
@@ -25,8 +27,13 @@ import type {
  * `SkillMutationResult` / `SkillPublishResult` / `SkillRefreshResult` envelopes, 409 only on a
  * stale `expectedRevision`, 503 = no catalog to serve):
  *  - the catalog renders as the KPI band (total · enabled · overridden · core · portable) + one
- *    row per skill with kind / provenance chips and the core / claude-only / conflict / unpublished
- *    badges; the source and snapshot lines name the baseline and the current generation;
+ *    row per skill with kind / provenance chips and the core / portability / conflict / unpublished
+ *    badges; the source and snapshot lines name the baseline and the current generation. The
+ *    portability badge is PER KIND OF REASON (F-079, api-types 0.34.0 `SkillEntry.portability`):
+ *    an authoring reason → "not portable" (title = the reasons + the first `file:line`), the
+ *    harness reason alone → "needs Claude harness" (title = the reason); an older daemon without the
+ *    field falls back to the generic "not portable" with the pre-0.34.0 sentence; the Portable tile's
+ *    context splits the rest the same way and the chips `not-portable` / `needs-claude` cut it;
  *  - CAS: every mutation sends `expectedRevision` (the catalog revision) and the answered
  *    `revision` is adopted for the next one; a 409 raises the `skills-conflict` reload prompt and
  *    freezes every write until the catalog is re-read;
@@ -98,6 +105,17 @@ const REV_3 = 3;
 const BASELINE = 'b'.repeat(16);
 const SNAPSHOT_PATH = '/state/skills/snapshots/000003';
 
+/** The publisher's verdict for the extractor (0.34.0): three AUTHORING reasons, two `file:line` anchors. */
+const EXTRACTOR_PORTABILITY: SkillPortability = {
+  portable: false,
+  reasons: ['cwd-script', 'plugin-root', 'relative-link'],
+  evidence: ['skills/domain/extractor/SKILL.md:41', 'skills/domain/extractor/refs/loop.md:7'],
+};
+
+/** A skill excluded BY DESIGN — the harness reason and nothing else. */
+const AGENTIC = 'wicked-garden-agentic';
+const AGENTIC_PORTABILITY: SkillPortability = { portable: false, reasons: ['requires-harness:claude'], evidence: ['skills/agentic/SKILL.md:3'] };
+
 /** The four-skill manifest: a core router (shipped, published), a core Claude-only fork worker
  *  (an OVERRIDE whose SKILL.md is not yet published, in refresh conflict), a disabled fork worker,
  *  and a user-added module (no baseline, never published) — plus two root support files. */
@@ -127,8 +145,8 @@ function catalog(opts: {
       },
       skills: {
         [REPO_LEARN]: entry({ dir: 'skills/repo-learn', kind: 'router', core: true }),
-        // An override (edited files), Claude-only, in refresh conflict + upgrade available, not yet published.
-        [EXTRACTOR]: entry({ dir: 'skills/domain/extractor', kind: 'fork-worker', core: true, portable: false, provenance: 'override', upgradeAvailable: true, conflict: true, editedAt: '2026-09-07T10:00:00Z' }),
+        // An override (edited files), not portable for three authoring reasons, in refresh conflict + upgrade available, not yet published.
+        [EXTRACTOR]: entry({ dir: 'skills/domain/extractor', kind: 'fork-worker', core: true, portable: false, portability: EXTRACTOR_PORTABILITY, provenance: 'override', upgradeAvailable: true, conflict: true, editedAt: '2026-09-07T10:00:00Z' }),
         [A11Y]: entry({ dir: 'skills/qe/a11y-test-engineer', kind: 'fork-worker', enabled: false }),
         // User-added: no baseline, never published.
         [MINE]: entry({ dir: `skills/${MINE}`, provenance: 'user-added' }),
@@ -277,7 +295,11 @@ describe('SkillsPage — the catalog from the manifest', () => {
     expect(within(extractor).getByTestId('skills-kind-chip').dataset.kind).toBe('fork-worker');
     expect(within(extractor).getByTestId('skills-provenance-chip').dataset.provenance).toBe('override');
     expect(within(extractor).getByTestId('skills-core-badge')).toBeInTheDocument();
-    expect(within(extractor).getByTestId('skills-claude-only-badge')).toBeInTheDocument();
+    // The one-release compatibility wrapper still resolves; the badge inside is the per-reason one.
+    expect(within(extractor).getByTestId('skills-claude-only-badge').dataset.reach).toBe('not-portable');
+    expect(within(extractor).getByTestId('skills-not-portable-badge')).toHaveTextContent('not portable');
+    expect(within(extractor).queryByTestId('skills-needs-claude-badge')).toBeNull();
+    expect(screen.getByTestId('skills-kpi-portable')).toHaveTextContent('1 not portable · 0 need Claude harness');
     expect(within(extractor).getByTestId('skills-upgrade-badge')).toBeInTheDocument();
     expect(within(extractor).getByTestId('skills-conflict-badge')).toBeInTheDocument();
     expect(within(extractor).getByTestId('skills-unpublished-badge')).toBeInTheDocument();
@@ -288,6 +310,8 @@ describe('SkillsPage — the catalog from the manifest', () => {
     expect(within(mine).getByTestId('skills-unpublished-badge')).toBeInTheDocument();
     expect(within(mine).queryByTestId('skills-core-badge')).toBeNull();
     expect(within(mine).queryByTestId('skills-claude-only-badge')).toBeNull();
+    expect(within(mine).queryByTestId('skills-not-portable-badge')).toBeNull();
+    expect(within(mine).queryByTestId('skills-needs-claude-badge')).toBeNull();
     expect(within(mine).queryByTestId('skills-conflict-badge')).toBeNull();
     expect(within(mine).queryByTestId('skills-upgrade-badge')).toBeNull();
 
@@ -1962,5 +1986,122 @@ describe('SkillsPage — review round 3 (closing sweep): unsafe map keys, a fail
     expect(within(drawer).getAllByTestId('skills-file')[1]).toHaveAttribute('aria-current', 'true');
     expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(1);
     expect(calls('GET', `/skills/${REPO_LEARN}/files/refs/notes.md`)).toBe(2);
+  });
+});
+
+describe('SkillsPage — portability per KIND of reason (F-079, api-types 0.34.0 `SkillEntry.portability`)', () => {
+  it('an authoring reason → the "not portable" badge; its hover title lists the reasons and the first file:line anchor, and is the accessible name', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog()) });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+
+    const badge = within(row(EXTRACTOR)).getByTestId('skills-not-portable-badge');
+    expect(badge).toHaveTextContent('not portable');
+    expect(badge.dataset.reasons).toBe('cwd-script plugin-root relative-link');
+    expect(badge.dataset.detailed).toBe('true');
+    expect(badge.title).toContain('cwd-script, plugin-root, relative-link');
+    expect(badge.title).toContain('first at skills/domain/extractor/SKILL.md:41');
+    expect(badge.title).not.toContain('refs/loop.md'); // the hover carries the FIRST anchor; the drawer lists them all
+    expect(badge).toHaveAccessibleName(badge.title);
+    expect(badge).toHaveAttribute('role', 'note');
+  });
+
+  it('the harness reason ALONE → the "needs Claude harness" badge whose title is the reason; the KPI context and the chips split the two kinds', async () => {
+    wire({
+      'GET /skills': () => Promise.resolve(catalog({
+        skills: { [AGENTIC]: entry({ dir: 'skills/agentic', kind: 'router', portable: false, portability: AGENTIC_PORTABILITY }) },
+        files: { 'skills/agentic/SKILL.md': record() },
+      })),
+    });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+
+    const agentic = row(AGENTIC);
+    const badge = within(agentic).getByTestId('skills-needs-claude-badge');
+    expect(badge).toHaveTextContent('needs Claude harness');
+    expect(badge.title).toContain('requires-harness:claude');
+    expect(badge.title).toContain('first at skills/agentic/SKILL.md:3');
+    expect(badge).toHaveAccessibleName(/needs Claude harness — requires-harness:claude/);
+    expect(within(agentic).getByTestId('skills-claude-only-badge').dataset.reach).toBe('needs-claude');
+    expect(within(agentic).queryByTestId('skills-not-portable-badge')).toBeNull();
+
+    // Five skills: three portable, one not portable (authoring), one that needs the harness.
+    const tile = screen.getByTestId('skills-kpi-portable');
+    expect(tile.dataset.value).toBe('3');
+    expect(tile).toHaveTextContent('1 not portable · 1 need Claude harness');
+
+    // The chips are doors into each kind; `claude-only` is gone.
+    const chips = screen.getAllByTestId('skills-filter-chip');
+    const labels = chips.map((c) => c.textContent ?? '');
+    expect(labels.some((l) => l.startsWith('not-portable'))).toBe(true);
+    expect(labels.some((l) => l.startsWith('needs-claude'))).toBe(true);
+    expect(labels.some((l) => l.startsWith('claude-only'))).toBe(false);
+    fireEvent.click(chips.find((c) => (c.textContent ?? '').startsWith('not-portable'))!);
+    expect(screen.getByTestId('skills-filter').dataset.filter).toBe('not-portable');
+    expect(screen.getAllByTestId('skills-row').map((r) => r.dataset.skill)).toEqual([EXTRACTOR]);
+    fireEvent.click(screen.getAllByTestId('skills-filter-chip').find((c) => (c.textContent ?? '').startsWith('needs-claude'))!);
+    expect(screen.getAllByTestId('skills-row').map((r) => r.dataset.skill)).toEqual([AGENTIC]);
+    // The Portable tile still opens the portable cut.
+    fireEvent.click(tile);
+    expect(screen.getAllByTestId('skills-row').map((r) => r.dataset.skill)).toEqual([MINE, A11Y, REPO_LEARN]);
+  });
+
+  it('an older daemon (no `portability` field) falls back to `portable` alone: the generic "not portable" badge with the pre-0.34.0 sentence, counted as not portable', async () => {
+    wire({
+      'GET /skills': () => Promise.resolve(catalog({
+        skills: { [EXTRACTOR]: entry({ dir: 'skills/domain/extractor', kind: 'fork-worker', core: true, portable: false, provenance: 'override', upgradeAvailable: true, conflict: true }) },
+      })),
+    });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+
+    const badge = within(row(EXTRACTOR)).getByTestId('skills-not-portable-badge');
+    expect(badge).toHaveTextContent('not portable');
+    expect(badge.dataset.detailed).toBe('false');
+    expect(badge.dataset.reasons).toBe('');
+    expect(badge.title).toBe(GENERIC_NOT_PORTABLE_TITLE);
+    expect(badge).toHaveAccessibleName(GENERIC_NOT_PORTABLE_TITLE);
+    expect(within(row(EXTRACTOR)).getByTestId('skills-claude-only-badge').dataset.reach).toBe('not-portable');
+    expect(screen.getByTestId('skills-kpi-portable')).toHaveTextContent('1 not portable · 0 need Claude harness');
+  });
+
+  it('the drawer carries a Portability line: every reason with its copy, and every file:line anchor as monospace text', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog()), ...fileHandlers(EXTRACTOR) });
+    render(<Harness />);
+    const drawer = await openDrawer(EXTRACTOR);
+
+    const line = within(drawer).getByTestId('skills-drawer-portability');
+    expect(line.dataset.reach).toBe('not-portable');
+    expect(line.dataset.detailed).toBe('true');
+    expect(line).toHaveTextContent('Portability — not portable — cwd-script, plugin-root, relative-link (first at skills/domain/extractor/SKILL.md:41)');
+    expect(within(line).getAllByTestId('skills-drawer-portability-reason').map((li) => li.dataset.reason)).toEqual(['cwd-script', 'plugin-root', 'relative-link']);
+    expect(within(line).getAllByTestId('skills-drawer-portability-reason')[1]).toHaveTextContent('plugin-root — resolves ${CLAUDE_PLUGIN_ROOT}');
+    const anchors = within(line).getAllByTestId('skills-drawer-portability-anchor');
+    expect(anchors.map((a) => a.textContent)).toEqual(['skills/domain/extractor/SKILL.md:41', 'skills/domain/extractor/refs/loop.md:7']);
+    // Long anchors wrap at phone width rather than widening the drawer.
+    for (const a of anchors) expect(a.className).toContain('break-all');
+    // The header badge in the drawer is the same per-reason badge as the row's.
+    expect(within(drawer).getByTestId('skills-not-portable-badge')).toBeInTheDocument();
+  });
+
+  it('the drawer of a portable skill has no Portability line; an older daemon\'s non-portable skill gets the generic line, no reasons, no anchors', async () => {
+    wire({
+      'GET /skills': () => Promise.resolve(catalog({
+        skills: { [EXTRACTOR]: entry({ dir: 'skills/domain/extractor', kind: 'fork-worker', core: true, portable: false, provenance: 'override' }) },
+      })),
+      ...fileHandlers(REPO_LEARN),
+      ...fileHandlers(EXTRACTOR),
+    });
+    render(<Harness />);
+    const learn = await openDrawer(REPO_LEARN);
+    expect(within(learn).queryByTestId('skills-drawer-portability')).toBeNull();
+    fireEvent.click(screen.getByTestId('skills-drawer-close'));
+
+    const drawer = await openDrawer(EXTRACTOR);
+    const line = within(drawer).getByTestId('skills-drawer-portability');
+    expect(line.dataset.detailed).toBe('false');
+    expect(line).toHaveTextContent(`Portability — ${GENERIC_NOT_PORTABLE_TITLE}`);
+    expect(within(line).queryAllByTestId('skills-drawer-portability-reason')).toEqual([]);
+    expect(within(line).queryAllByTestId('skills-drawer-portability-anchor')).toEqual([]);
   });
 });

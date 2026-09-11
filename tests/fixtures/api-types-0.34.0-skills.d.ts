@@ -1,5 +1,10 @@
-// >>> VERBATIM wicked-crew-api-types@0.27.0 index.d.ts:1322-1685 (crew#480 @ 4cae105) — the skills block
-// ── Skills — the daemon-owned garden plugin root, published as immutable snapshots (api-types 0.27.0) ──
+// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts (crew#531; PROVISIONAL until 0.34.0 publishes: the 0.32.0 block at :1502-1874 + the additive SkillPortability shape) — the skills block
+// ── Skills — the daemon-owned garden plugin root, published as immutable snapshots (api-types 0.28.0) ──
+//
+// api-types 0.29.0 (design amendment v3.6, crew #490): the installer-managed copy
+// `<config dir>/plugins/wicked-garden` is a LAST-resort seed source — `SkillSourceKind` gains
+// `installer-copy`, and `DiagnosticsSkillsFinding.kind` gains the persistent `skills.source` warning
+// and the fail-closed `skills.manifest` error.
 //
 // Skills are files (skills keystone, design v3 + amendments v3.1/v3.2). The daemon owns ONE
 // effective `wicked-garden`-shaped plugin root — `<state home>/skills/effective/`, the dependency
@@ -34,10 +39,14 @@ export type SkillKind = 'router' | 'fork-worker' | 'module';
  *  it while the operator's edits were kept). */
 export type SkillProvenance = 'shipped' | 'override' | 'user-added';
 
-/** Where a baseline was captured from. `claude-plugin-cache` covers the marketplace cache AND the
- *  hand-installed `plugins/wicked-garden` copy (both are "the installed plugin"); `checkout` is a
- *  git working tree; `directory` any other explicit plugin-shaped directory. */
-export type SkillSourceKind = 'claude-plugin-cache' | 'checkout' | 'directory';
+/** Where a baseline was captured from. `claude-plugin-cache` is the marketplace cache
+ *  (`<config dir>/plugins/cache/wicked-garden/wicked-garden/<version>` — the plugin Claude Code
+ *  runs); `installer-copy` is the installer-managed `<config dir>/plugins/wicked-garden` copy
+ *  (`npx wicked-installer install wicked-garden`), accepted only as the LAST resort when no cache
+ *  exists (design v3.6, api-types 0.29.0) and flagged by the `skills.source` diagnostics finding
+ *  while it is the current baseline; `checkout` is a git working tree; `directory` any other
+ *  explicit plugin-shaped directory. */
+export type SkillSourceKind = 'claude-plugin-cache' | 'installer-copy' | 'checkout' | 'directory';
 
 /** The per-baseline `uv sync` state (`<baseline>/.venv`, provisioned once per content hash — the
  *  publish that needs it AWAITS it — and shared read-only by every snapshot that links it):
@@ -62,6 +71,27 @@ export interface SkillBaselineRecord {
   venv: SkillVenvState;
 }
 
+/** WHY a skill is not portable — the publisher's per-reason verdict (api-types 0.34.0, F-079). The
+ *  five AUTHORING reasons are defects in the skill's text an author can fix without touching the
+ *  harness: `plugin-root` = resolves `${CLAUDE_PLUGIN_ROOT}`; `skill-dir-var` = resolves
+ *  `${CLAUDE_SKILL_DIR}`; `cwd-script` = invokes a script relative to the cwd (`python3 scripts/x.py`,
+ *  `./scripts/x`); `relative-link` = a `../` link to a sibling; `cross-skill-path` = a path into
+ *  another skill's directory. `requires-harness:claude` is different in kind: the skill's MECHANICS
+ *  need the Claude harness (hooks, the plugin catalogs) — nothing to rewrite. */
+export type SkillPortabilityReason =
+  | 'plugin-root' | 'skill-dir-var' | 'cwd-script' | 'relative-link' | 'cross-skill-path'
+  | 'requires-harness:claude';
+
+/** The publisher's portability verdict for one skill (api-types 0.34.0). */
+export interface SkillPortability {
+  /** Same value as SkillEntry.portable — reasons.length === 0. */
+  portable: boolean;
+  /** Sorted, unique. Empty when portable. */
+  reasons: SkillPortabilityReason[];
+  /** Up to N anchors, `<plugin-relative file>:<line>`, for the drawer/hover. */
+  evidence?: string[];
+}
+
 export interface SkillEntry {
   /** Plugin-relative directory, nested layout preserved (`skills/engineering/frontend`). Never
    *  renamed — sibling `../` links depend on it. */
@@ -76,6 +106,9 @@ export interface SkillEntry {
    *  excluded from the snapshot's `views/copilot/` and from the per-launch skill lists core builds
    *  for the other CLIs. `portable` is the admission key for every non-Claude view (design v3.2). */
   portable: boolean;
+  /** WHY `portable` is false, per reason with `file:line` evidence (api-types 0.34.0, F-079).
+   *  Absent from a daemon that predates the field — readers fall back to `portable` alone. */
+  portability?: SkillPortability;
   /** Manifest state, orthogonal to content: a disabled skill's files stay in `effective/` and are
    *  excluded from the next published snapshot. Reset never flips it. */
   enabled: boolean;
@@ -92,7 +125,7 @@ export interface SkillEntry {
    *  name collision (upstream ships this name at another dir than the operator's skill); `null`
    *  otherwise. `GET /skills/:name/files/*path?side=baseline` reads THIS directory for such a skill,
    *  so the two sides of the collision are comparable — the answer's `path` names the file actually
-   *  read (api-types 0.27.0). Re-derived by every refresh. */
+   *  read (api-types 0.28.0). Re-derived by every refresh. */
   upstreamDir: string | null;
 }
 
@@ -117,7 +150,7 @@ export interface SkillPublishedRecord {
   at: string;
   /** sha256 of the exact `snapshot.json` bytes publish wrote. `snapshot.json` is excluded from the
    *  content hash, so the crew-owned manifest AUTHENTICATES it: `current` verifies only the
-   *  generation this record names, with metadata hashing to this value (api-types 0.27.0). */
+   *  generation this record names, with metadata hashing to this value (api-types 0.28.0). */
   snapshotHash: string;
 }
 
@@ -202,7 +235,7 @@ export type SkillFindingKind =
    *  the snapshot does not carry it — a file the bundle omits, or a skill that is disabled) is a
    *  `warning`: a content bug the skill's author owns, published as found — a publish with only
    *  warnings answers `verdict: 'warnings'` with the findings AND a written snapshot (api-types
-   *  0.27.0). */
+   *  0.28.0). */
   | 'unresolved-ref'
   /** A path the store refuses BY NAME rather than reads through: a shape that could leave its root
    *  (`..`, an absolute piece), a component that crosses a symlink, or — under `effective/`, where
@@ -219,24 +252,24 @@ export type SkillFindingKind =
   | 'empty-snapshot'
   /** `.claude-plugin/plugin.json`, `archetypes.json` or `components.json` is absent from `effective/`
    *  — the plugin manifest + the runtime catalogs are REQUIRED snapshot members (blocking at
-   *  publish; api-types 0.27.0). */
+   *  publish; api-types 0.28.0). */
   | 'missing-plugin-manifest'
   /** The plugin manifest or a runtime catalog is present but not what its reader expects — does
    *  not parse as JSON, is not a JSON object, or `archetypes.json` lacks its `archetypes`
-   *  collection (blocking at publish; api-types 0.27.0). A manifest without `name` is
+   *  collection (blocking at publish; api-types 0.28.0). A manifest without `name` is
    *  `name-mismatch`. */
   | 'catalog-invalid'
   /** The baseline's shared read-only Python env could not be provisioned (uv missing, `uv sync`
    *  failed, or the env could not be locked) while the bundle carries a `pyproject.toml` — the env
    *  is REQUIRED, so the publish is blocked and nothing (the provisioning state included) is
-   *  persisted (api-types 0.27.0). */
+   *  persisted (api-types 0.28.0). */
   | 'venv-failed'
   /** A publish was refused because one is already running (one at a time) — nothing was written, so
    *  it is a 2xx `blocked` envelope, not a 409 (409 is only a stale `expectedRevision`; api-types
-   *  0.27.0). Re-read `GET /skills` and retry against the revision it answers. */
+   *  0.28.0). Re-read `GET /skills` and retry against the revision it answers. */
   | 'publish-in-flight'
   /** A publish was aborted because the skills root changed under it — nothing was written to either
-   *  root; a 2xx `blocked` envelope (api-types 0.27.0). Re-read `GET /skills` and retry. */
+   *  root; a 2xx `blocked` envelope (api-types 0.28.0). Re-read `GET /skills` and retry. */
   | 'root-changed'
   /** A path outside the bundle closure — the ONE allowlist of what the seed copies, what the support
    *  API may address, and what a snapshot may carry: the five runtime catalogs under `.claude-plugin`
@@ -246,7 +279,7 @@ export type SkillFindingKind =
    *  directories and any `wg-`-prefixed dev tooling, plus `pyproject.toml` and `uv.lock`. A support
    *  add/PUT there is a 2xx `blocked` envelope (nothing written); a file found there under
    *  `effective/` at publish/analyze (a direct filesystem edit) is a BLOCKING finding naming the path
-   *  — a snapshot never ships it (api-types 0.27.0). */
+   *  — a snapshot never ships it (api-types 0.28.0). */
   | 'outside-closure'
   /** A content-addressed `baseline/<hash>` whose tree does not hash to its name (a bundle file
    *  modified, planted or removed, or a symlink inside), or a baseline file whose bytes do not match
@@ -254,7 +287,7 @@ export type SkillFindingKind =
    *  refuses to reuse it (2xx `blocked`, nothing copied), reset refuses to restore from it (nothing
    *  written), publish/analyze report it blocking (before AND after the env was provisioned in it).
    *  Read-only mode bits on the baseline are a guard, never the integrity boundary — the hash is
-   *  (api-types 0.27.0). */
+   *  (api-types 0.28.0). */
   | 'baseline-corrupt';
 
 export type SkillFindingSeverity = 'warning' | 'blocking';
@@ -330,7 +363,7 @@ export interface SkillRefreshResult extends SkillAnalyzeResult {
 /** The 409 body of a `/skills` mutation whose `expectedRevision` is stale — a CAS conflict, the
  *  ONLY thing that answers 409. A publish refused because another is in flight, or aborted because
  *  the skills root changed under it, wrote nothing and instead answers a 2xx `blocked` findings
- *  envelope (`publish-in-flight` / `root-changed`; api-types 0.27.0), never a 409. */
+ *  envelope (`publish-in-flight` / `root-changed`; api-types 0.28.0), never a 409. */
 export interface SkillRevisionConflict {
   error: string;
   /** The current revision — re-read `GET /skills` (or use this) and retry. */
@@ -365,8 +398,8 @@ export interface ReplaceSkillBody {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.27.0 index.d.ts:3262-3302 (crew#480 @ 4cae105) — the diagnostics skills block
-/** The skills seam's state as `GET /diagnostics` reports it (skills keystone, api-types 0.27.0). */
+// >>> VERBATIM wicked-crew-api-types@0.34.0 index.d.ts (crew#531; PROVISIONAL until 0.34.0 publishes: the 0.32.0 block at :3844-3893) — the diagnostics skills block
+/** The skills seam's state as `GET /diagnostics` reports it (skills keystone, api-types 0.28.0). */
 export type DiagnosticsSkillsState = 'published' | 'fallback' | 'blocked' | 'config-error' | 'disabled';
 
 /** One finding the skills degradation ladder produced (design v3 §3). */
@@ -376,8 +409,17 @@ export interface DiagnosticsSkillsFinding {
    *  blocked (engine input points at a non-existent refusal path — launches fail loudly until the
    *  catalog is fixed); `skills.config` = the configured root is corrupt/unusable (same refusal;
    *  `error`), or — as a `warning` on the `published` state — the root lies OUTSIDE the daemon
-   *  state home, so core's fence cross-check (`WICKED_CREW_STATE_HOME`) refuses every launch. */
-  kind: 'skills.fallback' | 'skills.blocked' | 'skills.config';
+   *  state home, so core's fence cross-check (`WICKED_CREW_STATE_HOME`) refuses every launch;
+   *  `skills.source` (`warning`, api-types 0.29.0, design v3.6) = the CURRENT baseline was seeded
+   *  from the installer-managed copy (`SkillSourceKind` `installer-copy`) — the daemon works, but
+   *  that copy receives no marketplace updates until the plugin is registered with Claude Code; it
+   *  persists (alongside the ladder's own finding, if any) until a refresh from the marketplace
+   *  cache re-records the baseline's provenance (byte-identical or not); `skills.manifest`
+   *  (`error`, api-types 0.29.0) = `manifest.json` could not be read when diagnostics were taken
+   *  (corrupt, unreadable, or the root no longer the one the store bound) — reported as
+   *  `config-error` with the cause instead of the stale boot outcome; the exported engine input is
+   *  unchanged until the daemon restarts. */
+  kind: 'skills.fallback' | 'skills.blocked' | 'skills.config' | 'skills.source' | 'skills.manifest';
   severity: 'warning' | 'error';
   message: string;
 }
