@@ -242,6 +242,23 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False,
          "repo": False, "metrics_ws": False,
+         # Wave 5 (phase4-r2 findings, e2e/ux5_document_hardening_test.py), all default-off so
+         # no standing rig's wires change:
+         #   export_report       — a PDF export's response AND its export.generated echo carry
+         #                         interactive#219's additive report (layout / layout_source /
+         #                         page_size / pages) — the F-4R2-016 rendering case.
+         #   doc_fail_floor      — a chat.posted ask is answered by crew's REAL run-failure
+         #                         line (status.posted state:"error", the deliverable-floor
+         #                         dump verbatim, scrubbed paths) — the F-4R2-014 card.
+         #   doc_heartbeat_ms    — the create path re-emits its current narration every N ms
+         #                         until the landing (crew's ≤15 s heartbeat) — F-4R2-005.
+         #   doc_bound_run       — {"pid","doc"}: ONE executing run whose declared write root
+         #                         is `<state>/interactive-drafts/<doc>` rides GET /runs, filed
+         #                         into pid — the run record F-4R2-006's reload restores from.
+         #   create_409_existing — POST /api/docs answers the bridge's real 409 "doc already
+         #                         exists" for a name already created this lifetime — F-4R2-003.
+         "export_report": False, "doc_fail_floor": False, "doc_heartbeat_ms": 0,
+         "doc_bound_run": None, "create_409_existing": False,
          # Slice P (DES-FEEDBACK-003 §10.2 fixture additions, switch-gated so
          # no standing rig's board grows rows it never asserted):
          #   chat_runs — 2 chat runs ride GET /runs: one 'chat'-stamped live
@@ -1841,6 +1858,18 @@ def assemble_runs() -> list:
         # join BOTH wires (list + detail) so the DTO echo decorates identically.
         if project_dto_on and not state["no_runs"]:
             runs = runs + [UNFILED_RUN] + launched_runs
+        # Wave 5 (F-4R2-006): the doc's bound run — the shape crew's draft seam launches
+        # (`extraWriteRoots: [runDir]`, runDir = <draftDir>/<docId>), filed into its project.
+        bound = state["doc_bound_run"]
+        if bound and not state["no_runs"]:
+            bound_run = session("r-doc-bound", "executing",
+                                f"Draft the document {bound['doc']} from its brief",
+                                "draft the document")
+            bound_run["session"]["workflow_id"] = "interactive-draft"
+            bound_run["session"]["extra_write_roots"] = [
+                f"/w5/state/interactive-drafts/{bound['doc']}"]
+            bound_run["session"]["project_id"] = bound["pid"]
+            runs = runs + [bound_run]
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -2044,14 +2073,28 @@ doc_sched_lock = threading.Lock()
 doc_next_free: dict = {}  # (pid, doc) -> unix seconds when the agent frees up
 
 
-def schedule_doc_run(pid: str, doc: str, delay_s: float, fixed_version: int | None = None) -> None:
+def schedule_doc_run(pid: str, doc: str, delay_s: float, fixed_version: int | None = None,
+                     heartbeat_message: str | None = None) -> None:
     """Land one version after `delay_s` of FIFO-queued work. `fixed_version`
     re-announces an existing manifest version (the create path, whose v1 is
-    committed at POST time); None appends head+1 (a steer send's own landing)."""
+    committed at POST time); None appends head+1 (a steer send's own landing).
+    Wave 5 (F-4R2-005): with `doc_heartbeat_ms` > 0 and a `heartbeat_message`,
+    the CURRENT narration is re-emitted every that-many ms until the landing —
+    crew's ≤15 s heartbeat, which pre-fix rendered as one identical row each."""
     with doc_sched_lock:
         start = max(time.time(), doc_next_free.get((pid, doc), 0.0))
         fire_at = start + delay_s
         doc_next_free[(pid, doc)] = fire_at
+    with state_lock:
+        heartbeat_ms = int(state["doc_heartbeat_ms"])
+    if heartbeat_message is not None and heartbeat_ms > 0:
+        def beat() -> None:
+            while time.time() + heartbeat_ms / 1000.0 < fire_at:
+                time.sleep(heartbeat_ms / 1000.0)
+                queue_interactive("wicked.interactive.status.posted", {
+                    "project_id": pid, "document_id": doc, "state": "working",
+                    "message": heartbeat_message})
+        threading.Thread(target=beat, daemon=True).start()
 
     def land() -> None:
         if fixed_version is None:
@@ -2923,6 +2966,16 @@ class W2Handler(SimpleHTTPRequestHandler):
                                           "start crew, or create the doc without a project"})
                 return True
             doc = slug(str(body.get("name") or "doc"))
+            # Wave 5 (F-4R2-003): the bridge's real collision — server.js answers
+            # 409 {error: "doc already exists"} for a name that is already a doc.
+            with state_lock:
+                collide = bool(state["create_409_existing"])
+            if collide:
+                with docs_lock:
+                    exists = doc in docs_created.get(pid, {})
+                if exists:
+                    self._json(409, {"error": "doc already exists"})
+                    return True
             # Slice T (§8.4.1 probe 1): the REAL bridge DROPS source_message_id —
             # no `meta.sourceMessageId` ever reaches the manifest (the interactive.ts
             # claim was aspirational). The client's anchor is client-side; the
@@ -2955,17 +3008,19 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # J3 no-answerer shape: the ack is real, the bus never speaks.
                 self._json(201, {"name": doc, "head": head0, "generating": True, "project_id": pid})
                 return True
+            planning = "Planning the deck — outline first, then the slides."
             queue_interactive("wicked.interactive.status.posted", {
                 "project_id": pid, "document_id": doc, "state": "working",
-                "message": "Planning the deck — outline first, then the slides."})
+                "message": planning})
             if v0_mirror:
                 # The answerer lands the FIRST DRAFT as v1 (head 0 → 1), exactly
                 # the real materializeDraft → version.created "generated" path.
-                schedule_doc_run(pid, doc, run_ms / 1000.0)
+                schedule_doc_run(pid, doc, run_ms / 1000.0, heartbeat_message=planning)
             elif run_ms > 0:
                 # Slice T: v1 is committed now but LANDS (the frame) after the
                 # run — long enough for the rig to witness thread-generating.
-                schedule_doc_run(pid, doc, run_ms / 1000.0, fixed_version=1)
+                schedule_doc_run(pid, doc, run_ms / 1000.0, fixed_version=1,
+                                 heartbeat_message=planning)
             else:
                 queue_interactive("wicked.interactive.version.created", {
                     "project_id": pid, "document_id": doc,
@@ -3023,6 +3078,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             download = f"/d/{doc}/api/export/file/{urllib.parse.quote(file)}"
             result = {"format": fmt, "path": f"/docs/{doc}/exports/{file}",
                       "file": file, "download": download}
+            # Wave 5 (F-4R2-016 / interactive#219): the additive layout report, on the
+            # response and the echo alike — an A4 two-pager, as the acceptance brochure was.
+            with state_lock:
+                report_on = bool(state["export_report"])
+            if report_on and fmt == "pdf":
+                result.update({"layout": "document", "layout_source": "author @page",
+                               "page_size": "A4 portrait", "pages": 2})
             # The bridge announces the artifact on the bus too (export.generated);
             # the client deduplicates the echo on `href` (docThread.ts EXPORTED).
             queue_interactive("wicked.interactive.export.generated", {
@@ -3207,6 +3269,36 @@ class W2Handler(SimpleHTTPRequestHandler):
                 if silent_doc:
                     # J3 no-answerer shape: 200 {ok}, landed durably — and then
                     # NOTHING answers it (no status frame, no landing, ever).
+                    self._json(200, {"ok": True, "event_id": "evt-fixture",
+                                     "correlation_id": "c-fixture"})
+                    return True
+                with state_lock:
+                    fail_floor = bool(state["doc_fail_floor"])
+                if fail_floor:
+                    # Wave 5 (F-4R2-014): crew's chat seam picks the ask up, then its
+                    # governed run trips the deterministic deliverable floor — the REAL
+                    # run-failure line (chat-events.ts), state:"error", paths scrubbed.
+                    run_id = "37f020cc-e42c-48aa-b3ec-aa18ec6f9f63"
+                    expected = f"/w5/state/interactive-chats/{doc}-m-dmsg-7/revised.html"
+                    queue_interactive("wicked.interactive.status.posted", {
+                        "project_id": pid, "document_id": doc, "state": "working",
+                        "message": "A governed crew picked up your ask — revising the document…"})
+
+                    def fail() -> None:
+                        queue_interactive("wicked.interactive.status.posted", {
+                            "project_id": pid, "document_id": doc, "state": "error",
+                            "message": (
+                                f"The crew run answering your ask failed (run {run_id}). Reason: "
+                                "[wicked-crew] deliverable floor: this phase declared 1 artifact(s); "
+                                "this run launched at 2026-09-11T10:32:54.984Z. "
+                                f"[wicked-crew] EXPECTED: {expected} [wicked-crew] FOUND: (nothing) "
+                                f"[wicked-crew] MISSING: {expected} (does not exist) "
+                                "[wicked-crew] DELIVERABLE FLOOR FAILED — the run reported done without "
+                                "producing the artifact(s) it was launched to produce. A prose reply is "
+                                "not a deliverable (crew#311), and a prior run's leftover file is not "
+                                f"this run's. Inspect it via the crew API (GET /api/v1/runs/{run_id}), "
+                                "then resend the message.")})
+                    threading.Timer(0.4, fail).start()
                     self._json(200, {"ok": True, "event_id": "evt-fixture",
                                      "correlation_id": "c-fixture"})
                     return True

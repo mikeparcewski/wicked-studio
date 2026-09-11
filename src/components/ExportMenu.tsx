@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { interactiveUrl } from '../api/interactive.js';
 import type { ExportFormat } from '../api/interactive.js';
+import { describeExportReport, exportReportTitle } from '../interactive/exportReport.js';
 import { EXPORT_FORMATS, runExport } from '../interactive/exportWire.js';
 import { exportKey, NO_ANSWERS, useExportAnswers } from '../store/exportAnswers.js';
 import type { ExportAnswer } from '../store/exportAnswers.js';
@@ -85,7 +86,15 @@ export function ExportMenu({
   const answers = useExportAnswers((s) => s.answers[key] ?? NO_ANSWERS);
 
   const pending = answers.find((a) => a.state === 'pending');
-  const readyHere = answers.find((a) => a.state === 'ready' && a.version === version);
+  // F-4R2-016: readiness is PER FORMAT. The first-ready-answer lookup this replaced let an
+  // un-consumed HTML answer shadow the PDF that finished after it — the PDF button never
+  // became its download while the file already sat in the thread. Each button asks for its
+  // own (version, format) answer, so every finished format flips independently.
+  const readyHere = (format: ExportFormat): Extract<ExportAnswer, { state: 'ready' }> | undefined =>
+    answers.find((a): a is Extract<ExportAnswer, { state: 'ready' }> =>
+      a.state === 'ready' && a.version === version && a.format === format);
+  const readyHereAll = answers.filter((a): a is Extract<ExportAnswer, { state: 'ready' }> =>
+    a.state === 'ready' && a.version === version);
   const failedHere = answers.filter((a) => a.state === 'failed' && a.version === version);
   // Round-3 J3: un-acted answers for OTHER versions of this doc stay at the click
   // site, labeled with their own version — never wiped by a selection move or a
@@ -112,8 +121,10 @@ export function ExportMenu({
         useExportAnswers.getState().settle(key, outcome.ok
           ? { state: 'ready', version, format,
               // READY at the click site: the service's `download` is bridge-root-relative;
-              // resolved through the proxy it stays on the one origin (§5.3).
-              href: interactiveUrl(projectId, outcome.result.download), file: outcome.file }
+              // resolved through the proxy it stays on the one origin (§5.3). `report` is
+              // the bridge's additive layout report (interactive#219) — null on an older one.
+              href: interactiveUrl(projectId, outcome.result.download), file: outcome.file,
+              report: outcome.report }
           : { state: 'failed', version, format, hint: outcome.hint });
       });
   }
@@ -124,16 +135,21 @@ export function ExportMenu({
     const label = labelVersion
       ? (compact ? `${a.format} v${a.version} ↓` : `${a.format.toUpperCase()} v${a.version} ↓`)
       : (compact ? `${a.format} ↓` : `${a.format.toUpperCase()} ↓`);
+    // interactive#219: what was printed, when the bridge said — on the hover text here, and
+    // as its own line under the row (below) where the control is not compact.
+    const printed = exportReportTitle(a.report ?? null);
     return (
       <a
         key={`${a.format}-${a.version}`}
         data-testid="export-ready"
         data-format={a.format}
         data-version={String(a.version)}
+        data-pages={a.report?.pages ?? undefined}
+        data-page-size={a.report?.pageSize ?? undefined}
         href={a.href}
         download={a.file}
         onClick={() => useExportAnswers.getState().consume(key, a.version, a.format)}
-        title={`${a.format.toUpperCase()} of v${a.version} ready — download ${a.file}`}
+        title={`${a.format.toUpperCase()} of v${a.version} ready — download ${a.file}${printed === null ? '' : ` · ${printed}`}`}
         style={{ ...(compact ? COMPACT : BUTTON), ...READY }}
       >
         {label}
@@ -158,12 +174,13 @@ export function ExportMenu({
             Export v{version}
           </span>
         )}
-        {EXPORT_FORMATS.map((format) => (
+        {EXPORT_FORMATS.map((format) => {
           // §7.2 READY: the control that was clicked IS the download now — a real
           // anchor with the artifact's name, at the click site. The thread message
-          // remains; this is the click site answering (EC37).
-          readyHere !== undefined && readyHere.format === format ? (
-            readyAnchor(readyHere as Extract<ExportAnswer, { state: 'ready' }>, false)
+          // remains; this is the click site answering (EC37). Per format (F-4R2-016).
+          const ready = readyHere(format);
+          return ready !== undefined ? (
+            readyAnchor(ready, false)
           ) : (
             <button
               key={format}
@@ -184,8 +201,8 @@ export function ExportMenu({
                 ? <span data-testid="export-pending" className="animate-pulse">{format}…</span>
                 : compact ? format : format.toUpperCase()}
             </button>
-          )
-        ))}
+          );
+        })}
         {/* VIDEO-FB: the recording is already an artifact — no render step, so it
             is a download from the start, same-origin through the project proxy. */}
         {recording !== null && (
@@ -212,6 +229,26 @@ export function ExportMenu({
           </span>
         )}
       </div>
+      {/* interactive#219 (F-4R2-016): what the finished export actually printed — "PDF ready —
+          2 pages · A4 portrait" — under the row, where the download is. Only when the bridge
+          reported it; an older bridge renders nothing here. Compact controls carry it on hover. */}
+      {!compact && readyHereAll.map((a) => {
+        const phrase = describeExportReport(a.report ?? null);
+        if (phrase === null) return null;
+        return (
+          <span
+            key={`report-${a.format}-${a.version}`}
+            data-testid="export-report"
+            data-format={a.format}
+            data-version={String(a.version)}
+            title={exportReportTitle(a.report ?? null) ?? undefined}
+            style={{ color: S.muted, fontSize: '9px', fontFamily: 'var(--font-mono)',
+                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          >
+            {a.format.toUpperCase()} ready — {phrase}
+          </span>
+        );
+      })}
       {/* §7.2 FAILED, §3.3: the reason is stated and the control that retries it is the
           row above — adjacent, not a toast that takes the fix away with it when it fades. */}
       {[...failedHere, ...failedElsewhere].map((a) => (

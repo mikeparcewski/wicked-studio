@@ -114,7 +114,14 @@ describe('state 1 — idle: typing CREATES the doc-generation run', () => {
     createDoc.mockRejectedValue(new Error('API 409: doc already exists'));
     mount(null);
     await send('a deck for the Q3 review');
-    await waitFor(() => expect(screen.getByTestId('doc-composer-error')).toHaveTextContent('409'));
+    // F-4R2-003: a collision NAMES the document and offers the way out; the daemon's own
+    // sentence still rides along, dimmed — carried whole, never paraphrased away.
+    const err = await screen.findByTestId('doc-composer-error');
+    expect(err).toHaveAttribute('data-status', '409');
+    expect(err).toHaveTextContent('A document named “a-deck-for-the-q3-review” already exists');
+    expect(err).toHaveTextContent('409');
+    expect(screen.getByTestId('doc-composer-open-existing')).toHaveAttribute('href', `/p/${PROJECT}/document/a-deck-for-the-q3-review`);
+    expect(screen.getByTestId('doc-composer-rename')).toBeInTheDocument();
     expect(screen.getByTestId('doc-composer')).toHaveValue('a deck for the Q3 review');
   });
 });

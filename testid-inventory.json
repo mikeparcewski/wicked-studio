@@ -11,8 +11,8 @@
   "studioVersion": "0.5.5",
   "counts": {
     "files": 144,
-    "occurrences": 1242,
-    "static": 1068,
+    "occurrences": 1259,
+    "static": 1082,
     "dynamic": 59,
     "computed": 7
   },
@@ -1524,6 +1524,12 @@
       ]
     },
     {
+      "testId": "doc-bound-run",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
       "testId": "doc-canvas",
       "files": [
         "src/components/DocumentCanvas.tsx"
@@ -1537,6 +1543,18 @@
     },
     {
       "testId": "doc-composer-error",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-composer-open-existing",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-composer-rename",
       "files": [
         "src/components/DocumentThread.tsx"
       ]
@@ -1620,7 +1638,31 @@
       ]
     },
     {
+      "testId": "doc-name",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-name-reset",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-name-row",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
       "testId": "doc-narration",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-narration-elapsed",
       "files": [
         "src/components/DocumentThread.tsx"
       ]
@@ -1659,6 +1701,42 @@
       "testId": "doc-picker-row",
       "files": [
         "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "doc-run-failed",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-run-failed-details",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-run-failed-raw",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-run-failed-run",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-run-failed-summary",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-run-failed-wayback",
+      "files": [
+        "src/components/DocumentThread.tsx"
       ]
     },
     {
@@ -1879,6 +1957,12 @@
     },
     {
       "testId": "export-recording",
+      "files": [
+        "src/components/ExportMenu.tsx"
+      ]
+    },
+    {
+      "testId": "export-report",
       "files": [
         "src/components/ExportMenu.tsx"
       ]

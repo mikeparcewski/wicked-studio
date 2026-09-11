@@ -153,6 +153,44 @@ describe('the version strip exports the SELECTED version (§4.4, §4.2)', () => 
     expect(screen.getAllByTestId('export-format')).toHaveLength(2);
   });
 
+  // F-4R2-016: readiness is PER FORMAT. Pre-fix, `readyHere` was the FIRST ready answer for
+  // the version, so an un-consumed HTML answer shadowed the PDF that finished after it — the
+  // PDF button spun for 120 s while the file already sat in the thread.
+  it('F-4R2-016: a second format finishing while the first READY answer is un-acted flips ITS OWN chip', async () => {
+    strip();
+    postExport.mockResolvedValue(reply('roadmap_v3.html', 'html'));
+    await press('html');
+    const html = await screen.findByTestId('export-ready');
+    expect(html).toHaveAttribute('data-format', 'html');
+
+    // The HTML download is NOT clicked (un-consumed) — then the PDF is asked for.
+    let release: (v: unknown) => void = () => {};
+    postExport.mockImplementation(() => new Promise((res) => { release = res; }));
+    await press('pdf');
+    expect(screen.getByTestId('export-pending').closest('[data-format="pdf"]')).not.toBeNull();
+    release({ ...reply('roadmap_v3.pdf'), layout: 'document', layout_source: 'author @page', page_size: 'A4 portrait', pages: 2 });
+
+    await waitFor(() => expect(screen.getAllByTestId('export-ready')).toHaveLength(2));
+    const ready = screen.getAllByTestId('export-ready').map((a) => a.getAttribute('data-format'));
+    expect(ready).toEqual(['html', 'pdf']);
+    expect(screen.queryByTestId('export-pending')).toBeNull();
+    // Only PPTX is still a plain button.
+    expect(screen.getAllByTestId('export-format').map((b) => b.getAttribute('data-format'))).toEqual(['pptx']);
+
+    // interactive#219: what the PDF printed — on the anchor and as its own line under the row.
+    const pdf = screen.getAllByTestId('export-ready')[1]!;
+    expect(pdf).toHaveAttribute('data-pages', '2');
+    expect(pdf).toHaveAttribute('data-page-size', 'A4 portrait');
+    expect(pdf.getAttribute('title')).toContain('2 pages · A4 portrait — layout from author @page');
+    const report = screen.getByTestId('export-report');
+    expect(report).toHaveAttribute('data-format', 'pdf');
+    expect(report).toHaveTextContent('PDF ready — 2 pages · A4 portrait');
+    // The thread line carries it too.
+    expect(messages().some((m) => m.kind === 'agent' && m.text === 'PDF export ready — roadmap_v3.pdf · 2 pages · A4 portrait')).toBe(true);
+    // The HTML answer (no report on an older bridge's reply) has no report line.
+    expect(screen.getAllByTestId('export-report')).toHaveLength(1);
+  });
+
   it('round-3 J3: a new version selection KEEPS the un-acted READY answer, wearing its own version', async () => {
     const { rerender } = render(
       <VersionStrip projectId={PROJECT} docId={DOC} manifest={MANIFEST}

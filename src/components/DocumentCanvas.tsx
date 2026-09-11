@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getConversation, getVersions, interactiveDocUrl, listDocs } from '../api/interactive.js';
+import { restoreDocRun } from '../interactive/runBinding.js';
 import { readAnchors, readExports, readSendStates } from '../interactive/threadStopgap.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
@@ -615,7 +616,12 @@ export function DocumentCanvas({
         if (!cancelled) {
           useDocThreadStore.getState().hydrate(key, [], [], readSendStates(key), readExports(key));
         }
-      });
+      })
+      // F-4R2-006: the transcript cannot say whether a run is STILL executing (its frames carry
+      // no run id, the announce history no state) — the runs wire can. One read per doc open,
+      // after the hydrate has had its say, so a reload mid-run restores `generating` from the
+      // run record instead of reading `terminal` until the next heartbeat.
+      .finally(() => { if (!cancelled) void restoreDocRun(projectId, docId); });
     return () => { cancelled = true; };
   }, [projectId, docId]);
 

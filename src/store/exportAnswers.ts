@@ -21,10 +21,12 @@
 
 import { create } from 'zustand';
 import type { ExportFormat } from '../api/interactive.js';
+import type { ExportReport } from '../interactive/exportReport.js';
 
 export type ExportAnswer =
   | { state: 'pending'; version: number; format: ExportFormat }
-  | { state: 'ready'; version: number; format: ExportFormat; href: string; file: string }
+  // `report` is the bridge's additive layout report (interactive#219) — `null` on an older bridge.
+  | { state: 'ready'; version: number; format: ExportFormat; href: string; file: string; report?: ExportReport | null }
   | { state: 'failed'; version: number; format: ExportFormat; hint: string };
 
 /** One click site's identity: the doc, on its project mount. */

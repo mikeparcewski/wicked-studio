@@ -18,6 +18,7 @@
 
 import { postExport, ServiceHintError } from '../api/interactive.js';
 import type { ExportFormat, ExportResult } from '../api/interactive.js';
+import { describeExportReport, exportReportOf, type ExportReport } from './exportReport.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
 
 /** Offered in §4.4's own order. Parity is all three, from every surface that exports. */
@@ -58,8 +59,16 @@ export interface ExportArgs {
 
 /** What the pressed control needs back. Everything a READER needs is in the thread. */
 export type ExportOutcome =
-  | { ok: true; file: string; result: ExportResult }
+  // `report`: the bridge's additive layout report (interactive#219), `null` when it sent none.
+  | { ok: true; file: string; result: ExportResult; report: ExportReport | null }
   | { ok: false; hint: string };
+
+/** The thread line for a finished export — the file, then what was printed when the bridge said
+ *  ("PDF export ready — brochure_v3.pdf · 2 pages · A4 portrait"). */
+export function exportReadyText(format: ExportFormat, file: string, report: ExportReport | null): string {
+  const phrase = describeExportReport(report);
+  return `${format.toUpperCase()} export ready — ${file}${phrase === null ? '' : ` · ${phrase}`}`;
+}
 
 /**
  * Export one version and put the whole of it in the conversation. Never throws: a refused
@@ -75,9 +84,9 @@ export async function runExport(
   try {
     const result = await postExport(projectId, docId, version, format);
     const file = exportFilename(docId, version, format, result.file);
-    store.addAgentMsg(key, 'export', `${format.toUpperCase()} export ready — ${file}`,
-                      { href: result.download, file });
-    return { ok: true, file, result };
+    const report = exportReportOf(result);
+    store.addAgentMsg(key, 'export', exportReadyText(format, file, report), { href: result.download, file });
+    return { ok: true, file, result, report };
   } catch (e: unknown) {
     const hint = exportHint(e);
     store.addActionable(
