@@ -21,7 +21,7 @@ import {
 import { useGateStore } from '../src/store/gates.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { makeUnit, makeView } from './factories.js';
-import { G4_EVENTS, G4_GATE, GATE_RUN, GATE_UNITS } from './fixtures/gateEvidence.js';
+import { G4_EVENTS, G4_GATE, G5_EVENTS, G5_GATE, GATE_RUN, GATE_UNITS, REPO_CHECKS_FAIL } from './fixtures/gateEvidence.js';
 import type { SessionView } from '../src/api/types.js';
 
 /** `GET /runs/:id/events`, swappable per test — the gate inbox backfills it for open-gate runs. */
@@ -188,8 +188,10 @@ describe('the gate inbox (W4, §2.7 rule 5)', () => {
     expect(inbox.textContent).toContain('migrate the tables');
   });
 
-  it('F-3R2-006: the inbox card states the evaluator verdict the gate is about — the same block as the run page', () => {
-    // The recorded G4 gate (before unit #4, verify): the fix phase's PASS is in the run's event log.
+  it('F-3R2-006: the inbox card states the evaluator verdict the gate is about — the same block as the run page', async () => {
+    // The recorded G4 gate (before unit #4, verify): the fix phase's PASS is in the run's event log
+    // (live in the store AND confirmed by the durable log — readiness needs the latter).
+    getRunEvents.mockImplementation(async (id) => ({ events: id === GATE_RUN ? G4_EVENTS : [] }));
     useGateStore.setState({
       gates: {
         [GATE_RUN]: { runId: GATE_RUN, ord: G4_GATE.ord, prompt: G4_GATE.prompt, lifecycle: 'open', receivedAt: 1 },
@@ -198,7 +200,7 @@ describe('the gate inbox (W4, §2.7 rule 5)', () => {
     useRunEventStore.setState({ byRun: { [GATE_RUN]: G4_EVENTS } });
     dash([makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS)]);
     const inbox = screen.getByTestId('gate-inbox');
-    const card = screen.getByTestId('gate-verdict');
+    const card = await screen.findByTestId('gate-verdict');
     expect(inbox.contains(card)).toBe(true);
     expect(card).toHaveAttribute('data-verdict', 'pass');
     expect(card).toHaveAttribute('data-phase-ord', '3');
@@ -269,6 +271,65 @@ describe('the gate inbox (W4, §2.7 rule 5)', () => {
     // more (a reconnect gap between the two gates can never leave the old verdict standing).
     act(() => useGateStore.setState({ gates: { [GATE_RUN]: { ...first, receivedAt: 2 } } }));
     expect(getRunEvents).toHaveBeenCalledTimes(2);
+    // …and the new instance proves its own history before its block renders.
+    expect(await screen.findByTestId('gate-verdict')).toHaveAttribute('data-verdict', 'pass');
+  });
+
+  /** The retry's OWN verdict — attempt 1 denied by the repo-checks floor (wire-declared shape). */
+  const RETRY_DENY = {
+    type: 'gateEvaluated', session: GATE_RUN, ord: 4, seq: 403, ts: 1789081879700,
+    criterion: "the repository's own checks pass in the run's worktree",
+    hasDeterministicFloor: true, deterministicPass: false, agentVerdict: 'pass', agentReasoning: null,
+    evaluatorPass: true, evaluatorPolicies: [] as string[],
+    denialReason: 'repository checks failed in the worktree: lint exited 1',
+    denial: { source: 'repo_checks', reason: 'repository checks failed in the worktree: lint exited 1', claimId: null, ruleIds: [], deniedTool: null, phase: 'unit-4' },
+    combined: false,
+  };
+  const RETRY_GATE = { runId: GATE_RUN, ord: 4, prompt: G5_GATE.prompt, lifecycle: 'open', receivedAt: 2 };
+
+  it('READINESS: on a same-ord retry after a reconnect the OLD attempt\'s verdict never renders — the block waits for this gate\'s own history (Copilot on #252)', async () => {
+    // The live slice: attempt 0's worktree-guard denial (the run's EARLIER ord-4 gate) — all the
+    // store knows when the retry's gate opens after a reconnect gap.
+    useRunEventStore.setState({ byRun: { [GATE_RUN]: [...G5_EVENTS] } });
+    let landLog!: (v: { events: unknown[] }) => void;
+    getRunEvents.mockImplementation(() => new Promise<{ events: unknown[] }>((r) => { landLog = r; }));
+    useGateStore.setState({ gates: { [GATE_RUN]: RETRY_GATE } });
+    dash([makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS)]);
+
+    // Pending: the inbox shows the gate, but NO verdict — the ord-4 evaluation in the store is
+    // attempt 0's, not this gate's.
+    expect(screen.getByTestId('gate-inbox')).toBeInTheDocument();
+    expect(screen.queryByTestId('gate-verdict')).toBeNull();
+
+    // The durable log lands with the retry's own verdict: the block renders THAT one.
+    await act(async () => { landLog({ events: [...G5_EVENTS, REPO_CHECKS_FAIL, RETRY_DENY] }); });
+    const card = await screen.findByTestId('gate-verdict');
+    expect(card).toHaveAttribute('data-verdict', 'fail');
+    expect(card).toHaveAttribute('data-denial-source', 'repo_checks');
+    expect(card).not.toHaveTextContent('worktree guard');
+    expect(screen.getByTestId('gate-verdict-floor')).toHaveAttribute('data-floor', 'fail');
+  });
+
+  it('READINESS: an EMPTY durable history leaves the block withheld — never the stale slice', async () => {
+    useRunEventStore.setState({ byRun: { [GATE_RUN]: [...G5_EVENTS] } });
+    getRunEvents.mockImplementation(async () => ({ events: [] }));
+    useGateStore.setState({ gates: { [GATE_RUN]: RETRY_GATE } });
+    dash([makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS)]);
+    await act(async () => { await Promise.resolve(); });
+    expect(getRunEvents).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('gate-inbox')).toBeInTheDocument();
+    expect(screen.queryByTestId('gate-verdict')).toBeNull();
+  });
+
+  it('READINESS: a failed fetch (503 / no event-log binding) leaves the block withheld — never the stale slice', async () => {
+    useRunEventStore.setState({ byRun: { [GATE_RUN]: [...G5_EVENTS] } });
+    getRunEvents.mockImplementation(async () => { throw new Error('503 no event-log binding'); });
+    useGateStore.setState({ gates: { [GATE_RUN]: RETRY_GATE } });
+    dash([makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS)]);
+    await act(async () => { await Promise.resolve(); });
+    expect(getRunEvents).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('gate-inbox')).toBeInTheDocument();
+    expect(screen.queryByTestId('gate-verdict')).toBeNull();
   });
 
   it('the inbox card renders NO verdict block when the run has no evaluation in its log yet', () => {

@@ -276,6 +276,12 @@ const FEED_META: Record<string, FeedMeta> = {
 const NO_EVENTS: CoreEvent[] = [];
 const NO_UNITS: WorkUnit[] = [];
 
+/** One open gate as an INSTANCE: the same run can open several while the dashboard stays mounted
+ *  (a retry of the same ord included), and each must fetch and prove its own history. */
+function gateInstanceKey(g: { runId: string; ord: number; receivedAt: number }): string {
+  return `${g.runId}:${g.ord}:${g.receivedAt}`;
+}
+
 const DEFAULT_META: FeedMeta = {
   icon: '·',
   label: 'Event',
@@ -296,6 +302,11 @@ interface GateCardProps {
   events: readonly CoreEvent[];
   /** The run's units (snapshot) — names the verdict's phase. */
   units: readonly WorkUnit[];
+  /** True once THIS gate instance's durable history has been fetched and merged (see the
+   *  dashboard's backfill). Until then the block is withheld: the store may hold only an earlier
+   *  attempt's evaluation plus this gate's `awaitingHuman`, and a same-ord retry would otherwise
+   *  render the OLD verdict under the new gate — indefinitely, if the fetch returns nothing. */
+  ready: boolean;
   onApprove: (runId: string, amend?: string) => Promise<void>;
   onReject: (runId: string) => Promise<void>;
 }
@@ -307,6 +318,7 @@ function GateActionCard({
   sessionLbl,
   events,
   units,
+  ready,
   onApprove,
   onReject,
 }: GateCardProps): React.ReactElement {
@@ -315,8 +327,12 @@ function GateActionCard({
   const [steerOpen, setSteerOpen] = useState(false);
   // The same verdict block the run page's gate card renders (F-3R2-006): a gate answered from
   // this inbox must show what it is approving too. Bounded on the gate's ord — with none known,
-  // no block, never an unbounded historical evaluation dressed as this gate's.
-  const verdict = useMemo(() => (typeof ord === 'number' ? gateVerdict(events, ord) : null), [events, ord]);
+  // no block, never an unbounded historical evaluation dressed as this gate's — and only once
+  // this gate instance's history is KNOWN (`ready`): never the previous slice's verdict.
+  const verdict = useMemo(
+    () => (ready && typeof ord === 'number' ? gateVerdict(events, ord) : null),
+    [events, ord, ready],
+  );
 
   const run = useCallback(
     async (action: () => Promise<void>): Promise<void> => {
@@ -1001,20 +1017,32 @@ export function CenterDashboard({
   // is read inside), so a busy dashboard does not rescan its gates on every structured frame.
   // Degrades silently — an api surface without `getRunEvents`, a 503 (no event-log binding) or
   // an empty history leaves the card promptless, never wrong.
+  //
+  // READINESS (Copilot on #252): while an instance's fetch is pending the card renders NO verdict —
+  // the store's slice may be an earlier attempt's evaluation plus this gate's `awaitingHuman`, so
+  // on a same-ord retry after a reconnect "render from what we have" would show the OLD verdict
+  // under the new gate. An instance becomes ready only when its fetch resolves WITH history (the
+  // durable prefix merged); an empty history or a 503 leaves it un-ready for good — no block,
+  // never a stale one — which is the contract stated above.
   const gateBackfilled = useRef<Set<string>>(new Set());
+  const [gateReady, setGateReady] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {
     for (const g of openGates) {
       const id = g.runId;
-      const instance = `${id}:${g.ord}:${g.receivedAt}`;
+      const instance = gateInstanceKey(g);
       if (gateBackfilled.current.has(instance)) continue;
       gateBackfilled.current.add(instance);
       try {
         api
           .getRunEvents(id)
-          .then(({ events }) => useRunEventStore.getState().hydrate(id, events))
-          .catch(() => { /* no event-log binding, or no persisted history — no backfill */ });
+          .then(({ events }) => {
+            if (events.length === 0) return; // nothing known — stays un-ready, no block
+            useRunEventStore.getState().hydrate(id, events);
+            setGateReady((prev) => (prev.has(instance) ? prev : new Set(prev).add(instance)));
+          })
+          .catch(() => { /* no event-log binding, or the fetch failed — stays un-ready, no block */ });
       } catch {
-        /* an api surface without getRunEvents — nothing to backfill from */
+        /* an api surface without getRunEvents — nothing to backfill from; stays un-ready */
       }
     }
   }, [openGates]);
@@ -1138,6 +1166,7 @@ export function CenterDashboard({
                     sessionLbl={lbl}
                     events={byRun[gate.runId] ?? NO_EVENTS}
                     units={v?.units ?? NO_UNITS}
+                    ready={gateReady.has(gateInstanceKey(gate))}
                     onApprove={handleApprove}
                     onReject={handleReject}
                   />

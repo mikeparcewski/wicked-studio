@@ -18,11 +18,18 @@ import { makeUnit } from '../factories.js';
  *    own checks (F-039, `repoChecksEvaluated`: typecheck / lint / test, exit codes + durations)
  *    and the ord-4 `gateEvaluated` passed on that floor.
  *
- * Shapes are the wire's, byte for byte in every field the surfaces read. Scrubbed: the run id,
- * the operator's intent text, the rig's worktree paths and the test-runner tails (all replaced by
- * short generic stand-ins), and the two git tree ids (synthetic hex of the same width — the
- * denial prose that quotes them is kept in its exact wording so the card's copy is exercised on
- * the engine's real sentence structure). `seq` values are the recording's.
+ * The gate-relevant subset of the recording (`g4-events.json` / `g5-events.json` /
+ * `g6-events.json`): every `awaitingHuman`, `gateEvaluated`, `gateDecided`, `gateEscalated`,
+ * `unitDenied`, `unitDone`, `resumed`, `unitDispatched`, `unitExecuting`, `unitReworkAmended`,
+ * `evaluatorMutatedWorktree` and `repoChecksEvaluated` frame between the first gate and G6, with
+ * the recording's `seq` and `ts`; the high-volume frames between them (`unitOutputDelta`,
+ * `governanceHookFired`, council frames, `dataUsed`, `unitOutputCaptured`, …) are omitted. Every
+ * field the surfaces read is the wire's byte for byte — criterion, reasoning, verdicts, denial
+ * prose, check names / exit codes / durations / sources. Scrubbed: the run id, the operator's
+ * intent text (prompts, the retry amendment's re-stated description), the rig's worktree paths and
+ * the test-runner tails (replaced by short generic stand-ins), and the two git tree ids (synthetic
+ * hex of the same width — the denial prose and the amendment that quote them keep their exact
+ * wording). Only `REPO_CHECKS_FAIL` is synthetic, and says so.
  */
 
 export const GATE_RUN = 'run-3r2';
@@ -116,9 +123,9 @@ export const WORKTREE_GUARD_REASON =
 /** The run up to and including the G5 gate — unit #4 (`verify`) denied by the worktree guard. */
 export const G5_EVENTS: CoreEvent[] = [
   ...G4_EVENTS,
-  { type: 'gateDecided', session: GATE_RUN, ord: 4, seq: 201, ts: 1789080930000, allow: true },
-  { type: 'resumed', session: GATE_RUN, seq: 202, ts: 1789080930001 },
-  { type: 'unitDispatched', session: GATE_RUN, ord: 4, seq: 203, ts: 1789080930002, cli: 'pi', attempt: 0 },
+  { type: 'resumed', session: GATE_RUN, ord: 4, seq: 201, ts: 1789081094441 },
+  { type: 'unitDispatched', session: GATE_RUN, ord: 4, seq: 202, ts: 1789081095027, attempt: 0 },
+  { type: 'unitExecuting', session: GATE_RUN, ord: 4, seq: 203, ts: 1789081095027 },
   {
     type: 'evaluatorMutatedWorktree',
     session: GATE_RUN,
@@ -241,31 +248,47 @@ export const REPO_CHECKS_PASS: CoreEvent = {
  */
 export const G6_EVENTS: CoreEvent[] = [
   ...G5_EVENTS,
-  { type: 'gateDecided', session: GATE_RUN, ord: 4, seq: 251, ts: 1789081500000, allow: true },
-  { type: 'resumed', session: GATE_RUN, seq: 252, ts: 1789081500001 },
-  { type: 'unitDispatched', session: GATE_RUN, ord: 4, seq: 253, ts: 1789081500002, cli: 'claude', attempt: 1 },
+  {
+    // The operator approved the retry WITH a steer note (the recorded amendment, tree id
+    // substituted; the re-stated description is the scrubbed intent).
+    type: 'unitReworkAmended',
+    session: GATE_RUN,
+    ord: 4,
+    seq: 251,
+    ts: 1789081594674,
+    amendment:
+      `Operator restored the creator's tree (git read-tree --reset -u ${TREE_BEFORE.slice(0, 10)}...) before this retry. ` +
+      'Evaluator: you are READ-ONLY — do not edit, write, or format any file, and do not run npm run build (it writes dist/). ' +
+      'Run typecheck, lint and the test suite; review the diff against the acceptance criteria; report findings such as the stale comment at App.tsx:147 in your verdict text only — never fix them.',
+    updatedDescription: `verify — ${INTENT}`,
+  },
+  { type: 'resumed', session: GATE_RUN, ord: 4, seq: 252, ts: 1789081594676 },
+  { type: 'unitDispatched', session: GATE_RUN, ord: 4, seq: 253, ts: 1789081595299, attempt: 1 },
   REPO_CHECKS_PASS,
   {
+    // Recorded: the floor's criterion is JOINED onto the phase's own with `; `.
     type: 'gateEvaluated',
     session: GATE_RUN,
     ord: 4,
     seq: 303,
-    ts: 1789081879700,
+    ts: 1789081879672,
     criterion:
+      'the run left a change in its worktree (done is re-derived from the diff, never asserted); ' +
       "the repository's own checks pass in the run's worktree (every detected check exits 0 — done is re-derived by running them, never asserted)",
     hasDeterministicFloor: true,
     deterministicPass: true,
     agentVerdict: 'pass',
-    agentReasoning: 'PASS — the verify phase reported the suite green and the engine observed every check exit 0. PASS',
+    agentReasoning:
+      'PASS — The worktree evidence shows multiple modified files and one added test file, satisfying the criterion that the run left a change in its worktree. PASS',
     evaluatorPass: true,
     evaluatorPolicies: [],
     denialReason: null,
     denial: null,
     combined: true,
   },
-  { type: 'gateDecided', session: GATE_RUN, ord: 4, seq: 304, ts: 1789081879700, allow: true },
-  { type: 'unitDone', session: GATE_RUN, ord: 4, seq: 305, ts: 1789081879700 },
-  { type: 'awaitingHuman', session: GATE_RUN, ord: 5, seq: 306, ts: 1789081879701, prompt: `Approve unit 5 before it runs: deliver — ${INTENT}`, reviewingOrd: null },
+  { type: 'gateDecided', session: GATE_RUN, ord: 4, seq: 304, ts: 1789081879672, allow: true },
+  { type: 'unitDone', session: GATE_RUN, ord: 4, seq: 305, ts: 1789081879672 },
+  { type: 'awaitingHuman', session: GATE_RUN, ord: 5, seq: 306, ts: 1789081879673, prompt: `Approve unit 5 before it runs: deliver — ${INTENT}`, reviewingOrd: null },
 ];
 
 /** The G6 gate as the gate store holds it. */

@@ -62,7 +62,13 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       )}
 
       {view.denial !== null && (
-        <p className="text-[11px]" data-testid="gate-verdict-denial" style={{ color: 'var(--status-fail)' }}>
+        <p
+          className="text-[11px]"
+          data-testid="gate-verdict-denial"
+          // The recorded remedy carries a 40-hex tree id inside one <code> span — an unbreakable
+          // token that overflows a narrow dock unless it may wrap anywhere.
+          style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }}
+        >
           <span className="font-semibold">denied by {denialSourceLabel(view.denial.source)}: </span>
           {splitBackticks(view.denial.reason).map((part, i) =>
             i % 2 === 1 ? (
