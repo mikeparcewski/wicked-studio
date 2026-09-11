@@ -188,7 +188,10 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
   for (let i = 0; i < events.length; i++) {
     const e = events[i]!;
     if (e.type !== 'gateEvaluated') continue;
-    if (gateOrd !== undefined && typeof e.ord === 'number' && e.ord > gateOrd) continue;
+    // A bounded lookup needs a numeric ordinal to bound: a frame with no `ord` cannot be shown to
+    // belong at or below this gate, so it is never the answer to one (Copilot on #252). Unbounded
+    // (no `gateOrd`) still takes the last evaluation whatever its shape.
+    if (gateOrd !== undefined && (typeof e.ord !== 'number' || e.ord > gateOrd)) continue;
     idx = i;
   }
   if (idx === -1) return null;

@@ -94,6 +94,20 @@ describe('gateVerdict — which evaluation answers the gate', () => {
     expect(v!.outcome).toBe('pass');
   });
 
+  it('a bounded lookup ignores a gateEvaluated with no numeric ord — it can never be shown to belong to this gate (Copilot on #252)', () => {
+    const ordless: CoreEvent = {
+      type: 'gateEvaluated', session: GATE_RUN, criterion: 'stray', hasDeterministicFloor: false,
+      deterministicPass: true, agentVerdict: null, agentReasoning: null, evaluatorPass: true,
+      evaluatorPolicies: [], denialReason: null, combined: true,
+    };
+    // Appended last, it would otherwise win "last at or below ord 4" and render an `unknown phase` card.
+    expect(gateVerdict([...G4_EVENTS, ordless], 4)!.ord).toBe(3);
+    // Alone in the log, a bounded gate sees no evaluation at all.
+    expect(gateVerdict([ordless], 4)).toBeNull();
+    // Unbounded still takes the last evaluation whatever its shape.
+    expect(gateVerdict([ordless])!.criterion).toBe('stray');
+  });
+
   it('no gateEvaluated yet (the very first gate) ⇒ null — the card renders no block', () => {
     const firstGate = G4_EVENTS.slice(0, 1); // just the ord-1 awaitingHuman
     expect(gateVerdict(firstGate, 1)).toBeNull();
