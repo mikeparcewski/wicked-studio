@@ -1,17 +1,15 @@
 /**
  * The wave-6 wire MIRROR (`src/api/wave6-wire.ts`) against the INSTALLED `wicked-crew-api-types`.
  *
- * The #257 parity pattern (`tests/skillsWire.test.ts`), in two postures keyed on the pin:
+ * The #257 parity pattern (`tests/skillsWire.test.ts`), now in its PINNED posture (pin ≥ 0.36.0,
+ * the version that published the wire): every `>>> VERBATIM … <<< VERBATIM` region of the mirror is
+ * byte-equal to the installed package at the labelled line range, every label names the pinned
+ * version, and every wave-6 declaration studio codes against lives INSIDE a region (a trivial region
+ * beside a hand-written wave-6 block does not satisfy the pin — independent review of #263, F-6).
  *
- *  - PROVISIONAL (pin < 0.36.0 — the wire is not published yet): the mirror's header says
- *    PROVISIONAL, none of the wave-6 names exist in the installed `index.d.ts` (so studio cannot
- *    be silently reading a shape the pinned contract already declares differently), the readers
- *    are null-safe on a frame without the keys, and every name the wave-6 briefs give is spelled
- *    in the mirror exactly.
- *  - PINNED (pin ≥ 0.36.0): the mirror MUST have been re-vendored — VERBATIM regions between
- *    `>>> VERBATIM wicked-crew-api-types@<v> index.d.ts:<from>-<to> …` / `<<< VERBATIM` markers,
- *    each byte-equal to the installed package at the labelled line range — and the PROVISIONAL
- *    header must be gone. A pin bump without the re-vendor fails HERE.
+ * The two WIRE GAPS the mirror keeps studio-worded (a row-level `Campaign.test_set` /
+ * `RunGroup.test_set` join; `TestingReconBody.workflow`) are guarded the other way round: the
+ * installed package must NOT declare them — the version that does fails here and says "re-vendor".
  *
  * @vitest-environment node
  */
@@ -32,16 +30,18 @@ import {
 } from '../src/api/wave6-wire.js';
 
 const MIRROR = fileURLToPath(new URL('../src/api/wave6-wire.ts', import.meta.url));
+const SKILLS_MIRROR = fileURLToPath(new URL('../src/api/skills-wire.ts', import.meta.url));
 const INSTALLED = fileURLToPath(new URL('../node_modules/wicked-crew-api-types/index.d.ts', import.meta.url));
 const INSTALLED_PKG = fileURLToPath(new URL('../node_modules/wicked-crew-api-types/package.json', import.meta.url));
 const PINNED_PKG = fileURLToPath(new URL('../package.json', import.meta.url));
 
-/** The version the wave-6 wire publishes under. */
+/** The version the wave-6 wire publishes under — the mirror's floor. */
 const WAVE6_VERSION = [0, 36, 0] as const;
 
 const LABEL = /^wicked-crew-api-types@(\S+) index\.d\.ts:(\d+)-(\d+) /;
 const BEGIN = /^\/\/ >>> VERBATIM (.+)$/;
 const END = '// <<< VERBATIM';
+const GAPS_BANNER = '// ── WIRE GAPS — PROVISIONAL';
 
 function semver(v: string): [number, number, number] {
   const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v);
@@ -83,59 +83,98 @@ const installed = JSON.parse(readFileSync(INSTALLED_PKG, 'utf8')) as { version: 
 const pinned = (JSON.parse(readFileSync(PINNED_PKG, 'utf8')) as { devDependencies: Record<string, string> }).devDependencies['wicked-crew-api-types']!;
 const mirror = readFileSync(MIRROR, 'utf8');
 const installedDts = readFileSync(INSTALLED, 'utf8');
-const pinnedAtWave6 = atLeast(installed.version, WAVE6_VERSION);
+const rs = regions(MIRROR);
+const regionText = rs.map((r) => r.body).join('\n');
+const gapsAt = mirror.indexOf(GAPS_BANNER);
 
-/** Every wave-6 name the briefs give — spelled once here, asserted present in the mirror. The first
- *  entry is studio's own constant (the workflow id the panel reads off `GET /workflows`); every other
- *  entry is a contract declaration that must live inside a VERBATIM region once the pin lands. */
-const STUDIO_CONSTANTS = ["QE_AUTHOR_TESTS_WORKFLOW_ID = 'qe-author-tests'"];
+/** Studio's own spellings — the constants the surfaces speak; asserted present in the mirror. */
+const STUDIO_CONSTANTS = [
+  "QE_AUTHOR_TESTS_WORKFLOW_ID = 'qe-author-tests'",
+  `WORKER_REMOTE_WRITE_REMEDY = "delivery is performed by the run's deliver phase"`,
+];
+
+/** Every wave-6 declaration the briefs name, spelled as 0.36.0 PUBLISHES it — each must live inside
+ *  a VERBATIM region of the mirror. */
 const WAVE6_DECLS = [
-  'export interface TestingAuthorBody',
-  'export interface TestingAuthorResponse',
-  'export interface TestSetRegistration',
-  "export type RunDiffSource = 'worktree' | 'branch'",
+  // POST /testing/author + the registered test set
+  "export type QeAuthorTestsWorkflowId = 'qe-author-tests';",
+  'export interface TestingAuthorBody {',
+  'export interface TestingAuthorResponse {',
+  'export interface WorkflowPlan {',
+  'export interface TestingAuthorRun {',
+  'export interface TestSet {',
+  'test_sets?: TestSet[];',
+  'export interface TestingReconBody {',
+  // GET /runs/:id/diff
+  "source?: 'worktree' | 'branch';",
+  // gateEvaluated
   'ungated?: boolean;',
   'ungatedReason?: string | null;',
-  'degradedReason?: string | null;',
-  'agreementPct?: number | null;',
+  'floorNote?: string | null;',
+  'judgeSkippedReason?: string | null;',
+  // repoChecksEvaluated
+  'sandboxLevel?: string;',
+  'sandboxError?: string | null;',
+  'detectError?: string | null;',
+  // unitDistributed — camelCase
+  'export interface UnitDistributedEvent {',
+  "routingMethod: 'council' | 'degraded' | 'evaluator_distinct' | 'tool';",
+  'agreementPct: number | null;',
+  'seated: number | null;',
+  'degradedReason: string | null;',
+  'seatConstraint: string | null;',
+  // workerToolCallDenied
   "type: 'workerToolCallDenied';",
   "carrier: 'acp' | 'wrapped_cli' | (string & {});",
-  'role: string;',
+  "role: 'creator' | 'evaluator' | 'neutral' | (string & {});",
   'tool: string;',
   'command: string;',
-  'remedy: string | null;',
+  'remedy: string;',
+  // acpFallback auth kinds
+  "| 'auth_failed'",
+  "| 'unauthenticated'",
+  // runBaseResolved
+  'runBranch?: string;',
+  // roster
+  'auth?: SeatAuth;',
+  "auth_source?: 'seat-stderr';",
+  "free_tier_source?: 'registry' | 'crew-heuristic';",
+  'council_eligible?: boolean;',
+  'council_bench?: RosterSeatCouncilBench;',
+  // chat refused[]
+  "export type ChatRefusalSource = 'auth' | 'scope' | 'bench' | 'budget' | 'engine' | (string & {});",
+  'refused?: ChatSeatRefusal[];',
+  'refused?: ChatSeatRefusal[] | null;',
+  // GET /interactive/docs
+  'export interface InteractiveDocsListing {',
+  'export interface InteractiveDocIndexRow {',
+  'unreachable: InteractiveDocsUnreachable[];',
 ];
-const WAVE6_NAMES = [...STUDIO_CONSTANTS, ...WAVE6_DECLS];
+
+/** The wave-6 SKILLS additions live in the skills block, vendored by `skills-wire.ts`. */
+const WAVE6_SKILLS_DECLS = [
+  "| 'skills.stale-rules';",
+  'export interface PortabilityRulesIdentity {',
+  'export interface SnapshotRowDrift {',
+  'drift?: SnapshotRowDrift[];',
+];
 
 describe('src/api/wave6-wire.ts — the wave-6 mirror against the installed contract', () => {
-  it('the devDependency is an exact pin equal to the installed version', () => {
+  it('the devDependency is an exact pin equal to the installed version, at or above the wave-6 floor', () => {
     expect(pinned).toBe(installed.version);
+    expect(atLeast(installed.version, WAVE6_VERSION), `${installed.version} ≥ 0.36.0`).toBe(true);
   });
 
-  it('spells every name the wave-6 briefs give, exactly', () => {
-    for (const name of WAVE6_NAMES) expect(mirror, name).toContain(name);
+  it('carries the MIRROR header naming the contract and the release swap; PROVISIONAL only in the wire-gaps section', () => {
+    const head = mirror.slice(0, 400);
+    expect(head).toContain(`MIRROR of the wicked-crew-api-types ${installed.version} wave-6 additions`);
+    expect(head).toContain('replace with imports from the');
+    expect(gapsAt, 'the wire-gaps section exists').toBeGreaterThan(0);
+    expect(mirror.slice(0, gapsAt)).not.toContain('PROVISIONAL');
   });
 
-  it(`posture: ${pinnedAtWave6 ? 'PINNED ≥ 0.36.0 — re-vendored VERBATIM regions, no PROVISIONAL header' : 'PROVISIONAL < 0.36.0 — the wave-6 names are NOT yet in the installed contract'}`, () => {
-    if (!pinnedAtWave6) {
-      expect(mirror.slice(0, 1200)).toContain('PROVISIONAL');
-      // None of these are declared by the pinned contract yet — if one appears, the pin moved (or a
-      // 0.35.x publish carried the wire under these names) and the mirror must be re-vendored
-      // against it (the other posture) rather than kept provisional. Both studio's own spellings
-      // (`TestSetRegistration`, `TestingAuthorBody`, `TestSetCounts`, `test_set`, `testing/author`)
-      // and the engine's (`workerToolCallDenied`, `ungatedReason`, `degradedReason`) are guarded —
-      // independent review of #263, F-6.
-      for (const name of [
-        'workerToolCallDenied', 'ungatedReason', 'degradedReason',
-        'TestSetRegistration', 'TestingAuthorBody', 'TestSetCounts', 'test_set', 'testing/author',
-      ]) {
-        expect(installedDts, `${name} declared by ${installed.version} — re-vendor the mirror`).not.toContain(name);
-      }
-      return;
-    }
-    expect(mirror.slice(0, 1200)).not.toContain('PROVISIONAL');
-    const rs = regions(MIRROR);
-    expect(rs.length, 'at least one VERBATIM region').toBeGreaterThan(0);
+  it('every VERBATIM region is byte-equal to the INSTALLED package at the labelled line range, and the label names the pinned version', () => {
+    expect(rs.length, 'the regions').toBeGreaterThanOrEqual(14);
     const lines = installedDts.split('\n');
     for (const { label, body } of rs) {
       const m = LABEL.exec(label);
@@ -144,15 +183,41 @@ describe('src/api/wave6-wire.ts — the wave-6 mirror against the installed cont
       expect(version, label).toBe(installed.version);
       expect(body, label).toBe(lines.slice(Number(from) - 1, Number(to)).join('\n'));
     }
-    // Every wave-6 declaration must live INSIDE a verbatim region — a trivial region beside a
-    // still-hand-written wave-6 block does not satisfy the pin (F-6).
-    const regionText = rs.map((r) => r.body).join('\n');
-    for (const name of WAVE6_DECLS) {
-      expect(regionText, `${name} inside a VERBATIM region`).toContain(name);
-    }
-    for (const name of ['workerToolCallDenied', 'ungatedReason', 'degradedReason']) {
+  });
+
+  it('every wave-6 declaration lives INSIDE a VERBATIM region (F-6), spelled as the package publishes it', () => {
+    for (const name of WAVE6_DECLS) expect(regionText, `${name} inside a VERBATIM region`).toContain(name);
+    for (const name of WAVE6_DECLS) expect(installedDts, `${name} declared by ${installed.version}`).toContain(name);
+  });
+
+  it('spells the constants studio speaks, exactly', () => {
+    for (const name of STUDIO_CONSTANTS) expect(mirror, name).toContain(name);
+  });
+
+  it('the wave-6 SKILLS additions (stale-rules, current.rules / drift) are declared by the package and vendored by skills-wire.ts', () => {
+    const skills = regions(SKILLS_MIRROR).map((r) => r.body).join('\n');
+    for (const name of WAVE6_SKILLS_DECLS) {
       expect(installedDts, name).toContain(name);
+      expect(skills, `${name} inside a skills-wire.ts VERBATIM region`).toContain(name);
     }
+  });
+
+  it('WIRE GAP 1 — a row-level `test_set` join / `TestSetRegistration` is NOT declared by the package; the mirror keeps it provisional', () => {
+    expect(installedDts).not.toMatch(/\btest_set\b/);
+    expect(installedDts).not.toContain('TestSetRegistration');
+    // The package serves the sets at the list level instead — vendored, so the gap is legible.
+    expect(regionText).toContain('test_sets?: TestSet[];');
+    const gaps = mirror.slice(gapsAt);
+    expect(gaps).toContain('export interface TestSetRegistration {');
+    expect(gaps).toContain('test_set?: TestSetRegistration | null;');
+  });
+
+  it('WIRE GAP 2 — `TestingReconBody` declares no `workflow` key; the mirror keeps the ladder rung provisional', () => {
+    const recon = rs.find((r) => r.label.includes('TestingReconBody'));
+    expect(recon, 'the TestingReconBody region').toBeDefined();
+    expect(recon!.body).toContain('export interface TestingReconBody {');
+    expect(recon!.body).not.toContain('workflow');
+    expect(mirror.slice(gapsAt)).toContain('export interface TestingReconWorkflowBody {');
   });
 });
 
@@ -165,19 +230,20 @@ describe('the null-safe readers — an older daemon\'s frame changes nothing', (
     expect(gateUngated({ type: 'gateEvaluated', session: 'r', ungated: true } as never)).toBe(true);
     expect(gateUngatedReason({ type: 'gateEvaluated', session: 'r', ungatedReason: '' } as never)).toBeNull();
   });
-  it('distribution: camelCase first, snake_case fallback, null/absent → null', () => {
+  it('distribution: the camelCase spelling ONLY — the deprecated snake_case aliases the engine never emitted are not read', () => {
     expect(distributionDegradedReason(bare)).toBeNull();
     expect(distributionAgreementPct(bare)).toBeNull();
-    expect(distributionDegradedReason({ type: 'unitDistributed', session: 'r', degraded_reason: 'x' } as never)).toBe('x');
-    expect(distributionDegradedReason({ type: 'unitDistributed', session: 'r', degradedReason: 'y', degraded_reason: 'x' } as never)).toBe('y');
+    expect(distributionDegradedReason({ type: 'unitDistributed', session: 'r', degradedReason: 'y' } as never)).toBe('y');
+    expect(distributionDegradedReason({ type: 'unitDistributed', session: 'r', degraded_reason: 'x' } as never)).toBeNull();
+    expect(distributionDegradedReason({ type: 'unitDistributed', session: 'r', degradedReason: null, degraded_reason: 'x' } as never)).toBeNull();
     expect(distributionAgreementPct({ type: 'unitDistributed', session: 'r', agreementPct: 66 } as never)).toBe(66);
-    expect(distributionAgreementPct({ type: 'unitDistributed', session: 'r', agreement_pct: 50 } as never)).toBe(50);
+    expect(distributionAgreementPct({ type: 'unitDistributed', session: 'r', agreement_pct: 50 } as never)).toBeNull();
     expect(distributionAgreementPct({ type: 'unitDistributed', session: 'r', agreementPct: Number.NaN } as never)).toBeNull();
   });
   it('diff: only the two declared sources; anything else (absent, a newer token) is null', () => {
     expect(diffSource({ diff: '', truncated: false })).toBeNull();
-    expect(diffSource({ diff: '', truncated: false, source: 'branch' } as never)).toBe('branch');
-    expect(diffSource({ diff: '', truncated: false, source: 'worktree' } as never)).toBe('worktree');
+    expect(diffSource({ diff: '', truncated: false, source: 'branch' })).toBe('branch');
+    expect(diffSource({ diff: '', truncated: false, source: 'worktree' })).toBe('worktree');
     expect(diffSource({ diff: '', truncated: false, source: 'bundle' } as never)).toBeNull();
   });
   it('the constants studio speaks', () => {

@@ -158,6 +158,27 @@ npm publish dates. Every version listed here exists on
     accept `PLAYWRIGHT_CHANNEL` (e.g. `chrome`) to run on an installed browser when the Playwright
     cache is absent (review R2-6 — a rig never installs anything); testid inventory regenerated.
 
+### Changed
+- **Pin `wicked-crew-api-types` 0.36.0** (the wave-6 wire, crew#536; `skills.stale-rules`, crew#535) and
+  re-vendor BOTH wire mirrors from the installed `index.d.ts`. The skills mirror + fixture
+  (`tests/fixtures/api-types-0.36.0-skills.d.ts`, `index.d.ts:1969-2419` / `4682-4741`) carry the
+  ADDITIVE block: `SkillsManifestResponse.current.rules` / `drift`, `PortabilityRulesIdentity`,
+  `SnapshotRowDrift`, the `skills.stale-rules` finding kind. The wave-6 mirror (`src/api/wave6-wire.ts`)
+  drops its PROVISIONAL declarations for 14 VERBATIM regions byte-pinned by `tests/wave6Wire.test.ts`
+  against the installed package: `POST /testing/author` (`TestingAuthorBody` / `TestingAuthorResponse`
+  with `runs[]`, `plan`, `gate`, `scope`; the registered `TestSet`), `CampaignsListResponse.test_sets`,
+  `RunDiff.source` / `branch` / `base`, `gateEvaluated.ungated` / `ungatedReason` / `floorNote` /
+  `judgeSkippedReason`, `repoChecksEvaluated.sandboxLevel` / `sandboxError` / `detectError`,
+  `unitDistributed` camelCase (`seatConstraint` included), `workerToolCallDenied` (`carrier` / `role` /
+  `tool`), the `acpFallback` auth kinds, `runBaseResolved.runBranch`, the roster's `auth` /
+  `auth_source` / `free_tier_source` / `council_eligible` / `council_bench`, chat `refused[]`, the
+  `GET /interactive/docs` rows. The `unitDistributed` snake_case fallbacks (`agreement_pct`,
+  `degraded_reason`) are dropped — 0.36.0 declares them `@deprecated`; the engine never emitted them.
+  Two WIRE GAPS stay studio-worded and test-guarded: a row-level `Campaign.test_set` /
+  `RunGroup.test_set` join (0.36.0 serves the sets as top-level `test_sets: TestSet[]`, so the Test
+  landing's per-card counts render only when a daemon joins the row) and `TestingReconBody.workflow`
+  (the launch ladder's middle rung; a 0.36.0 daemon answers the first rung, `POST /testing/author`).
+
 ## [0.5.6] — 2026-09-11
 _The published bundle is built against `wicked-crew-api-types` **0.34.0** — the exact
 devDependency pin on this cut, and the wire the bundle's mirrors and `satisfies` checks are typed

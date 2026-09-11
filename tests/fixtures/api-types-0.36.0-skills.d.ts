@@ -1,4 +1,4 @@
-// >>> VERBATIM wicked-crew-api-types@0.35.0 index.d.ts:1768-2186 (crew#531 via PR #532) — the skills block
+// >>> VERBATIM wicked-crew-api-types@0.36.0 index.d.ts:1969-2419 (crew#535 via crew#536) — the skills block
 // ── Skills — the daemon-owned garden plugin root, published as immutable snapshots (api-types 0.28.0) ──
 //
 // api-types 0.29.0 (design amendment v3.6, crew #490): the installer-managed copy
@@ -196,8 +196,40 @@ export interface SkillsManifestResponse {
   root: string;
   /** The VERIFIED published snapshot `current` resolves to, or `null` before the first publish.
    *  `path` is the absolute REAL path of `snapshots/<gen>` — byte-identical to the one input the
-   *  engine is handed (`WICKED_SKILLS_SNAPSHOT`; design v3.1 §2). */
-  current: { gen: number; path: string } | null;
+   *  engine is handed (`WICKED_SKILLS_SNAPSHOT`; design v3.1 §2). `rules` / `drift` (api-types
+   *  0.36.0, F-083 / crew#535) ride beside it on a daemon ≥ 0.7.30 — absent on an older one. */
+  current: {
+    gen: number;
+    path: string;
+    /** The portability rules the generation was published under vs the rules this daemon runs:
+     *  `recorded` is `null` for a generation predating the identity (0.7.29 and earlier);
+     *  `stale: true` = they differ and the daemon raised `skills.stale-rules`. */
+    rules?: {
+      recorded: PortabilityRulesIdentity | null;
+      running: PortabilityRulesIdentity;
+      stale: boolean;
+    };
+    /** The rows whose portability derives differently under the running rules than the snapshot
+     *  recorded — the `skills.stale-rules` warning names up to five; the list carries the rest.
+     *  `recorded.reasons` is `null` for a row written before per-reason portability (0.34.0). */
+    drift?: SnapshotRowDrift[];
+  } | null;
+}
+
+/** The identity of a portability-rule table (api-types 0.36.0, F-083): its version and the
+ *  sha256 of the committed parity fixture (`tests/fixtures/portability_rules.json`). */
+export interface PortabilityRulesIdentity {
+  version: number;
+  sha256: string;
+}
+
+/** One snapshot row whose portability the RUNNING rules derive differently than the snapshot
+ *  recorded (api-types 0.36.0, F-083) — see `SkillsManifestResponse.current.drift`. */
+export interface SnapshotRowDrift {
+  name: string;
+  recorded: { portable: boolean; reasons: SkillPortabilityReason[] | null };
+  /** What the RUNNING rules derive for the row — the same per-reason shape `SkillEntry.portability` carries. */
+  derived: SkillPortability;
 }
 
 export interface SkillFileEntry {
@@ -420,7 +452,7 @@ export interface ReplaceSkillBody {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.35.0 index.d.ts:4223-4272 (crew#531 via PR #532) — the diagnostics skills block
+// >>> VERBATIM wicked-crew-api-types@0.36.0 index.d.ts:4682-4741 (crew#535 via crew#536) — the diagnostics skills block
 /** The skills seam's state as `GET /diagnostics` reports it (skills keystone, api-types 0.28.0). */
 export type DiagnosticsSkillsState = 'published' | 'fallback' | 'blocked' | 'config-error' | 'disabled';
 
@@ -440,8 +472,18 @@ export interface DiagnosticsSkillsFinding {
    *  (`error`, api-types 0.29.0) = `manifest.json` could not be read when diagnostics were taken
    *  (corrupt, unreadable, or the root no longer the one the store bound) — reported as
    *  `config-error` with the cause instead of the stale boot outcome; the exported engine input is
-   *  unchanged until the daemon restarts. */
-  kind: 'skills.fallback' | 'skills.blocked' | 'skills.config' | 'skills.source' | 'skills.manifest';
+   *  unchanged until the daemon restarts; `skills.stale-rules` (`warning`, api-types 0.36.0, F-083 /
+   *  crew#535) = the CURRENT generation was published under OTHER portability rules than the daemon
+   *  now runs — accepted (the snapshot is never rewritten; the runtime stays `published`), the rows
+   *  that now derive differently are named (`SkillsManifestResponse.current.drift`), and a publish
+   *  records the running rules and clears it. */
+  kind:
+    | 'skills.fallback'
+    | 'skills.blocked'
+    | 'skills.config'
+    | 'skills.source'
+    | 'skills.manifest'
+    | 'skills.stale-rules';
   severity: 'warning' | 'error';
   message: string;
 }

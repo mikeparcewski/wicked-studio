@@ -29,7 +29,7 @@ describe('narrate — the event → status-line templates (§4)', () => {
     [{ type: 'councilDeliberated', session: 'r', ord: 1, round: 2, agreementPct: 50, neededPct: 75 }, 'Ballot 2: 50% — below the 75% bar, runoff', 'info'],
     [{ type: 'councilVoted', session: 'r', ord: 1, agreementPct: 100, votes: 4 }, 'Council voted — 100% agreement (4 votes)', 'info'],
     [{ type: 'councilSeatFailed', session: 'r', ord: 1, cli: 'codex', kind: 'timed_out' }, 'Seat codex did not vote (timed_out)', 'fail'],
-    [{ type: 'unitDistributed', session: 'r', ord: 2, cli: 'claude', agreement_pct: 83 }, 'phase-2 routed to claude — council 83%', 'info'],
+    [{ type: 'unitDistributed', session: 'r', ord: 2, cli: 'claude', agreementPct: 83 }, 'phase-2 routed to claude — council 83%', 'info'],
     [{ type: 'unitDispatched', session: 'r', ord: 2, attempt: 0 }, 'Worker started phase-2', 'work'],
     [{ type: 'unitDispatched', session: 'r', ord: 2, attempt: 1 }, 'phase-2 re-dispatched (attempt 2)', 'work'],
     [{ type: 'unitExecuting', session: 'r', ord: 2 }, 'phase-2 is running', 'work'],
