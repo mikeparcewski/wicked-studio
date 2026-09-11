@@ -1,22 +1,16 @@
 import type { Campaign, RunGroup } from '../../src/api/campaigns.js';
 import type { CoreEvent, GateEvaluatedEvent, UnitDistributedEvent, WorkflowDef } from '../../src/api/types.js';
-import type {
-  GateEvaluatedUngated,
-  TestSetRegistration,
-  UnitDistributedWave6,
-  WorkerToolCallDeniedEvent,
-} from '../../src/api/wave6-wire.js';
+import type { TestSetRegistration, WorkerToolCallDeniedEvent } from '../../src/api/wave6-wire.js';
 import { makeUnit } from '../factories.js';
 
 /**
  * The wave-6 wire (api-types 0.36.0 — the governed testing journey) as SYNTHETIC frames in the
  * engine's `event_to_json` spelling: camelCase, every key present, `null` never absent. Not a
- * recording: 0.36.0 was unpublished when this was written — every literal is spelled exactly as
- * the wave-6 briefs name the fields (`ungated` / `ungatedReason`, `degradedReason`,
- * `workerToolCallDenied {role, command}` + a remedy, `diff.source: "branch"`, the campaign's
- * `test_set`), typed `satisfies` the provisional mirror so a drift fails `tsc`. Re-vendor against
- * the published package at the pin bump. Privacy-scrubbed by construction: synthetic ids, no host
- * paths, no operator text.
+ * recording — every event literal is typed `satisfies` the PUBLISHED 0.36.0 declaration (through
+ * `./types.js` / the byte-pinned `wave6-wire.ts` regions) so a drift fails `tsc`. The campaign rows'
+ * `test_set` is studio's provisional row-level join (wire gap 1 in `wave6-wire.ts`: 0.36.0 serves
+ * `CampaignsListResponse.test_sets` instead). Privacy-scrubbed by construction: synthetic ids, no
+ * host paths, no operator text.
  */
 
 export const W6_RUN = 'r-gt-done';
@@ -57,7 +51,8 @@ export const UNIT_DISTRIBUTED_DEGRADED = {
   seated: 5,
   dissent: 0,
   degradedReason: W6_DEGRADED_REASON,
-} satisfies Omit<UnitDistributedEvent, 'routing_method' | 'agreement_pct' | 'returned' | 'dissent' | 'degraded_reason'> & UnitDistributedWave6;
+  seatConstraint: null,
+} satisfies UnitDistributedEvent;
 
 /** The same frame with a full council — no reason. */
 export const UNIT_DISTRIBUTED_FULL = {
@@ -67,11 +62,12 @@ export const UNIT_DISTRIBUTED_FULL = {
   returned: 5,
   dissent: 1,
   degradedReason: null,
-} satisfies Omit<UnitDistributedEvent, 'routing_method' | 'agreement_pct' | 'returned' | 'dissent' | 'degraded_reason'> & UnitDistributedWave6;
+} satisfies UnitDistributedEvent;
 
-/** The 0.34.0 snake_case spelling a consumer might still be handed (the declared-but-never-emitted
- *  names) — the readers fall back to it until the 0.36.0 pin. */
-export const UNIT_DISTRIBUTED_SNAKE: UnitDistributedEvent = {
+/** A frame carrying ONLY the `@deprecated` snake_case aliases 0.36.0 keeps for one minor (the
+ *  pre-0.36 declared-but-never-emitted names) — the readers no longer read them: no pct, no degraded
+ *  line. Not a `UnitDistributedEvent` (its camelCase fields are required); a permissive frame. */
+export const UNIT_DISTRIBUTED_DEPRECATED_ALIASES = {
   type: 'unitDistributed',
   session: W6_RUN,
   ord: 2,
@@ -81,7 +77,7 @@ export const UNIT_DISTRIBUTED_SNAKE: UnitDistributedEvent = {
   returned: 3,
   dissent: 1,
   degraded_reason: '2 of 5 seats benched: codex, pi (signed out)',
-};
+} satisfies Pick<UnitDistributedEvent, 'type' | 'session' | 'ord' | 'cli' | 'routing_method' | 'agreement_pct' | 'returned' | 'dissent' | 'degraded_reason'>;
 
 export const W6_UNGATED_REASON = 'no eligible judge seat';
 
@@ -105,7 +101,7 @@ export const GATE_UNGATED_WITH_FLOOR = {
   judgeDistinct: null,
   ungated: true,
   ungatedReason: W6_UNGATED_REASON,
-} satisfies GateEvaluatedEvent & GateEvaluatedUngated;
+} satisfies GateEvaluatedEvent;
 
 /** UNGATED with no floor either — the free-text case the phase7-r2 rig recorded, now said. */
 export const GATE_UNGATED_NO_FLOOR = {
@@ -114,7 +110,7 @@ export const GATE_UNGATED_NO_FLOOR = {
   criterion: null,
   hasDeterministicFloor: false,
   deterministicPass: true,
-} satisfies GateEvaluatedEvent & GateEvaluatedUngated;
+} satisfies GateEvaluatedEvent;
 
 /** A judged pass on the same wire — `ungated: false`, a judge seat named. */
 export const GATE_JUDGED_PASS = {
@@ -127,7 +123,7 @@ export const GATE_JUDGED_PASS = {
   judgeDistinct: true,
   ungated: false,
   ungatedReason: null,
-} satisfies GateEvaluatedEvent & GateEvaluatedUngated;
+} satisfies GateEvaluatedEvent;
 
 export const W6_REFUSED_COMMAND = 'gh pr create --title "test(run-lifecycle): gap tests" --body-file /tmp/body.md';
 export const W6_REMEDY = "delivery is performed by the run's deliver phase";
@@ -147,13 +143,14 @@ export const WORKER_TOOL_DENIED = {
   remedy: W6_REMEDY,
 } satisfies WorkerToolCallDeniedEvent;
 
-/** The same fence with the remedy left `null` — the studio states the platform's sentence. */
+/** The same fence with the remedy left `null` — 0.36.0 declares `remedy: string`, so this is the
+ *  frame of an engine that sends none; the studio states the platform's sentence. */
 export const WORKER_TOOL_DENIED_NO_REMEDY = {
   ...WORKER_TOOL_DENIED,
   command: 'git push origin HEAD',
   reason: 'remote write refused for a creator seat: git push',
   remedy: null,
-} satisfies WorkerToolCallDeniedEvent;
+} satisfies Omit<WorkerToolCallDeniedEvent, 'remedy'> & { remedy: null };
 
 /** The frames of the completed run, in the daemon's order (`seq`-less: `hydrate` keeps order). */
 export const W6_EVENTS: CoreEvent[] = [

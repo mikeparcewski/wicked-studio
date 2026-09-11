@@ -55,7 +55,10 @@ import {
  * reads the INSTALLED `index.d.ts`, extracts each declaration's key set and each union's tokens, and
  * diffs the frames against them — "every key present, `null` never absent, nothing the wire does not
  * declare" is re-derived from the package the lockfile resolved, not from a hand-copied list that
- * would drift silently on the next pin.
+ * would drift silently on the next pin. Since the 0.36.0 pin the installed declarations carry OPTIONAL
+ * wave-6 keys (`ungated?` / `floorNote?` / `judgeSkippedReason?`, `sandboxLevel?` / `sandboxError?` /
+ * `detectError?`, `runBranch?`, …) declared "absent on an older engine" — a recorded 0.33.0 frame omits
+ * them, so the key pin reads "every REQUIRED key present, nothing undeclared".
  */
 
 const PKG_ROOT = new URL('../', import.meta.url);
@@ -74,6 +77,12 @@ function declaredKeys(name: string): string[] {
   return [...declBody(name).matchAll(/^\s+([A-Za-z_]\w*)\??:/gm)].map((m) => m[1]!).sort();
 }
 
+/** The REQUIRED property names (no `?`) — the keys a frame from the declaring engine always carries.
+ *  The optional ones are the wire's later additions, declared absent on an older engine. */
+function requiredKeys(name: string): string[] {
+  return [...declBody(name).matchAll(/^\s+([A-Za-z_]\w*):/gm)].map((m) => m[1]!).sort();
+}
+
 /** The `type: '<token>'` discriminant a frame declaration carries. */
 function declaredType(name: string): string {
   const m = /^\s+type: '([A-Za-z]+)';/m.exec(declBody(name));
@@ -83,8 +92,10 @@ function declaredType(name: string): string {
 
 /** The quoted tokens of a string-literal union (`export type X = | 'a' | 'b' | (string & {})`), sorted. */
 function unionTokens(name: string): string[] {
+  // Doc comments between union members (0.36.0 documents the wave-6 `AcpFallbackKind` tokens inline)
+  // may carry a `;` — strip them before the lazy match to the union's terminating `;`.
   const re = new RegExp(`^export type ${name} =([\\s\\S]*?);`, 'm');
-  const m = re.exec(DTS);
+  const m = re.exec(DTS.replace(/\/\*[\s\S]*?\*\//g, ''));
   if (m === null) throw new Error(`${name} is not declared in the installed wicked-crew-api-types index.d.ts`);
   return [...m[1]!.matchAll(/'([^']+)'/g)].map((x) => x[1]!).sort();
 }
@@ -123,13 +134,19 @@ describe('wire433 fixtures — the shapes wicked-crew-api-types 0.33.0 declares'
   });
 
   for (const [name, frames] of Object.entries(pinned)) {
-    it(`${name}: every frame carries exactly the declared keys, each present (null, never absent)`, () => {
-      const keys = declaredKeys(name);
-      expect(keys.length).toBeGreaterThan(3);
+    it(`${name}: every frame carries every REQUIRED key, each present (null, never absent), and nothing undeclared`, () => {
+      const declared = declaredKeys(name);
+      const required = requiredKeys(name);
+      expect(required.length).toBeGreaterThan(3);
       const token = declaredType(name);
       for (const frame of frames) {
         expect(frame.type).toBe(token);
-        expect(wireKeys(frame)).toEqual(keys);
+        const keys = wireKeys(frame);
+        // Nothing the wire does not declare …
+        expect(keys.filter((k) => !declared.includes(k)), `${name}: undeclared keys`).toEqual([]);
+        // … and every required key present; the optional (later-wave) keys may be absent on these
+        // 0.33.0-era frames, exactly as their declarations say.
+        expect(required.filter((k) => !keys.includes(k)), `${name}: missing required keys`).toEqual([]);
         expect(Object.values(frame).some((v) => v === undefined)).toBe(false);
         expect(typeof frame['seq']).toBe('number');
         expect(typeof frame['ts']).toBe('number');

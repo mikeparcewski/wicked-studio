@@ -1,7 +1,7 @@
 // The wave-6 wire (api-types 0.36.0) in the FEED (DES-RUN-NARRATOR §4): a degraded council said
 // on the routing line, a gate the engine calls UNGATED said as UNGATED (never "Checks ran — pass"
 // alone), the remote-write fence with its remedy, and the camelCase `agreementPct` the engine
-// actually emits — with the snake_case 0.34.0 spelling still read as the fallback until the pin.
+// actually emits and 0.36.0 declares — the deprecated snake_case aliases are no longer read.
 
 import { describe, expect, it } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
@@ -12,7 +12,7 @@ import {
   GATE_UNGATED_WITH_FLOOR,
   UNIT_DISTRIBUTED_DEGRADED,
   UNIT_DISTRIBUTED_FULL,
-  UNIT_DISTRIBUTED_SNAKE,
+  UNIT_DISTRIBUTED_DEPRECATED_ALIASES,
   W6_DEGRADED_REASON,
   W6_REFUSED_COMMAND,
   W6_REMEDY,
@@ -40,13 +40,14 @@ describe('unitDistributed — the camelCase spelling, and the degraded council',
     expect(line.ord).toBe(2);
   });
 
-  it('the 0.34.0 snake_case spelling is still read as the fallback (TODO drop at the 0.36.0 pin)', () => {
-    const line = narrate(ev(UNIT_DISTRIBUTED_SNAKE), ctx)!;
-    expect(line.text).toBe('phase-2 routed to claude — council 67% — council degraded: 2 of 5 seats benched: codex, pi (signed out)');
+  it('the deprecated snake_case aliases are NOT read (dropped at the 0.36.0 pin) — a frame carrying only them routes with no pct and no degraded line', () => {
+    const line = narrate(ev(UNIT_DISTRIBUTED_DEPRECATED_ALIASES), ctx)!;
+    expect(line.text).toBe('phase-2 routed to claude');
+    expect(line.tone).toBe('info');
   });
 
-  it('camelCase wins when both spellings are present', () => {
-    const line = narrate(ev({ ...UNIT_DISTRIBUTED_SNAKE, agreementPct: 100, degradedReason: null }), ctx)!;
+  it('the camelCase spelling beside the aliases is the only one read', () => {
+    const line = narrate(ev({ ...UNIT_DISTRIBUTED_DEPRECATED_ALIASES, agreementPct: 100, degradedReason: null }), ctx)!;
     expect(line.text).toBe('phase-2 routed to claude — council 100%');
     expect(line.tone).toBe('info');
   });

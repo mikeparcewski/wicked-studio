@@ -5,7 +5,7 @@ import { degradedCouncil, RunDegradedNote } from '../src/components/RunDegradedN
 import {
   UNIT_DISTRIBUTED_DEGRADED,
   UNIT_DISTRIBUTED_FULL,
-  UNIT_DISTRIBUTED_SNAKE,
+  UNIT_DISTRIBUTED_DEPRECATED_ALIASES,
   W6_DEGRADED_REASON,
   W6_EVENTS,
 } from './fixtures/wave6.js';
@@ -13,7 +13,7 @@ import {
 /**
  * "council degraded: …" on the run head (wave 6 — F-7R2-006 studio half, api-types 0.36.0
  * `unitDistributed.degradedReason`): the latest reason speaks, the affected-unit count rides
- * beside it, a full council renders nothing, and the 0.34.0 snake_case spelling is still read.
+ * beside it, a full council renders nothing, and the deprecated snake_case alias is not read.
  */
 
 const ev = (e: unknown): CoreEvent => e as CoreEvent;
@@ -43,8 +43,8 @@ describe('degradedCouncil — the fold', () => {
     expect(degradedCouncil([ev(UNIT_DISTRIBUTED_FULL)])).toBeNull();
     expect(degradedCouncil([])).toBeNull();
   });
-  it('reads the 0.34.0 snake_case spelling as the fallback', () => {
-    expect(degradedCouncil([ev(UNIT_DISTRIBUTED_SNAKE)])!.reason).toBe('2 of 5 seats benched: codex, pi (signed out)');
+  it('does NOT read the deprecated snake_case alias (dropped at the 0.36.0 pin) — a frame carrying only `degraded_reason` renders nothing', () => {
+    expect(degradedCouncil([ev(UNIT_DISTRIBUTED_DEPRECATED_ALIASES)])).toBeNull();
   });
 });
 
