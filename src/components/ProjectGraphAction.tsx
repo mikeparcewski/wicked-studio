@@ -26,9 +26,14 @@ import { ago } from './ProjectCard.js';
  *    card grounds NEW chats — that is said, never implied to have re-bound the open one.
  */
 
-/** Sentences that are developer remedies, not customer copy: a raw route, an issue id. */
+/** Sentences that are developer remedies, not customer copy: a raw route, an issue id. Keyed on
+ *  crew's prose (`projects/graph.ts`: "Build it with POST /api/v1/projects/<id>/graph/refresh." and
+ *  "POST /api/v1/projects/<id>/graph/refresh fixes it."); a reworded daemon fails CLOSED — the
+ *  sentence is kept verbatim, nothing is lost. */
 const RAW_ROUTE_SENTENCE = /[^.]*\bPOST\s+\/api\/v1\/[^.]*\.?/g;
-/** The seams' "repo-less" clause — false over a scope that names repositories. */
+/** The seams' "repo-less" clause (crew `draft-events.ts` / `edit-events.ts` / `demo-events.ts` /
+ *  `projects/graph.ts`, spelled exactly "This repo-less run gets no code graph.") — false over a
+ *  scope that names repositories; kept when the scope genuinely names none. */
 const REPO_LESS_SENTENCE = /\s*This repo-less run gets no code graph\.?/g;
 
 /**
@@ -44,7 +49,10 @@ export function humanizeGraphReason(reason: string, repoCount: number): string {
   return text;
 }
 
-/** Does this unbound reason name a project graph a refresh would build? */
+/** Does this unbound reason name a project graph a refresh would build? Keyed on crew's
+ *  `projects/graph.ts` `not-indexed` / never-refreshed sentences ("no code graph yet", "the
+ *  project graph has never been built", "not in the graph yet") and on the route it names; a
+ *  reworded daemon fails CLOSED — the control is simply not offered. */
 export function reasonWantsProjectGraph(reason: string): boolean {
   return /no code graph yet|never been built|not in the graph yet|graph\/refresh/i.test(reason);
 }
@@ -90,11 +98,15 @@ export function describeGraphStatus(status: ProjectGraphStatus, now = Date.now()
       return 'not built — the seats read files, not a code graph';
     case 'no-repo-members':
       return 'no repositories attached — nothing to index';
-    case 'engine-too-old':
-      return humanizeGraphReason(status.detail, status.repos.length);
-    default:
+    default: // `engine-too-old`, and any state a newer daemon adds: the daemon's own sentence, humanized
       return humanizeGraphReason(status.detail, status.repos.length);
   }
+}
+
+/** A per-repo index error, for one line: its first line, capped — the whole text rides the hover. */
+function briefError(error: string, max = 160): string {
+  const line = error.replace(/\r/g, '').split('\n')[0] ?? '';
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)' };
@@ -107,7 +119,9 @@ export function ProjectGraphAction({
 
   useEffect(() => {
     setBuild({ kind: 'idle' });
-    if (!fetchStatus) { setRead({ kind: 'idle' }); return; }
+    // The synthesized Unfiled project has no graph to read or build (the route answers 409 on a
+    // refresh and the synthesized no-graph status on a read) — no request is spent on it.
+    if (!fetchStatus || projectId === 'default') { setRead({ kind: 'idle' }); return; }
     let cancelled = false;
     setRead({ kind: 'loading' });
     // Through a resolved promise: a client that cannot serve the read (an older daemon, a
@@ -189,12 +203,16 @@ export function ProjectGraphAction({
         {label}
       </button>
       {build.kind === 'built' && (
-        <span data-testid="project-graph-result" style={{ ...MONO, color: build.result.failed.length > 0 ? 'var(--status-gate)' : 'var(--status-run)' }}>
+        <span
+          data-testid="project-graph-result"
+          title={build.result.failed.length > 0 ? build.result.failed.map((f) => `${f.label}: ${f.error}`).join('\n') : undefined}
+          style={{ ...MONO, color: build.result.failed.length > 0 ? 'var(--status-gate)' : 'var(--status-run)' }}
+        >
           {build.result.failed.length === 0
             ? `project graph ${build.result.status.state === 'ready' || build.result.status.state === 'ready-single-repo' ? 'ready' : build.result.status.state} — ${build.result.indexed.length} indexed`
               + (build.result.skipped.length > 0 ? `, ${build.result.skipped.length} already current` : '')
             : `built with failures — ${build.result.indexed.length} indexed, ${build.result.failed.length} failed: `
-              + build.result.failed.map((f) => `${f.label} (${f.error})`).join('; ')}
+              + build.result.failed.map((f) => `${f.label} (${briefError(f.error)})`).join('; ')}
           {builtNote !== undefined ? ` · ${builtNote}` : ''}
         </span>
       )}

@@ -107,14 +107,30 @@ describe('the control (row variant, with the standing read)', () => {
     expect(err.textContent).toContain('not built — the daemon refused this — the installed engine predates project graphs');
   });
 
-  it('renders nothing on a daemon without the route, and nothing for the Unfiled project', async () => {
+  it('renders nothing on a daemon without the route, and nothing — with NO read — for the Unfiled project', async () => {
     getProjectGraph.mockRejectedValue(new ApiError(404, 'Not Found'));
     render(<ProjectGraphAction projectId={PID} variant="row" fetchStatus />);
     await waitFor(() => expect(getProjectGraph).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByTestId('project-graph')).toBeNull());
     cleanup();
+    getProjectGraph.mockClear();
     render(<ProjectGraphAction projectId="default" variant="row" fetchStatus />);
+    await new Promise((r) => setTimeout(r, 10));
     expect(screen.queryByTestId('project-graph')).toBeNull();
+    expect(getProjectGraph).not.toHaveBeenCalled(); // the synthesized project pays no request it would ignore
+  });
+
+  it('a per-repo index error is one line on the result (first line, capped) with the whole text on hover', async () => {
+    getProjectGraph.mockResolvedValue({ status: status('not-indexed') });
+    const long = `estate index failed: ${'x'.repeat(200)}\nsecond line with /w5/state/paths`;
+    refreshProjectGraph.mockResolvedValueOnce(result(['repo-0'], [{ repoId: 'r1', label: 'repo-1', error: long }]));
+    render(<ProjectGraphAction projectId={PID} variant="row" fetchStatus />);
+    fireEvent.click(await screen.findByTestId('project-graph-build'));
+    const res = await screen.findByTestId('project-graph-result');
+    expect(res.textContent).not.toContain('second line');
+    expect(res.textContent!.length).toBeLessThan(long.length);
+    expect(res.textContent).toMatch(/…\)/);
+    expect(res.getAttribute('title')).toContain('second line with /w5/state/paths');
   });
 });
 
