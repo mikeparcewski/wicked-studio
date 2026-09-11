@@ -278,24 +278,40 @@ with sync_playwright() as p:
     page.get_by_role("button", name="Expand sidebar").click()
     page.set_viewport_size({"width": 1440, "height": 700})
 
-    # F-076: a project's chips carry a DROP button each (the un-narrowed launch above sent no project).
+    # F-076 / review F-9: a project's chips carry a DROP button each. The fixture's `upload-endpoint`
+    # holds one `crew.repo` member (studio-api) under the governed switch — pick it, expect ONE
+    # via-project chip WITH its drop button, drop it, and see the dropped line refuse the launch.
     page.goto(f"{ORIGIN}/testing/campaigns?new=test", wait_until="domcontentloaded")
     page.locator('[data-testid="testing-launch-panel"]').wait_for(timeout=15000)
     select = page.locator('[data-testid="testing-launch-project"]')
     select.wait_for(timeout=10000)
-    options = page.evaluate("""() => Array.from(document.querySelectorAll('[data-testid="testing-launch-project"] option')).map(o => o.value).filter(Boolean)""")
-    if options:
-        select.select_option(options[0])
-        page.wait_for_timeout(800)
+    page.wait_for_function(
+        """() => Array.from(document.querySelectorAll('[data-testid="testing-launch-project"] option')).some(o => o.value === 'upload-endpoint')""",
+        timeout=10000)
+    select.select_option("upload-endpoint")
+    page.locator('[data-testid="testing-launch-chip"][data-source="project"]').first.wait_for(timeout=10000)
     chips = page.evaluate(
         """() => ({
-          chips: Array.from(document.querySelectorAll('[data-testid="testing-launch-chip"]')).map(c => c.dataset.source),
-          drops: Array.from(document.querySelectorAll('[data-testid="testing-launch-chip-remove"]')).map(d => d.dataset.source),
+          chips: Array.from(document.querySelectorAll('[data-testid="testing-launch-chip"]')).map(c => [c.dataset.repo, c.dataset.source]),
+          drops: Array.from(document.querySelectorAll('[data-testid="testing-launch-chip-remove"]')).map(d => [d.dataset.repo, d.dataset.source, d.getAttribute('aria-label')]),
         })""")
-    # The fixture's projects carry run members, not crew.repo members — so no chips render here;
-    # the drop-per-chip contract is pinned by tests/TestingLaunch.governed.test.tsx. What this rig
-    # asserts is that NO locked (drop-less) project chip exists on the surface.
-    check("project_chips_are_droppable", all(s in chips["drops"] for s in chips["chips"]), **chips)
+    page.locator('[data-testid="testing-launch-chip-remove"][data-repo="studio-api"]').click()
+    page.locator('[data-testid="testing-launch-dropped"]').wait_for(timeout=5000)
+    dropped = page.evaluate(
+        """() => ({
+          text: document.querySelector('[data-testid="testing-launch-dropped"]')?.textContent ?? '',
+          count: document.querySelector('[data-testid="testing-launch-dropped"]')?.getAttribute('data-count'),
+          chipsLeft: document.querySelectorAll('[data-testid="testing-launch-chip"]').length,
+          restore: !!document.querySelector('[data-testid="testing-launch-restore"]'),
+        })""")
+    check(
+        "project_chips_are_droppable",
+        chips["chips"] == [["studio-api", "project"]]
+        and chips["drops"] == [["studio-api", "project", "Drop studio-api from this test"]]
+        and dropped["count"] == "1" and dropped["chipsLeft"] == 0 and dropped["restore"]
+        and "nothing left to test: keep one, attach a codebase, or clear the project" in dropped["text"],
+        **chips, **dropped,
+    )
 
     # ── Scene 4: the run page — degraded council, UNGATED, the refused remote write, the branch diff ──
     page.goto(f"{ORIGIN}/runs/{GT_RUN}", wait_until="domcontentloaded")

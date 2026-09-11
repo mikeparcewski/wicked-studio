@@ -16,22 +16,24 @@ export interface DegradedCouncil {
   reason: string;
   /** The unit that distribution was for, when the frame named one. */
   ord: number | null;
-  /** How many distributions in the log carried a reason. */
+  /** How many DISTINCT units were routed by a degraded council — a re-dispatch or a re-plan of the
+   *  same ord is one unit, not two (independent review of #263, F-11). */
   units: number;
 }
 
-/** The fold: the latest degraded distribution + how many there were; `null` when none. */
+/** The fold: the latest degraded distribution + how many distinct units; `null` when none. */
 export function degradedCouncil(events: readonly CoreEvent[]): DegradedCouncil | null {
-  let latest: DegradedCouncil | null = null;
-  let units = 0;
+  let latest: { reason: string; ord: number | null } | null = null;
+  const ords = new Set<string>();
   for (const e of events) {
     if (e.type !== 'unitDistributed') continue;
     const reason = distributionDegradedReason(e);
     if (reason === null) continue;
-    units += 1;
-    latest = { reason, ord: typeof e.ord === 'number' ? e.ord : null, units };
+    const ord = typeof e.ord === 'number' ? e.ord : null;
+    ords.add(ord === null ? `?${ords.size}` : String(ord));
+    latest = { reason, ord };
   }
-  return latest === null ? null : { ...latest, units };
+  return latest === null ? null : { ...latest, units: ords.size };
 }
 
 export function RunDegradedNote({ events }: { events: readonly CoreEvent[] }): React.ReactElement | null {

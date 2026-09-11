@@ -38,10 +38,12 @@ import { phaseWord, RUN_DOT } from './RunsSection.js';
  *  - **Demo** = the DEMO corpus (docs whose kind is `demo`). The header's ＋ opens a
  *    project-picker locked to Video.
  *
- * Data discipline unchanged: ZERO requests on mount. Runs ride the app's one `GET /runs`; attach
- * clocks and project names read the membership mirror; doc lists read the session docsCache — the
- * honest corpus, which the EC24-grammar label says out loud. Derived titles everywhere — never
- * raw prompts.
+ * Data discipline: no fan-out on mount. Runs ride the app's one `GET /runs`; attach clocks and
+ * project names read the membership mirror; doc lists read the session docsCache — plus ONE cheap,
+ * presence-checked read of the daemon-wide document index (`GET /interactive/docs`, no bridge
+ * spawn; absent on a pre-0.36 daemon). The per-project fan-out — a bridge cold start per project —
+ * is the operator's explicit gesture only (independent review of #263, F-1). The EC24-grammar label
+ * says which corpus is on screen. Derived titles everywhere — never raw prompts.
  */
 
 export type MadeMode = 'execute' | 'vibe' | 'demo';
@@ -52,11 +54,15 @@ interface Props {
   navigate: (path: string) => void;
   /** Where a run row lands — the caller's routing (flat `/runs/:id` here). */
   runPath: (id: string) => string;
+  /** The router's pathname + search — the CURRENT project (`/p/:id/…`) lists first on the corpus
+   *  surfaces and follows navigation (F-12). Absent ⇒ no project is current. */
+  pathname?: string;
+  search?: string;
 }
 
-export function MadeDashboard({ mode, runs, navigate, runPath }: Props): React.ReactElement {
+export function MadeDashboard({ mode, runs, navigate, runPath, pathname = '', search = '' }: Props): React.ReactElement {
   if (mode === 'execute') return <ExecuteDashboard runs={runs} navigate={navigate} runPath={runPath} />;
-  return <CorpusDashboard mode={mode} navigate={navigate} />;
+  return <CorpusDashboard mode={mode} navigate={navigate} pathname={pathname} search={search} />;
 }
 
 // ── Execute — the run half ──────────────────────────────────────────────────────
@@ -415,9 +421,11 @@ const VIBE_COPY = {
   },
 };
 
-function CorpusDashboard({ mode, navigate }: {
+function CorpusDashboard({ mode, navigate, pathname, search }: {
   mode: 'vibe' | 'demo';
   navigate: (path: string) => void;
+  pathname: string;
+  search: string;
 }): React.ReactElement {
   const isDemo = mode === 'demo';
   const copy = VIBE_COPY[mode];
@@ -439,21 +447,23 @@ function CorpusDashboard({ mode, navigate }: {
     () => Object.fromEntries(projects.map((p) => [p.id, p.name])),
     [projects],
   );
-  // F-A45-008: the corpus DEFAULTS to what the bridge serves — every project's docs, asked once
-  // per session (`ensureAll`: only projects the cache does not know yet). A fresh browser on a
-  // daemon holding documents no longer reads "DOCUMENTS 0 — projects opened this session".
+  // F-A45-008, as bounded by the independent review of #263 (F-1): NOTHING fans out on mount. The
+  // one request this page makes on its own is the CHEAP daemon-wide index (`GET /interactive/docs`,
+  // served from the ledgers, no bridge spawn), presence-checked — a pre-0.36 daemon answers 404 and
+  // the corpus stays "documents in opened projects". The per-project fan-out — one bridge cold
+  // start per project — is the operator's explicit `[load for all projects]` gesture below,
+  // sequential and cancellable, never automatic.
   const projectIds = useMemo(() => projects.filter((p) => p.id !== 'default').map((p) => p.id), [projects]);
+  const census = useDocsCache((s) => s.census);
+  const unavailable = useDocsCache((s) => s.unavailable);
   useEffect(() => {
-    if (projectIds.length === 0) return;
-    void useDocsCache.getState().ensureAll(projectIds);
-  }, [projectIds]);
+    void useDocsCache.getState().loadIndex();
+  }, []);
 
   // The current project — the one the address names (`/p/:id/…`) — lists first; `/vibe` itself
-  // names none, so the order falls back to the projects store's (most recently active first).
-  const currentProjectId = useMemo(
-    () => (typeof window === 'undefined' ? null : ambientProjectId(window.location.pathname, window.location.search)),
-    [],
-  );
+  // names none, so the order falls back to newest-first. Read off the router's pathname prop, so it
+  // follows navigation within the mounted dashboard (F-12).
+  const currentProjectId = useMemo(() => ambientProjectId(pathname, search), [pathname, search]);
   // Only the CURRENT project is ranked ahead; every other project ties, so with no project named
   // the corpus stays newest-first across projects and the chips order by size.
   const projectRank = useMemo(() => {
@@ -494,9 +504,19 @@ function CorpusDashboard({ mode, navigate }: {
   /** How many projects the census covers — the projects store's count, or the cache's when the
    *  store is still cold (a deposit from elsewhere can precede the projects read). */
   const censusProjects = Math.max(projectIds.length, Object.keys(byProject).filter((pid) => pid !== UNFILED_MOUNT).length);
+  /** Projects whose bridge could not answer (F-2) — named, never counted as "no documents". */
+  const unreachable = Object.keys(unavailable).filter((pid) => projectIds.includes(pid) || pid in byProject);
+  /** Projects a surface has listed this session (the honest denominator before any census). */
+  const openedProjects = Object.keys(byProject).filter((pid) => pid !== UNFILED_MOUNT).length;
 
+  // The explicit gesture: ask every project the cache does not know (or, once a census ran, every
+  // project again) — SEQUENTIALLY, one bridge at a time.
   const fanout = (): void => {
-    void useDocsCache.getState().loadAll(projectIds);
+    const known = useDocsCache.getState();
+    const targets = known.fanoutDone || known.census === 'daemon'
+      ? projectIds
+      : projectIds.filter((pid) => !(pid in known.byProject));
+    void known.loadAll(targets.length > 0 ? targets : projectIds);
   };
 
   const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
@@ -509,9 +529,25 @@ function CorpusDashboard({ mode, navigate }: {
     .filter(({ projectId }) => projectChip === 'all' || projectId === projectChip)
     .filter(({ doc, projectName }) =>
       q === '' || doc.name.toLowerCase().includes(q) || projectName.toLowerCase().includes(q));
-  const censusWord = fanoutProgress !== null
-    ? `loading ${fanoutProgress.done} of ${fanoutProgress.total} projects…`
-    : `all ${censusProjects} project${censusProjects === 1 ? '' : 's'}`;
+  // The corpus label — WHAT the count covers, said out loud (EC24 grammar; F-1/F-2):
+  //  - a fan-out running: which project is being asked, k of N;
+  //  - the daemon-wide index landed: every project, no bridge asked;
+  //  - the explicit gesture ran: every project — minus the ones whose bridge could not answer,
+  //    named as unreachable, never counted as empty;
+  //  - otherwise: only the projects some surface opened this session.
+  const censusKind: 'loading' | 'all-projects' | 'partial' | 'opened' =
+    fanoutProgress !== null ? 'loading'
+      : census === 'daemon' ? 'all-projects'
+        : census === 'fanout' ? (unreachable.length > 0 ? 'partial' : 'all-projects')
+          : 'opened';
+  const censusWord =
+    censusKind === 'loading'
+      ? `loading ${fanoutProgress!.done} of ${fanoutProgress!.total} projects${fanoutProgress!.current !== null ? ` — ${projectNameById[fanoutProgress!.current] ?? fanoutProgress!.current}` : ''}…`
+      : censusKind === 'all-projects'
+        ? `all ${censusProjects} project${censusProjects === 1 ? '' : 's'}`
+        : censusKind === 'partial'
+          ? `${censusProjects} project${censusProjects === 1 ? '' : 's'} · ${unreachable.length} unreachable`
+          : `documents in opened projects${openedProjects > 0 ? ` (${openedProjects} of ${censusProjects})` : ''}`;
 
   return (
     <div className="flex flex-col" style={{ color: 'var(--ink-high)', padding: '0 var(--space-8) var(--space-8)', gap: 'var(--space-4)' }}>
@@ -579,7 +615,8 @@ function CorpusDashboard({ mode, navigate }: {
       <div ref={whyRef} className="relative flex items-center gap-3 flex-wrap">
         <p
           data-testid={`${mode}-corpus-label`}
-          data-census={fanoutProgress !== null ? 'loading' : 'all-projects'}
+          data-census={censusKind}
+          {...(unreachable.length > 0 ? { 'data-unreachable': unreachable.length } : {})}
           style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
         >
           Listing: {isDemo ? 'demos' : 'documents'} ({censusWord})
@@ -613,27 +650,52 @@ function CorpusDashboard({ mode, navigate }: {
           </p>
         )}
         {fanoutProgress !== null ? (
-          <p
-            data-testid={`${mode}-fanout-progress`}
-            style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
-          >
-            loading… {fanoutProgress.done}/{fanoutProgress.total}
-          </p>
+          <>
+            <p
+              data-testid={`${mode}-fanout-progress`}
+              style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
+            >
+              loading… {fanoutProgress.done}/{fanoutProgress.total}
+              {fanoutProgress.current !== null && <> — asking {projectNameById[fanoutProgress.current] ?? fanoutProgress.current} (one bridge at a time)</>}
+            </p>
+            <button
+              type="button"
+              data-testid={`${mode}-fanout-cancel`}
+              onClick={() => useDocsCache.getState().cancelFanout()}
+              title="Stop after the project being asked answers — what landed stays listed"
+              className="rounded px-2 py-0.5 transition-opacity hover:opacity-80"
+              style={{
+                background: 'transparent', border: '1px solid var(--surface-raised)',
+                fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)', cursor: 'pointer',
+              }}
+            >
+              cancel
+            </button>
+          </>
         ) : (
           <button
             type="button"
             data-testid={`${mode}-load-all`}
             data-census={fanoutDone ? 'done' : 'pending'}
             onClick={fanout}
-            title="Ask every project's bridge again (the census is cached for the session)"
+            title={`Ask each project's bridge for its ${isDemo ? 'demos' : 'documents'} — sequentially, one bridge cold start (~60 s) at a time; cancellable. ${fanoutDone || census === 'daemon' ? 'Asks every project again.' : 'Asks only projects not listed yet this session.'}`}
             className="rounded px-2 py-0.5 transition-opacity hover:opacity-80"
             style={{
               background: 'transparent', border: '1px solid var(--surface-raised)',
               fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)', cursor: 'pointer',
             }}
           >
-            {fanoutDone ? 'reload all projects' : 'load for all projects'}
+            {fanoutDone ? 'reload all projects' : census === 'daemon' ? 'ask every bridge anyway' : 'load for all projects'}
           </button>
+        )}
+        {unreachable.length > 0 && fanoutProgress === null && (
+          <p
+            data-testid={`${mode}-unreachable`}
+            title={unreachable.map((pid) => `${projectNameById[pid] ?? pid}: ${unavailable[pid]}`).join('\n')}
+            style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--status-gate)', fontFamily: 'var(--font-mono)' }}
+          >
+            {unreachable.length} unreachable — {unreachable.map((pid) => projectNameById[pid] ?? pid).join(', ')} (bridge did not answer; not counted)
+          </p>
         )}
       </div>
 

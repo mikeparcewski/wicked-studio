@@ -107,19 +107,48 @@ npm publish dates. Every version listed here exists on
     `seatStandingWord`: `auth: not_required` is never a sign-in problem, `auth: signed_out` warns
     even when the heuristic is null, a daemon-declared `council_eligible: false` gets its own
     sentence with the daemon's reason (`ineligible-warning`); a pre-0.35 roster keeps the heuristic.
-  - *`/vibe` and the Home door count what the daemon serves* (F-A45-008 MEDIUM). The corpus listed
-    only "projects opened this session" (the docs cache's deposits), so a fresh browser on a daemon
-    holding three documents read "DOCUMENTS 0" and Home said "Vibe 0 documents". Crew has no
-    daemon-wide docs route (`GET /projects/:id/interactive/api/docs` is per project), so the default
-    is a once-per-session census: `useDocsCache.ensureAll` asks every project the cache does not know
-    yet on `/vibe`, `/demo` and Home (a project the board model already deposited is not asked
-    again; no interactive root ⇒ an honest empty list), the tile says "all N projects" ("loading k
-    of N…" while it runs; `data-census`), the per-project view is a FILTER chip (`All projects` /
-    one per project with live counts, the CURRENT project — the one the address names — first, its
-    rows first), and the button reads "reload all projects" (testid kept). Home's Vibe door counts
-    the cache ∪ the board model's lists, deduped per project.
-  - Tests: `SkillsPage.recovery` (8), `ChatInput.seatStanding` (5), `MadeDashboard.corpus` (9); the
-    `/vibe` + Home loopback rig `e2e/vibe_corpus_test.py` (3/3 steps); testid inventory regenerated.
+  - *`/vibe` and the Home door count what the daemon serves — without spawning a bridge per project*
+    (F-A45-008 MEDIUM, bounded by the independent review of #263, F-1/F-2). The corpus listed only
+    "projects opened this session" (the docs cache's deposits), so a fresh browser on a daemon holding
+    three documents read "DOCUMENTS 0" and Home said "Vibe 0 documents". A per-project docs GET
+    (`GET /projects/:id/interactive/api/docs`, the only per-project route) MATERIALIZES the project's
+    partition and cold-starts one `wicked-interactive` bridge (~60 s) — so NOTHING fans out on mount.
+    The one request the corpus surfaces and Home make on their own is the CHEAP daemon-wide index
+    `GET /interactive/docs` (api-types 0.36.0, the wave-6 crew PR — served from the state-home doc
+    ledgers, no bridge; presence-checked: a pre-0.36 daemon answers 404 and the corpus stays "documents
+    in opened projects (k of N)" — the honest word, never "all N projects" on the strength of unasked
+    bridges). The per-project fan-out is the operator's explicit `[load for all projects]` gesture:
+    SEQUENTIAL (one bridge at a time), the project being asked named in the progress line,
+    cancellable (`cancel` stops after the current project answers; what landed stays). A project
+    whose bridge cannot answer (503 `bridge_unavailable`) is recorded as UNREACHABLE with the daemon's
+    sentence — the label reads "N projects · M unreachable", the count excludes it, the button stays
+    live for it — never counted as "no documents". The per-project view is a FILTER chip (`All
+    projects` / one per project with live counts), the CURRENT project — read off the router's
+    pathname, so it follows navigation — first; with no project named the corpus is newest-first.
+    Home's Vibe door says "N documents in opened projects" until a census (the index, or the gesture)
+    has answered for every project. The docsCache header is amended accordingly.
+  - *Independent review of #263 (REVISE → fixes, one bundled commit)*: F-1/F-2 above; F-3 the launch
+    button is disabled ("resolving workflows…") while `GET /workflows` is pending — a click could
+    launch a silent plain run — and a failed read shows the banner before enabling the plain run as
+    an explicit choice; F-4 a NARROWED project launches through `POST /testing/author` (projectId +
+    the exact `repoRefs`) when the daemon has it, the per-run `POST /runs` fan only as the
+    route-absent fallback (recorded wire gap: that fan's `deliver: 'pr'` default appends a second
+    deliver phase to a def that already ends in one); F-5 a PASS whose frame says `judgeCli: null`
+    (the single-seat floor-only case) appends "no distinct judge reviewed this verdict (floor only)"
+    on the gate card and "— no distinct judge" in the feed; F-6 the mirror-posture test also guards
+    studio's own spellings (`test_set`, `testing/author`, `TestSetCounts`) and requires every wave-6
+    declaration inside a VERBATIM region at the pin; F-7 the mirror's `workerToolCallDenied` carries
+    `carrier` and `tool` (the feed names the tool); F-8 `ApiError.body` keeps a refusal's JSON, so a
+    skills 409's `revision` is adopted and the next click needs no second analyze; F-9 the governed
+    rig's drop-chip scene is real (the fixture project carries a `crew.repo` member); F-10 the fan
+    note says "each pauses at its own intake gate; approve them one at a time"; F-11 the degraded
+    count is distinct ords; F-12 the current project follows the router; F-13 the inventory scan
+    has a 30 s budget.
+  - Tests: `SkillsPage.recovery` (9), `ChatInput.seatStanding` (5), `MadeDashboard.corpus` (12 — no
+    fan-out on mount, the index, the sequential + cancellable gesture, unreachable bridges); the
+    `/vibe` + Home loopback rig `e2e/vibe_corpus_test.py` (4/4 steps — the fresh page asks no bridge
+    beyond the board model's rooted reads, the gesture never has two docs GETs in flight); testid
+    inventory regenerated.
 
 ## [0.5.6] — 2026-09-11
 _The published bundle is built against `wicked-crew-api-types` **0.34.0** — the exact

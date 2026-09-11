@@ -77,6 +77,14 @@ describe('gateEvaluated — UNGATED is said as UNGATED (F-7R2-005 / F-7R2-017)',
     expect(line.tone).toBe('work');
   });
 
+  it('F-5: a floor-only pass whose frame SAYS `judgeCli: null` (the single-seat rig) appends "— no distinct judge"; a pre-0.33 frame without the key claims nothing', () => {
+    const floorOnly = { ...GATE_UNGATED_WITH_FLOOR, ungated: false, ungatedReason: null }; // judgeCli: null present
+    expect(narrate(ev(floorOnly), ctx)!.text).toBe('Checks ran on phase-2 — pass — no distinct judge');
+    const { judgeCli: _j, judgeDistinct: _d, ...older } = floorOnly;
+    void _j; void _d;
+    expect(narrate(ev(older), ctx)!.text).toBe('Checks ran on phase-2 — pass');
+  });
+
   it('a denial is a denial even when the frame also says ungated', () => {
     const line = narrate(ev({ ...GATE_UNGATED_WITH_FLOOR, combined: false, denialReason: 'typecheck exit 2' }), ctx)!;
     expect(line.text).toBe('Checks ran on phase-2 — deny: typecheck exit 2');
@@ -93,14 +101,14 @@ describe('gateEvaluated — UNGATED is said as UNGATED (F-7R2-005 / F-7R2-017)',
 describe('workerToolCallDenied — the remote-write fence (F-7R2-012)', () => {
   it('names the seat, its role, the refused command as code, and the engine\'s remedy', () => {
     const line = narrate(ev(WORKER_TOOL_DENIED), ctx)!;
-    expect(line.text).toBe(`Refused a remote write by claude (creator) during phase-2 — \`${W6_REFUSED_COMMAND}\` — ${W6_REMEDY}`);
+    expect(line.text).toBe(`Refused a remote write by claude (creator) during phase-2 — Bash: \`${W6_REFUSED_COMMAND}\` — ${W6_REMEDY}`);
     expect(line.tone).toBe('fail');
     expect(line.ord).toBe(2);
   });
 
   it('a frame with no remedy gets the platform\'s own sentence — never a bare refusal', () => {
     const line = narrate(ev(WORKER_TOOL_DENIED_NO_REMEDY), ctx)!;
-    expect(line.text).toBe("Refused a remote write by claude (creator) during phase-2 — `git push origin HEAD` — delivery is performed by the run's deliver phase");
+    expect(line.text).toBe("Refused a remote write by claude (creator) during phase-2 — Bash: `git push origin HEAD` — delivery is performed by the run's deliver phase");
   });
 
   it('a very long command is clipped to one line, the remedy still rides', () => {

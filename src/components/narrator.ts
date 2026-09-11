@@ -209,7 +209,12 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
           ? line(`Gate UNGATED on ${phase} — ${reason}; no repository checks ran`, 'gate')
           : line(`Gate UNGATED on ${phase} — ${reason}; repository checks ran, no distinct judge`, 'gate');
       }
-      if (!noFloor) return line(`Checks ran on ${phase} — pass`, 'work');
+      // F-5 (independent review of #263): the common single-seat case — the default floor ran, the
+      // engine SAYS `judgeCli: null` (the 0.33.0 key is present) and does not call it ungated — is a
+      // pass whose judge axis is silent; say "no distinct judge" so evaluator ≠ creator is never
+      // implied. A frame WITHOUT the key (a pre-0.33 engine) claims nothing either way.
+      const judgeSilent = 'judgeCli' in event && event.judgeCli === null && !judged;
+      if (!noFloor) return line(`Checks ran on ${phase} — pass${judgeSilent ? ' — no distinct judge' : ''}`, 'work');
       if (judged) return line(`Judge passed ${phase} — no repository checks ran`, 'work');
       if (policed) return line(`Evaluator policy passed ${phase} — no repository checks ran`, 'work');
       return line(`Gate passed without checks on ${phase} (ungated)`, 'info');
@@ -303,10 +308,11 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
       // fence refused it — delivery is the ENGINE's job. The remedy rides the line, the engine's when
       // the frame carries one, the platform's own sentence otherwise.
       const role = str(event['role']);
+      const tool = str(event['tool']);
       const command = clip(str(event['command']), 100);
       const remedy = str(event['remedy']) || WORKER_REMOTE_WRITE_REMEDY;
       return line(
-        `Refused a remote write by ${str(event.cli) || 'the seat'}${role ? ` (${role})` : ''} during ${phase} — \`${command || 'a remote-writing command'}\` — ${remedy}`,
+        `Refused a remote write by ${str(event.cli) || 'the seat'}${role ? ` (${role})` : ''} during ${phase} — ${tool ? `${tool}: ` : ''}\`${command || 'a remote-writing command'}\` — ${remedy}`,
         'fail',
       );
     }

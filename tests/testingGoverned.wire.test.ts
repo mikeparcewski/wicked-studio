@@ -136,21 +136,38 @@ describe('the ladder — each step only when the previous wire is ABSENT', () =>
 });
 
 describe('the NARROWED project (F-076 / F-7R2-010) — the fan, never the pinned body', () => {
-  it('members dropped ⇒ POST /runs per REMAINING member ∪ explicit, projectId kept for filing, no /testing/* call at all', async () => {
-    let n = 0;
-    wire({ '/runs': () => ({ runId: `r-${++n}` }), '/testing/author': new Error('must not be called'), '/testing/recon': new Error('must not be called') });
+  it('members dropped, the wave-6 route PRESENT ⇒ ONE POST /testing/author with projectId (filing) + the exact repoRefs — never the fan (review F-4: the fan\'s POST /runs default `deliver: \'pr\'` would append a second deliver phase)', async () => {
+    wire({
+      '/testing/author': { runId: 'r-a', runIds: ['r-a'], campaign: 'author-a', campaignRegistered: false, workflow: 'qe-author-tests' },
+      '/runs': new Error('must not be called'), '/testing/recon': new Error('must not be called'),
+    });
     const r = await launchGovernedTest({
       ...base, projectId: 'wicked-platform',
       projectRepos: ['wicked-studio', 'wicked-crew', 'wicked-core', 'wicked-garden'],
       excluded: ['wicked-crew', 'wicked-core', 'wicked-garden'],
     });
     expect(calls()).toEqual([
+      ['/testing/author', { problem: base.problem, projectId: 'wicked-platform', repoRefs: ['wicked-studio'] }],
+    ]);
+    expect(r).toMatchObject({ route: 'testing-author', workflow: 'qe-author-tests', runIds: ['r-a'] });
+  });
+
+  it('members dropped, the route ABSENT ⇒ POST /runs per REMAINING member ∪ explicit, projectId kept for filing; /testing/recon is never tried (its projectId would union the dropped members back in)', async () => {
+    let n = 0;
+    wire({ '/runs': () => ({ runId: `r-${++n}` }), '/testing/recon': new Error('must not be called') });
+    const r = await launchGovernedTest({
+      ...base, projectId: 'wicked-platform',
+      projectRepos: ['wicked-studio', 'wicked-crew', 'wicked-core', 'wicked-garden'],
+      excluded: ['wicked-crew', 'wicked-core', 'wicked-garden'],
+    });
+    expect(calls()).toEqual([
+      ['/testing/author', { problem: base.problem, projectId: 'wicked-platform', repoRefs: ['wicked-studio'] }],
       ['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests', repoRef: 'wicked-studio', projectId: 'wicked-platform' }],
     ]);
     expect(r).toMatchObject({ route: 'runs-fan', runIds: ['r-1'], campaignRegistered: false });
   });
 
-  it('a narrowed project with NO workflow still fans over POST /runs (plain runs, filed) — the workflow key is simply absent', async () => {
+  it('a narrowed project with NO workflow fans over POST /runs directly (plain runs, filed) — no governed route to try, the workflow key simply absent', async () => {
     wire({ '/runs': { runId: 'r-plain' } });
     await launchGovernedTest({ ...base, workflow: null, projectId: 'p', projectRepos: ['a', 'b'], excluded: ['b'] });
     expect(calls()).toEqual([['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, repoRef: 'a', projectId: 'p' }]]);

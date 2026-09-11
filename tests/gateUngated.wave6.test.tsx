@@ -97,6 +97,31 @@ describe('GateVerdict — the card', () => {
   });
 });
 
+describe('GateVerdict — F-5: a PASS with no distinct judge says so', () => {
+  it('the frame carries `judgeCli: null` and is not ungated ⇒ PASS, layers line ends "no distinct judge reviewed this verdict (floor only)"', () => {
+    const floorOnly = { ...GATE_UNGATED_WITH_FLOOR, ungated: false, ungatedReason: null };
+    const v = gateVerdict([ev(floorOnly)], 2)!;
+    expect(v.outcome).toBe('pass');
+    expect(v.judgeReported).toBe(true);
+    render(<GateVerdict view={v} phase="author" />);
+    expect(screen.getByTestId('gate-verdict')).toHaveAttribute('data-verdict', 'pass');
+    expect(screen.getByTestId('gate-verdict-no-judge')).toHaveTextContent('no distinct judge reviewed this verdict (floor only)');
+    expect(screen.getByTestId('gate-verdict-layers')).toHaveTextContent('deterministic floor: pass · evaluator: default-allow (no policy applied) · no distinct judge reviewed this verdict (floor only)');
+  });
+
+  it('a judged pass renders no such line; a pre-0.33 frame (no judgeCli key) renders none either', () => {
+    render(<GateVerdict view={gateVerdict([ev(GATE_JUDGED_PASS)], 4)!} phase="review" />);
+    expect(screen.queryByTestId('gate-verdict-no-judge')).toBeNull();
+    cleanup();
+    const { judgeCli: _j, judgeDistinct: _d, ...older } = { ...GATE_UNGATED_WITH_FLOOR, ungated: false, ungatedReason: null };
+    void _j; void _d;
+    const v = gateVerdict([ev(older)], 2)!;
+    expect(v.judgeReported).toBe(false);
+    render(<GateVerdict view={v} phase="author" />);
+    expect(screen.queryByTestId('gate-verdict-no-judge')).toBeNull();
+  });
+});
+
 describe('VerdictDetail — the run page\'s verdict card', () => {
   it('states UNGATED with the engine\'s reason under the layers line', () => {
     useRunEventStore.setState({ byRun: {} });

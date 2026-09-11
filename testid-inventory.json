@@ -11,9 +11,9 @@
   "studioVersion": "0.5.6",
   "counts": {
     "files": 146,
-    "occurrences": 1291,
-    "static": 1114,
-    "dynamic": 59,
+    "occurrences": 1294,
+    "static": 1115,
+    "dynamic": 61,
     "computed": 7
   },
   "static": [
@@ -2299,6 +2299,12 @@
     },
     {
       "testId": "gate-verdict-mutation",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-no-judge",
       "files": [
         "src/components/GateVerdict.tsx"
       ]
@@ -6814,6 +6820,12 @@
       ]
     },
     {
+      "pattern": "*-fanout-cancel",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
       "pattern": "*-fanout-progress",
       "files": [
         "src/components/MadeDashboard.tsx"
@@ -6872,6 +6884,12 @@
       "pattern": "*-search",
       "files": [
         "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
+      "pattern": "*-unreachable",
+      "files": [
+        "src/components/MadeDashboard.tsx"
       ]
     },
     {

@@ -156,6 +156,45 @@ describe('the workflow is read off the daemon, never assumed', () => {
     expect(banner).toHaveTextContent('GET /workflows could not be read');
   });
 
+  it('F-3: while GET /workflows is PENDING the launch button is disabled ("resolving workflows…") — a click cannot launch a silent plain run; it enables the moment the read lands', async () => {
+    let release: (v: { workflows: unknown[] }) => void = () => {};
+    listWorkflows.mockImplementation(() => new Promise<{ workflows: unknown[] }>((r) => { release = r; }));
+    wire({ '/testing/author': { runId: 'r-late', runIds: ['r-late'], campaign: 'a', campaignRegistered: false } });
+    const user = userEvent.setup();
+    const p = panel();
+    await attach(user, p, 'wicked-studio');
+    await user.type(within(p).getByTestId('testing-launch-instructions'), 'Quick');
+    const submit = within(p).getByTestId('testing-launch-submit');
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveTextContent('resolving workflows…');
+    expect(submit).toHaveAttribute('data-pending', 'workflows');
+    expect(p).toHaveAttribute('data-governed', 'unknown');
+    await user.click(submit);
+    expect(apiFetch).not.toHaveBeenCalled();
+    await act(async () => { release({ workflows: [QE_AUTHOR_TESTS_DEF] }); await Promise.resolve(); });
+    await waitFor(() => expect(submit).toBeEnabled());
+    expect(submit).toHaveTextContent('Launch test');
+    await user.click(submit);
+    await screen.findByTestId('testing-launch-waiting');
+    expect(posts()[0]![0]).toBe('/testing/author');
+  });
+
+  it('F-3: a FAILED workflows read shows the banner first and then enables the plain run as an explicit choice', async () => {
+    listWorkflows.mockRejectedValue(new ApiError(500, 'boom'));
+    wire({ '/testing/recon': { runId: 'r-plain', runIds: ['r-plain'], campaign: 'recon-a', campaignRegistered: false } });
+    const user = userEvent.setup();
+    const p = panel();
+    await within(p).findByTestId('testing-launch-plain-banner');
+    await attach(user, p, 'wicked-studio');
+    await user.type(within(p).getByTestId('testing-launch-instructions'), 'Plain');
+    const submit = within(p).getByTestId('testing-launch-submit');
+    expect(submit).toBeEnabled();
+    expect(submit).toHaveTextContent('Launch test');
+    await user.click(submit);
+    await screen.findByTestId('testing-launch-waiting');
+    expect(posts()).toEqual([['/testing/recon', { problem: `${TEST_PROBLEM_PREFIX}\n\nPlain`, repoRefs: ['wicked-studio'] }]]);
+  });
+
   it('Run recon never claims the workflow — no chip, no banner (data-governed=n/a)', async () => {
     const p = panel('recon');
     await within(p).findByTestId('testing-launch-instructions');
@@ -210,8 +249,10 @@ describe('the governed launch — the wire, the link, the waiting line (F-7R2-01
 });
 
 describe('project chips are DROPPABLE (F-076 / F-7R2-010)', () => {
-  it('drop two of three members ⇒ ONE POST /runs for the remaining repo with workflow + intake gate + projectId (filed), no /testing/* call; the dropped line names them; restore all brings them back', async () => {
-    wire({ '/runs': { runId: 'r-single' }, '/testing/author': new Error('must not be called'), '/testing/recon': new Error('must not be called') });
+  it('drop two of three members on a daemon WITHOUT /testing/author ⇒ ONE POST /runs for the remaining repo with workflow + intake gate + projectId (filed); the dropped line names them; restore all brings them back', async () => {
+    // `/testing/author` answers route-absent (the wire() default) — the narrowed launch tries it first
+    // (review F-4) and falls back to the fan; `/testing/recon` must never be tried for a narrowed scope.
+    wire({ '/runs': { runId: 'r-single' }, '/testing/recon': new Error('must not be called') });
     const user = userEvent.setup();
     const p = panel();
     await within(p).findByTestId('testing-launch-workflow');
@@ -228,10 +269,13 @@ describe('project chips are DROPPABLE (F-076 / F-7R2-010)', () => {
 
     await brief(user, p, 'Only studio');
     await screen.findByTestId('testing-launch-waiting');
-    expect(posts()).toEqual([['/runs', {
-      problem: `${TEST_PROBLEM_PREFIX}\n\nOnly studio`, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests',
-      repoRef: 'wicked-studio', projectId: 'wicked-platform',
-    }]]);
+    expect(posts()).toEqual([
+      ['/testing/author', { problem: `${TEST_PROBLEM_PREFIX}\n\nOnly studio`, projectId: 'wicked-platform', repoRefs: ['wicked-studio'] }],
+      ['/runs', {
+        problem: `${TEST_PROBLEM_PREFIX}\n\nOnly studio`, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests',
+        repoRef: 'wicked-studio', projectId: 'wicked-platform',
+      }],
+    ]);
     expect(within(p).getByTestId('testing-launch-route')).toHaveTextContent('via POST /runs per repository — repoRef scopes, projectId files');
     expect(within(p).getByTestId('testing-launch-launched')).toHaveAttribute('data-route', 'runs-fan');
   });
@@ -262,10 +306,12 @@ describe('project chips are DROPPABLE (F-076 / F-7R2-010)', () => {
     await pick(user, p, 'wicked-platform', 'wicked platform');
     await within(p).findAllByTestId('testing-launch-chip');
     await user.click(within(p).getByRole('button', { name: 'Drop wicked-core from this test' }));
-    expect(within(p).getByTestId('testing-launch-fan-note')).toHaveTextContent('2 repositories → 2 governed runs (one council each — they run one at a time)');
+    expect(within(p).getByTestId('testing-launch-fan-note')).toHaveTextContent('2 repositories → 2 governed runs — each pauses at its own intake gate; approve them one at a time');
     await brief(user, p, 'Two');
     const fanout = await screen.findByTestId('testing-launch-fanout');
-    const sent = posts();
+    // The narrowed launch tries /testing/author first (route-absent here), then fans.
+    const sent = posts().filter(([path]) => path === '/runs');
+    expect(posts()[0]![0]).toBe('/testing/author');
     expect(sent.map(([path]) => path)).toEqual(['/runs', '/runs']);
     expect(sent.map(([, b]) => b['repoRef'])).toEqual(['wicked-studio', 'wicked-crew']);
     expect(sent.every(([, b]) => b['projectId'] === 'wicked-platform' && b['workflow'] === 'qe-author-tests' && typeof b['groupLabel'] === 'string')).toBe(true);

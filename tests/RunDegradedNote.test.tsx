@@ -29,6 +29,16 @@ describe('degradedCouncil — the fold', () => {
     ])!;
     expect(d).toEqual({ reason: W6_DEGRADED_REASON, ord: 3, units: 2 });
   });
+  it('F-11: a re-dispatch of the SAME ord is one unit, not two — distinct ords are counted', () => {
+    const d = degradedCouncil([
+      ev(UNIT_DISTRIBUTED_DEGRADED),
+      ev({ ...UNIT_DISTRIBUTED_DEGRADED, ord: 2 }), // re-planned / re-dispatched ord 2
+      ev({ ...UNIT_DISTRIBUTED_DEGRADED, ord: 3 }),
+    ])!;
+    expect(d.units).toBe(2);
+    expect(d.ord).toBe(3);
+  });
+
   it('null when no distribution carries a reason (a full council, or a pre-0.36 daemon)', () => {
     expect(degradedCouncil([ev(UNIT_DISTRIBUTED_FULL)])).toBeNull();
     expect(degradedCouncil([])).toBeNull();

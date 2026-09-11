@@ -344,6 +344,22 @@ export async function launchGovernedTest(scope: GovernedLaunchScope): Promise<Go
     if (repos.length === 0) {
       throw new Error('every repository of the project was dropped — keep at least one, attach a codebase, or clear the project');
     }
+    // Independent review of #263, F-4: the wave-6 crew route `POST /testing/author` accepts a
+    // NARROWED project scope — `projectId` files, `repoRefs` is the exact set — so when the daemon has
+    // it the launch is ONE call with the engine's own deliver phase, never the per-run fan (whose
+    // `POST /runs` launches default `deliver: 'pr'` — a second, appended deliver phase on a def that
+    // already ends in one). The fan stays only for a daemon without the route.
+    if (scope.workflow !== null) {
+      try {
+        const r = await apiFetch<TestingLaunchResult>('/testing/author', {
+          method: 'POST',
+          body: JSON.stringify({ problem: scope.problem, projectId: scope.projectId, repoRefs: repos }),
+        });
+        return normalizeRecon(r, 'testing-author', scope.workflow);
+      } catch (e) {
+        if (!isRouteAbsent(e)) throw e;
+      }
+    }
     return launchRunsFan(scope, repos);
   }
   const pinned: TestingLaunchBody = { problem: scope.problem };

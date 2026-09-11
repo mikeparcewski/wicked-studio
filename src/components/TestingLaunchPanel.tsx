@@ -313,7 +313,12 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
   // A project whose every member was dropped and nothing attached covers nothing — refused before
   // the wire, on the button.
   const emptyNarrowed = narrowed && willCover.length === 0;
-  const canLaunch = instructions.trim() !== '' && (scoped || unscoped) && !busy && !emptyNarrowed && projectRepos !== 'loading';
+  // F-3 (independent review of #263): while `GET /workflows` is still pending, "New test" does not
+  // know whether it is governed — a click then would launch a plain free-text run with no banner
+  // ever shown (exactly the F-7R2-003 run). The button waits for the read to land or fail; a failed
+  // read shows the banner first and the plain run is then an explicit choice.
+  const workflowsPending = intent === 'campaign' && workflows === 'loading';
+  const canLaunch = instructions.trim() !== '' && (scoped || unscoped) && !busy && !emptyNarrowed && projectRepos !== 'loading' && !workflowsPending;
 
   const launch = async (): Promise<void> => {
     if (!canLaunch) return;
@@ -559,13 +564,18 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               onClick={() => void launch()}
               className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
               style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-              title={emptyNarrowed ? 'every project repository was dropped — keep one, attach a codebase, or clear the project' : undefined}
+              title={emptyNarrowed
+                ? 'every project repository was dropped — keep one, attach a codebase, or clear the project'
+                : workflowsPending
+                  ? 'waiting for GET /workflows — the launch must know whether this daemon has the governed test workflow'
+                  : undefined}
+              {...(workflowsPending ? { 'data-pending': 'workflows' } : {})}
             >
-              {busy ? 'Launching…' : copy.cta}
+              {busy ? 'Launching…' : workflowsPending ? 'resolving workflows…' : copy.cta}
             </button>
             {scoped && willCover.length > 1 && (
               <span data-testid="testing-launch-fan-note" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-                {willCover.length} repositories → {willCover.length} governed runs (one council each — they run one at a time)
+                {willCover.length} repositories → {willCover.length} governed runs — each pauses at its own intake gate; approve them one at a time
               </span>
             )}
           </div>

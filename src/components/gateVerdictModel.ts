@@ -142,6 +142,13 @@ export interface GateVerdictView {
   /** Whether that judge seat was identity-distinct from the work's author; `null` when unknown. */
   judgeDistinct: boolean | null;
   /**
+   * Whether the frame CARRIED the `judgeCli` key at all (api-types 0.33.0+): `true` with
+   * `judgeCli === null` is the engine SAYING no judge ran on this verdict — the single-seat case the
+   * card must not dress as evaluator ≠ creator (independent review of #263, F-5). `false` from a
+   * pre-0.33 frame, which claims nothing either way.
+   */
+  judgeReported: boolean;
+  /**
    * The engine SAYS the unit went ungated (api-types 0.36.0 `gateEvaluated.ungated` — wave 6,
    * F-7R2-005): no eligible judge seat could be convened, so evaluator ≠ creator was not held and
    * the verdict is a disclosed default-allow, never a pass. `false` from a daemon that does not send
@@ -337,6 +344,7 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
     restore: restoreFrame === null ? null : restoreOf(restoreFrame),
     judgeCli: str(ev.judgeCli),
     judgeDistinct: typeof ev.judgeDistinct === 'boolean' ? ev.judgeDistinct : null,
+    judgeReported: 'judgeCli' in (ev as Record<string, unknown>),
     ungated,
     ungatedReason,
     attempt: ord === null ? null : attemptBefore(events, ord, idx),

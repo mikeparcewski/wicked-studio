@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getDiagnostics } from '../api/diagnostics.js';
-import { apiWire } from '../api/errors.js';
+import { apiRevision, apiWire } from '../api/errors.js';
 import {
   analyzeSkills,
   currentBaseline,
@@ -383,9 +383,14 @@ export function SkillsPage({ navigate, search = '' }: {
       }
     } catch (e) {
       if (isSkillsConflict(e)) {
-        // The catalog moved under this page — the 409 says so; the revision is re-learned next click.
-        revisionRef.current = null;
-        setRecovery((cur) => ({ ...cur, error: `the catalog changed under this page (${apiWire(e) ?? 'a stale revision'}) — the revision was re-read; try again` }));
+        // The catalog moved under this page — the 409 says so AND carries the live revision
+        // (crew's `{error, revision}`; independent review of #263, F-8): adopt it, so the next click
+        // needs no second analyze. A 409 without one (an older daemon) re-learns it next click.
+        revisionRef.current = apiRevision(e);
+        setRecovery((cur) => ({
+          ...cur,
+          error: `the catalog changed under this page (${apiWire(e) ?? 'a stale revision'}) — ${revisionRef.current !== null ? `revision ${revisionRef.current} adopted from the refusal` : 'the revision will be re-read'}; try again`,
+        }));
         return;
       }
       setRecovery((cur) => ({ ...cur, error: e instanceof Error ? e.message : String(e) }));

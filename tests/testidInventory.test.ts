@@ -41,7 +41,9 @@ function committed(): TestidInventory {
 }
 
 describe('testid-inventory.json (TH-13)', () => {
-  it('matches a live scan of src/ exactly — drift fails CI until regenerated + reviewed', () => {
+  // A filesystem scan of src/ — 6 s on a loaded host (independent review of #263, F-13); the
+  // default 5 s budget is a load-shaped flake, not a signal.
+  it('matches a live scan of src/ exactly — drift fails CI until regenerated + reviewed', { timeout: 30_000 }, () => {
     const live = collectTestidInventory(ROOT);
     // toEqual over the whole artifact: any testid added/removed/renamed, any file moved,
     // any count change shows up as a structural diff naming the exact entry.

@@ -2752,8 +2752,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             if chat_runs_on and pid == "notes":
                 refs.append("r-chat-live")
                 kinds["r-chat-live"] = "crew.chat"
-            # Slice J (§10.2): upload-endpoint's bound repo, a `crew.repo` member.
-            if repo_member_on and pid == "upload-endpoint":
+            # Slice J (§10.2): upload-endpoint's bound repo, a `crew.repo` member. Wave 6 lights it
+            # too, so the governed rig can pick the project and see one DROPPABLE chip (F-9).
+            with state_lock:
+                gt_member_on = state["governed_testing"]
+            if (repo_member_on or gt_member_on) and pid == "upload-endpoint":
                 refs.append(REPO_ID)
                 kinds[REPO_ID] = "crew.repo"
             # Slice Q: the 24h-spread clocks override the W2 defaults (river on).

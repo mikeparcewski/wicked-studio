@@ -155,24 +155,42 @@ describe('Publish — the remedy the finding names', () => {
     expect(calls('POST', '/skills/publish')).toBe(0);
   });
 
-  it('a 409 (the catalog moved) says so and re-learns the revision on the next click', async () => {
-    let n = 0;
+  it('a 409 (the catalog moved) ADOPTS the revision the refusal body carries (crew\'s `{error, revision}`) — the next click posts against it with NO second analyze (F-8)', async () => {
     const card = await renderUnavailable({
-      'POST /skills/analyze': () => Promise.resolve(analyzeOk(n++ === 0 ? REV : REV + 5)),
+      'POST /skills/analyze': () => Promise.resolve(analyzeOk(REV)),
       'POST /skills/publish': (init) => {
         const b = JSON.parse(init!.body!) as { expectedRevision: number };
-        return b.expectedRevision === REV ? Promise.reject(new ApiError(409, `expectedRevision ${REV} is stale; the catalog is at ${REV + 5}`)) : Promise.resolve(blockedPublish(REV + 5));
+        return b.expectedRevision === REV
+          ? Promise.reject(new ApiError(409, `expectedRevision ${REV} is stale; the catalog is at ${REV + 5}`, { error: 'stale', revision: REV + 5 }))
+          : Promise.resolve(blockedPublish(REV + 5));
       },
     });
     await within(card).findByTestId('skills-recovery-state');
     fireEvent.click(within(card).getByTestId('skills-recover-publish'));
     const err = await within(card).findByTestId('skills-recovery-error');
     expect(err).toHaveTextContent('the catalog changed under this page');
-    expect(err).toHaveTextContent('try again');
+    expect(err).toHaveTextContent(`revision ${REV + 5} adopted from the refusal; try again`);
+    fireEvent.click(within(card).getByTestId('skills-recover-publish'));
+    await within(card).findByTestId('skills-recovery-findings');
+    expect(calls('POST', '/skills/analyze')).toBe(1);
+    expect(apiFetch.mock.calls.filter(([p]) => p === '/skills/publish').map(([, init]) => JSON.parse((init as { body: string }).body))).toEqual([{ expectedRevision: REV }, { expectedRevision: REV + 5 }]);
+  });
+
+  it('a 409 WITHOUT a revision in its body (an older daemon) re-learns it through analyze on the next click', async () => {
+    let n = 0;
+    const card = await renderUnavailable({
+      'POST /skills/analyze': () => Promise.resolve(analyzeOk(n++ === 0 ? REV : REV + 5)),
+      'POST /skills/publish': (init) => {
+        const b = JSON.parse(init!.body!) as { expectedRevision: number };
+        return b.expectedRevision === REV ? Promise.reject(new ApiError(409, 'stale expectedRevision')) : Promise.resolve(blockedPublish(REV + 5));
+      },
+    });
+    await within(card).findByTestId('skills-recovery-state');
+    fireEvent.click(within(card).getByTestId('skills-recover-publish'));
+    expect(await within(card).findByTestId('skills-recovery-error')).toHaveTextContent('the revision will be re-read; try again');
     fireEvent.click(within(card).getByTestId('skills-recover-publish'));
     await within(card).findByTestId('skills-recovery-findings');
     expect(calls('POST', '/skills/analyze')).toBe(2);
-    expect(apiFetch.mock.calls.filter(([p]) => p === '/skills/publish').map(([, init]) => JSON.parse((init as { body: string }).body))).toEqual([{ expectedRevision: REV }, { expectedRevision: REV + 5 }]);
   });
 });
 

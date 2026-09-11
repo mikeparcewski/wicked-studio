@@ -161,13 +161,68 @@ export interface WorkerToolCallDeniedEvent {
   attempt: number;
   /** The registry seat key. */
   cli: string;
-  /** The seat's role on the unit (`creator` | `evaluator`). */
+  /** The carrier the refusal happened on — `acp` (the per-call deny) or `wrapped_cli` (the
+   *  wrapped carrier's command filter). Open-ended for a future carrier (core #449 emits both). */
+  carrier: 'acp' | 'wrapped_cli' | (string & {});
+  /** The seat's role on the unit — `creator`, `evaluator`, or `neutral` (a recon/planning rung;
+   *  core #449 emits all three). */
   role: string;
+  /** The tool the seat asked for, as it named it (`Bash`, `shell`, `run_command`, …). */
+  tool: string;
   /** The refused command, as the seat spelled it. */
   command: string;
   reason: string;
   /** The remedy the engine attaches ("delivery is performed by the run's deliver phase"). */
   remedy: string | null;
+}
+
+// ── The daemon-wide docs listing (no bridge spawn) ────────────────────────────────────────────
+
+/**
+ * `GET /interactive/docs` (0.36.0 — the wave-6 crew PR): every project's documents from the
+ * state-home doc LEDGERS, served by the daemon itself — it never resolves a project root and never
+ * starts a `wicked-interactive` bridge. The cheap census the Vibe surface and the Home door count
+ * from (independent review of #263, F-1); absent on a pre-0.36 daemon (route-absent 404), and then
+ * studio counts only what a surface has already listed. PROVISIONAL spelling: rows are the bridge's
+ * `DocSummary` (snake_case, as `GET /projects/:id/interactive/api/docs` serves them) plus the
+ * project they belong to.
+ */
+export interface InteractiveDocsIndexRow {
+  project_id: string;
+  name: string;
+  kind: string;
+  head: number;
+  versions: number;
+  updated_at: string | null;
+}
+
+export interface InteractiveDocsIndexResponse {
+  docs: InteractiveDocsIndexRow[];
+}
+
+/** Narrow the daemon-wide listing off the wire bag — rows without a project or a name are dropped;
+ *  a body without `docs` is `null` (not the route's answer). */
+export function docsIndexOf(body: unknown): InteractiveDocsIndexRow[] | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const raw = (body as Record<string, unknown>)['docs'];
+  if (!Array.isArray(raw)) return null;
+  const out: InteractiveDocsIndexRow[] = [];
+  for (const r of raw) {
+    if (typeof r !== 'object' || r === null) continue;
+    const b = r as Record<string, unknown>;
+    const pid = str(b['project_id']) ?? str(b['projectId']);
+    const name = str(b['name']);
+    if (pid === null || name === null) continue;
+    out.push({
+      project_id: pid,
+      name,
+      kind: str(b['kind']) ?? 'doc',
+      head: typeof b['head'] === 'number' ? b['head'] : 0,
+      versions: typeof b['versions'] === 'number' ? b['versions'] : 0,
+      updated_at: str(b['updated_at']) ?? str(b['updatedAt']),
+    });
+  }
+  return out;
 }
 
 /** The remedy the studio states when a frame carries none (the engine's own sentence). */

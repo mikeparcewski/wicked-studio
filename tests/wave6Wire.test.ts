@@ -85,9 +85,11 @@ const mirror = readFileSync(MIRROR, 'utf8');
 const installedDts = readFileSync(INSTALLED, 'utf8');
 const pinnedAtWave6 = atLeast(installed.version, WAVE6_VERSION);
 
-/** Every wave-6 name the briefs give — spelled once here, asserted present in the mirror. */
-const WAVE6_NAMES = [
-  "QE_AUTHOR_TESTS_WORKFLOW_ID = 'qe-author-tests'",
+/** Every wave-6 name the briefs give — spelled once here, asserted present in the mirror. The first
+ *  entry is studio's own constant (the workflow id the panel reads off `GET /workflows`); every other
+ *  entry is a contract declaration that must live inside a VERBATIM region once the pin lands. */
+const STUDIO_CONSTANTS = ["QE_AUTHOR_TESTS_WORKFLOW_ID = 'qe-author-tests'"];
+const WAVE6_DECLS = [
   'export interface TestingAuthorBody',
   'export interface TestingAuthorResponse',
   'export interface TestSetRegistration',
@@ -97,10 +99,13 @@ const WAVE6_NAMES = [
   'degradedReason?: string | null;',
   'agreementPct?: number | null;',
   "type: 'workerToolCallDenied';",
+  "carrier: 'acp' | 'wrapped_cli' | (string & {});",
   'role: string;',
+  'tool: string;',
   'command: string;',
   'remedy: string | null;',
 ];
+const WAVE6_NAMES = [...STUDIO_CONSTANTS, ...WAVE6_DECLS];
 
 describe('src/api/wave6-wire.ts — the wave-6 mirror against the installed contract', () => {
   it('the devDependency is an exact pin equal to the installed version', () => {
@@ -114,9 +119,16 @@ describe('src/api/wave6-wire.ts — the wave-6 mirror against the installed cont
   it(`posture: ${pinnedAtWave6 ? 'PINNED ≥ 0.36.0 — re-vendored VERBATIM regions, no PROVISIONAL header' : 'PROVISIONAL < 0.36.0 — the wave-6 names are NOT yet in the installed contract'}`, () => {
     if (!pinnedAtWave6) {
       expect(mirror.slice(0, 1200)).toContain('PROVISIONAL');
-      // None of these are declared by the pinned contract yet — if one appears, the pin moved and
-      // the mirror must be re-vendored against it (the other posture) rather than kept provisional.
-      for (const name of ['workerToolCallDenied', 'ungatedReason', 'TestSetRegistration', 'TestingAuthorBody']) {
+      // None of these are declared by the pinned contract yet — if one appears, the pin moved (or a
+      // 0.35.x publish carried the wire under these names) and the mirror must be re-vendored
+      // against it (the other posture) rather than kept provisional. Both studio's own spellings
+      // (`TestSetRegistration`, `TestingAuthorBody`, `TestSetCounts`, `test_set`, `testing/author`)
+      // and the engine's (`workerToolCallDenied`, `ungatedReason`, `degradedReason`) are guarded —
+      // independent review of #263, F-6.
+      for (const name of [
+        'workerToolCallDenied', 'ungatedReason', 'degradedReason',
+        'TestSetRegistration', 'TestingAuthorBody', 'TestSetCounts', 'test_set', 'testing/author',
+      ]) {
         expect(installedDts, `${name} declared by ${installed.version} — re-vendor the mirror`).not.toContain(name);
       }
       return;
@@ -131,6 +143,12 @@ describe('src/api/wave6-wire.ts — the wave-6 mirror against the installed cont
       const [, version, from, to] = m!;
       expect(version, label).toBe(installed.version);
       expect(body, label).toBe(lines.slice(Number(from) - 1, Number(to)).join('\n'));
+    }
+    // Every wave-6 declaration must live INSIDE a verbatim region — a trivial region beside a
+    // still-hand-written wave-6 block does not satisfy the pin (F-6).
+    const regionText = rs.map((r) => r.body).join('\n');
+    for (const name of WAVE6_DECLS) {
+      expect(regionText, `${name} inside a VERBATIM region`).toContain(name);
     }
     for (const name of ['workerToolCallDenied', 'ungatedReason', 'degradedReason']) {
       expect(installedDts, name).toContain(name);

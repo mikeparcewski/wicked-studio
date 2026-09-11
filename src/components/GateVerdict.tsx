@@ -267,6 +267,11 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
             : `evaluator: ${view.evaluatorPass ? 'pass' : 'fail'} (${view.evaluatorPolicies.length} ${
                 view.evaluatorPolicies.length === 1 ? 'policy' : 'policies'
               })`}
+        {/* F-5 (independent review of #263): a PASS whose frame SAYS `judgeCli: null` — the default
+            floor ran, no distinct judge — is not evaluator ≠ creator; say so on the layers line. */}
+        {outcome === 'pass' && view.judgeReported && view.judgeCli === null && (
+          <span data-testid="gate-verdict-no-judge"> · no distinct judge reviewed this verdict (floor only)</span>
+        )}
       </p>
 
       {/* Wave 6 (F-7R2-005, api-types 0.36.0): when the engine SAYS why the unit went ungated
