@@ -21,6 +21,7 @@ import {
 import { useGateStore } from '../src/store/gates.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { makeUnit, makeView } from './factories.js';
+import { G4_EVENTS, G4_GATE, GATE_RUN, GATE_UNITS } from './fixtures/gateEvidence.js';
 import type { SessionView } from '../src/api/types.js';
 
 vi.mock('../src/api/client.js', () => ({
@@ -179,6 +180,34 @@ describe('the gate inbox (W4, §2.7 rule 5)', () => {
     expect(inbox.textContent).toContain('Approve the plan?');
     // The gate card names the run by intent, not by workflow id.
     expect(inbox.textContent).toContain('migrate the tables');
+  });
+
+  it('F-3R2-006: the inbox card states the evaluator verdict the gate is about — the same block as the run page', () => {
+    // The recorded G4 gate (before unit #4, verify): the fix phase's PASS is in the run's event log.
+    useGateStore.setState({
+      gates: {
+        [GATE_RUN]: { runId: GATE_RUN, ord: G4_GATE.ord, prompt: G4_GATE.prompt, lifecycle: 'open', receivedAt: 1 },
+      },
+    });
+    useRunEventStore.setState({ byRun: { [GATE_RUN]: G4_EVENTS } });
+    dash([makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS)]);
+    const inbox = screen.getByTestId('gate-inbox');
+    const card = screen.getByTestId('gate-verdict');
+    expect(inbox.contains(card)).toBe(true);
+    expect(card).toHaveAttribute('data-verdict', 'pass');
+    expect(card).toHaveAttribute('data-phase-ord', '3');
+    expect(card).toHaveTextContent('Evaluator verdict — fix · PASS');
+    expect(screen.getByTestId('gate-verdict-criterion')).toHaveTextContent('the run left a change in its worktree');
+    expect(screen.getByTestId('gate-verdict-judge')).toHaveTextContent('judge: pass');
+  });
+
+  it('the inbox card renders NO verdict block when the run has no evaluation in its log yet', () => {
+    useGateStore.setState({
+      gates: { 'r-gate': { runId: 'r-gate', ord: 1, prompt: 'Approve unit 1 before it runs?', lifecycle: 'open', receivedAt: 1 } },
+    });
+    dash([makeView({ id: 'r-gate', problem: 'migrate the tables', status: 'awaiting_human' })]);
+    expect(screen.getByTestId('gate-inbox')).toBeInTheDocument();
+    expect(screen.queryByTestId('gate-verdict')).toBeNull();
   });
 });
 

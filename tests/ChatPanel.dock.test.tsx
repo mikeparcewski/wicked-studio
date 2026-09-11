@@ -62,6 +62,41 @@ describe('ApprovalDock — pinned, never scrolls away', () => {
     expect(screen.getByTestId('steering-gate')).toBeInTheDocument();
     // SteeringGate's own id-only fallback copy renders (§3.3).
     expect(screen.getByTestId('steering-prompt')).toHaveTextContent(/prompt unavailable/i);
+    // The gate's ord is derived from the run's own cursor (`units[unit_ix].ord`, the same
+    // resolution `useRunModel.pendingGate` makes), so the card is still bound to a unit.
+    expect(screen.getByTestId('steering-gate')).toHaveTextContent('before unit #2');
+  });
+
+  it('daemon-restart fallback: the verdict lookup stays BOUNDED on the derived ord (Copilot on #252)', () => {
+    // The run paused before unit #2 (unit_ix 1 → units[1].ord = 2). Its log holds the survey
+    // phase's evaluation (ord 1) — the verdict this gate is about — and, appended later, a stray
+    // ord-9 frame that an UNBOUNDED "last evaluation" lookup would have shown instead.
+    act(() => {
+      useRunEventStore.setState({
+        byRun: {
+          'run-1': [
+            {
+              type: 'gateEvaluated', session: 'run-1', ord: 1,
+              criterion: 'the survey names every service', hasDeterministicFloor: true, deterministicPass: true,
+              agentVerdict: 'pass', agentReasoning: 'PASS — every service is named.', evaluatorPass: true,
+              evaluatorPolicies: [], denialReason: null, denial: null, combined: true,
+            },
+            {
+              type: 'gateEvaluated', session: 'run-1', ord: 9,
+              criterion: 'stray', hasDeterministicFloor: true, deterministicPass: false,
+              agentVerdict: 'deny', agentReasoning: null, evaluatorPass: true,
+              evaluatorPolicies: [], denialReason: 'stray denial', denial: null, combined: false,
+            },
+          ],
+        },
+      });
+    });
+    renderPanel(); // status awaiting_human, gate store empty → ord derived, prompt unavailable
+    const card = screen.getByTestId('gate-verdict');
+    expect(card).toHaveAttribute('data-verdict', 'pass');
+    expect(card).toHaveAttribute('data-phase-ord', '1');
+    expect(card).toHaveTextContent('Evaluator verdict — survey · PASS');
+    expect(card).not.toHaveTextContent('stray');
   });
 
   it('docks an open MCP elicitation the same way', () => {

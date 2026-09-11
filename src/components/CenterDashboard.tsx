@@ -14,12 +14,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { SessionView } from '../api/types.js';
+import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { unitsInFlight } from '../api/run-state.js';
 import { usageTotals, WINDOW_LABEL_STYLE } from '../board/metrics.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useRunEventStore } from '../store/events.js';
+import { GateVerdict } from './GateVerdict.js';
+import { gateVerdict, phaseLabel } from './gateVerdictModel.js';
 import { useSteeringStore } from '../store/steering.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { chroniclePath, modePath } from '../hooks/useRoute.js';
@@ -271,6 +273,9 @@ const FEED_META: Record<string, FeedMeta> = {
   },
 };
 
+const NO_EVENTS: CoreEvent[] = [];
+const NO_UNITS: WorkUnit[] = [];
+
 const DEFAULT_META: FeedMeta = {
   icon: '·',
   label: 'Event',
@@ -286,6 +291,11 @@ interface GateCardProps {
   ord: number | undefined;
   prompt: string | undefined;
   sessionLbl: string;
+  /** The run's structured event log (already subscribed by the dashboard) — the evaluator verdict
+   *  this gate is about is read from it (wicked-studio#250, F-3R2-006), exactly as `SteeringGate` does. */
+  events: readonly CoreEvent[];
+  /** The run's units (snapshot) — names the verdict's phase. */
+  units: readonly WorkUnit[];
   onApprove: (runId: string, amend?: string) => Promise<void>;
   onReject: (runId: string) => Promise<void>;
 }
@@ -295,12 +305,18 @@ function GateActionCard({
   ord,
   prompt,
   sessionLbl,
+  events,
+  units,
   onApprove,
   onReject,
 }: GateCardProps): React.ReactElement {
   const [amend, setAmend] = useState('');
   const [loading, setLoading] = useState(false);
   const [steerOpen, setSteerOpen] = useState(false);
+  // The same verdict block the run page's gate card renders (F-3R2-006): a gate answered from
+  // this inbox must show what it is approving too. Bounded on the gate's ord — with none known,
+  // no block, never an unbounded historical evaluation dressed as this gate's.
+  const verdict = useMemo(() => (typeof ord === 'number' ? gateVerdict(events, ord) : null), [events, ord]);
 
   const run = useCallback(
     async (action: () => Promise<void>): Promise<void> => {
@@ -394,6 +410,11 @@ function GateActionCard({
         >
           {prompt}
         </p>
+      )}
+
+      {/* The evaluator verdict this gate is about (F-3R2-006) — see SteeringGate. */}
+      {verdict !== null && (
+        <GateVerdict view={verdict} phase={phaseLabel(runId, units, verdict.ord)} />
       )}
 
       {/* Steer textarea — visible only when "Approve + steer" is toggled */}
@@ -1080,6 +1101,8 @@ export function CenterDashboard({
                     ord={gate.ord}
                     prompt={gate.prompt}
                     sessionLbl={lbl}
+                    events={byRun[gate.runId] ?? NO_EVENTS}
+                    units={v?.units ?? NO_UNITS}
                     onApprove={handleApprove}
                     onReject={handleReject}
                   />

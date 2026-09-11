@@ -55,8 +55,12 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
   // what the operator is approving (the fix phase's verdict, criterion, the checks that ran) or
   // rejecting (which layer denied, the engine's remedy) instead of the bare prompt. Zero fetches;
   // an un-hydrated or evaluation-less log renders no block, never a verdict made up from the prompt.
+  // BOUNDED on the gate's ord, always: with no numeric ord in hand there is nothing to bound the
+  // lookup with, so no block — never an unbounded historical evaluation dressed as this gate's
+  // (Copilot on #252). Every caller has one: the gate record's, or ApprovalDock's derivation from
+  // the run's own cursor when the daemon-restart fallback lost the prompt.
   const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
-  const verdict = useMemo(() => gateVerdict(events, ord), [events, ord]);
+  const verdict = useMemo(() => (typeof ord === 'number' ? gateVerdict(events, ord) : null), [events, ord]);
   // Slice BD (DES-UX-002 §4.3, EC51): gate arrival pre-populates the steer
   // textarea — the gate card MOUNTING is the arrival on this surface. Slice BE
   // added the durable layer (CREW-UX-7): pre-population order is the run DTO's

@@ -198,4 +198,11 @@ describe('SteeringGate — the evaluator verdict on the card (F-3R2-006)', () =>
     render(<SteeringGate runId={GATE_RUN} ord={G4_GATE.ord} prompt={G4_GATE.prompt} />);
     expect(screen.getByTestId('gate-verdict')).toHaveTextContent('Evaluator verdict — unit 3 · PASS');
   });
+
+  it('without a numeric `ord` there is nothing to bound the lookup with — NO block, even with a full log (Copilot on #252)', () => {
+    useRunEventStore.setState({ byRun: { [GATE_RUN]: G5_EVENTS } });
+    render(<SteeringGate runId={GATE_RUN} units={GATE_UNITS} />);
+    expect(screen.getByTestId('steering-prompt')).toHaveTextContent(/prompt unavailable/i);
+    expect(screen.queryByTestId('gate-verdict')).toBeNull();
+  });
 });
