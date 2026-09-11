@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.5",
   "counts": {
-    "files": 141,
-    "occurrences": 1216,
-    "static": 1041,
+    "files": 142,
+    "occurrences": 1221,
+    "static": 1046,
     "dynamic": 59,
     "computed": 7
   },
@@ -1140,6 +1140,12 @@
       ]
     },
     {
+      "testId": "copy-command",
+      "files": [
+        "src/components/CopyButton.tsx"
+      ]
+    },
+    {
       "testId": "create-first-project",
       "files": [
         "src/components/HomeBoard.tsx"
@@ -1326,6 +1332,12 @@
       ]
     },
     {
+      "testId": "deliver-lift-check-tail",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
       "testId": "deliver-lift-conflicts",
       "files": [
         "src/components/DeliverLift.tsx"
@@ -1333,6 +1345,12 @@
     },
     {
       "testId": "deliver-lift-failure",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-failure-elided",
       "files": [
         "src/components/DeliverLift.tsx"
       ]
@@ -2052,6 +2070,12 @@
       ]
     },
     {
+      "testId": "gate-inbox-card",
+      "files": [
+        "src/components/CenterDashboard.tsx"
+      ]
+    },
+    {
       "testId": "gate-inbox-pill",
       "files": [
         "src/components/CenterDashboard.tsx"
@@ -2101,6 +2125,12 @@
     },
     {
       "testId": "gate-verdict-check",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-check-tail",
       "files": [
         "src/components/GateVerdict.tsx"
       ]

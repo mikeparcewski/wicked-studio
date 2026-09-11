@@ -186,7 +186,7 @@ describe('gateVerdict helpers', () => {
   });
 
   it('checkOutcome: exit code, timeout and spawn error in that priority', () => {
-    const base = { name: 'test', argv: [], source: '', exitCode: 0, timedOut: false, spawnError: null, durationMs: 1 };
+    const base = { name: 'test', argv: [], source: '', exitCode: 0, timedOut: false, spawnError: null, durationMs: 1, stdoutTail: null, stderrTail: null };
     expect(checkOutcome(base)).toEqual({ word: 'exit 0', ok: true });
     expect(checkOutcome({ ...base, exitCode: 1 })).toEqual({ word: 'exit 1', ok: false });
     expect(checkOutcome({ ...base, exitCode: null, timedOut: true })).toEqual({ word: 'timed out', ok: false });

@@ -22,8 +22,13 @@ import { G4_EVENTS, GATE_RUN, TREE_AFTER, TREE_BEFORE } from './gateEvidence.js'
  * Privacy-scrubbed by construction: no operator text, no host paths, synthetic hex.
  *
  * Denial prose and refusal texts are the engine's own format strings (`worktree_guard.rs`
- * `denial_reason`, `deliver_lift.rs`, `actor.rs`'s mutation-gate prompt) with the placeholders
- * filled — byte-for-byte the sentences a 0.7.19 engine emits for these inputs.
+ * `denial_reason`, `deliver_lift.rs`, `actor.rs`'s mutation-gate and triage-escalate prompts) with the
+ * placeholders filled — the sentences a 0.7.19 engine composes. What the WIRE then does to them is
+ * modelled too (F-255-04): a deliver refusal reaches `stepFailed.detail` as `bounded_excerpt`'s
+ * head+tail (150/250 on the failure-triage path, `[… N chars elided …]` between the halves once it
+ * outgrows 400 chars), the retry gate's prompt quotes a wider excerpt (450/750) after `Failure
+ * output:`, and a rejected unit's `denial_reason` is framed (`Worker FAILED on unit N …`) — see
+ * `boundedExcerpt` and the `deliver*Reason` / `deliverRetryGate` helpers below.
  */
 
 /** A frame as the daemon relays it: the engine's `event_to_json` shape plus the `seq` / `ts` envelope
@@ -32,6 +37,26 @@ import { G4_EVENTS, GATE_RUN, TREE_AFTER, TREE_BEFORE } from './gateEvidence.js'
  *  the fixtures ARE the declared shapes, not a studio-side guess (`tests/wire433.shapes.test.ts`
  *  re-derives the same diff at run time against the installed `index.d.ts`). */
 export type Wire<T> = T & { seq: number; ts: number };
+
+/** wicked-core `actor.rs` `bounded_excerpt(raw, head, tail)`: the whole string when it fits the cap,
+ *  else its first `head` and last `tail` CHARACTERS (code points, as Rust's `chars()`) around the
+ *  marker `\n[… N chars elided …]\n`. */
+export function boundedExcerpt(raw: string, head: number, tail: number): string {
+  const chars = Array.from(raw);
+  const n = chars.length;
+  const cap = head + tail;
+  if (n <= cap) return raw;
+  return `${chars.slice(0, head).join('')}\n[… ${n - cap} chars elided …]\n${chars.slice(n - tail).join('')}`;
+}
+/** `triage_judge_excerpt` (450/750): what the failure-triage judge reads, what the escalate prompt
+ *  quotes, and the `triage escalation: …` denial_reason while that gate is open. */
+export const triageExcerpt = (raw: string): string => boundedExcerpt(raw.trim(), 450, 750);
+/** `failure_detail_excerpt` of the triage excerpt (150/250): `stepFailed.detail` on the triage path,
+ *  and the excerpt inside a triage-Fail `Worker FAILED on unit N (triage: …): …` denial_reason. */
+export const detailExcerpt = (raw: string): string => boundedExcerpt(triageExcerpt(raw), 150, 250);
+/** The plain worker-failure path (no human present, no triage): `detail` and the framed
+ *  `Worker FAILED on unit N: …` denial_reason both carry the 300/500 excerpt. */
+export const failureExcerpt = (raw: string): string => boundedExcerpt(raw.trim(), 300, 500);
 
 const T10 = (id: string): string => id.slice(0, 10);
 const T7 = (id: string): string => id.slice(0, 7);
@@ -268,14 +293,21 @@ export const GATE_DELIVER_PASS = {
   judgeDistinct: null,
 } satisfies Wire<GateEvaluatedEvent>;
 
-/** A FAILED re-verify: lint exited 1 on the lifted tree, test skipped. */
+/** The red check's evidence — `RepoCheckRun.stderrTail`, "the last 4 KiB of the stream", as eslint
+ *  writes it (a synthetic path inside the run worktree). */
+export const LINT_STDERR_TAIL =
+  '\n/w/trees/run-3r2/src/components/DeliverLift.tsx\n' +
+  '  41:9  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any\n\n' +
+  '✖ 1 problem (1 error, 0 warnings)\n';
+
+/** A FAILED re-verify: lint exited 1 on the lifted tree (its stderr tail recorded), test skipped. */
 export const DELIVER_REVERIFY_FAIL = {
   ...DELIVER_REVERIFY_PASS,
   passed: false,
   checks: [
     DELIVER_REVERIFY_PASS.checks[0]!,
     DELIVER_REVERIFY_PASS.checks[1]!,
-    { ...DELIVER_REVERIFY_PASS.checks[2]!, exitCode: 1, durationMs: 5402 },
+    { ...DELIVER_REVERIFY_PASS.checks[2]!, exitCode: 1, durationMs: 5402, stderrTail: LINT_STDERR_TAIL },
   ],
   skipped: ['test'],
 } satisfies Wire<RepoChecksEvaluatedEvent>;
@@ -292,10 +324,13 @@ export const DELIVER_REVERIFY_CHANGED_TREE = {
  *  unrecognized-failure route (`actor.rs`: `StepFailed` fires at once, then failure triage
  *  escalates), which stamps `failureKind: "workerError"` — the engine's token for "the unit's
  *  process ended non-zero", not a judgement on the seat. Declared `string` on the wire; the
- *  engine's three tokens are `workerError` / `environmentRefused` / `substanceRejected`. */
-function stepFailed(seq: number, detail: string) {
+ *  engine's three tokens are `workerError` / `environmentRefused` / `substanceRejected`. The
+ *  `detail` is what the wire carries — `failure_detail_excerpt(&failure_excerpt)`, the 150/250
+ *  head+tail of the refusal — never the refusal itself (F-255-04). */
+function stepFailed(seq: number, refusal: string) {
   return {
-    type: 'stepFailed', session: GATE_RUN, ord: 5, seq, ts: 1789082100000 + seq, attempt: 0, detail, failureKind: 'workerError',
+    type: 'stepFailed', session: GATE_RUN, ord: 5, seq, ts: 1789082100000 + seq, attempt: 0,
+    detail: detailExcerpt(refusal), failureKind: 'workerError',
   } satisfies Wire<StepFailedEvent>;
 }
 
@@ -329,13 +364,39 @@ export const STEP_FAILED_WRONG_HEAD = stepFailed(311, REFUSAL_WRONG_HEAD);
 export const STEP_FAILED_REVERIFY = stepFailed(322, REFUSAL_REVERIFY_FAILED);
 export const STEP_FAILED_CHANGED_TREE = stepFailed(322, REFUSAL_CHANGED_TREE);
 
-/** The retry gate the engine opens on the refused deliver unit (failure triage → escalate). */
-export const DELIVER_RETRY_PROMPT = 'Unit 5 failed — approve to retry the deliver phase, or reject to cancel the run';
-export const DELIVER_RETRY_GATE = { ord: 5, prompt: DELIVER_RETRY_PROMPT };
-function deliverRetry(seq: number): CoreEvent[] {
+/** The `detail` each refusal reaches the wire as — intact when the refusal fits 400 chars
+ *  (LIFT-CONFLICT, apply-failed, wrong-HEAD), elided in the middle when it does not (the re-verify
+ *  failure and the changed-tree proof) — so tests assert what an operator will actually see. */
+export const DETAIL_CONFLICT = detailExcerpt(REFUSAL_CONFLICT);
+export const DETAIL_APPLY_FAILED = detailExcerpt(REFUSAL_APPLY_FAILED);
+export const DETAIL_WRONG_HEAD = detailExcerpt(REFUSAL_WRONG_HEAD);
+export const DETAIL_REVERIFY_FAILED = detailExcerpt(REFUSAL_REVERIFY_FAILED);
+export const DETAIL_CHANGED_TREE = detailExcerpt(REFUSAL_CHANGED_TREE);
+
+/** The failure-triage judge's analysis of a deliver refusal (it escalates: a git state, not a worker error). */
+export const DELIVER_TRIAGE_ANALYSIS = 'the engine refused the deliver: a git state, not a worker error';
+
+/** The retry gate the engine opens on the refused deliver unit — `actor.rs` `TriageDecision::Escalate`,
+ *  format string filled. The prompt QUOTES the failure (the 450/750 triage excerpt), so a gate card
+ *  that also renders the lift's `failure` must say it once (F-255-02). */
+export const deliverRetryPrompt = (refusal: string): string =>
+  `Unit 5 failed and triage escalated: ${DELIVER_TRIAGE_ANALYSIS}. Failure output: "${triageExcerpt(refusal)}". ` +
+  'Approve to retry (optionally amend), reject to fail the run, or reassign the unit to a different CLI first.';
+export const deliverRetryGate = (refusal: string): { ord: number; prompt: string } => ({ ord: 5, prompt: deliverRetryPrompt(refusal) });
+/** While that gate is open the unit's `denial_reason` already reads the escalation (the same excerpt). */
+export const deliverEscalationReason = (refusal: string): string =>
+  `triage escalation: ${DELIVER_TRIAGE_ANALYSIS} — ${triageExcerpt(refusal)}`;
+/** A REJECTED deliver unit's `denial_reason`, as the engine FRAMES it — never the bare refusal: the
+ *  triage-Fail path (a human was present; the 150/250 excerpt) … */
+export const deliverRejectedReason = (refusal: string): string =>
+  `Worker FAILED on unit 5 (triage: ${DELIVER_TRIAGE_ANALYSIS}): ${detailExcerpt(refusal)}`;
+/** … and the plain worker-failure path (no human; the 300/500 excerpt). */
+export const deliverWorkerFailedReason = (refusal: string): string => `Worker FAILED on unit 5: ${failureExcerpt(refusal)}`;
+
+function deliverRetry(seq: number, refusal: string): CoreEvent[] {
   return [
-    { type: 'failureTriaged', session: GATE_RUN, ord: 5, seq, ts: 1789082200000, decision: 'escalate', analysis: 'the engine refused the deliver: a git state, not a worker error' },
-    { type: 'awaitingHuman', session: GATE_RUN, ord: 5, seq: seq + 1, ts: 1789082200001, prompt: DELIVER_RETRY_PROMPT, reviewingOrd: 5 },
+    { type: 'failureTriaged', session: GATE_RUN, ord: 5, seq, ts: 1789082200000, decision: 'escalate', analysis: DELIVER_TRIAGE_ANALYSIS },
+    { type: 'awaitingHuman', session: GATE_RUN, ord: 5, seq: seq + 1, ts: 1789082200001, prompt: deliverRetryPrompt(refusal), reviewingOrd: 5 },
   ];
 }
 
@@ -343,13 +404,13 @@ function deliverRetry(seq: number): CoreEvent[] {
  *  unit #5) so the run's earlier folds stay in the log. */
 export const DELIVER_UNCHANGED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_UNCHANGED];
 export const DELIVER_LIFTED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_LIFTED, DELIVER_REVERIFY_PASS, GATE_DELIVER_PASS];
-export const DELIVER_CONFLICT_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_CONFLICT, STEP_FAILED_CONFLICT, ...deliverRetry(312)];
+export const DELIVER_CONFLICT_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_CONFLICT, STEP_FAILED_CONFLICT, ...deliverRetry(312, REFUSAL_CONFLICT)];
 export const DELIVER_SKIPPED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_SKIPPED];
-export const DELIVER_FAILED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_FAILED, STEP_FAILED_APPLY, ...deliverRetry(312)];
+export const DELIVER_FAILED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_FAILED, STEP_FAILED_APPLY, ...deliverRetry(312, REFUSAL_APPLY_FAILED)];
 /** The addendum: refused for a wrong HEAD ref — NO `deliverLiftEvaluated` precedes the failure. */
-export const DELIVER_WRONG_HEAD_TAIL: CoreEvent[] = [...DISPATCH_5, STEP_FAILED_WRONG_HEAD, ...deliverRetry(312)];
-export const DELIVER_REVERIFY_FAILED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_LIFTED, DELIVER_REVERIFY_FAIL, STEP_FAILED_REVERIFY, ...deliverRetry(323)];
-export const DELIVER_CHANGED_TREE_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_LIFTED, DELIVER_REVERIFY_CHANGED_TREE, STEP_FAILED_CHANGED_TREE, ...deliverRetry(323)];
+export const DELIVER_WRONG_HEAD_TAIL: CoreEvent[] = [...DISPATCH_5, STEP_FAILED_WRONG_HEAD, ...deliverRetry(312, REFUSAL_WRONG_HEAD)];
+export const DELIVER_REVERIFY_FAILED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_LIFTED, DELIVER_REVERIFY_FAIL, STEP_FAILED_REVERIFY, ...deliverRetry(323, REFUSAL_REVERIFY_FAILED)];
+export const DELIVER_CHANGED_TREE_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_LIFTED, DELIVER_REVERIFY_CHANGED_TREE, STEP_FAILED_CHANGED_TREE, ...deliverRetry(323, REFUSAL_CHANGED_TREE)];
 
 // ── (4) the run base ─────────────────────────────────────────────────────────────────────────────
 

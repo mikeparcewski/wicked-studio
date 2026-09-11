@@ -137,8 +137,8 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     edit was discarded and the creator's verified tree restored.
                     Approve to retry the phase against the restored tree …").
                     r-auth (failed) gains a REJECTED `deliver` unit whose
-                    denial_reason is the engine's `deliver: LIFT-CONFLICT — …`
-                    refusal, and its tail becomes the full chronology with
+                    denial_reason is the engine's framed `Worker FAILED on unit 2
+                    (triage: …): deliver: LIFT-CONFLICT — …` refusal, and its tail becomes the full chronology with
                     `runBaseResolved` (origin/main, 5 behind, lifted) at the head
                     and `deliverLiftEvaluated {outcome: "conflict"}` + the
                     `stepFailed` before sessionFailed. Every frame is the wire's
@@ -1199,6 +1199,10 @@ WIRE433_LIFT_REFUSAL = (
     f"(base {WIRE433_BASE_BEFORE[:7]}); nothing was rebased and nothing was pushed. Resolve on "
     "the branch (rebase onto origin/main, regenerate any generated files, re-run the "
     "repository's checks) and approve to retry the deliver phase.")
+WIRE433_TRIAGE_ANALYSIS = "the engine refused the deliver: a git state, not a worker error"
+# A rejected unit's denial_reason as the ENGINE frames it (actor.rs, the triage-Fail path) — the
+# refusal is 370 chars, under the 150/250 excerpt cap, so it rides whole inside the framing.
+WIRE433_LIFT_DENIAL = f"Worker FAILED on unit 2 (triage: {WIRE433_TRIAGE_ANALYSIS}): {WIRE433_LIFT_REFUSAL}"
 WIRE433_INTENT = "migrate the auth tables"
 
 
@@ -1289,7 +1293,7 @@ WIRE433_AUTH_UNITS = [
     _wire433_unit("r-auth", "survey", 0, "survey the auth middleware surface", "recon", "done"),
     _wire433_unit("r-auth", "review", 1, "review the middleware refactor", "review", "done"),
     _wire433_unit("r-auth", "deliver", 2, "deliver — refactor the auth middleware", "build",
-                  "rejected", denial=WIRE433_LIFT_REFUSAL,
+                  "rejected", denial=WIRE433_LIFT_DENIAL,
                   tool_cmd=["bash", "-lc", "gh pr create --fill"]),
 ]
 WIRE433_AUTH_WORKDIR = "/w2/trees/r-auth"
@@ -1336,8 +1340,8 @@ WIRE433_AUTH_EVENTS = [
      "ts": WIRE433_A0 + 5 * MIN + 4 * SEC, "seq": 15},
     {"type": "stepFailed", "session": "r-auth", "ord": 2, "attempt": 0, "detail": WIRE433_LIFT_REFUSAL,
      "failureKind": "workerError", "ts": WIRE433_A0 + 5 * MIN + 4 * SEC, "seq": 16},
-    {"type": "failureTriaged", "session": "r-auth", "ord": 2, "decision": "escalate",
-     "analysis": "the engine refused the deliver: a git state, not a worker error",
+    {"type": "failureTriaged", "session": "r-auth", "ord": 2, "decision": "fail",
+     "analysis": WIRE433_TRIAGE_ANALYSIS,
      "ts": WIRE433_A0 + 5 * MIN + 5 * SEC, "seq": 17},
     {"type": "sessionFailed", "session": "r-auth", "ord": 2, "ts": NOW0 - 12 * MIN, "seq": 18},
 ]
@@ -1885,8 +1889,9 @@ def assemble_runs() -> list:
                 r["session"]["extra_write_roots"] = [FORENSICS_EVIDENCE_ROOT]
             # wicked-core#431 (api-types 0.33.0): r-api on the bug workflow's five
             # units, genuinely ON the denied verify (unit_ix 3); r-auth with its
-            # REJECTED deliver unit (the engine's LIFT-CONFLICT refusal verbatim as
-            # denial_reason) and a workdir, so the Delivery card names the worktree.
+            # REJECTED deliver unit (the engine's LIFT-CONFLICT refusal, framed as the
+            # engine frames a rejected unit's denial_reason) and a workdir, so the
+            # Delivery card names the worktree.
             if wire433_on and r["session"]["id"] == "r-api":
                 r["units"] = json.loads(json.dumps(WIRE433_API_UNITS))
                 r["session"]["unit_ix"] = 3

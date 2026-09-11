@@ -11,7 +11,7 @@
  *   - the gate inbox appears only when a gate is pending (W4).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import {
   BUILD_PURPOSE,
   CenterDashboard,
@@ -22,6 +22,7 @@ import { useGateStore } from '../src/store/gates.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { makeUnit, makeView } from './factories.js';
 import { G4_EVENTS, G4_GATE, G5_EVENTS, G5_GATE, GATE_RUN, GATE_UNITS, REPO_CHECKS_FAIL } from './fixtures/gateEvidence.js';
+import { G5R_EVENTS, G5R_GATE } from './fixtures/wire433.js';
 import type { SessionView } from '../src/api/types.js';
 
 /** `GET /runs/:id/events`, swappable per test — the gate inbox backfills it for open-gate runs. */
@@ -207,6 +208,41 @@ describe('the gate inbox (W4, §2.7 rule 5)', () => {
     expect(card).toHaveTextContent('Evaluator verdict — fix · PASS');
     expect(screen.getByTestId('gate-verdict-criterion')).toHaveTextContent('the run left a change in its worktree');
     expect(screen.getByTestId('gate-verdict-judge')).toHaveTextContent('judge: pass');
+  });
+
+  it("F-255-01: the restored-tree denial gate relabels the inbox card's Approve too — the same predicate as the run page", async () => {
+    getRunEvents.mockImplementation(async (id) => ({ events: id === GATE_RUN ? G5R_EVENTS : [] }));
+    useGateStore.setState({
+      gates: {
+        [GATE_RUN]: { runId: GATE_RUN, ord: G5R_GATE.ord, prompt: G5R_GATE.prompt, lifecycle: 'open', receivedAt: 1 },
+      },
+    });
+    useRunEventStore.setState({ byRun: { [GATE_RUN]: G5R_EVENTS } });
+    dash([makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS)]);
+    expect(await screen.findByTestId('gate-verdict-restored')).toBeInTheDocument();
+    const card = screen.getByTestId('gate-inbox-card');
+    expect(card).toHaveAttribute('data-retry-restored', 'true');
+    expect(within(card).getByRole('button', { name: 'Retry against the restored tree' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Retry + steer' })).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Approve' })).toBeNull();
+    // The copyable git show hint is a real button here as well (F-255-06).
+    expect(within(card).getByRole('button', { name: /^copy git show refs\/wicked\/suggestions\// })).toBeInTheDocument();
+  });
+
+  it('F-255-01: a gate whose deciding verdict PASSED keeps "Approve" on the inbox card', async () => {
+    getRunEvents.mockImplementation(async (id) => ({ events: id === GATE_RUN ? G4_EVENTS : [] }));
+    useGateStore.setState({
+      gates: {
+        [GATE_RUN]: { runId: GATE_RUN, ord: G4_GATE.ord, prompt: G4_GATE.prompt, lifecycle: 'open', receivedAt: 1 },
+      },
+    });
+    useRunEventStore.setState({ byRun: { [GATE_RUN]: G4_EVENTS } });
+    dash([makeView({ id: GATE_RUN, problem: 'fix the reported issue', status: 'awaiting_human', unit_ix: 3 }, GATE_UNITS)]);
+    await screen.findByTestId('gate-verdict');
+    const card = screen.getByTestId('gate-inbox-card');
+    expect(card).not.toHaveAttribute('data-retry-restored');
+    expect(within(card).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Approve + steer' })).toBeInTheDocument();
   });
 
   it('after a reload the inbox backfills the open-gate run\'s event log ONCE, so a persisted verdict still renders (Copilot on #252)', async () => {

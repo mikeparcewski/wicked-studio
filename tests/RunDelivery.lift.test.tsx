@@ -5,7 +5,7 @@
 // refused-before-the-lift case, and silence for a daemon that never sent a deliver-ord frame.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { RunDelivery } from '../src/components/RunDelivery.js';
 import { useDeliveryStore } from '../src/store/delivery.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -25,8 +25,12 @@ import {
   DELIVER_SKIPPED_TAIL,
   DELIVER_UNCHANGED_TAIL,
   DELIVER_WRONG_HEAD_TAIL,
+  DETAIL_REVERIFY_FAILED,
   REFUSAL_CONFLICT,
+  REFUSAL_REVERIFY_FAILED,
   REFUSAL_WRONG_HEAD,
+  deliverRejectedReason,
+  deliverWorkerFailedReason,
 } from './fixtures/wire433.js';
 
 /** The recorded run's view with its deliver unit (ord 5) in `status`, filed on a plain workflow. */
@@ -88,18 +92,31 @@ describe('RunDelivery — the deliver lift block', () => {
     expect(screen.queryByTestId('deliver-lift-failure')).toBeNull();
   });
 
-  it('conflict on a rejected unit: files, remedy, and the refusal ONCE — omitted from the lift block when denial_reason already carries it', () => {
+  it("conflict on a rejected unit: files, remedy, and the refusal ONCE — the engine's FRAMED denial_reason (Worker FAILED on unit 5: …) already carries it, so the lift block omits its copy", () => {
     seed(DELIVER_CONFLICT_TAIL);
-    render(<RunDelivery view={view('rejected', REFUSAL_CONFLICT)} />);
+    // As the engine frames it on the plain worker-failure path (actor.rs) — never the bare refusal.
+    const reason = deliverWorkerFailedReason(REFUSAL_CONFLICT);
+    expect(reason.startsWith('Worker FAILED on unit 5: deliver: LIFT-CONFLICT')).toBe(true);
+    render(<RunDelivery view={view('rejected', reason)} />);
     expect(screen.getByTestId('run-delivery')).toHaveAttribute('data-state', 'failed');
     const lift = screen.getByTestId('deliver-lift');
     expect(lift).toHaveAttribute('data-outcome', 'conflict');
     expect(screen.getByTestId('deliver-lift-conflicts')).toHaveTextContent('testid-inventory.json');
     expect(screen.getByTestId('deliver-lift-remedy')).toHaveTextContent('remedy:');
     // The unit's own reason renders verbatim below; the lift block does not repeat it.
-    expect(screen.getByTestId('run-delivery-reason')).toHaveTextContent(REFUSAL_CONFLICT);
+    expect(screen.getByTestId('run-delivery-reason')).toHaveTextContent(reason);
     expect(screen.queryByTestId('deliver-lift-failure')).toBeNull();
     expect(screen.getAllByText(/LIFT-CONFLICT — lifting/)).toHaveLength(1);
+  });
+
+  it("a rejected re-verify failure: the triage-Fail framing (Worker FAILED on unit 5 (triage: …): <150/250 excerpt>) carries the elided detail — omitted from the lift block, said once", () => {
+    seed(DELIVER_REVERIFY_FAILED_TAIL);
+    const reason = deliverRejectedReason(REFUSAL_REVERIFY_FAILED);
+    render(<RunDelivery view={view('rejected', reason)} />);
+    expect(screen.getByTestId('run-delivery-reason')).toHaveTextContent('Worker FAILED on unit 5 (triage:');
+    expect(screen.queryByTestId('deliver-lift-failure')).toBeNull();
+    const card = screen.getByTestId('run-delivery');
+    expect((card.textContent ?? '').split('deliver: the tree that would ship').length - 1).toBe(1);
   });
 
   it('conflict when the unit has NOT resolved yet (the retry gate is open): the refusal renders in the lift block', () => {
@@ -134,7 +151,7 @@ describe('RunDelivery — the deliver lift block', () => {
     expect(screen.getByTestId('deliver-lift-failure')).toHaveTextContent(REFUSAL_WRONG_HEAD.replace(/`/g, ''));
   });
 
-  it('a FAILED re-verify: floor fail, the red check marked, the skipped one named, the refusal names the lockfile drift', () => {
+  it('a FAILED re-verify: floor fail, the red check marked (its stderr tail behind a collapsed block), the skipped one named, the refusal as the wire carries it — elided', () => {
     seed(DELIVER_REVERIFY_FAILED_TAIL);
     render(<RunDelivery view={view('distributed')} />);
     const floor = screen.getByTestId('deliver-lift-floor');
@@ -145,7 +162,23 @@ describe('RunDelivery — the deliver lift block', () => {
     ]);
     expect(screen.getByTestId('deliver-lift-skipped')).toHaveTextContent('skipped (an earlier check failed): test');
     expect(screen.queryByTestId('deliver-lift-changed-tree')).toBeNull();
-    expect(screen.getByTestId('deliver-lift-failure')).toHaveTextContent('Lockfile drift between the old base and the tip (package-lock.json)');
+    // What the wire carries (F-255-04): the 150/250 head+tail of the 532-char refusal — the marker
+    // renders dimmed between the kept words; the lockfile-drift sentence sits in the elided middle.
+    expect(DETAIL_REVERIFY_FAILED).toMatch(/chars elided/);
+    const failure = screen.getByTestId('deliver-lift-failure');
+    expect(failure).toHaveTextContent('deliver: the tree that would ship');
+    expect(within(failure).getByTestId('deliver-lift-failure-elided')).toHaveTextContent(/\[… \d+ chars elided …\]/);
+    expect(failure).not.toHaveTextContent('Lockfile drift between the old base and the tip');
+    expect(failure).toHaveTextContent('the checks run again until the tree passes');
+    // The evidence behind the red row (F-255-03): lint's stderr tail, collapsed; the green rows carry none.
+    const lint = rows.find((r) => r.getAttribute('data-check') === 'lint')!;
+    const tail = within(lint).getByTestId('deliver-lift-check-tail');
+    expect(tail.tagName).toBe('DETAILS');
+    expect(tail).toHaveAttribute('data-stream', 'stderr');
+    expect((tail as HTMLDetailsElement).open).toBe(false);
+    expect(tail).toHaveTextContent('@typescript-eslint/no-explicit-any');
+    expect(within(tail).getByText(/stderr tail/)).toBeInTheDocument();
+    expect(screen.getAllByTestId('deliver-lift-check-tail')).toHaveLength(1);
   });
 
   it('a failed POST-CHECK PROOF: passed:false over all-green rows is explained as "the checks CHANGED the worktree"', () => {

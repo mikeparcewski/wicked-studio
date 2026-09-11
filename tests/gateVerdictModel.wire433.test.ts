@@ -5,8 +5,8 @@
 
 import { describe, expect, it } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
-import { deliverLift, liftIsFailure, liftOutcomeLabel, reverifyChangedTree } from '../src/components/deliverLiftModel.js';
-import { gateVerdict, shortId } from '../src/components/gateVerdictModel.js';
+import { deliverLift, liftIsFailure, liftOutcomeLabel, reverifyChangedTree, splitElided, textCarriesFailure } from '../src/components/deliverLiftModel.js';
+import { floorOf, gateVerdict, isRestoredRetry, shortId } from '../src/components/gateVerdictModel.js';
 import { runBase, runBaseLine, runBaseOf } from '../src/components/runBaseModel.js';
 import { G4_EVENTS, G5_EVENTS, G6_EVENTS, GATE_RUN, TREE_BEFORE } from './fixtures/gateEvidence.js';
 import {
@@ -16,17 +16,25 @@ import {
   DELIVER_CONFLICT_TAIL,
   DELIVER_FAILED_TAIL,
   DELIVER_LIFTED_TAIL,
+  DELIVER_REVERIFY_FAIL,
   DELIVER_REVERIFY_FAILED_TAIL,
   DELIVER_SKIPPED_TAIL,
   DELIVER_UNCHANGED_TAIL,
   DELIVER_WRONG_HEAD_TAIL,
+  DETAIL_CHANGED_TREE,
+  DETAIL_CONFLICT,
+  DETAIL_REVERIFY_FAILED,
+  DETAIL_WRONG_HEAD,
   DISPATCH_5,
   G4_SAME_SEAT_EVENTS,
   G5R_EVENTS,
   G5R_UNPINNED_EVENTS,
   G5_RESTORE_FAILED_EVENTS,
+  GATE_DENY_RESTORED,
   LIFT_CONFLICT,
+  LINT_STDERR_TAIL,
   REFUSAL_CONFLICT,
+  REFUSAL_REVERIFY_FAILED,
   REFUSAL_WRONG_HEAD,
   RESTORE_FAILED_ERROR,
   RUN_BASE_AT_TIP,
@@ -35,6 +43,11 @@ import {
   RUN_BASE_LOCAL_KEPT,
   RUN_BASE_NO_REMOTE,
   SUGGESTION_REF,
+  boundedExcerpt,
+  deliverEscalationReason,
+  deliverRejectedReason,
+  deliverRetryPrompt,
+  deliverWorkerFailedReason,
 } from './fixtures/wire433.js';
 
 describe('gateVerdict — the judge seat (F-3R2-007)', () => {
@@ -149,7 +162,12 @@ describe('deliverLift — the deliver ord\'s newest-attempt story (F-3R2-013)', 
     expect(red.reverify!.passed).toBe(false);
     expect(red.reverify!.skipped).toEqual(['test']);
     expect(reverifyChangedTree(red.reverify!)).toBe(false);
-    expect(red.failure).toContain("the repository's own checks FAILED on it");
+    // What the wire carries (F-255-04): the 150/250 head+tail of the 532-char refusal — the marker in
+    // the middle, the lockfile-drift sentence (elided) gone; an operator reads the excerpt, not the essay.
+    expect(red.failure).toBe(DETAIL_REVERIFY_FAILED);
+    expect(red.failure).toMatch(/\[… \d+ chars elided …\]/);
+    expect(red.failure!.startsWith('deliver: the tree that would ship')).toBe(true);
+    expect(red.failure).not.toContain('Lockfile drift between the old base and the tip');
     const moved = deliverLift(tail(DELIVER_CHANGED_TREE_TAIL), 5)!;
     expect(moved.reverify!.passed).toBe(false);
     expect(moved.reverify!.checks.every((c) => c.exitCode === 0)).toBe(true);
@@ -215,5 +233,90 @@ describe('runBase — how the run\'s base was chosen (F-3R2-013)', () => {
     expect(shortId(TREE_BEFORE)).toBe(TREE_BEFORE.slice(0, 10));
     expect(shortId(BASE_AFTER, 7)).toBe(BASE_AFTER.slice(0, 7));
     expect(shortId('abc', 7)).toBe('abc');
+  });
+});
+
+describe("the wire's excerpting and framing — modelled, not wished away (F-255-04)", () => {
+  it('boundedExcerpt is actor.rs bounded_excerpt: whole under the cap, head + marker + tail over it (code points, not bytes)', () => {
+    expect(boundedExcerpt('short', 150, 250)).toBe('short');
+    const long = 'a'.repeat(300) + 'é' + 'b'.repeat(299); // 600 code points
+    const out = boundedExcerpt(long, 150, 250);
+    expect(out.startsWith('a'.repeat(150) + '\n[… 200 chars elided …]\n')).toBe(true);
+    expect(out.endsWith('b'.repeat(250))).toBe(true);
+  });
+
+  it('the refusals that fit 400 chars reach the wire whole; the two that do not are elided in the middle', () => {
+    expect(DETAIL_CONFLICT).toBe(REFUSAL_CONFLICT);
+    expect(DETAIL_WRONG_HEAD).toBe(REFUSAL_WRONG_HEAD);
+    for (const d of [DETAIL_REVERIFY_FAILED, DETAIL_CHANGED_TREE]) {
+      expect(d).toMatch(/\[… \d+ chars elided …\]/);
+      expect(d.startsWith('deliver: ')).toBe(true);
+    }
+    expect(splitElided(DETAIL_REVERIFY_FAILED)).toHaveLength(3);
+    expect(splitElided(DETAIL_CONFLICT)).toEqual([DETAIL_CONFLICT]);
+  });
+});
+
+describe('textCarriesFailure — the refusal is said once (F-255-02)', () => {
+  it('the triage-escalate prompt (450/750 excerpt) carries the elided 150/250 detail; an unrelated prompt does not', () => {
+    expect(textCarriesFailure(deliverRetryPrompt(REFUSAL_REVERIFY_FAILED), DETAIL_REVERIFY_FAILED)).toBe(true);
+    expect(textCarriesFailure(deliverRetryPrompt(REFUSAL_CONFLICT), DETAIL_CONFLICT)).toBe(true);
+    expect(textCarriesFailure(deliverRetryPrompt(REFUSAL_CONFLICT), DETAIL_REVERIFY_FAILED)).toBe(false);
+    expect(textCarriesFailure('Prompt unavailable (daemon restarted) — you can still approve or reject.', DETAIL_CONFLICT)).toBe(false);
+  });
+
+  it("a rejected unit's FRAMED denial_reason carries it on both engine paths; so does the open-gate escalation reason", () => {
+    expect(textCarriesFailure(deliverWorkerFailedReason(REFUSAL_CONFLICT), DETAIL_CONFLICT)).toBe(true);
+    expect(textCarriesFailure(deliverRejectedReason(REFUSAL_REVERIFY_FAILED), DETAIL_REVERIFY_FAILED)).toBe(true);
+    expect(textCarriesFailure(deliverEscalationReason(REFUSAL_REVERIFY_FAILED), DETAIL_REVERIFY_FAILED)).toBe(true);
+    // The bare refusal — what no engine path sends as a reason — would carry it too.
+    expect(textCarriesFailure(REFUSAL_REVERIFY_FAILED, DETAIL_REVERIFY_FAILED)).toBe(true);
+  });
+
+  it('nothing to compare is never a match', () => {
+    expect(textCarriesFailure(null, DETAIL_CONFLICT)).toBe(false);
+    expect(textCarriesFailure(undefined, DETAIL_CONFLICT)).toBe(false);
+    expect(textCarriesFailure('anything', null)).toBe(false);
+    expect(textCarriesFailure('anything', '\n[… 12 chars elided …]\n')).toBe(false);
+  });
+});
+
+describe('isRestoredRetry — one predicate for every gate card (F-255-01 / F-255-05)', () => {
+  it("true exactly for this unit's failed worktree-guard denial with the tree restored", () => {
+    expect(isRestoredRetry(gateVerdict(G5R_EVENTS, 4), 4)).toBe(true);
+    expect(isRestoredRetry(gateVerdict(G5R_UNPINNED_EVENTS, 4), 4)).toBe(true); // a failed pin changes nothing here
+  });
+
+  it('false when the restore failed, on the pre-0.33.0 fold, for another ord, with no ord, and with no verdict', () => {
+    expect(isRestoredRetry(gateVerdict(G5_RESTORE_FAILED_EVENTS, 4), 4)).toBe(false);
+    expect(isRestoredRetry(gateVerdict(G5_EVENTS, 4), 4)).toBe(false);
+    expect(isRestoredRetry(gateVerdict(G5R_EVENTS, 4), 5)).toBe(false);
+    expect(isRestoredRetry(gateVerdict(G5R_EVENTS, 4), undefined)).toBe(false);
+    expect(isRestoredRetry(gateVerdict(G5R_EVENTS, 4), null)).toBe(false);
+    expect(isRestoredRetry(null, 4)).toBe(false);
+  });
+
+  it("mirrors the engine's guard: a dual-deny another layer wins (denial.source ≠ worktree_guard) keeps Approve even though the tree was restored", () => {
+    const otherLayerWins: CoreEvent[] = G5R_EVENTS.map((e) =>
+      e.type === 'gateEvaluated' && e.ord === 4
+        ? { ...e, denial: { ...GATE_DENY_RESTORED.denial, source: 'repo_checks', reason: 'repository checks failed in the worktree: lint exited 1' } }
+        : e,
+    );
+    const v = gateVerdict(otherLayerWins, 4)!;
+    expect(v.mutation?.restored).toBe(true);
+    expect(v.denial?.source).toBe('repo_checks');
+    expect(isRestoredRetry(v, 4)).toBe(false);
+  });
+});
+
+describe('floorOf — the stream tails behind a red check (F-255-03)', () => {
+  it('a recorded stderr tail survives narrowing; an empty stream is null, never an empty box', () => {
+    const floor = floorOf(DELIVER_REVERIFY_FAIL);
+    const lint = floor.checks.find((c) => c.name === 'lint')!;
+    expect(lint.stderrTail).toBe(LINT_STDERR_TAIL);
+    expect(lint.stdoutTail).toBeNull();
+    const install = floor.checks.find((c) => c.name === 'install')!;
+    expect(install.stderrTail).toBeNull();
+    expect(install.stdoutTail).toBeNull();
   });
 });

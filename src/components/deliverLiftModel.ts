@@ -173,3 +173,37 @@ export function reverifyChangedTree(floor: GateFloorView): boolean {
     floor.checks.every((c) => c.exitCode === 0 && !c.timedOut && c.spawnError === null)
   );
 }
+
+/** The engine's elision marker, as `bounded_excerpt` (wicked-core `actor.rs`) writes it between the
+ *  kept head and tail of an over-long output: `{head}\n[… N chars elided …]\n{tail}`. */
+export const ELISION_MARKER = /\[… \d+ chars elided …\]/;
+
+/** `text` cut at the engine's elision marker(s): even indices are the words the wire KEPT, odd
+ *  indices the markers themselves — so a view can dim the marker and keep the words verbatim. */
+export function splitElided(text: string): string[] {
+  return text.split(/(\[… \d+ chars elided …\])/);
+}
+
+/**
+ * Whether `text` — a gate prompt, a unit's `denial_reason` — already carries `failure` (the deliver
+ * unit's `stepFailed.detail`), so a surface that renders both never prints the engine's refusal twice
+ * (F-255-02).
+ *
+ * `text.includes(failure)` is not enough because of what the wire does to the words (wicked-core
+ * `actor.rs`): `detail` is a HEAD+TAIL excerpt — `bounded_excerpt(…, 150, 250)` on the failure-triage
+ * path, 300/500 on the plain worker-failure path — with `[… N chars elided …]` between the halves once
+ * the refusal outgrows the bound, while the triage-escalate prompt quotes a WIDER excerpt (450/750:
+ * `… Failure output: "<excerpt>". Approve to retry …`) and a rejected unit's `denial_reason` frames
+ * its own (`Worker FAILED on unit N: <excerpt>`). Every segment the detail kept is a substring of any
+ * wider excerpt of the same output — a head+tail excerpt keeps the original head and the original
+ * tail — so the test is: each kept segment of `failure` occurs in `text`. Nothing on either side is
+ * nothing to compare, never a match.
+ */
+export function textCarriesFailure(text: string | null | undefined, failure: string | null): boolean {
+  if (text === null || text === undefined || failure === null) return false;
+  const kept = splitElided(failure)
+    .filter((_, i) => i % 2 === 0)
+    .map((s) => s.trim())
+    .filter((s) => s !== '');
+  return kept.length > 0 && kept.every((s) => text.includes(s));
+}

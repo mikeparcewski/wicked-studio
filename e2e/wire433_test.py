@@ -8,7 +8,7 @@ studio surfaces, in a real browser against the shared loopback fixture
      judge seat (`judge: codex`); the restored-tree denial says "the evaluator's
      edit was discarded and the creator's verified tree restored", lists the
      discarded path, and carries the copyable `git show refs/wicked/suggestions/…`
-     hint; Approve reads "Retry against the restored tree" (`data-retry-restored`);
+     hint with a real copy button beside it; Approve reads "Retry against the restored tree" (`data-retry-restored`);
      the engine's NEW prompt renders whole. No `git read-tree` command is offered
      (the engine already ran the remedy).
   2. RUN HEAD / TIMELINE (r-auth, failed): the What / Where card carries the
@@ -124,6 +124,7 @@ with sync_playwright() as p:
             suggestionRef: q('[data-testid="gate-verdict-restored"]')?.getAttribute('data-suggestion-ref'),
             hint: t('[data-testid="gate-verdict-suggestion-hint"]'),
             hintTag: q('[data-testid="gate-verdict-suggestion-hint"]')?.tagName,
+            copyButton: !!q('[data-testid="gate-verdict-restored"] button[aria-label^="copy git show refs/wicked/suggestions/"]'),
             denial: t('[data-testid="gate-verdict-denial"]'),
             readTreeOffered: /git read-tree/.test(t('[data-testid="gate-verdict"]')),
             restoreFailed: !!q('[data-testid="gate-verdict-restore-failed"]'),
@@ -147,6 +148,7 @@ with sync_playwright() as p:
         and gate["suggestionRef"] == WIRE433_SUGGESTION_REF
         and gate["hint"].strip() == f"git show {WIRE433_SUGGESTION_REF}"
         and gate["hintTag"] == "CODE"
+        and gate["copyButton"]
         and "The evaluator's edit was DISCARDED" in gate["denial"]
         and not gate["readTreeOffered"]
         and not gate["restoreFailed"]
@@ -273,7 +275,8 @@ with sync_playwright() as p:
         and "nothing was rebased and nothing was pushed" in delivery["summary"]
         and delivery["conflicts"].strip() == "testid-inventory.json"
         and "remedy:" in delivery["remedy"]
-        and delivery["reason"].startswith("deliver: LIFT-CONFLICT")
+        and delivery["reason"].startswith("Worker FAILED on unit 2 (triage:")
+        and "deliver: LIFT-CONFLICT" in delivery["reason"]
         and delivery["liftFailureBlocks"] == 0  # denial_reason already carries the refusal
         and delivery["refusalMentions"] == 1
         and delivery["worktree"]

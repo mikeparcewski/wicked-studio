@@ -61,6 +61,11 @@ export interface GateFloorCheck {
   timedOut: boolean;
   spawnError: string | null;
   durationMs: number;
+  /** The last 4 KiB of the check's stdout / stderr as the engine recorded them (`RepoCheckRun`, on the
+   *  wire since api-types 0.31.0) — the evidence behind a failed check, verbatim. `null` when the
+   *  stream was empty or the frame predates the field, so no surface paints an empty box (F-255-03). */
+  stdoutTail: string | null;
+  stderrTail: string | null;
 }
 
 /** The F-039 floor as `repoChecksEvaluated` reported it. */
@@ -138,6 +143,8 @@ export interface GateVerdictView {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+/** A recorded stream tail: a non-blank string, else `null` — an empty stream is nothing to show. */
+const tail = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 
@@ -173,6 +180,8 @@ function checkOf(raw: unknown): GateFloorCheck | null {
     timedOut: c.timedOut === true,
     spawnError: str(c.spawnError),
     durationMs: typeof c.durationMs === 'number' ? c.durationMs : 0,
+    stdoutTail: tail(c.stdoutTail),
+    stderrTail: tail(c.stderrTail),
   };
 }
 
@@ -337,6 +346,42 @@ export function checkOutcome(c: GateFloorCheck): { word: string; ok: boolean } {
   if (c.timedOut) return { word: 'timed out', ok: false };
   if (c.exitCode === null) return { word: 'no exit code', ok: false };
   return { word: c.exitCode === 0 ? 'exit 0' : `exit ${c.exitCode}`, ok: c.exitCode === 0 };
+}
+
+/**
+ * The recorded stream tails of a check that did NOT pass, stderr first — what a collapsed `<details>`
+ * per stream renders on the gate card's floor and on the deliver lift (F-255-03). Empty for a passing
+ * check (its output is not evidence of anything the card claims) and for a check whose streams the
+ * engine recorded as empty.
+ */
+export function checkTails(c: GateFloorCheck): Array<{ stream: 'stderr' | 'stdout'; text: string }> {
+  if (checkOutcome(c).ok) return [];
+  const out: Array<{ stream: 'stderr' | 'stdout'; text: string }> = [];
+  if (c.stderrTail !== null) out.push({ stream: 'stderr', text: c.stderrTail });
+  if (c.stdoutTail !== null) out.push({ stream: 'stdout', text: c.stdoutTail });
+  return out;
+}
+
+/**
+ * Whether Approve on the gate for `gateOrd` means "retry against the restored tree" (wicked-core#431 /
+ * F-3R2-010): the deciding evaluation is THIS unit's, it failed, the WORKTREE GUARD is the layer that
+ * denied it, and the engine reports the creator's tree restored. That is the engine's own condition
+ * for sending the restored-tree prompt (`actor.rs`: `denial.source == "worktree_guard" &&
+ * mutation.restored`) — in a dual-deny another layer wins, the engine keeps the legacy prompt and this
+ * keeps "Approve" (F-255-05). ONE predicate for every gate card — the run page's `SteeringGate` and the
+ * landing inbox's card (F-255-01) — so an open gate never reads "Retry" on one surface and "Approve"
+ * on the other. Keyed on the evidence frames, never on the prompt text; a prose-only denial from an
+ * older engine (`source: null`) cannot be shown to be the guard's and stays "Approve".
+ */
+export function isRestoredRetry(view: GateVerdictView | null, gateOrd: number | null | undefined): boolean {
+  return (
+    view !== null &&
+    typeof gateOrd === 'number' &&
+    view.ord === gateOrd &&
+    view.outcome === 'fail' &&
+    view.denial?.source === 'worktree_guard' &&
+    view.mutation?.restored === true
+  );
 }
 
 /**

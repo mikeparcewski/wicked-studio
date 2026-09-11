@@ -9,10 +9,10 @@ import { durableGuidance, useGuidanceStore } from '../store/guidance.js';
 import { useGateStore } from '../store/gates.js';
 import { useSteeringStore, type SteeringAction } from '../store/steering.js';
 import { DeliverLift } from './DeliverLift.js';
-import { deliverLift } from './deliverLiftModel.js';
+import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
-import { gateVerdict, phaseLabel } from './gateVerdictModel.js';
+import { gateVerdict, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 
 interface Props {
   runId: string;
@@ -68,15 +68,21 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
   // what the lift did and the engine's remedy on the card. A pre-run deliver gate has no deliver-ord
   // frames yet and renders nothing; so does every non-deliver gate.
   const lift = useMemo(() => (typeof ord === 'number' ? deliverLift(events, ord) : null), [events, ord]);
-  // wicked-core#431 (F-3R2-010): when the deciding denial is THIS unit's worktree-guard denial and the
+  // wicked-core#431 (F-3R2-010): when the deciding denial is THIS unit's WORKTREE-GUARD denial and the
   // engine restored the creator's tree, Approve no longer means "adopt the evaluator's edit and retry"
   // — it means a retry against the restored, verified tree, and the button says so. The engine's
   // `awaitingHuman.prompt` changed with it ("… its edit was discarded and the creator's verified tree
   // restored. Approve to retry the phase against the restored tree …"); the relabel keys on the
   // EVIDENCE frames, not on that prose, so a daemon that sends the frames with any prompt relabels and
-  // one that predates them never does.
-  const restoredRetry =
-    verdict !== null && verdict.outcome === 'fail' && verdict.ord === ord && verdict.mutation?.restored === true;
+  // one that predates them never does. ONE predicate for every gate card — the landing inbox's card
+  // uses the same `isRestoredRetry` — mirroring the engine's own guard (`denial.source ==
+  // "worktree_guard" && mutation.restored`), so no surface relabels where the engine kept the legacy prompt.
+  const restoredRetry = isRestoredRetry(verdict, ord);
+  // The engine's triage-escalate prompt already QUOTES the deliver refusal (`Unit N failed and triage
+  // escalated: … Failure output: "<excerpt>". Approve to retry …`), so the lift block omits its copy
+  // when the prompt carries it — the refusal reads ONCE on the card (F-255-02). A prompt that does
+  // not (the daemon-restart fallback, an older engine's wording) leaves the block to say it.
+  const liftOmitsFailure = lift !== null && lift.failure !== null && textCarriesFailure(prompt, lift.failure);
   // Slice BD (DES-UX-002 §4.3, EC51): gate arrival pre-populates the steer
   // textarea — the gate card MOUNTING is the arrival on this surface. Slice BE
   // added the durable layer (CREW-UX-7): pre-population order is the run DTO's
@@ -289,7 +295,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, onR
       )}
 
       {/* The deliver lift + the engine's refusal for a gate on the deliver unit (wicked-core#431). */}
-      {lift !== null && <DeliverLift view={lift} />}
+      {lift !== null && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
 
       {/* Coverage stats — shown when evaluator gate fails and we have repo coverage data */}
       {isCoverageFail && coverage && (

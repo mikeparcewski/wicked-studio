@@ -2,9 +2,10 @@ import {
   liftIsFailure,
   liftOutcomeLabel,
   reverifyChangedTree,
+  splitElided,
   type DeliverLiftView,
 } from './deliverLiftModel.js';
-import { checkOutcome, formatDuration, shortId, splitBackticks } from './gateVerdictModel.js';
+import { checkOutcome, checkTails, formatDuration, shortId, splitBackticks } from './gateVerdictModel.js';
 
 /**
  * The deliver lift ON the card (wicked-core#431 / F-3R2-013, api-types 0.33.0): what the engine
@@ -144,6 +145,21 @@ export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftVi
                     {' · '}
                     {formatDuration(c.durationMs)}
                     {c.source !== '' && <span style={{ color: 'var(--ink-dim)' }}> · {c.source}</span>}
+                  
+                    {/* The evidence behind a red row (F-255-03): the stream tails the engine recorded, collapsed. */}
+                    {checkTails(c).map((t) => (
+                      <details key={t.stream} data-testid="deliver-lift-check-tail" data-stream={t.stream} className="mt-0.5">
+                        <summary className="cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
+                          {t.stream} tail — the check&apos;s own output, verbatim
+                        </summary>
+                        <pre
+                          className="mt-1 p-1.5 rounded overflow-auto text-[10px] leading-snug"
+                          style={{ maxHeight: '12rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: 'var(--surface-rail)', color: 'var(--ink-high)' }}
+                        >
+                          {t.text}
+                        </pre>
+                      </details>
+                    ))}
                   </li>
                 );
               })}
@@ -157,16 +173,30 @@ export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftVi
         </div>
       )}
 
-      {/* The engine's refusal, VERBATIM — it carries the remedy; quoted refs render as copyable code. */}
+      {/* The engine's refusal as the WIRE carries it — `stepFailed.detail` is a head+tail excerpt (actor.rs
+        * `bounded_excerpt`), so an over-long refusal arrives with `[… N chars elided …]` between the kept
+        * halves: the words render verbatim, the marker dimmed; quoted refs render as copyable code (F-255-04).
+        * Omitted (`omitFailure`) when the surface already shows the same text — the gate prompt quotes it, a
+        * rejected unit's denial_reason frames it — so the refusal reads once (F-255-02). */}
       {view.failure !== null && !omitFailure && (
         <p data-testid="deliver-lift-failure" style={{ color: 'var(--status-fail)' }}>
-          {splitBackticks(view.failure).map((part, i) =>
-            i % 2 === 1 ? (
-              <code key={i} className="px-1 rounded" style={{ background: 'var(--surface-rail)', color: 'var(--ink-high)' }}>
-                {part}
-              </code>
+          {splitElided(view.failure).map((segment, s) =>
+            s % 2 === 1 ? (
+              <span key={`elided-${s}`} data-testid="deliver-lift-failure-elided" style={{ color: 'var(--ink-dim)' }}>
+                {' '}
+                {segment}
+                {' '}
+              </span>
             ) : (
-              <span key={i}>{part}</span>
+              splitBackticks(segment).map((part, i) =>
+                i % 2 === 1 ? (
+                  <code key={`${s}-${i}`} className="px-1 rounded" style={{ background: 'var(--surface-rail)', color: 'var(--ink-high)' }}>
+                    {part}
+                  </code>
+                ) : (
+                  <span key={`${s}-${i}`}>{part}</span>
+                ),
+              )
             ),
           )}
         </p>

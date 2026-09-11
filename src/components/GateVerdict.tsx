@@ -1,5 +1,7 @@
+import { CopyButton } from './CopyButton.js';
 import {
   checkOutcome,
+  checkTails,
   denialSourceLabel,
   formatDuration,
   shortId,
@@ -170,7 +172,8 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
                 style={{ background: 'var(--surface-rail)', color: 'var(--ink-high)', userSelect: 'all' }}
               >
                 git show {view.restore.suggestionRef}
-              </code>
+              </code>{' '}
+              <CopyButton command={`git show ${view.restore.suggestionRef}`} />
             </>
           )}
           {view.restore !== null && view.restore.suggestionRef === null && ' · the discarded edit was not pinned (no suggestion ref) — only the paths above record it'}
@@ -222,6 +225,21 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
                     {' · '}
                     {formatDuration(c.durationMs)}
                     {c.source !== '' && <span style={{ color: 'var(--ink-dim)' }}> · {c.source}</span>}
+                  
+                    {/* The evidence behind a red row (F-255-03): the stream tails the engine recorded, collapsed. */}
+                    {checkTails(c).map((t) => (
+                      <details key={t.stream} data-testid="gate-verdict-check-tail" data-stream={t.stream} className="mt-0.5">
+                        <summary className="cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
+                          {t.stream} tail — the check&apos;s own output, verbatim
+                        </summary>
+                        <pre
+                          className="mt-1 p-1.5 rounded overflow-auto text-[10px] leading-snug"
+                          style={{ maxHeight: '12rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: 'var(--surface-rail)', color: 'var(--ink-high)' }}
+                        >
+                          {t.text}
+                        </pre>
+                      </details>
+                    ))}
                   </li>
                 );
               })}

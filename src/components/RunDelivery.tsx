@@ -5,7 +5,7 @@ import { useRunEventStore } from '../store/events.js';
 import { usePostHocDeliverStore } from '../store/postHocDeliver.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { DeliverLift } from './DeliverLift.js';
-import { deliverLift } from './deliverLiftModel.js';
+import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import {
   DELIVERY_COLOR,
   DELIVERY_LABEL,
@@ -268,10 +268,13 @@ export function RunDelivery({ view }: Props): React.ReactElement {
   const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
   const deliverOrd = unitId === null ? null : (view.units.find((u) => u.id === unitId)?.ord ?? null);
   const lift = useMemo(() => (deliverOrd === null ? null : deliverLift(events, deliverOrd)), [events, deliverOrd]);
-  // A rejected deliver unit's `denial_reason` (rendered VERBATIM below) usually IS the engine's
-  // refusal that the lift view also holds as `failure` — the same text twice on one card is noise,
-  // so the lift block omits its copy when the reason already contains it.
-  const liftOmitsFailure = lift !== null && lift.failure !== null && reason !== null && reason.includes(lift.failure);
+  // A rejected deliver unit's `denial_reason` (rendered VERBATIM below) carries the engine's refusal
+  // the lift view also holds as `failure` — FRAMED (`Worker FAILED on unit N: …`) and excerpted
+  // differently from `stepFailed.detail` (actor.rs: 300/500 vs 150/250 head+tail) — so the lift block
+  // omits its copy when every segment the detail kept is already in the reason (`textCarriesFailure`,
+  // F-255-02/04). `reason` is `null` unless the claim is failed / nothing-to-deliver — exactly when it
+  // renders — so the omission can never hide a refusal the card is not otherwise showing.
+  const liftOmitsFailure = lift !== null && lift.failure !== null && textCarriesFailure(reason, lift.failure);
 
   // The licence — for the remedy line, and (in the caller) for the whole `'none'`
   // arm this body would otherwise open with "This run has no deliver phase":

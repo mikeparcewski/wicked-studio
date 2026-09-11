@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
 import { useProvenanceStore } from '../store/provenance.js';
+import { CopyButton } from './CopyButton.js';
 import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, liftOutcomeLabel } from './deliverLiftModel.js';
 import { shortId } from './gateVerdictModel.js';
@@ -279,7 +280,9 @@ export function RunTimeline({ view, navigate, onOpenFile }: Props): React.ReactE
             <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
               {ref !== null ? (
                 <>
-                  the discarded edit is kept at <code>{ref}</code> — <code style={{ userSelect: 'all' }}>git show {ref}</code>
+                  the discarded edit is kept at <code>{ref}</code> —{' '}
+                  <code style={{ userSelect: 'all' }} title="click to select, then copy">git show {ref}</code>{' '}
+                  <CopyButton command={`git show ${ref}`} />
                 </>
               ) : (
                 'the discarded edit was not pinned (no suggestion ref)'
