@@ -11,8 +11,8 @@
   "studioVersion": "0.5.6",
   "counts": {
     "files": 146,
-    "occurrences": 1281,
-    "static": 1104,
+    "occurrences": 1291,
+    "static": 1114,
     "dynamic": 59,
     "computed": 7
   },
@@ -2646,6 +2646,12 @@
       ]
     },
     {
+      "testId": "ineligible-warning",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "install-gate",
       "files": [
         "src/components/InstallGate.tsx"
@@ -4952,6 +4958,60 @@
       "testId": "skills-provenance-chip",
       "files": [
         "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skills-recover-publish",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-recover-refresh",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-recovery",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-recovery-busy",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-recovery-error",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-recovery-finding",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-recovery-no-diagnostics",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-recovery-staged",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-recovery-state",
+      "files": [
+        "src/components/SkillsPage.tsx"
       ]
     },
     {

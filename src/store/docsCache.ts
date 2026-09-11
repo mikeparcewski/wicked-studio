@@ -34,6 +34,15 @@ interface DocsCacheStore {
   remove: (projectId: string, name: string) => void;
   /** The explicit fan-out gesture: one GET per given project id. */
   loadAll: (projectIds: string[]) => Promise<void>;
+  /**
+   * The DEFAULT census (acceptance finding F-A45-008): ask the bridge for every project the cache
+   * does not know yet — once per session, cached — so `/vibe` and the Home door count what the
+   * daemon serves, not what this browser happened to open. A project already deposited (by the
+   * board model's root-guarded read, a Document-mode visit) is KNOWN and is not asked again; a
+   * project with no interactive root answers an honest empty list. No-op while a fan-out runs or
+   * once one finished; `loadAll` stays the explicit "ask everything again" gesture.
+   */
+  ensureAll: (projectIds: string[]) => Promise<void>;
 }
 
 export const useDocsCache = create<DocsCacheStore>((set, get) => ({
@@ -64,5 +73,16 @@ export const useDocsCache = create<DocsCacheStore>((set, get) => ({
       }));
     }));
     set({ fanoutDone: true, fanoutProgress: null });
+  },
+
+  ensureAll: async (projectIds) => {
+    const s = get();
+    if (s.fanoutDone || s.fanoutProgress !== null) return;
+    const unknown = projectIds.filter((pid) => !(pid in s.byProject));
+    if (unknown.length === 0) {
+      set({ fanoutDone: true });
+      return;
+    }
+    await get().loadAll(unknown);
   },
 }));

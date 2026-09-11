@@ -85,6 +85,41 @@ npm publish dates. Every version listed here exists on
     rail names the widened `info` finding severity, the wave-2 fixture's `legacyOutbox` carries the
     new required `scope`. The wave-6 mirror stays PROVISIONAL under 0.35.0 (none of its names are
     declared there — `tests/wave6Wire.test.ts` asserts exactly that).
+  - *Skills page recovery from `GET /skills` 503* (acceptance findings F-A45-001 HIGH / F-A45-002
+    MEDIUM — the F-083 stale-rules refusal "current does not point at a valid published snapshot …
+    re-publish or remove the link"). The unavailable card used to offer only Refresh (a second 503);
+    the remedy the finding names was unreachable. It now carries the engine's word — `GET
+    /diagnostics` → `skills.state` + every `findings[]` message (`skills-recovery-finding`) — and two
+    controls with pending/result states: **Refresh baseline** (`POST /skills/refresh-baseline`) and
+    **Publish** (`POST /skills/publish`). Every mutation is CAS-guarded by the revision the 503
+    withholds, so the page learns it through `POST /skills/analyze` (the dry run reads the MANIFEST,
+    not `current`) and says so when analyze 503s too (the manifest itself is unreadable — the
+    daemon host's job). After a Refresh the baseline is STAGED and the catalog still answers 503
+    until Publish: the result renders inline ("garden 12.33.0 staged (… taken · kept · added ·
+    removed · conflicts) — publish to activate"), the engine line is re-read, the catalog is NOT
+    (F-A45-002). A Publish that writes a snapshot re-reads the catalog and flips the page to the
+    loaded state with the note; a blocked publish renders its findings on the card. A 409 says the
+    catalog moved and re-learns the revision on the next click.
+  - *One roster story on the composer and the rail* (F-A45-006 studio half). The composer's seat
+    warning derived from the `signed_in` file/env heuristic alone, so it said "codex + opencode
+    aren't signed in" while the Health rail — reading crew#533's `auth` / `council_eligible` /
+    `free_tier` — showed opencode green "no sign-in needed". Both now read the rail's
+    `seatStandingWord`: `auth: not_required` is never a sign-in problem, `auth: signed_out` warns
+    even when the heuristic is null, a daemon-declared `council_eligible: false` gets its own
+    sentence with the daemon's reason (`ineligible-warning`); a pre-0.35 roster keeps the heuristic.
+  - *`/vibe` and the Home door count what the daemon serves* (F-A45-008 MEDIUM). The corpus listed
+    only "projects opened this session" (the docs cache's deposits), so a fresh browser on a daemon
+    holding three documents read "DOCUMENTS 0" and Home said "Vibe 0 documents". Crew has no
+    daemon-wide docs route (`GET /projects/:id/interactive/api/docs` is per project), so the default
+    is a once-per-session census: `useDocsCache.ensureAll` asks every project the cache does not know
+    yet on `/vibe`, `/demo` and Home (a project the board model already deposited is not asked
+    again; no interactive root ⇒ an honest empty list), the tile says "all N projects" ("loading k
+    of N…" while it runs; `data-census`), the per-project view is a FILTER chip (`All projects` /
+    one per project with live counts, the CURRENT project — the one the address names — first, its
+    rows first), and the button reads "reload all projects" (testid kept). Home's Vibe door counts
+    the cache ∪ the board model's lists, deduped per project.
+  - Tests: `SkillsPage.recovery` (8), `ChatInput.seatStanding` (5), `MadeDashboard.corpus` (9); the
+    `/vibe` + Home loopback rig `e2e/vibe_corpus_test.py` (3/3 steps); testid inventory regenerated.
 
 ## [0.5.6] — 2026-09-11
 _The published bundle is built against `wicked-crew-api-types` **0.34.0** — the exact

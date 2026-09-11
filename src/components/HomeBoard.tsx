@@ -13,6 +13,7 @@ import { leadMovingRun } from '../board/phaseProgress.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { modePath, projectPath, runTimelinePath, type Navigate } from '../hooks/useRoute.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
+import { useDocsCache } from '../store/docsCache.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { BatchGateBar } from './BatchGateBar.js';
@@ -299,7 +300,23 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     onClick: (e) => { e.preventDefault(); navigate(path); },
   });
 
-  const docsCount = useMemo(() => items.reduce((a, i) => a + i.docs.length, 0), [items]);
+  // F-A45-008: the Vibe door counts what the daemon SERVES — every project's docs, asked once per
+  // session through the docs cache (`ensureAll` asks only projects the board model's root-guarded
+  // read did not already deposit) — not the projects this browser happened to open. The union of
+  // the cache and the board model's own lists, deduped per project.
+  const byProject = useDocsCache((s) => s.byProject);
+  const projectIds = useMemo(() => items.map((i) => i.project.id).filter((id) => id !== 'default'), [items]);
+  useEffect(() => {
+    if (projectIds.length === 0) return;
+    void useDocsCache.getState().ensureAll(projectIds);
+  }, [projectIds]);
+  const docsCount = useMemo(() => {
+    const seen = new Set<string>();
+    let n = 0;
+    for (const [pid, docs] of Object.entries(byProject)) { seen.add(pid); n += docs.length; }
+    for (const i of items) if (!seen.has(i.project.id)) n += i.docs.length;
+    return n;
+  }, [items, byProject]);
 
   // The section-doors strip (redesign): the Execute/Test/Vibe/Demo/Evals/Steering breakout made
   // legible on the landing, each with a live count (absent counts show no number, never a zero).

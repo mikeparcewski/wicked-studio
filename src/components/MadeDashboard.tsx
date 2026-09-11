@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../api/types.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
 import { gateOpenPath } from '../board/gateActions.js';
+import { ambientProjectId } from '../hooks/ambientProject.js';
 import { outcomeOf } from '../board/metrics.js';
 import {
   attachSeries, deltaWord, orderByAttention, statusCounts, windowBuckets, windowDelta,
@@ -438,7 +439,31 @@ function CorpusDashboard({ mode, navigate }: {
     () => Object.fromEntries(projects.map((p) => [p.id, p.name])),
     [projects],
   );
-  // The known corpus: doc rows off the session cache, split by kind, newest first.
+  // F-A45-008: the corpus DEFAULTS to what the bridge serves — every project's docs, asked once
+  // per session (`ensureAll`: only projects the cache does not know yet). A fresh browser on a
+  // daemon holding documents no longer reads "DOCUMENTS 0 — projects opened this session".
+  const projectIds = useMemo(() => projects.filter((p) => p.id !== 'default').map((p) => p.id), [projects]);
+  useEffect(() => {
+    if (projectIds.length === 0) return;
+    void useDocsCache.getState().ensureAll(projectIds);
+  }, [projectIds]);
+
+  // The current project — the one the address names (`/p/:id/…`) — lists first; `/vibe` itself
+  // names none, so the order falls back to the projects store's (most recently active first).
+  const currentProjectId = useMemo(
+    () => (typeof window === 'undefined' ? null : ambientProjectId(window.location.pathname, window.location.search)),
+    [],
+  );
+  // Only the CURRENT project is ranked ahead; every other project ties, so with no project named
+  // the corpus stays newest-first across projects and the chips order by size.
+  const projectRank = useMemo(() => {
+    const rank = new Map<string, number>();
+    if (currentProjectId !== null) rank.set(currentProjectId, -1);
+    return rank;
+  }, [currentProjectId]);
+  const [projectChip, setProjectChip] = useState<string>('all');
+
+  // The corpus: doc rows off the cache, split by kind — the current project's first, then newest.
   const docRows = useMemo(
     () => Object.entries(byProject)
       .flatMap(([pid, docs]) => docs.map((doc) => ({
@@ -446,12 +471,32 @@ function CorpusDashboard({ mode, navigate }: {
         projectName: projectNameById[pid] ?? (pid === UNFILED_MOUNT ? 'Unfiled' : pid),
       })))
       .filter(({ doc }) => (isDemo ? doc.kind === 'demo' : doc.kind !== 'demo'))
-      .sort((a, b) => (b.doc.updated_at ?? '').localeCompare(a.doc.updated_at ?? '')),
-    [byProject, projectNameById, isDemo],
+      .sort((a, b) =>
+        (projectRank.get(a.projectId) ?? Number.MAX_SAFE_INTEGER) - (projectRank.get(b.projectId) ?? Number.MAX_SAFE_INTEGER)
+        || (b.doc.updated_at ?? '').localeCompare(a.doc.updated_at ?? '')),
+    [byProject, projectNameById, isDemo, projectRank],
   );
+  /** Per-project chips (F-A45-008: the per-project view is a FILTER now, not the default), the
+   *  current project first, counts live; only projects with at least one row of this kind. */
+  const projectChips: FilterChip[] = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of docRows) counts.set(r.projectId, (counts.get(r.projectId) ?? 0) + 1);
+    return [
+      { id: 'all', label: 'All projects', count: docRows.length },
+      ...[...counts.entries()]
+        .map(([pid, n]) => ({ id: pid, label: projectNameById[pid] ?? (pid === UNFILED_MOUNT ? 'Unfiled' : pid), count: n }))
+        .sort((a, b) =>
+          (projectRank.get(a.id) ?? 0) - (projectRank.get(b.id) ?? 0)
+          || b.count - a.count
+          || a.label.localeCompare(b.label)),
+    ];
+  }, [docRows, projectRank, projectNameById]);
+  /** How many projects the census covers — the projects store's count, or the cache's when the
+   *  store is still cold (a deposit from elsewhere can precede the projects read). */
+  const censusProjects = Math.max(projectIds.length, Object.keys(byProject).filter((pid) => pid !== UNFILED_MOUNT).length);
 
   const fanout = (): void => {
-    void useDocsCache.getState().loadAll(projects.filter((p) => p.id !== 'default').map((p) => p.id));
+    void useDocsCache.getState().loadAll(projectIds);
   };
 
   const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
@@ -460,8 +505,13 @@ function CorpusDashboard({ mode, navigate }: {
   });
 
   const q = query.trim().toLowerCase();
-  const visibleDocs = docRows.filter(({ doc, projectName }) =>
-    q === '' || doc.name.toLowerCase().includes(q) || projectName.toLowerCase().includes(q));
+  const visibleDocs = docRows
+    .filter(({ projectId }) => projectChip === 'all' || projectId === projectChip)
+    .filter(({ doc, projectName }) =>
+      q === '' || doc.name.toLowerCase().includes(q) || projectName.toLowerCase().includes(q));
+  const censusWord = fanoutProgress !== null
+    ? `loading ${fanoutProgress.done} of ${fanoutProgress.total} projects…`
+    : `all ${censusProjects} project${censusProjects === 1 ? '' : 's'}`;
 
   return (
     <div className="flex flex-col" style={{ color: 'var(--ink-high)', padding: '0 var(--space-8) var(--space-8)', gap: 'var(--space-4)' }}>
@@ -506,30 +556,33 @@ function CorpusDashboard({ mode, navigate }: {
             testId={`stat-${mode}-items`}
             label={isDemo ? 'Demos' : 'Documents'}
             value={docRows.length}
-            context="projects opened this session"
-            title="Everything listed below — from the projects loaded this session"
-            onOpen={() => setQuery('')}
+            context={censusWord}
+            title={`Everything the daemon serves — every project's bridge is asked once per session (${censusWord})`}
+            onOpen={() => { setQuery(''); setProjectChip('all'); }}
           />
         </KpiGroup>
       </KpiBand>
 
+      {/* F-A45-008: the per-project view is a FILTER chip, the current project first — the default
+          is the whole corpus. */}
       <FilterStrip
         testId={`${mode}-filter`}
         query={query}
         onQuery={setQuery}
         placeholder={isDemo ? 'Search demos…' : 'Search documents…'}
-        chips={[]}
-        active=""
-        onChip={() => {}}
+        chips={projectChips}
+        active={projectChip}
+        onChip={setProjectChip}
       />
 
       {/* The corpus label (EC24 grammar) heads the list — the honest census. */}
       <div ref={whyRef} className="relative flex items-center gap-3 flex-wrap">
         <p
           data-testid={`${mode}-corpus-label`}
+          data-census={fanoutProgress !== null ? 'loading' : 'all-projects'}
           style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
         >
-          Listing: {isDemo ? 'demos' : 'documents'} (projects opened this session)
+          Listing: {isDemo ? 'demos' : 'documents'} ({censusWord})
           {' — '}
           <button
             ref={whyTriggerRef}
@@ -553,8 +606,10 @@ function CorpusDashboard({ mode, navigate }: {
               fontSize: 'var(--text-2xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-sans)',
             }}
           >
-            {isDemo ? 'Demos' : 'Documents'} load per project. Open a project — or use &lsquo;load
-            for all projects&rsquo; — to list them here.
+            {isDemo ? 'Demos' : 'Documents'} live behind each project&rsquo;s bridge (`GET /projects/:id/interactive/api/docs`) —
+            there is no daemon-wide list. Every project is asked ONCE per session when this page opens (a project
+            already listed elsewhere this session is not asked again); a project without an interactive root
+            answers an empty list. Pick a project chip to narrow the corpus; &lsquo;reload all projects&rsquo; asks again.
           </p>
         )}
         {fanoutProgress !== null ? (
@@ -564,22 +619,20 @@ function CorpusDashboard({ mode, navigate }: {
           >
             loading… {fanoutProgress.done}/{fanoutProgress.total}
           </p>
-        ) : fanoutDone ? (
-          <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
-            loaded for all projects
-          </p>
         ) : (
           <button
             type="button"
             data-testid={`${mode}-load-all`}
+            data-census={fanoutDone ? 'done' : 'pending'}
             onClick={fanout}
+            title="Ask every project's bridge again (the census is cached for the session)"
             className="rounded px-2 py-0.5 transition-opacity hover:opacity-80"
             style={{
               background: 'transparent', border: '1px solid var(--surface-raised)',
               fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)', cursor: 'pointer',
             }}
           >
-            load for all projects
+            {fanoutDone ? 'reload all projects' : 'load for all projects'}
           </button>
         )}
       </div>

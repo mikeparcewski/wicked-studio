@@ -22,6 +22,7 @@ import {
   type SkillAnalyzeResult,
   type SkillGuardResult,
   type SkillMutationResult,
+  type SkillRefreshResult,
   type SkillRow,
   type SkillsCatalog,
 } from '../api/skills.js';
@@ -309,6 +310,90 @@ export function SkillsPage({ navigate, search = '' }: {
     }
   };
 
+  // ── Recovery from the 503 state (acceptance findings F-A45-001 / F-A45-002) ─────────────────
+  //
+  // `GET /skills` answers 503 when `current` fails verification (F-083: a snapshot published under
+  // older portability rules — "re-publish or remove the link"), when the root is unseeded, or when
+  // the manifest is corrupt. The page used to offer only Refresh (a second 503). The remedy the
+  // finding itself names — re-publish — is a mutation, and every mutation is CAS-guarded by the
+  // catalog's `revision`, which the 503 withholds. `POST /skills/analyze` is the dry run that reads
+  // the MANIFEST (not `current`) and answers `{verdict, findings, revision}` — so it is how the
+  // revision is learned here; when analyze 503s too, the manifest itself is unreadable and the UI
+  // says so instead of pretending a button could fix it.
+  //
+  // F-A45-002: after a successful Refresh baseline the catalog is STAGED, not published — GET
+  // /skills keeps answering 503 until Publish. The result is rendered INLINE ("garden 12.33.0
+  // staged — publish to activate"); the page does not reload into the same 503.
+  const [recovery, setRecovery] = useState<{
+    busy: 'refresh' | 'publish' | null;
+    /** The refresh that staged a baseline this session, when one did (F-A45-002). */
+    staged: SkillRefreshResult | null;
+    /** The last recovery envelope worth reading (blocked publish findings, refresh warnings). */
+    result: { verb: string; result: SkillGuardResult } | null;
+    error: string | null;
+  }>({ busy: null, staged: null, result: null, error: null });
+
+  /** The catalog's revision, learned through the dry run when the 503 withholds it. */
+  const learnRevision = useCallback(async (): Promise<number> => {
+    if (revisionRef.current !== null) return revisionRef.current;
+    try {
+      const a = await analyzeSkills();
+      revisionRef.current = a.revision;
+      return a.revision;
+    } catch (e) {
+      if (isSkillsUnavailable(e)) {
+        throw new Error(
+          `the catalog's revision could not be learned — POST /skills/analyze answered 503 too (${apiWire(e) ?? 'no detail'}), so the manifest itself is unreadable; recovery needs the daemon host (reseed the skills root), not this page`,
+        );
+      }
+      throw e;
+    }
+  }, []);
+
+  const recover = async (verb: 'refresh' | 'publish'): Promise<void> => {
+    setRecovery((r) => ({ ...r, busy: verb, error: null, result: null }));
+    try {
+      const rev = await learnRevision();
+      if (verb === 'refresh') {
+        const r = await refreshSkillsBaseline(rev);
+        revisionRef.current = r.revision;
+        setRecovery((cur) => ({
+          ...cur,
+          staged: r.verdict === 'blocked' ? cur.staged : r,
+          result: { verb: 'Refresh baseline', result: r },
+        }));
+        // The finding may have changed (a re-seeded baseline) — re-read the engine line, NOT the
+        // catalog: GET /skills is still the same 503 until a publish lands (F-A45-002).
+        void loadEngine();
+        return;
+      }
+      const r = await publishSkills(rev);
+      revisionRef.current = r.revision;
+      setRecovery((cur) => ({ ...cur, result: { verb: 'Publish', result: r } }));
+      if (r.snapshot !== null) {
+        // A written snapshot is what `current` now points at — the catalog should answer 200.
+        const next = await load();
+        if (next !== null) {
+          setNote(`Published — snapshot generation ${r.snapshot.gen} is current (${r.snapshot.skills} skills, ${r.snapshot.contentHash.slice(0, 12)}); workers spawn with it from now on.`);
+          setPageResult(r.findings.length > 0 ? { verb: 'Publish', result: r } : null);
+          setRecovery({ busy: null, staged: null, result: null, error: null });
+        } else {
+          void loadEngine();
+        }
+      }
+    } catch (e) {
+      if (isSkillsConflict(e)) {
+        // The catalog moved under this page — the 409 says so; the revision is re-learned next click.
+        revisionRef.current = null;
+        setRecovery((cur) => ({ ...cur, error: `the catalog changed under this page (${apiWire(e) ?? 'a stale revision'}) — the revision was re-read; try again` }));
+        return;
+      }
+      setRecovery((cur) => ({ ...cur, error: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setRecovery((cur) => ({ ...cur, busy: null }));
+    }
+  };
+
   /** After an applied Add: the modal closes, the note stands, and the catalog is re-read — the new
    *  skill's drawer (`?skill=<name>`) opens only once that re-read SUCCEEDS. A failed re-read has
    *  already raised the stale banner (the rows stay, writes wait); navigating anyway would render
@@ -466,6 +551,83 @@ export function SkillsPage({ navigate, search = '' }: {
               empty catalog. The daemon says:
             </p>
             <p className="font-mono text-[11px]" style={{ color: 'var(--ink-high)' }}>{state.message}</p>
+
+            {/* F-A45-001: what the engine is being handed and WHY (diagnostics.skills), then the
+                remedy the finding names — Refresh baseline / Publish — with pending + result states. */}
+            <div data-testid="skills-recovery" className="mt-1 flex flex-col gap-2 rounded p-3" style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)' }}>
+              {engine === null ? (
+                <p data-testid="skills-recovery-no-diagnostics" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>
+                  The engine's word is not available (GET /diagnostics answered nothing, or predates the skills seam) — the
+                  controls below still act on the store.
+                </p>
+              ) : (
+                <>
+                  <p className="text-[11px]" data-testid="skills-recovery-state" data-state={engine.state} style={{ color: ENGINE_STATE_COLOR[engine.state] }}>
+                    engine: <span className="font-semibold">{engine.state}</span> — {SKILLS_ENGINE_STATE_COPY[engine.state]}
+                    {engine.engineInput !== null && engine.engineInput !== '' && (
+                      <span className="font-mono" style={{ color: 'var(--ink-dim)' }}> · input {engine.engineInput}</span>
+                    )}
+                  </p>
+                  {engine.findings.length === 0 ? (
+                    <p className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>no finding recorded</p>
+                  ) : (
+                    engine.findings.map((f, i) => (
+                      <p key={`${f.kind}-${i}`} data-testid="skills-recovery-finding" data-kind={f.kind} data-severity={f.severity} className="text-[11px] font-mono" style={{ color: f.severity === 'error' ? 'var(--status-fail)' : 'var(--status-gate)', overflowWrap: 'anywhere' }}>
+                        {f.kind} · {f.severity} · {f.message}
+                      </p>
+                    ))
+                  )}
+                </>
+              )}
+
+              {/* F-A45-002: a refresh STAGES a baseline; the catalog answers 200 only after a publish. */}
+              {recovery.staged !== null && (
+                <p data-testid="skills-recovery-staged" className="text-[11px]" style={{ color: 'var(--status-done)' }}>
+                  garden {recovery.staged.plugin_version} staged ({recovery.staged.baseline.slice(0, 12)}: {recovery.staged.taken.length} taken · {recovery.staged.kept.length} kept · {recovery.staged.added.length} added · {recovery.staged.removed.length} removed · {recovery.staged.conflicts.length} {recovery.staged.conflicts.length === 1 ? 'conflict' : 'conflicts'}) —{' '}
+                  <span className="font-semibold">publish to activate</span>. The catalog stays unavailable until then; nothing was re-read.
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="skills-recover-refresh"
+                  disabled={recovery.busy !== null}
+                  onClick={() => void recover('refresh')}
+                  title="Capture the installed wicked-garden plugin as a new baseline (three-way per file, your edits kept) — then publish to activate it"
+                  className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
+                  style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
+                >
+                  {recovery.busy === 'refresh' ? 'Refreshing…' : 'Refresh baseline'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="skills-recover-publish"
+                  disabled={recovery.busy !== null}
+                  onClick={() => void recover('publish')}
+                  title="Validate the whole tree and write a fresh snapshot generation — the remedy for a `current` that fails verification (re-publish)"
+                  className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
+                  style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+                >
+                  {recovery.busy === 'publish' ? 'Publishing…' : 'Publish'}
+                </button>
+                {recovery.busy !== null && (
+                  <span data-testid="skills-recovery-busy" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+                    {revisionRef.current === null ? 'learning the catalog revision (POST /skills/analyze), then ' : ''}
+                    {recovery.busy === 'refresh' ? 'POST /skills/refresh-baseline…' : 'POST /skills/publish…'}
+                  </span>
+                )}
+              </div>
+
+              {recovery.error !== null && (
+                <p data-testid="skills-recovery-error" className="rounded px-2 py-1 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)', overflowWrap: 'anywhere' }}>
+                  {recovery.error}
+                </p>
+              )}
+              {recovery.result !== null && (
+                <SkillFindings verb={recovery.result.verb} result={recovery.result.result} testId="skills-recovery-findings" />
+              )}
+            </div>
           </div>
         ) : state.kind === 'failed' ? (
           <p data-testid="skills-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
