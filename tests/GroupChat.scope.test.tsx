@@ -104,6 +104,8 @@ describe('the gap rule (chatScopeGap)', () => {
     expect(describeChatOpenRefusal(400, CHAT_OPEN_REFUSALS.ambiguous.body.error, 'x')).toMatch(/^Scope refused — repoRef 'api' is ambiguous/);
     expect(describeChatOpenRefusal(409, CHAT_OPEN_REFUSALS.overlap.body.error, 'x')).toMatch(/^The daemon refused to open this chat — repo 'scratchpad'/);
     expect(describeChatOpenRefusal(501, CHAT_OPEN_REFUSALS.engine.body.error, 'x')).toMatch(/^This daemon cannot open a SCOPED chat — the installed wicked-core-ts predates chat scope/);
+    // A 404 that is not a repo 404 (the route also answers `Project <id> not found`) reads plain.
+    expect(describeChatOpenRefusal(404, 'Project proj_9 not found', 'x')).toBe('Project proj_9 not found');
     expect(describeChatOpenRefusal(400, 'Invalid request body', 'the daemon refused this — Invalid request body')).toBe('the daemon refused this — Invalid request body');
     expect(describeChatOpenRefusal(null, null, 'boom')).toBe('boom');
   });
@@ -295,6 +297,61 @@ describe('the create-flow scope control', () => {
     await typeAndSend('repo ask');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     expect(lastBody().repoRef).toBe('studio-api');
+  });
+});
+
+describe('seat admissibility on a scoped open (review W3S-253-01)', () => {
+  const REFUSED = "seat 'codex' is not admissible for a scoped chat: no acp_input_governance and no os_sandbox";
+  const answerWithRefusal = (body: ChatOpenBody) =>
+    Promise.resolve({
+      chatId: body.chatId!,
+      seats: [{ cliKey: 'claude', ok: true }, { cliKey: 'codex', ok: false, error: REFUSED }],
+      scope: SCOPE_PROJECT,
+    });
+
+  it('untouched chips + a scope ⇒ the open OMITS clis (the daemon pre-filters), the 201 re-seeds the chips, and a refused seat says why', async () => {
+    openChat.mockImplementation(answerWithRefusal);
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    expect(screen.queryByTestId('chat-scope-admission'), 'no scope yet — no admission sentence').toBeNull();
+    await user.click(screen.getByTestId('project-field'));
+    await waitFor(() => expect(screen.getAllByTestId('project-switcher-option').length).toBeGreaterThan(0));
+    await user.click(screen.getAllByTestId('project-switcher-option')[0]!);
+    expect(screen.getByTestId('chat-scope-admission').textContent).toContain('a scoped chat admits only governed seats — refused seats say why');
+    await typeAndSend('scoped, default chips');
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect('clis' in lastBody(), 'the daemon picks the admissible default seats').toBe(false);
+    expect(lastBody().projectId).toBe('api-migration');
+    // The header chips are the daemon's answer: claude ready, codex failed WITH the engine's sentence.
+    const chips = await screen.findAllByTestId('seat-chip');
+    const byAgent = Object.fromEntries(chips.map((c) => [c.getAttribute('data-agent'), c]));
+    // (claude is `working` the moment the first send fans out to it — either warm state is the point.)
+    expect(['ready', 'working']).toContain(byAgent['claude']!.getAttribute('data-state'));
+    expect(byAgent['codex']).toHaveAttribute('data-state', 'failed');
+    expect(byAgent['codex']!.textContent).toContain(REFUSED);
+  });
+
+  it('an EDITED selection is the operator\'s word — clis rides the scoped open as asked', async () => {
+    openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_PROJECT, body.clis ?? ['claude'])));
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} projectId="api-migration" />);
+    // The roster here is one seat; removing it empties the selection, so re-add via the picker is
+    // out of scope — instead pin the edit through the Remove control on a two-seat roster.
+    setCachedRoster([{ key: 'claude', enabled_for_council: true }, { key: 'pi', enabled_for_council: true }] as unknown as RosterSeat[]);
+    cleanup();
+    render(<GroupChat repoId={null} onBack={() => undefined} projectId="api-migration" />);
+    await user.click(screen.getByRole('button', { name: 'Remove pi' }));
+    await typeAndSend('edited chips');
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect(lastBody().clis).toEqual(['claude']);
+  });
+
+  it('an UNSCOPED open keeps the displayed chips as the audience (EC44) — clis is sent', async () => {
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await typeAndSend('unscoped');
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect(lastBody().clis).toEqual(['claude']);
   });
 });
 

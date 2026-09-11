@@ -181,11 +181,14 @@ describe('older daemons — null-safe by construction', () => {
     expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'healthy');
   });
 
-  it('a diagnostics read that FAILS (5xx) renders the unreachable row and degrades — never a guessed store', async () => {
-    diagnosticsAnswer = () => Promise.reject(new ApiError(500, 'boom'));
+  it('a diagnostics read that FAILS (5xx) renders the unreachable row WITH its reason and degrades — never a guessed store', async () => {
+    diagnosticsAnswer = () => Promise.reject(new ApiError(500, 'governance fold crashed: ENOSPC'));
     render(<Harness />);
     await waitFor(() => expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'degraded'));
-    expect(screen.queryByTestId('rail-governance')).toBeNull();
-    expect(screen.getByText('governance').parentElement?.textContent).toContain('unreachable');
+    const gov = screen.getByTestId('rail-governance');
+    expect(gov).toHaveAttribute('data-state', 'error');
+    expect(gov.textContent).toContain('unreachable');
+    // The daemon's own sentence rides the row (the translated ApiError message) — not dropped.
+    expect(within(gov).getByTestId('rail-governance-error').textContent).toContain('governance fold crashed: ENOSPC');
   });
 });

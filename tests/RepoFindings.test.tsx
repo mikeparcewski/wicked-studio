@@ -72,6 +72,33 @@ describe('the finding rule (module functions)', () => {
     expect(findingLabel(unknown)).toBe('some new code');
   });
 
+  it('CONTRACT: the re-onboard rule keys on the sentence wicked-core pins in its own tests', () => {
+    // The wire has no machine-readable sub-state (both forms share `code: in_tree_code_graph_ignored`),
+    // so this UI keys on the remedy words core's `repo.rs` emits in `code_graph_db_and_findings` and
+    // pins in `the_record_publishes_the_root_path_and_reports_an_in_tree_graph` (asserts the no-live
+    // form `contains("re-run onboarding")` and NOT `"the live graph is"`) and
+    // `registration_ignores_an_in_tree_graph_and_reports_it`. If core rewords the remedy, this test
+    // fails here first — the row would otherwise silently downgrade from error + button to a warning.
+    const noLive = (repoId: string, db: string): string =>
+      `/w2/repos/${repoId}/.codegraph exists in the checkout — a code graph an older wicked-core indexed IN the ` +
+      'working tree. It is ignored (no graph has been indexed under the state home yet — re-run onboarding ' +
+      `(POST /repos/${repoId}/onboard) to build ${db}; never inside the repository). Delete \`.codegraph/\` from ` +
+      'the checkout — and `git rm --cached` it if the repository tracks it — to clear this finding (core#406).';
+    const live = (repoId: string, db: string): string =>
+      `/w2/repos/${repoId}/.codegraph exists in the checkout — a code graph an older wicked-core indexed IN the ` +
+      `working tree. It is ignored (the live graph is ${db}; never inside the repository). Delete \`.codegraph/\` ` +
+      'from the checkout — and `git rm --cached` it if the repository tracks it — to clear this finding (core#406).';
+    const unresolvedRoot =
+      'no live graph path resolves yet — see the `code_graph_root_unresolvable` finding; once one does it will be under the daemon state home';
+    const code = 'in_tree_code_graph_ignored';
+    expect(findingNeedsReonboard({ code, message: noLive('acme', '/w2/state/repo-graphs/acme-1/estate.db'), path: '/w2/repos/acme/.codegraph' })).toBe(true);
+    expect(findingNeedsReonboard({ code, message: live('acme', '/w2/state/repo-graphs/acme-1/estate.db'), path: '/w2/repos/acme/.codegraph' })).toBe(false);
+    // The third `live` sentence (no root resolves) names the OTHER finding, not the re-run remedy.
+    expect(findingNeedsReonboard({ code, message: `x exists in the checkout … It is ignored (${unresolvedRoot}; never inside the repository).`, path: null })).toBe(false);
+    // The rule is scoped to the in-tree code: the remedy words on any other code never grow a button.
+    expect(findingNeedsReonboard({ code: 'code_graph_root_unresolvable', message: 're-run onboarding', path: null })).toBe(false);
+  });
+
   it('renders NOTHING for an absent or empty findings array', () => {
     const { container } = render(
       <>

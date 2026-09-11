@@ -11,8 +11,8 @@
   "studioVersion": "0.5.4",
   "counts": {
     "files": 140,
-    "occurrences": 1190,
-    "static": 1022,
+    "occurrences": 1192,
+    "static": 1023,
     "dynamic": 59,
     "computed": 7
   },
@@ -837,6 +837,12 @@
     },
     {
       "testId": "chat-scope",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-scope-admission",
       "files": [
         "src/components/GroupChat.tsx"
       ]

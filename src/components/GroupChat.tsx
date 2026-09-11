@@ -246,7 +246,11 @@ export function chatScopeGap(input: {
  */
 export function describeChatOpenRefusal(status: number | null, wire: string | null, fallback: string): string {
   if (status === 404 && wire !== null) {
-    return `Scope refused — ${wire}. Name repositories that are registered (by id, or a name only one repo carries) and send again.`;
+    // Only a REPO 404 (`Repo 'x', 'y' not found` — chat-scope.ts) gets the repo remedy; the route
+    // also answers 404 `Project <id> not found` (routes.ts), which reads plain.
+    return /^Repo /.test(wire)
+      ? `Scope refused — ${wire}. Name repositories that are registered (by id, or a name only one repo carries) and send again.`
+      : wire;
   }
   if (status === 400 && wire !== null && /ambiguous/i.test(wire)) {
     return `Scope refused — ${wire}`;
@@ -900,11 +904,27 @@ export function GroupChat({
         if (scopeModeRef.current === 'repos' && scopeRepoIdsRef.current.length > 0) {
           body.repoRefs = [...scopeRepoIdsRef.current];
         }
-        // An empty selection omits `clis` — the daemon warms its own default
+        // Admissibility (crew#502 / review W3S-253-01): a SCOPED chat admits only governed seats
+        // — crew pre-filters its DEFAULT roster to seats with `acp_input_governance` / `os_sandbox`
+        // ONLY when `clis` is omitted; an explicit list is passed through and the engine refuses
+        // the inadmissible seats one by one (red chips with a sentence, no rule stated). So while
+        // the chips are UNTOUCHED (the default selection) and the scope is not `none`, the open
+        // omits `clis` and lets the daemon pick; the 201's `seats` then re-seed the chips so the
+        // audience shown is the audience the daemon admitted. An EDITED selection is the
+        // operator's word and rides as asked (refused seats say why); an unscoped open keeps the
+        // pre-existing rule (the displayed chips ARE the audience — EC44).
+        const scoped =
+          Boolean(repoId) || Boolean(boundProject) ||
+          (scopeModeRef.current === 'repos' && scopeRepoIdsRef.current.length > 0);
+        const daemonPicksSeats = scoped && !chipsTouchedRef.current;
+        // Otherwise an empty selection omits `clis` — the daemon warms its own default
         // roster (the pre-existing wire semantics for an absent array).
-        if (agents.length > 0) body.clis = agents;
+        if (!daemonPicksSeats && agents.length > 0) body.clis = agents;
         const answer = await api.openChat(body);
         const opened = answer.seats;
+        if (daemonPicksSeats && chatIdRef.current === id) {
+          setSelectedAgents(opened.map((s) => s.cliKey));
+        }
         // The daemon STATES the scope it resolved (crew#502); an older daemon's
         // 201 carries none — said as "not stated", never invented.
         const stated = (answer as { scope?: ChatScope }).scope;
@@ -1715,6 +1735,11 @@ export function GroupChat({
                 </>
               )}
             </div>
+            {(repoId || (scopeMode === 'repos' ? scopeRepoIds.length > 0 : boundProjectId !== null)) && (
+              <p data-testid="chat-scope-admission" className="text-[11px]" style={{ color: 'var(--ink-dim)', margin: 0 }}>
+                a scoped chat admits only governed seats — refused seats say why
+              </p>
+            )}
             {scopeGap !== null && (
               <p data-testid="chat-scope-gap" className="text-[11px] font-mono" style={{ color: 'var(--status-fail)', margin: 0 }}>
                 {scopeGap}

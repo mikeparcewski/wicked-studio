@@ -131,7 +131,14 @@ function stamp(ms: number): string {
 /** The governance registry group — one CheckRow per question, the findings as banners. */
 function GovernanceRows({ read }: { read: GovernanceRead }): React.ReactElement {
   if (read.kind === 'loading') return <CheckRow label="governance" ok={null} detail="checking…" />;
-  if (read.kind === 'error') return <CheckRow label="governance" ok={false} detail="unreachable" />;
+  if (read.kind === 'error') {
+    return (
+      <div data-testid="rail-governance" data-state="error">
+        <CheckRow label="governance" ok={false} detail="unreachable" />
+        <DetailLine testId="rail-governance-error" label="why" value={read.message} color="var(--status-fail)" />
+      </div>
+    );
+  }
   if (read.kind === 'absent') {
     return (
       <div data-testid="rail-governance" data-state="absent" data-why={read.why}>

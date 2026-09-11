@@ -3188,6 +3188,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                              "dangling": []}
                 if scope_501 and scope["kind"] != "none":
                     return self._json(501, {"error": CHAT_SCOPE_501})
+                # crew's admissibility pre-filter (routes.ts @ #518): with `clis` OMITTED on a
+                # SCOPED open the DEFAULT roster is filtered to governed seats; an explicit list
+                # is passed through as asked. The fixture's stand-in for "governed" is the
+                # chat-capable set (the same seats chat_ensure admits).
+                if scope["kind"] != "none" and not body.get("clis"):
+                    clis = list(CHAT_CAPABLE_KEYS)
             # Slice AB (§7.9-4): seats named by `chat_reject_seats` answer the
             # daemon's real per-seat shape — ok:false with an error the chip
             # must wear as failed-with-reason. Only accepted seats warm.

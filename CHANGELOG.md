@@ -29,14 +29,18 @@ npm publish dates. Every version listed here exists on
     (count as a floor when truncated, by type / by reason, the timestamp range, the outbox, the
     pre-fix HOME outbox) and every finding as a severity-styled row whose message carries the
     `wicked-crew governance replay …` recipe. A `store: null` boot and any error finding turn the
-    heart red (and show the collapsed-header dot); a warning degrades it to amber. A daemon without
-    the block, or without the route, reads "not reported by this daemon".
+    heart red (and show the collapsed-header dot) and degrade the home board's **Governed** tile
+    (fail-coloured, the reason underneath — never a clean percentage over evidence that is not
+    landing); a warning degrades the heart to amber. A daemon without the block, or without the
+    route, reads "not reported by this daemon".
   - *Scoped New Chat* (#248, crew#502 / F-067): the create window carries a **Scope** control —
     *All project repos* (the default once a project is bound: `projectId` alone rides the open and
     the daemon scopes to every `crew.repo` member), *Choose repos…* (a multi-select from
     `GET /repos`, loaded on that gesture; sends `repoRefs` by id) and *Unscoped* (an explicit click).
     An Unfiled chat with no choice does not open on send — the gap is stated on the row, nothing is
-    posted, the draft stays. The opened chat states `ChatOpenResponse.scope` under the header: the
+    posted, the draft stays. A scoped open with the default (untouched) seat chips omits `clis`, so
+    the daemon admits only governed seats and the 201 re-seeds the chips; an edited selection rides
+    as asked and refused seats say why. The opened chat states `ChatOpenResponse.scope` under the header: the
     repositories (names; paths on hover), read-only, whether a code graph grounds the seats and the
     daemon's reason when not, and any project member the registry no longer knows; a rejoin states
     `ChatDetailResponse.scope`, and a daemon that said nothing is reported as "not stated". The
