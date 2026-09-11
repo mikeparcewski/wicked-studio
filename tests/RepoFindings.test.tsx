@@ -20,7 +20,7 @@ const REPOS: RepoEntry[] = [REPO_CLEAN, REPO_PREDATES_FINDINGS, REPO_INTREE_LIVE
 
 const listRepos = vi.fn(() => Promise.resolve({ repos: REPOS }));
 const listRuns = vi.fn(() => Promise.resolve({ runs: [makeView({ id: 'r-1', repo_ref: 'billing', workflow_id: 'onboarding', status: 'completed' })] }));
-const rerunOnboarding = vi.fn(() => Promise.resolve({ runId: 'run-reonboard' }));
+const rerunOnboarding = vi.fn<(repoId: string) => Promise<{ runId: string }>>(() => Promise.resolve({ runId: 'run-reonboard' }));
 const getRepoGraph = vi.fn(() => Promise.resolve({ graph: null }));
 const getRepoGitHistory = vi.fn(() => Promise.resolve({ commits: [] }));
 const getRepoContributors = vi.fn(() => Promise.resolve({ contributors: [] }));
