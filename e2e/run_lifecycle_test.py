@@ -74,18 +74,24 @@ with sync_playwright() as p:
     # Submit must stay disabled until BOTH a non-whitespace instruction AND a
     # repo scope chip are present — this exercises the browser's canSubmit gate.
     page.goto(f"{ORIGIN}/testing/campaigns", wait_until="domcontentloaded")
-    page.locator(TID("testing-launch-panel")).wait_for(timeout=15000)
+    # Wait for the submit button itself — not just the panel — so is_disabled() reads
+    # a live DOM node, never a non-existent one.
     submit = page.locator(TID("testing-launch-submit"))
+    submit.wait_for(timeout=15000)
 
     check("lc1_submit_disabled_empty", submit.is_disabled())
 
     page.locator(TID("testing-launch-instructions")).fill("smoke the auth endpoint")
+    # fill() resolves after the browser dispatches the input event and React
+    # synchronously re-renders, so the disabled attribute is up-to-date.
     check("lc1_submit_disabled_no_scope", submit.is_disabled())
 
     # Search for the fixture's repo ("studio-api") and pick it.
     page.locator(TID("testing-launch-repo-search")).fill("studio")
     page.locator(TID("testing-launch-repo-option")).first.wait_for(timeout=8000)
     page.locator(TID("testing-launch-repo-option")).first.click()
+    # click() resolves after the browser fires the click event and React re-renders,
+    # adding the chip; canSubmit flips synchronously so is_enabled() is stable here.
     check("lc1_submit_enabled_with_scope", submit.is_enabled())
     page.screenshot(path=str(VSHOTS / "lc1-launch-form.png"))
 
