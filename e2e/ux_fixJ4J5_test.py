@@ -269,6 +269,9 @@ with sync_playwright() as p:
     page2.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page2.add_style_tag(content=HIDE_GATE_TOASTS)
 
+    _scope_none = page2.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page2.locator("textarea").fill(MSG1)
     page2.keyboard.press("Enter")
     # 1 — the URL names the session the moment it exists.
@@ -318,6 +321,9 @@ with sync_playwright() as p:
           and rejoined["ready"] > 0 and not rejoined["firstrun"],
           **rejoined)
 
+    _scope_none = page2.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page2.locator("textarea").fill(MSG2)
     page2.keyboard.press("Enter")
     page2.wait_for_function(
@@ -350,6 +356,9 @@ with sync_playwright() as p:
     page2.screenshot(path=str(VSHOTS / "ux-fixJ4J5-ended.png"))
 
     # 3 — a send from the ended boundary starts a NEW session; the URL follows.
+    _scope_none = page2.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page2.locator("textarea").fill(MSG3)
     page2.keyboard.press("Enter")
     page2.wait_for_function(

@@ -176,6 +176,9 @@ with sync_playwright() as p:
           and mount_chat == [("GET", "/api/v1/roster")],
           storage_entries=storage, chips_bar=mount["chipsBar"], mount_chat_requests=mount_chat)
 
+    _scope_none = page.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page.locator("textarea").fill(MSG_COLD)
     page.keyboard.press("Enter")
     # The daemon ACCEPTS (strict contract): composer clears, replies land.
@@ -237,6 +240,9 @@ with sync_playwright() as p:
     # EC44: the failed MOUNT resolve renders as the bar's unresolved row —
     # no chip is painted, Send stays disabled, and Enter ships NOTHING.
     page2.locator('[data-testid="agent-chips-unresolved"]').wait_for(timeout=30000)
+    _scope_none = page2.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page2.locator("textarea").fill(MSG_DOWN)
     page2.keyboard.press("Enter")
     down = page2.evaluate(CENSUS)
@@ -260,6 +266,9 @@ with sync_playwright() as p:
     set_fixture(ORIGIN, roster_fail=False)
     page2.locator('[data-testid="agent-chips-retry"]').click()
     page2.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
+    _scope_none = page2.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page2.locator("textarea").click()
     page2.keyboard.press("Enter")
     page2.wait_for_function(
@@ -285,6 +294,9 @@ with sync_playwright() as p:
     page3.locator('[data-testid="agent-chip"]').first.wait_for(timeout=30000)
     page3.add_style_tag(content=HIDE_GATE_TOASTS)
 
+    _scope_none = page3.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page3.locator("textarea").fill(MSG_REJ)
     page3.keyboard.press("Enter")
     page3.locator('[data-testid="chat-send-failed"]').wait_for(timeout=30000)

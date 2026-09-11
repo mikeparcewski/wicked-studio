@@ -232,6 +232,9 @@ with sync_playwright() as p:
     # no seat comes up red — the no-4-red-seats-by-default acceptance.
     displayed = page.evaluate(
         """() => [...document.querySelectorAll('[data-testid="agent-chip"]')].map((c) => c.dataset.agent)""")
+    _scope_none = page.locator('[data-testid="chat-scope-none"]')  # studio#248: an Unfiled chat opens only on an EXPLICIT unscoped choice
+    if _scope_none.count() and _scope_none.is_enabled():
+        _scope_none.click()
     page.locator("textarea").fill(MSG_COLD)
     page.keyboard.press("Enter")
     page.wait_for_function(
