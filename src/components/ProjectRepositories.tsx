@@ -19,7 +19,12 @@ import { RepoFindings, repoFindings } from './RepoFindings.js';
  * selected at registration — and detach is `DELETE /projects/:id/members/:mid`.
  * The picker is the registered-repo list from the ONE session repo cache
  * (DES-FEEDBACK-002 §1.4): fetched on the first gesture that needs it (the
- * search field's focus), never on mount.
+ * search field's focus) — and, since acceptance finding F-2R2-004, on mount
+ * for a project that HAS repository members: the rows' engine findings
+ * (`in_tree_code_graph_ignored` + "Re-run onboarding") live on the registry
+ * record, and the checklist path "project → repositories" showed none while
+ * the cache stayed cold. Still the one shared cache: at most one GET /repos
+ * per session however many surfaces ask.
  *
  * Membership state stays with the parent (the dashboard's / detail page's one
  * membership read): this section filters to `crew.repo` and reports every
@@ -204,6 +209,20 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
     () => members.filter((m) => m.member_kind === REPO_KIND),
     [members],
   );
+
+  // F-2R2-004: the rows can only show the engine's findings (and their "Re-run onboarding")
+  // once the registry is known — warm the ONE session cache when this project has members and
+  // the cache is cold. A failed read stays silent here: the picker's gesture retries and
+  // reports it (`registryError`), so the failure is never lost, only not doubled.
+  useEffect(() => {
+    if (repos !== null || repoMembers.length === 0 || projectId === DEFAULT_PROJECT_ID) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => fetchReposCached())
+      .then((rs) => { if (!cancelled) setRepos(rs); })
+      .catch(() => { /* the picker's gesture retries and reports */ });
+    return () => { cancelled = true; };
+  }, [repos, repoMembers.length, projectId]);
 
   const options = useMemo(() => {
     if (repos === null) return [];

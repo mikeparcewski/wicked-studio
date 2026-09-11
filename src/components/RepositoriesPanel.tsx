@@ -3,7 +3,7 @@ import { api } from '../api/client.js';
 import type { Project, RepoEntry, SessionView } from '../api/types.js';
 import { gateOpenPath } from '../board/gateActions.js';
 import {
-  matchesRepoChip, repoFleetModels, type RepoChip, type RepoFleetModel,
+  graphReady, matchesRepoChip, repoFleetModels, type OnboardState, type RepoChip, type RepoFleetModel,
 } from '../board/repoStats.js';
 import {
   attachSeries, deltaWord, healthColor, healthOf, statusCounts, windowBuckets, windowDelta,
@@ -82,11 +82,24 @@ const CARD_STAT: React.CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
+/** The card's graph state — the engine's checkout findings OUTRANK the run verdict (F-2R2-003). */
+function graphState(m: RepoFleetModel): OnboardState | 'missing' {
+  // An onboard in flight is building the graph the finding says is missing — say so.
+  if (m.graphGap !== null && m.onboard.state !== 'onboarding') return 'missing';
+  return m.onboard.state;
+}
+
 /** The graph-state line's words — one honest sentence per state. */
 function graphStateWord(m: RepoFleetModel, attachedAt: Record<string, number>, now: number): string {
-  const { state, run } = m.onboard;
+  const { run } = m.onboard;
+  const state = graphState(m);
   const clock = run === null ? undefined : attachedAt[run.session.id];
   const when = clock === undefined ? '' : ` · ${ago(clock, now)} ago`;
+  if (state === 'missing') {
+    return m.graphGap?.kind === 'no-graph-root'
+      ? 'graph missing — no graph root resolves for this daemon'
+      : `graph missing — re-run onboarding${m.onboard.state === 'ready' ? ' (the onboard that completed predates the live graph)' : ''}`;
+  }
   if (state === 'ready') return `graph ready — onboard completed${when}`;
   if (state === 'onboarding') return 'onboarding now — index + annotate in flight';
   if (state === 'failed') return `onboard FAILED${when} — the graph may be stale or absent`;
@@ -98,7 +111,12 @@ const GRAPH_STATE_COLOR: Record<string, string> = {
   onboarding: 'var(--status-run)',
   failed: 'var(--status-fail)',
   never: 'var(--status-gate)',
+  missing: 'var(--status-fail)',
 };
+
+/** The hover text every graph-state reading shares: what the story is derived from. */
+const GRAPH_STATE_TITLE =
+  'Derived from the repo\'s newest onboarding run AND the engine\'s checkout findings (RepoEntry.findings): a finding that says no live graph has been indexed outranks a completed onboard — the repos wire carries no index-freshness field';
 
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
   const [repos, setRepos] = useState<RepoEntry[]>([]);
@@ -329,9 +347,17 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     [repos, repoRuns, attachedAt, windowIds],
   );
   const activeRepoN = fleet.filter((m) => m.activeNow).length;
-  const readyN = fleet.filter((m) => m.onboard.state === 'ready').length;
-  const gapFailedN = fleet.filter((m) => m.onboard.state === 'failed').length;
-  const gapNeverN = fleet.filter((m) => m.onboard.state === 'never').length;
+  // F-2R2-003: READY means the onboard completed AND the engine names no live-graph gap; a
+  // repo whose findings say no live graph exists is an INDEX GAP whatever its run history says.
+  const readyN = fleet.filter((m) => graphReady(m)).length;
+  const gapMissingN = fleet.filter((m) => graphState(m) === 'missing').length;
+  const gapFailedN = fleet.filter((m) => m.onboard.state === 'failed' && graphState(m) !== 'missing').length;
+  const gapNeverN = fleet.filter((m) => m.onboard.state === 'never' && graphState(m) !== 'missing').length;
+  const gapWords = [
+    gapMissingN > 0 ? `${gapMissingN} graph missing` : null,
+    gapFailedN > 0 ? `${gapFailedN} onboard failed` : null,
+    gapNeverN > 0 ? `${gapNeverN} never onboarded` : null,
+  ].filter((w): w is string => w !== null);
 
   /** The gate jump: the run's thread AT the gate when its project is known;
    *  the flat run detail (where the approval dock lives) when unfiled. */
@@ -349,10 +375,10 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   const visible = searched.filter((m) => matchesRepoChip(m, chip));
 
   const chipCounts = useMemo(() => {
-    const counts: Record<RepoChip, number> = { all: 0, 'needs-you': 0, active: 0, failing: 0, ready: 0, never: 0 };
+    const counts: Record<RepoChip, number> = { all: 0, 'needs-you': 0, active: 0, failing: 0, ready: 0, never: 0, 'graph-missing': 0 };
     for (const m of searched) {
       counts.all += 1;
-      for (const c of ['needs-you', 'active', 'failing', 'ready', 'never'] as const) {
+      for (const c of ['needs-you', 'active', 'failing', 'ready', 'never', 'graph-missing'] as const) {
         if (matchesRepoChip(m, c)) counts[c] += 1;
       }
     }
@@ -366,6 +392,10 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     { id: 'failing', label: 'Failing', count: chipCounts.failing },
     { id: 'ready', label: 'Ready', count: chipCounts.ready },
     { id: 'never', label: 'Never onboarded', count: chipCounts.never },
+    // F-2R2-003: the engine's own "no live graph" — a chip only while some repo carries it.
+    ...(chipCounts['graph-missing'] > 0
+      ? [{ id: 'graph-missing', label: 'Graph missing', count: chipCounts['graph-missing'] } satisfies FilterChip]
+      : []),
   ];
 
   return (
@@ -439,8 +469,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                 testId="stat-ready"
                 label="Graphs ready"
                 value={readyN}
-                context={`of ${repos.length} repo${repos.length === 1 ? '' : 's'} onboarded`}
-                title="Repos whose newest onboard run completed — filter to them"
+                context={`of ${repos.length} repo${repos.length === 1 ? '' : 's'} — live graph built`}
+                title="Repos whose newest onboard completed AND whose live graph the engine's checkout findings do not dispute — filter to them"
                 onOpen={() => setChip('ready')}
               />
             </KpiGroup>
@@ -459,15 +489,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
               <StatTile
                 testId="stat-gaps"
                 label="Index gaps"
-                value={gapFailedN + gapNeverN}
-                valueColor={gapFailedN > 0 ? 'var(--status-fail)' : undefined}
-                context={
-                  gapFailedN + gapNeverN === 0
-                    ? 'every graph ready'
-                    : `${gapFailedN} onboard failed · ${gapNeverN} never onboarded`
-                }
-                title="Repos without a completed onboard — the graph story is derived from the run history (the repos wire carries no index-freshness field)"
-                onOpen={() => setChip(gapFailedN > 0 ? 'failing' : 'never')}
+                value={gapMissingN + gapFailedN + gapNeverN}
+                valueColor={gapMissingN + gapFailedN > 0 ? 'var(--status-fail)' : undefined}
+                context={gapWords.length === 0 ? 'every graph ready' : gapWords.join(' · ')}
+                title="Repos without a live graph — a failed or never-run onboard, OR a completed onboard whose live graph the engine's checkout findings say was never built (in-tree graph ignored — re-run onboarding). The repos wire carries no index-freshness field; the findings are the engine's own word."
+                onOpen={() => setChip(gapMissingN > 0 ? 'graph-missing' : gapFailedN > 0 ? 'failing' : 'never')}
               />
             </KpiGroup>
           </KpiBand>
@@ -754,13 +780,13 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     {repo.root_path}
                   </p>
 
-                  {/* The graph state — derived from the run history, honestly */}
+                  {/* The graph state — the run history, corrected by the engine's findings (F-2R2-003) */}
                   <p
                     data-testid="repo-graph-state"
-                    data-state={m.onboard.state}
+                    data-state={graphState(m)}
                     className="text-[11px] font-mono truncate"
-                    style={{ color: GRAPH_STATE_COLOR[m.onboard.state] ?? 'var(--ink-dim)', margin: 0 }}
-                    title="Derived from the repo's newest onboarding run — the repos wire carries no index-freshness field"
+                    style={{ color: GRAPH_STATE_COLOR[graphState(m)] ?? 'var(--ink-dim)', margin: 0 }}
+                    title={GRAPH_STATE_TITLE}
                   >
                     {graphStateWord(m, attachedAt, now)}
                   </p>

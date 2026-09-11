@@ -646,4 +646,25 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(cli === undefined ? {} : { cli }),
     }),
+
+  /**
+   * `GET /projects/:id/graph` — the project graph's standing (crew `projects/routes.ts`): always
+   * 200 for a known project, `state` naming what it holds and `detail` its cause + remedy;
+   * `default` answers the synthesized no-graph status. 404 unknown project; 501 engine too old.
+   */
+  getProjectGraph: (id: string) =>
+    apiFetch<{ status: import('./types.js').ProjectGraphStatus }>(`/projects/${encodeURIComponent(id)}/graph`),
+
+  /**
+   * `POST /projects/:id/graph/refresh` — the incremental (re)build over every `crew.repo` member
+   * (acceptance finding F-2R2-008: the ONE control that builds a project graph from the UI).
+   * SYNCHRONOUS on the daemon: the answer describes a graph that IS built, so this can take as
+   * long as the slowest member's index. `{}` is the plain refresh; `force` re-indexes every repo.
+   * 404 unknown project; 409 the `default` project; 501 engine too old.
+   */
+  refreshProjectGraph: (id: string, body?: import('./types.js').RefreshProjectGraphBody) =>
+    apiFetch<import('./types.js').ProjectGraphRefreshResult>(`/projects/${encodeURIComponent(id)}/graph/refresh`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
 };

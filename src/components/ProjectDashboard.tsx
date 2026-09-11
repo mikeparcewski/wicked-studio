@@ -28,6 +28,7 @@ import { GateChip } from './GateChip.js';
 import { GateRejectNote } from './GateRejectNote.js';
 import { MODE_LABEL } from './ProjectShell.js';
 import { ago, ATTENTION_DOT } from './ProjectCard.js';
+import { ProjectGraphAction } from './ProjectGraphAction.js';
 import { ProjectRepositories } from './ProjectRepositories.js';
 import { ageWord } from './DashboardTiles.js';
 import { deliverySummary } from './delivery.js';
@@ -438,6 +439,13 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
               );
             })}
           </p>
+        )}
+        {/* F-2R2-008: the project graph's standing and the ONE control that builds it
+            (`POST /projects/:id/graph/refresh`) — a project with repositories and no graph
+            grounds its chats and runs on files alone, and until now nothing in the UI could
+            change that. Read on mount with the membership; hidden on a daemon without the route. */}
+        {repoMembers.length > 0 && (
+          <ProjectGraphAction projectId={projectId} variant="row" repoCount={repoMembers.length} fetchStatus />
         )}
       </header>
 

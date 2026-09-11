@@ -106,6 +106,40 @@ npm publish dates. Every version listed here exists on
   never a different badge (`portable` stays the admission key).
 
 ### Fixed
+- **Repo readiness honesty + the project graph control** (phase2-r2 acceptance findings F-2R2-003 /
+  -004 / -008 / -009).
+  - */repos KPIs and card status* (F-2R2-003): "GRAPHS READY 9 of 9 · INDEX GAPS 0" and "graph ready —
+    onboard completed" over two repos whose engine findings said no live graph existed. The graph story
+    is now the run history CORRECTED by `RepoEntry.findings` (wicked-core#406): a repo whose finding
+    names the re-onboard remedy (`in_tree_code_graph_ignored`, no live graph) or `code_graph_root_
+    unresolvable` reads **"graph missing — re-run onboarding"** (`repo-graph-state[data-state=missing]`),
+    is excluded from Graphs ready, counted on Index gaps ("2 graph missing · …"), and gets its own
+    `Graph missing` filter chip; tooltips say what the reading derives from.
+  - *Project dashboard REPOSITORIES rows* (F-2R2-004): the `project-repo-findings` mount existed but
+    the row's registry lookup stayed undefined until the attach picker's gesture warmed the repo
+    cache. A project WITH repo members now warms the one session cache on mount (still at most one
+    `GET /repos` per session), so rows show the finding and **Re-run onboarding**.
+  - *Build project graph* (F-2R2-008, studio half): a new `ProjectGraphAction` calls crew's existing
+    `POST /api/v1/projects/:id/graph/refresh` (`api.refreshProjectGraph`; standing from the new
+    `api.getProjectGraph`, `GET /projects/:id/graph`) with honest state — the build is synchronous on
+    the daemon and says so ("Building… indexing 9 repositories — this can take a few minutes"), the
+    result is the daemon's indexed / skipped / failed labels. On the project dashboard (standing +
+    control, hidden on a daemon without the route) and on the chat scope card for a project scope
+    whose reason names an unbuilt graph (the result says it grounds NEW chats — the open chat keeps
+    the scope it opened with). The scope card's reason is now customer copy: the raw `POST …`
+    sentence is dropped, "repo-less" is said only when the scope names no repository, the daemon's
+    own words stay (raw sentence on hover).
+  - *Health rail seat rows* (F-2R2-009): an active seat with `signed_in: false` wore a green ✓ and
+    "active · signed out" as if nothing followed. It now wears the amber `!` and says **"signed out —
+    councils may bench this seat"** (`rail-seat-row[data-signed-in][data-standing]`) — hedged, because
+    today's roster (api-types 0.33.0) carries no eligibility field and the rig saw a "signed out" seat
+    answer on its free tier — with the free-tier possibility on hover; the heuristic is never folded
+    into the heart. When a daemon sends crew#533's `auth` / `free_tier` / `council_eligible` /
+    `council_ineligible_reason` (api-types 0.35.0) the row believes those instead ("no sign-in needed
+    (<tier>)" with a ✓, "not council-eligible — <the daemon's reason>", "signed out — still
+    council-eligible"), and only a daemon-declared ineligibility degrades the heart.
+  - Tests: `RepositoriesPanel.graphMissing`, `ProjectRepositories.findings`, `ProjectGraphAction`,
+    `GroupChat.graphBuild`, `HealthRailSection.signin`, `ProjectDashboard.graph`.
 - **The gate card's verdict block is about THIS gate's unit** (F-7R2-018): on an escalation gate
   about unit N the block rendered the LAST `gateEvaluated` at or below N — unit N−1's vacuous pass
   under a card about the unit that failed. `gateVerdictFor` keys an escalation gate ("Unit N failed

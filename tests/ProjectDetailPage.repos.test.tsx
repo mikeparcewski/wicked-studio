@@ -100,8 +100,10 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     // The run member is a Member, not a repository — and the generic list no longer double-lists repos.
     expect(within(section).queryByText('r-1')).toBeNull();
     expect(screen.getByText('Members (1)')).toBeInTheDocument();
-    // Nothing fetched the registry on mount — the picker warms the cache on its first gesture.
-    expect(listRepos).not.toHaveBeenCalled();
+    // F-2R2-004: a project WITH repo members warms the one session cache on mount (the rows'
+    // engine findings live on the registry record) — exactly once; the picker's gesture then
+    // finds it warm and fetches nothing more.
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(1));
   });
 
   it('the empty state names the consequence (a project-scoped test cannot launch)', async () => {

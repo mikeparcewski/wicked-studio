@@ -26,6 +26,7 @@ import {
 } from './ChatThread.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { NowBar } from './NowBar.js';
+import { humanizeGraphReason, ProjectGraphAction, reasonWantsProjectGraph } from './ProjectGraphAction.js';
 import {
   buildChatFeed,
   deriveChatArtifacts,
@@ -1500,8 +1501,23 @@ export function GroupChat({
               title={scope.graph.reason}
               style={{ color: scope.graph.bound ? 'var(--status-run)' : 'var(--status-gate)' }}
             >
-              {scope.graph.bound ? 'code graph bound' : `no code graph — ${scope.graph.reason}`}
+              {/* F-2R2-008: the daemon's reason, for a customer — no raw POST, "repo-less" only
+                  when the scope names no repository; the daemon's own words otherwise (the raw
+                  sentence stays on hover). */}
+              {scope.graph.bound ? 'code graph bound' : `no code graph — ${humanizeGraphReason(scope.graph.reason, scope.repos.length)}`}
             </span>
+          )}
+          {/* F-2R2-008: a project scope with no project graph gets the control that builds it —
+              crew's existing refresh route. The open chat's scope was decided when it opened, so
+              the result says what it grounds: the NEXT chats in this project. */}
+          {scope !== null && !scope.graph.bound && scope.kind === 'project'
+            && scope.projectId !== undefined && reasonWantsProjectGraph(scope.graph.reason) && (
+            <ProjectGraphAction
+              projectId={scope.projectId}
+              variant="inline"
+              repoCount={scope.repos.length}
+              builtNote="new chats in this project ground on it (this chat keeps the scope it opened with)"
+            />
           )}
           {scope !== null && scope.dangling.length > 0 && (
             <span

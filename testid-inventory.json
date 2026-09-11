@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.5",
   "counts": {
-    "files": 143,
-    "occurrences": 1237,
-    "static": 1063,
+    "files": 144,
+    "occurrences": 1242,
+    "static": 1068,
     "dynamic": 59,
     "computed": 7
   },
@@ -3428,6 +3428,36 @@
       "testId": "project-dashboard",
       "files": [
         "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph",
+      "files": [
+        "src/components/ProjectGraphAction.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-build",
+      "files": [
+        "src/components/ProjectGraphAction.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-error",
+      "files": [
+        "src/components/ProjectGraphAction.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-result",
+      "files": [
+        "src/components/ProjectGraphAction.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-state",
+      "files": [
+        "src/components/ProjectGraphAction.tsx"
       ]
     },
     {

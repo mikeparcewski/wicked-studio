@@ -63,24 +63,81 @@ function CheckRow({ label, ok, detail }: { label: string; ok: boolean | null; de
 
 const EXCERPT_CH = 40;
 
+/**
+ * What a signed-out seat MEANS (acceptance finding F-2R2-009): the roster's `signed_in` is the
+ * daemon's cheap file/env heuristic — "never proof the credential still works", and never proof
+ * the seat cannot answer without one: the phase2-r2 rig saw opencode read `signed_in:false` and
+ * still answer a chat on its provider free tier. So the rail must neither wear a green ✓ over
+ * "active · signed out" as if nothing followed from it, nor assert an engine rule the wire does
+ * not carry. Today's roster (api-types 0.33.0) has no eligibility field, so the row states the
+ * OBSERVATION and HEDGES the consequence ("councils may bench this seat"). crew#533 (api-types
+ * 0.35.0) adds `auth` (`signed_in | signed_out | not_required | unknown`), `free_tier`,
+ * `council_eligible` and `council_ineligible_reason` — read off the seat when a daemon sends
+ * them (`seatStandingWord`), so a daemon that SAYS what a council would do is believed.
+ */
+export const SIGNED_OUT_DETAIL = 'signed out — councils may bench this seat';
+export const SIGNED_OUT_TITLE =
+  'The daemon\'s file/env check saw no sign-in for this seat. A seat that cannot authenticate fails at spawn '
+  + 'and a council benches it — but a provider free tier may still answer; the roster cannot tell yet. '
+  + 'Sign in from Settings.';
+
+/** The roster's word on one seat's standing, read for what the WIRE says (never inferred). */
+export type SeatStanding =
+  | { kind: 'signed-in'; detail: string; title: string | null; auth: string | null }
+  | { kind: 'no-sign-in-needed'; detail: string; title: string | null; auth: string | null }
+  | { kind: 'signed-out'; detail: string; title: string; auth: string | null }
+  | { kind: 'ineligible'; detail: string; title: string; auth: string | null }
+  | { kind: 'unknown'; detail: null; title: null; auth: string | null };
+
+export function seatStandingWord(seat: RosterSeat): SeatStanding {
+  const bag = seat as Record<string, unknown>;
+  const auth = typeof bag['auth'] === 'string' ? (bag['auth'] as string) : null;
+  const eligible = bag['council_eligible'];
+  const reason = typeof bag['council_ineligible_reason'] === 'string' ? (bag['council_ineligible_reason'] as string) : '';
+  const tier = typeof bag['free_tier'] === 'string' ? (bag['free_tier'] as string) : '';
+  // The daemon SAYS a council would not seat it — its reason, its words (crew#533).
+  if (eligible === false) {
+    return { kind: 'ineligible', detail: `not council-eligible — ${reason !== '' ? reason : 'the daemon says a council would not seat it'}`, title: reason !== '' ? reason : 'the daemon reports this seat as not council-eligible', auth };
+  }
+  if (auth === 'not_required') {
+    return { kind: 'no-sign-in-needed', detail: `no sign-in needed${tier !== '' ? ` (${tier})` : ''}`, title: tier !== '' ? `answers on its provider free tier: ${tier}` : null, auth };
+  }
+  if (auth === 'signed_in' || seat.signed_in === true) return { kind: 'signed-in', detail: 'signed in', title: null, auth };
+  if (auth === 'signed_out' || seat.signed_in === false) {
+    return eligible === true
+      ? { kind: 'signed-out', detail: 'signed out — still council-eligible', title: 'No sign-in observed, and the daemon still reports the seat as council-eligible.', auth }
+      : { kind: 'signed-out', detail: SIGNED_OUT_DETAIL, title: SIGNED_OUT_TITLE, auth };
+  }
+  return { kind: 'unknown', detail: null, title: null, auth };
+}
+
 /** One registry row (§6.2's anatomy): glyph, name, the honest detail. */
 function SeatRow({ seat }: { seat: RosterSeat }): React.ReactElement {
   const h = seat.health;
+  const standing = seatStandingWord(seat);
+  const hedged = standing.kind === 'signed-out' || standing.kind === 'ineligible';
   // Absent health (a daemon predating crew#274) is UNKNOWN — a dim `·`, no
-  // message, never a fabricated "active" (§6.2).
-  const glyph = h === undefined ? '·' : h.status === 'active' ? '✓' : '✗';
-  const color = h === undefined ? 'var(--ink-dim)' : h.status === 'active' ? 'var(--status-run)' : 'var(--status-fail)';
-  const signedIn = seat.signed_in === true ? 'signed in' : seat.signed_in === false ? 'signed out' : null;
+  // message, never a fabricated "active" (§6.2). An ACTIVE seat with no sign-in
+  // observed (or one the daemon calls ineligible) is reachable but in question:
+  // the `!` in gate-amber, not a green ✓ (F-2R2-009).
+  const glyph = h === undefined ? '·' : h.status === 'active' ? (hedged ? '!' : '✓') : '✗';
+  const color = h === undefined
+    ? 'var(--ink-dim)'
+    : h.status === 'active' ? (hedged ? 'var(--status-gate)' : 'var(--status-run)') : 'var(--status-fail)';
   const message = h?.status === 'inactive' && h.message !== undefined ? h.message : null;
   const detail = message !== null
     ? message.length > EXCERPT_CH ? `${message.slice(0, EXCERPT_CH)}…` : message
-    : [h?.status, signedIn].filter((s): s is string => s != null).join(' · ');
+    : [h?.status, standing.detail].filter((s): s is string => s != null).join(' · ');
+  const detailColor = message !== null ? 'var(--status-fail)' : hedged ? 'var(--status-gate)' : 'var(--ink-dim)';
   return (
     <div
       data-testid="rail-seat-row"
       data-seat={seat.key}
       data-health={h?.status ?? 'unknown'}
-      title={message ?? undefined}
+      data-signed-in={seat.signed_in === true ? 'true' : seat.signed_in === false ? 'false' : 'unknown'}
+      data-standing={standing.kind}
+      {...(standing.auth !== null ? { 'data-auth': standing.auth } : {})}
+      title={message ?? standing.title ?? undefined}
       style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '5px' }}
     >
       <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{glyph}</span>
@@ -89,7 +146,7 @@ function SeatRow({ seat }: { seat: RosterSeat }): React.ReactElement {
       </span>
       <span
         className="truncate"
-        style={{ marginLeft: 'auto', fontSize: 'var(--text-2xs)', color: message !== null ? 'var(--status-fail)' : 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
+        style={{ marginLeft: 'auto', fontSize: 'var(--text-2xs)', color: detailColor, fontFamily: 'var(--font-mono)' }}
       >
         {detail}
       </span>
@@ -285,8 +342,13 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
   // seat down or the socket gone), amber when degraded (socket still connecting,
   // a probe errored, or the API server not reporting ok), green otherwise. It
   // reads the same signals the section already computes — no new data source.
+  // F-2R2-009 (review): the sign-in HEURISTIC is said per row (the amber `!`), never folded into the
+  // heart — on a default roster most seats read `signed_in:false`, and a healthy daemon must not
+  // wear a permanently degraded heart over a guess. Only a daemon-declared `council_eligible: false`
+  // (crew#533, api-types 0.35.0) degrades it, because that IS the daemon's own word.
+  const ineligible = (roster ?? []).some((s) => (s as Record<string, unknown>)['council_eligible'] === false && s.health?.status !== 'inactive');
   const degraded =
-    wsStatus === 'connecting' || healthError || rosterError || govWarnings || (health !== null && health.status !== 'ok');
+    wsStatus === 'connecting' || healthError || rosterError || govWarnings || ineligible || (health !== null && health.status !== 'ok');
   const heartState = sick ? 'unhealthy' : degraded ? 'degraded' : 'healthy';
   const heartColor = sick
     ? 'var(--status-fail)'
