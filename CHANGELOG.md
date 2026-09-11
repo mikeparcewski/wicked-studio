@@ -11,6 +11,43 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+### Added
+- **The wicked-core#431 wire on the gate, the delivery card, the run head and the feed** (#250/#431
+  consumer follow-through — pins `wicked-crew-api-types` 0.33.0, the wire wicked-crew#527 publishes).
+  Every field is read off the frames the daemon sends and rendered only when present, so an older
+  daemon changes nothing.
+  - *Gate card — the judge seat* (`gateEvaluated.judgeCli` / `judgeDistinct`): the verdict header
+    names WHO judged (`· judge: codex`); `judgeDistinct: false` adds a same-seat warning — the judge
+    fell back to the single default runner, so evaluator ≠ creator is not held on that verdict.
+  - *Denial card — the restored tree* (`evaluatorMutatedWorktree.restored` + `worktreeRestored`):
+    a worktree-guard denial the engine already remedied says "the evaluator's edit was discarded and
+    the creator's verified tree restored", lists the discarded paths from the restore record, and
+    gives `git show refs/wicked/suggestions/<run>/<ord>/<attempt>` as copyable code when the edit was
+    pinned (an honest "not pinned" otherwise). **Approve is relabelled "Retry against the restored
+    tree"** (and "Retry + steer") on exactly that gate — keyed on the evidence frames, not on the
+    prompt, which the engine also changed ("confirm to retry the phase" → "Approve to retry the phase
+    against the restored tree"; the card's NOT PASS match holds for both spellings). A failed
+    restore (`restored: false`) is said, with the engine's error, and the manual remedy stands.
+  - *Delivery card / deliver gate — the lift* (`deliverLiftEvaluated`, the deliver ord's
+    `repoChecksEvaluated`, the deliver unit's `deliver:` refusal): the rail's Delivery body and a
+    gate opened on the deliver unit render what the pre-push lift did — `unchanged` / `lifted`
+    (base and tree before → after, the re-verify per check with the forced-install source
+    `package-lock.json (forced: lockfile drift)`) / `conflict` (the files, "nothing was rebased and
+    nothing was pushed", the LIFT-CONFLICT remedy) / `skipped` / `failed` — and the engine's
+    refusal verbatim, once. A deliver unit refused BEFORE the lift (a `HEAD` off the run branch)
+    has no lift frame and renders its `deliver:` text on its own; a `passed: false` re-verify over
+    all-green rows is explained as the checks having CHANGED the worktree.
+  - *Run head / timeline — the base* (`runBaseResolved`): a `base` row on the run's context card and
+    a `based on` head row on the evidence timeline — "origin/main @ f57069d · 5 behind · lifted to
+    the tip" — plus timeline rows and detail panels for the restore, the lift and a refused write.
+  - *Feed*: narration lines for the run base, the creator-tree restore, each lift outcome, a refused
+    write-class tool call (`evaluatorToolCallDenied`) and the one deliberate ACP reroute
+    (`acpFallback.fallbackKind: 'read_only_requires_wrapped'` — routing, not a failure); every other
+    `acpFallback` kind stays silent as before.
+  - Tests: unit suites over synthetic frames in the wire's exact spelling (`tests/fixtures/wire433.ts`,
+    mirroring wicked-crew's wire-contract literals) for each surface; the loopback rig
+    `e2e/wire433_test.py` (fixture switch `wire433`) drives the three surfaces in a real browser.
+
 
 ## [0.5.5] — 2026-09-11
 ### Added

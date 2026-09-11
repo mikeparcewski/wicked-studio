@@ -60,7 +60,13 @@ describe('gateVerdict — which evaluation answers the gate', () => {
       afterTree: TREE_AFTER,
       headMoved: false,
       changed: [{ path: 'src/App.tsx', status: 'M' }],
+      // The recorded frame predates wicked-core#431 (api-types 0.33.0): no `restored` field ⇒ `null`,
+      // never `false` — `false` is the engine SAYING the restore failed (tests/*.wire433.test.*).
+      restored: null,
+      restoreError: null,
     });
+    expect(v!.restore).toBeNull();
+    expect(v!.judgeCli).toBeNull();
     // The judge itself said PASS — the denial is the guard's, and the view keeps both facts.
     expect(v!.agentVerdict).toBe('pass');
   });

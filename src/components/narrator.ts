@@ -1,5 +1,7 @@
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { isPrUrl } from './delivery.js';
+import { shortId } from './gateVerdictModel.js';
+import { runBaseLine, runBaseOf } from './runBaseModel.js';
 
 /**
  * The run narrator (DES-RUN-NARRATOR §4-§6): a DETERMINISTIC template layer —
@@ -220,6 +222,53 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
         : null;
     case 'governanceUnenforced':
       return line(`Governance was requested but is not enforced for ${str(event.cli) || 'this seat'}`, 'gate');
+    // ── wicked-core#431 (api-types 0.33.0) ──────────────────────────────────
+    case 'runBaseResolved': {
+      const base = runBaseOf(event);
+      return base === null ? null : line(`Based on ${runBaseLine(base)}`, 'info');
+    }
+    case 'worktreeRestored': {
+      const n = Array.isArray(event.discarded) ? event.discarded.length : 0;
+      const ref = str(event['suggestionRef']);
+      return line(
+        `Restored the creator's tree for ${phase} — ${str(event.cli) || 'the seat'}'s edit (${n} path${n === 1 ? '' : 's'}) was discarded${ref ? `, kept at ${ref}` : ''}`,
+        'gate',
+      );
+    }
+    case 'deliverLiftEvaluated': {
+      const outcome = str(event.outcome);
+      const base = str(event['baseRef']) || 'the remote default branch';
+      const tip = str(event['baseAfter']) ? shortId(str(event['baseAfter']), 7) : '?';
+      const note = str(event['note']);
+      switch (outcome) {
+        case 'unchanged':
+          return line(`Deliver lift: base unchanged — ${base} is still at ${str(event['baseBefore']) ? shortId(str(event['baseBefore']), 7) : '?'}`, 'info');
+        case 'lifted':
+          return line(`Deliver lift: lifted onto ${base} @ ${tip} — re-running the repository's checks on the lifted tree`, 'work');
+        case 'conflict': {
+          const files = Array.isArray(event['conflicts']) ? (event['conflicts'] as unknown[]).filter((c): c is string => typeof c === 'string') : [];
+          return line(`Deliver lift: CONFLICT in ${files.join(', ') || 'unlisted paths'} — nothing rebased, nothing pushed`, 'fail');
+        }
+        case 'skipped':
+          return line(`Deliver lift: skipped${note ? ` — ${clip(note)}` : ''}`, 'info');
+        case 'failed':
+          return line(`Deliver lift: FAILED${note ? ` — ${clip(note)}` : ''} — nothing pushed`, 'fail');
+        default:
+          return line(`Deliver lift: ${outcome || 'unknown outcome'}${note ? ` — ${clip(note)}` : ''}`, 'info');
+      }
+    }
+    case 'evaluatorToolCallDenied':
+      return line(
+        `Refused a write by ${str(event.cli) || 'the seat'} during ${phase} — ${str(event['tool']) || 'a write tool'}${str(event['path']) ? ` on ${str(event['path'])}` : ''} (a read-only phase may not edit)`,
+        'fail',
+      );
+    case 'acpFallback':
+      // The one deliberate reroute the feed speaks: a read-only phase on an ACP seat whose adapter
+      // cannot enforce the write lock moves to the wrapped carrier BEFORE any turn. Routing, not a
+      // failure — the other kinds (binary_unavailable, session_died, …) stay silent as before.
+      return str(event.fallbackKind) === 'read_only_requires_wrapped'
+        ? line(`${str(event.cliKey) || 'The seat'} moved to the wrapped carrier for its read-only turn — the write lock is an argv fact there, not a failure`, 'info')
+        : null;
     case 'sessionCompleted':
       return line('Run completed', 'work');
     case 'sessionFailed':
@@ -229,7 +278,7 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
     case 'error':
       return line(`Error: ${clip(str(event.message)) || 'unspecified'}`, 'fail');
     default:
-      return null; // silent: deltas, heartbeat, terminal*, cliUsage, workerSession*, acp*, …
+      return null; // silent: deltas, heartbeat, terminal*, cliUsage, workerSession*, acpSession*, …
   }
 }
 

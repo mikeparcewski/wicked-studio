@@ -34,8 +34,20 @@ import type { CoreEvent, RepoCheckRun, UnitDenial, WorkUnit, WorktreeChangedPath
  *
  * Never overclaimed (FINDING-025): an evaluation with no floor, no judge verdict and no evaluator
  * policy is `'ungated'` — a default-allow the card labels as "nothing gated this phase", not a
- * pass. The judge SEAT is not on this wire (api-types 0.31.0 `gateEvaluated` carries no seat),
- * so no view field exists for it — render nothing rather than infer one from `unitDispatched`.
+ * pass.
+ *
+ * wicked-core#431 (api-types 0.33.0) put three more facts on the same frames, all read here and
+ * all `null` when an older daemon does not send them:
+ *  - `gateEvaluated.judgeCli` / `judgeDistinct` — WHO rendered `agentVerdict`, and whether that
+ *    seat was identity-distinct from the work's author (evaluator ≠ creator is the doctrine;
+ *    `false` means the judge fell back to the single default runner and its independence is
+ *    prompt-only). Read off the frame, never inferred from `unitDispatched`.
+ *  - `evaluatorMutatedWorktree.restored` / `restoreError` — whether the engine already put the
+ *    creator's tree back after the mutation, so a human's Approve now means a retry against the
+ *    VERIFIED tree, not adoption of the evaluator's edit.
+ *  - `worktreeRestored` (a new frame between the mutation record and the verdict) — what was
+ *    discarded and where the discarded edit was pinned (`refs/wicked/suggestions/<run>/<ord>/<attempt>`,
+ *    `null` when the pin failed), attached as `restore`.
  */
 
 export type GateOutcome = 'pass' | 'fail' | 'ungated';
@@ -68,6 +80,26 @@ export interface GateMutationView {
   afterTree: string;
   headMoved: boolean;
   changed: WorktreeChangedPath[];
+  /** wicked-core#431: whether the engine restored the creator's tree right after the mutation.
+   *  `null` when the frame predates the field (an older engine) — the card then keeps the manual
+   *  `git read-tree` remedy the denial prose carries and says nothing about a restore. */
+  restored: boolean | null;
+  /** Why the restore failed or was not attempted, when `restored === false`. */
+  restoreError: string | null;
+}
+
+/** The `worktreeRestored` record (wicked-core#431, api-types 0.33.0): what the engine put back and
+ *  what it threw away. Follows `evaluatorMutatedWorktree` when `restored` is `true`. */
+export interface GateRestoreView {
+  /** The tree id the worktree was restored to (the creator's baseline). */
+  tree: string;
+  /** The commit `HEAD` was reset to when the phase had moved it; `null` when it had not. */
+  head: string | null;
+  /** Exactly what the evaluator's edit was — the same list the mutation event carried as `changed`. */
+  discarded: WorktreeChangedPath[];
+  /** Where the discarded edit was pinned (`refs/wicked/suggestions/<run>/<ord>/<attempt>`), so
+   *  `git show <ref>` reads it back; `null` when the pin failed. */
+  suggestionRef: string | null;
 }
 
 /** The winning denial: structured when the wire carries `denial`, prose-only from an older engine. */
@@ -95,6 +127,13 @@ export interface GateVerdictView {
   denial: GateDenialView | null;
   floor: GateFloorView | null;
   mutation: GateMutationView | null;
+  /** The `worktreeRestored` record for this fold, when the engine restored the creator's tree. */
+  restore: GateRestoreView | null;
+  /** The council seat key the layer-2 judge ran under (`codex`, `pi`, …); `null` when no judge ran,
+   *  on the bus-mediated path, and from a daemon that predates api-types 0.33.0. */
+  judgeCli: string | null;
+  /** Whether that judge seat was identity-distinct from the work's author; `null` when unknown. */
+  judgeDistinct: boolean | null;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
@@ -137,7 +176,9 @@ function checkOf(raw: unknown): GateFloorCheck | null {
   };
 }
 
-function floorOf(ev: CoreEvent): GateFloorView {
+/** The F-039 floor off a `repoChecksEvaluated` frame — shared with the deliver re-verify
+ *  (`deliverLiftModel.ts`), which is the same frame emitted for the deliver ord. */
+export function floorOf(ev: CoreEvent): GateFloorView {
   return {
     passed: ev.passed === true,
     criterion: str(ev.criterion) ?? '',
@@ -147,19 +188,36 @@ function floorOf(ev: CoreEvent): GateFloorView {
   };
 }
 
-function mutationOf(ev: CoreEvent): GateMutationView {
-  const changed = Array.isArray(ev.changed)
-    ? ev.changed.filter(
+/** Narrow a wire `ChangedPath[]` — anything that is not `{path, status}` strings is dropped. */
+function changedPaths(v: unknown): WorktreeChangedPath[] {
+  return Array.isArray(v)
+    ? v.filter(
         (p): p is WorktreeChangedPath => isRecord(p) && typeof p.path === 'string' && typeof p.status === 'string',
       )
     : [];
+}
+
+function mutationOf(ev: CoreEvent): GateMutationView {
   return {
     cli: str(ev.cli) ?? '',
     phase: str(ev.phase) ?? '',
     beforeTree: str(ev.beforeTree) ?? '',
     afterTree: str(ev.afterTree) ?? '',
     headMoved: ev.headMoved === true,
-    changed,
+    changed: changedPaths(ev.changed),
+    // Absent (an older engine) is `null`, never `false`: `false` is the engine SAYING the restore
+    // failed, and the card renders that as a warning it must not fabricate.
+    restored: typeof ev.restored === 'boolean' ? ev.restored : null,
+    restoreError: str(ev.restoreError),
+  };
+}
+
+function restoreOf(ev: CoreEvent): GateRestoreView {
+  return {
+    tree: str(ev.tree) ?? '',
+    head: str(ev.head),
+    discarded: changedPaths(ev.discarded),
+    suggestionRef: str(ev.suggestionRef),
   };
 }
 
@@ -216,6 +274,9 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
 
   const floorFrame = nearestBefore(events, idx, 'repoChecksEvaluated', ord);
   const mutationFrame = nearestBefore(events, idx, 'evaluatorMutatedWorktree', ord);
+  // The restore record rides the same fold: emitted AFTER the mutation frame and BEFORE the verdict
+  // (wicked-core#431), so the same bounded look-back finds it and a retry never inherits it.
+  const restoreFrame = nearestBefore(events, idx, 'worktreeRestored', ord);
 
   return {
     ord,
@@ -230,6 +291,9 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
     denial,
     floor: floorFrame === null ? null : floorOf(floorFrame),
     mutation: mutationFrame === null ? null : mutationOf(mutationFrame),
+    restore: restoreFrame === null ? null : restoreOf(restoreFrame),
+    judgeCli: str(ev.judgeCli),
+    judgeDistinct: typeof ev.judgeDistinct === 'boolean' ? ev.judgeDistinct : null,
   };
 }
 
@@ -297,4 +361,10 @@ export function formatDuration(ms: number): string {
  */
 export function splitBackticks(text: string): string[] {
   return text.split('`');
+}
+
+/** A git object id cut for display: the first `n` hex chars (trees 10, as the card already prints
+ *  them; commits 7, git's own default). Anything shorter than `n` is shown whole. */
+export function shortId(id: string, n = 10): string {
+  return id.length > n ? id.slice(0, n) : id;
 }

@@ -127,6 +127,23 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     unitReworkAmended → re-dispatch → gateEvaluated deny arc,
                     ending sessionFailed. Ride it WITH `forensics` (units +
                     output wires). Default False.
+  wire433         — the wicked-core#431 wire (api-types 0.33.0; wicked-crew#527):
+                    r-api's complex gate becomes the ord-4 RESTORED-TREE denial —
+                    its units grow to the recorded bug workflow's five, its events
+                    tail carries `evaluatorMutatedWorktree {restored: true}` +
+                    `worktreeRestored {suggestionRef}` + a `gateEvaluated` deny
+                    naming the judge (`judgeCli: "codex", judgeDistinct: true`),
+                    and its cached gate carries the engine's NEW prompt ("… its
+                    edit was discarded and the creator's verified tree restored.
+                    Approve to retry the phase against the restored tree …").
+                    r-auth (failed) gains a REJECTED `deliver` unit whose
+                    denial_reason is the engine's `deliver: LIFT-CONFLICT — …`
+                    refusal, and its tail becomes the full chronology with
+                    `runBaseResolved` (origin/main, 5 behind, lifted) at the head
+                    and `deliverLiftEvaluated {outcome: "conflict"}` + the
+                    `stepFailed` before sessionFailed. Every frame is the wire's
+                    exact camelCase spelling (crew's wire-contract literals).
+                    Default False — no standing rig's gate or tail changes.
   project_dto     — the slice-S CREW-UX-2 corpus (DES-UX-001 §2.3): every run
                     DTO carries `project_id` (api-types 0.8.0 — a string echoed
                     from the membership record, or null = GENUINELY unfiled),
@@ -320,6 +337,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # (the units + output wires). Default False: sliceR's tail keeps its
          # historical 4-event shape.
          "timeline": False,
+         # wicked-core#431 (api-types 0.33.0): the restored-tree gate on r-api,
+         # the lift conflict + run base on r-auth — see the module docstring.
+         "wire433": False,
          # C6 fix (BRIEF-UX-002 final gate): the stale-clock reproduction —
          # EVERY clock the board could read for upload-endpoint goes 15h stale
          # (project.updated_at, the r-upload attach clock) AND the /ws
@@ -1136,6 +1156,192 @@ TIMELINE_AUTH_EVENTS = [
 # real fetch (the zero-request-hang regression trap, §1.3-4b).
 FORENSICS_DIFF_HANG_SECONDS = 30
 
+# ── wicked-core#431 (api-types 0.33.0): the wire433 corpus, behind `wire433` ──
+#
+# Two runs, the two stories the studio renders off the new frames — every frame
+# the wire's exact `event_to_json` spelling (camelCase, every key present, `null`
+# never absent), the same literals wicked-crew#527's wire-contract test pins.
+#
+#  - r-api (awaiting_human, project api-migration): the bug workflow's five units;
+#    the `verify` phase (ord 4, `executes_code: false`) changed the worktree, the
+#    engine RESTORED the creator's tree (`restored: true`, a `worktreeRestored`
+#    with the pinned suggestion ref), the judge is named (`codex`, distinct), and
+#    the gate carries the engine's NEW mutation-gate prompt.
+#  - r-auth (failed, project auth-refactor): based on origin/main 5 commits ahead
+#    of the clone (`runBaseResolved`, lifted); survey + review done, then the
+#    deliver phase's pre-push lift hit a CONFLICT in a generated file — the unit
+#    failed with the engine's `deliver: LIFT-CONFLICT — …` refusal, nothing
+#    rebased or pushed, and the run failed.
+
+WIRE433_TREE_BEFORE = "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0"
+WIRE433_TREE_AFTER = "f0e1d2c3b4a5f0e1d2c3b4a5f0e1d2c3b4a5f0e1"
+WIRE433_BASE_BEFORE = "1432c96e0f1a2b3c4d5e6f708192a3b4c5d6e7f8"
+WIRE433_BASE_AFTER = "f57069d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6a7b"
+WIRE433_SUGGESTION_REF = "refs/wicked/suggestions/r-api/4/0"
+WIRE433_CRITERION = ("the run left a change in its worktree (done is re-derived "
+                     "from the diff, never asserted)")
+WIRE433_RESTORED_REASON = (
+    "evaluator≠creator: phase `verify` declares `executes_code: false` but changed the "
+    "worktree it was reviewing — 1 path(s): M src/App.tsx "
+    f"(tree {WIRE433_TREE_BEFORE[:10]} → {WIRE433_TREE_AFTER[:10]}). "
+    "The change under review is no longer the creator's, so this phase's verdict cannot "
+    "certify it. The evaluator's edit was DISCARDED: the engine restored the creator's tree "
+    f"({WIRE433_TREE_BEFORE[:10]}) in the worktree, so approving this gate retries the phase "
+    "against the verified tree. A phase that must change code declares `executes_code: true` "
+    "in the workflow def.")
+WIRE433_RESTORED_PROMPT = (
+    "Unit 4 verdict is NOT PASS — the evaluator changed the tree under review; its edit was "
+    "discarded and the creator's verified tree restored. Approve to retry the phase against "
+    "the restored tree, or reject to cancel the run")
+WIRE433_LIFT_REFUSAL = (
+    f"deliver: LIFT-CONFLICT — lifting the run's work onto origin/main ({WIRE433_BASE_AFTER[:7]}) "
+    "would conflict in: testid-inventory.json. The worktree was left exactly as verified "
+    f"(base {WIRE433_BASE_BEFORE[:7]}); nothing was rebased and nothing was pushed. Resolve on "
+    "the branch (rebase onto origin/main, regenerate any generated files, re-run the "
+    "repository's checks) and approve to retry the deliver phase.")
+WIRE433_INTENT = "migrate the auth tables"
+
+
+def _wire433_unit(rid: str, key: str, ord_: int, desc: str, stage: str, status: str,
+                  denial: str | None = None, tool_cmd: list | None = None) -> dict:
+    u = {"id": f"{rid}:{key}", "session_id": rid, "ord": ord_, "description": desc,
+         "stage": stage, "assigned_cli": "claude" if status != "pending" else None,
+         "assigned_invocation": None, "council_task_ref": None, "routing": None,
+         "denial_reason": denial, "phase_ref": None, "conformance_ref": None,
+         "phase_status": None, "collection_scope": None, "status": status}
+    if tool_cmd is not None:
+        u["tool_cmd"] = tool_cmd
+    return u
+
+
+WIRE433_API_UNITS = [
+    _wire433_unit("r-api", "triage", 1, f"triage — {WIRE433_INTENT}", "recon", "done"),
+    _wire433_unit("r-api", "reproduce", 2, f"reproduce — {WIRE433_INTENT}", "recon", "done"),
+    _wire433_unit("r-api", "fix", 3, f"fix — {WIRE433_INTENT}", "build", "done"),
+    _wire433_unit("r-api", "verify", 4, f"verify — {WIRE433_INTENT}", "test", "pending"),
+    _wire433_unit("r-api", "deliver", 5, f"deliver — {WIRE433_INTENT}", "build", "pending",
+                  tool_cmd=["bash", "-lc", "gh pr create --fill"]),
+]
+
+WIRE433_T0 = NOW0 - 40 * MIN
+
+
+def _w433_gate_pass(ord_: int, seq: int, ts: int, judge: str | None, distinct: bool | None,
+                    floor: bool) -> dict:
+    return {"type": "gateEvaluated", "session": "r-api", "ord": ord_, "seq": seq, "ts": ts,
+            "criterion": WIRE433_CRITERION if floor else None,
+            "hasDeterministicFloor": floor, "deterministicPass": True,
+            "agentVerdict": "pass" if judge else None,
+            "agentReasoning": ("PASS — the worktree evidence shows modified tracked files, "
+                               "satisfying the criterion. PASS") if judge else None,
+            "evaluatorPass": True, "evaluatorPolicies": [],
+            "denialReason": None, "denial": None, "combined": True,
+            "judgeCli": judge, "judgeDistinct": distinct}
+
+
+WIRE433_API_EVENTS = [
+    {"type": "sessionStarted", "session": "r-api", "problem": WIRE433_INTENT,
+     "workflowId": "bug", "cliCount": 1, "governed": True, "entityMode": "shared",
+     "ts": WIRE433_T0, "seq": 1},
+    {"type": "workflowSelected", "session": "r-api", "workflowId": "bug", "unitCount": 5,
+     "ts": WIRE433_T0 + SEC, "seq": 2},
+    {"type": "awaitingHuman", "session": "r-api", "ord": 1, "seq": 33, "ts": WIRE433_T0 + 2 * SEC,
+     "prompt": f"Approve unit 1 before it runs: triage — {WIRE433_INTENT}", "reviewingOrd": None},
+    _w433_gate_pass(1, 43, WIRE433_T0 + 3 * MIN, None, None, False),
+    {"type": "gateDecided", "session": "r-api", "ord": 1, "seq": 44, "ts": WIRE433_T0 + 3 * MIN, "allow": True},
+    _w433_gate_pass(2, 102, WIRE433_T0 + 6 * MIN, None, None, False),
+    {"type": "gateDecided", "session": "r-api", "ord": 2, "seq": 103, "ts": WIRE433_T0 + 6 * MIN, "allow": True},
+    _w433_gate_pass(3, 197, WIRE433_T0 + 20 * MIN, "codex", True, True),
+    {"type": "gateDecided", "session": "r-api", "ord": 3, "seq": 198, "ts": WIRE433_T0 + 20 * MIN, "allow": True},
+    {"type": "unitDone", "session": "r-api", "ord": 3, "seq": 199, "ts": WIRE433_T0 + 20 * MIN},
+    {"type": "awaitingHuman", "session": "r-api", "ord": 4, "seq": 200, "ts": WIRE433_T0 + 20 * MIN + SEC,
+     "prompt": f"Approve unit 4 before it runs: verify — {WIRE433_INTENT}", "reviewingOrd": None},
+    {"type": "resumed", "session": "r-api", "ord": 4, "seq": 201, "ts": WIRE433_T0 + 22 * MIN},
+    {"type": "unitDispatched", "session": "r-api", "ord": 4, "seq": 202, "ts": WIRE433_T0 + 22 * MIN, "attempt": 0},
+    {"type": "unitExecuting", "session": "r-api", "ord": 4, "seq": 203, "ts": WIRE433_T0 + 22 * MIN},
+    {"type": "evaluatorMutatedWorktree", "session": "r-api", "ord": 4, "seq": 245,
+     "ts": WIRE433_T0 + 28 * MIN, "attempt": 0, "cli": "pi", "phase": "verify",
+     "beforeTree": WIRE433_TREE_BEFORE, "afterTree": WIRE433_TREE_AFTER, "headMoved": False,
+     "changed": [{"path": "src/App.tsx", "status": "M"}], "restored": True, "restoreError": None},
+    {"type": "worktreeRestored", "session": "r-api", "ord": 4, "seq": 246,
+     "ts": WIRE433_T0 + 28 * MIN, "attempt": 0, "cli": "pi", "phase": "verify",
+     "tree": WIRE433_TREE_BEFORE, "head": None,
+     "discarded": [{"path": "src/App.tsx", "status": "M"}],
+     "suggestionRef": WIRE433_SUGGESTION_REF},
+    {"type": "gateEvaluated", "session": "r-api", "ord": 4, "seq": 247, "ts": WIRE433_T0 + 28 * MIN,
+     "criterion": WIRE433_CRITERION, "hasDeterministicFloor": True, "deterministicPass": True,
+     "agentVerdict": "pass",
+     "agentReasoning": "PASS — the worktree evidence shows modified tracked files, satisfying the criterion. PASS",
+     "evaluatorPass": True, "evaluatorPolicies": [],
+     "denialReason": WIRE433_RESTORED_REASON,
+     "denial": {"source": "worktree_guard", "reason": WIRE433_RESTORED_REASON, "claimId": None,
+                "ruleIds": [], "deniedTool": None, "phase": "unit-4"},
+     "combined": False, "judgeCli": "codex", "judgeDistinct": True},
+    {"type": "gateDecided", "session": "r-api", "ord": 4, "seq": 248, "ts": WIRE433_T0 + 28 * MIN, "allow": False},
+    {"type": "unitDenied", "session": "r-api", "ord": 4, "seq": 249, "ts": WIRE433_T0 + 28 * MIN},
+    {"type": "gateEscalated", "session": "r-api", "ord": 4, "seq": 250, "ts": WIRE433_T0 + 28 * MIN,
+     "condition": "verdict_not_pass", "verdictSummary": WIRE433_RESTORED_REASON},
+    {"type": "awaitingHuman", "session": "r-api", "ord": 4, "seq": 251, "ts": WIRE433_T0 + 28 * MIN + SEC,
+     "prompt": WIRE433_RESTORED_PROMPT, "reviewingOrd": 4},
+]
+
+WIRE433_AUTH_UNITS = [
+    _wire433_unit("r-auth", "survey", 0, "survey the auth middleware surface", "recon", "done"),
+    _wire433_unit("r-auth", "review", 1, "review the middleware refactor", "review", "done"),
+    _wire433_unit("r-auth", "deliver", 2, "deliver — refactor the auth middleware", "build",
+                  "rejected", denial=WIRE433_LIFT_REFUSAL,
+                  tool_cmd=["bash", "-lc", "gh pr create --fill"]),
+]
+WIRE433_AUTH_WORKDIR = "/w2/trees/r-auth"
+WIRE433_A0 = NOW0 - 13 * MIN
+
+
+def _w433_auth_planned(ord_: int, desc: str, stage: str, seq: int, ts: int) -> dict:
+    return {"type": "unitPlanned", "session": "r-auth", "ord": ord_, "description": desc,
+            "stage": stage, "role": None, "gate": None, "skillRef": None,
+            "hasValidatorPin": True, "executorType": "cli" if ord_ < 2 else "tool",
+            "ts": ts, "seq": seq}
+
+
+WIRE433_AUTH_EVENTS = [
+    {"type": "sessionStarted", "session": "r-auth", "problem": "refactor the auth middleware",
+     "workflowId": "wf-w2", "cliCount": 1, "governed": True, "entityMode": "shared",
+     "ts": WIRE433_A0, "seq": 1},
+    {"type": "runBaseResolved", "session": "r-auth", "baseRef": "origin/main",
+     "baseCommit": WIRE433_BASE_AFTER, "localHead": WIRE433_BASE_BEFORE, "behind": 5,
+     "fetched": True, "lifted": True, "note": None, "ts": WIRE433_A0 + SEC, "seq": 2},
+    {"type": "workflowSelected", "session": "r-auth", "workflowId": "wf-w2", "unitCount": 3,
+     "ts": WIRE433_A0 + 2 * SEC, "seq": 3},
+    _w433_auth_planned(0, "survey the auth middleware surface", "recon", 4, WIRE433_A0 + 3 * SEC),
+    _w433_auth_planned(1, "review the middleware refactor", "review", 5, WIRE433_A0 + 3 * SEC),
+    _w433_auth_planned(2, "deliver — refactor the auth middleware", "build", 6, WIRE433_A0 + 3 * SEC),
+    {"type": "unitDispatched", "session": "r-auth", "ord": 0, "attempt": 0, "ts": WIRE433_A0 + 4 * SEC, "seq": 7},
+    {"type": "unitOutputCaptured", "session": "r-auth", "ord": 0, "attempt": 0, "outputBytes": 2048,
+     "stepStatus": "ok", "governed": True, "ts": WIRE433_A0 + 40 * SEC, "seq": 8},
+    {"type": "unitDone", "session": "r-auth", "ord": 0, "ts": WIRE433_A0 + 41 * SEC, "seq": 9},
+    {"type": "unitDispatched", "session": "r-auth", "ord": 1, "attempt": 0, "ts": WIRE433_A0 + 42 * SEC, "seq": 10},
+    {"type": "gateEvaluated", "session": "r-auth", "ord": 1, "ts": WIRE433_A0 + 5 * MIN, "seq": 11,
+     "criterion": "the middleware refactor keeps every existing auth test green",
+     "hasDeterministicFloor": True, "deterministicPass": True, "agentVerdict": "pass",
+     "agentReasoning": "PASS — auth.refresh.spec and the full auth suite are green on the refactor. PASS",
+     "evaluatorPass": True, "evaluatorPolicies": [], "denialReason": None, "denial": None,
+     "combined": True, "judgeCli": "codex", "judgeDistinct": True},
+    {"type": "gateDecided", "session": "r-auth", "ord": 1, "allow": True, "ts": WIRE433_A0 + 5 * MIN, "seq": 12},
+    {"type": "unitDone", "session": "r-auth", "ord": 1, "ts": WIRE433_A0 + 5 * MIN, "seq": 13},
+    {"type": "unitDispatched", "session": "r-auth", "ord": 2, "attempt": 0, "ts": WIRE433_A0 + 5 * MIN + SEC, "seq": 14},
+    {"type": "deliverLiftEvaluated", "session": "r-auth", "ord": 2, "attempt": 0,
+     "outcome": "conflict", "baseRef": "origin/main", "baseBefore": WIRE433_BASE_BEFORE,
+     "baseAfter": WIRE433_BASE_AFTER, "treeBefore": WIRE433_TREE_BEFORE, "treeAfter": None,
+     "conflicts": ["testid-inventory.json"], "note": None,
+     "ts": WIRE433_A0 + 5 * MIN + 4 * SEC, "seq": 15},
+    {"type": "stepFailed", "session": "r-auth", "ord": 2, "attempt": 0, "detail": WIRE433_LIFT_REFUSAL,
+     "ts": WIRE433_A0 + 5 * MIN + 4 * SEC, "seq": 16},
+    {"type": "failureTriaged", "session": "r-auth", "ord": 2, "decision": "escalate",
+     "analysis": "the engine refused the deliver: a git state, not a worker error",
+     "ts": WIRE433_A0 + 5 * MIN + 5 * SEC, "seq": 17},
+    {"type": "sessionFailed", "session": "r-auth", "ord": 2, "ts": NOW0 - 12 * MIN, "seq": 18},
+]
+
 # ── Slice BA (DES-UX-002 §1): the nerve-center plan corpus, behind `nerve` ────
 #
 # r-upload's plan grows to §1.5's shape: 5 ordered units, 2 done, 1 active
@@ -1626,12 +1832,13 @@ def assemble_runs() -> list:
         nerve_on = state["nerve"]
         gate_now = list(state["gate_now"])
         guidance = dict(state["guidance"])
+        wire433_on = state["wire433"]
         # Slice S (DES-UX-001 §2.3): the null-claim run + this-lifetime launches
         # join BOTH wires (list + detail) so the DTO echo decorates identically.
         if project_dto_on and not state["no_runs"]:
             runs = runs + [UNFILED_RUN] + launched_runs
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
-            or chronicle_on or nerve_on or gate_now or guidance:
+            or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
         for r in runs:
             # Slice BE (CREW-UX-7, crew#312): the DTO echoes the durable note
@@ -1676,6 +1883,18 @@ def assemble_runs() -> list:
             if forensics_on and r["session"]["id"] == "r-auth":
                 r["units"] = json.loads(json.dumps(FORENSICS_AUTH_UNITS))
                 r["session"]["extra_write_roots"] = [FORENSICS_EVIDENCE_ROOT]
+            # wicked-core#431 (api-types 0.33.0): r-api on the bug workflow's five
+            # units, genuinely ON the denied verify (unit_ix 3); r-auth with its
+            # REJECTED deliver unit (the engine's LIFT-CONFLICT refusal verbatim as
+            # denial_reason) and a workdir, so the Delivery card names the worktree.
+            if wire433_on and r["session"]["id"] == "r-api":
+                r["units"] = json.loads(json.dumps(WIRE433_API_UNITS))
+                r["session"]["unit_ix"] = 3
+                r["session"]["workflow_id"] = "bug"
+            if wire433_on and r["session"]["id"] == "r-auth":
+                r["units"] = json.loads(json.dumps(WIRE433_AUTH_UNITS))
+                r["session"]["workdir"] = WIRE433_AUTH_WORKDIR
+                r["session"]["unit_ix"] = 2
             # Slice S (CREW-UX-2): the DTO echoes the membership record —
             # ALWAYS present with the corpus on (string | null), the
             # api-types 0.8.0 contract. Launched runs arrive pre-stamped;
@@ -2350,6 +2569,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
                                  "prompt": "Approve the deck outline?",
                                  "receivedAt": iso(NOW0 - age)})
+            elif rid == "r-api" and state["wire433"]:
+                # wicked-core#431: the escalated mutation gate on unit 4 with the
+                # engine's NEW prompt (the restored-tree wording); `options: null`
+                # keeps it the COMPLEX shape, answered in the thread.
+                self._json(200, {"runId": rid, "ord": 4, "lifecycle": "open",
+                                 "prompt": WIRE433_RESTORED_PROMPT,
+                                 "receivedAt": iso(NOW0 - 2 * MIN), "options": None})
             elif rid == "r-api":
                 # `options: null` = free text ⇒ the COMPLEX gate shape (§7.11).
                 self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
@@ -2384,6 +2610,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 river_on = state["river"]
                 forensics_on = state["forensics"]
                 timeline_on = state["timeline"]
+                wire433_on = state["wire433"]
             if viewer_on and rid == "r-upload":
                 events = events + VIEWER_EVENTS
             # Slice Q: r-auth's durable tail matches its spread attach clock.
@@ -2400,6 +2627,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             # the full recorded chronology, seq-ordered, deny verdict included.
             if timeline_on and rid == "r-auth":
                 events = list(TIMELINE_AUTH_EVENTS)
+            # wicked-core#431 (api-types 0.33.0): the wire433 corpus SUPERSEDES both
+            # runs' tails — r-api's restored-tree gate fold, r-auth's run base +
+            # lift conflict chronology.
+            if wire433_on and rid == "r-api":
+                events = list(WIRE433_API_EVENTS)
+            if wire433_on and rid == "r-auth":
+                events = list(WIRE433_AUTH_EVENTS)
             # Slice BC: the chain tip's durable tail — the current-state
             # strip's criterion/workflow derivation reads exactly this.
             with state_lock:

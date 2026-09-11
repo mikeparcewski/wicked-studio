@@ -2,7 +2,11 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
 import { useProvenanceStore } from '../store/provenance.js';
+import { DeliverLift } from './DeliverLift.js';
+import { deliverLift, liftOutcomeLabel } from './deliverLiftModel.js';
+import { shortId } from './gateVerdictModel.js';
 import { ProvenanceLine } from './ProvenanceLine.js';
+import { runBaseLine, runBaseOf } from './runBaseModel.js';
 import { VerdictDetail } from './VerdictDetail.js';
 import { WorkUnitDetail } from './WorkUnitDetail.js';
 
@@ -19,6 +23,13 @@ import { WorkUnitDetail } from './WorkUnitDetail.js';
  * (joined from the SessionView's units by `ord`). The derivation is
  * O(units + events) per render, memoized; CREW-UX-6 (explicit boundary events)
  * remains the optimization seam if logs outgrow it.
+ *
+ * wicked-core#431 (api-types 0.33.0) adds four rows, each only when its frame is
+ * in the log: `runBaseResolved` (the one-line "based on origin/<ref> @ <commit>,
+ * N behind, lifted" note at the head), `worktreeRestored` (the creator's tree put
+ * back after an evaluator mutation), `deliverLiftEvaluated` (the pre-push lift's
+ * outcome — its detail is the shared {@link DeliverLift} card) and
+ * `evaluatorToolCallDenied` (a write-class tool call refused at the ACP boundary).
  */
 
 /** The event types that constitute a run's timeline (§2.2); everything else is skipped. */
@@ -66,6 +77,11 @@ export function timelineRows(events: readonly CoreEvent[], units: readonly WorkU
     };
     switch (e.type) {
       case 'sessionStarted': push('run-started', hhmmss(e.ts), null); break;
+      case 'runBaseResolved': {
+        const base = runBaseOf(e);
+        if (base !== null) push('based on', runBaseLine(base), null);
+        break;
+      }
       case 'workflowSelected': push('workflow', str(e.workflowId) || str(e.workflow_id), null); break;
       case 'unitPlanned': push('planned', str(e.description), null); break;
       case 'unitDispatched':
@@ -75,6 +91,24 @@ export function timelineRows(events: readonly CoreEvent[], units: readonly WorkU
       case 'stepFailed': push('✗ failed', str(e['failureKind']) || str(e.detail), phase, 'fail'); break;
       case 'crashRecoveryRedrive': push('↩ retry', `attempt ${attempt}`, phase); break;
       case 'gateEscalated': push('gate', str(e['condition']), 'gate', 'gate'); break;
+      case 'worktreeRestored': {
+        const n = Array.isArray(e.discarded) ? e.discarded.length : 0;
+        push('↺ restored', `creator tree ${str(e.tree) ? shortId(str(e.tree)) : '?'} · ${n} path${n === 1 ? '' : 's'} discarded`, phase, 'gate');
+        break;
+      }
+      case 'evaluatorToolCallDenied':
+        push('✗ write refused', `${str(e.cli) || '?'} · ${str(e['tool']) || 'a write tool'}${str(e['path']) ? ` ${str(e['path'])}` : ''}`, phase, 'fail');
+        break;
+      case 'deliverLiftEvaluated': {
+        const outcome = str(e.outcome) || null;
+        const conflicts = Array.isArray(e['conflicts']) ? (e['conflicts'] as unknown[]).filter((c): c is string => typeof c === 'string') : [];
+        const meta =
+          outcome === 'conflict' ? `${liftOutcomeLabel(outcome)} · ${conflicts.join(', ') || 'no path listed'}`
+          : outcome === 'lifted' ? `${liftOutcomeLabel(outcome)} · ${str(e['baseRef']) || 'remote'} @ ${str(e['baseAfter']) ? shortId(str(e['baseAfter']), 7) : '?'}`
+          : `${liftOutcomeLabel(outcome)}${str(e['note']) ? ` · ${str(e['note'])}` : ''}`;
+        push('lift', meta, phase, outcome === 'conflict' || outcome === 'failed' ? 'fail' : null);
+        break;
+      }
       case 'gateEvaluated': push('verdict', e.combined === true ? 'pass' : 'deny', 'gate', 'gate'); break;
       case 'unitReworkAmended': push('amended', str(e.amendment), 'gate', 'amend'); break;
       case 'sessionCompleted': push('run-ended', 'completed', null); break;
@@ -198,6 +232,75 @@ export function RunTimeline({ view, navigate, onOpenFile }: Props): React.ReactE
         );
       case 'sessionStarted':
         return <StartDetail runId={session.id} problem={session.problem} />;
+      case 'runBaseResolved': {
+        const base = runBaseOf(e);
+        return (
+          <div data-testid="run-base-detail" className="flex flex-col gap-1.5">
+            <p className="text-xs font-semibold font-mono" style={{ color: 'var(--ink-body)' }}>
+              Run base — {base === null ? '(unreadable frame)' : runBaseLine(base)}
+            </p>
+            {base !== null && (
+              <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
+                worktree minted from {base.baseCommit}
+                {base.localHead !== '' && ` · the registered clone's HEAD was ${base.localHead}`}
+                {` · git fetch origin ${base.fetched ? 'succeeded' : 'FAILED (cached refs used)'}`}
+              </p>
+            )}
+            {base !== null && base.note !== null && (
+              <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>{base.note}</p>
+            )}
+          </div>
+        );
+      }
+      case 'deliverLiftEvaluated': {
+        const lift = ord !== null ? deliverLift(events, ord) : null;
+        return lift !== null ? (
+          <DeliverLift view={lift} />
+        ) : (
+          <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>lift · {str(e.outcome) || '?'}</p>
+        );
+      }
+      case 'worktreeRestored': {
+        const discarded = Array.isArray(e.discarded)
+          ? (e.discarded as unknown[]).filter((c): c is { path: string; status: string } =>
+              typeof c === 'object' && c !== null && typeof (c as { path?: unknown }).path === 'string' && typeof (c as { status?: unknown }).status === 'string')
+          : [];
+        const ref = str(e['suggestionRef']) || null;
+        return (
+          <div data-testid="worktree-restored-detail" className="flex flex-col gap-1.5" style={{ overflowWrap: 'anywhere' }}>
+            <p className="text-xs font-semibold font-mono" style={{ color: 'var(--status-gate)' }}>
+              Creator tree restored — unit {ord ?? '?'} · {str(e.phase) || 'phase'} by {str(e.cli) || 'the seat'}
+            </p>
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-body)' }}>
+              discarded: {discarded.length === 0 ? 'no path listed' : discarded.map((c) => `${c.status} ${c.path}`).join(', ')}
+              {str(e.tree) && <span style={{ color: 'var(--ink-dim)' }}> · tree {shortId(str(e.tree))}</span>}
+              {str(e.head) && ` · HEAD reset to ${shortId(str(e.head), 7)}`}
+            </p>
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
+              {ref !== null ? (
+                <>
+                  the discarded edit is kept at <code>{ref}</code> — <code style={{ userSelect: 'all' }}>git show {ref}</code>
+                </>
+              ) : (
+                'the discarded edit was not pinned (no suggestion ref)'
+              )}
+            </p>
+          </div>
+        );
+      }
+      case 'evaluatorToolCallDenied':
+        return (
+          <div data-testid="tool-call-denied-detail" className="flex flex-col gap-1.5" style={{ overflowWrap: 'anywhere' }}>
+            <p className="text-xs font-semibold font-mono" style={{ color: 'var(--status-fail)' }}>
+              Write refused — unit {ord ?? '?'} · {str(e.cli) || 'the seat'} asked for {str(e['tool']) || 'a write tool'}
+              {str(e['path']) && ` on ${str(e['path'])}`}
+            </p>
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-body)' }}>{str(e['reason']) || '(no reason recorded)'}</p>
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
+              refused at the {str(e['carrier']) || 'acp'} permission boundary — a read-only phase may not edit; the call cost the seat one tool call, not the phase a retry
+            </p>
+          </div>
+        );
       case 'gateEscalated':
         return (
           <div className="flex flex-col gap-1.5">
