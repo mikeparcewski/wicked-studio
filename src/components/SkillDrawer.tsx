@@ -509,7 +509,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           }}
         >
           <span className="min-w-0 break-words">
-            <span className="font-semibold" style={{ color: reach.reach === 'needs-claude' ? 'var(--ink-high)' : 'var(--status-gate)' }}>Portability</span>
+            <span className="font-semibold" style={{ color: 'var(--ink-high)' }}>Portability</span>
             {' — '}
             {portabilityTitle(reach)}
           </span>

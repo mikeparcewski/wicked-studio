@@ -78,7 +78,9 @@ npm publish dates. Every version listed here exists on
   at phone width. `skillCounts` gains `notPortable` / `needsClaude` (`portable + notPortable +
   needsClaude === total`). The wire mirror (`src/api/skills-wire.ts`) and its parity fixture move
   to the 0.34.0 block (picking up the 0.29.0 `installer-copy` source kind and the `skills.source` /
-  `skills.manifest` diagnostics findings the 0.27.0 mirror lagged).
+  `skills.manifest` diagnostics findings the 0.27.0 mirror lagged). The Reach KPI group is as wide
+  as the two-tile groups so the context line never ellipsizes, the badge's ink is `--ink-high` on the
+  amber fill so it reads in both themes, and the page header + verbs wrap at phone width.
 
 ## [0.5.5] — 2026-09-11
 ### Added

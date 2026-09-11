@@ -126,9 +126,11 @@ export function PortabilityBadge({ portability, portable }: {
         aria-label={title}
         title={title}
         className={BADGE}
+        // Amber = actionable (the text is fixable); the ink stays `--ink-high` so the badge reads in
+        // BOTH themes (the light theme keeps `--status-gate` pale — only its `-dim` fill is re-tuned).
         style={needsClaude
           ? { background: 'var(--surface-raised)', color: 'var(--ink-muted)' }
-          : { background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
+          : { background: 'var(--status-gate-dim)', color: 'var(--ink-high)', border: '1px solid var(--status-gate)' }}
       >
         {SKILL_REACH_LABELS[view.reach]}
       </span>

@@ -348,8 +348,9 @@ export function SkillsPage({ navigate, search = '' }: {
   return (
     <div data-testid="skills-page" className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
-        <div className="flex items-start gap-2">
-          <div className="min-w-0">
+        {/* The verbs wrap under the intro at phone width instead of squeezing it to a word per line. */}
+        <div className="flex flex-wrap items-start gap-2">
+          <div className="min-w-0 flex-1 basis-[16rem]">
             <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Skills</h2>
             <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
               The skills every governed worker runs — one effective plugin root the daemon publishes
@@ -409,7 +410,7 @@ export function SkillsPage({ navigate, search = '' }: {
               </p>
             )}
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {state.kind === 'loaded' && (
               <>
                 <button
@@ -506,12 +507,15 @@ export function SkillsPage({ navigate, search = '' }: {
                   onOpen={() => setFacets({ ...facets, chip: 'core' })}
                 />
               </KpiGroup>
-              <KpiGroup label="Reach">
+              {/* Same width as the two-tile groups: the context line names both kinds of exclusion and
+                  must not ellipsize at desktop widths (it is the KPI split F-079 asked for). */}
+              <KpiGroup label="Reach" grow={2}>
                 <StatTile
                   testId="skills-kpi-portable"
                   label="Portable"
                   value={counts.portable}
                   context={`${counts.notPortable} not portable · ${counts.needsClaude} need Claude harness`}
+                  title={`${counts.portable} portable · ${counts.notPortable} not portable (an authoring reason — fixable in the skill text) · ${counts.needsClaude} need the Claude harness (by design)`}
                   onOpen={() => setFacets({ ...facets, chip: 'portable' })}
                 />
               </KpiGroup>
