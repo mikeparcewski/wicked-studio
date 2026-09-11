@@ -182,6 +182,20 @@ describe('the project page repo rows (ProjectRepositories)', () => {
     expect(note.textContent).toContain('onboarding run run-reonboard started');
   });
 
+  it('the re-run holds the section\'s ONE mutation lock: Detach is disabled while it is in flight and released after', async () => {
+    let release: (v: { runId: string }) => void = () => undefined;
+    rerunOnboarding.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
+    await fetchReposCached();
+    render(<ProjectRepositories projectId="p-1" members={MEMBERS} onMembersChange={() => undefined} />);
+    fireEvent.click(screen.getByTestId('project-repo-findings-reonboard'));
+    await waitFor(() => expect(screen.getByTestId('project-repo-findings-reonboard')).toBeDisabled());
+    for (const b of screen.getAllByTestId('project-repo-detach')) expect(b).toBeDisabled();
+    release({ runId: 'run-late' });
+    await screen.findByTestId('project-repo-reonboard-note');
+    expect(screen.getByTestId('project-repo-findings-reonboard')).not.toBeDisabled();
+    for (const b of screen.getAllByTestId('project-repo-detach')) expect(b).not.toBeDisabled();
+  });
+
   it('a refused re-run is stated as a failure, not swallowed', async () => {
     rerunOnboarding.mockRejectedValueOnce(new Error('the daemon refused this — repo is already onboarding'));
     await fetchReposCached();

@@ -158,7 +158,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
    * `confirming` while a detach is mid-request, and keeps the picker from
    * starting an attach on top of it.
    */
-  const busy = attaching !== null || detaching !== null;
+  const busy = attaching !== null || detaching !== null || reonboarding !== null;
 
   /**
    * The project this section shows RIGHT NOW — `null` once unmounted. Neither
@@ -195,6 +195,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
     setPickerOpen(false);
     setAttaching(null);
     setDetaching(null);
+    setReonboarding(null);
     return () => { liveProjectId.current = null; };
   }, [projectId]);
 
@@ -271,7 +272,9 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
    * Onboard button posts). This section has no run navigation, so the started run is STATED inline.
    */
   async function rerunOnboarding(repo: RepoEntry): Promise<void> {
-    if (reonboarding !== null) return;
+    // One mutation at a time, the SAME lock attach/detach hold (Copilot on #253): a concurrent
+    // mutation would take the token and this request's `finally` could never clear its flag.
+    if (busy) return;
     const stillMine = beginMutation();
     setReonboarding(repo.id);
     try {

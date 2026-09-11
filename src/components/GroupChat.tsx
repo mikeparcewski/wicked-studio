@@ -158,6 +158,19 @@ const SEAT_DOT: Record<SeatState, string> = {
  */
 const CHAT_ID_KEY = (repoId?: string | null): string => `wicked.chat.${repoId ?? '_'}`;
 
+/**
+ * The per-surface storage key (Copilot on #253): a repo-entry chat is keyed by its repo, a
+ * PROJECT-SHELL chat by its project (`project:<id>`) — never the flat `_` key every shell would
+ * otherwise share, which let project B rejoin project A's chat (now a SCOPE leak, crew#502: no
+ * new POST rides a rejoin, so B's `projectId` was never applied). The flat `/chat/*` routes keep
+ * the historical `_` key.
+ */
+function chatStorageKey(repoId: string | null | undefined, projectId: string | null | undefined): string | null {
+  if (repoId) return repoId;
+  if (projectId) return `project:${projectId}`;
+  return null;
+}
+
 /** All three wrapped: sessionStorage throws in private-mode/blocked-cookie browsers, and a chat
  *  the operator cannot open is a worse outcome than a chat that leaks. Degrades to mint-per-mount,
  *  which is exactly the pre-fix behaviour — no new failure, just no improvement. */
@@ -247,6 +260,19 @@ export function describeChatOpenRefusal(status: number | null, wire: string | nu
   return fallback;
 }
 
+/**
+ * Whether a refused `POST /chats` is one the daemon answered BEFORE opening anything — crew#502's
+ * 400 (bad body / ambiguous name), 404 (missing refs), 409 (a conflict that opened nothing) and
+ * 501 (a scoped chat the engine cannot hold — closed again by the daemon). The one 409 that names
+ * a LIVE chat ("already open on this daemon") is excluded: that id exists and must not be dropped.
+ * Transport failures and 5xx (`status` null / ≥500) are unknown — the id is retained (FINDING-027).
+ */
+export function chatOpenedNothing(status: number | null, wire: string | null): boolean {
+  if (status === 400 || status === 404 || status === 501) return true;
+  if (status === 409) return !(wire !== null && /already open/i.test(wire));
+  return false;
+}
+
 interface Props {
   repoId?: string | null;
   onBack: () => void;
@@ -281,6 +307,8 @@ interface Props {
 export function GroupChat({
   repoId, onBack, projectId = null, navigate, routedChatId = null, reflectUrl = false,
 }: Props): React.ReactElement {
+  /** Where this surface remembers its live chat id — by repo, by project, or the flat `_` key. */
+  const storageKey = chatStorageKey(repoId, projectId);
   const [chatId, setChatId] = useState<string | null>(null);
   const [seats, setSeats] = useState<Record<string, SeatState>>({});
   const [seatErrors, setSeatErrors] = useState<Record<string, string>>({});
@@ -476,7 +504,7 @@ export function GroupChat({
     setOpenError(null);
     setOpenErrorStatus(null);
     setScopeGap(null);
-    clearStoredChatId(repoId);
+    clearStoredChatId(storageKey);
     setChatId(null);
     chatIdRef.current = null;
     setSeats({});
@@ -623,6 +651,13 @@ export function GroupChat({
     setRoutedGone(false);
     setScope(null);
     setScopeUnstated(false);
+    // The create-flow scope choice belongs to the surface it was made on (Copilot on
+    // #253): a repo pick made for one route must not ride the next route's open.
+    setScopeMode('project');
+    setScopeRepoIds([]);
+    setScopePickerOpen(false);
+    setScopeGap(null);
+    setOpenErrorStatus(null);
 
     // A stored id is a claim, not a fact — the daemon reaps idle chats and enforces a pool cap,
     // so it may have reclaimed this one underneath us. Ask before trusting it. With nothing
@@ -630,7 +665,7 @@ export function GroupChat({
     // Read SYNCHRONOUSLY, and park the opt-ins while the probe runs (see `resolving`).
     // J4: a URL-routed id WINS over the per-repo stored id — the operator asked
     // for THAT session by address; the stored id is only the tab's memory.
-    const stored = routedChatId ?? readStoredChatId(repoId);
+    const stored = routedChatId ?? readStoredChatId(storageKey);
     setResolving(stored !== null);
 
     void (async () => {
@@ -663,7 +698,7 @@ export function GroupChat({
         chatIdRef.current = stored;
         // A routed rejoin becomes THIS tab's session for the repo too — /chats
         // → row → send → navigate away → back must land on the same session.
-        writeStoredChatId(repoId, stored);
+        writeStoredChatId(storageKey, stored);
         // Warm seats only — the transcript is not persisted server-side, so a rejoined chat
         // starts with an empty log. The SESSIONS carry the conversation memory, which is the
         // expensive part; re-minting would have thrown that away as well as leaking it.
@@ -688,7 +723,7 @@ export function GroupChat({
       // ended (`routedGone`) — the honest boundary, never a wordless empty.
       // Either way warming stays the user's call and the next opt-in mints fresh.
       if (routedChatId !== null) setRoutedGone(true);
-      if (readStoredChatId(repoId) === stored) clearStoredChatId(repoId);
+      if (readStoredChatId(storageKey) === stored) clearStoredChatId(storageKey);
       setResolving(false);
       // (On the cancelled path `resolving` is deliberately left alone: the next effect
       // run has already set its own value for the new repo.)
@@ -699,7 +734,7 @@ export function GroupChat({
     };
     // (The exhaustive-deps suppression that used to sit here is gone: the effect closes over
     // nothing but `repoId`/`routedChatId` and module-scope helpers — the list is complete.)
-  }, [repoId, routedChatId]);
+  }, [repoId, routedChatId, projectId, storageKey]);
 
   // J4/C6 — the URL names the session the moment it exists. Mint, rejoin, or
   // routed: on the flat chat routes the live id is REFLECTED into `/chat/:id`
@@ -830,7 +865,7 @@ export function GroupChat({
         id = crypto.randomUUID();
         setChatId(id);
         chatIdRef.current = id;
-        writeStoredChatId(repoId, id);
+        writeStoredChatId(storageKey, id);
       }
       // Optimistic chips: each seat being warmed shows as connecting while the open is
       // in flight; ready/failed events (and the open response) correct them as truth arrives.
@@ -923,13 +958,26 @@ export function GroupChat({
         if (ready.length > 0) useLiveChatsStore.getState().upsert(id, ready);
         return { ready, failure: null };
       } catch (e: unknown) {
-        // The id stays stored on purpose: an open that failed at the HTTP layer may still have
-        // warmed seats server-side, and dropping the id here would orphan exactly what
-        // FINDING-027 exists to stop orphaning. The next mount re-checks it and clears it if dead.
-        const failure = describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e));
+        const status = apiStatus(e);
+        const failure = describeChatOpenRefusal(status, apiWire(e), e instanceof Error ? e.message : String(e));
         if (chatIdRef.current === id) {
           setOpenError(failure);
-          setOpenErrorStatus(apiStatus(e));
+          setOpenErrorStatus(status);
+          if (chatOpenedNothing(status, apiWire(e))) {
+            // A NAMED refusal (crew#502): the daemon validated the scope before any seat warmed
+            // and opened nothing — so the provisional id points at no chat, and keeping it would
+            // hide the create controls (the scope row) behind a failed pick the operator could
+            // not correct (Copilot on #253). Drop it; the next send mints fresh.
+            clearStoredChatId(storageKey);
+            setChatId(null);
+            chatIdRef.current = null;
+            setSeats({});
+            setSeatErrors({});
+          }
+          // Otherwise the id stays stored on purpose: an open that failed at the HTTP layer may
+          // still have warmed seats server-side, and dropping the id here would orphan exactly
+          // what FINDING-027 exists to stop orphaning. The next mount re-checks it and clears
+          // it if dead.
         }
         return { ready: [], failure };
       }
@@ -1078,7 +1126,13 @@ export function GroupChat({
     // Forget the id FIRST. If the DELETE fails we still must not rejoin a chat the operator has
     // ended — and the daemon's idle reaper will collect it either way. The reverse order would
     // leave a "live" id pointing at a chat the UI has already walked away from.
-    clearStoredChatId(repoId);
+    clearStoredChatId(storageKey);
+    // The next chat on this surface starts from the scope default, never from the
+    // closed chat's repo pick (Copilot on #253).
+    setScopeMode('project');
+    setScopeRepoIds([]);
+    setScopePickerOpen(false);
+    setScopeGap(null);
     if (chatId !== null) {
       useLiveChatsStore.getState().remove(chatId);
       try {
@@ -1407,7 +1461,7 @@ export function GroupChat({
             <span
               data-testid="chat-scope-dangling"
               title={scope.dangling.join(', ')}
-              style={{ color: 'var(--status-fail)' }}
+              style={{ color: 'var(--status-gate)' }}
             >
               {scope.dangling.length} project member{scope.dangling.length === 1 ? '' : 's'} not readable — no longer in the repo registry: {scope.dangling.join(', ')}
             </span>

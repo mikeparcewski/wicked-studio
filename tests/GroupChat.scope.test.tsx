@@ -51,7 +51,7 @@ vi.mock('../src/hooks/useEventStream.js', () => ({
 }));
 
 const { GroupChat } = await import('../src/components/GroupChat.js');
-const { chatScopeGap, describeChatOpenRefusal } = await import('../src/components/GroupChat.js');
+const { chatScopeGap, chatOpenedNothing, describeChatOpenRefusal } = await import('../src/components/GroupChat.js');
 const { clearRepoCache } = await import('../src/store/repoCache.js');
 
 const ROSTER = [{ key: 'claude', enabled_for_council: true }] as unknown as RosterSeat[];
@@ -106,6 +106,61 @@ describe('the gap rule (chatScopeGap)', () => {
     expect(describeChatOpenRefusal(501, CHAT_OPEN_REFUSALS.engine.body.error, 'x')).toMatch(/^This daemon cannot open a SCOPED chat — the installed wicked-core-ts predates chat scope/);
     expect(describeChatOpenRefusal(400, 'Invalid request body', 'the daemon refused this — Invalid request body')).toBe('the daemon refused this — Invalid request body');
     expect(describeChatOpenRefusal(null, null, 'boom')).toBe('boom');
+  });
+});
+
+describe('the scope choice belongs to the surface it was made on (review fix)', () => {
+  it('a route change resets the repo pick — the next open carries no stale repoRefs', async () => {
+    openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_PROJECT)));
+    const view = render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-repos'));
+    const options = await screen.findAllByTestId('chat-scope-repo-option');
+    fireEvent.click(within(options[1]!).getByRole('checkbox'));
+    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-repo-count', '1');
+    // The App re-renders the SAME mount as a project shell (a different surface).
+    view.rerender(<GroupChat repoId={null} onBack={() => undefined} projectId="api-migration" />);
+    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-mode', 'project');
+    await typeAndSend('shell ask');
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect(lastBody().projectId).toBe('api-migration');
+    expect('repoRefs' in lastBody(), 'the flat route\'s pick must not ride the shell\'s open').toBe(false);
+  });
+
+  it('Close resets the pick too — the next chat on the surface starts from the default', async () => {
+    openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_REPOS_NO_GRAPH)));
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-repos'));
+    const options = await screen.findAllByTestId('chat-scope-repo-option');
+    fireEvent.click(within(options[1]!).getByRole('checkbox'));
+    await typeAndSend('first');
+    await screen.findByTestId('chat-scope');
+    fireEvent.click(screen.getByTestId('chat-close'));
+    await waitFor(() => expect(closeChat).toHaveBeenCalledTimes(1));
+    // (Close calls onBack; the surface itself is `ended`, so the assertion is on the stored pick
+    // through a fresh mount of the same surface.)
+    cleanup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-mode', 'project');
+    expect(getChat, 'the closed id was forgotten — no rejoin probe').not.toHaveBeenCalled();
+  });
+
+  it('project-shell sessions persist per PROJECT: project B never rejoins project A\'s chat', async () => {
+    openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_PROJECT)));
+    render(<GroupChat repoId={null} onBack={() => undefined} projectId="api-migration" />);
+    await typeAndSend('for A');
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    const idA = lastBody().chatId!;
+    expect(sessionStorage.getItem('wicked.chat.project:api-migration')).toBe(idA);
+    expect(sessionStorage.getItem('wicked.chat._'), 'the flat key is not shared with the shell').toBeNull();
+    cleanup();
+    getChat.mockResolvedValue({ chatId: idA, seats: ['claude'], scope: SCOPE_PROJECT });
+    render(<GroupChat repoId={null} onBack={() => undefined} projectId="auth-refactor" />);
+    // Nothing stored for B: first-run, no probe of A's id.
+    expect(screen.getByTestId('chat-firstrun')).toBeInTheDocument();
+    expect(getChat).not.toHaveBeenCalled();
+    cleanup();
+    render(<GroupChat repoId={null} onBack={() => undefined} projectId="api-migration" />);
+    await waitFor(() => expect(getChat).toHaveBeenCalledWith(idA)); // A rejoins its own
   });
 });
 
@@ -262,7 +317,17 @@ describe('crew#502 refusals render as clear inline errors', () => {
     await typeAndSend('scoped');
   }
 
-  it('404 — every missing ref named, the remedy stated', async () => {
+  it('classifies which refusals opened nothing (chatOpenedNothing)', () => {
+    expect(chatOpenedNothing(404, "Repo 'x' not found")).toBe(true);
+    expect(chatOpenedNothing(400, 'ambiguous')).toBe(true);
+    expect(chatOpenedNothing(501, 'predates chat scope')).toBe(true);
+    expect(chatOpenedNothing(409, CHAT_OPEN_REFUSALS.overlap.body.error)).toBe(true);
+    expect(chatOpenedNothing(409, 'chat abc is already open on this daemon; DELETE /chats/abc first')).toBe(false);
+    expect(chatOpenedNothing(500, 'boom')).toBe(false);
+    expect(chatOpenedNothing(null, null)).toBe(false);
+  });
+
+  it('404 — every missing ref named, the remedy stated; the daemon opened nothing, so the create controls RETURN and the corrected pick mints fresh', async () => {
     refuse(CHAT_OPEN_REFUSALS.missing);
     render(<GroupChat repoId={null} onBack={() => undefined} />);
     await sendAsRepos();
@@ -271,6 +336,35 @@ describe('crew#502 refusals render as clear inline errors', () => {
     expect(err.textContent).toContain("Scope refused — Repo 'ghost', 'phantom' not found");
     expect(err.textContent).toContain('Name repositories that are registered');
     expect(screen.queryByTestId('chat-scope-fallback-none')).toBeNull();
+    const refusedId = lastBody().chatId;
+    // The provisional id points at no chat: it is forgotten and the scope row is back.
+    expect(sessionStorage.getItem('wicked.chat._')).toBeNull();
+    const row = screen.getByTestId('chat-scope-row');
+    expect(row).toHaveAttribute('data-mode', 'repos');
+    // Correct the pick (add the second repo) and send again: a FRESH id, the new refs.
+    openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_REPOS_NO_GRAPH)));
+    // The picker (mode + the first pick) survives the refusal — only the dead id is dropped.
+    const options = screen.getAllByTestId('chat-scope-repo-option');
+    expect(options[0]).toHaveAttribute('data-checked', 'true');
+    fireEvent.click(within(options[1]!).getByRole('checkbox'));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('textbox'));
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(2));
+    expect(lastBody().chatId).not.toBe(refusedId);
+    expect(lastBody().repoRefs).toEqual(['studio-api', 'billing']);
+    expect(screen.queryByTestId('chat-open-error'), 'the refusal banner clears on the next attempt').toBeNull();
+  });
+
+  it('a TRANSPORT failure keeps the provisional id (FINDING-027) — the open may have warmed seats', async () => {
+    openChat.mockRejectedValue(new Error('Failed to fetch'));
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await typeAndSend('hello');
+    const err = await screen.findByTestId('chat-open-error');
+    expect(err).toHaveAttribute('data-status', 'none');
+    expect(sessionStorage.getItem('wicked.chat._')).toBe(lastBody().chatId!);
+    expect(screen.queryByTestId('chat-scope-row'), 'the chat may exist — the create controls stay hidden').toBeNull();
   });
 
   it('400 ambiguous name — the daemon\'s own "name the repo by id" sentence', async () => {
