@@ -63,24 +63,44 @@ function CheckRow({ label, ok, detail }: { label: string; ok: boolean | null; de
 
 const EXCERPT_CH = 40;
 
+/**
+ * What a signed-out seat MEANS (acceptance finding F-2R2-009): the roster's `signed_in` is the
+ * daemon's cheap file/env heuristic and the engine's council rule benches a seat it reads as
+ * signed out — so the rail must not wear a green ✓ over "active · signed out" as if nothing
+ * followed from it. The wire carries NO field that says whether the seat could still answer
+ * without a sign-in (the rig saw opencode answer a chat on a provider free tier while
+ * `signed_in:false`), so the row states exactly what IS known — councils bench it — and puts
+ * the free-tier possibility on hover as a possibility, never as a claim.
+ */
+export const SIGNED_OUT_DETAIL = 'signed out — councils bench this seat';
+export const SIGNED_OUT_TITLE =
+  'No sign-in observed for this seat (the daemon\'s file/env check) — a council benches a signed-out seat. '
+  + 'A chat may still seat it on a provider free tier; the roster cannot tell yet. Sign in from Settings.';
+
 /** One registry row (§6.2's anatomy): glyph, name, the honest detail. */
 function SeatRow({ seat }: { seat: RosterSeat }): React.ReactElement {
   const h = seat.health;
+  const signedOut = seat.signed_in === false;
   // Absent health (a daemon predating crew#274) is UNKNOWN — a dim `·`, no
-  // message, never a fabricated "active" (§6.2).
-  const glyph = h === undefined ? '·' : h.status === 'active' ? '✓' : '✗';
-  const color = h === undefined ? 'var(--ink-dim)' : h.status === 'active' ? 'var(--status-run)' : 'var(--status-fail)';
-  const signedIn = seat.signed_in === true ? 'signed in' : seat.signed_in === false ? 'signed out' : null;
+  // message, never a fabricated "active" (§6.2). An ACTIVE seat that is signed
+  // out is reachable but benched: the `!` in gate-amber, not a green ✓ (F-2R2-009).
+  const glyph = h === undefined ? '·' : h.status === 'active' ? (signedOut ? '!' : '✓') : '✗';
+  const color = h === undefined
+    ? 'var(--ink-dim)'
+    : h.status === 'active' ? (signedOut ? 'var(--status-gate)' : 'var(--status-run)') : 'var(--status-fail)';
+  const signedIn = seat.signed_in === true ? 'signed in' : signedOut ? SIGNED_OUT_DETAIL : null;
   const message = h?.status === 'inactive' && h.message !== undefined ? h.message : null;
   const detail = message !== null
     ? message.length > EXCERPT_CH ? `${message.slice(0, EXCERPT_CH)}…` : message
     : [h?.status, signedIn].filter((s): s is string => s != null).join(' · ');
+  const detailColor = message !== null ? 'var(--status-fail)' : signedOut ? 'var(--status-gate)' : 'var(--ink-dim)';
   return (
     <div
       data-testid="rail-seat-row"
       data-seat={seat.key}
       data-health={h?.status ?? 'unknown'}
-      title={message ?? undefined}
+      data-signed-in={seat.signed_in === true ? 'true' : signedOut ? 'false' : 'unknown'}
+      title={message ?? (signedOut ? SIGNED_OUT_TITLE : undefined)}
       style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '5px' }}
     >
       <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{glyph}</span>
@@ -89,7 +109,7 @@ function SeatRow({ seat }: { seat: RosterSeat }): React.ReactElement {
       </span>
       <span
         className="truncate"
-        style={{ marginLeft: 'auto', fontSize: 'var(--text-2xs)', color: message !== null ? 'var(--status-fail)' : 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
+        style={{ marginLeft: 'auto', fontSize: 'var(--text-2xs)', color: detailColor, fontFamily: 'var(--font-mono)' }}
       >
         {detail}
       </span>
@@ -285,8 +305,10 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
   // seat down or the socket gone), amber when degraded (socket still connecting,
   // a probe errored, or the API server not reporting ok), green otherwise. It
   // reads the same signals the section already computes — no new data source.
+  // F-2R2-009: a signed-out seat is benched by councils — degraded, said on the heart too.
+  const benched = (roster ?? []).some((s) => s.signed_in === false && s.health?.status !== 'inactive');
   const degraded =
-    wsStatus === 'connecting' || healthError || rosterError || govWarnings || (health !== null && health.status !== 'ok');
+    wsStatus === 'connecting' || healthError || rosterError || govWarnings || benched || (health !== null && health.status !== 'ok');
   const heartState = sick ? 'unhealthy' : degraded ? 'degraded' : 'healthy';
   const heartColor = sick
     ? 'var(--status-fail)'

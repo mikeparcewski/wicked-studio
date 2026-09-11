@@ -1,4 +1,5 @@
-import type { RepoEntry, SessionView } from '../api/types.js';
+import type { RepoEntry, RepoFinding, SessionView } from '../api/types.js';
+import { findingNeedsReonboard, REPO_FINDING_ROOT_UNRESOLVABLE } from '../components/RepoFindings.js';
 import { outcomeOf } from './metrics.js';
 import { statusCounts, type StatusCounts } from './windowStats.js';
 
@@ -40,6 +41,33 @@ export interface RepoOnboard {
   run: SessionView | null;
 }
 
+/**
+ * The engine's own word on whether a LIVE graph exists (acceptance finding F-2R2-003): the
+ * run history said "graph ready — onboard completed" while the repo's findings said the
+ * checkout's in-tree graph is ignored and NO live graph has been indexed under the state
+ * home — two in-tree repos read as ready on the KPI tiles. `RepoEntry.findings[]`
+ * (wicked-core#406) is derived by the engine on every read, so it outranks a run verdict:
+ *  - `no-live-graph`  — `in_tree_code_graph_ignored` with the re-onboard remedy: the live
+ *                       graph was never built; onboarding again builds it;
+ *  - `no-graph-root`  — `code_graph_root_unresolvable`: no graph can exist for this daemon.
+ * `null` = the findings name no gap (or the daemon predates the field).
+ */
+export type RepoGraphGapKind = 'no-live-graph' | 'no-graph-root';
+
+export interface RepoGraphGap {
+  kind: RepoGraphGapKind;
+  finding: RepoFinding;
+}
+
+/** The graph gap the engine's findings name for this repo, or `null`. */
+export function repoGraphGap(repo: Pick<RepoEntry, 'findings'>): RepoGraphGap | null {
+  for (const finding of repo.findings ?? []) {
+    if (finding.code === REPO_FINDING_ROOT_UNRESOLVABLE) return { kind: 'no-graph-root', finding };
+    if (findingNeedsReonboard(finding)) return { kind: 'no-live-graph', finding };
+  }
+  return null;
+}
+
 /** One repo's fleet-card model — one fold per card, shared by grid and chips. */
 export interface RepoFleetModel {
   repo: RepoEntry;
@@ -52,8 +80,15 @@ export interface RepoFleetModel {
   /** Failed runs in the window, or the graph build itself failed. */
   failing: boolean;
   onboard: RepoOnboard;
+  /** The engine's checkout findings say no live graph exists (F-2R2-003) — outranks `onboard`. */
+  graphGap: RepoGraphGap | null;
   /** Newest attach clock among the repo's runs; `null` = no clock known. */
   lastAt: number | null;
+}
+
+/** Whether the repo's graph is READY: the newest onboard completed AND the engine names no gap. */
+export function graphReady(m: Pick<RepoFleetModel, 'onboard' | 'graphGap'>): boolean {
+  return m.onboard.state === 'ready' && m.graphGap === null;
 }
 
 /**
@@ -103,6 +138,7 @@ export function repoFleetModels(
       activeNow: mine.some((v) => outcomeOf(v.session.status) === 'run'),
       failing: counts.failed > 0 || onboard.state === 'failed',
       onboard,
+      graphGap: repoGraphGap(repo),
       lastAt: clocks.length > 0 ? Math.max(...clocks) : null,
     };
   }).sort((a, b) =>
@@ -114,13 +150,15 @@ export function repoFleetModels(
   );
 }
 
-export type RepoChip = 'all' | 'needs-you' | 'active' | 'failing' | 'ready' | 'never';
+export type RepoChip = 'all' | 'needs-you' | 'active' | 'failing' | 'ready' | 'never' | 'graph-missing';
 
 export function matchesRepoChip(m: RepoFleetModel, chip: RepoChip): boolean {
   if (chip === 'all') return true;
   if (chip === 'needs-you') return m.waiting.length > 0;
   if (chip === 'active') return m.activeNow;
   if (chip === 'failing') return m.failing;
-  if (chip === 'ready') return m.onboard.state === 'ready';
+  // Ready means READY: a completed onboard whose live graph the engine does not dispute.
+  if (chip === 'ready') return graphReady(m);
+  if (chip === 'graph-missing') return m.graphGap !== null;
   return m.onboard.state === 'never'; // never onboarded (no run on record)
 }

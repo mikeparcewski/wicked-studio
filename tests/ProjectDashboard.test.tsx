@@ -313,7 +313,7 @@ describe('bound repos row (unchanged contract)', () => {
     expect(screen.getByTestId('dashboard-runs')).toHaveAttribute('data-count', '1');
   });
 
-  it('a cold cache renders the raw ref in --ink-dim — membership is the truth, still a link, still no fetch', async () => {
+  it('a cold cache renders the raw ref in --ink-dim — membership is the truth, still a link; the section warms the ONE cache once', async () => {
     listProjectMembers.mockResolvedValue({ members: [member('studio-api', 'crew.repo')] });
     render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
 
@@ -322,7 +322,10 @@ describe('bound repos row (unchanged contract)', () => {
     expect(chip).toHaveTextContent('studio-api'); // the raw ref
     expect(chip).toHaveAttribute('href', '/repo-detail/studio-api');
     expect((chip as HTMLElement).style.color).toBe('var(--ink-dim)');
-    expect(listRepos).not.toHaveBeenCalled();
+    // F-2R2-004: the REPOSITORIES rows need the registry for their engine findings, so a
+    // project WITH repo members warms the one session cache on mount — exactly one GET
+    // /repos (the header chip never fetches on its own; it reads the same cache).
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(1));
   });
 
   it('with no crew.repo member the testid is ABSENT — the empty-state budget', async () => {
