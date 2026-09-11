@@ -82,6 +82,13 @@ describe('the finding rule (module functions)', () => {
     expect(container.innerHTML).toBe('');
   });
 
+  it('the host\'s shared lock (`disabled`) disables the action WITHOUT claiming this repo is starting', () => {
+    render(<RepoFindings findings={REPO_INTREE_NO_LIVE.findings} onRerunOnboarding={() => undefined} disabled />);
+    const button = screen.getByTestId('repo-findings-reonboard');
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent('Re-run onboarding');
+  });
+
   it('states the remedy without a button when the host has no onboarding trigger', () => {
     render(<RepoFindings findings={REPO_INTREE_NO_LIVE.findings} />);
     const row = screen.getByTestId('repo-findings-row');
@@ -155,10 +162,11 @@ describe('the repo detail header (RepoDetailPage)', () => {
     await waitFor(() => expect(onSelectRun).toHaveBeenCalledWith('run-reonboard'));
   });
 
-  it('a clean record shows no findings block', async () => {
-    render(<RepoDetailPage repoId="billing" onSelectRun={() => undefined} navigate={() => undefined} onOpenGraph={() => undefined} />);
+  it('a clean record shows no findings block — and no empty spacer under the root path', async () => {
+    const { container } = render(<RepoDetailPage repoId="billing" onSelectRun={() => undefined} navigate={() => undefined} onOpenGraph={() => undefined} />);
     await screen.findByText('billing');
     expect(screen.queryByTestId('repo-findings')).toBeNull();
+    expect(container.querySelector('.mt-2:empty')).toBeNull();
   });
 });
 
@@ -175,6 +183,9 @@ describe('the project page repo rows (ProjectRepositories)', () => {
     expect(rows).toHaveLength(2);
     const blocks = screen.getAllByTestId('project-repo-findings');
     expect(blocks, 'billing is clean — only wicked-studio carries a block').toHaveLength(1);
+    // The clean member gets no padded wrapper either — silent means silent.
+    const billingRow = rows.find((r) => r.getAttribute('data-repo') === 'billing')!;
+    expect(billingRow.parentElement!.children).toHaveLength(1);
     fireEvent.click(within(blocks[0]!).getByTestId('project-repo-findings-reonboard'));
     await waitFor(() => expect(rerunOnboarding).toHaveBeenCalledWith('wicked-studio'));
     const note = await screen.findByTestId('project-repo-reonboard-note');

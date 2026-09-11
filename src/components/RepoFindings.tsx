@@ -76,8 +76,11 @@ interface Props {
   /** The host surface's EXISTING onboarding trigger (`api.rerunOnboarding` + its own state);
    *  when omitted the re-onboard row states the remedy without a button. */
   onRerunOnboarding?: (() => void) | undefined;
-  /** The host's in-flight flag for that trigger (disables the button, "Starting…"). */
+  /** The host's in-flight flag for THIS repo's trigger (disables the button, "Starting…"). */
   rerunning?: boolean | undefined;
+  /** The host's shared mutation lock (another repo's re-run, an attach/detach): disables the
+   *  button without claiming this repo is starting. */
+  disabled?: boolean | undefined;
   /** Card dress: one-line rows, the message truncated with the full text on hover. */
   compact?: boolean | undefined;
   /** Test id root; per-finding rows are `<testId>-row`. */
@@ -85,7 +88,7 @@ interface Props {
 }
 
 export function RepoFindings({
-  findings, onRerunOnboarding, rerunning = false, compact = false, testId = 'repo-findings',
+  findings, onRerunOnboarding, rerunning = false, disabled = false, compact = false, testId = 'repo-findings',
 }: Props): React.ReactElement | null {
   if (findings === undefined || findings.length === 0) return null;
   return (
@@ -141,12 +144,12 @@ export function RepoFindings({
               <button
                 type="button"
                 data-testid={`${testId}-reonboard`}
-                disabled={rerunning}
+                disabled={rerunning || disabled}
                 title="Re-index this repo as a governed onboarding run (index → annotate) — builds the live graph under the daemon state home"
                 onClick={(e) => { e.stopPropagation(); onRerunOnboarding(); }}
                 className="disabled:opacity-50"
                 style={{
-                  flexShrink: 0, cursor: rerunning ? 'default' : 'pointer',
+                  flexShrink: 0, cursor: rerunning || disabled ? 'default' : 'pointer',
                   background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
                   borderRadius: 'var(--radius-md)', padding: '2px 10px',
                   fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', fontWeight: 'var(--weight-semi)',

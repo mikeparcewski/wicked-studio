@@ -217,13 +217,15 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
             {/* studio#251: the engine's checkout findings (wicked-core#406) — an ignored in-tree
                 graph, a graph-less repo — with "Re-run onboarding" wired to THIS page's onboarding
                 trigger. Silent when the record carries none (or predates the field). */}
-            <div className="mt-2">
-              <RepoFindings
-                findings={repo.findings}
-                onRerunOnboarding={() => void startOnboarding()}
-                rerunning={onboarding}
-              />
-            </div>
+            {(repo.findings?.length ?? 0) > 0 && (
+              <div className="mt-2">
+                <RepoFindings
+                  findings={repo.findings}
+                  onRerunOnboarding={() => void startOnboarding()}
+                  rerunning={onboarding}
+                />
+              </div>
+            )}
             {repo.git_url && (
               /^https?:\/\//i.test(repo.git_url) ? (
                 <a

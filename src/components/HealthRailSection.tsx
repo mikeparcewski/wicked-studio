@@ -179,9 +179,9 @@ function GovernanceRows({ read }: { read: GovernanceRead }): React.ReactElement 
               (dl.truncated ? ' · fold truncated at its size cap — count is a floor' : '')
             }
           />
-          {dl.path !== null && <DetailLine testId="rail-governance-outbox" label="outbox" value={dl.path} />}
         </>
       )}
+      {dl.path !== null && <DetailLine testId="rail-governance-outbox" label="outbox" value={dl.path} />}
       {dl.legacyOutbox !== null && (
         <DetailLine testId="rail-governance-legacy" label="legacy outbox" value={`${dl.legacyOutbox.path} · ${dl.legacyOutbox.bytes} bytes`} color="var(--status-gate)" />
       )}
@@ -220,6 +220,9 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
   const [roster, setRoster] = useState<RosterSeat[] | null>(null);
   const [rosterError, setRosterError] = useState(false);
   const [governance, setGovernance] = useState<GovernanceRead>({ kind: 'loading' });
+  /** The expand generation a diagnostics read belongs to — a completion from an earlier
+   *  expand must not overwrite a later one (the findings drive the heart and the dot). */
+  const governanceGen = useRef(0);
   const ref = useRef<HTMLDivElement>(null);
 
   // EC30: the expand IS the fetch gesture — one GET /health + one GET /roster
@@ -238,13 +241,21 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
     // studio#246: the same gesture reads the governance block. Absence is a
     // named state (older daemon), never an invented healthy store.
     setGovernance({ kind: 'loading' });
+    const gen = ++governanceGen.current;
     // Through a resolved promise so a client that cannot serve the read at all
     // (a partial mock, a missing export) becomes the honest error row, not a throw.
+    // Only the CURRENT expand's answer lands (Copilot on #253): a slow earlier read
+    // resolving after a re-expand would otherwise paint stale governance health.
     Promise.resolve()
       .then(() => getDiagnostics())
-      .then((d) => setGovernance(d.governance === undefined ? { kind: 'absent', why: 'no-block' } : { kind: 'ok', governance: d.governance }))
-      .catch((e: unknown) =>
-        setGovernance(isDiagnosticsUnsupported(e) ? { kind: 'absent', why: 'no-route' } : { kind: 'error', message: e instanceof Error ? e.message : String(e) }));
+      .then((d) => {
+        if (governanceGen.current !== gen) return;
+        setGovernance(d.governance === undefined ? { kind: 'absent', why: 'no-block' } : { kind: 'ok', governance: d.governance });
+      })
+      .catch((e: unknown) => {
+        if (governanceGen.current !== gen) return;
+        setGovernance(isDiagnosticsUnsupported(e) ? { kind: 'absent', why: 'no-route' } : { kind: 'error', message: e instanceof Error ? e.message : String(e) });
+      });
     // Opened from the chrome dot: bring the foot into view (§6.2).
     ref.current?.scrollIntoView({ block: 'nearest' });
   }, [open]);

@@ -486,9 +486,19 @@ export function GroupChat({
   /** The project switcher's selection: a project makes `none` meaningless (the
    *  daemon scopes to the project whenever `projectId` rides the open). */
   function selectProject(id: string | null): void {
+    const changed = id !== selectedProjectRef.current;
     setSelectedProjectId(id);
     setScopeGap(null);
-    if (id !== null && scopeModeRef.current === 'none') setScopeMode('project');
+    if (changed) {
+      // A project change is a scope change: the previous project's repo pick and picker do not
+      // carry over (Copilot on #253) — the new project's default is "all its repos", and an
+      // Unfiled switch is back to the explicit-choice state.
+      setScopeMode('project');
+      setScopeRepoIds([]);
+      setScopePickerOpen(false);
+    } else if (id !== null && scopeModeRef.current === 'none') {
+      setScopeMode('project');
+    }
   }
 
   /**

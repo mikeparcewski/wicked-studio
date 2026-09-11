@@ -59,6 +59,29 @@ describe('the fetch rides the expand gesture (EC30)', () => {
   });
 });
 
+describe('only the CURRENT expand\'s answer lands', () => {
+  it('a slow read from an earlier expand cannot overwrite a later expand\'s governance block', async () => {
+    let releaseFirst: (v: unknown) => void = () => undefined;
+    let releaseSecond: (v: unknown) => void = () => undefined;
+    const answers = [
+      new Promise((resolve) => { releaseFirst = resolve; }),
+      new Promise((resolve) => { releaseSecond = resolve; }),
+    ];
+    diagnosticsAnswer = () => answers.shift()!;
+    const { rerender } = render(<HealthRailSection open onToggle={() => undefined} />);
+    rerender(<HealthRailSection open={false} onToggle={() => undefined} />);
+    rerender(<HealthRailSection open onToggle={() => undefined} />);
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
+    releaseSecond({ governance: GOVERNANCE_HEALTHY });
+    const gov = await screen.findByTestId('rail-governance');
+    expect(gov).toHaveAttribute('data-state', 'ok');
+    releaseFirst({ governance: GOVERNANCE_DEADLETTERS }); // the stale first read lands late
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByTestId('rail-governance')).toHaveAttribute('data-state', 'ok');
+    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'healthy');
+  });
+});
+
 describe('the healthy store', () => {
   it('names the store path + source, the record counts, zero dead letters, no findings; heart stays green', async () => {
     withGovernance(GOVERNANCE_HEALTHY);
@@ -70,6 +93,10 @@ describe('the healthy store', () => {
     expect(gov.textContent).toContain('via core-db-sidecar');
     expect(within(gov).getByTestId('rail-governance-store-path').textContent).toContain('/w2/state/core.db.governance/governance.db');
     expect(gov.textContent).toContain('412 records · 37 since boot');
+    // The outbox is part of the account even when it is empty — the operator can see where
+    // a dead letter WOULD land.
+    expect(within(gov).getByTestId('rail-governance-outbox').textContent).toContain('/w2/state/core.db.governance/emit-outbox.ndjson');
+    expect(within(gov).queryByTestId('rail-governance-by-type')).toBeNull();
     expect(within(gov).queryByTestId('rail-governance-finding')).toBeNull();
     expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'healthy');
     expect(screen.queryByTestId('rail-health-summary-dot')).toBeNull();

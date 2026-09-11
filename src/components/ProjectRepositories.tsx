@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { ProjectMember, RepoEntry } from '../api/types.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
-import { RepoFindings } from './RepoFindings.js';
+import { RepoFindings, repoFindings } from './RepoFindings.js';
 
 /**
  * The project's repositories — the one UI path that attaches a `crew.repo`
@@ -196,6 +196,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
     setAttaching(null);
     setDetaching(null);
     setReonboarding(null);
+    setReonboardNote({});
     return () => { liveProjectId.current = null; };
   }, [projectId]);
 
@@ -379,13 +380,14 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
               {/* studio#251: the engine's checkout findings for this member (wicked-core#406) —
                   known once the registry cache is warm (the picker's gesture), silent otherwise
                   and silent for a clean checkout. */}
-              {repo !== undefined && (
+              {repo !== undefined && (repoFindings(repo).length > 0 || note !== undefined) && (
                 <div style={{ padding: '0 10px 6px 30px', minWidth: 0 }}>
                   <RepoFindings
                     compact
                     findings={repo.findings}
                     onRerunOnboarding={() => void rerunOnboarding(repo)}
                     rerunning={reonboarding === repo.id}
+                    disabled={busy}
                     testId="project-repo-findings"
                   />
                   {note !== undefined && (

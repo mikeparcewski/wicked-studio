@@ -126,6 +126,27 @@ describe('the scope choice belongs to the surface it was made on (review fix)', 
     expect('repoRefs' in lastBody(), 'the flat route\'s pick must not ride the shell\'s open').toBe(false);
   });
 
+  it('switching the Project field resets the pick — project B never inherits project A\'s repos', async () => {
+    openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_PROJECT)));
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-repos'));
+    const options = await screen.findAllByTestId('chat-scope-repo-option');
+    fireEvent.click(within(options[0]!).getByRole('checkbox'));
+    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-repo-count', '1');
+    await user.click(screen.getByTestId('project-field'));
+    await waitFor(() => expect(screen.getAllByTestId('project-switcher-option').length).toBeGreaterThan(0));
+    await user.click(screen.getAllByTestId('project-switcher-option')[0]!);
+    const row = screen.getByTestId('chat-scope-row');
+    expect(row).toHaveAttribute('data-mode', 'project');
+    expect(row).not.toHaveAttribute('data-repo-count');
+    expect(screen.queryByTestId('chat-scope-picker')).toBeNull();
+    await typeAndSend('for the project');
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect(lastBody().projectId).toBe('api-migration');
+    expect('repoRefs' in lastBody()).toBe(false);
+  });
+
   it('Close resets the pick too — the next chat on the surface starts from the default', async () => {
     openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_REPOS_NO_GRAPH)));
     render(<GroupChat repoId={null} onBack={() => undefined} />);
