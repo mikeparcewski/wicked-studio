@@ -45,6 +45,21 @@ export function ApprovalDock({
 
   const guidance = session === undefined ? undefined : sessionGuidance(session);
 
+  // The gate's ord, best-first: the cached gate record, else — the daemon-restarted fallback
+  // (§3.3: status says awaiting_human, the transient cache is empty) — derived from the run's own
+  // cursor the way `useRunModel.pendingGate` does: `unit_ix` is a 0-based INDEX and a gate's ord is
+  // the unit it sits before, so resolve it through the snapshot (`units[unit_ix].ord`, else
+  // `unit_ix + 1`). The cursor indexes units in ORD order and the DTO's array is not guaranteed
+  // to arrive sorted, so sort first (the contract ChatPanel's render already states). Trusted run
+  // state, never a guess — it keeps the card's verdict lookup BOUNDED when the prompt itself was
+  // lost (Copilot on #252). Undefined only with no run view at all.
+  const ord: number | undefined =
+    gate !== undefined
+      ? gate.ord
+      : view !== undefined
+        ? ([...view.units].sort((a, b) => a.ord - b.ord)[view.session.unit_ix]?.ord ?? view.session.unit_ix + 1)
+        : undefined;
+
   return (
     <div
       data-testid="approval-dock"
@@ -60,7 +75,9 @@ export function ApprovalDock({
         <SteeringGate
           runId={id}
           guidance={guidance}
-          {...(gate ? { ord: gate.ord, prompt: gate.prompt } : {})}
+          {...(ord !== undefined ? { ord } : {})}
+          {...(gate ? { prompt: gate.prompt } : {})}
+          {...(view !== undefined ? { units: view.units } : {})}
           onResolved={onResolved}
         />
       )}

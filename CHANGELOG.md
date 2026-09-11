@@ -45,6 +45,32 @@ npm publish dates. Every version listed here exists on
     scope, with a **Continue unscoped** fallback that mints a fresh unscoped chat outside the shell).
 
 ### Fixed
+- **Gate cards state the evaluator verdict they are asking about** (#250, acceptance finding
+  F-3R2-006 — the UI half of wicked-core F-036/F-039). The verify pre-run gate ("Approve unit 4
+  before it runs") and the deliver gate showed only their prompt while the `fix` phase's PASS —
+  criterion, deterministic floor, the judge's reasoning — sat in the already-hydrated event log;
+  the DENIED gate said "Unit 4 verdict is NOT PASS — confirm to retry…" while the reason
+  (evaluator≠creator, the changed path, the restore command) was only in an expandable thread
+  line. `SteeringGate` now renders a `gate-verdict` block from the run's own `gateEvaluated` (the
+  last one at or below the gate's ord), with the F-039 `repoChecksEvaluated` floor per check
+  (name · exit code · duration · manifest source, plus what was skipped) and the F-036
+  `evaluatorMutatedWorktree` record (seat, phase, changed paths, tree ids) attached from the SAME
+  fold — a retry's verdict never inherits the previous attempt's evidence. A denial names the
+  layer (`denial.source`: worktree guard, repository checks, …) and quotes the engine's reason
+  verbatim, backticked commands rendered as copyable code. An ungated phase is labelled a
+  default-allow, never a pass (FINDING-025); no evaluation yet ⇒ no block, never a verdict
+  fabricated from the prompt. Zero new requests. `wicked-crew-api-types` 0.30.0 → 0.31.0
+  (purely additive: `UnitDenial`, `GateEvaluatedEvent.denial`, `RepoChecksEvaluatedEvent`,
+  `EvaluatorMutatedWorktreeEvent`). The judge SEAT is not on this wire, so the card claims none.
+- **The landing's delivery strip no longer counts onboarding runs as "Vacuous — needs retry"**
+  (#250, F-3R2-018). The daemon stamps `delivery: 'vacuous'` on every completed repo-scoped run
+  whose worktree is untouched — the DESIGNED outcome of `onboarding` and the other system
+  workflows — so a fresh install read "9 Vacuous — needs retry" and buried the one real signal.
+  `deliveryCounts` (shared by the strip and the KPI ribbon's Review tile) now licenses the
+  vacuous bucket with the Delivery section's own `canDeliver` rule — a deliver unit on the run, or
+  a workflow positively known not to be a system one (`is_system`, the one budgeted
+  `GET /workflows`) — and the cell reads "Vacuous — no change to deliver": the condition, not a
+  prescription. The licence can only withhold a count, never invent one.
 - **`.codegraph/estate.db` is no longer tracked** (#220). A fresh clone shipped the operator repo's code-graph
   identity, so onboarding the clone failed with `REPO COLLISION` (and an older wicked-core wrote into the
   tracked file); the graph is per-checkout, built by `wicked-estate index` under the daemon state home

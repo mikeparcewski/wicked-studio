@@ -4,6 +4,7 @@ import type { Navigate } from '../hooks/useRoute.js';
 import { governedRuns } from '../board/steeringUsage.js';
 import { observedSpend } from '../board/metrics.js';
 import { useRuntimeStore } from '../store/runtime.js';
+import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import {
   attachSeries,
   createdAtSeries,
@@ -51,6 +52,9 @@ interface Props {
 export function DeckKpiRibbon({ runs, claims, needCount, navigate, now }: Props): React.ReactElement {
   const at = now ?? Date.now();
   const logs = useRuntimeStore((s) => s.logs);
+  // The `is_system` lookup licenses the vacuous count (wicked-studio#250, F-3R2-018) — the same
+  // fold the strip below reads, so the Review tile and the strip can never disagree.
+  const isSystemWorkflow = useIsSystemWorkflow();
 
   const model = useMemo(() => {
     const live = runs.filter((v) => v.session.archived_at == null);
@@ -75,7 +79,7 @@ export function DeckKpiRibbon({ runs, claims, needCount, navigate, now }: Props)
     const successWord = counts.terminal === 0 ? '—' : `${Math.round((counts.done / counts.terminal) * 100)}%`;
 
     // Delivery outcomes across all live runs (the review-queue count + the strip below the feed).
-    const dc = deliveryCounts(live);
+    const dc = deliveryCounts(live, isSystemWorkflow);
     const reviewQueue = dc.stranded + dc.vacuous;
 
     // Rework: share of live runs that are a retry of another.
@@ -90,7 +94,7 @@ export function DeckKpiRibbon({ runs, claims, needCount, navigate, now }: Props)
       runsCurrent: current.length, runsDelta, failedDelta, counts, activeNow, spark,
       health, successWord, reviewQueue, reworkPct, governed, spend,
     };
-  }, [runs, claims, logs, at]);
+  }, [runs, claims, logs, at, isSystemWorkflow]);
 
   const go = (path: string) => (e: React.MouseEvent) => { e.preventDefault(); navigate(path); };
 

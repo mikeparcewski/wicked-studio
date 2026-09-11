@@ -14,12 +14,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import type { SessionView } from '../api/types.js';
+import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { unitsInFlight } from '../api/run-state.js';
 import { usageTotals, WINDOW_LABEL_STYLE } from '../board/metrics.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useRunEventStore } from '../store/events.js';
+import { GateVerdict } from './GateVerdict.js';
+import { gateVerdict, phaseLabel } from './gateVerdictModel.js';
 import { useSteeringStore } from '../store/steering.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { chroniclePath, modePath } from '../hooks/useRoute.js';
@@ -271,6 +273,15 @@ const FEED_META: Record<string, FeedMeta> = {
   },
 };
 
+const NO_EVENTS: CoreEvent[] = [];
+const NO_UNITS: WorkUnit[] = [];
+
+/** One open gate as an INSTANCE: the same run can open several while the dashboard stays mounted
+ *  (a retry of the same ord included), and each must fetch and prove its own history. */
+function gateInstanceKey(g: { runId: string; ord: number; receivedAt: number }): string {
+  return `${g.runId}:${g.ord}:${g.receivedAt}`;
+}
+
 const DEFAULT_META: FeedMeta = {
   icon: '·',
   label: 'Event',
@@ -286,6 +297,16 @@ interface GateCardProps {
   ord: number | undefined;
   prompt: string | undefined;
   sessionLbl: string;
+  /** The run's structured event log (already subscribed by the dashboard) — the evaluator verdict
+   *  this gate is about is read from it (wicked-studio#250, F-3R2-006), exactly as `SteeringGate` does. */
+  events: readonly CoreEvent[];
+  /** The run's units (snapshot) — names the verdict's phase. */
+  units: readonly WorkUnit[];
+  /** True once THIS gate instance's durable history has been fetched and merged (see the
+   *  dashboard's backfill). Until then the block is withheld: the store may hold only an earlier
+   *  attempt's evaluation plus this gate's `awaitingHuman`, and a same-ord retry would otherwise
+   *  render the OLD verdict under the new gate — indefinitely, if the fetch returns nothing. */
+  ready: boolean;
   onApprove: (runId: string, amend?: string) => Promise<void>;
   onReject: (runId: string) => Promise<void>;
 }
@@ -295,12 +316,23 @@ function GateActionCard({
   ord,
   prompt,
   sessionLbl,
+  events,
+  units,
+  ready,
   onApprove,
   onReject,
 }: GateCardProps): React.ReactElement {
   const [amend, setAmend] = useState('');
   const [loading, setLoading] = useState(false);
   const [steerOpen, setSteerOpen] = useState(false);
+  // The same verdict block the run page's gate card renders (F-3R2-006): a gate answered from
+  // this inbox must show what it is approving too. Bounded on the gate's ord — with none known,
+  // no block, never an unbounded historical evaluation dressed as this gate's — and only once
+  // this gate instance's history is KNOWN (`ready`): never the previous slice's verdict.
+  const verdict = useMemo(
+    () => (ready && typeof ord === 'number' ? gateVerdict(events, ord) : null),
+    [events, ord, ready],
+  );
 
   const run = useCallback(
     async (action: () => Promise<void>): Promise<void> => {
@@ -394,6 +426,11 @@ function GateActionCard({
         >
           {prompt}
         </p>
+      )}
+
+      {/* The evaluator verdict this gate is about (F-3R2-006) — see SteeringGate. */}
+      {verdict !== null && (
+        <GateVerdict view={verdict} phase={phaseLabel(runId, units, verdict.ord)} />
       )}
 
       {/* Steer textarea — visible only when "Approve + steer" is toggled */}
@@ -963,6 +1000,53 @@ export function CenterDashboard({
     return all.filter((g) => mine.has(g.runId));
   }, [gates, projectId, scopedRuns]);
 
+  // Backfill the event log for OPEN-GATE runs whose frames are not in the store (a landing or
+  // project reload: `useRuns` restores the run list and the gate prompt, but only the run page's
+  // route hydrates `/runs/:id/events`) — else the inbox card's verdict block, which reads that
+  // log, would be empty for an evaluation that is durably recorded (Copilot on #252). Bounded the
+  // way `useBoardModel`'s failed-run backfill is: once per GATE INSTANCE (run id + ord + the
+  // moment it opened) per mount, and only for runs that currently hold a gate (a paused run has
+  // exactly one), so the list surface's request budget stays O(gates opened), not O(rows) — and a
+  // run that opens a second gate while the dashboard stays mounted (a retry of the same ord
+  // included) refreshes its durable prefix, so a reconnect gap between the two can never leave the
+  // earlier attempt's verdict standing under the new gate. No "already has frames" shortcut: after
+  // a reconnect the live slice may hold only the new `awaitingHuman` while the `gateEvaluated` that
+  // opened it was recorded before the socket came up, so presence of a frame proves nothing about
+  // the history — the per-instance guard alone bounds the requests, and `hydrate` merges live
+  // frames by fingerprint, so nothing is double-counted. Depends on `openGates` only (the store
+  // is read inside), so a busy dashboard does not rescan its gates on every structured frame.
+  // Degrades silently — an api surface without `getRunEvents`, a 503 (no event-log binding) or
+  // an empty history leaves the card promptless, never wrong.
+  //
+  // READINESS (Copilot on #252): while an instance's fetch is pending the card renders NO verdict —
+  // the store's slice may be an earlier attempt's evaluation plus this gate's `awaitingHuman`, so
+  // on a same-ord retry after a reconnect "render from what we have" would show the OLD verdict
+  // under the new gate. An instance becomes ready only when its fetch resolves WITH history (the
+  // durable prefix merged); an empty history or a 503 leaves it un-ready for good — no block,
+  // never a stale one — which is the contract stated above.
+  const gateBackfilled = useRef<Set<string>>(new Set());
+  const [gateReady, setGateReady] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    for (const g of openGates) {
+      const id = g.runId;
+      const instance = gateInstanceKey(g);
+      if (gateBackfilled.current.has(instance)) continue;
+      gateBackfilled.current.add(instance);
+      try {
+        api
+          .getRunEvents(id)
+          .then(({ events }) => {
+            if (events.length === 0) return; // nothing known — stays un-ready, no block
+            useRunEventStore.getState().hydrate(id, events);
+            setGateReady((prev) => (prev.has(instance) ? prev : new Set(prev).add(instance)));
+          })
+          .catch(() => { /* no event-log binding, or the fetch failed — stays un-ready, no block */ });
+      } catch {
+        /* an api surface without getRunEvents — nothing to backfill from; stays un-ready */
+      }
+    }
+  }, [openGates]);
+
   /** The last recorded `sessionFailed` message for a run, if the store holds one. */
   const failReasonOf = useCallback(
     (runId: string): string | undefined => {
@@ -1080,6 +1164,9 @@ export function CenterDashboard({
                     ord={gate.ord}
                     prompt={gate.prompt}
                     sessionLbl={lbl}
+                    events={byRun[gate.runId] ?? NO_EVENTS}
+                    units={v?.units ?? NO_UNITS}
+                    ready={gateReady.has(gateInstanceKey(gate))}
                     onApprove={handleApprove}
                     onReject={handleReject}
                   />

@@ -1,5 +1,6 @@
 import type { CoreEvent, WorkUnit } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
+import { phaseLabel } from './gateVerdictModel.js';
 
 /**
  * The evaluator verdict card (DES-UX-001 §1.3-2, slice R).
@@ -75,14 +76,8 @@ export function decidingEval(events: readonly CoreEvent[]): GateEvalView | null 
   return denies[denies.length - 1] ?? evals[evals.length - 1] ?? null;
 }
 
-/** Phase name for an ord: the unit-key suffix for workflow units, the stage for free-text ones. */
-function phaseLabel(runId: string, units: readonly WorkUnit[], ord: number | null): string {
-  if (ord === null) return 'unknown phase';
-  const unit = units.find((u) => u.ord === ord);
-  if (unit === undefined) return `unit ${ord}`;
-  const key = unit.id.startsWith(`${runId}:`) ? unit.id.slice(runId.length + 1) : `u${unit.ord}`;
-  return /^u\d+$/.test(key) ? unit.stage : key;
-}
+// `phaseLabel` (the unit-key suffix for workflow units, the stage for free-text ones) is shared
+// with the gate card's verdict block — one spelling, `./gateVerdictModel.ts`.
 
 const EMPTY_EVENTS: CoreEvent[] = [];
 
