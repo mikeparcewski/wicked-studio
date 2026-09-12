@@ -231,20 +231,20 @@ describe('the governed launch — the wire, the link, the waiting line (F-7R2-01
     expect(within(p).getByTestId('testing-launch-fanout-label')).toHaveTextContent('author-1');
   });
 
-  it('/testing/author absent ⇒ /testing/recon carries `workflow`; the route line says so', async () => {
-    wire({ '/testing/recon': { runId: 'r-2', runIds: ['r-2'], campaign: 'recon-2', campaignRegistered: true } });
+  it('/testing/author absent ⇒ the per-repo POST /runs fan carries `workflow`; /testing/recon is never sent one (0.36.0 declares no such key); the route line says so', async () => {
+    wire({ '/runs': { runId: 'r-2' } });
     const user = userEvent.setup();
     const p = panel();
     await within(p).findByTestId('testing-launch-workflow');
     await attach(user, p, 'wicked-studio');
     await brief(user, p, 'B');
     await screen.findByTestId('testing-launch-waiting');
-    expect(posts().map(([path, body]) => [path, body['workflow']])).toEqual([['/testing/author', undefined], ['/testing/recon', 'qe-author-tests']]);
+    // The exact sequence — a `/testing/recon` call anywhere would fail this.
+    expect(posts().map(([path, body]) => [path, body['workflow']])).toEqual([['/testing/author', undefined], ['/runs', 'qe-author-tests']]);
     const route = within(p).getByTestId('testing-launch-route');
-    expect(route).toHaveTextContent('via POST /testing/recon (workflow)');
-    expect(route).toHaveTextContent('registered on the Test landing');
-    // A single run ALSO names its test label (F-7R2-011: the single-run answer used to render nothing).
-    expect(within(route).getByTestId('testing-launch-fanout-label')).toHaveTextContent('recon-2');
+    expect(route).toHaveTextContent('via POST /runs per repository');
+    expect(within(p).getByTestId('testing-launch-launched')).toHaveAttribute('data-route', 'runs-fan');
+    expect(within(p).getByTestId('testing-launch-fanout-run')).toHaveAttribute('data-run-id', 'r-2');
   });
 });
 

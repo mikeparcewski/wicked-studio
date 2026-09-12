@@ -7,9 +7,11 @@
  * version, and every wave-6 declaration studio codes against lives INSIDE a region (a trivial region
  * beside a hand-written wave-6 block does not satisfy the pin — independent review of #263, F-6).
  *
- * The two WIRE GAPS the mirror keeps studio-worded (a row-level `Campaign.test_set` /
- * `RunGroup.test_set` join; `TestingReconBody.workflow`) are guarded the other way round: the
- * installed package must NOT declare them — the version that does fails here and says "re-vendor".
+ * The two shapes studio 0.5.7 coded against PROVISIONALLY (a row-level `Campaign.test_set` /
+ * `RunGroup.test_set` join; `TestingReconBody.workflow`) are gone — the produced sets ride the
+ * declared TOP-LEVEL `CampaignsListResponse.test_sets`, and the recon+workflow ladder rung was dead
+ * code. Both stay guarded the other way round: the installed package must NOT declare them, and
+ * studio must not reintroduce them — the pin (or edit) that does fails here and says "re-vendor".
  *
  * @vitest-environment node
  */
@@ -26,6 +28,7 @@ import {
   gateUngatedReason,
   QE_AUTHOR_TESTS_WORKFLOW_ID,
   testSetOf,
+  testSetsOf,
   WORKER_REMOTE_WRITE_REMEDY,
 } from '../src/api/wave6-wire.js';
 
@@ -34,6 +37,8 @@ const SKILLS_MIRROR = fileURLToPath(new URL('../src/api/skills-wire.ts', import.
 const INSTALLED = fileURLToPath(new URL('../node_modules/wicked-crew-api-types/index.d.ts', import.meta.url));
 const INSTALLED_PKG = fileURLToPath(new URL('../node_modules/wicked-crew-api-types/package.json', import.meta.url));
 const PINNED_PKG = fileURLToPath(new URL('../package.json', import.meta.url));
+const CAMPAIGNS_SRC = fileURLToPath(new URL('../src/api/campaigns.ts', import.meta.url));
+const TESTING_SRC = fileURLToPath(new URL('../src/api/testing.ts', import.meta.url));
 
 /** The version the wave-6 wire publishes under — the mirror's floor. */
 const WAVE6_VERSION = [0, 36, 0] as const;
@@ -41,7 +46,6 @@ const WAVE6_VERSION = [0, 36, 0] as const;
 const LABEL = /^wicked-crew-api-types@(\S+) index\.d\.ts:(\d+)-(\d+) /;
 const BEGIN = /^\/\/ >>> VERBATIM (.+)$/;
 const END = '// <<< VERBATIM';
-const GAPS_BANNER = '// ── WIRE GAPS — PROVISIONAL';
 
 function semver(v: string): [number, number, number] {
   const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v);
@@ -85,7 +89,6 @@ const mirror = readFileSync(MIRROR, 'utf8');
 const installedDts = readFileSync(INSTALLED, 'utf8');
 const rs = regions(MIRROR);
 const regionText = rs.map((r) => r.body).join('\n');
-const gapsAt = mirror.indexOf(GAPS_BANNER);
 
 /** Studio's own spellings — the constants the surfaces speak; asserted present in the mirror. */
 const STUDIO_CONSTANTS = [
@@ -165,12 +168,11 @@ describe('src/api/wave6-wire.ts — the wave-6 mirror against the installed cont
     expect(atLeast(installed.version, WAVE6_VERSION), `${installed.version} ≥ 0.36.0`).toBe(true);
   });
 
-  it('carries the MIRROR header naming the contract and the release swap; PROVISIONAL only in the wire-gaps section', () => {
+  it('carries the MIRROR header naming the contract and the release swap; nothing PROVISIONAL remains', () => {
     const head = mirror.slice(0, 400);
     expect(head).toContain(`MIRROR of the wicked-crew-api-types ${installed.version} wave-6 additions`);
     expect(head).toContain('replace with imports from the');
-    expect(gapsAt, 'the wire-gaps section exists').toBeGreaterThan(0);
-    expect(mirror.slice(0, gapsAt)).not.toContain('PROVISIONAL');
+    expect(mirror).not.toContain('PROVISIONAL');
   });
 
   it('every VERBATIM region is byte-equal to the INSTALLED package at the labelled line range, and the label names the pinned version', () => {
@@ -202,22 +204,27 @@ describe('src/api/wave6-wire.ts — the wave-6 mirror against the installed cont
     }
   });
 
-  it('WIRE GAP 1 — a row-level `test_set` join / `TestSetRegistration` is NOT declared by the package; the mirror keeps it provisional', () => {
+  it('the produced sets ride the TOP-LEVEL `test_sets` (vendored) — no row-level `test_set` join exists in the package, and studio declares none either', () => {
     expect(installedDts).not.toMatch(/\btest_set\b/);
     expect(installedDts).not.toContain('TestSetRegistration');
-    // The package serves the sets at the list level instead — vendored, so the gap is legible.
     expect(regionText).toContain('test_sets?: TestSet[];');
-    const gaps = mirror.slice(gapsAt);
-    expect(gaps).toContain('export interface TestSetRegistration {');
-    expect(gaps).toContain('test_set?: TestSetRegistration | null;');
+    expect(regionText).toContain('export interface TestSet {');
+    // Studio reads the list, not a row: the provisional join and its reader are gone.
+    expect(mirror).not.toContain('TestSetRegistration');
+    expect(mirror).not.toContain('WithTestSet');
+    expect(readFileSync(CAMPAIGNS_SRC, 'utf8')).not.toMatch(/test_set\??:/);
+    expect(typeof testSetsOf).toBe('function');
   });
 
-  it('WIRE GAP 2 — `TestingReconBody` declares no `workflow` key; the mirror keeps the ladder rung provisional', () => {
+  it('`TestingReconBody` declares no `workflow` key — and studio sends none: the recon+workflow ladder rung is gone', () => {
     const recon = rs.find((r) => r.label.includes('TestingReconBody'));
     expect(recon, 'the TestingReconBody region').toBeDefined();
     expect(recon!.body).toContain('export interface TestingReconBody {');
     expect(recon!.body).not.toContain('workflow');
-    expect(mirror.slice(gapsAt)).toContain('export interface TestingReconWorkflowBody {');
+    expect(mirror).not.toContain('TestingReconWorkflowBody');
+    const testing = readFileSync(TESTING_SRC, 'utf8');
+    expect(testing).not.toContain('testing-recon-workflow');
+    expect(testing).not.toMatch(/\.\.\.pinned,\s*workflow/);
   });
 });
 
@@ -249,6 +256,13 @@ describe('the null-safe readers — an older daemon\'s frame changes nothing', (
   it('the constants studio speaks', () => {
     expect(QE_AUTHOR_TESTS_WORKFLOW_ID).toBe('qe-author-tests');
     expect(WORKER_REMOTE_WRITE_REMEDY).toBe("delivery is performed by the run's deliver phase");
+  });
+  it('test sets: a body without `test_sets` is null (absence), an empty list is []; a row without its run_id is null', () => {
+    expect(testSetsOf(null)).toBeNull();
+    expect(testSetsOf({ campaigns: [], groups: [] })).toBeNull();
+    expect(testSetsOf({ test_sets: [] })).toEqual([]);
     expect(testSetOf(null)).toBeNull();
+    expect(testSetOf({ id: 'x' })).toBeNull();
+    expect(testSetOf({ run_id: 'r' })?.run_id).toBe('r');
   });
 });

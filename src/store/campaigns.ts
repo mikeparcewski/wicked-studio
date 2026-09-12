@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { listCampaigns, type Campaign, type RunGroup } from '../api/campaigns.js';
 import type { CoreEvent } from '../api/types.js';
+import type { TestSet } from '../api/wave6-wire.js';
 
 /**
  * The campaign store (DES-CAMPAIGN-001 §1.5/§2.4 + TH-14): the support probe, the campaign
@@ -79,6 +80,9 @@ interface CampaignsStore {
   campaigns: Campaign[];
   /** Ad-hoc label groups (api-types 0.19.0) — `[]` on a pre-0.19 daemon (normalized). */
   groups: RunGroup[];
+  /** The registered test sets (wave 6, api-types 0.36.0), wire order (newest first); `null` on a
+   *  pre-0.36 daemon — absence, never a fabricated empty list. */
+  testSets: TestSet[] | null;
   /** Live frame fold, keyed by campaign id. */
   live: Record<string, CampaignLive>;
   /** Probe + (re)fetch the list. Sets `support` from the answer (§1.5). */
@@ -94,18 +98,19 @@ export const useCampaignsStore = create<CampaignsStore>((set) => ({
   support: 'unknown',
   campaigns: [],
   groups: [],
+  testSets: null,
   live: {},
 
   refresh: () => {
     if (inflight !== null) return inflight;
     inflight = listCampaigns()
-      .then(({ campaigns, groups }) => {
-        set({ support: 'supported', campaigns, groups });
+      .then(({ campaigns, groups, testSets }) => {
+        set({ support: 'supported', campaigns, groups, testSets: testSets ?? null });
       })
       .catch(() => {
         // 404/501 = this daemon predates campaigns (§1.5's whole discriminator);
         // anything else (network, 500) also reads as unsupported — said once, not spun on.
-        set({ support: 'unsupported', campaigns: [], groups: [] });
+        set({ support: 'unsupported', campaigns: [], groups: [], testSets: null });
       })
       .finally(() => {
         inflight = null;

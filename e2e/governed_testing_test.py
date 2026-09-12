@@ -13,8 +13,10 @@ No crew daemon is involved. Acceptance findings F-075 / F-076 / F-7R2-003 / -005
      workflow + wire and shows the waiting line; the intake gate arrives over /ws and the card
      carries the PLAN — five phases with executor / skill / seat. Project chips carry a DROP
      button (F-076). Screenshots at 1440x700 and 400px.
-  3. THE PRODUCED SET (F-7R2-014): the landing's card shows "2 test files · 11 tests · 11
-     executed · 11 passed · 0 failed" off the campaign's `test_set`, the workflow chip, the plan.
+  3. THE PRODUCED SET (F-7R2-014): the landing's card — the `qe-tests-studio-api` label group
+     0.36.0 files the run under — shows "verified · 11 produced · 11 executed · 11 passed · 0
+     failed" off the TOP-LEVEL `test_sets` row joined by run_id, the workflow chip, the PLAN
+     (opens the run) and the engine's PR link.
   4. THE RUN PAGE (F-7R2-005 / -006 / -012 / -013 / -017): the run head says "council degraded:
      4 of 5 seats benched …"; the feed says "Gate UNGATED on author — no eligible judge seat …"
      (never "Checks ran — pass" for that gate) and "Refused a remote write by claude (creator)
@@ -135,13 +137,19 @@ with sync_playwright() as p:
           const set = c?.querySelector('[data-testid="campaign-card-testset"]');
           return {
             kind: c?.getAttribute('data-kind'),
-            title: (c?.textContent ?? '').includes('Tests · studio-api · run lifecycle'),
+            title: (c?.textContent ?? '').includes('qe-tests-studio-api'),
             workflow: c?.querySelector('[data-testid="campaign-card-workflow"]')?.getAttribute('data-workflow'),
             set: t('[data-testid="campaign-card-testset"]'),
-            tests: set?.getAttribute('data-tests'), executed: set?.getAttribute('data-executed'),
+            setRun: set?.getAttribute('data-run-id'), verified: set?.getAttribute('data-verified'),
+            verifiedChip: t('[data-testid="campaign-card-testset-verified"]'),
+            produced: set?.getAttribute('data-produced'), executed: set?.getAttribute('data-executed'),
             passed: set?.getAttribute('data-passed'), failed: set?.getAttribute('data-failed'),
+            notExecuted: set?.getAttribute('data-not-executed'),
             unverified: !!c?.querySelector('[data-testid="campaign-card-testset-unverified"]'),
             plan: t('[data-testid="campaign-card-testset-plan"]'),
+            planRun: c?.querySelector('[data-testid="campaign-card-testset-plan"]')?.getAttribute('data-run-id'),
+            pr: c?.querySelector('[data-testid="campaign-card-testset-pr"]')?.getAttribute('href'),
+            prText: t('[data-testid="campaign-card-testset-pr"]'),
             delivery: t('[data-testid="campaign-card-delivery"]'),
             header: document.querySelector('[data-testid="campaigns-header-copy"]')?.textContent ?? '',
             authorVerb: document.querySelector('[data-testid="testing-author-open"]')?.textContent?.trim(),
@@ -150,13 +158,16 @@ with sync_playwright() as p:
         }""")
     check(
         "landing_shows_produced_set",
-        card["kind"] == "campaign" and card["title"]
+        card["kind"] == "group" and card["title"]
         and card["workflow"] == "qe-author-tests"
-        and card["set"].startswith("2 test files · 11 tests · 11 executed · 11 passed · 0 failed")
-        and (card["tests"], card["executed"], card["passed"], card["failed"]) == ("11", "11", "11", "0")
+        and card["setRun"] == GT_RUN and card["verified"] == "true" and card["verifiedChip"] == "verified"
+        and "11 produced · 11 executed · 11 passed · 0 failed" in card["set"]
+        and (card["produced"], card["executed"], card["passed"], card["failed"], card["notExecuted"]) == ("11", "11", "11", "0", "0")
         and not card["unverified"]
-        and card["plan"] == "plan: tests/PLAN-run-lifecycle.md"
+        and card["plan"] == "plan: tests/PLAN-run-lifecycle.md" and card["planRun"] == GT_RUN
+        and card["pr"] == "https://github.com/example/studio-api/pull/999" and card["prText"] == "PR #999"
         and "1 of 1 delivered" in card["delivery"]
+        and "1 test set · 11 of 11 passed" in card["testsKpi"]
         and "qe-author-tests" in card["header"]
         and card["authorVerb"] == "Add testing rules",
         **card,

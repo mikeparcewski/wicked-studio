@@ -5,6 +5,7 @@ import type { Diagnostics } from '../src/api/diagnostics.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useRuntimeStore } from '../src/store/runtime.js';
 import { makeView } from './factories.js';
+import { W6_RUN, W6_TEST_SET, w6Group } from './fixtures/wave6.js';
 
 /**
  * The command center's analytics column (DES-HOME-COMMAND-CENTER §4–§5): the
@@ -19,6 +20,9 @@ let chats: Array<{ chatId: string; seats: string[]; idleSecs: number | null }> |
 let claims: GovernanceClaim[] | Error = [];
 let rules: unknown[] | Error = [];
 let campaignsAnswer: unknown[] | Error = [];
+/** The listing's label groups and 0.36 test sets (`null` = a pre-0.36 daemon), beside the campaigns. */
+let groupsAnswer: unknown[] = [];
+let testSetsAnswer: unknown[] | null = null;
 let scoreboardAnswer: unknown | Error = new Error('absent');
 let diagAnswer: Diagnostics | Error = new Error('absent');
 
@@ -43,7 +47,7 @@ vi.mock('../src/api/interactive.js', () => ({
 
 vi.mock('../src/api/campaigns.js', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  listCampaigns: () => answer(campaignsAnswer).then((c) => ({ campaigns: c })),
+  listCampaigns: () => answer(campaignsAnswer).then((c) => ({ campaigns: c, groups: groupsAnswer, testSets: testSetsAnswer })),
 }));
 
 vi.mock('../src/api/wiki.js', async (importOriginal) => ({
@@ -161,6 +165,8 @@ describe('HomeBoard — the section doors', () => {
       { id: 'old-001', retired: true },
     ];
     campaignsAnswer = [];
+    groupsAnswer = [];
+    testSetsAnswer = null;
     scoreboardAnswer = {
       evidence: { per_rule: [{ rule_id: 'sec-001', denial_claims: 2, governs_evidence: 1 }] },
     };
@@ -193,6 +199,17 @@ describe('HomeBoard — the section doors', () => {
       expect(bySection.get('test')).toHaveAttribute('href', '/testing/campaigns');
       expect(bySection.get('evals')).toHaveAttribute('href', '/testing/evals');
       expect(bySection.get('steering')).toHaveAttribute('href', '/steering/dashboard');
+    });
+  });
+
+  it('the Test door counts label groups as tests (how 0.36.0 files a New test) and appends the registered sets once the wire carries them', async () => {
+    groupsAnswer = [w6Group()];
+    testSetsAnswer = [W6_TEST_SET];
+    await mountBoard([makeView({ id: W6_RUN, status: 'completed' })]);
+    await vi.waitFor(() => {
+      const doors = screen.getByTestId('home-section-doors');
+      const test = within(doors).getAllByTestId('section-door').find((d) => d.getAttribute('data-section') === 'test');
+      expect(test?.textContent).toContain('1 test · 1 test set');
     });
   });
 

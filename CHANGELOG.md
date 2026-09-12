@@ -11,6 +11,24 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+### Fixed
+- **The Test landing reads the daemon's top-level `test_sets` (api-types 0.36.0) — counts, PLAN and
+  PR per produced set.** The 0.5.7 landing (`CampaignsPage`, the Home "Test" door, `campaignStats`)
+  read a PROVISIONAL row-level `Campaign.test_set` / `RunGroup.test_set` join that 0.36.0 never
+  declared, so against a 0.36.0 daemon no card showed a produced set. The daemon serves the sets as
+  `CampaignsListResponse.test_sets: TestSet[]` (snake_case, `run_id`-keyed, tagged with the
+  `qe-tests-<repo>` label an authoring run is filed under); `listCampaigns` now normalizes them
+  (`testSets: null` = a pre-0.36 daemon — absence, never a fabricated zero), the store holds them,
+  and the fold joins them onto each campaign / label-group card by `run_id` (and by label for a
+  group). Each set renders its verified chip, `produced · executed · passed · failed` (plus
+  "· N not executed" when the verify phase left tests unrun), the PLAN (opens the producing run)
+  and the engine's PR (`isPrUrl`-gated); the Tests tile's context and the Home door append the
+  registered sets once the wire carries them. The provisional join, its `testSetOf` row reader and
+  the dead `POST /testing/recon` + `workflow` ladder rung (`qe-author-tests` shipped together with
+  `POST /testing/author`, so no daemon lists the workflow without the route; 0.36.0's
+  `TestingReconBody` declares no `workflow` key) are deleted — `tests/wave6Wire.test.ts` now guards
+  that neither shape returns. Fixtures (`tests/fixtures/wave6.ts`, `e2e/uxfix_fixture.py`) serve the
+  real 0.36.0 shape; the testid inventory gains `campaign-card-testset-{verified,pr,more}`.
 
 ## [0.5.7] — 2026-09-11
 _The published bundle is built against `wicked-crew-api-types` **0.36.0** — the exact

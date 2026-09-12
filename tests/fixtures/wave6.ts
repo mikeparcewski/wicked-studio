@@ -1,16 +1,17 @@
-import type { Campaign, RunGroup } from '../../src/api/campaigns.js';
-import type { CoreEvent, GateEvaluatedEvent, UnitDistributedEvent, WorkflowDef } from '../../src/api/types.js';
-import type { TestSetRegistration, WorkerToolCallDeniedEvent } from '../../src/api/wave6-wire.js';
+import type { AttachedRunView, Campaign, CampaignsListing, RunGroup } from '../../src/api/campaigns.js';
+import type { CoreEvent, GateEvaluatedEvent, TestSet, UnitDistributedEvent, WorkflowDef } from '../../src/api/types.js';
+import type { WorkerToolCallDeniedEvent } from '../../src/api/wave6-wire.js';
 import { makeUnit } from '../factories.js';
 
 /**
  * The wave-6 wire (api-types 0.36.0 — the governed testing journey) as SYNTHETIC frames in the
  * engine's `event_to_json` spelling: camelCase, every key present, `null` never absent. Not a
  * recording — every event literal is typed `satisfies` the PUBLISHED 0.36.0 declaration (through
- * `./types.js` / the byte-pinned `wave6-wire.ts` regions) so a drift fails `tsc`. The campaign rows'
- * `test_set` is studio's provisional row-level join (wire gap 1 in `wave6-wire.ts`: 0.36.0 serves
- * `CampaignsListResponse.test_sets` instead). Privacy-scrubbed by construction: synthetic ids, no
- * host paths, no operator text.
+ * `./types.js` / the byte-pinned `wave6-wire.ts` regions) so a drift fails `tsc`. The produced set is
+ * the TOP-LEVEL `CampaignsListResponse.test_sets` row 0.36.0 declares (snake_case, `run_id`-keyed,
+ * tagged with the `qe-tests-<repo>` label the daemon files an authoring run under) — there is no
+ * row-level join on a campaign or a group. Privacy-scrubbed by construction: synthetic ids, no host
+ * paths, no operator text.
  */
 
 export const W6_RUN = 'r-gt-done';
@@ -167,25 +168,57 @@ export const W6_EVENTS: CoreEvent[] = [
   { type: 'sessionCompleted', session: W6_RUN },
 ];
 
-/** The produced test set the completed run registered on the campaigns surface. */
-export const W6_TEST_SET: TestSetRegistration = {
-  runId: W6_RUN,
-  workflow: 'qe-author-tests',
-  files: ['tests/run-lifecycle.test.tsx', 'e2e/run_lifecycle_test.py'],
-  counts: { files: 2, tests: 11, executed: 11, passed: 11, failed: 0 },
+/** The label group `POST /testing/author` files a wicked-studio run under (`TestingAuthorRun.label`). */
+export const W6_LABEL = 'qe-tests-wicked-studio';
+export const W6_PR = 'https://github.com/example/wicked-studio/pull/999';
+
+const W6_SET_BASE = {
+  id: `testset-${W6_RUN}`,
+  run_id: W6_RUN,
+  workflow_id: 'qe-author-tests',
+  label: W6_LABEL,
+  repo_ref: 'wicked-studio',
+  repo_name: 'wicked-studio',
+  registered_at: 1_757_500_000_000,
+  run_status: 'completed',
+  verify_status: 'done',
+  verified: true,
+  files: [
+    { path: 'tests/run-lifecycle.test.tsx', harness: 'vitest', status: 'passed' },
+    { path: 'e2e/run_lifecycle_test.py', harness: 'playwright-python', status: 'passed' },
+  ],
+  produced: 11,
+  executed: 11,
+  passed: 11,
+  failed: 0,
+  not_executed: 0,
   plan: 'tests/PLAN-run-lifecycle.md',
-  prUrl: 'https://github.com/example/wicked-studio/pull/999',
-};
+  harnesses: ['vitest', 'playwright-python'],
+} satisfies Omit<TestSet, 'deliverUrl'>;
 
-/** A registration whose verify phase did NOT run every test — the card must say so. */
-export const W6_TEST_SET_UNVERIFIED: TestSetRegistration = {
-  ...W6_TEST_SET,
-  counts: { files: 2, tests: 11, executed: 6, passed: 6, failed: 0 },
-  prUrl: null,
-};
+/** The produced test set the completed run registered — `CampaignsListResponse.test_sets[0]` as
+ *  0.36.0 declares it: verified, every test executed and green, the PLAN, the engine's PR. */
+export const W6_TEST_SET = { ...W6_SET_BASE, deliverUrl: W6_PR } satisfies TestSet;
 
-/** The campaign row a single-repo New test registers, as `GET /campaigns` serves it. */
-export function w6Campaign(testSet: TestSetRegistration | null = W6_TEST_SET, over: Partial<Campaign> = {}): Campaign {
+/** A set whose verify phase did NOT run every test — registered anyway (deny-dominates: a red set is
+ *  shown, never hidden), `verified: false`, no PR because the deliver phase never ran. */
+export const W6_TEST_SET_UNVERIFIED = {
+  ...W6_SET_BASE,
+  run_status: 'failed',
+  verify_status: 'rejected',
+  verified: false,
+  files: [
+    { path: 'tests/run-lifecycle.test.tsx', harness: 'vitest', status: 'passed' },
+    { path: 'e2e/run_lifecycle_test.py', harness: 'playwright-python', status: 'not-executed' },
+  ],
+  executed: 6,
+  passed: 6,
+  not_executed: 5,
+} satisfies TestSet;
+
+/** An engine campaign whose node run is the producing run — a multi-repo recon's shape; the set
+ *  joins onto it by `run_id`. Carries NO `test_set` row: 0.36.0 declares none. */
+export function w6Campaign(over: Partial<Campaign> = {}): Campaign {
   return {
     id: 'qe-tests-wicked-studio',
     def_id: 'qe-tests-wicked-studio',
@@ -194,18 +227,27 @@ export function w6Campaign(testSet: TestSetRegistration | null = W6_TEST_SET, ov
     node_status: { author: 'completed' },
     node_run_id: { author: W6_RUN },
     node_attempt: { author: 0 },
-    node_delivery: { author: { delivery: 'delivered', deliverUrl: 'https://github.com/example/wicked-studio/pull/999' } },
+    node_delivery: { author: { delivery: 'delivered', deliverUrl: W6_PR } },
     attached_runs: [],
-    test_set: testSet,
     ...over,
   };
 }
 
-/** The ad-hoc group a narrowed-project fan renders as, with the set registered by one member. */
-export function w6Group(testSet: TestSetRegistration | null = W6_TEST_SET): RunGroup {
-  return {
-    label: 'test-m1abc-xyz12345',
-    runs: [{ runId: W6_RUN, status: 'completed', delivery: 'delivered', deliverUrl: 'https://github.com/example/wicked-studio/pull/999' }],
-    test_set: testSet,
-  };
+/** The label group a New test renders as on `GET /campaigns` — how 0.36.0 files an authoring run
+ *  (`campaignRegistered: false`, one `RunGroup` per repo under `qe-tests-<repo>`). */
+export function w6Group(
+  label: string = W6_LABEL,
+  runs: AttachedRunView[] = [{ runId: W6_RUN, status: 'completed', delivery: 'delivered', deliverUrl: W6_PR }],
+): RunGroup {
+  return { label, runs };
+}
+
+/** The normalized listing `listCampaigns()` answers (what the suites mock): `testSets: null` is the
+ *  pre-0.36 daemon — the sets ABSENT, not empty. */
+export function w6Listing(
+  testSets: TestSet[] | null = [W6_TEST_SET],
+  campaigns: Campaign[] = [],
+  groups: RunGroup[] = [w6Group()],
+): CampaignsListing {
+  return { campaigns, groups, testSets };
 }

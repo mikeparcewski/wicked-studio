@@ -106,7 +106,6 @@ type WorkflowsState = 'loading' | 'unavailable' | WorkflowDef[];
 /** The words for the wire a launch rode — stated on the panel, never implied. */
 const ROUTE_WORD: Record<GovernedLaunchRoute, string> = {
   'testing-author': 'via POST /testing/author',
-  'testing-recon-workflow': 'via POST /testing/recon (workflow)',
   'runs-fan': 'via POST /runs per repository — repoRef scopes, projectId files',
   'testing-recon-plain': 'via POST /testing/recon — a plain free-text run',
 };

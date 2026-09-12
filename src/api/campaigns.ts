@@ -24,7 +24,7 @@
 
 import { apiFetch } from './client.js';
 import type { SessionStatus } from './types.js';
-import type { TestSetRegistration } from './wave6-wire.js';
+import { testSetsOf, type TestSet } from './wave6-wire.js';
 
 /** Per-node lifecycle status. Terminal = `completed` | `failed` | `blocked` | `cancelled`. */
 export type CampaignNodeStatus =
@@ -128,13 +128,6 @@ export interface Campaign {
    * scheduler ignores them; provenance only. Absent from a pre-0.19 daemon; `[]` when none.
    */
   attached_runs?: AttachedRunView[];
-  /**
-   * The produced TEST SET a completed `qe-author-tests` run registered here (wave 6, api-types
-   * 0.36.0 — acceptance finding F-7R2-014): daemon-joined like `node_delivery`, with the counts the
-   * verify phase re-derived. Absent from a daemon that predates the wave; `null` when the run has
-   * registered nothing yet. Read through `testSetOf` (`./wave6-wire.ts`), never bare.
-   */
-  test_set?: TestSetRegistration | null;
   [k: string]: unknown;
 }
 
@@ -146,14 +139,30 @@ export interface Campaign {
 export interface RunGroup {
   label: string;
   runs: AttachedRunView[];
-  /** The produced test set, when a member `qe-author-tests` run registered one (wave 6). */
-  test_set?: TestSetRegistration | null;
 }
 
-/** `GET /campaigns` 200 body — `groups` is ADDITIVE (a pre-0.19 daemon sends only campaigns). */
+/**
+ * `GET /campaigns` 200 body — `groups` is ADDITIVE (a pre-0.19 daemon sends only campaigns), and so
+ * is `test_sets` (wave 6, api-types 0.36.0 — F-7R2-014): the registered TEST SETS, newest first,
+ * each keyed by the `run_id` that produced it and tagged with the `qe-tests-<repo>` `label` the
+ * daemon filed the authoring run under. A pre-0.36 daemon omits the key. There is NO row-level join
+ * on a campaign or a group — the sets are joined client-side (`board/campaignStats.ts`).
+ */
 export interface CampaignsListResponse {
   campaigns: Campaign[];
   groups: RunGroup[];
+  test_sets?: TestSet[];
+}
+
+/**
+ * The listing as studio holds it — the wire normalized ONCE: `groups` is always an array, and
+ * `testSets` keeps the wire's honest absence (`null` = a daemon predating the sets; `[]` = a 0.36
+ * daemon with nothing registered yet), so no surface fabricates a zero.
+ */
+export interface CampaignsListing {
+  campaigns: Campaign[];
+  groups: RunGroup[];
+  testSets: TestSet[] | null;
 }
 
 /**
@@ -176,11 +185,12 @@ export interface RunAcceptance {
 /**
  * `GET /campaigns` — 200 with empty lists on an empty store; 404/501 = daemon predates
  * campaigns (§1.5). A pre-0.19 daemon omits `groups`, normalized here to `[]` so no consumer
- * carries the `undefined` arm.
+ * carries the `undefined` arm; a pre-0.36 daemon omits `test_sets`, kept as `null` (absence is a
+ * fact the Test landing and the Home door render as "no sets on this wire", never as 0).
  */
-export async function listCampaigns(): Promise<CampaignsListResponse> {
-  const res = await apiFetch<{ campaigns?: Campaign[]; groups?: RunGroup[] }>('/campaigns');
-  return { campaigns: res.campaigns ?? [], groups: res.groups ?? [] };
+export async function listCampaigns(): Promise<CampaignsListing> {
+  const res = await apiFetch<Partial<CampaignsListResponse>>('/campaigns');
+  return { campaigns: res.campaigns ?? [], groups: res.groups ?? [], testSets: testSetsOf(res) };
 }
 
 /** `GET /campaigns/:id` — `{ campaign }`, the same daemon-side join as the list; 404 unknown. */
