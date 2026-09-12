@@ -1,4 +1,4 @@
-// crew#265 — the Archived chip: a write-off view, off by default.
+// crew#265 + issue #219 — Archived chip and Archive-from-row.
 //
 // Default: archived runs are simply absent (the daemon excludes them; WorkPage adds nothing).
 // Chip ON: fetches the complete list, shows ONLY the archived remainder under an "Archived"
@@ -70,5 +70,51 @@ describe('WorkPage — Archived chip (crew#265)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Unarchive' }));
     expect(archiveRun).toHaveBeenCalledWith('old-1', false);
     await waitFor(() => expect(screen.queryByText(/campaign leftover/)).toBeNull());
+  });
+});
+
+describe('WorkPage — Archive from terminal row (#219)', () => {
+  it('terminal rows show an Archive button', () => {
+    render(
+      <WorkPage
+        runs={[live]}
+        selectedRunId={null}
+        onSelect={() => {}}
+        navigate={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole('button', { name: 'Archive' })).toHaveLength(1);
+  });
+
+  it('active runs do not show an Archive button', () => {
+    const activeRun = makeView({ id: 'act-1', workflow_id: 'feature', problem: 'active work', status: 'executing' });
+    render(
+      <WorkPage
+        runs={[activeRun]}
+        selectedRunId={null}
+        onSelect={() => {}}
+        navigate={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+  });
+
+  it('Archive calls archiveRun(id, true) and invokes onRefresh', async () => {
+    archiveRun.mockResolvedValue({ runId: 'live-1', archived: true });
+    const onRefresh = vi.fn();
+    render(
+      <WorkPage
+        runs={[live]}
+        selectedRunId={null}
+        onSelect={() => {}}
+        navigate={() => {}}
+        onRefresh={onRefresh}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    expect(archiveRun).toHaveBeenCalledWith('live-1', true);
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
   });
 });

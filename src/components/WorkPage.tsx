@@ -17,6 +17,8 @@ interface Props {
    *  `?filter=failed` (an all-runs affordance in a failure context) lands with
    *  the Failed tab active. Anything not a tab id is ignored. */
   search?: string;
+  /** Called after a successful archive so the parent can refresh the run list. */
+  onRefresh?: () => void;
 }
 
 /** The routed status filter, or null when the search carries none/garbage. */
@@ -44,7 +46,7 @@ const TABS: { id: StatusTab; label: string }[] = [
   { id: 'cancelled', label: 'Cancelled' },
 ];
 
-export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' }: Props): React.ReactElement {
+export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '', onRefresh }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const entryFilter = routedFilter(search);
   const [tab, setTab] = useState<StatusTab>(entryFilter ?? 'all');
@@ -81,6 +83,15 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
     try {
       await api.archiveRun(id, false);
       setArchivedRuns((prev) => (prev ? prev.filter((v) => v.session.id !== id) : prev));
+    } catch {
+      /* surfaced on next fetch; the row simply stays */
+    }
+  }
+
+  async function archive(id: string): Promise<void> {
+    try {
+      await api.archiveRun(id, true);
+      onRefresh?.();
     } catch {
       /* surfaced on next fetch; the row simply stays */
     }
@@ -370,7 +381,20 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
               <>
                 <GroupLabel>Completed</GroupLabel>
                 {completedGroup.map(v => (
-                  <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                  <div key={v.session.id} className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <RunLink view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="run-archive-row"
+                      onClick={() => void archive(v.session.id)}
+                      className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
+                      style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+                    >
+                      Archive
+                    </button>
+                  </div>
                 ))}
               </>
             )}
@@ -378,7 +402,20 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
               <>
                 <GroupLabel>Failed</GroupLabel>
                 {failedGroup.map(v => (
-                  <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                  <div key={v.session.id} className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <RunLink view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="run-archive-row"
+                      onClick={() => void archive(v.session.id)}
+                      className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
+                      style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+                    >
+                      Archive
+                    </button>
+                  </div>
                 ))}
               </>
             )}
@@ -386,7 +423,20 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
               <>
                 <GroupLabel>Cancelled</GroupLabel>
                 {cancelledGroup.map(v => (
-                  <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                  <div key={v.session.id} className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <RunLink view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="run-archive-row"
+                      onClick={() => void archive(v.session.id)}
+                      className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
+                      style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+                    >
+                      Archive
+                    </button>
+                  </div>
                 ))}
               </>
             )}
@@ -397,9 +447,26 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '' 
             {filtered.length === 0 ? (
               <EmptyState query={query} tab={tab} hidden={hiddenByRange} />
             ) : (
-              filtered.map(v => (
-                <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
-              ))
+              filtered.map(v =>
+                tab === 'active' ? (
+                  <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                ) : (
+                  <div key={v.session.id} className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <RunLink view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="run-archive-row"
+                      onClick={() => void archive(v.session.id)}
+                      className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
+                      style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+                    >
+                      Archive
+                    </button>
+                  </div>
+                )
+              )
             )}
           </>
         )}
