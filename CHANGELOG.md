@@ -11,6 +11,24 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+### Fixed
+- **Archive control for terminal runs in the run header and on WorkPage rows (#219, refs #211).**
+  Studio could *unarchive* a run (crew#265) but never *archive* one — `archiveRun(id, false)` was the
+  wire's only caller, so a terminal run left the active work list only through the API and the
+  seed-surfaces suite's RUN-ARC journey (#211) had to run `[SUBSTITUTE]`. The run header of every
+  terminal run (`completed` / `failed` / `cancelled`, on both `/runs/:id` and `/p/:pid/build/:runId`)
+  now carries **Archive** (`run-archive`) in the slot Cancel occupies on a live run: confirm-gated
+  (`run-archive-confirm`, Yes / Keep, Escape = Keep), refusals surfaced inline as `role="alert"`
+  (`run-archive-error`) with the confirm held open, and on success the run index refreshes and the
+  view navigates back so the run leaves the list. Every terminal Work row — the Completed / Failed /
+  Cancelled groups on the All tab and the filtered Completed / Failed / Cancelled tab views — gets
+  an inline **Archive** button (`run-archive-row`) beside the run, the shipped Unarchive-row pattern;
+  Active rows and live runs get nothing. Both paths `POST /runs/:id/archive {archived: true}`;
+  Unarchive is unchanged.
+  - *Review findings landed in-wave (independent review of #268, M-1 / L-1 / L-2):* this entry; the
+    header offers no Archive on an already-archived run (`session.archived_at` set — reachable
+    through the Archived chip), so there is nothing to re-archive; and the WorkPage tests now cover
+    the filtered tab views and the Failed / Cancelled groups, not only Completed.
 
 ## [0.5.8] — 2026-09-12
 _The published bundle is built against `wicked-crew-api-types` **0.36.0** — the exact

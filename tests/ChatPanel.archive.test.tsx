@@ -59,6 +59,17 @@ describe('run header Archive (#219)', () => {
     expect(screen.queryByTestId('run-archive-confirm')).toBeNull();
   });
 
+  it.each(['completed', 'cancelled', 'failed'] as const)(
+    'an already-archived %s run offers no Archive — archived_at is set, nothing to re-archive',
+    (status) => {
+      renderPanel(makeView({ id: 'run-9', status, unit_ix: 0, archived_at: 1786700000000 }, []));
+      expect(screen.getByTestId('run-header')).toBeInTheDocument();
+      expect(screen.queryByTestId('run-archive')).toBeNull();
+      expect(screen.queryByTestId('run-archive-confirm')).toBeNull();
+      expect(client.api.archiveRun).not.toHaveBeenCalled();
+    },
+  );
+
   it('asks first — Keep closes the confirm and fires nothing', async () => {
     const user = userEvent.setup();
     const { onRefresh } = renderPanel(terminalView('completed'));

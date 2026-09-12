@@ -956,8 +956,11 @@ function RunChat({
         <ModePill mode={mode} onChange={onModeChange} readOnly={isTerminal} />
         <ExportEvidenceButton runId={session.id} disabled={!isTerminal} />
         {/* Archive for terminal runs (#219): write-off → navigates back so the
-            run leaves the active list; the run index refreshes on success. */}
-        {isTerminal && (
+            run leaves the active list; the run index refreshes on success. An
+            already-archived run (reached through the Archived chip) offers
+            nothing to re-archive — `archived_at` is set, guard `== null` (the
+            wire sends `null` for live, never omits the key). */}
+        {isTerminal && session.archived_at == null && (
           <RunArchiveControl
             runId={session.id}
             onArchived={() => { onRefresh(); onNavigateBack(); }}
