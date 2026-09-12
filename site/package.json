@@ -11,7 +11,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "astro": "^7.1.3",
+    "astro": "^7.3.2",
     "wicked-web": "github:mikeparcewski/wicked-web#c522dc2e0addacae99eae248fca5164e8a2bc08e"
   },
   "devDependencies": {
