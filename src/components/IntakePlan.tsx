@@ -32,8 +32,9 @@ export interface IntakePlanProps {
   autoDeliver?: boolean | null | undefined;
 }
 
-/** The run's deliver posture off the session DTO (`auto_deliver`, additive since wicked-core-ts
- *  0.7.24): a boolean when the engine knows the deliver gate, `null` when it predates it. */
+/** The run's deliver posture off the session DTO (`AgentSession.auto_deliver`, additive since
+ *  wicked-core-ts 0.7.24 / api-types 0.37.0): a boolean when the engine knows the deliver gate,
+ *  `null` when it predates it. Null-safe on ANY frame — an older daemon's DTO has no key. */
 export function autoDeliverOf(session: unknown): boolean | null {
   if (typeof session !== 'object' || session === null) return null;
   const v = (session as { auto_deliver?: unknown }).auto_deliver;

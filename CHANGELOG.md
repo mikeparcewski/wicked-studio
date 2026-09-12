@@ -50,6 +50,18 @@ npm publish dates. Every version listed here exists on
   never sends `deliverGate` (the older launch schema rejects it). "No gates" is labelled
   auto-deliver only where the select is honoured (not in Ask mode, where every unit is gated).
 
+### Changed
+- **Pin `wicked-crew-api-types` 0.37.0** (the deliver-gate wire, crew#543) and re-vendor both wire
+  mirrors from the installed `index.d.ts`. Built against api-types 0.37.0: `HealthResponse`
+  (`GET /health`, previously undeclared) with `capabilities.deliverGate`, `LaunchRunBody.deliverGate:
+  'human' | 'auto'`, and `AgentSession.auto_deliver` — the three shapes #269 hand-declared as
+  "≥ 0.37" in `src/api/client.ts` (`getHealth`) and `src/api/types.ts` (`LaunchBodyWithDeliver`) now
+  come from the package, and `tests/deliverGateWire.test.ts` pins them to the installed `index.d.ts`
+  (compile-time `satisfies` + the declaration lines) so a pin that loses them fails the suite. 0.37.0
+  is ADDITIVE and touches neither the skills block nor the wave-6 shapes: all 16 VERBATIM regions of
+  `src/api/skills-wire.ts` (+ its fixture, now `tests/fixtures/api-types-0.37.0-skills.d.ts`;
+  `index.d.ts:1995-2445` / `4720-4779`) and `src/api/wave6-wire.ts` are byte-identical to 0.36.0 and
+  relabelled by line range only (+26 above the `LaunchRunBody` addition, +38 below it).
 
 ## [0.5.8] — 2026-09-12
 _The published bundle is built against `wicked-crew-api-types` **0.36.0** — the exact
