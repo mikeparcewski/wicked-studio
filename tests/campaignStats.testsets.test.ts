@@ -82,14 +82,17 @@ describe('unattributedTestSets / testSetsWord — the tile says what no card can
     expect(unattributedTestSets(cards, [W6_TEST_SET])).toEqual([]);
     expect(unattributedTestSets([], [])).toEqual([]);
   });
-  it('the sets word leads with the count and the pass fraction, then the honest tails; a real zero is said', () => {
+  it('the sets word leads with the count and the pass fraction, then the honest tails; a real zero is said — the painted `lead` form is short, the `full` form for the hover title is unabridged (R2-1)', () => {
     const one = testSetTotals([W6_TEST_SET]);
-    expect(testSetsWord(one, 0, 0)).toBe('1 test set · 11/11 passed');
-    expect(testSetsWord(one, 1, 0)).toBe('1 test set · 11/11 passed · 1 unattributed');
-    expect(testSetsWord(one, 0, 2)).toBe('1 test set · 11/11 passed · 2 malformed');
-    expect(testSetsWord(testSetTotals([W6_TEST_SET, W6_TEST_SET_UNVERIFIED]), 1, 1)).toBe('2 test sets · 17/22 passed · 1 unattributed · 1 malformed');
-    expect(testSetsWord(testSetTotals([]), 0, 0)).toBe('no test sets registered yet');
+    expect(testSetsWord(one, 0, 0)).toBe('1 set · 11/11 passed');
+    expect(testSetsWord(one, 0, 0, 'full')).toBe('1 test set · 11/11 passed');
+    expect(testSetsWord(one, 1, 0)).toBe('1 set · 11/11 passed · 1 unattributed');
+    expect(testSetsWord(one, 0, 2)).toBe('1 set · 11/11 passed · 2 malformed');
+    expect(testSetsWord(testSetTotals([W6_TEST_SET, W6_TEST_SET_UNVERIFIED]), 1, 1)).toBe('2 sets · 17/22 passed · 1 unattributed · 1 malformed');
+    expect(testSetsWord(testSetTotals([W6_TEST_SET, W6_TEST_SET_UNVERIFIED]), 1, 1, 'full')).toBe('2 test sets · 17/22 passed · 1 unattributed · 1 malformed');
+    expect(testSetsWord(testSetTotals([]), 0, 0)).toBe('no sets registered yet');
+    expect(testSetsWord(testSetTotals([]), 0, 0, 'full')).toBe('no test sets registered yet');
     // Zero joinable sets but a malformed row: the row is said, not "nothing registered".
-    expect(testSetsWord(testSetTotals([]), 0, 1)).toBe('0 test sets · 0/0 passed · 1 malformed');
+    expect(testSetsWord(testSetTotals([]), 0, 1)).toBe('0 sets · 0/0 passed · 1 malformed');
   });
 });

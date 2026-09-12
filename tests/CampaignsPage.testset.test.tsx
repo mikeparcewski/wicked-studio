@@ -136,7 +136,8 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     const tile = screen.getByTestId('stat-campaigns');
     expect(tile).toHaveAttribute('data-test-sets', '2');
     expect(tile).toHaveAttribute('data-test-sets-unattributed', '1');
-    expect(within(tile).getByTestId('stat-context')).toHaveTextContent('2 test sets · 22/22 passed · 1 unattributed');
+    expect(within(tile).getByTestId('stat-context')).toHaveTextContent('2 sets · 22/22 passed · 1 unattributed');
+    expect(within(tile).getByTestId('stat-context')).toHaveAttribute('title', expect.stringContaining('2 test sets · 22/22 passed · 1 unattributed'));
     expect(tile).toHaveAttribute('title', expect.stringContaining('tests/PLAN-stray.md'));
   });
 
@@ -144,7 +145,7 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     await landing(w6Listing([W6_TEST_SET], [], [w6Group()], 2));
     const tile = screen.getByTestId('stat-campaigns');
     expect(tile).toHaveAttribute('data-test-sets-malformed', '2');
-    expect(within(tile).getByTestId('stat-context')).toHaveTextContent('1 test set · 11/11 passed · 2 malformed');
+    expect(within(tile).getByTestId('stat-context')).toHaveTextContent('1 set · 11/11 passed · 2 malformed');
   });
 
   it("a set the verify phase did NOT fully run says how many were never executed and is NOT verified — shown, never hidden (F-7R2-015's lesson)", async () => {
@@ -184,7 +185,8 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     expect(within(card).queryByTestId('campaign-card-testset')).toBeNull();
     const tile = screen.getByTestId('stat-campaigns');
     expect(tile).toHaveAttribute('data-test-sets', '0');
-    expect(within(tile).getByTestId('stat-context')).toHaveTextContent(/^no test sets registered yet · 0 active now$/);
+    expect(within(tile).getByTestId('stat-context')).toHaveTextContent(/^no sets registered yet · 0 active now$/);
+    expect(within(tile).getByTestId('stat-context')).toHaveAttribute('title', 'no test sets registered yet · 0 active now');
   });
 
   it('with no live run known and no set, neither chip nor counts render — absence stays absent', async () => {
@@ -197,13 +199,13 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     expect(within(card).queryByTestId('campaign-card-workflow')).toBeNull();
   });
 
-  it("the Tests tile's context leads with the sets word (it must survive the tile's ellipsis — #266 F-1), carries the full text as its title, and says nothing about sets on a pre-0.36 daemon", async () => {
+  it("the Tests tile's context leads with the short sets word (it must clear the tile's ellipsis glyph at 1440px — #266 F-1/R2-1), carries the UNABRIDGED line as its title, and says nothing about sets on a pre-0.36 daemon", async () => {
     await landing(w6Listing());
     const tile = screen.getByTestId('stat-campaigns');
     expect(tile).toHaveAttribute('data-value', '1');
     expect(tile).toHaveAttribute('data-test-sets', '1');
     const ctx = within(tile).getByTestId('stat-context');
-    expect(ctx.textContent).toBe('1 test set · 11/11 passed · 0 active now');
+    expect(ctx.textContent).toBe('1 set · 11/11 passed · 0 active now');
     expect(ctx).toHaveAttribute('title', '1 test set · 11/11 passed · 0 active now');
     expect(ctx.textContent).not.toContain('ad-hoc');
     cleanup();
@@ -213,6 +215,7 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     expect(older).toHaveAttribute('data-value', '1');
     expect(older).toHaveAttribute('data-test-sets', 'absent');
     expect(within(older).getByTestId('stat-context').textContent).toBe('0 active now');
+    expect(within(older).getByTestId('stat-context')).toHaveAttribute('title', '0 active now');
   });
 
   it('the header copy names the governed workflow and the "Add testing rules" verb says what it authors', async () => {

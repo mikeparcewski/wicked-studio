@@ -502,6 +502,9 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   // absent on a pre-0.36 daemon (`setTotals === null`), "no test sets registered yet" on a 0.36
   // daemon's real zero (F-3), "· N unattributed" / "· N malformed" whenever non-zero (F-2).
   const setsWord = setTotals === null ? null : testSetsWord(setTotals, unattributed.length, malformedTestSets);
+  // The unabridged line for the span's hover title (R2-1): "1 test set · …" where the painted lead
+  // says "1 set · …" so it clears the ellipsis glyph at 1440 px.
+  const setsWordFull = setTotals === null ? null : testSetsWord(setTotals, unattributed.length, malformedTestSets, 'full');
 
   // The freshest member-run narration per card — `recentActivity` capped at 1 (the ONE
   // narrator fold the home pulse reads; a second derivation could contradict it), clocked by
@@ -658,6 +661,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             // "N ad-hoc group" word is gone — every 0.36 New test IS a label group, so it only crowded
             // the line (#266 F-1 / F-8). The tile's `title` says what the value counts.
             context={[...(setsWord !== null ? [setsWord] : []), `${totals.activeNow} active now`].join(' · ')}
+            contextTitle={[...(setsWordFull !== null ? [setsWordFull] : []), `${totals.activeNow} active now`].join(' · ')}
             data={{
               'data-test-sets': setTotals === null ? 'absent' : setTotals.sets,
               'data-test-sets-unattributed': unattributed.length,

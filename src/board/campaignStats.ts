@@ -331,14 +331,24 @@ export function unattributedTestSets(cards: readonly CampaignCardModel[], testSe
 
 /**
  * The Tests tile's sets word — FIRST in the tile's context so it is the part that survives the
- * tile's ellipsis (review of #266, F-1): "1 test set · 11/11 passed", plus "· N unattributed" and
- * "· N malformed" whenever either is non-zero (deny-dominates: never hidden). A 0.36 daemon with
- * nothing registered says "no test sets registered yet" — its real zero (F-3); a pre-0.36 daemon has
- * no word at all (the caller passes no totals).
+ * tile's ellipsis (review of #266, F-1), plus "· N unattributed" and "· N malformed" whenever either
+ * is non-zero (deny-dominates: never hidden). A 0.36 daemon with nothing registered says its real
+ * zero (F-3); a pre-0.36 daemon has no word at all (the caller passes no totals).
+ *
+ * Two forms of the same fact (R2-1): the `lead` — "1 set · 11/11 passed" — is what the tile PAINTS,
+ * sized so the whole lead clears the `…` glyph at 1440 px (it is the Tests tile: "set" needs no
+ * "test"); the `full` — "1 test set · 11/11 passed" — rides the span's `title`, so hover always
+ * reads the unabridged line.
  */
-export function testSetsWord(totals: TestSetTotals, unattributed: number, malformed: number): string {
-  if (totals.sets === 0 && malformed === 0) return 'no test sets registered yet';
-  const parts = [`${totals.sets} test set${totals.sets === 1 ? '' : 's'} · ${totals.passed}/${totals.produced} passed`];
+export function testSetsWord(
+  totals: TestSetTotals,
+  unattributed: number,
+  malformed: number,
+  form: 'lead' | 'full' = 'lead',
+): string {
+  const noun = form === 'full' ? 'test set' : 'set';
+  if (totals.sets === 0 && malformed === 0) return `no ${noun}s registered yet`;
+  const parts = [`${totals.sets} ${noun}${totals.sets === 1 ? '' : 's'} · ${totals.passed}/${totals.produced} passed`];
   if (unattributed > 0) parts.push(`${unattributed} unattributed`);
   if (malformed > 0) parts.push(`${malformed} malformed`);
   return parts.join(' · ');
