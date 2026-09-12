@@ -49,9 +49,8 @@ describe('ApprovalDock → SteeringGate → IntakePlan deliver-gate pass-through
 
   it('a session with auto_deliver: false reaches the intake plan as "human gate before it pushes"', () => {
     openIntakeGate();
-    const v = makeView({ status: 'awaiting_human', unit_ix: 0 }, intakeUnits());
-    (v.session as unknown as { auto_deliver: boolean }).auto_deliver = false;
-    renderPanel(v);
+    // `auto_deliver` is declared on `AgentSession` since api-types 0.37.0 — no cast.
+    renderPanel(makeView({ status: 'awaiting_human', unit_ix: 0, auto_deliver: false }, intakeUnits()));
     const row = screen.getByTestId('intake-plan-deliver-gate');
     expect(row.dataset.deliverGate).toBe('human');
     expect(screen.getByTestId('approval-dock').contains(row)).toBe(true);

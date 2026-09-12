@@ -87,16 +87,11 @@ export interface DeliverRunResult {
  * `'pr'` (flippable by the daemon's `deliverDefault` setting), everything else
  * to `'none'`. `'none'` is additive at 0.18.0: older daemons 400 on it, so the
  * composer only sends the key where it would have been licensed to send `'pr'`.
+ * `deliverGate: 'human' | 'auto'` (F-E2E-030; api-types 0.37.0) needs no hand-declaration: it rides
+ * `LaunchRunBody` itself and survives the `Omit` — `tests/deliverGateWire.test.ts` pins it.
  */
 export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
   deliver?: 'pr' | 'none';
-  /**
-   * Who confirms the deliver phase (F-E2E-030; crew ≥ 0.7.33 / api-types ≥ 0.37): the ENGINE
-   * gates the push + PR by default (`'human'`, or omitted); `'auto'` is the operator's EXPLICIT
-   * opt-out, sent only for the postures the composer names "auto-deliver" (No gates,
-   * Autonomous). Hand-declared here like `deliver` — delete on the ≥0.37 api-types bump.
-   */
-  deliverGate?: 'human' | 'auto';
   /**
    * Ad-hoc campaign attach (wicked-studio#27; api-types 0.19.0): file this run onto an
    * EXISTING campaign's surface. Provenance only — the run executes byte-identically, never
