@@ -577,7 +577,7 @@ export function App(): React.ReactElement {
         <div className="flex-1 overflow-y-auto">
           {/* `search` carries §7.4's context-sensitive entry (slice Y): arriving
               from a failure context (`?filter=failed`) lands with that tab active. */}
-          <WorkPage runs={runs} selectedRunId={runId} onSelect={selectRun} navigate={navigate} search={search} />
+          <WorkPage runs={runs} selectedRunId={runId} onSelect={selectRun} navigate={navigate} search={search} onRefresh={refresh} />
         </div>
       );
     }

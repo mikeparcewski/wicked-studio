@@ -319,6 +319,96 @@ function RunCancelControl({ runId, onCancelled }: {
   );
 }
 
+function RunArchiveControl({ runId, onArchived }: {
+  runId: string;
+  onArchived: () => void;
+}): React.ReactElement {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm(): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.archiveRun(runId, true);
+      setConfirming(false);
+      onArchived();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function keep(): void {
+    if (busy) return;
+    setConfirming(false);
+    setError(null);
+  }
+
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        data-testid="run-archive"
+        onClick={() => setConfirming(true)}
+        title="Archive this run — write it off; moves it out of the active work list"
+        className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
+        style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+      >
+        Archive
+      </button>
+    );
+  }
+  return (
+    <div
+      data-testid="run-archive-confirm"
+      role="group"
+      aria-label="Confirm archiving this run"
+      className="flex items-center gap-2 shrink-0 rounded-lg px-2 py-1"
+      style={{ background: 'var(--surface-raised)', border: '1px solid var(--surface-overlay)' }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          keep();
+        }
+      }}
+    >
+      <span className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+        Archive this run? It moves to the Archived section.
+      </span>
+      <button
+        type="button"
+        data-testid="run-archive-yes"
+        onClick={() => void confirm()}
+        disabled={busy}
+        autoFocus
+        className="rounded-lg px-2.5 py-1 text-[11px] font-semibold font-mono disabled:opacity-50 transition-opacity"
+        style={{ background: 'var(--surface-raised)', border: '1px solid var(--surface-overlay)', color: 'var(--ink-body)' }}
+      >
+        {busy ? 'Archiving…' : 'Yes, archive'}
+      </button>
+      <button
+        type="button"
+        data-testid="run-archive-keep"
+        onClick={keep}
+        disabled={busy}
+        className="rounded-lg px-2.5 py-1 text-[11px] font-semibold font-mono disabled:opacity-50 transition-opacity"
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)', color: 'var(--ink-body)' }}
+      >
+        Keep
+      </button>
+      {error !== null && (
+        <span role="alert" data-testid="run-archive-error" className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function DownloadIcon(): React.ReactElement {
   return (
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -865,6 +955,17 @@ function RunChat({
         {isTerminal && <InspectMenu lens={runTab} onSelect={setRunTab} />}
         <ModePill mode={mode} onChange={onModeChange} readOnly={isTerminal} />
         <ExportEvidenceButton runId={session.id} disabled={!isTerminal} />
+        {/* Archive for terminal runs (#219): write-off → navigates back so the
+            run leaves the active list; the run index refreshes on success. An
+            already-archived run (reached through the Archived chip) offers
+            nothing to re-archive — `archived_at` is set, guard `== null` (the
+            wire sends `null` for live, never omits the key). */}
+        {isTerminal && session.archived_at == null && (
+          <RunArchiveControl
+            runId={session.id}
+            onArchived={() => { onRefresh(); onNavigateBack(); }}
+          />
+        )}
         {/* F-029: Cancel for every non-terminal status — planning, distributing,
             executing AND awaiting_human — outside any gate card, confirmed, on
             the wire's `POST /runs/:id/cancel`; the run index refreshes on success. */}

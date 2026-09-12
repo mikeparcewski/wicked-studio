@@ -11,8 +11,8 @@
   "studioVersion": "0.5.8",
   "counts": {
     "files": 146,
-    "occurrences": 1300,
-    "static": 1121,
+    "occurrences": 1309,
+    "static": 1127,
     "dynamic": 61,
     "computed": 7
   },
@@ -4203,6 +4203,42 @@
       "testId": "routing-provenance",
       "files": [
         "src/components/RoutingProvenance.tsx"
+      ]
+    },
+    {
+      "testId": "run-archive",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-archive-confirm",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-archive-error",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-archive-keep",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-archive-row",
+      "files": [
+        "src/components/WorkPage.tsx"
+      ]
+    },
+    {
+      "testId": "run-archive-yes",
+      "files": [
+        "src/components/ChatPanel.tsx"
       ]
     },
     {
