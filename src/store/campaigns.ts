@@ -83,6 +83,8 @@ interface CampaignsStore {
   /** The registered test sets (wave 6, api-types 0.36.0), wire order (newest first); `null` on a
    *  pre-0.36 daemon — absence, never a fabricated empty list. */
   testSets: TestSet[] | null;
+  /** `test_sets` rows served without a `run_id` — counted so the landing can say "N malformed". */
+  malformedTestSets: number;
   /** Live frame fold, keyed by campaign id. */
   live: Record<string, CampaignLive>;
   /** Probe + (re)fetch the list. Sets `support` from the answer (§1.5). */
@@ -99,18 +101,19 @@ export const useCampaignsStore = create<CampaignsStore>((set) => ({
   campaigns: [],
   groups: [],
   testSets: null,
+  malformedTestSets: 0,
   live: {},
 
   refresh: () => {
     if (inflight !== null) return inflight;
     inflight = listCampaigns()
-      .then(({ campaigns, groups, testSets }) => {
-        set({ support: 'supported', campaigns, groups, testSets: testSets ?? null });
+      .then(({ campaigns, groups, testSets, malformedTestSets }) => {
+        set({ support: 'supported', campaigns, groups, testSets: testSets ?? null, malformedTestSets: malformedTestSets ?? 0 });
       })
       .catch(() => {
         // 404/501 = this daemon predates campaigns (§1.5's whole discriminator);
         // anything else (network, 500) also reads as unsupported — said once, not spun on.
-        set({ support: 'unsupported', campaigns: [], groups: [], testSets: null });
+        set({ support: 'unsupported', campaigns: [], groups: [], testSets: null, malformedTestSets: 0 });
       })
       .finally(() => {
         inflight = null;

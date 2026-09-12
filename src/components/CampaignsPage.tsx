@@ -3,7 +3,8 @@ import { campaignPath, testingPath, type LaunchIntent } from '../api/testing.js'
 import type { SessionView } from '../api/types.js';
 import {
   campaignCards, campaignTotals, deliveryRollupWord, matchesCampaignChip, memberRunIdSet,
-  passRateHealth, passRateWord, progressWord, testSetCountsWord, testSetPrHref, testSetTotals,
+  passRateHealth, passRateWord, progressWord, testSetCountsWord, testSetPrHref, testSetTotals, testSetsWord,
+  unattributedTestSets,
   type CampaignCardModel, type CampaignChip,
 } from '../board/campaignStats.js';
 import { recentActivity } from '../board/homeActivity.js';
@@ -428,6 +429,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   const campaigns = useCampaignsStore((s) => s.campaigns);
   const groups = useCampaignsStore((s) => s.groups);
   const testSets = useCampaignsStore((s) => s.testSets);
+  const malformedTestSets = useCampaignsStore((s) => s.malformedTestSets);
   const refresh = useCampaignsStore((s) => s.refresh);
   const byRun = useRunEventStore((s) => s.byRun);
   const logs = useRuntimeStore((s) => s.logs);
@@ -491,6 +493,15 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
     () => campaignCards(campaigns, groups, runsById, windowIds, testSets ?? []),
     [campaigns, groups, runsById, windowIds, testSets],
   );
+  // Sets no card carries (the producing run archived / its group gone) — said, never folded away.
+  const unattributed = useMemo(
+    () => (testSets === null ? [] : unattributedTestSets(cards, testSets)),
+    [cards, testSets],
+  );
+  // The tile's sets word — FIRST in the context so it survives the tile's ellipsis (#266 F-1);
+  // absent on a pre-0.36 daemon (`setTotals === null`), "no test sets registered yet" on a 0.36
+  // daemon's real zero (F-3), "· N unattributed" / "· N malformed" whenever non-zero (F-2).
+  const setsWord = setTotals === null ? null : testSetsWord(setTotals, unattributed.length, malformedTestSets);
 
   // The freshest member-run narration per card — `recentActivity` capped at 1 (the ONE
   // narrator fold the home pulse reads; a second derivation could contradict it), clocked by
@@ -643,15 +654,18 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             testId="stat-campaigns"
             label="Tests"
             value={totals.campaigns + totals.groups}
-            context={[
-              `${totals.activeNow} active now`,
-              ...(totals.groups > 0 ? [`${totals.groups} ad-hoc group${totals.groups === 1 ? '' : 's'}`] : []),
-              // The produced sets (api-types 0.36.0) — said only when the wire carries them.
-              ...(setTotals !== null && setTotals.sets > 0
-                ? [`${setTotals.sets} test set${setTotals.sets === 1 ? '' : 's'} · ${setTotals.passed} of ${setTotals.produced} passed`]
-                : []),
-            ].join(' · ')}
-            title="Every test and ad-hoc group on this daemon — click to clear filters"
+            // The sets word leads (it is what the operator came for); "active now" follows. The
+            // "N ad-hoc group" word is gone — every 0.36 New test IS a label group, so it only crowded
+            // the line (#266 F-1 / F-8). The tile's `title` says what the value counts.
+            context={[...(setsWord !== null ? [setsWord] : []), `${totals.activeNow} active now`].join(' · ')}
+            data={{
+              'data-test-sets': setTotals === null ? 'absent' : setTotals.sets,
+              'data-test-sets-unattributed': unattributed.length,
+              'data-test-sets-malformed': malformedTestSets,
+            }}
+            title={unattributed.length > 0
+              ? `Every test on this daemon — each repository's label group and every multi-repo run — click to clear filters. ${unattributed.length} registered set${unattributed.length === 1 ? '' : 's'} belong${unattributed.length === 1 ? 's' : ''} to no test shown here (the producing run is gone from the wire): ${unattributed.map((t) => t.plan ?? t.id).join(', ')}`
+              : "Every test on this daemon — each repository's label group and every multi-repo run — click to clear filters"}
             onOpen={() => { setChip('all'); setQuery(''); }}
           />
           <StatTile

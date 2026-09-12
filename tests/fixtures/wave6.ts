@@ -248,6 +248,8 @@ export function w6Listing(
   testSets: TestSet[] | null = [W6_TEST_SET],
   campaigns: Campaign[] = [],
   groups: RunGroup[] = [w6Group()],
+  /** `test_sets` rows the daemon served without a `run_id` (#266 F-2). */
+  malformedTestSets = 0,
 ): CampaignsListing {
-  return { campaigns, groups, testSets };
+  return { campaigns, groups, testSets, malformedTestSets };
 }

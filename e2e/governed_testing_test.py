@@ -16,7 +16,9 @@ No crew daemon is involved. Acceptance findings F-075 / F-076 / F-7R2-003 / -005
   3. THE PRODUCED SET (F-7R2-014): the landing's card — the `qe-tests-studio-api` label group
      0.36.0 files the run under — shows "verified · 11 produced · 11 executed · 11 passed · 0
      failed" off the TOP-LEVEL `test_sets` row joined by run_id, the workflow chip, the PLAN
-     (opens the run) and the engine's PR link.
+     (opens the run) and the engine's PR link. The Tests tile LEADS with the sets word — asserted
+     VISIBLE (its glyph box inside the context span, not ellipsized) with the full text as the
+     span's title — and says "1 malformed" for the run_id-less row the fixture also serves.
   4. THE RUN PAGE (F-7R2-005 / -006 / -012 / -013 / -017): the run head says "council degraded:
      4 of 5 seats benched …"; the feed says "Gate UNGATED on author — no eligible judge seat …"
      (never "Checks ran — pass" for that gate) and "Refused a remote write by claude (creator)
@@ -153,7 +155,28 @@ with sync_playwright() as p:
             delivery: t('[data-testid="campaign-card-delivery"]'),
             header: document.querySelector('[data-testid="campaigns-header-copy"]')?.textContent ?? '',
             authorVerb: document.querySelector('[data-testid="testing-author-open"]')?.textContent?.trim(),
-            testsKpi: document.querySelector('[data-testid="stat-campaigns"]')?.textContent ?? '',
+            ...(() => {
+              // #266 F-1: the sets word must be SEEN, not merely present in textContent — measure the
+              // glyph box of the leading sets word against the context span's visible box.
+              const tile = document.querySelector('[data-testid="stat-campaigns"]');
+              const ctx = tile?.querySelector('[data-testid="stat-context"]');
+              const text = ctx?.textContent ?? '';
+              const lead = '1 test set · 11/11 passed';
+              let leadRight = null;
+              const node = ctx?.firstChild;
+              if (node && node.nodeType === Node.TEXT_NODE && text.startsWith(lead)) {
+                const r = document.createRange(); r.setStart(node, 0); r.setEnd(node, lead.length);
+                leadRight = r.getBoundingClientRect().right;
+              }
+              const box = ctx?.getBoundingClientRect();
+              return {
+                testsKpi: text, kpiTitle: ctx?.getAttribute('title'),
+                kpiLeadVisible: leadRight !== null && box ? leadRight <= box.right + 0.5 && box.width > 0 : false,
+                kpiTestSets: tile?.getAttribute('data-test-sets'),
+                kpiMalformed: tile?.getAttribute('data-test-sets-malformed'),
+                kpiUnattributed: tile?.getAttribute('data-test-sets-unattributed'),
+              };
+            })(),
           };
         }""")
     check(
@@ -167,7 +190,10 @@ with sync_playwright() as p:
         and card["plan"] == "plan: tests/PLAN-run-lifecycle.md" and card["planRun"] == GT_RUN
         and card["pr"] == "https://github.com/example/studio-api/pull/999" and card["prText"] == "PR #999"
         and "1 of 1 delivered" in card["delivery"]
-        and "1 test set · 11 of 11 passed" in card["testsKpi"]
+        # The Tests tile: sets word FIRST and visible, full text on title, the malformed row said.
+        and card["testsKpi"].startswith("1 test set · 11/11 passed · 1 malformed · ")
+        and card["kpiTitle"] == card["testsKpi"] and card["kpiLeadVisible"] is True
+        and (card["kpiTestSets"], card["kpiMalformed"], card["kpiUnattributed"]) == ("1", "1", "0")
         and "qe-author-tests" in card["header"]
         and card["authorVerb"] == "Add testing rules",
         **card,
@@ -212,7 +238,8 @@ with sync_playwright() as p:
             waiting: t('[data-testid="testing-launch-waiting"]'),
             workflow: t('[data-testid="testing-launch-launched-workflow"]'),
             routeLine: t('[data-testid="testing-launch-route"]'),
-            label: t('[data-testid="testing-launch-fanout-label"]'),
+            filedLabel: t('[data-testid="testing-launch-filed-label"]'),
+            fanoutLabel: !!p?.querySelector('[data-testid="testing-launch-fanout-label"]'),
           };
         }""")
     author_posts = [pd for m, u, pd in posted if u == "/api/v1/testing/author"]
@@ -224,7 +251,10 @@ with sync_playwright() as p:
         and "r-gt-1" in launched["waiting"] and "intake gate will appear here" in launched["waiting"]
         and launched["workflow"] == "qe-author-tests"
         and "via POST /testing/author" in launched["routeLine"]
-        and launched["label"] == "author-r-gt-1"
+        # #266 F-4: the label group is already on the Test landing — "filed under", off runs[].label.
+        and launched["filedLabel"] == "qe-tests-studio-api" and not launched["fanoutLabel"]
+        and "filed under qe-tests-studio-api on the Test landing — the set fills in when the verify phase registers it" in launched["routeLine"]
+        and "appears on the Test landing when" not in launched["routeLine"]
         and body is not None and body.get("repoRefs") == ["studio-api"] and "projectId" not in body
         and body.get("problem", "").startswith("New test: plan the test for the attached scope")
         and not any(u in ("/api/v1/testing/recon", "/api/v1/runs") for _, u, _ in posted),

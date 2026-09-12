@@ -24,7 +24,7 @@
 
 import { apiFetch } from './client.js';
 import type { SessionStatus } from './types.js';
-import { testSetsOf, type TestSet } from './wave6-wire.js';
+import { testSetsReadOf, type TestSet } from './wave6-wire.js';
 
 /** Per-node lifecycle status. Terminal = `completed` | `failed` | `blocked` | `cancelled`. */
 export type CampaignNodeStatus =
@@ -163,6 +163,10 @@ export interface CampaignsListing {
   campaigns: Campaign[];
   groups: RunGroup[];
   testSets: TestSet[] | null;
+  /** `test_sets` rows the daemon served WITHOUT a `run_id` — registered but unjoinable; said on the
+   *  Test landing as "N malformed", never dropped silently (review of #266, F-2). 0 when none, and
+   *  0 on a pre-0.36 daemon (there is no list to be malformed). */
+  malformedTestSets: number;
 }
 
 /**
@@ -190,7 +194,13 @@ export interface RunAcceptance {
  */
 export async function listCampaigns(): Promise<CampaignsListing> {
   const res = await apiFetch<Partial<CampaignsListResponse>>('/campaigns');
-  return { campaigns: res.campaigns ?? [], groups: res.groups ?? [], testSets: testSetsOf(res) };
+  const read = testSetsReadOf(res);
+  return {
+    campaigns: res.campaigns ?? [],
+    groups: res.groups ?? [],
+    testSets: read === null ? null : read.sets,
+    malformedTestSets: read === null ? 0 : read.malformed,
+  };
 }
 
 /** `GET /campaigns/:id` — `{ campaign }`, the same daemon-side join as the list; 404 unknown. */

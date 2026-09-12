@@ -165,7 +165,11 @@ export function StatTile({
         {delta !== undefined && <DeltaMark delta={delta} sense={deltaSense} />}
       </span>
       {context !== undefined && (
+        // One nowrap line — the tail may ellipsize, so the FULL text rides on `title` (review of
+        // #266, F-1) and callers put the part that must survive first.
         <span
+          data-testid="stat-context"
+          title={context}
           style={{
             fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',

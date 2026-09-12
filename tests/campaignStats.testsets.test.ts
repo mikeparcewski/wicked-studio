@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  campaignCards, joinTestSets, testDoorWord, testSetCountsWord, testSetPrHref, testSetTotals,
+  campaignCards, joinTestSets, testDoorWord, testSetCountsWord, testSetPrHref, testSetTotals, testSetsWord,
+  unattributedTestSets,
 } from '../src/board/campaignStats.js';
 import { attachedRun, makeCampaign, makeGroup } from './campaignFactories.js';
 import { W6_LABEL, W6_PR, W6_RUN, W6_TEST_SET, W6_TEST_SET_UNVERIFIED, w6Group } from './fixtures/wave6.js';
@@ -65,11 +66,30 @@ describe('testSetTotals / testSetCountsWord / testSetPrHref / testDoorWord', () 
     expect(testSetPrHref({ deliverUrl: 'javascript:alert(1)' })).toBeNull();
     expect(testSetPrHref({ deliverUrl: 'https://github.com/example/x/pull/new/branch' })).toBeNull();
   });
-  it('the Home door: campaigns + groups as "tests", the sets appended only when the wire carries them', () => {
+  it('the Home door: campaigns + groups as "tests"; the sets appended whenever the wire carries the list — a real zero says "0 test sets", absence (null) says nothing (#266 F-3)', () => {
     expect(testDoorWord({ campaigns: [], groups: [], testSets: null })).toBe('0 tests');
     expect(testDoorWord({ campaigns: [{}], groups: [{}], testSets: null })).toBe('2 tests');
-    expect(testDoorWord({ campaigns: [], groups: [{}], testSets: [] })).toBe('1 test');
+    expect(testDoorWord({ campaigns: [], groups: [{}], testSets: [] })).toBe('1 test · 0 test sets');
     expect(testDoorWord({ campaigns: [], groups: [{}], testSets: [W6_TEST_SET] })).toBe('1 test · 1 test set');
     expect(testDoorWord({ campaigns: [{}], testSets: [W6_TEST_SET, W6_TEST_SET_UNVERIFIED] })).toBe('1 test · 2 test sets');
+  });
+});
+
+describe('unattributedTestSets / testSetsWord — the tile says what no card can show (#266 F-1/F-2/F-3)', () => {
+  it('a set on no card is unattributed; sets carried by any card are not', () => {
+    const cards = campaignCards([], [w6Group()], new Map(), new Set(), [W6_TEST_SET, other]);
+    expect(unattributedTestSets(cards, [W6_TEST_SET, other]).map((t) => t.id)).toEqual(['testset-r-other']);
+    expect(unattributedTestSets(cards, [W6_TEST_SET])).toEqual([]);
+    expect(unattributedTestSets([], [])).toEqual([]);
+  });
+  it('the sets word leads with the count and the pass fraction, then the honest tails; a real zero is said', () => {
+    const one = testSetTotals([W6_TEST_SET]);
+    expect(testSetsWord(one, 0, 0)).toBe('1 test set · 11/11 passed');
+    expect(testSetsWord(one, 1, 0)).toBe('1 test set · 11/11 passed · 1 unattributed');
+    expect(testSetsWord(one, 0, 2)).toBe('1 test set · 11/11 passed · 2 malformed');
+    expect(testSetsWord(testSetTotals([W6_TEST_SET, W6_TEST_SET_UNVERIFIED]), 1, 1)).toBe('2 test sets · 17/22 passed · 1 unattributed · 1 malformed');
+    expect(testSetsWord(testSetTotals([]), 0, 0)).toBe('no test sets registered yet');
+    // Zero joinable sets but a malformed row: the row is said, not "nothing registered".
+    expect(testSetsWord(testSetTotals([]), 0, 1)).toBe('0 test sets · 0/0 passed · 1 malformed');
   });
 });

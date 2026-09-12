@@ -25,7 +25,7 @@ const frame = (type: string, fields: Record<string, unknown> = {}): CoreEvent =>
 
 beforeEach(() => {
   listCampaigns.mockReset();
-  useCampaignsStore.setState({ support: 'unknown', campaigns: [], groups: [], testSets: null, live: {} });
+  useCampaignsStore.setState({ support: 'unknown', campaigns: [], groups: [], testSets: null, malformedTestSets: 0, live: {} });
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -53,6 +53,15 @@ describe('the §1.5 support probe — three states, never a boolean', () => {
     listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
     await useCampaignsStore.getState().refresh();
     expect(useCampaignsStore.getState().testSets).toBeNull();
+  });
+
+  it('holds the malformed-row count beside the sets; a listing without it (partial mock) reads 0', async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [], testSets: [W6_TEST_SET], malformedTestSets: 2 });
+    await useCampaignsStore.getState().refresh();
+    expect(useCampaignsStore.getState().malformedTestSets).toBe(2);
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [], testSets: [] });
+    await useCampaignsStore.getState().refresh();
+    expect(useCampaignsStore.getState().malformedTestSets).toBe(0);
   });
 
   it('404 = this daemon predates campaigns → unsupported', async () => {

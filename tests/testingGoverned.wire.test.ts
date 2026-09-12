@@ -77,10 +77,11 @@ describe('the pure plan — effectiveRepos / isNarrowedProject / mintGroupLabel'
 
 describe('the ladder — each step only when the previous wire is ABSENT', () => {
   it('1. the workflow is listed ⇒ POST /testing/author with the pinned body; the answer names the route and echoes the workflow', async () => {
-    wire({ '/testing/author': { runId: 'r-1', runIds: ['r-1'], campaign: 'author-x', campaignRegistered: false, workflow: 'qe-author-tests' } });
+    wire({ '/testing/author': { runId: 'r-1', runIds: ['r-1'], campaign: 'author-x', campaignRegistered: false, workflow: 'qe-author-tests', runs: [{ runId: 'r-1', repoRef: 'wicked-studio', label: 'qe-tests-wicked-studio' }, { runId: 'r-1', repoRef: 'wicked-studio', label: 'qe-tests-wicked-studio' }, { label: '' }] } });
     const r = await launchGovernedTest({ ...base, projectId: 'proj-a', explicit: ['wicked-studio'] });
     expect(calls()).toEqual([['/testing/author', { problem: base.problem, projectId: 'proj-a', repoRefs: ['wicked-studio'] }]]);
-    expect(r).toMatchObject({ route: 'testing-author', workflow: 'qe-author-tests', runIds: ['r-1'], runId: 'r-1', campaign: 'author-x', campaignRegistered: false });
+    // `labels` = the filed `runs[].label`s, unique, empty labels dropped (#266 F-4).
+    expect(r).toMatchObject({ route: 'testing-author', workflow: 'qe-author-tests', runIds: ['r-1'], runId: 'r-1', campaign: 'author-x', campaignRegistered: false, labels: ['qe-tests-wicked-studio'] });
   });
 
   it('2. /testing/author absent ⇒ straight to the per-repo POST /runs fan — /testing/recon is never sent a `workflow` key (0.36.0 declares none)', async () => {
@@ -90,7 +91,7 @@ describe('the ladder — each step only when the previous wire is ABSENT', () =>
       ['/testing/author', { problem: base.problem, repoRefs: ['wicked-studio'] }],
       ['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests', repoRef: 'wicked-studio' }],
     ]);
-    expect(r).toMatchObject({ route: 'runs-fan', workflow: 'qe-author-tests', runIds: ['r-2'], runId: 'r-2', campaignRegistered: false });
+    expect(r).toMatchObject({ route: 'runs-fan', workflow: 'qe-author-tests', runIds: ['r-2'], runId: 'r-2', campaignRegistered: false, labels: [] });
   });
 
   it('3. the fan: one POST /runs per resolved repo, workflow + intake gate on each, projectId filing, a shared groupLabel for ≥ 2', async () => {
@@ -103,7 +104,7 @@ describe('the ladder — each step only when the previous wire is ABSENT', () =>
       ['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests', repoRef: 'wicked-studio', projectId: 'proj-a', groupLabel: base.groupLabel }],
       ['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests', repoRef: 'wicked-crew', projectId: 'proj-a', groupLabel: base.groupLabel }],
     ]);
-    expect(r).toMatchObject({ route: 'runs-fan', workflow: 'qe-author-tests', runIds: ['r-1', 'r-2'], runId: 'r-1', campaign: base.groupLabel, campaignRegistered: false });
+    expect(r).toMatchObject({ route: 'runs-fan', workflow: 'qe-author-tests', runIds: ['r-1', 'r-2'], runId: 'r-1', campaign: base.groupLabel, campaignRegistered: false, labels: [] });
   });
 
   it('3b. a ONE-repo fan sends no groupLabel and answers no campaign — nothing is fabricated', async () => {
@@ -124,7 +125,7 @@ describe('the ladder — each step only when the previous wire is ABSENT', () =>
     wire({ '/testing/recon': { runId: 'r-p', runIds: ['r-p'], campaign: 'recon-z', campaignRegistered: false } });
     const r = await launchGovernedTest({ ...base, workflow: null, projectId: 'proj-a', explicit: ['wicked-studio'] });
     expect(calls()).toEqual([['/testing/recon', { problem: base.problem, projectId: 'proj-a', repoRefs: ['wicked-studio'] }]]);
-    expect(r).toMatchObject({ route: 'testing-recon-plain', workflow: null, runIds: ['r-p'] });
+    expect(r).toMatchObject({ route: 'testing-recon-plain', workflow: null, runIds: ['r-p'], labels: [] });
     expect(apiFetch.mock.calls.some(([p]) => p === '/testing/author')).toBe(false);
   });
 });

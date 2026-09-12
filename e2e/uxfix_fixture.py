@@ -1342,6 +1342,22 @@ GT_GROUP = {
     "label": GT_LABEL,
     "runs": [{"runId": GT_RUN, "status": "completed", "delivery": "delivered", "deliverUrl": GT_PR}],
 }
+# A registration the daemon served WITHOUT a `run_id` — nothing to join, nothing to open. The landing
+# must SAY it ("1 malformed" on the Tests tile), never read it as "nothing registered" (#266 F-2).
+GT_TEST_SET_MALFORMED = {
+    "id": "testset-orphan", "workflow_id": "qe-author-tests", "repo_ref": None,
+    "registered_at": NOW0 - 9 * MIN, "run_status": "failed", "verify_status": None, "verified": False,
+    "files": [], "produced": 0, "executed": 0, "passed": 0, "failed": 0, "not_executed": 0,
+    "plan": None, "harnesses": [],
+}
+# The `WorkflowPlan` the 0.36.0 `TestingAuthorResponse` carries — derived from the def the panel read.
+GT_AUTHOR_PLAN = {
+    "workflow": "qe-author-tests",
+    "phases": [{"id": p["id"], "kind": p["kind"], "role": p["role"],
+                "executor": "tool" if p.get("executor") else "agent", "skillRef": p["skill_ref"],
+                "gate": "auto", "executesCode": p["executes_code"]} for p in GT_WORKFLOW_DEF["phases"]],
+    "seats": ["claude", "codex", "pi"],
+}
 GT_BRANCH_DIFF = """\
 diff --git a/tests/run-lifecycle.test.tsx b/tests/run-lifecycle.test.tsx
 new file mode 100644
@@ -2591,7 +2607,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             if not gt_on:
                 self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             else:
-                self._json(200, {"campaigns": [], "groups": [GT_GROUP], "test_sets": [GT_TEST_SET]})
+                self._json(200, {"campaigns": [], "groups": [GT_GROUP],
+                                 "test_sets": [GT_TEST_SET, GT_TEST_SET_MALFORMED]})
             return True
         # Slice V: GET /runs/<id> — one run's detail (`{run: SessionView}`), the
         # real daemon contract useRunModel re-hydrates on. Same corpus assembly
@@ -3671,9 +3688,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 run["units"] = gt_units(rid, done=False)
                 gt_launched.append(run)
                 state["extra_gates"].append({"session": rid, "ord": 1, "prompt": GT_INTAKE_PROMPT})
-                campaign = f"author-{rid}"
-            return self._json(201, {"runId": rid, "runIds": [rid], "campaign": campaign,
-                                    "campaignRegistered": False, "workflow": "qe-author-tests"})
+            # The 0.36.0 `TestingAuthorResponse`: NO `campaign` field — the filing rides `runs[].label`
+            # (`qe-tests-<repo>`, the RunGroup.label on GET /campaigns); the plan the intake card shows.
+            return self._json(201, {"runId": rid, "runIds": [rid], "workflow": "qe-author-tests",
+                                    "runs": [{"runId": rid, "repoRef": REPO_ID, "label": GT_LABEL}],
+                                    "gate": "before:1", "deliver": "pr", "plan": GT_AUTHOR_PLAN,
+                                    "scope": "repoRefs" if refs else "project",
+                                    "campaignRegistered": False})
         # POST /api/v1/runs — the REAL launch (slice S, project_dto only): the
         # daemon's `{runId}` answer; `body.projectId` files the run atomically
         # (LaunchSchema, routes.ts:148 — "never a silent unfiled run"), and the

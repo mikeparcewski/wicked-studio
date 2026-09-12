@@ -157,6 +157,9 @@ interface Launched {
   ids: string[];
   campaign: string | null;
   campaignRegistered: boolean;
+  /** The `qe-tests-<repo>` label groups the daemon filed the runs under (`/testing/author`'s
+   *  `runs[].label`) — the group card already exists on the Test landing (#266 F-4). */
+  labels: string[];
   route: GovernedLaunchRoute;
   workflow: string | null;
   /** R2-1: the daemon's answer did not honour the narrowed scope — said, never hidden. */
@@ -341,6 +344,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
         ids,
         campaign: typeof result.campaign === 'string' && result.campaign !== '' ? result.campaign : null,
         campaignRegistered: result.campaignRegistered,
+        labels: result.labels,
         route: result.route,
         workflow: result.workflow,
         scopeNote: result.scopeNote,
@@ -594,6 +598,8 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
                   {launched.ids.length} runs launched
                   {launched.campaign !== null ? (
                     <> under <span className="font-mono" data-testid="testing-launch-fanout-label">{launched.campaign}</span></>
+                  ) : launched.labels.length > 0 ? (
+                    <> — one per attached codebase, each filed under its repository&rsquo;s label</>
                   ) : (
                     <> — one per attached codebase, under one test</>
                   )}
@@ -619,11 +625,26 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               {launched.ids.length === 1 && launched.campaign !== null && (
                 <> · {launched.campaignRegistered ? 'test' : 'label'} <span className="font-mono" data-testid="testing-launch-fanout-label">{launched.campaign}</span></>
               )}
-              {launched.campaignRegistered
-                ? ' · registered on the Test landing'
-                : launched.campaign !== null
-                  ? ' · grouped under one label on the Test landing'
-                  : ' · appears on the Test landing when the run registers its test set'}
+              {launched.campaignRegistered ? (
+                ' · registered on the Test landing'
+              ) : launched.labels.length > 0 ? (
+                // 0.36.0 files each run under `qe-tests-<repo>` at launch — the group card is already
+                // on the Test landing; only the SET waits for the verify phase (#266 F-4).
+                <>
+                  {' · filed under '}
+                  {launched.labels.map((l, i) => (
+                    <span key={l}>
+                      {i > 0 ? ', ' : ''}
+                      <span className="font-mono" data-testid="testing-launch-filed-label" style={{ color: 'var(--ink-high)' }}>{l}</span>
+                    </span>
+                  ))}
+                  {' on the Test landing — the set fills in when the verify phase registers it'}
+                </>
+              ) : launched.campaign !== null ? (
+                ' · grouped under one label on the Test landing'
+              ) : (
+                ' · appears on the Test landing when the run registers its test set'
+              )}
             </p>
           </div>
 

@@ -242,6 +242,15 @@ export interface GovernedLaunchResult extends TestingLaunchResult {
   workflow: string | null;
   campaignRegistered: boolean;
   /**
+   * The label groups the DAEMON filed the runs under — `POST /testing/author`'s `runs[].label`
+   * (`qe-tests-<repo>`, one per repo; the `RunGroup.label` on `GET /campaigns`, so the group card
+   * exists on the Test landing the moment the run does). Unique, answer order. `[]` for every other
+   * route: a `POST /runs` fan's client-minted `groupLabel` rides `campaign` as before (the panel says
+   * "grouped under one label"), a plain recon files nothing (review of #266, F-4: the author route
+   * says "filed under …", never "appears … when the run registers").
+   */
+  labels: string[];
+  /**
    * An honest note about the SCOPE the daemon actually launched, when it differs from the one asked
    * for (independent review of #263, R2-1): a `/testing/author` answer with more `runIds` than the
    * narrowed `repoRefs` did not honour the narrowing (it unioned the project's members back in). The
@@ -272,6 +281,20 @@ export function mintGroupLabel(now: number = Date.now(), rand: string = Math.ran
   return `test-${now.toString(36)}-${rand}`;
 }
 
+/** `TestingAuthorResponse.runs[].label` off the wire bag — the `qe-tests-<repo>` groups the launch
+ *  filed the runs under; unique, answer order; `[]` when the answer carries none (a recon answer). */
+export function filedLabelsOf(raw: TestingLaunchResult): string[] {
+  const runs = raw['runs'];
+  if (!Array.isArray(runs)) return [];
+  const out: string[] = [];
+  for (const r of runs) {
+    if (typeof r !== 'object' || r === null) continue;
+    const label = (r as Record<string, unknown>)['label'];
+    if (typeof label === 'string' && label !== '' && !out.includes(label)) out.push(label);
+  }
+  return out;
+}
+
 function normalizeRecon(raw: TestingLaunchResult, route: GovernedLaunchRoute, workflow: string | null): GovernedLaunchResult {
   const ids = launchedRunIds(raw);
   return {
@@ -281,6 +304,7 @@ function normalizeRecon(raw: TestingLaunchResult, route: GovernedLaunchRoute, wo
     route,
     workflow: typeof raw['workflow'] === 'string' && raw['workflow'] !== '' ? (raw['workflow'] as string) : workflow,
     campaignRegistered: raw['campaignRegistered'] === true,
+    labels: filedLabelsOf(raw),
     scopeNote: null,
   };
 }
@@ -331,6 +355,7 @@ async function launchRunsFan(scope: GovernedLaunchScope, repos: string[]): Promi
     route: 'runs-fan',
     workflow: scope.workflow,
     campaignRegistered: false,
+    labels: [],
     scopeNote: null,
   };
 }

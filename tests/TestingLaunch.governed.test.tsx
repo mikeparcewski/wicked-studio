@@ -207,7 +207,8 @@ describe('the workflow is read off the daemon, never assumed', () => {
 
 describe('the governed launch — the wire, the link, the waiting line (F-7R2-011)', () => {
   it('an un-narrowed project rides POST /testing/author with projectId ALONE; the panel links the run, names the workflow + wire, shows the waiting line naming the run', async () => {
-    wire({ '/testing/author': { runId: 'r-gt-1', runIds: ['r-gt-1'], campaign: 'author-1', campaignRegistered: false, workflow: 'qe-author-tests' } });
+    // The 0.36.0 `TestingAuthorResponse`: no `campaign` field — the filing rides `runs[].label`.
+    wire({ '/testing/author': { runId: 'r-gt-1', runIds: ['r-gt-1'], campaignRegistered: false, workflow: 'qe-author-tests', runs: [{ runId: 'r-gt-1', repoRef: 'wicked-studio', label: 'qe-tests-wicked-studio' }] } });
     const user = userEvent.setup();
     const navigate = vi.fn();
     const p = panel('campaign', navigate);
@@ -228,7 +229,11 @@ describe('the governed launch — the wire, the link, the waiting line (F-7R2-01
     expect(within(p).getByTestId('testing-launch-launched-workflow')).toHaveTextContent('qe-author-tests');
     expect(within(p).getByTestId('testing-launch-route')).toHaveTextContent('via POST /testing/author');
     expect(within(p).getByTestId('testing-launch-launched')).toHaveAttribute('data-route', 'testing-author');
-    expect(within(p).getByTestId('testing-launch-fanout-label')).toHaveTextContent('author-1');
+    // #266 F-4: the label group already exists on the Test landing — say "filed under", not "appears when".
+    expect(within(p).getByTestId('testing-launch-filed-label')).toHaveTextContent('qe-tests-wicked-studio');
+    expect(within(p).getByTestId('testing-launch-route')).toHaveTextContent('filed under qe-tests-wicked-studio on the Test landing — the set fills in when the verify phase registers it');
+    expect(within(p).getByTestId('testing-launch-route')).not.toHaveTextContent('appears on the Test landing when');
+    expect(within(p).queryByTestId('testing-launch-fanout-label')).toBeNull();
   });
 
   it('/testing/author absent ⇒ the per-repo POST /runs fan carries `workflow`; /testing/recon is never sent one (0.36.0 declares no such key); the route line says so', async () => {

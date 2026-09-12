@@ -973,14 +973,36 @@ export function testSetOf(raw: unknown): TestSet | null {
   };
 }
 
+/** The `test_sets` list as read: the joinable rows plus the count of rows that could NOT be joined. */
+export interface TestSetsRead {
+  /** Every row naming its `run_id`, wire order (newest first). */
+  sets: TestSet[];
+  /** Rows the daemon registered WITHOUT a `run_id` (nothing to join, nothing to open). Counted, never
+   *  hidden — a malformed registration is still a registration (review of #266, F-2). */
+  malformed: number;
+}
+
 /**
  * `CampaignsListResponse.test_sets` off the `GET /campaigns` body: `null` when the daemon carries
- * no such key (pre-0.36 — absence, never a fabricated empty list), else every joinable row in wire
- * order (newest first). `[]` is a real answer: a 0.36 daemon with nothing registered yet.
+ * no such key (pre-0.36 — absence, never a fabricated empty list), else the joinable rows in wire
+ * order (newest first) plus how many rows were malformed. `{ sets: [], malformed: 0 }` is a real
+ * answer: a 0.36 daemon with nothing registered yet.
  */
-export function testSetsOf(body: unknown): TestSet[] | null {
+export function testSetsReadOf(body: unknown): TestSetsRead | null {
   if (typeof body !== 'object' || body === null) return null;
   const raw = (body as Record<string, unknown>)['test_sets'];
   if (!Array.isArray(raw)) return null;
-  return raw.map(testSetOf).filter((t): t is TestSet => t !== null);
+  const sets: TestSet[] = [];
+  let malformed = 0;
+  for (const row of raw) {
+    const t = testSetOf(row);
+    if (t !== null) sets.push(t);
+    else malformed += 1;
+  }
+  return { sets, malformed };
+}
+
+/** The joinable rows alone — {@link testSetsReadOf} without the malformed count. */
+export function testSetsOf(body: unknown): TestSet[] | null {
+  return testSetsReadOf(body)?.sets ?? null;
 }

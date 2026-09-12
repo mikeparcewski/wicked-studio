@@ -11,8 +11,8 @@
   "studioVersion": "0.5.7",
   "counts": {
     "files": 146,
-    "occurrences": 1298,
-    "static": 1119,
+    "occurrences": 1300,
+    "static": 1121,
     "dynamic": 61,
     "computed": 7
   },
@@ -5165,6 +5165,12 @@
       ]
     },
     {
+      "testId": "stat-context",
+      "files": [
+        "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
       "testId": "stat-delta",
       "files": [
         "src/components/dashboardKit.tsx"
@@ -6050,6 +6056,12 @@
     },
     {
       "testId": "testing-launch-fanout-run",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
+      ]
+    },
+    {
+      "testId": "testing-launch-filed-label",
       "files": [
         "src/components/TestingLaunchPanel.tsx"
       ]

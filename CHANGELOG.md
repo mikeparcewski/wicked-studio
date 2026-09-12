@@ -29,6 +29,18 @@ npm publish dates. Every version listed here exists on
   `TestingReconBody` declares no `workflow` key) are deleted — `tests/wave6Wire.test.ts` now guards
   that neither shape returns. Fixtures (`tests/fixtures/wave6.ts`, `e2e/uxfix_fixture.py`) serve the
   real 0.36.0 shape; the testid inventory gains `campaign-card-testset-{verified,pr,more}`.
+  - *Review findings landed in-wave (independent review of #266, F-1..F-4):* the Tests tile's
+    context now LEADS with the sets word (`1 test set · 11/11 passed`) so it survives the tile's
+    ellipsis, the redundant "N ad-hoc group" word is gone, and every `StatTile` context carries
+    its full text as `title` (`stat-context`); sets no card can show are said as `· N
+    unattributed` and `test_sets` rows served without a `run_id` as `· N malformed` (never
+    folded away — `listCampaigns` now returns `malformedTestSets`); a 0.36 daemon's real zero
+    renders as `no test sets registered yet` on the tile and `N tests · 0 test sets` on the Home
+    door, while a pre-0.36 daemon still says nothing about sets; the launch panel reads
+    `/testing/author`'s `runs[].label` and says `filed under qe-tests-<repo> on the Test landing
+    — the set fills in when the verify phase registers it` (`testing-launch-filed-label`) instead
+    of "appears … when the run registers its test set". The Chrome rig asserts the sets word is
+    VISIBLE (glyph box inside the context span), not merely present in `textContent`.
 
 ## [0.5.7] — 2026-09-11
 _The published bundle is built against `wicked-crew-api-types` **0.36.0** — the exact

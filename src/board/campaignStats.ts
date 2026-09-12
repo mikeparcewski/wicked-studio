@@ -302,8 +302,9 @@ export function testSetPrHref(t: TestSet | Pick<TestSet, 'deliverUrl'>): string 
 /**
  * The Home "Test" door's count line — the SAME census as the landing's "Tests" tile (campaigns +
  * label groups), with the registered sets appended once a 0.36 daemon serves them: "2 tests ·
- * 3 test sets". A pre-0.36 daemon (`testSets: null`) says only "2 tests" — the sets are absent, not
- * zero. (`groups` is optional only for older partial answers; it reads as none.)
+ * 3 test sets". A 0.36 daemon with nothing registered says "2 tests · 0 test sets" — its REAL zero;
+ * a pre-0.36 daemon (`testSets: null`) says only "2 tests" — the sets are absent, not zero (review
+ * of #266, F-3). (`groups` is optional only for older partial answers; it reads as none.)
  */
 export function testDoorWord(listing: {
   campaigns: readonly unknown[];
@@ -313,7 +314,34 @@ export function testDoorWord(listing: {
   const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
   const tests = plural(listing.campaigns.length + (listing.groups?.length ?? 0), 'test');
   const sets = listing.testSets ?? null;
-  return sets === null || sets.length === 0 ? tests : `${tests} · ${plural(sets.length, 'test set')}`;
+  return sets === null ? tests : `${tests} · ${plural(sets.length, 'test set')}`;
+}
+
+/**
+ * The registered sets NO card carries (review of #266, F-2): a set joins a card only through a
+ * member `run_id` or a group `label`, so once the producing run is archived / reaped and its group
+ * drops off the wire, the set — a durable audit entry the daemon still hydrates — has nowhere to
+ * open. Counted on the Tests tile as "N unattributed", never folded silently into the sets total.
+ */
+export function unattributedTestSets(cards: readonly CampaignCardModel[], testSets: readonly TestSet[]): TestSet[] {
+  const carried = new Set<string>();
+  for (const c of cards) for (const t of c.testSets) carried.add(t.id);
+  return testSets.filter((t) => !carried.has(t.id));
+}
+
+/**
+ * The Tests tile's sets word — FIRST in the tile's context so it is the part that survives the
+ * tile's ellipsis (review of #266, F-1): "1 test set · 11/11 passed", plus "· N unattributed" and
+ * "· N malformed" whenever either is non-zero (deny-dominates: never hidden). A 0.36 daemon with
+ * nothing registered says "no test sets registered yet" — its real zero (F-3); a pre-0.36 daemon has
+ * no word at all (the caller passes no totals).
+ */
+export function testSetsWord(totals: TestSetTotals, unattributed: number, malformed: number): string {
+  if (totals.sets === 0 && malformed === 0) return 'no test sets registered yet';
+  const parts = [`${totals.sets} test set${totals.sets === 1 ? '' : 's'} · ${totals.passed}/${totals.produced} passed`];
+  if (unattributed > 0) parts.push(`${unattributed} unattributed`);
+  if (malformed > 0) parts.push(`${malformed} malformed`);
+  return parts.join(' · ');
 }
 
 // ── The card models (needs-you first) ──────────────────────────────────────────
