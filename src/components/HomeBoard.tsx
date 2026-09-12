@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import { listCampaigns, type Campaign } from '../api/campaigns.js';
+import { listCampaigns, type CampaignsListing } from '../api/campaigns.js';
+import { testDoorWord } from '../board/campaignStats.js';
 import { getDiagnostics, type Diagnostics } from '../api/diagnostics.js';
 import type { SteeringRule } from '../api/steering.js';
 import type { GovernanceClaim, SessionView } from '../api/types.js';
@@ -139,7 +140,9 @@ function BandGrid({ items, columns, rowH, firstRow, lastRow, navigate, cursor }:
  *  unless) each answers; absence degrades the feature, never the page. */
 interface HomeWires {
   chats: LiveChatSnapshot[] | null;
-  campaigns: Campaign[] | null;
+  /** The ONE `GET /campaigns` answer — campaigns + label groups, plus the api-types 0.36.0 test
+   *  sets (`testSets: null` inside = a pre-0.36 daemon). */
+  campaigns: CampaignsListing | null;
   claims: GovernanceClaim[] | null;
   rules: SteeringRule[] | null;
   perRule: WikiRuleEvidenceRow[] | null;
@@ -181,7 +184,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
       if (!cancelled) setWires((w) => ({ ...w, ...part }));
     };
     void read(() => api.listChats()).then((r) => r !== null && deposit({ chats: r.chats }));
-    void read(() => listCampaigns()).then((r) => r !== null && deposit({ campaigns: r.campaigns }));
+    void read(() => listCampaigns()).then((r) => r !== null && deposit({ campaigns: r }));
     void read(() => api.listClaims()).then((r) => r !== null && deposit({ claims: r.claims }));
     void read(() => api.listConformanceRules()).then(
       (r) => r !== null && deposit({ rules: r.rules as SteeringRule[] }),
@@ -239,7 +242,8 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
         projectIds: projectIdByRun,
         chats: wires.chats ?? [],
         repos,
-        campaigns: wires.campaigns ?? [],
+        // The needs-you wall reads the ENGINE campaigns off the listing (a label group has no gate of its own).
+        campaigns: wires.campaigns?.campaigns ?? [],
         now,
       }),
     [runs, gates, failedAt, attachedAt, projectIdByRun, wires.chats, wires.campaigns, repos, now],
@@ -325,7 +329,9 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
     return [
       { key: 'execute', label: 'Execute', glyph: '▸', count: plural(runs.length, 'run'), href: '/execute', color: 'var(--status-run)' },
-      { key: 'test', label: 'Test', glyph: '✓', count: wires.campaigns === null ? null : plural(wires.campaigns.length, 'test'), href: '/testing/campaigns', color: 'var(--section-test)' },
+      // The same census as the landing's "Tests" tile (campaigns + label groups) — with the produced
+      // sets appended once a 0.36 daemon serves them (`testDoorWord`); a pre-0.36 answer says only "N tests".
+      { key: 'test', label: 'Test', glyph: '✓', count: wires.campaigns === null ? null : testDoorWord(wires.campaigns), href: '/testing/campaigns', color: 'var(--section-test)' },
       // F-1/F-2: the census the count covers is said — "N documents" only once the daemon-wide index
       // (or an explicit fan-out) has answered for every project; otherwise "in opened projects".
       { key: 'vibe', label: 'Vibe', glyph: '▤', count: docsCensus === 'opened' ? `${plural(docsCount, 'document')} in opened projects` : plural(docsCount, 'document'), href: '/vibe', color: 'var(--section-vibe)' },

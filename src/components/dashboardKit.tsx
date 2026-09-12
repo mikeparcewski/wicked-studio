@@ -86,8 +86,11 @@ export interface StatTileProps {
   delta?: StatDelta | undefined;
   /** How to color a delta: neutral (ink) or bad-up (more failed = red). */
   deltaSense?: 'neutral' | 'bad-up' | undefined;
-  /** Tiny context line (the window, honestly named). */
+  /** Tiny context line (the window, honestly named). One nowrap line — the tail may ellipsize. */
   context?: string | undefined;
+  /** The context span's hover text when the painted line is an abridgement of it (R2-1 on #266);
+   *  defaults to `context` itself so the full line is always reachable. */
+  contextTitle?: string | undefined;
   /** Inline area sparkline series (oldest first). Absent/all-zero = no chart. */
   spark?: readonly number[] | undefined;
   /** Threshold color for the number itself — only where it MEANS something. */
@@ -133,7 +136,7 @@ function DeltaMark({ delta, sense }: { delta: StatDelta; sense: 'neutral' | 'bad
 }
 
 export function StatTile({
-  testId, label, value, delta, deltaSense = 'neutral', context, spark,
+  testId, label, value, delta, deltaSense = 'neutral', context, contextTitle, spark,
   valueColor, onOpen, href, title, data,
 }: StatTileProps): React.ReactElement {
   const body = (
@@ -165,7 +168,11 @@ export function StatTile({
         {delta !== undefined && <DeltaMark delta={delta} sense={deltaSense} />}
       </span>
       {context !== undefined && (
+        // One nowrap line — the tail may ellipsize, so the FULL text rides on `title` (review of
+        // #266, F-1) and callers put the part that must survive first.
         <span
+          data-testid="stat-context"
+          title={contextTitle ?? context}
           style={{
             fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',

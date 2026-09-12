@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
+import { W6_TEST_SET } from './fixtures/wave6.js';
 
 /**
  * The campaign store (TH-14): the §1.5 support probe's three states and the Campaign* frame
@@ -24,7 +25,7 @@ const frame = (type: string, fields: Record<string, unknown> = {}): CoreEvent =>
 
 beforeEach(() => {
   listCampaigns.mockReset();
-  useCampaignsStore.setState({ support: 'unknown', campaigns: [], groups: [], live: {} });
+  useCampaignsStore.setState({ support: 'unknown', campaigns: [], groups: [], testSets: null, malformedTestSets: 0, live: {} });
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -39,6 +40,28 @@ describe('the §1.5 support probe — three states, never a boolean', () => {
     expect(useCampaignsStore.getState().support).toBe('supported');
     expect(useCampaignsStore.getState().campaigns).toEqual([]);
     expect(useCampaignsStore.getState().groups).toEqual([]);
+    expect(useCampaignsStore.getState().testSets).toBeNull();
+  });
+
+  it("holds a 0.36 daemon's test sets as served; a listing without them (an older daemon — or a partial mock) holds null, never []", async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [], testSets: [W6_TEST_SET] });
+    await useCampaignsStore.getState().refresh();
+    expect(useCampaignsStore.getState().testSets).toEqual([W6_TEST_SET]);
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [], testSets: [] });
+    await useCampaignsStore.getState().refresh();
+    expect(useCampaignsStore.getState().testSets).toEqual([]);
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
+    await useCampaignsStore.getState().refresh();
+    expect(useCampaignsStore.getState().testSets).toBeNull();
+  });
+
+  it('holds the malformed-row count beside the sets; a listing without it (partial mock) reads 0', async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [], testSets: [W6_TEST_SET], malformedTestSets: 2 });
+    await useCampaignsStore.getState().refresh();
+    expect(useCampaignsStore.getState().malformedTestSets).toBe(2);
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [], testSets: [] });
+    await useCampaignsStore.getState().refresh();
+    expect(useCampaignsStore.getState().malformedTestSets).toBe(0);
   });
 
   it('404 = this daemon predates campaigns → unsupported', async () => {

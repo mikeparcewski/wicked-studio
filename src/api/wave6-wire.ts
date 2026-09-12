@@ -39,14 +39,18 @@
  *  - `skills.stale-rules` + `SkillsManifestResponse.current.rules` / `current.drift` live in the
  *    SKILLS block and are vendored by `./skills-wire.ts` (its own byte-pinned regions), not here.
  *
- * WIRE GAPS — two shapes studio codes against are NOT declared by 0.36.0 and stay studio-worded at
- * the bottom of this file, each guarded by `tests/wave6Wire.test.ts` so the day the package
- * declares them the suite says "re-vendor": (1) a row-level `Campaign.test_set` / `RunGroup.test_set`
- * join ({@link TestSetRegistration}) — 0.36.0 serves the produced sets as a separate top-level
- * `CampaignsListResponse.test_sets: TestSet[]` (snake_case, `run_id`-keyed), so the Test landing's
- * per-card counts render only when a daemon joins the row; (2) `TestingReconBody.workflow`
- * ({@link TestingReconWorkflowBody}) — the launch ladder's middle rung; a 0.36.0 daemon has
- * `POST /testing/author` itself, so the rung is reached only on a daemon that lacks the route.
+ * WIRE GAPS — none. Two shapes the 0.5.7 cut coded against provisionally are gone (studio 0.5.8):
+ * (1) a row-level `Campaign.test_set` / `RunGroup.test_set` join was never declared — 0.36.0 serves
+ * the produced sets as the top-level `CampaignsListResponse.test_sets: TestSet[]` (snake_case,
+ * `run_id`-keyed, `label`-tagged), which {@link testSetsOf} reads null-safely and
+ * `board/campaignStats.ts` joins onto the campaign / group cards by `run_id` (and by the
+ * `qe-tests-<repo>` label the daemon files an authoring run under); (2) `TestingReconBody.workflow`
+ * — the launch ladder's middle rung — was dead code: `qe-author-tests` and `POST /testing/author`
+ * shipped together in wave 6, so no daemon lists the workflow without the route, and the ladder
+ * falls from the route straight to the per-repo `POST /runs` fan. {@link TestingReconBody} stays
+ * vendored as the evidence that the recon body carries NO `workflow` key — studio sends none.
+ * `tests/wave6Wire.test.ts` guards both: a `test_set` row join or a `workflow` recon key appearing
+ * in a later pin fails the suite and says "re-vendor".
  */
 
 import type {
@@ -208,7 +212,7 @@ export interface TestSet {
 }
 // <<< VERBATIM
 
-/** The recon body, vendored as EVIDENCE: no `workflow` key (see {@link TestingReconWorkflowBody}). */
+/** The recon body, vendored as EVIDENCE: no `workflow` key — studio's launch ladder sends none. */
 // >>> VERBATIM wicked-crew-api-types@0.36.0 index.d.ts:2745-2778 (crew#536) — TestingReconBody (no `workflow` key)
 /**
  * The `POST /testing/recon` request body (api-types 0.15.0) — the Testing page's campaign-recon
@@ -908,81 +912,97 @@ export function diffSource(d: RunDiff): RunDiffSource | null {
   return s === 'branch' || s === 'worktree' ? s : null;
 }
 
-// ── WIRE GAPS — PROVISIONAL, studio-worded: NOT declared by wicked-crew-api-types 0.36.0 ──────
-//
-// Each shape here is guarded by `tests/wave6Wire.test.ts`: the suite asserts the installed package
-// does NOT declare it, so the pin that does makes this section a failing test, not a silent drift.
+// ── The registered test sets — `CampaignsListResponse.test_sets`, read null-safely ────────────
 
-/**
- * PROVISIONAL (wire gap 1) — the counts of a row-joined test set. 0.36.0's {@link TestSet} carries
- * `produced` / `executed` / `passed` / `failed` / `not_executed` at the top level of the
- * `CampaignsListResponse.test_sets` entry instead; `tests` here is the produced count.
- */
-export interface TestSetCounts {
-  files: number;
-  tests: number;
-  executed: number;
-  passed: number;
-  failed: number;
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+/** One `TestSetFile` narrowed off the wire; `null` unless the row names its `path`. An unknown
+ *  status token reads as `not-executed` — never as a pass (deny-dominates). */
+function testSetFileOf(raw: unknown): TestSetFile | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const f = raw as Record<string, unknown>;
+  const path = str(f['path']);
+  if (path === null) return null;
+  const status = f['status'];
+  return {
+    path,
+    harness: str(f['harness']) ?? 'unknown',
+    status: status === 'passed' || status === 'failed' ? status : 'not-executed',
+  };
 }
 
 /**
- * PROVISIONAL (wire gap 1) — the test set a completed `qe-author-tests` run registers, as studio
- * reads it off a campaign ROW (`Campaign.test_set` / `RunGroup.test_set`, daemon-joined like
- * `node_delivery`). 0.36.0 declares no row-level join: it serves the sets as
- * `CampaignsListResponse.test_sets: TestSet[]` (`run_id`, `files: TestSetFile[]`, `plan`,
- * `deliverUrl`). Until a pin declares the join, a 0.36.0 daemon's row renders no counts (absence,
- * never a fabricated zero) — `testSetOf` answers `null`.
+ * One `TestSet` row narrowed off the wire bag — `null` unless it names its producing `run_id` (the
+ * join key; a row without one attaches to nothing). The contract declares every count required;
+ * a count that is not a finite number reads as 0 and the row is still shown, never dropped — a
+ * malformed registration is a red set, not a hidden one. `verified` is `true` only on an explicit
+ * `true`.
  */
-export interface TestSetRegistration {
-  /** The run that produced the set. */
-  runId: string;
-  /** The workflow that produced it (`qe-author-tests`). */
-  workflow: string;
-  /** Repo-relative paths of the produced test files. */
-  files: string[];
-  counts: TestSetCounts;
-  /** Repo-relative path of the PLAN the author phase wrote; `null` when none. */
-  plan: string | null;
-  /** The delivered PR URL when the deliver phase opened one; `null` otherwise. */
-  prUrl: string | null;
-}
-
-/** PROVISIONAL (wire gap 1) — a campaign row (or ad-hoc group) as studio reads the join. */
-export interface WithTestSet {
-  test_set?: TestSetRegistration | null;
-}
-
-/**
- * PROVISIONAL (wire gap 2) — the additive `workflow` key studio sends on `TestingReconBody` as the
- * launch ladder's middle rung. 0.36.0's {@link TestingReconBody} declares no such key: a daemon with
- * a strict schema 400s it as unrecognized and the ladder falls through to one `POST /runs` per repo.
- * On a 0.36.0 daemon the first rung (`POST /testing/author`) answers, so this rung is never reached.
- */
-export interface TestingReconWorkflowBody {
-  problem: string;
-  projectId?: string;
-  repoRefs?: string[];
-  ungated?: boolean;
-  workflow?: string;
-}
-
-/** `Campaign.test_set` / `RunGroup.test_set` narrowed off the wire bag — `null` unless the shape holds. */
-export function testSetOf(row: unknown): TestSetRegistration | null {
-  if (typeof row !== 'object' || row === null) return null;
-  const raw = (row as Record<string, unknown>)['test_set'];
+export function testSetOf(raw: unknown): TestSet | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const t = raw as Record<string, unknown>;
-  const counts = t['counts'];
-  if (typeof t['runId'] !== 'string' || typeof counts !== 'object' || counts === null) return null;
-  const c = counts as Record<string, unknown>;
-  const n = (k: string): number => (typeof c[k] === 'number' && Number.isFinite(c[k]) ? (c[k] as number) : 0);
+  const runId = str(t['run_id']);
+  if (runId === null) return null;
+  const label = str(t['label']);
+  const repoName = str(t['repo_name']);
+  const deliverUrl = str(t['deliverUrl']);
   return {
-    runId: t['runId'],
-    workflow: str(t['workflow']) ?? QE_AUTHOR_TESTS_WORKFLOW_ID,
-    files: Array.isArray(t['files']) ? (t['files'] as unknown[]).filter((f): f is string => typeof f === 'string') : [],
-    counts: { files: n('files'), tests: n('tests'), executed: n('executed'), passed: n('passed'), failed: n('failed') },
+    id: str(t['id']) ?? `testset-${runId}`,
+    run_id: runId,
+    workflow_id: QE_AUTHOR_TESTS_WORKFLOW_ID,
+    ...(label !== null ? { label } : {}),
+    repo_ref: str(t['repo_ref']),
+    ...(repoName !== null ? { repo_name: repoName } : {}),
+    registered_at: num(t['registered_at']),
+    run_status: str(t['run_status']) ?? 'unknown',
+    verify_status: str(t['verify_status']),
+    verified: t['verified'] === true,
+    files: Array.isArray(t['files'])
+      ? (t['files'] as unknown[]).map(testSetFileOf).filter((f): f is TestSetFile => f !== null)
+      : [],
+    produced: num(t['produced']),
+    executed: num(t['executed']),
+    passed: num(t['passed']),
+    failed: num(t['failed']),
+    not_executed: num(t['not_executed']),
     plan: str(t['plan']),
-    prUrl: str(t['prUrl']),
+    harnesses: Array.isArray(t['harnesses'])
+      ? (t['harnesses'] as unknown[]).filter((h): h is string => typeof h === 'string' && h !== '')
+      : [],
+    ...(deliverUrl !== null ? { deliverUrl } : {}),
   };
+}
+
+/** The `test_sets` list as read: the joinable rows plus the count of rows that could NOT be joined. */
+export interface TestSetsRead {
+  /** Every row naming its `run_id`, wire order (newest first). */
+  sets: TestSet[];
+  /** Rows the daemon registered WITHOUT a `run_id` (nothing to join, nothing to open). Counted, never
+   *  hidden — a malformed registration is still a registration (review of #266, F-2). */
+  malformed: number;
+}
+
+/**
+ * `CampaignsListResponse.test_sets` off the `GET /campaigns` body: `null` when the daemon carries
+ * no such key (pre-0.36 — absence, never a fabricated empty list), else the joinable rows in wire
+ * order (newest first) plus how many rows were malformed. `{ sets: [], malformed: 0 }` is a real
+ * answer: a 0.36 daemon with nothing registered yet.
+ */
+export function testSetsReadOf(body: unknown): TestSetsRead | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const raw = (body as Record<string, unknown>)['test_sets'];
+  if (!Array.isArray(raw)) return null;
+  const sets: TestSet[] = [];
+  let malformed = 0;
+  for (const row of raw) {
+    const t = testSetOf(row);
+    if (t !== null) sets.push(t);
+    else malformed += 1;
+  }
+  return { sets, malformed };
+}
+
+/** The joinable rows alone — {@link testSetsReadOf} without the malformed count. */
+export function testSetsOf(body: unknown): TestSet[] | null {
+  return testSetsReadOf(body)?.sets ?? null;
 }

@@ -210,7 +210,6 @@ export const INTAKE_GATE = 'before:1';
 /**
  * Which wire the launch actually rode — stated on the panel, never implied:
  *  - `testing-author`          — `POST /testing/author` (the wave-6 route for the QE workflow);
- *  - `testing-recon-workflow`  — `POST /testing/recon` with the additive `workflow` key;
  *  - `runs-fan`                — one `POST /runs {workflow, repoRef, projectId, humanConfirm}` per
  *                                resolved repo (the SHIPPING wire — `projectId` files, `repoRef`
  *                                scopes — used when the operator NARROWED a project (F-076: the
@@ -218,7 +217,7 @@ export const INTAKE_GATE = 'before:1';
  *                                daemon lists the workflow but its testing routes predate it);
  *  - `testing-recon-plain`     — today's free-text recon: the daemon has no governed test workflow.
  */
-export type GovernedLaunchRoute = 'testing-author' | 'testing-recon-workflow' | 'runs-fan' | 'testing-recon-plain';
+export type GovernedLaunchRoute = 'testing-author' | 'runs-fan' | 'testing-recon-plain';
 
 /** The panel's scope, as the operator composed it — the pure input `launchGovernedTest` plans from. */
 export interface GovernedLaunchScope {
@@ -242,6 +241,15 @@ export interface GovernedLaunchResult extends TestingLaunchResult {
   /** The workflow every launched run carries, or `null` for a plain run. */
   workflow: string | null;
   campaignRegistered: boolean;
+  /**
+   * The label groups the DAEMON filed the runs under — `POST /testing/author`'s `runs[].label`
+   * (`qe-tests-<repo>`, one per repo; the `RunGroup.label` on `GET /campaigns`, so the group card
+   * exists on the Test landing the moment the run does). Unique, answer order. `[]` for every other
+   * route: a `POST /runs` fan's client-minted `groupLabel` rides `campaign` as before (the panel says
+   * "grouped under one label"), a plain recon files nothing (review of #266, F-4: the author route
+   * says "filed under …", never "appears … when the run registers").
+   */
+  labels: string[];
   /**
    * An honest note about the SCOPE the daemon actually launched, when it differs from the one asked
    * for (independent review of #263, R2-1): a `/testing/author` answer with more `runIds` than the
@@ -268,17 +276,23 @@ export function isNarrowedProject(scope: Pick<GovernedLaunchScope, 'projectId' |
   return scope.projectId !== null && scope.excluded.length > 0;
 }
 
-/** A strict-schema 400 that names `key` as unrecognized — the wire of a daemon whose route predates
- *  the additive field (crew's schemas are `.strict()`; the error names the offending key). */
-export function isUnrecognizedKey(e: unknown, key: string): boolean {
-  if (!(e instanceof ApiError) || e.status !== 400) return false;
-  const wire = e.wire.toLowerCase();
-  return /unrecognized key/.test(wire) && wire.includes(key.toLowerCase());
-}
-
 /** The panel's mint for a client-side fan label — `test-<base36 clock>-<random>` (1–200 chars). */
 export function mintGroupLabel(now: number = Date.now(), rand: string = Math.random().toString(36).slice(2, 10)): string {
   return `test-${now.toString(36)}-${rand}`;
+}
+
+/** `TestingAuthorResponse.runs[].label` off the wire bag — the `qe-tests-<repo>` groups the launch
+ *  filed the runs under; unique, answer order; `[]` when the answer carries none (a recon answer). */
+export function filedLabelsOf(raw: TestingLaunchResult): string[] {
+  const runs = raw['runs'];
+  if (!Array.isArray(runs)) return [];
+  const out: string[] = [];
+  for (const r of runs) {
+    if (typeof r !== 'object' || r === null) continue;
+    const label = (r as Record<string, unknown>)['label'];
+    if (typeof label === 'string' && label !== '' && !out.includes(label)) out.push(label);
+  }
+  return out;
 }
 
 function normalizeRecon(raw: TestingLaunchResult, route: GovernedLaunchRoute, workflow: string | null): GovernedLaunchResult {
@@ -290,6 +304,7 @@ function normalizeRecon(raw: TestingLaunchResult, route: GovernedLaunchRoute, wo
     route,
     workflow: typeof raw['workflow'] === 'string' && raw['workflow'] !== '' ? (raw['workflow'] as string) : workflow,
     campaignRegistered: raw['campaignRegistered'] === true,
+    labels: filedLabelsOf(raw),
     scopeNote: null,
   };
 }
@@ -340,6 +355,7 @@ async function launchRunsFan(scope: GovernedLaunchScope, repos: string[]): Promi
     route: 'runs-fan',
     workflow: scope.workflow,
     campaignRegistered: false,
+    labels: [],
     scopeNote: null,
   };
 }
@@ -350,14 +366,19 @@ async function launchRunsFan(scope: GovernedLaunchScope, repos: string[]): Promi
  * The chain, in order, each step taken only when the previous one's wire is ABSENT (never on a
  * named refusal — a 404 naming a bad ref, a 400 about the scope, a 409, a 500 all surface as
  * answers):
- *  1. a NARROWED project (members dropped) ⇒ the per-repo `POST /runs` fan over the remaining
- *     members ∪ explicit, `projectId` kept for filing — the recon body's `projectId` would union the
- *     dropped members back in; an empty remainder is refused HERE, before any wire call;
+ *  1. a NARROWED project (members dropped) ⇒ `POST /testing/author` with the exact `repoRefs`
+ *     (`projectId` files) when the daemon has the route, else the per-repo `POST /runs` fan over the
+ *     remaining members ∪ explicit — the recon body's `projectId` would union the dropped members
+ *     back in; an empty remainder is refused HERE, before any wire call;
  *  2. the workflow is listed ⇒ `POST /testing/author` (route absent ⇒ 3);
- *  3. `POST /testing/recon` + `workflow` (a strict schema naming `workflow` unrecognized ⇒ 4);
- *  4. the per-repo `POST /runs` fan with `workflow` (the shipping wire carries a workflow id);
- *  5. no workflow listed ⇒ today's plain recon ({@link launchTestingRun}) — the panel has already
+ *  3. the per-repo `POST /runs` fan with `workflow` (the shipping wire carries a workflow id);
+ *  4. no workflow listed ⇒ today's plain recon ({@link launchTestingRun}) — the panel has already
  *     said "this daemon has no governed test workflow — plain run".
+ *
+ * There is NO `POST /testing/recon` + `workflow` rung: 0.36.0's `TestingReconBody` declares no
+ * `workflow` key (vendored as evidence in `./wave6-wire.ts`), and `qe-author-tests` shipped together
+ * with `POST /testing/author`, so no daemon lists the workflow without the route — the rung studio
+ * 0.5.7 carried was unreachable. `/testing/recon` is only ever sent the pinned body (step 4).
  */
 export async function launchGovernedTest(scope: GovernedLaunchScope): Promise<GovernedLaunchResult> {
   const repos = effectiveRepos(scope);
@@ -396,15 +417,6 @@ export async function launchGovernedTest(scope: GovernedLaunchScope): Promise<Go
     return normalizeRecon(r, 'testing-author', scope.workflow);
   } catch (e) {
     if (!isRouteAbsent(e)) throw e;
-  }
-  try {
-    const r = await apiFetch<TestingLaunchResult>('/testing/recon', {
-      method: 'POST',
-      body: JSON.stringify({ ...pinned, workflow: scope.workflow }),
-    });
-    return normalizeRecon(r, 'testing-recon-workflow', scope.workflow);
-  } catch (e) {
-    if (!isUnrecognizedKey(e, 'workflow') && !isRouteAbsent(e)) throw e;
   }
   return launchRunsFan(scope, repos);
 }

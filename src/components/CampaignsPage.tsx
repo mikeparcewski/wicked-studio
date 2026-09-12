@@ -3,7 +3,8 @@ import { campaignPath, testingPath, type LaunchIntent } from '../api/testing.js'
 import type { SessionView } from '../api/types.js';
 import {
   campaignCards, campaignTotals, deliveryRollupWord, matchesCampaignChip, memberRunIdSet,
-  passRateHealth, passRateWord, progressWord,
+  passRateHealth, passRateWord, progressWord, testSetCountsWord, testSetPrHref, testSetTotals, testSetsWord,
+  unattributedTestSets,
   type CampaignCardModel, type CampaignChip,
 } from '../board/campaignStats.js';
 import { recentActivity } from '../board/homeActivity.js';
@@ -66,6 +67,8 @@ const CARD_STAT: React.CSSProperties = {
 
 /** Most per-sibling PR links a card renders inline; the rest fold into a "+n" word. */
 const CARD_PR_CAP = 4;
+/** Produced test sets shown per card, newest first; older ones are counted, never hidden silently. */
+const CARD_SET_CAP = 3;
 
 /** The scoreboard's segmented status bar, condensed onto the card — real counts, no series. */
 function StatusBar({ m }: { m: CampaignCardModel }): React.ReactElement | null {
@@ -269,50 +272,112 @@ function CampaignCard({ m, narration, navigate }: {
         </div>
       )}
 
-      {/* ── The produced test set (wave 6, F-7R2-014) — the counts the VERIFY phase re-derived, off
-             the campaign registration; the workflow chip reads the live runs' `workflow_id` so the
-             card says "qe-author-tests" from launch, before any registration lands. ── */}
-      {(m.workflowIds.length > 0 || m.testSet !== null) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {m.workflowIds.map((w) => (
-            <span
-              key={w}
-              data-testid="campaign-card-workflow"
-              data-workflow={w}
-              title={w === 'qe-author-tests'
-                ? 'The governed test-authoring workflow: recon → author → verify → review → deliver'
-                : `Workflow ${w}`}
-              style={{
-                ...CARD_STAT, color: w === 'qe-author-tests' ? S.accent : S.muted,
-                border: `1px solid ${S.border}`, borderRadius: 'var(--radius-full)', padding: '1px 8px',
-              }}
-            >
-              {w}
-            </span>
-          ))}
-          {m.testSet !== null && (
-            <span
-              data-testid="campaign-card-testset"
-              data-tests={m.testSet.counts.tests}
-              data-executed={m.testSet.counts.executed}
-              data-passed={m.testSet.counts.passed}
-              data-failed={m.testSet.counts.failed}
-              title={m.testSet.files.length > 0 ? m.testSet.files.join('\n') : 'no file list on the registration'}
-              style={{ ...CARD_STAT, color: m.testSet.counts.failed > 0 ? 'var(--status-fail)' : S.ink, whiteSpace: 'normal' }}
-            >
-              {m.testSet.counts.files} test file{m.testSet.counts.files === 1 ? '' : 's'} · {m.testSet.counts.tests} test{m.testSet.counts.tests === 1 ? '' : 's'}
-              {' · '}
-              {m.testSet.counts.executed} executed · {m.testSet.counts.passed} passed · {m.testSet.counts.failed} failed
-              {m.testSet.counts.executed < m.testSet.counts.tests && (
-                <span data-testid="campaign-card-testset-unverified" style={{ color: 'var(--status-gate)' }}>
-                  {' '}· {m.testSet.counts.tests - m.testSet.counts.executed} never executed
+      {/* ── The produced test sets (wave 6, F-7R2-014; api-types 0.36.0) — the top-level
+             `CampaignsListResponse.test_sets`, joined onto this card by run_id / label in the fold, with
+             the counts the VERIFY phase re-derived, the PLAN and the delivered PR. The workflow chip reads
+             the live runs' `workflow_id`, so the card says "qe-author-tests" from launch, before any set
+             registers. A pre-0.36 daemon serves no sets: nothing below renders (absence, never 0). ── */}
+      {(m.workflowIds.length > 0 || m.testSets.length > 0) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {m.workflowIds.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {m.workflowIds.map((w) => (
+                <span
+                  key={w}
+                  data-testid="campaign-card-workflow"
+                  data-workflow={w}
+                  title={w === 'qe-author-tests'
+                    ? 'The governed test-authoring workflow: recon → author → verify → review → deliver'
+                    : `Workflow ${w}`}
+                  style={{
+                    ...CARD_STAT, color: w === 'qe-author-tests' ? S.accent : S.muted,
+                    border: `1px solid ${S.border}`, borderRadius: 'var(--radius-full)', padding: '1px 8px',
+                  }}
+                >
+                  {w}
                 </span>
-              )}
-            </span>
+              ))}
+            </div>
           )}
-          {m.testSet !== null && m.testSet.plan !== null && (
-            <span data-testid="campaign-card-testset-plan" style={{ ...CARD_STAT, color: S.faint }} title="The PLAN the author phase wrote">
-              plan: {m.testSet.plan}
+          {m.testSets.slice(0, CARD_SET_CAP).map((t) => {
+            const pr = testSetPrHref(t);
+            return (
+              <div
+                key={t.id}
+                data-testid="campaign-card-testset"
+                data-set-id={t.id}
+                data-run-id={t.run_id}
+                data-verified={t.verified}
+                data-produced={t.produced}
+                data-executed={t.executed}
+                data-passed={t.passed}
+                data-failed={t.failed}
+                data-not-executed={t.not_executed}
+                title={t.files.length > 0
+                  ? t.files.map((f) => `${f.path} — ${f.status}`).join('\n')
+                  : 'no file list on the registration'}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
+              >
+                <span
+                  data-testid="campaign-card-testset-verified"
+                  title={t.verified
+                    ? 'The verify phase PASSED: every produced test executed and green, the repository checks green, the PLAN present'
+                    : `NOT verified — verify phase: ${t.verify_status ?? 'never planned'}; run ${t.run_status}`}
+                  style={{
+                    ...CARD_STAT, color: t.verified ? 'var(--status-done)' : 'var(--status-gate)',
+                    border: `1px solid ${S.border}`, borderRadius: 'var(--radius-full)', padding: '1px 8px', flexShrink: 0,
+                  }}
+                >
+                  {t.verified ? 'verified' : 'not verified'}
+                </span>
+                <span style={{ ...CARD_STAT, color: t.failed > 0 ? 'var(--status-fail)' : S.ink, whiteSpace: 'normal' }}>
+                  {testSetCountsWord(t)}
+                  {t.not_executed > 0 && (
+                    <span data-testid="campaign-card-testset-unverified" style={{ color: 'var(--status-gate)' }}>
+                      {' '}· {t.not_executed} not executed
+                    </span>
+                  )}
+                </span>
+                {t.plan !== null && (
+                  <button
+                    type="button"
+                    data-testid="campaign-card-testset-plan"
+                    data-run-id={t.run_id}
+                    data-plan={t.plan}
+                    title="The PLAN the author phase wrote — open the run; its Files view reads the run branch"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/runs/${encodeURIComponent(t.run_id)}`); }}
+                    style={{
+                      ...CARD_STAT, color: S.muted, textDecoration: 'underline', cursor: 'pointer',
+                      background: 'transparent', border: 'none', padding: 0,
+                    }}
+                  >
+                    plan: {t.plan}
+                  </button>
+                )}
+                {pr !== null && (
+                  <a
+                    data-testid="campaign-card-testset-pr"
+                    data-run-id={t.run_id}
+                    href={pr}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`${runShortId(t.run_id)} — ${pr}`}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ ...CARD_STAT, color: S.accent, textDecoration: 'underline' }}
+                  >
+                    PR #{pr.split('/').pop()}
+                  </a>
+                )}
+              </div>
+            );
+          })}
+          {m.testSets.length > CARD_SET_CAP && (
+            <span
+              data-testid="campaign-card-testset-more"
+              style={{ ...CARD_STAT, color: S.faint }}
+              title="Older sets registered under this test — the daemon serves every one; the card shows the newest three"
+            >
+              +{m.testSets.length - CARD_SET_CAP} older set{m.testSets.length - CARD_SET_CAP === 1 ? '' : 's'}
             </span>
           )}
         </div>
@@ -363,6 +428,8 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   const support = useCampaignsStore((s) => s.support);
   const campaigns = useCampaignsStore((s) => s.campaigns);
   const groups = useCampaignsStore((s) => s.groups);
+  const testSets = useCampaignsStore((s) => s.testSets);
+  const malformedTestSets = useCampaignsStore((s) => s.malformedTestSets);
   const refresh = useCampaignsStore((s) => s.refresh);
   const byRun = useRunEventStore((s) => s.byRun);
   const logs = useRuntimeStore((s) => s.logs);
@@ -411,6 +478,8 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
 
   // ── KPI folds (pure, board/campaignStats) ───────────────────────────────────
   const totals = useMemo(() => campaignTotals(campaigns, groups), [campaigns, groups]);
+  // The registered sets' rollup — `null` on a pre-0.36 daemon, so the tile says nothing about sets.
+  const setTotals = useMemo(() => (testSets === null ? null : testSetTotals(testSets)), [testSets]);
   const runsDelta = useMemo(() => windowDelta(buckets, (rs) => rs.length), [buckets]);
   const failedDelta = useMemo(
     () => windowDelta(buckets, (rs) => rs.filter((v) => outcomeOf(v.session.status) === 'fail').length),
@@ -421,9 +490,21 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
 
   // ── The card models (needs-you first; campaigns and groups, one sorted set) ──
   const cards = useMemo(
-    () => campaignCards(campaigns, groups, runsById, windowIds),
-    [campaigns, groups, runsById, windowIds],
+    () => campaignCards(campaigns, groups, runsById, windowIds, testSets ?? []),
+    [campaigns, groups, runsById, windowIds, testSets],
   );
+  // Sets no card carries (the producing run archived / its group gone) — said, never folded away.
+  const unattributed = useMemo(
+    () => (testSets === null ? [] : unattributedTestSets(cards, testSets)),
+    [cards, testSets],
+  );
+  // The tile's sets word — FIRST in the context so it survives the tile's ellipsis (#266 F-1);
+  // absent on a pre-0.36 daemon (`setTotals === null`), "no test sets registered yet" on a 0.36
+  // daemon's real zero (F-3), "· N unattributed" / "· N malformed" whenever non-zero (F-2).
+  const setsWord = setTotals === null ? null : testSetsWord(setTotals, unattributed.length, malformedTestSets);
+  // The unabridged line for the span's hover title (R2-1): "1 test set · …" where the painted lead
+  // says "1 set · …" so it clears the ellipsis glyph at 1440 px.
+  const setsWordFull = setTotals === null ? null : testSetsWord(setTotals, unattributed.length, malformedTestSets, 'full');
 
   // The freshest member-run narration per card — `recentActivity` capped at 1 (the ONE
   // narrator fold the home pulse reads; a second derivation could contradict it), clocked by
@@ -576,8 +657,19 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             testId="stat-campaigns"
             label="Tests"
             value={totals.campaigns + totals.groups}
-            context={`${totals.activeNow} active now${totals.groups > 0 ? ` · ${totals.groups} ad-hoc group${totals.groups === 1 ? '' : 's'}` : ''}`}
-            title="Every test and ad-hoc group on this daemon — click to clear filters"
+            // The sets word leads (it is what the operator came for); "active now" follows. The
+            // "N ad-hoc group" word is gone — every 0.36 New test IS a label group, so it only crowded
+            // the line (#266 F-1 / F-8). The tile's `title` says what the value counts.
+            context={[...(setsWord !== null ? [setsWord] : []), `${totals.activeNow} active now`].join(' · ')}
+            contextTitle={[...(setsWordFull !== null ? [setsWordFull] : []), `${totals.activeNow} active now`].join(' · ')}
+            data={{
+              'data-test-sets': setTotals === null ? 'absent' : setTotals.sets,
+              'data-test-sets-unattributed': unattributed.length,
+              'data-test-sets-malformed': malformedTestSets,
+            }}
+            title={unattributed.length > 0
+              ? `Every test on this daemon — each repository's label group and every multi-repo run — click to clear filters. ${unattributed.length} registered set${unattributed.length === 1 ? '' : 's'} belong${unattributed.length === 1 ? 's' : ''} to no test shown here (the producing run is gone from the wire): ${unattributed.map((t) => t.plan ?? t.id).join(', ')}`
+              : "Every test on this daemon — each repository's label group and every multi-repo run — click to clear filters"}
             onOpen={() => { setChip('all'); setQuery(''); }}
           />
           <StatTile
@@ -683,7 +775,8 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
           </p>
           <p style={{ fontSize: '12px', color: S.faint, margin: 0 }}>
             A test appears here the moment New test launches it (one card per launch, its runs inside) and
-            fills in with the produced set — files, tests, executed / passed / failed — when the run finishes.
+            fills in with the produced set — produced, executed / passed / failed, the PLAN and the PR — when
+            the run finishes.
           </p>
           <button
             type="button"

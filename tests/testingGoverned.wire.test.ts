@@ -3,10 +3,12 @@ import { ApiError } from '../src/api/errors.js';
 
 /**
  * The GOVERNED test launch chain (wave 6 — F-075 / F-7R2-003 / F-076 / F-7R2-010), below the
- * panel: `launchGovernedTest` plans the scope and walks the wire ladder — `/testing/author` →
- * `/testing/recon` + `workflow` → the per-repo `POST /runs` fan → today's plain recon — taking a
- * step ONLY when the previous wire is ABSENT (a bare unknown-route 404, or a strict schema naming
- * the additive key unrecognized). Every NAMED refusal is rethrown untouched. A NARROWED project
+ * panel: `launchGovernedTest` plans the scope and walks the wire ladder — `/testing/author` → the
+ * per-repo `POST /runs` fan → today's plain recon — taking a step ONLY when the previous wire is
+ * ABSENT (a bare unknown-route 404). There is NO `/testing/recon` + `workflow` rung: 0.36.0's
+ * `TestingReconBody` declares no such key and the workflow shipped together with the route, so
+ * `/testing/recon` only ever receives the pinned body. Every NAMED refusal is rethrown untouched.
+ * A NARROWED project
  * (members dropped) never touches the pinned recon body: its `projectId` unions the dropped members
  * back in, so the fan sends each remaining repo explicitly and keeps `projectId` for FILING.
  */
@@ -15,12 +17,13 @@ const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
 const {
-  effectiveRepos, INTAKE_GATE, isNarrowedProject, isUnrecognizedKey, launchGovernedTest, mintGroupLabel,
+  effectiveRepos, INTAKE_GATE, isNarrowedProject, launchGovernedTest, mintGroupLabel,
 } = await import('../src/api/testing.js');
 const { QE_AUTHOR_TESTS_WORKFLOW_ID } = await import('../src/api/wave6-wire.js');
 
 const ROUTE_ABSENT = new ApiError(404, 'Not Found');
-const STRICT_WORKFLOW = new ApiError(400, "Invalid recon body: unrecognized key 'workflow' — the body accepts problem, projectId, repoRefs, ungated");
+/** The recon route must never be reached with a `workflow` key — the fixture makes any call loud. */
+const RECON_UNTOUCHED = new Error('must not be called');
 
 /** Every call, in order, as `[path, parsed body]`. */
 const calls = (): Array<[string, Record<string, unknown>]> =>
@@ -50,7 +53,7 @@ const base = {
 // `beforeEach` as a cleanup hook — it would call `apiFetch()` after every test.
 beforeEach(() => { apiFetch.mockReset(); });
 
-describe('the pure plan — effectiveRepos / isNarrowedProject / isUnrecognizedKey / mintGroupLabel', () => {
+describe('the pure plan — effectiveRepos / isNarrowedProject / mintGroupLabel', () => {
   it('explicit ∪ (project members − dropped), explicit first, deduped, order kept', () => {
     expect(effectiveRepos({ projectId: 'p', projectRepos: ['a', 'b', 'c'], excluded: ['b'], explicit: ['c', 'z'] })).toEqual(['c', 'z', 'a']);
     expect(effectiveRepos({ projectId: null, projectRepos: ['a', 'b'], excluded: [], explicit: ['z'] })).toEqual(['z']); // no project ⇒ members do not count
@@ -61,14 +64,6 @@ describe('the pure plan — effectiveRepos / isNarrowedProject / isUnrecognizedK
     expect(isNarrowedProject({ projectId: 'p', excluded: ['a'] })).toBe(true);
     expect(isNarrowedProject({ projectId: 'p', excluded: [] })).toBe(false);
     expect(isNarrowedProject({ projectId: null, excluded: ['a'] })).toBe(false);
-  });
-
-  it("isUnrecognizedKey: a 400 whose wire names the key as unrecognized — nothing else", () => {
-    expect(isUnrecognizedKey(STRICT_WORKFLOW, 'workflow')).toBe(true);
-    expect(isUnrecognizedKey(new ApiError(400, "unrecognized key 'projectId'"), 'workflow')).toBe(false);
-    expect(isUnrecognizedKey(new ApiError(400, 'repoRefs must name at least one registered repo'), 'workflow')).toBe(false);
-    expect(isUnrecognizedKey(new ApiError(404, "unrecognized key 'workflow'"), 'workflow')).toBe(false);
-    expect(isUnrecognizedKey(new Error("unrecognized key 'workflow'"), 'workflow')).toBe(false);
   });
 
   it('mintGroupLabel: `test-<base36 clock>-<rand>`, deterministic under injected inputs, within the wire\'s 1–200 chars', () => {
@@ -82,38 +77,38 @@ describe('the pure plan — effectiveRepos / isNarrowedProject / isUnrecognizedK
 
 describe('the ladder — each step only when the previous wire is ABSENT', () => {
   it('1. the workflow is listed ⇒ POST /testing/author with the pinned body; the answer names the route and echoes the workflow', async () => {
-    wire({ '/testing/author': { runId: 'r-1', runIds: ['r-1'], campaign: 'author-x', campaignRegistered: false, workflow: 'qe-author-tests' } });
+    wire({ '/testing/author': { runId: 'r-1', runIds: ['r-1'], campaign: 'author-x', campaignRegistered: false, workflow: 'qe-author-tests', runs: [{ runId: 'r-1', repoRef: 'wicked-studio', label: 'qe-tests-wicked-studio' }, { runId: 'r-1', repoRef: 'wicked-studio', label: 'qe-tests-wicked-studio' }, { label: '' }] } });
     const r = await launchGovernedTest({ ...base, projectId: 'proj-a', explicit: ['wicked-studio'] });
     expect(calls()).toEqual([['/testing/author', { problem: base.problem, projectId: 'proj-a', repoRefs: ['wicked-studio'] }]]);
-    expect(r).toMatchObject({ route: 'testing-author', workflow: 'qe-author-tests', runIds: ['r-1'], runId: 'r-1', campaign: 'author-x', campaignRegistered: false });
+    // `labels` = the filed `runs[].label`s, unique, empty labels dropped (#266 F-4).
+    expect(r).toMatchObject({ route: 'testing-author', workflow: 'qe-author-tests', runIds: ['r-1'], runId: 'r-1', campaign: 'author-x', campaignRegistered: false, labels: ['qe-tests-wicked-studio'] });
   });
 
-  it('2. /testing/author absent ⇒ POST /testing/recon with the additive `workflow` key', async () => {
-    wire({ '/testing/recon': { runId: 'r-2', runIds: ['r-2'], campaign: 'recon-y', campaignRegistered: true } });
+  it('2. /testing/author absent ⇒ straight to the per-repo POST /runs fan — /testing/recon is never sent a `workflow` key (0.36.0 declares none)', async () => {
+    wire({ '/runs': { runId: 'r-2' }, '/testing/recon': RECON_UNTOUCHED });
     const r = await launchGovernedTest({ ...base, explicit: ['wicked-studio'] });
     expect(calls()).toEqual([
       ['/testing/author', { problem: base.problem, repoRefs: ['wicked-studio'] }],
-      ['/testing/recon', { problem: base.problem, repoRefs: ['wicked-studio'], workflow: 'qe-author-tests' }],
+      ['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests', repoRef: 'wicked-studio' }],
     ]);
-    expect(r).toMatchObject({ route: 'testing-recon-workflow', workflow: 'qe-author-tests', campaignRegistered: true });
+    expect(r).toMatchObject({ route: 'runs-fan', workflow: 'qe-author-tests', runIds: ['r-2'], runId: 'r-2', campaignRegistered: false, labels: [] });
   });
 
-  it('3. the recon schema refuses `workflow` as unrecognized ⇒ one POST /runs per resolved repo, workflow + intake gate on each, projectId filing, a shared groupLabel for ≥ 2', async () => {
+  it('3. the fan: one POST /runs per resolved repo, workflow + intake gate on each, projectId filing, a shared groupLabel for ≥ 2', async () => {
     let n = 0;
-    wire({ '/testing/recon': STRICT_WORKFLOW, '/runs': () => ({ runId: `r-${++n}` }) });
+    wire({ '/testing/recon': RECON_UNTOUCHED, '/runs': () => ({ runId: `r-${++n}` }) });
     const r = await launchGovernedTest({ ...base, projectId: 'proj-a', projectRepos: ['wicked-studio', 'wicked-crew'], explicit: [] });
     const c = calls();
     expect(c[0]![0]).toBe('/testing/author');
-    expect(c[1]![0]).toBe('/testing/recon');
-    expect(c.slice(2)).toEqual([
+    expect(c.slice(1)).toEqual([
       ['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests', repoRef: 'wicked-studio', projectId: 'proj-a', groupLabel: base.groupLabel }],
       ['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests', repoRef: 'wicked-crew', projectId: 'proj-a', groupLabel: base.groupLabel }],
     ]);
-    expect(r).toMatchObject({ route: 'runs-fan', workflow: 'qe-author-tests', runIds: ['r-1', 'r-2'], runId: 'r-1', campaign: base.groupLabel, campaignRegistered: false });
+    expect(r).toMatchObject({ route: 'runs-fan', workflow: 'qe-author-tests', runIds: ['r-1', 'r-2'], runId: 'r-1', campaign: base.groupLabel, campaignRegistered: false, labels: [] });
   });
 
   it('3b. a ONE-repo fan sends no groupLabel and answers no campaign — nothing is fabricated', async () => {
-    wire({ '/testing/recon': STRICT_WORKFLOW, '/runs': { runId: 'r-solo' } });
+    wire({ '/testing/recon': RECON_UNTOUCHED, '/runs': { runId: 'r-solo' } });
     const r = await launchGovernedTest({ ...base, explicit: ['wicked-studio'] });
     expect(calls().at(-1)).toEqual(['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests', repoRef: 'wicked-studio' }]);
     expect(r.campaign).toBeUndefined();
@@ -121,7 +116,7 @@ describe('the ladder — each step only when the previous wire is ABSENT', () =>
   });
 
   it('3c. an UNSCOPED fan is one repo-less POST /runs — the daemon decides what that means for the workflow', async () => {
-    wire({ '/testing/recon': STRICT_WORKFLOW, '/runs': { runId: 'r-un' } });
+    wire({ '/testing/recon': RECON_UNTOUCHED, '/runs': { runId: 'r-un' } });
     await launchGovernedTest({ ...base });
     expect(calls().at(-1)).toEqual(['/runs', { problem: base.problem, humanConfirm: INTAKE_GATE, workflow: 'qe-author-tests' }]);
   });
@@ -130,7 +125,7 @@ describe('the ladder — each step only when the previous wire is ABSENT', () =>
     wire({ '/testing/recon': { runId: 'r-p', runIds: ['r-p'], campaign: 'recon-z', campaignRegistered: false } });
     const r = await launchGovernedTest({ ...base, workflow: null, projectId: 'proj-a', explicit: ['wicked-studio'] });
     expect(calls()).toEqual([['/testing/recon', { problem: base.problem, projectId: 'proj-a', repoRefs: ['wicked-studio'] }]]);
-    expect(r).toMatchObject({ route: 'testing-recon-plain', workflow: null, runIds: ['r-p'] });
+    expect(r).toMatchObject({ route: 'testing-recon-plain', workflow: null, runIds: ['r-p'], labels: [] });
     expect(apiFetch.mock.calls.some(([p]) => p === '/testing/author')).toBe(false);
   });
 });
@@ -223,11 +218,11 @@ describe('the NEGATIVE guarantee — a named refusal is an answer, never a fallb
     expect(calls().map(([p]) => p)).toEqual(['/testing/author']);
   });
 
-  it('/testing/recon (with workflow) answers a NAMED 400 that is not about `workflow` ⇒ rethrown, no fan', async () => {
+  it("the fan's POST /runs answers a NAMED 400 ⇒ rethrown untouched; /testing/recon is never a fallback for the governed launch", async () => {
     const err = new ApiError(400, "unrecognized key 'projectId'");
-    wire({ '/testing/recon': err });
+    wire({ '/runs': err, '/testing/recon': RECON_UNTOUCHED });
     await expect(launchGovernedTest({ ...base, explicit: ['wicked-studio'] })).rejects.toBe(err);
-    expect(calls().map(([p]) => p)).toEqual(['/testing/author', '/testing/recon']);
+    expect(calls().map(([p]) => p)).toEqual(['/testing/author', '/runs']);
   });
 
   it('a 201 with no run id is not disguised: runIds is empty and the panel says so', async () => {

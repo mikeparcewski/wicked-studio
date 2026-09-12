@@ -13,8 +13,14 @@ No crew daemon is involved. Acceptance findings F-075 / F-076 / F-7R2-003 / -005
      workflow + wire and shows the waiting line; the intake gate arrives over /ws and the card
      carries the PLAN — five phases with executor / skill / seat. Project chips carry a DROP
      button (F-076). Screenshots at 1440x700 and 400px.
-  3. THE PRODUCED SET (F-7R2-014): the landing's card shows "2 test files · 11 tests · 11
-     executed · 11 passed · 0 failed" off the campaign's `test_set`, the workflow chip, the plan.
+  3. THE PRODUCED SET (F-7R2-014): the landing's card — the `qe-tests-studio-api` label group
+     0.36.0 files the run under — shows "verified · 11 produced · 11 executed · 11 passed · 0
+     failed" off the TOP-LEVEL `test_sets` row joined by run_id, the workflow chip, the PLAN
+     (opens the run) and the engine's PR link. The Tests tile LEADS with the sets word ("1 set ·
+     11/11 passed") — asserted PAINTED: its glyph box must end at least one `…` glyph (measured in
+     the span's own font) before the span's right edge whenever the line is clipped, at 1280, 1440
+     and 1920 px — with the unabridged "1 test set · …" line as the span's title, and it says
+     "1 malformed" for the run_id-less row the fixture also serves (R2-1 on #266).
   4. THE RUN PAGE (F-7R2-005 / -006 / -012 / -013 / -017): the run head says "council degraded:
      4 of 5 seats benched …"; the feed says "Gate UNGATED on author — no eligible judge seat …"
      (never "Checks ran — pass" for that gate) and "Refused a remote write by claude (creator)
@@ -88,6 +94,47 @@ def text(page, selector: str) -> str:
     return loc.first.text_content() if loc.count() > 0 else ""
 
 
+# The Tests tile's lead word as the operator SEES it (R2-1): `text-overflow: ellipsis` paints `…` in
+# place of the trailing glyphs that would otherwise fit, so "lead right edge <= span right edge" is
+# NOT enough — when the span is clipped the lead must end at least one ellipsis glyph (measured on a
+# probe span in the context span's computed font) before the span's right edge. Returns the raw
+# numbers so a failure names the shortfall.
+TILE_LEAD = "1 set · 11/11 passed"
+TILE_JS = """(lead) => {
+  const tile = document.querySelector('[data-testid="stat-campaigns"]');
+  const ctx = tile?.querySelector('[data-testid="stat-context"]');
+  const text = ctx?.textContent ?? '';
+  const box = ctx?.getBoundingClientRect();
+  let leadRight = null;
+  const node = ctx?.firstChild;
+  if (node && node.nodeType === Node.TEXT_NODE && text.startsWith(lead)) {
+    const r = document.createRange(); r.setStart(node, 0); r.setEnd(node, lead.length);
+    leadRight = r.getBoundingClientRect().right;
+  }
+  let ellipsisWidth = null;
+  if (ctx) {
+    const cs = getComputedStyle(ctx);
+    const probe = document.createElement('span');
+    probe.textContent = '\u2026';
+    probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${cs.font};letter-spacing:${cs.letterSpacing}`;
+    document.body.appendChild(probe);
+    ellipsisWidth = probe.getBoundingClientRect().width;
+    probe.remove();
+  }
+  const clipped = ctx ? ctx.scrollWidth > ctx.clientWidth : null;
+  const limit = box && ellipsisWidth !== null ? (clipped ? box.right - ellipsisWidth : box.right) : null;
+  return {
+    viewport: window.innerWidth,
+    testsKpi: text, kpiTitle: ctx?.getAttribute('title'),
+    leadRight, boxRight: box?.right ?? null, boxWidth: box?.width ?? null, ellipsisWidth, clipped, limit,
+    kpiLeadVisible: leadRight !== null && limit !== null && (box?.width ?? 0) > 0 && leadRight <= limit + 0.5,
+    kpiTestSets: tile?.getAttribute('data-test-sets'),
+    kpiMalformed: tile?.getAttribute('data-test-sets-malformed'),
+    kpiUnattributed: tile?.getAttribute('data-test-sets-unattributed'),
+  };
+}"""
+
+
 with sync_playwright() as p:
     # PLAYWRIGHT_CHANNEL (review R2-6): run on an installed browser channel (`chrome`, `msedge`)
     # when the Playwright browser cache is absent on the host — nothing is installed by a rig.
@@ -135,33 +182,62 @@ with sync_playwright() as p:
           const set = c?.querySelector('[data-testid="campaign-card-testset"]');
           return {
             kind: c?.getAttribute('data-kind'),
-            title: (c?.textContent ?? '').includes('Tests · studio-api · run lifecycle'),
+            title: (c?.textContent ?? '').includes('qe-tests-studio-api'),
             workflow: c?.querySelector('[data-testid="campaign-card-workflow"]')?.getAttribute('data-workflow'),
             set: t('[data-testid="campaign-card-testset"]'),
-            tests: set?.getAttribute('data-tests'), executed: set?.getAttribute('data-executed'),
+            setRun: set?.getAttribute('data-run-id'), verified: set?.getAttribute('data-verified'),
+            verifiedChip: t('[data-testid="campaign-card-testset-verified"]'),
+            produced: set?.getAttribute('data-produced'), executed: set?.getAttribute('data-executed'),
             passed: set?.getAttribute('data-passed'), failed: set?.getAttribute('data-failed'),
+            notExecuted: set?.getAttribute('data-not-executed'),
             unverified: !!c?.querySelector('[data-testid="campaign-card-testset-unverified"]'),
             plan: t('[data-testid="campaign-card-testset-plan"]'),
+            planRun: c?.querySelector('[data-testid="campaign-card-testset-plan"]')?.getAttribute('data-run-id'),
+            pr: c?.querySelector('[data-testid="campaign-card-testset-pr"]')?.getAttribute('href'),
+            prText: t('[data-testid="campaign-card-testset-pr"]'),
             delivery: t('[data-testid="campaign-card-delivery"]'),
             header: document.querySelector('[data-testid="campaigns-header-copy"]')?.textContent ?? '',
             authorVerb: document.querySelector('[data-testid="testing-author-open"]')?.textContent?.trim(),
-            testsKpi: document.querySelector('[data-testid="stat-campaigns"]')?.textContent ?? '',
           };
         }""")
+    # #266 F-1 / R2-1: the sets word must be PAINTED, not merely present in textContent.
+    card.update(page.evaluate(TILE_JS, TILE_LEAD))
     check(
         "landing_shows_produced_set",
-        card["kind"] == "campaign" and card["title"]
+        card["kind"] == "group" and card["title"]
         and card["workflow"] == "qe-author-tests"
-        and card["set"].startswith("2 test files · 11 tests · 11 executed · 11 passed · 0 failed")
-        and (card["tests"], card["executed"], card["passed"], card["failed"]) == ("11", "11", "11", "0")
+        and card["setRun"] == GT_RUN and card["verified"] == "true" and card["verifiedChip"] == "verified"
+        and "11 produced · 11 executed · 11 passed · 0 failed" in card["set"]
+        and (card["produced"], card["executed"], card["passed"], card["failed"], card["notExecuted"]) == ("11", "11", "11", "0", "0")
         and not card["unverified"]
-        and card["plan"] == "plan: tests/PLAN-run-lifecycle.md"
+        and card["plan"] == "plan: tests/PLAN-run-lifecycle.md" and card["planRun"] == GT_RUN
+        and card["pr"] == "https://github.com/example/studio-api/pull/999" and card["prText"] == "PR #999"
         and "1 of 1 delivered" in card["delivery"]
+        # The Tests tile: the short lead FIRST and painted clear of the `…` glyph, the unabridged line on
+        # the title, the malformed row said.
+        and card["testsKpi"].startswith("1 set · 11/11 passed · 1 malformed · ")
+        and card["kpiTitle"] == "1 test set · 11/11 passed · 1 malformed · 0 active now"
+        and card["kpiLeadVisible"] is True
+        and (card["kpiTestSets"], card["kpiMalformed"], card["kpiUnattributed"]) == ("1", "1", "0")
         and "qe-author-tests" in card["header"]
         and card["authorVerb"] == "Add testing rules",
         **card,
     )
     page.screenshot(path=str(SHOTS / "gt-landing.png"))
+
+    # R2-1: the lead stays painted at the three desktop widths the tile is laid out for — the same
+    # measurement, re-taken after each reflow (no reload; the DOM is the one already asserted above).
+    widths = {}
+    for w in (1280, 1440, 1920):
+        page.set_viewport_size({"width": w, "height": 700})
+        page.wait_for_timeout(150)
+        widths[str(w)] = page.evaluate(TILE_JS, TILE_LEAD)
+    page.set_viewport_size({"width": 1440, "height": 700})
+    check(
+        "tile_lead_painted_at_desktop_widths",
+        all(m["kpiLeadVisible"] is True and m["viewport"] == int(w) for w, m in widths.items()),
+        **{w: {k: m[k] for k in ("leadRight", "boxRight", "boxWidth", "ellipsisWidth", "clipped", "limit", "kpiLeadVisible")} for w, m in widths.items()},
+    )
 
     # ── Scene 2: New test — governed launch, link + waiting, the intake plan ────────
     page.locator('[data-testid="testing-campaign-open"]').click()
@@ -201,7 +277,8 @@ with sync_playwright() as p:
             waiting: t('[data-testid="testing-launch-waiting"]'),
             workflow: t('[data-testid="testing-launch-launched-workflow"]'),
             routeLine: t('[data-testid="testing-launch-route"]'),
-            label: t('[data-testid="testing-launch-fanout-label"]'),
+            filedLabel: t('[data-testid="testing-launch-filed-label"]'),
+            fanoutLabel: !!p?.querySelector('[data-testid="testing-launch-fanout-label"]'),
           };
         }""")
     author_posts = [pd for m, u, pd in posted if u == "/api/v1/testing/author"]
@@ -213,7 +290,10 @@ with sync_playwright() as p:
         and "r-gt-1" in launched["waiting"] and "intake gate will appear here" in launched["waiting"]
         and launched["workflow"] == "qe-author-tests"
         and "via POST /testing/author" in launched["routeLine"]
-        and launched["label"] == "author-r-gt-1"
+        # #266 F-4: the label group is already on the Test landing — "filed under", off runs[].label.
+        and launched["filedLabel"] == "qe-tests-studio-api" and not launched["fanoutLabel"]
+        and "filed under qe-tests-studio-api on the Test landing — the set fills in when the verify phase registers it" in launched["routeLine"]
+        and "appears on the Test landing when" not in launched["routeLine"]
         and body is not None and body.get("repoRefs") == ["studio-api"] and "projectId" not in body
         and body.get("problem", "").startswith("New test: plan the test for the attached scope")
         and not any(u in ("/api/v1/testing/recon", "/api/v1/runs") for _, u, _ in posted),

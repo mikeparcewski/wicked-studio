@@ -512,8 +512,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   wires change: GET /workflows lists `qe-author-tests` (five phases);
          #   POST /testing/author launches ONE run that pauses at its intake gate (the
          #   awaitingHuman frame rides /ws, GET /runs/:id serves its planned units +
-         #   pool); GET /campaigns serves the COMPLETED run's registration with its
-         #   `test_set` counts; the completed run's events carry `degradedReason`,
+         #   pool); GET /campaigns serves the COMPLETED run as the `qe-tests-<repo>` label
+         #   group 0.36.0 files an authoring run under, with its registered set as the
+         #   TOP-LEVEL `test_sets` (no row-level join); the completed run's events carry `degradedReason`,
          #   `workerToolCallDenied` and an UNGATED gateEvaluated; its diff answers
          #   200 `source: "branch"` (the worktree is gone). Default False: GET
          #   /workflows and GET /campaigns keep answering the unknown-route 404.
@@ -1208,8 +1209,9 @@ FORENSICS_DIFF_HANG_SECONDS = 30
 #
 # Every name below is spelled EXACTLY as the wave-6 briefs give it (camelCase as the engine
 # emits): `qe-author-tests`, `degradedReason`, `ungated` / `ungatedReason`,
-# `workerToolCallDenied {role, command, remedy}`, `diff.source: "branch"`, the campaign's
-# `test_set`. Synthetic — 0.36.0 was unpublished when written; re-vendor at the pin bump.
+# `workerToolCallDenied {role, command, remedy}`, `diff.source: "branch"`, and the registered set as
+# `CampaignsListResponse.test_sets[]` (api-types 0.36.0: snake_case, `run_id`-keyed, tagged with the
+# `qe-tests-<repo>` label — served beside the label group, never joined onto a row). Synthetic.
 GT_RUN = "r-gt-done"                     # the COMPLETED New test (registered its set)
 GT_PROBLEM = "New test: cover the run lifecycle UI — launch form, gate answering, archive"
 GT_INTAKE_PROMPT = ("Approve unit 1 before it runs: recon — read the repository and its "
@@ -1319,22 +1321,42 @@ GT_EVENTS = [
     {"type": "sessionCompleted", "session": GT_RUN, "seq": 15, "ts": NOW0 - 5 * MIN},
 ]
 
+GT_LABEL = "qe-tests-studio-api"          # the RunGroup.label POST /testing/author files the run under
+GT_PR = "https://github.com/example/studio-api/pull/999"
+# The registered TEST SET — `CampaignsListResponse.test_sets[0]`, spelled as api-types 0.36.0
+# declares `TestSet` (snake_case, `run_id`-keyed, `label`-tagged; the verify phase's re-derived counts).
 GT_TEST_SET = {
-    "runId": GT_RUN, "workflow": "qe-author-tests",
-    "files": ["tests/run-lifecycle.test.tsx", "e2e/run_lifecycle_test.py"],
-    "counts": {"files": 2, "tests": 11, "executed": 11, "passed": 11, "failed": 0},
-    "plan": "tests/PLAN-run-lifecycle.md",
-    "prUrl": "https://github.com/example/studio-api/pull/999",
+    "id": f"testset-{GT_RUN}", "run_id": GT_RUN, "workflow_id": "qe-author-tests", "label": GT_LABEL,
+    "repo_ref": "studio-api", "repo_name": "studio-api",  # REPO_ID is bound further down; the literal, as GT_CAMPAIGN spelled it
+    "registered_at": NOW0 - 5 * MIN,  # unix millis (NOW0 is already ms)
+    "run_status": "completed", "verify_status": "done", "verified": True,
+    "files": [{"path": "tests/run-lifecycle.test.tsx", "harness": "vitest", "status": "passed"},
+              {"path": "e2e/run_lifecycle_test.py", "harness": "playwright-python", "status": "passed"}],
+    "produced": 11, "executed": 11, "passed": 11, "failed": 0, "not_executed": 0,
+    "plan": "tests/PLAN-run-lifecycle.md", "harnesses": ["vitest", "playwright-python"],
+    "deliverUrl": GT_PR,
 }
-GT_CAMPAIGN = {
-    "id": "qe-tests-studio-api", "def_id": "qe-tests-studio-api", "status": "completed",
-    "def": {"id": "qe-tests-studio-api", "name": "Tests · studio-api · run lifecycle",
-            "nodes": [{"node_id": "author", "run_spec": {"problem": GT_PROBLEM, "repo_ref": "studio-api",
-                                                          "workflow_id": "qe-author-tests"}}]},
-    "node_status": {"author": "completed"}, "node_run_id": {"author": GT_RUN}, "node_attempt": {"author": 0},
-    "pending_decision_amend": {}, "pending_failure_gates": [], "fail_fast_tripped": False,
-    "node_delivery": {"author": {"delivery": "delivered", "deliverUrl": "https://github.com/example/studio-api/pull/999"}},
-    "attached_runs": [], "test_set": GT_TEST_SET,
+# The label group the launch filed the run under (`campaignRegistered: false` — an author launch is
+# never an engine campaign); the set joins onto it client-side by run_id / label.
+GT_GROUP = {
+    "label": GT_LABEL,
+    "runs": [{"runId": GT_RUN, "status": "completed", "delivery": "delivered", "deliverUrl": GT_PR}],
+}
+# A registration the daemon served WITHOUT a `run_id` — nothing to join, nothing to open. The landing
+# must SAY it ("1 malformed" on the Tests tile), never read it as "nothing registered" (#266 F-2).
+GT_TEST_SET_MALFORMED = {
+    "id": "testset-orphan", "workflow_id": "qe-author-tests", "repo_ref": None,
+    "registered_at": NOW0 - 9 * MIN, "run_status": "failed", "verify_status": None, "verified": False,
+    "files": [], "produced": 0, "executed": 0, "passed": 0, "failed": 0, "not_executed": 0,
+    "plan": None, "harnesses": [],
+}
+# The `WorkflowPlan` the 0.36.0 `TestingAuthorResponse` carries — derived from the def the panel read.
+GT_AUTHOR_PLAN = {
+    "workflow": "qe-author-tests",
+    "phases": [{"id": p["id"], "kind": p["kind"], "role": p["role"],
+                "executor": "tool" if p.get("executor") else "agent", "skillRef": p["skill_ref"],
+                "gate": "auto", "executesCode": p["executes_code"]} for p in GT_WORKFLOW_DEF["phases"]],
+    "seats": ["claude", "codex", "pi"],
 }
 GT_BRANCH_DIFF = """\
 diff --git a/tests/run-lifecycle.test.tsx b/tests/run-lifecycle.test.tsx
@@ -2576,15 +2598,17 @@ class W2Handler(SimpleHTTPRequestHandler):
             else:
                 self._json(200, {"workflows": GT_WORKFLOWS_ELSE + ([] if absent else [GT_WORKFLOW_DEF])})
             return True
-        # Wave 6: GET /campaigns — the completed New test's registration with its `test_set` counts
-        # (F-7R2-014). Off ⇒ the standing unknown-route 404 (the landing's "unsupported" state).
+        # Wave 6: GET /campaigns — the completed New test's label group beside its registered set as
+        # the TOP-LEVEL `test_sets` (api-types 0.36.0, F-7R2-014). Off ⇒ the standing unknown-route
+        # 404 (the landing's "unsupported" state).
         if path == "/api/v1/campaigns":
             with state_lock:
                 gt_on = state["governed_testing"]
             if not gt_on:
                 self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             else:
-                self._json(200, {"campaigns": [GT_CAMPAIGN], "groups": []})
+                self._json(200, {"campaigns": [], "groups": [GT_GROUP],
+                                 "test_sets": [GT_TEST_SET, GT_TEST_SET_MALFORMED]})
             return True
         # Slice V: GET /runs/<id> — one run's detail (`{run: SessionView}`), the
         # real daemon contract useRunModel re-hydrates on. Same corpus assembly
@@ -3664,9 +3688,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 run["units"] = gt_units(rid, done=False)
                 gt_launched.append(run)
                 state["extra_gates"].append({"session": rid, "ord": 1, "prompt": GT_INTAKE_PROMPT})
-                campaign = f"author-{rid}"
-            return self._json(201, {"runId": rid, "runIds": [rid], "campaign": campaign,
-                                    "campaignRegistered": False, "workflow": "qe-author-tests"})
+            # The 0.36.0 `TestingAuthorResponse`: NO `campaign` field — the filing rides `runs[].label`
+            # (`qe-tests-<repo>`, the RunGroup.label on GET /campaigns); the plan the intake card shows.
+            return self._json(201, {"runId": rid, "runIds": [rid], "workflow": "qe-author-tests",
+                                    "runs": [{"runId": rid, "repoRef": REPO_ID, "label": GT_LABEL}],
+                                    "gate": "before:1", "deliver": "pr", "plan": GT_AUTHOR_PLAN,
+                                    "scope": "repoRefs" if refs else "project",
+                                    "campaignRegistered": False})
         # POST /api/v1/runs — the REAL launch (slice S, project_dto only): the
         # daemon's `{runId}` answer; `body.projectId` files the run atomically
         # (LaunchSchema, routes.ts:148 — "never a silent unfiled run"), and the
