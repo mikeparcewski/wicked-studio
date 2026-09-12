@@ -11,6 +11,12 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+
+## [0.5.9] — 2026-09-13
+_The published bundle is built against `wicked-crew-api-types` **0.37.0** — the exact
+devDependency pin bumped from 0.36.0 in #270 (the deliver-gate wire: `HealthResponse.capabilities.deliverGate`,
+`LaunchRunBody.deliverGate`, `AgentSession.auto_deliver`); this cut lands the Archive control (#268, the
+harness-delivered fix for #219) and the composer's deliver-gate posture (#269, F-E2E-030)._
 ### Fixed
 - **Archive control for terminal runs in the run header and on WorkPage rows (#219, refs #211).**
   Studio could *unarchive* a run (crew#265) but never *archive* one — `archiveRun(id, false)` was the
@@ -29,8 +35,6 @@ npm publish dates. Every version listed here exists on
     header offers no Archive on an already-archived run (`session.archived_at` set — reachable
     through the Archived chip), so there is nothing to re-archive; and the WorkPage tests now cover
     the filtered tab views and the Failed / Cancelled groups, not only Completed.
-
-### Fixed
 - **The composer promised a push with no gate (acceptance finding F-E2E-030).** Under the default
   "First gate" posture the deliver notice read "When this finishes it pushes its branch → opens a
   PR" — and that is exactly what run `0ab5ccb8` did, unattended. The engine now gates the deliver
@@ -1110,7 +1114,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.8...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.9...HEAD
+[0.5.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.5...v0.5.6
