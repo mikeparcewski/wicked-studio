@@ -91,6 +91,13 @@ export interface DeliverRunResult {
 export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
   deliver?: 'pr' | 'none';
   /**
+   * Who confirms the deliver phase (F-E2E-030; crew ≥ 0.7.33 / api-types ≥ 0.37): the ENGINE
+   * gates the push + PR by default (`'human'`, or omitted); `'auto'` is the operator's EXPLICIT
+   * opt-out, sent only for the postures the composer names "auto-deliver" (No gates,
+   * Autonomous). Hand-declared here like `deliver` — delete on the ≥0.37 api-types bump.
+   */
+  deliverGate?: 'human' | 'auto';
+  /**
    * Ad-hoc campaign attach (wicked-studio#27; api-types 0.19.0): file this run onto an
    * EXISTING campaign's surface. Provenance only — the run executes byte-identically, never
    * becomes a DAG node. Validated at launch, loudly: unknown campaign = 404 (nothing

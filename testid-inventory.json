@@ -11,8 +11,8 @@
   "studioVersion": "0.5.8",
   "counts": {
     "files": 146,
-    "occurrences": 1309,
-    "static": 1127,
+    "occurrences": 1311,
+    "static": 1129,
     "dynamic": 61,
     "computed": 7
   },
@@ -2718,6 +2718,12 @@
       ]
     },
     {
+      "testId": "intake-plan-deliver-gate",
+      "files": [
+        "src/components/IntakePlan.tsx"
+      ]
+    },
+    {
       "testId": "intake-plan-seat",
       "files": [
         "src/components/IntakePlan.tsx"
@@ -2767,6 +2773,12 @@
     },
     {
       "testId": "launch-confirm",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-confirm-deliver",
       "files": [
         "src/components/ChatInput.tsx"
       ]

@@ -234,6 +234,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   /** Per-launch override; `null` = follow the preference. */
   const [deliverOverride, setDeliverOverride] = useState<boolean | null>(null);
   const deliverOn = deliverOverride ?? deliverPr;
+  // Who confirms the push (F-E2E-030). The ENGINE gates the deliver phase by default — the
+  // run pauses before it pushes its branch and opens the PR, whatever the gate posture. Only an
+  // EXPLICITLY unattended posture opts out: the Autonomous run mode, or the "No gates" selection
+  // — and the composer names that posture "auto-deliver" wherever it shows it, so the operator
+  // reads the consequence before Send. "First gate" / "Every unit" keep the gate.
+  const autoDeliver = mode === 'autonomous' || (mode !== 'ask' && confirmMode === 'none');
 
   // ── Preflight (DES-UX-001 §7.8, EC43, slice AC) ────────────────────────────
   // A code-shaped intent with no repo attached warns-and-blocks: zero POST
@@ -570,6 +576,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // older daemons also 400 on `'none'`, so unlicensed bodies never carry it).
     // The same verdict is on screen before the operator sends (`deliverNotice`).
     if (deliverKind(wf) === 'build' && targetRepoRef !== null) body.deliver = deliverOn ? 'pr' : 'none';
+    // F-E2E-030: the deliver gate is the engine's default; the body says nothing to be gated.
+    // Only the explicitly unattended postures send the opt-out — and only with a delivery.
+    if (body.deliver === 'pr' && autoDeliver) body.deliverGate = 'auto';
     // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
@@ -903,7 +912,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               // F-028: the notice NAMES the repo the PR lands on — `owner/repo`
               // off its registered git URL, its registered name otherwise.
               state: 'on',
-              text: `When this finishes it pushes its branch → opens a PR on ${targetLabel}. Merging stays yours.`,
+              // F-E2E-030: say WHEN the push happens — after the deliver gate the operator
+              // approves, or, under an explicitly unattended posture, with no gate at all —
+              // named "auto-deliver", never implied.
+              text: autoDeliver
+                ? `When this finishes it pushes its branch → opens a PR on ${targetLabel} with NO deliver gate — this posture is auto-deliver. Merging stays yours.`
+                : `When this finishes it pauses at the deliver gate; approve it and the run pushes its branch → opens a PR on ${targetLabel}. Merging stays yours.`,
             }
           : {
               // The consequence of OFF, said before the send (crew#393): the
@@ -1115,7 +1129,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         >
           <option value="before">{beforeOrd === 1 ? 'First gate' : `Before unit #${beforeOrd}`}</option>
           <option value="all">Every unit</option>
-          <option value="none">No gates</option>
+          {/* F-E2E-030: when this launch delivers, "No gates" is also the auto-deliver opt-out —
+              the option says so where it is chosen. */}
+          <option value="none">{deliverNotice?.state === 'on' ? 'No gates · auto-deliver' : 'No gates'}</option>
         </select>
       </div>
 
@@ -1281,6 +1297,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-testid="deliver-notice"
           data-deliver-state={deliverNotice.state}
           data-deliver-repo={targetRepoRef ?? ''}
+          data-deliver-gate={deliverNotice.state === 'on' ? (autoDeliver ? 'auto' : 'human') : ''}
           className="text-xs px-1 font-mono"
           style={{
             color:
@@ -1365,6 +1382,19 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           </span>
           {' · gate: '}
           <span data-testid="launch-confirm-gate" style={{ color: 'var(--ink-high)' }}>{describeGate(mode, confirmMode, beforeOrd)}</span>
+          {/* F-E2E-030: the deliver gate is part of what is being sent — read it here too. */}
+          {deliverNotice?.state === 'on' && (
+            <>
+              {' · deliver: '}
+              <span
+                data-testid="launch-confirm-deliver"
+                data-deliver-gate={autoDeliver ? 'auto' : 'human'}
+                style={{ color: autoDeliver ? 'var(--status-gate)' : 'var(--ink-high)' }}
+              >
+                {autoDeliver ? 'auto — no gate before the push' : 'after you approve the deliver gate'}
+              </span>
+            </>
+          )}
         </p>
       )}
 

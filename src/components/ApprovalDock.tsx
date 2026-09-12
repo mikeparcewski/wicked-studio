@@ -3,6 +3,7 @@ import type { SessionView } from '../api/types.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { useGateStore } from '../store/gates.js';
 import { ElicitationPrompt } from './ElicitationPrompt.js';
+import { autoDeliverOf } from './IntakePlan.js';
 import { SteeringGate } from './SteeringGate.js';
 
 /**
@@ -77,7 +78,9 @@ export function ApprovalDock({
           guidance={guidance}
           {...(ord !== undefined ? { ord } : {})}
           {...(gate ? { prompt: gate.prompt } : {})}
-          {...(view !== undefined ? { units: view.units, clis: view.session.clis } : {})}
+          {...(view !== undefined
+            ? { units: view.units, clis: view.session.clis, autoDeliver: autoDeliverOf(view.session) }
+            : {})}
           onResolved={onResolved}
         />
       )}

@@ -34,6 +34,9 @@ interface Props {
   /** The workflow def the run was planned from, when the host knows it (`GET /workflows`) — the
    *  intake plan (F-7R2-008) reads executor / skill / role vocabulary off it. */
   workflow?: WorkflowDef | null;
+  /** The run's deliver posture (`session.auto_deliver`, F-E2E-030) for the intake plan's deliver
+   *  row; `null`/absent = the engine predates the deliver gate. */
+  autoDeliver?: boolean | null;
   onResolved?: () => void;
 }
 
@@ -57,7 +60,7 @@ function coverageLabel(r: CoverageReport): string {
   return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
 }
 
-export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, workflow, onResolved }: Props): React.ReactElement {
+export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, workflow, onResolved, autoDeliver }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
   // F-7R2-008: the intake gate — the engine's pre-run gate on the run's FIRST unit — renders the
@@ -324,7 +327,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           planned phase with its executor, skill and seat — what "approve" launches — instead of the
           brief echoed back. Read off the run's units snapshot (+ the def when the host knows it). */}
       {intake && (
-        <IntakePlan runId={runId} units={units ?? EMPTY_UNITS} clis={pool ?? undefined} workflow={workflow ?? null} />
+        <IntakePlan runId={runId} units={units ?? EMPTY_UNITS} clis={pool ?? undefined} workflow={workflow ?? null} autoDeliver={autoDeliver ?? null} />
       )}
 
       {/* The evaluator verdict this gate is about (F-3R2-006): pass/deny, criterion, the judge's

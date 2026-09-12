@@ -94,6 +94,51 @@ describe('ChatInput delivery (#123)', () => {
     expect(body.repoRef).toBe('studio-api');
   });
 
+  // F-E2E-030 — the deliver gate: the default posture promises the gate and sends no opt-out;
+  // only the explicitly unattended "No gates" posture sends `deliverGate: 'auto'`, and it is
+  // named auto-deliver wherever the composer shows it.
+  it('the default posture keeps the deliver gate: the notice says so, the confirm line says so, the body sends no opt-out', async () => {
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await bind(user, { workflow: 'feature', repo: 'studio-api' });
+
+    const notice = screen.getByTestId('deliver-notice');
+    expect(notice.dataset.deliverGate).toBe('human');
+    expect(notice.textContent).toMatch(/pauses at the deliver gate/i);
+    expect(notice.textContent).not.toMatch(/auto-deliver/i);
+    expect(screen.getByTestId('launch-confirm-deliver').textContent).toMatch(/after you approve the deliver gate/i);
+    expect(screen.getByTestId('launch-confirm-deliver').dataset.deliverGate).toBe('human');
+    // The "No gates" option is labelled as the auto-deliver opt-out while this launch delivers.
+    expect(screen.getByRole('option', { name: /No gates · auto-deliver/ })).toBeInTheDocument();
+
+    await send(user, 'ship the archive control');
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    const body = sentBody();
+    expect(body.deliver).toBe('pr');
+    expect(body.deliverGate).toBeUndefined();
+    expect(body.humanConfirm).toBe('before:1');
+  });
+
+  it('"No gates" is the explicit opt-out: named auto-deliver before Send, and the body carries deliverGate: auto', async () => {
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await bind(user, { workflow: 'feature', repo: 'studio-api' });
+    await user.selectOptions(screen.getByTestId('gate-posture'), 'none');
+
+    const notice = screen.getByTestId('deliver-notice');
+    expect(notice.dataset.deliverGate).toBe('auto');
+    expect(notice.textContent).toMatch(/NO deliver gate/);
+    expect(notice.textContent).toMatch(/auto-deliver/i);
+    expect(screen.getByTestId('launch-confirm-deliver').dataset.deliverGate).toBe('auto');
+
+    await send(user, 'ship the archive control');
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    const body = sentBody();
+    expect(body.deliver).toBe('pr');
+    expect(body.deliverGate).toBe('auto');
+    expect(body.humanConfirm).toBeUndefined();
+  });
+
   it('GUARD — no workflow: launches WITHOUT deliver (crew would 400), and names the guard', async () => {
     const user = userEvent.setup();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
