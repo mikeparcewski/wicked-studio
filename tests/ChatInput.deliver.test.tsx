@@ -37,6 +37,11 @@ beforeEach(() => {
   });
   vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
   vi.spyOn(client.api, 'launchRun').mockResolvedValue({ runId: 'r-new' });
+  // A daemon that KEEPS the deliver gate (crew ≥ 0.7.33 on core-ts ≥ 0.7.24) — the F-E2E-030
+  // cases below assume it; the capability-absent case overrides this mock.
+  vi.spyOn(client.api, 'getHealth').mockResolvedValue({
+    status: 'ok', version: '0.7.33', ping: 'ok', capabilities: { deliverGate: true },
+  });
   // The default-ON preference, as a fresh install loads it (no stored key).
   useComposerPrefsStore.setState({
     prefs: DEFAULT_COMPOSER_PREFS, loaded: true, persist: 'unknown',
@@ -103,7 +108,7 @@ describe('ChatInput delivery (#123)', () => {
     await bind(user, { workflow: 'feature', repo: 'studio-api' });
 
     const notice = screen.getByTestId('deliver-notice');
-    expect(notice.dataset.deliverGate).toBe('human');
+    await waitFor(() => expect(notice.dataset.deliverGate).toBe('human'));
     expect(notice.textContent).toMatch(/pauses at the deliver gate/i);
     expect(notice.textContent).not.toMatch(/auto-deliver/i);
     expect(screen.getByTestId('launch-confirm-deliver').textContent).toMatch(/after you approve the deliver gate/i);
@@ -126,7 +131,7 @@ describe('ChatInput delivery (#123)', () => {
     await user.selectOptions(screen.getByTestId('gate-posture'), 'none');
 
     const notice = screen.getByTestId('deliver-notice');
-    expect(notice.dataset.deliverGate).toBe('auto');
+    await waitFor(() => expect(notice.dataset.deliverGate).toBe('auto'));
     expect(notice.textContent).toMatch(/NO deliver gate/);
     expect(notice.textContent).toMatch(/auto-deliver/i);
     expect(screen.getByTestId('launch-confirm-deliver').dataset.deliverGate).toBe('auto');
@@ -137,6 +142,66 @@ describe('ChatInput delivery (#123)', () => {
     expect(body.deliver).toBe('pr');
     expect(body.deliverGate).toBe('auto');
     expect(body.humanConfirm).toBeUndefined();
+  });
+
+  it('Autonomous mode is the other explicit opt-out: deliverGate: auto, no humanConfirm (review F-4)', async () => {
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} mode="autonomous" />);
+    await bind(user, { workflow: 'feature', repo: 'studio-api' });
+    const notice = screen.getByTestId('deliver-notice');
+    await waitFor(() => expect(notice.dataset.deliverGate).toBe('auto'));
+    expect(notice.textContent).toMatch(/auto-deliver/i);
+
+    await send(user, 'ship it unattended');
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    const body = sentBody();
+    expect(body.deliver).toBe('pr');
+    expect(body.deliverGate).toBe('auto');
+    expect(body.humanConfirm).toBeUndefined();
+  });
+
+  it('a daemon WITHOUT the deliver gate gets a truthful notice, and the body never sends deliverGate (review F-2)', async () => {
+    // crew ≤ 0.7.32: `/health` has no `capabilities` — the push follows verify unattended, and the
+    // older launch schema rejects `deliverGate`, so "No gates" must not send it either.
+    vi.mocked(client.api.getHealth).mockResolvedValue({ status: 'ok', version: '0.7.32', ping: 'ok' });
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await bind(user, { workflow: 'feature', repo: 'studio-api' });
+    const notice = screen.getByTestId('deliver-notice');
+    await waitFor(() => expect(notice.dataset.deliverGate).toBe('unsupported'));
+    expect(notice.textContent).toMatch(/delivers WITHOUT a deliver gate/);
+    expect(notice.textContent).toMatch(/upgrade crew to 0\.7\.33\+/);
+    expect(notice.textContent).not.toMatch(/pauses at the deliver gate/i);
+    expect(screen.getByTestId('launch-confirm-deliver').dataset.deliverGate).toBe('unsupported');
+    expect(screen.getByTestId('launch-confirm-deliver').textContent).toMatch(/no gate on this daemon/i);
+    // The opt-out label is not offered — there is nothing to opt out of.
+    expect(screen.queryByRole('option', { name: /auto-deliver/ })).toBeNull();
+    expect(screen.getByRole('option', { name: /^No gates$/ })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByTestId('gate-posture'), 'none');
+    await send(user, 'ship the archive control');
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    const body = sentBody();
+    expect(body.deliver).toBe('pr');
+    expect(body.deliverGate).toBeUndefined();
+  });
+
+  it('Ask mode ignores the gate select, so "No gates" is not labelled auto-deliver there (review F-3)', async () => {
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} mode="ask" />);
+    await bind(user, { workflow: 'feature', repo: 'studio-api' });
+    const notice = screen.getByTestId('deliver-notice');
+    await waitFor(() => expect(notice.dataset.deliverGate).toBe('human'));
+    expect(screen.queryByRole('option', { name: /auto-deliver/ })).toBeNull();
+    expect(screen.getByRole('option', { name: /^No gates$/ })).toBeInTheDocument();
+    // Selecting it changes nothing: Ask gates every unit, the deliver gate included.
+    await user.selectOptions(screen.getByTestId('gate-posture'), 'none');
+    expect(notice.dataset.deliverGate).toBe('human');
+    await send(user, 'ship it, asking first');
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    const body = sentBody();
+    expect(body.humanConfirm).toBe('all');
+    expect(body.deliverGate).toBeUndefined();
   });
 
   it('GUARD — no workflow: launches WITHOUT deliver (crew would 400), and names the guard', async () => {

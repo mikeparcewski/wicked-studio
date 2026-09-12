@@ -33,6 +33,38 @@ function renderPanel(v = gatedView()): void {
   render(<ChatPanel view={v} onLaunched={vi.fn()} onNavigateBack={vi.fn()} onRefresh={vi.fn()} />);
 }
 
+describe('ApprovalDock → SteeringGate → IntakePlan deliver-gate pass-through (F-E2E-030, review F-4)', () => {
+  const intakeUnits = () => [
+    makeUnit({ id: 'run-1:fix', ord: 1, stage: 'build', status: 'pending', assigned_cli: 'claude' }),
+    makeUnit({ id: 'run-1:deliver', ord: 2, stage: 'build', status: 'pending', assigned_cli: null, tool_cmd: ['bash', '-lc', 'echo deliver'] }),
+  ];
+  const openIntakeGate = (): void => {
+    act(() => {
+      useGateStore.setState({
+        gates: { 'run-1': { runId: 'run-1', ord: 1, prompt: 'Approve unit 1 before it runs: fix', lifecycle: 'open', receivedAt: 0 } },
+        approaching: {},
+      });
+    });
+  };
+
+  it('a session with auto_deliver: false reaches the intake plan as "human gate before it pushes"', () => {
+    openIntakeGate();
+    const v = makeView({ status: 'awaiting_human', unit_ix: 0 }, intakeUnits());
+    (v.session as unknown as { auto_deliver: boolean }).auto_deliver = false;
+    renderPanel(v);
+    const row = screen.getByTestId('intake-plan-deliver-gate');
+    expect(row.dataset.deliverGate).toBe('human');
+    expect(screen.getByTestId('approval-dock').contains(row)).toBe(true);
+  });
+
+  it('a session from an engine that predates the gate (no auto_deliver) promises nothing', () => {
+    openIntakeGate();
+    renderPanel(makeView({ status: 'awaiting_human', unit_ix: 0 }, intakeUnits()));
+    expect(screen.getByTestId('intake-plan')).toBeInTheDocument();
+    expect(screen.queryByTestId('intake-plan-deliver-gate')).toBeNull();
+  });
+});
+
 describe('ApprovalDock — pinned, never scrolls away', () => {
   it('renders the gate card in the dock, as a SIBLING of the scroll region (never inside it)', () => {
     act(() => {

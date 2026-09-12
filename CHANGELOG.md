@@ -43,7 +43,12 @@ npm publish dates. Every version listed here exists on
   says "with NO deliver gate — this posture is auto-deliver". The intake plan's deliver row names
   the gate from `session.auto_deliver` ("human gate before it pushes its branch + opens the PR" /
   "auto-deliver — … no gate"; `intake-plan-deliver-gate`) and stays silent on an engine that
-  predates the gate, so no promise is made that the engine cannot keep.
+  predates the gate, so no promise is made that the engine cannot keep. The composer makes the
+  same promise only when the DAEMON can keep it: it reads `GET /health.capabilities.deliverGate`
+  (crew ≥ 0.7.33) and, against a daemon without it, says "this daemon delivers WITHOUT a deliver
+  gate (upgrade crew to 0.7.33+ to confirm the push first)", offers no auto-deliver option and
+  never sends `deliverGate` (the older launch schema rejects it). "No gates" is labelled
+  auto-deliver only where the select is honoured (not in Ask mode, where every unit is gated).
 
 
 ## [0.5.8] — 2026-09-12

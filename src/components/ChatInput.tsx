@@ -240,6 +240,20 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // — and the composer names that posture "auto-deliver" wherever it shows it, so the operator
   // reads the consequence before Send. "First gate" / "Every unit" keep the gate.
   const autoDeliver = mode === 'autonomous' || (mode !== 'ask' && confirmMode === 'none');
+  // …and whether THIS daemon can keep the gate at all (review F-2 on studio#269): the engine gate
+  // exists from crew 0.7.33 / core-ts 0.7.24 (`GET /health.capabilities.deliverGate`). Against an
+  // older daemon the push follows verify unattended — the composer must SAY that, not promise a
+  // gate, and must not send `deliverGate` (the older launch schema rejects it). `null` = not yet
+  // known (loading, or the read failed) — no promise either way.
+  const [daemonDeliverGate, setDaemonDeliverGate] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getHealth())
+      .then((h) => { if (!cancelled) setDaemonDeliverGate(h.capabilities?.deliverGate === true); })
+      .catch(() => { if (!cancelled) setDaemonDeliverGate(null); });
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Preflight (DES-UX-001 §7.8, EC43, slice AC) ────────────────────────────
   // A code-shaped intent with no repo attached warns-and-blocks: zero POST
@@ -578,7 +592,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (deliverKind(wf) === 'build' && targetRepoRef !== null) body.deliver = deliverOn ? 'pr' : 'none';
     // F-E2E-030: the deliver gate is the engine's default; the body says nothing to be gated.
     // Only the explicitly unattended postures send the opt-out — and only with a delivery.
-    if (body.deliver === 'pr' && autoDeliver) body.deliverGate = 'auto';
+    if (body.deliver === 'pr' && autoDeliver && daemonDeliverGate === true) body.deliverGate = 'auto';
     // §5.1: Unfiled = NO projectId key at all (the backend default); a selected
     // or pre-bound project files the run atomically with the launch.
     const boundProject = lockedProjectId ?? selectedProjectId;
@@ -915,9 +929,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               // F-E2E-030: say WHEN the push happens — after the deliver gate the operator
               // approves, or, under an explicitly unattended posture, with no gate at all —
               // named "auto-deliver", never implied.
-              text: autoDeliver
-                ? `When this finishes it pushes its branch → opens a PR on ${targetLabel} with NO deliver gate — this posture is auto-deliver. Merging stays yours.`
-                : `When this finishes it pauses at the deliver gate; approve it and the run pushes its branch → opens a PR on ${targetLabel}. Merging stays yours.`,
+              text:
+                daemonDeliverGate === false
+                  ? `When this finishes it pushes its branch → opens a PR on ${targetLabel} — this daemon delivers WITHOUT a deliver gate (upgrade crew to 0.7.33+ to confirm the push first). Merging stays yours.`
+                  : daemonDeliverGate === null
+                    ? `When this finishes it pushes its branch → opens a PR on ${targetLabel}. Merging stays yours.`
+                    : autoDeliver
+                      ? `When this finishes it pushes its branch → opens a PR on ${targetLabel} with NO deliver gate — this posture is auto-deliver. Merging stays yours.`
+                      : `When this finishes it pauses at the deliver gate; approve it and the run pushes its branch → opens a PR on ${targetLabel}. Merging stays yours.`,
             }
           : {
               // The consequence of OFF, said before the send (crew#393): the
@@ -928,6 +947,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             };
     }
   })();
+
+  // The deliver-gate word the notice and the confirm line share (F-E2E-030): what the daemon can
+  // keep, then what the posture asks for. `unknown` while the health read is pending/failed.
+  const deliverGateWord: 'human' | 'auto' | 'unsupported' | 'unknown' =
+    daemonDeliverGate === false ? 'unsupported' : daemonDeliverGate === null ? 'unknown' : autoDeliver ? 'auto' : 'human';
 
   // Determine whether CLIs differ from the defaults that loaded from the roster
   const defaultCliSet = new Set(
@@ -1131,7 +1155,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           <option value="all">Every unit</option>
           {/* F-E2E-030: when this launch delivers, "No gates" is also the auto-deliver opt-out —
               the option says so where it is chosen. */}
-          <option value="none">{deliverNotice?.state === 'on' ? 'No gates · auto-deliver' : 'No gates'}</option>
+          <option value="none">{deliverNotice?.state === 'on' && mode !== 'ask' && daemonDeliverGate === true ? 'No gates · auto-deliver' : 'No gates'}</option>
         </select>
       </div>
 
@@ -1297,7 +1321,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-testid="deliver-notice"
           data-deliver-state={deliverNotice.state}
           data-deliver-repo={targetRepoRef ?? ''}
-          data-deliver-gate={deliverNotice.state === 'on' ? (autoDeliver ? 'auto' : 'human') : ''}
+          data-deliver-gate={deliverNotice.state === 'on' ? deliverGateWord : ''}
           className="text-xs px-1 font-mono"
           style={{
             color:
@@ -1388,10 +1412,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               {' · deliver: '}
               <span
                 data-testid="launch-confirm-deliver"
-                data-deliver-gate={autoDeliver ? 'auto' : 'human'}
-                style={{ color: autoDeliver ? 'var(--status-gate)' : 'var(--ink-high)' }}
+                data-deliver-gate={deliverGateWord}
+                style={{ color: deliverGateWord === 'human' ? 'var(--ink-high)' : 'var(--status-gate)' }}
               >
-                {autoDeliver ? 'auto — no gate before the push' : 'after you approve the deliver gate'}
+                {deliverGateWord === 'unsupported'
+                  ? 'no gate on this daemon (upgrade crew to 0.7.33+)'
+                  : deliverGateWord === 'unknown'
+                    ? 'after verify'
+                    : deliverGateWord === 'auto'
+                      ? 'auto — no gate before the push'
+                      : 'after you approve the deliver gate'}
               </span>
             </>
           )}
