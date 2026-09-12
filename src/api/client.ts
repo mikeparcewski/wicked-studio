@@ -332,7 +332,11 @@ export const api = {
     apiFetch<{ runId: string }>(`/repos/${encodeURIComponent(repoId)}/onboard`, { method: 'POST' }),
 
   /** Liveness (also proves the actor + event pump are up). */
-  getHealth: () => apiFetch<{ status: string; version: string; ping: string }>('/health'),
+  // `capabilities` is hand-declared until the api-types 0.37.0 pin lands (`HealthResponse` there):
+  // `deliverGate` — the daemon's engine pauses before the deliver phase pushes (F-E2E-030). Absent
+  // on a daemon before crew 0.7.33 ⇒ delivery follows verify unattended.
+  getHealth: () =>
+    apiFetch<{ status: string; version: string; ping: string; capabilities?: { deliverGate?: boolean } }>('/health'),
 
   /**
    * Open a PTY terminal session → its id. Drive it over the terminal WS

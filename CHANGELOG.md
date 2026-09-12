@@ -30,6 +30,27 @@ npm publish dates. Every version listed here exists on
     through the Archived chip), so there is nothing to re-archive; and the WorkPage tests now cover
     the filtered tab views and the Failed / Cancelled groups, not only Completed.
 
+### Fixed
+- **The composer promised a push with no gate (acceptance finding F-E2E-030).** Under the default
+  "First gate" posture the deliver notice read "When this finishes it pushes its branch → opens a
+  PR" — and that is exactly what run `0ab5ccb8` did, unattended. The engine now gates the deliver
+  phase by default (wicked-core#456) and crew accepts `deliverGate: 'human' | 'auto'`
+  (wicked-crew#543). The composer says WHEN the push happens: the default postures read "pauses
+  at the deliver gate; approve it and the run pushes its branch → opens a PR on <repo>", the
+  confirm line gains `deliver: after you approve the deliver gate` (`launch-confirm-deliver`), and
+  the body sends NO opt-out. Only the explicitly unattended postures — Autonomous, or the gate
+  option now labelled **"No gates · auto-deliver"** — send `deliverGate: 'auto'`, and their notice
+  says "with NO deliver gate — this posture is auto-deliver". The intake plan's deliver row names
+  the gate from `session.auto_deliver` ("human gate before it pushes its branch + opens the PR" /
+  "auto-deliver — … no gate"; `intake-plan-deliver-gate`) and stays silent on an engine that
+  predates the gate, so no promise is made that the engine cannot keep. The composer makes the
+  same promise only when the DAEMON can keep it: it reads `GET /health.capabilities.deliverGate`
+  (crew ≥ 0.7.33) and, against a daemon without it, says "this daemon delivers WITHOUT a deliver
+  gate (upgrade crew to 0.7.33+ to confirm the push first)", offers no auto-deliver option and
+  never sends `deliverGate` (the older launch schema rejects it). "No gates" is labelled
+  auto-deliver only where the select is honoured (not in Ask mode, where every unit is gated).
+
+
 ## [0.5.8] — 2026-09-12
 _The published bundle is built against `wicked-crew-api-types` **0.36.0** — the exact
 devDependency pin, unchanged from 0.5.7 (#264); this cut lands the fix that reads the `test_sets`

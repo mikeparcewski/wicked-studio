@@ -24,6 +24,20 @@ export interface IntakePlanProps {
   clis?: readonly string[] | undefined;
   /** The workflow def the run was planned from, when the host knows it. */
   workflow?: WorkflowDef | null | undefined;
+  /**
+   * The run's deliver posture (F-E2E-030, `session.auto_deliver`): `false` — the engine pauses
+   * for a human before the `deliver` phase pushes and opens the PR; `true` — the launch opted out
+   * (auto-deliver). `null`/absent — the engine predates the deliver gate, so NO promise is made.
+   */
+  autoDeliver?: boolean | null | undefined;
+}
+
+/** The run's deliver posture off the session DTO (`auto_deliver`, additive since wicked-core-ts
+ *  0.7.24): a boolean when the engine knows the deliver gate, `null` when it predates it. */
+export function autoDeliverOf(session: unknown): boolean | null {
+  if (typeof session !== 'object' || session === null) return null;
+  const v = (session as { auto_deliver?: unknown }).auto_deliver;
+  return typeof v === 'boolean' ? v : null;
 }
 
 /** Whether `prompt` is the engine's PRE-RUN gate on the run's first unit — the intake gate. */
@@ -41,7 +55,7 @@ function executorOf(unit: WorkUnit, phase: WorkflowDef['phases'][number] | undef
   return 'agent';
 }
 
-export function IntakePlan({ runId, units, clis, workflow }: IntakePlanProps): React.ReactElement | null {
+export function IntakePlan({ runId, units, clis, workflow, autoDeliver }: IntakePlanProps): React.ReactElement | null {
   if (units.length === 0) return null;
   const ordered = [...units].sort((a, b) => a.ord - b.ord);
   const pool = (clis ?? []).filter((c) => c !== '');
@@ -86,6 +100,20 @@ export function IntakePlan({ runId, units, clis, workflow }: IntakePlanProps): R
               )}
               {(u.role === 'evaluator' || phase?.role === 'evaluator') && (
                 <span style={{ color: 'var(--status-gate)' }}>evaluator ≠ creator</span>
+              )}
+              {/* F-E2E-030: the deliver phase is the step that leaves the machine — say, on the
+                  plan the operator approves, whether a human confirms it first. Silent when the
+                  engine predates the gate (no false promise). */}
+              {executor === 'tool' && name === 'deliver' && typeof autoDeliver === 'boolean' && (
+                <span
+                  data-testid="intake-plan-deliver-gate"
+                  data-deliver-gate={autoDeliver ? 'auto' : 'human'}
+                  style={{ color: autoDeliver ? 'var(--status-run)' : 'var(--status-gate)' }}
+                >
+                  {autoDeliver
+                    ? 'auto-deliver — pushes its branch + opens the PR with no gate'
+                    : 'human gate before it pushes its branch + opens the PR'}
+                </span>
               )}
               <span data-testid="intake-plan-seat" style={{ color: seat ? 'var(--ink-high)' : 'var(--ink-dim)' }}>
                 {seat
