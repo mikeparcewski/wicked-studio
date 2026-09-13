@@ -22,7 +22,7 @@ import { useMembershipStore } from '../store/membership.js';
 import { useRunEventStore } from '../store/events.js';
 import { deliverLift } from './deliverLiftModel.js';
 import { GateVerdict } from './GateVerdict.js';
-import { gateVerdictFor, isFailureEscalation, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { gateVerdictFor, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 import { ReassignControl } from './ReassignControl.js';
 import { useSteeringStore } from '../store/steering.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
@@ -453,8 +453,9 @@ function GateActionCard({
         <GateVerdict view={verdict} phase={phaseLabel(runId, units, verdict.ord)} />
       )}
 
-      {/* F-7R2-007: the seat lever on a failure escalation — see SteeringGate. */}
-      {escalation && (
+      {/* F-7R2-007: the seat lever on a SEAT failure escalation — see SteeringGate.
+          Seatless escalations suppress this lever (F-E2E-014). */}
+      {isSeatFailure(escalation, failedCli) && (
         <ReassignControl
           runId={runId}
           ord={ord}

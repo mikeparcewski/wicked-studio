@@ -11,6 +11,12 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+### Fixed
+- **Seatless-run failure card: headline truncated at `(Failed):` and "sign a seat in" remedy shown for tool-only failures (F-E2E-014, refs #272).**
+  `cleanPrompt` split on the first `[`, which in a triage-escalation prompt is the opening bracket of the engine's cause — so the cause was demoted to the collapsed "why this gate fired" disclosure (starting mid-token, since `slice(bracketIdx + 1)` stripped the bracket) and the headline stopped at `(Failed):`. The `ReassignControl` lever rendered for any failure escalation regardless of `assigned_cli`, so a run that never had a seat was told to retry on another seat / sign one in.
+  - `cleanPrompt` now keeps the leading `[` in the extracted footnote text (`slice(bracketIdx, …)` not `slice(bracketIdx + 1, …)`).
+  - `SteeringGate` skips footnote extraction entirely for escalation prompts (`isFailureEscalation`): the full prompt — cause included — renders in the headline, which now carries `overflow-wrap: anywhere` so a long unbroken cause wraps instead of overflowing.
+  - `isSeatFailure(escalation, failedCli)` (new predicate in `gateVerdictModel.ts`) gates `ReassignControl` in both `SteeringGate` and `CenterDashboard`: a seatless escalation (`failedCli === null`) renders no seat lever; a seat failure keeps the existing lever and Approve label unchanged.
 
 ## [0.5.9] — 2026-09-13
 _The published bundle is built against `wicked-crew-api-types` **0.37.0** — the exact

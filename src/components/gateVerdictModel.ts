@@ -402,6 +402,15 @@ export function isFailureEscalation(prompt: string | undefined, view: GateVerdic
   return kind === 'triage' || kind === 'worker-failed';
 }
 
+/**
+ * Whether a failure escalation had a seat assigned to the failed unit (F-E2E-014).
+ * A seatless / tool-only escalation (`failedCli === null`) never benefits from the seat-based
+ * remedy — `ReassignControl` must not render for it.
+ */
+export function isSeatFailure(escalation: boolean, failedCli: string | null): boolean {
+  return escalation && failedCli !== null;
+}
+
 /** One seat the operator may move a failed unit to, with the roster's word on it (F-7R2-007). */
 export interface ReassignCandidate {
   cli: string;
