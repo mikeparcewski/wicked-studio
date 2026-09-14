@@ -1,3 +1,4 @@
+import { seatStandingWord } from './HealthRailSection.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
@@ -74,9 +75,16 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const composerPersist = useComposerPrefsStore((s) => s.persist);
   const updateComposerPrefs = useComposerPrefsStore((s) => s.update);
 
+  /** Where the daemon says its settings file lives (`GET /settings.path`, crew 0.7.36); `null` =
+   *  the daemon predates the field — the page then says so instead of naming a path it made up. */
+  const [settingsPath, setSettingsPath] = useState<string | null>(null);
   useEffect(() => {
     api.getSettings()
-      .then(({ settings: s }) => setSettings(s))
+      .then((res) => {
+        setSettings(res.settings);
+        // api-types 0.38.0 `SettingsResponse.path?` (crew 0.7.36); absent/empty on an older daemon.
+        setSettingsPath(typeof res.path === 'string' && res.path !== '' ? res.path : null);
+      })
       // EC33: the translated message, never `String(Error)`'s "Error: …" framing.
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
     api.getRoster()
@@ -159,8 +167,9 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
             className="font-mono text-xs rounded px-1 py-0.5"
             style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}
           >
-            ~/.config/wicked-core/settings.json
-          </code>.
+            {settingsPath ?? "the daemon's settings file"}
+          </code>
+          {settingsPath === null && ' (this daemon does not report the path — crew 0.7.36 does)'}.
         </p>
       </div>
 
@@ -378,35 +387,67 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
                 <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                   {seat.key}
                 </span>
-                {seat.signed_in === true && (
-                  <span
-                    className="text-xs font-mono"
-                    style={{ color: 'var(--status-run)' }}
-                    data-testid={`seat-signin-${seat.key}`}
-                  >
-                    ✓ signed in
-                  </span>
-                )}
-                {seat.signed_in === false && (
-                  <span
-                    className="text-xs font-mono"
-                    style={{ color: 'var(--status-fail)' }}
-                    data-testid={`seat-signin-${seat.key}`}
-                  >
-                    sign in needed
-                  </span>
-                )}
-                {seat.login_invocation !== undefined && seat.login_invocation !== '' && seat.signed_in !== true && (
-                  <button
-                    type="button"
-                    onClick={() => setSignInSeat(seat)}
-                    aria-label={`Sign in ${seat.display_name}`}
-                    className="px-2.5 py-1 rounded-lg text-xs font-medium shrink-0"
-                    style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)', border: '1px solid var(--status-gate-dim)' }}
-                  >
-                    Sign in
-                  </button>
-                )}
+                {(() => {
+                  // F-E2E-040 = F-RC2-043: the seat's standing is read off the roster's `auth`
+                  // (`seatStandingWord`, the same fold the health rail applies), not the legacy
+                  // `signed_in` boolean alone — and when the seat's OWN stderr reported the failure
+                  // (`auth_source: 'seat-stderr'`) the row says so and offers Re-authenticate.
+                  const standing = seatStandingWord(seat);
+                  const bag = seat as Record<string, unknown>;
+                  const stderrFailed = bag['auth_source'] === 'seat-stderr';
+                  const evidence = typeof bag['auth_evidence'] === 'string' ? (bag['auth_evidence'] as string) : '';
+                  const word =
+                    stderrFailed
+                      ? `sign-in failed${evidence !== '' ? `: ${evidence}` : ''}`
+                      : standing.kind === 'signed-in'
+                        ? '✓ signed in'
+                        : standing.kind === 'signed-out'
+                          ? 'sign in needed'
+                          : standing.kind === 'no-sign-in-needed' || standing.kind === 'ineligible'
+                            ? standing.detail
+                            : standing.auth === 'unknown'
+                              ? 'auth unknown'
+                              : null; // nothing on the wire — say nothing, never a fabricated state
+                  const color =
+                    stderrFailed || standing.kind === 'signed-out' || standing.kind === 'ineligible'
+                      ? 'var(--status-fail)'
+                      : standing.kind === 'signed-in' || standing.kind === 'no-sign-in-needed'
+                        ? 'var(--status-run)'
+                        : 'var(--ink-dim)';
+                  const offerLogin =
+                    seat.login_invocation !== undefined &&
+                    seat.login_invocation !== '' &&
+                    standing.kind !== 'signed-in' &&
+                    standing.kind !== 'no-sign-in-needed';
+                  const verb = stderrFailed ? 'Re-authenticate' : 'Sign in';
+                  return (
+                    <>
+                      {word !== null && (
+                        <span
+                          className="text-xs font-mono"
+                          style={{ color }}
+                          data-testid={`seat-signin-${seat.key}`}
+                          data-auth={standing.auth ?? ''}
+                          data-auth-source={stderrFailed ? 'seat-stderr' : ''}
+                          title={standing.title ?? undefined}
+                        >
+                          {word}
+                        </span>
+                      )}
+                      {offerLogin && (
+                        <button
+                          type="button"
+                          onClick={() => setSignInSeat(seat)}
+                          aria-label={`${verb} ${seat.display_name}`}
+                          className="px-2.5 py-1 rounded-lg text-xs font-medium shrink-0"
+                          style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)', border: '1px solid var(--status-gate-dim)' }}
+                        >
+                          {verb}
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             ))}
           </div>

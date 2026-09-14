@@ -334,7 +334,7 @@ export function CommandPalette({
             href: runPath(id),
             rank: i,
             dot: SEARCH_DOT[v.session.status] ?? 'var(--ink-dim)',
-            when: runWhenWord(attachedAtByRun[id], Date.now()),
+            when: runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at),
           },
           m: m.positions.every((p) => p < intentLen) ? m : { score: m.score, positions: [] },
         });

@@ -192,7 +192,7 @@ function EvalReportView({ report, corpus, navigate }: {
           A gap is a behavior no steering rule matched. These are from the built-in <em>generic</em>
           corpus — if your steering targets your own codebase&rsquo;s concerns rather than these, that
           is expected, not broken rules. Import a corpus that mirrors your steering (Import a corpus,
-          below), or add rules for the behaviors you want caught{report.degraded === 'facet-only' ? ' — and note facet-only recall widens gaps a semantic embedder would close' : ''}.
+          below), or add rules for the behaviors you want caught.
         </p>
       )}
 

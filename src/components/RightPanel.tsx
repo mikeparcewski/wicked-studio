@@ -387,6 +387,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
         <FileViewer
           runId={runId}
           defaultTab="diff"
+          base="merge-base"
           onClose={() => { setFullDiffOpen(false); fullDiffBtnRef.current?.focus(); }}
           onUnsupported={() => {
             setFullDiffOpen(false);

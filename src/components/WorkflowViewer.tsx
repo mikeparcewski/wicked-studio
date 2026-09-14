@@ -100,6 +100,36 @@ interface BuilderPhase {
   dependsOn: string[];
   executesCode: boolean;
   verifiedEvidence: boolean;
+  /** F-RC1-093: carried through the builder VERBATIM (no editor yet) so a save never nulls them. */
+  skillRef: string | null;
+  allowedSkills: string[];
+  requiredDeliverables: string[];
+  validatorPin: string | null;
+}
+
+/** A def's phase as the builder holds it — the ONE def→builder mapper (the editor and the JSON
+ *  import used two copies; F-RC1-093 needs both to carry the four fields `buildDef` writes back). */
+export function builderPhaseOf(p: PhaseDef): BuilderPhase {
+  const ex = p.executor;
+  return {
+    _key: Math.random().toString(36).slice(2),
+    id: p.id,
+    kind: p.kind,
+    execMode: ex?.type === 'tool' ? 'command' : 'agent',
+    cmd: ex?.type === 'tool' ? ex.cmd.join(' ') : '',
+    script: '',
+    scriptLang: 'bash',
+    scriptPath: '',
+    gate: p.gate === 'auto' ? 'auto' : (typeof p.gate === 'object' && p.gate !== null && 'human_confirm_if' in p.gate) ? 'human_if' : 'human',
+    role: p.role,
+    dependsOn: p.depends_on,
+    executesCode: p.executes_code,
+    verifiedEvidence: p.verified_evidence,
+    skillRef: p.skill_ref ?? null,
+    allowedSkills: p.allowed_skills ?? [],
+    requiredDeliverables: p.required_deliverables ?? [],
+    validatorPin: p.validator_pin ?? null,
+  };
 }
 
 function emptyPhase(): BuilderPhase {
@@ -117,6 +147,10 @@ function emptyPhase(): BuilderPhase {
     dependsOn: [],
     executesCode: false,
     verifiedEvidence: false,
+    skillRef: null,
+    allowedSkills: [],
+    requiredDeliverables: [],
+    validatorPin: null,
   };
 }
 
@@ -138,7 +172,7 @@ async function resolveExecutor(p: BuilderPhase): Promise<PhaseExecutor> {
   return { type: 'tool', cmd: [interp, path] };
 }
 
-async function buildDef(id: string, phases: BuilderPhase[]): Promise<WorkflowDef> {
+export async function buildDef(id: string, phases: BuilderPhase[]): Promise<WorkflowDef> {
   const resolvedPhases: PhaseDef[] = await Promise.all(
     phases.map(async (p, i): Promise<PhaseDef> => ({
       id: p.id || `phase-${i + 1}`,
@@ -147,12 +181,14 @@ async function buildDef(id: string, phases: BuilderPhase[]): Promise<WorkflowDef
       gate: toGateSpec(p.gate),
       executes_code: p.executesCode,
       verified_evidence: p.verifiedEvidence,
-      required_deliverables: [],
+      // F-RC1-093: written back VERBATIM from the loaded def — a save used to null `skill_ref`
+      // (and empty the other three) on every workflow that carried them.
+      required_deliverables: p.requiredDeliverables,
       depends_on: p.dependsOn,
       role: p.role,
-      skill_ref: null,
-      allowed_skills: [],
-      validator_pin: null,
+      skill_ref: p.skillRef,
+      allowed_skills: p.allowedSkills,
+      validator_pin: p.validatorPin,
       executor: await resolveExecutor(p),
     })),
   );
@@ -387,25 +423,7 @@ function WorkflowBuilder({
   const [workflowId, setWorkflowId] = useState(initial?.id ?? '');
   const [phases, setPhases] = useState<BuilderPhase[]>(() => {
     if (!initial) return [emptyPhase()];
-    return initial.phases.map((p) => {
-      const ex = p.executor;
-      const execMode: ExecMode = ex?.type === 'tool' ? 'command' : 'agent';
-      return {
-        _key: Math.random().toString(36).slice(2),
-        id: p.id,
-        kind: p.kind,
-        execMode,
-        cmd: ex?.type === 'tool' ? ex.cmd.join(' ') : '',
-        script: '',
-        scriptLang: 'bash',
-        scriptPath: '',
-        gate: p.gate === 'auto' ? 'auto' : (typeof p.gate === 'object' && p.gate !== null && 'human_confirm_if' in p.gate) ? 'human_if' : 'human',
-        role: p.role,
-        dependsOn: p.depends_on,
-        executesCode: p.executes_code,
-        verifiedEvidence: p.verified_evidence,
-      };
-    });
+    return initial.phases.map(builderPhaseOf);
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -460,20 +478,7 @@ function WorkflowBuilder({
       try {
         const def = JSON.parse(ev.target?.result as string) as WorkflowDef;
         setWorkflowId(def.id ?? '');
-        setPhases(def.phases.map((p) => {
-          const ex = p.executor;
-          return {
-            _key: Math.random().toString(36).slice(2),
-            id: p.id,
-            kind: p.kind,
-            execMode: ex?.type === 'tool' ? 'command' : 'agent' as ExecMode,
-            cmd: ex?.type === 'tool' ? ex.cmd.join(' ') : '',
-            script: '', scriptLang: 'bash', scriptPath: '',
-            gate: p.gate === 'auto' ? 'auto' : (typeof p.gate === 'object' && p.gate !== null && 'human_confirm_if' in p.gate) ? 'human_if' : 'human',
-            role: p.role, dependsOn: p.depends_on,
-            executesCode: p.executes_code, verifiedEvidence: p.verified_evidence,
-          };
-        }));
+        setPhases(def.phases.map(builderPhaseOf));
         setError(null);
       } catch { setError('Could not parse workflow JSON'); }
     };

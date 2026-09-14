@@ -70,7 +70,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
       </div>
       <p className="text-[10px] mt-0.5 font-mono" style={{ color: 'var(--ink-dim)' }}>
         {spec.label} · {unitCount} task{unitCount === 1 ? '' : 's'} ·{' '}
-        <span data-testid="run-when" title={WHEN_TITLE}>{runWhenWord(attachedAt, Date.now())}</span>
+        <span data-testid="run-when" title={WHEN_TITLE}>{runWhenWord(attachedAt, Date.now(), session.created_at)}</span>
       </p>
     </button>
   );

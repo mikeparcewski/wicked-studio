@@ -82,13 +82,26 @@ export function runTitle(session: AgentSession, intentMax: number = INTENT_MAX):
  * mirror names no clock for this run (unfiled, or members not yet read) — the
  * honest absent state is stated, never a fabricated "0s ago".
  */
-export function runWhenWord(attachedAtMs: number | undefined, now: number): string {
+export function runWhenWord(attachedAtMs: number | undefined, now: number, createdAtSec?: number): string {
+  // crew#496 / studio#230: the run's OWN launch clock (`AgentSession.created_at`, unix seconds) wins
+  // when the daemon dates the run; the membership attach clock is the fallback it always was.
+  if (typeof createdAtSec === 'number' && Number.isFinite(createdAtSec)) {
+    return `${ageWord(Math.max(0, now - createdAtSec * 1000))} ago`;
+  }
   return attachedAtMs === undefined ? 'time unknown' : `${ageWord(Math.max(0, now - attachedAtMs))} ago`;
 }
 
-/** Hover copy for the attach clock — names WHICH clock this is (wire honesty). */
+/** "finished 3m ago" from `AgentSession.ended_at` (unix seconds; api-types 0.38.0) — `null` when the
+ *  daemon has not dated the run's end (live, pre-field, or terminalled before this daemon booted):
+ *  a duration is never derived from now for an undated run. */
+export function runEndedWord(endedAtSec: number | undefined, now: number): string | null {
+  if (typeof endedAtSec !== 'number' || !Number.isFinite(endedAtSec)) return null;
+  return `finished ${ageWord(Math.max(0, now - endedAtSec * 1000))} ago`;
+}
+
+/** Hover copy for the run clock — names WHICH clock this is (wire honesty). */
 export const WHEN_TITLE =
-  'when this run entered its project (the membership attach clock — the run record itself carries no timestamps)';
+  'when this run was launched (the daemon\'s run.launched record) — or, on a daemon that does not date the run, when it entered its project (the membership attach clock)';
 
 /** Event types that end a run, durable-log and live alike. */
 const END_TYPES: ReadonlySet<string> = new Set(['sessionCompleted', 'sessionFailed', 'runCancelled']);

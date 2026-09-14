@@ -1,3 +1,5 @@
+import { escalationCopy } from './denialCopy.js';
+import { escalationLookups } from './narrator.js';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
@@ -5,7 +7,7 @@ import { useProvenanceStore } from '../store/provenance.js';
 import { CopyButton } from './CopyButton.js';
 import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, liftOutcomeLabel } from './deliverLiftModel.js';
-import { shortId } from './gateVerdictModel.js';
+import { shortId, denialSourceLabel } from './gateVerdictModel.js';
 import { ProvenanceLine } from './ProvenanceLine.js';
 import { runBaseLine, runBaseOf } from './runBaseModel.js';
 import { VerdictDetail } from './VerdictDetail.js';
@@ -59,6 +61,30 @@ function hhmmss(ts: unknown): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
+type EscalationLookups = ReturnType<typeof escalationLookups>;
+
+/** The (condition × denialSource) copy for one `gateEscalated` frame — the narrator's table (crew #559);
+ *  `lookups` supplies the refused command and the seat from the run's other frames (MED-1). */
+function escalationCopyOf(e: CoreEvent, ord: number | null | undefined, lookups?: EscalationLookups): ReturnType<typeof escalationCopy> {
+  return escalationCopy(str(e['condition']) || null, str(e['denialSource']), {
+    ord: ord ?? null,
+    verdictSummary: str(e['verdictSummary']) || null,
+    restored: typeof e['restored'] === 'boolean' ? (e['restored'] as boolean) : null,
+    discardedCount: Array.isArray(e['discarded']) ? (e['discarded'] as unknown[]).length : null,
+    suggestionRef: str(e['suggestionRef']) || null,
+    defGate: e['defGate'] === true,
+    outputCaptured: e['outputCaptured'] === true,
+    deniedCommand: lookups?.deniedCommandOf(ord) ?? null,
+    cli: lookups?.seatOf(ord) ?? null,
+  });
+}
+
+/** The compact row label: the table's headline when the pair is known, else the condition token. */
+function escalationHeadline(e: CoreEvent, ord: number | null | undefined, lookups?: EscalationLookups): string {
+  const copy = escalationCopyOf(e, ord, lookups);
+  return copy.known ? copy.headline : str(e['condition']);
+}
+
 function str(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
@@ -66,6 +92,7 @@ function str(v: unknown): string {
 /** Pure rail derivation (unit-tested): recorded events → ordered, phase-bucketed rows. */
 export function timelineRows(events: readonly CoreEvent[], units: readonly WorkUnit[]): TimelineRow[] {
   const byOrd = new Map(units.map((u) => [u.ord, u]));
+  const lookups = escalationLookups(events, units); // MED-1: <cmd> + seat for the escalation rows
   const rows: TimelineRow[] = [];
   events.forEach((e, i) => {
     const key = typeof e.seq === 'number' ? `s${e.seq}` : `i${i}`;
@@ -85,13 +112,31 @@ export function timelineRows(events: readonly CoreEvent[], units: readonly WorkU
       }
       case 'workflowSelected': push('workflow', str(e.workflowId) || str(e.workflow_id), null); break;
       case 'unitPlanned': push('planned', str(e.description), null); break;
-      case 'unitDispatched':
-        push(`unit ${ord ?? '?'}`, `${unit?.assigned_cli ?? '(no CLI recorded)'} · attempt ${attempt}`, phase);
+      case 'unitDispatched': {
+        // wicked-core#468/#479 (api-types 0.38.0 `UnitDispatchedEvent.baseSkill { name; role; handed? }`):
+        // the discipline the unit follows; "named only (not handed)" ONLY on `handed === false` —
+        // absent means unknown (an engine before the field), never "not handed".
+        const bs = e['baseSkill'];
+        const skill = bs !== null && typeof bs === 'object' ? (bs as { name?: unknown; role?: unknown; handed?: unknown }) : null;
+        const discipline =
+          skill !== null && typeof skill.name === 'string' && skill.name !== ''
+            ? ` · discipline: ${skill.name}${typeof skill.role === 'string' ? ` §${skill.role}` : ''}${skill.handed === false ? ' · discipline named only (not handed)' : ''}`
+            : '';
+        push(`unit ${ord ?? '?'}`, `${unit?.assigned_cli ?? '(no CLI recorded)'} · attempt ${attempt}${discipline}`, phase);
+        break;
+      }
+      case 'sandboxPosture':
+        // api-types 0.38.0 `SandboxPostureEvent` (F-E2E-039): how the unit's sandbox is enforced.
+        push('containment', `${str(e['posture']) || '?'}${str(e['cli']) ? ` · ${str(e['cli'])}` : ''}${str(e['reason']) ? ` — ${str(e['reason'])}` : ''}`, phase);
+        break;
+      case 'worktreeRetained':
+        // api-types 0.38.0 `WorktreeRetainedEvent` (F-RC1-064): the engine kept the tree, and why.
+        push('worktree kept', `${str(e['reason']) || 'retained'}${str(e['path']) ? ` · ${str(e['path'])}` : ''}`, null);
         break;
       case 'unitOutputCaptured': push('✓ output', 'view transcript', phase); break;
       case 'stepFailed': push('✗ failed', str(e['failureKind']) || str(e.detail), phase, 'fail'); break;
       case 'crashRecoveryRedrive': push('↩ retry', `attempt ${attempt}`, phase); break;
-      case 'gateEscalated': push('gate', str(e['condition']), 'gate', 'gate'); break;
+      case 'gateEscalated': push('gate', escalationHeadline(e, ord, lookups), 'gate', 'gate'); break;
       case 'worktreeRestored': {
         const n = Array.isArray(e.discarded) ? e.discarded.length : 0;
         push('↺ restored', `creator tree ${str(e.tree) ? shortId(str(e.tree)) : '?'} · ${n} path${n === 1 ? '' : 's'} discarded`, phase, 'gate');
@@ -304,14 +349,18 @@ export function RunTimeline({ view, navigate, onOpenFile }: Props): React.ReactE
             </p>
           </div>
         );
-      case 'gateEscalated':
+      case 'gateEscalated': {
+        const copy = escalationCopyOf(e, ord, escalationLookups(events, view.units));
         return (
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-semibold font-mono" style={{ color: 'var(--status-gate)' }}>Gate escalated — unit {ord ?? '?'}</p>
-            {str(e['condition']) && <p className="text-xs" style={{ color: 'var(--ink-body)' }}>criterion: {str(e['condition'])}</p>}
+            {copy.known && <p className="text-xs" data-testid="escalation-headline" style={{ color: 'var(--ink-high)' }}>{copy.headline}</p>}
+            {str(e['condition']) && <p className="text-xs" style={{ color: 'var(--ink-body)' }}>criterion: {str(e['condition'])}{str(e['denialSource']) ? ` · denied by ${denialSourceLabel(str(e['denialSource']))}` : ''}</p>}
             {str(e['verdictSummary']) && <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>{str(e['verdictSummary'])}</p>}
+            {copy.notes.length > 0 && <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>{copy.notes.join(' · ')}</p>}
           </div>
         );
+      }
       case 'workflowSelected':
         return (
           <p className="text-xs font-mono" style={{ color: 'var(--ink-body)' }}>

@@ -25,6 +25,13 @@ export interface RetryPrefill {
   humanConfirm: HumanConfirm;
   /** From the DTO's `project_id` echo (CREW-UX-2); `null` = unfiled. */
   projectId: string | null;
+  /**
+   * "Revise PR #N" (DES-L9 §5; api-types 0.38.0 `LaunchRunBody.revisesPr`): a run launched from a
+   * DELIVERED run's PR deposits the PR here; the composer sends `revisesPr: number` ONLY when
+   * `GET /health.capabilities.revisesPr === true` (an older daemon's strict launch schema would
+   * 400), keeps `deliver: 'pr'`, and names the PR in the confirm line. `null`/absent = a plain launch.
+   */
+  revisesPr?: { number: number; title: string; headRef: string } | null;
 }
 
 let pending: RetryPrefill | null = null;

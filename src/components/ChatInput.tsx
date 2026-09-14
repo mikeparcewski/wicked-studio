@@ -246,14 +246,23 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // gate, and must not send `deliverGate` (the older launch schema rejects it). `null` = not yet
   // known (loading, or the read failed) — no promise either way.
   const [daemonDeliverGate, setDaemonDeliverGate] = useState<boolean | null>(null);
+  // …and whether it can REVISE an open PR (`capabilities.revisesPr`, crew 0.7.36 / DES-L9): the
+  // "Revise PR #N" pre-fill sends `revisesPr` only on `true`; `null` = not yet known.
+  const [daemonRevisesPr, setDaemonRevisesPr] = useState<boolean | null>(null);
   useEffect(() => {
     let cancelled = false;
     Promise.resolve()
       .then(() => api.getHealth())
-      .then((h) => { if (!cancelled) setDaemonDeliverGate(h.capabilities?.deliverGate === true); })
-      .catch(() => { if (!cancelled) setDaemonDeliverGate(null); });
+      .then((h) => {
+        if (cancelled) return;
+        setDaemonDeliverGate(h.capabilities?.deliverGate === true);
+        setDaemonRevisesPr(h.capabilities?.revisesPr === true);
+      })
+      .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); } });
     return () => { cancelled = true; };
   }, []);
+  /** The PR this launch revises (DES-L9 pre-fill) — clearable, like the lineage pill. */
+  const [revisesPr, setRevisesPr] = useState<NonNullable<RetryPrefill['revisesPr']> | null>(prefill?.revisesPr ?? null);
 
   // ── Preflight (DES-UX-001 §7.8, EC43, slice AC) ────────────────────────────
   // A code-shaped intent with no repo attached warns-and-blocks: zero POST
@@ -601,6 +610,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // never inferred from prompt equality. The pill above is the operator's
     // way to drop the claim before sending.
     if (retryOf) body.retryOf = retryOf;
+    // DES-L9 §5: `revisesPr` rides the body ONLY when this daemon says it can revise a PR (an
+    // older launch schema 400s on the key); a revision is always a PR delivery onto that PR.
+    if (revisesPr !== null && daemonRevisesPr === true && targetRepoRef !== null) {
+      body.revisesPr = revisesPr.number;
+      body.deliver = 'pr';
+    }
     // Ad-hoc grouping (wicked-studio#27, api-types 0.19.0): provenance only —
     // the run executes byte-identically. One control ⇒ never both keys. An
     // empty typed label sends NOTHING (omitting the key is pre-0.19 behavior,
@@ -970,6 +985,22 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     activePills.push({
       label: `Retry of ${retryOf.slice(0, 8)}`,
       onClear: () => setRetryOf(null),
+    });
+  }
+  if (revisesPr !== null) {
+    // The revision claim beside the lineage claim — and, against a daemon that cannot revise, the
+    // honest chip: nothing is sent, the operator reads why.
+    activePills.push({
+      label:
+        daemonRevisesPr === true
+          ? `Revises PR #${revisesPr.number} (${revisesPr.headRef})`
+          : `Revise PR #${revisesPr.number}: this daemon cannot revise a PR — upgrade wicked-crew`,
+      onClear: () => setRevisesPr(null),
+      attrs: {
+        'data-testid': 'launch-revises-pr',
+        'data-pr': String(revisesPr.number),
+        'data-supported': daemonRevisesPr === true ? 'yes' : daemonRevisesPr === false ? 'no' : 'unknown',
+      },
     });
   }
   if (attachedFiles.length > 0) {
@@ -1398,7 +1429,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           className="text-xs px-1 font-mono"
           style={{ color: 'var(--ink-muted)' }}
         >
-          {targetRepoRef === null ? 'Not ready to send: ' : 'Ready to send: '}
+          {/* F-089 / F-E2E-035: ONE predicate — the same `canSubmit` that disables Send — so the
+              line and the button can never disagree ("Send enabled but Not ready to send"). */}
+          {canSubmit ? 'Ready to send: ' : 'Not ready to send: '}
           <span data-testid="launch-confirm-workflow" style={{ color: 'var(--ink-high)' }}>{launchWorkflow}</span>
           {' on '}
           <span data-testid="launch-confirm-target" style={{ color: targetLabel === null ? 'var(--status-gate)' : 'var(--ink-high)' }}>

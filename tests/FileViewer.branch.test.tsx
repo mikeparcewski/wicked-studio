@@ -73,7 +73,8 @@ describe('RightPanel Files — the Full diff on the EMPTY state (F-7R2-013)', ()
     fireEvent.click(screen.getByTestId('files-full-diff'));
     expect(await screen.findByTestId('file-viewer')).toBeInTheDocument();
     expect(await screen.findByTestId('diff-baseline-note')).toHaveAttribute('data-source', 'branch');
-    expect(getRunDiff).toHaveBeenCalledExactlyOnceWith('r-gt-done', undefined);
+    // BC-54 (fixall L8-8E ii): the Full-diff button asks for the fork-point diff — `base=merge-base`.
+    expect(getRunDiff).toHaveBeenCalledExactlyOnceWith('r-gt-done', undefined, 'merge-base');
   });
 
   it('an ACTIVE run with no files yet keeps "No files changed yet." and the affordance', async () => {

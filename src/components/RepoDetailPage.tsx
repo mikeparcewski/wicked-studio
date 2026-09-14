@@ -143,6 +143,10 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const displayedRuns = expanded ? runs : runs.slice(0, 10);
 
   const graphStats = graph?.stats;
+  // crew#505 / F-RC1-100 (api-types 0.38.0 `CodeGraphData.totals`): the whole graph, beside the
+  // served slice — "150 of 5,470 shown", never the slice presented as the repo. Absent on an older
+  // daemon ⇒ only the slice is known, and only the slice is shown.
+  const graphTotals = graph?.totals;
 
   async function startOnboarding(): Promise<void> {
     setOnboarding(true);
@@ -369,13 +373,17 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
             {graphStats ? (
               <div className="flex flex-col gap-3">
                 {[
-                  { label: 'Symbols', value: graphStats.nodeCount },
-                  { label: 'Edges', value: graphStats.edgeCount },
-                  { label: 'Files indexed', value: graphStats.fileCount },
+                  { label: 'Symbols', value: graphStats.nodeCount, total: graphTotals?.nodes },
+                  { label: 'Edges', value: graphStats.edgeCount, total: graphTotals?.edges },
+                  { label: 'Files indexed', value: graphStats.fileCount, total: graphTotals?.files },
                 ].map(s => (
                   <div key={s.label} className="flex items-center justify-between">
                     <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>{s.label}</span>
-                    <span className="text-sm font-semibold font-mono" style={{ color: 'var(--ink-high)' }}>{s.value.toLocaleString()}</span>
+                    <span className="text-sm font-semibold font-mono" style={{ color: 'var(--ink-high)' }} data-testid={`graph-stat-${s.label.toLowerCase().replace(/\s+/g, '-')}`}>
+                      {typeof s.total === 'number' && s.total !== s.value
+                        ? `${s.value.toLocaleString()} of ${s.total.toLocaleString()} shown`
+                        : s.value.toLocaleString()}
+                    </span>
                   </div>
                 ))}
                 <button
