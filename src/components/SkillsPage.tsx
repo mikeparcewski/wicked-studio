@@ -288,7 +288,15 @@ export function SkillsPage({ navigate, search = '' }: {
         result = r;
         // `snapshot` is null exactly when the publish was blocked (nothing written, revision unchanged).
         if (r !== null && r.snapshot !== null) {
-          applied = `Published — snapshot generation ${r.snapshot.gen} is current (${r.snapshot.skills} skills, ${r.snapshot.contentHash.slice(0, 12)}); workers spawn with it from now on.`;
+          // `unchanged: true` (api-types 0.38.0, crew#547): nothing was re-published — `snapshot` IS the
+          // current generation, so the copy says so instead of announcing a "new" generation.
+          applied = r.unchanged === true
+            ? `Unchanged — generation ${r.snapshot.gen} is still current (${r.snapshot.skills} skills, ${r.snapshot.contentHash.slice(0, 12)}); nothing was re-published.`
+            : `Published — snapshot generation ${r.snapshot.gen} is current (${r.snapshot.skills} skills, ${r.snapshot.contentHash.slice(0, 12)}); workers spawn with it from now on.`;
+          // The engine line is re-read here explicitly (F-RC1-017 / crew#547 item 3, DES-L6 PR-L6-4a):
+          // the catalog re-read below refreshes it too on success, but a failed re-read after an applied
+          // publish used to leave the line on the previous generation until a page reload.
+          void loadEngine();
         }
       } else {
         const r = await run((rev) => refreshSkillsBaseline(rev));

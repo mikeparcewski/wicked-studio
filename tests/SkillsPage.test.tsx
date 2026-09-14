@@ -1503,6 +1503,27 @@ describe('SkillsPage — the page verbs: Add, Refresh baseline, Analyze, Publish
     expect(calls('GET', '/skills')).toBe(2);
   });
 
+  it('an `unchanged` Publish (api-types 0.38.0) says the generation is STILL current — no "new generation" copy — and the engine line is re-read (fixall L6-4a)', async () => {
+    const diagnostics = { skills: { state: 'published', root: '/state/skills', current: { gen: 3, path: '/state/skills/snapshots/000003' }, engineInput: '/state/skills/snapshots/000003', stateHome: '/state', findings: [] } };
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      'GET /diagnostics': () => Promise.resolve(diagnostics),
+      'POST /skills/publish': () => Promise.resolve({ ...publishedAt(3, REV_1), unchanged: true }),
+    });
+    render(<Harness />);
+    await screen.findAllByTestId('skills-row');
+    await waitFor(() => expect(calls('GET', '/diagnostics')).toBe(1));
+
+    fireEvent.click(screen.getByTestId('skills-publish'));
+    const findings = await screen.findByTestId('skills-page-findings');
+    expect(findings.dataset.verdict).toBe('clear');
+    expect(await screen.findByTestId('skills-note')).toHaveTextContent('Unchanged — generation 3 is still current (4 skills, nnnnnnnnnnnn); nothing was re-published.');
+    expect(screen.getByTestId('skills-note')).not.toHaveTextContent('Published —');
+    // the engine line was re-read after the publish (the explicit loadEngine + the catalog re-read's own)
+    await waitFor(() => expect(calls('GET', '/diagnostics')).toBeGreaterThanOrEqual(2));
+    expect(screen.getByTestId('skills-snapshot').dataset.generation).toBe('3');
+  });
+
   it('a blocked Publish renders the findings with their file:line and reloads nothing — the old generation stays current', async () => {
     const blocked: SkillPublishResult = {
       verdict: 'blocked',
