@@ -6,6 +6,8 @@ import type {
   ChatListResponse,
   ChatOpenBody,
   ChatOpenResponse,
+  ChatSeatOutcome,
+  ChatSeatRefusal,
   CoreEvent,
   CreateProjectBody,
   DeliverRunResult,
@@ -253,6 +255,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(targets === undefined ? { text } : { text, targets }),
     }),
+  /** F-W1-005: re-seat NAMED seats on a LIVE chat — the engine's per-seat `chat_ensure` with the
+   *  scope recorded at open, same pool key (crew ≥ 0.7.36 `POST /chats/:id/seats`; api-types 0.39.0
+   *  types it). Answers the 201's shapes; 404 on an older daemon or a chat that is gone. */
+  reseatChat: (chatId: string, clis: string[]) =>
+    apiFetch<{ chatId: string; seats: ChatSeatOutcome[]; refused: ChatSeatRefusal[] }>(
+      `/chats/${encodeURIComponent(chatId)}/seats`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clis }) },
+    ),
   closeChat: (chatId: string) =>
     apiFetch<{ ok: boolean }>(`/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' }),
   /** A chat's warm seats (+ the scope recorded at open, `null` for a chat this daemon did not

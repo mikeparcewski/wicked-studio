@@ -12,6 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+<!-- fixall L5 -->
+- **Chat: an `ok` reply is the answer; the seat picker offers only the seats the daemon would seat; a refused seat gets Retry on the live chat (F-W1-004 / F-W1-005, wave-1 P6 gate; R-L5-2, R-L5-3).**
+  - `finalizePending`: an `ok: true` `chatReply` IS the bubble (core-ts ≥ 0.7.27 makes `chatReply.text` the block after the seat's last tool call — the "Let me explore… Now let me read…" narration streamed as deltas and is not repeated); a NOT-ok reply (an eviction's budget sentence + partial) keeps `retainOnFinalize`'s longer-text rule, so nothing streamed before a cut is lost (E4). On an older engine the reply ⊇ the stream — unchanged.
+  - [+ Add] and the default chips read the daemon's `chat_admission` verdict for the CURRENT scope mode (crew ≥ 0.7.36 `GET /roster`; the same predicate its `POST /chats` pre-filter runs — one source of truth, no client-side copy of the rule; the F-W1-003 decision lands in that verdict daemon-side). Seats the daemon would refuse are not offered; one line under the picker names them with the daemon's reason. A pristine selection re-seeds when the scope mode changes before the first send. Without the verdict (older daemon) the picker behaves as before: every seat offered, the incapable ones labeled "no chat config".
+  - A failed seat chip on a live chat carries **Retry** → `POST /chats/:id/seats` (the engine's per-seat ensure in the recorded scope; same chat id, same pool key) — the chip folds the answer (ready / failed with the daemon's reason, narrated), a re-seated seat rejoins the next send's audience; a daemon without the route says so on the chip.
+
 <!-- fixall L8 -->
 - **Escalation gates say what happened, from the engine's own class × denying layer (fixall L8-8E(i);
   crew #559 / F-RC1-047 = F-RC2-061; DES-L8 r2 §5 PR-8E).** One copy table (`denialCopy.ts

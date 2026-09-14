@@ -31,6 +31,7 @@ const getChat = vi.fn();
 const closeChat = vi.fn();
 const getRoster = vi.fn();
 const sendChatMessage = vi.fn();
+const reseatChat = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
   api: {
@@ -39,6 +40,7 @@ vi.mock('../src/api/client.js', () => ({
     closeChat: (...a: unknown[]) => closeChat(...a),
     getRoster: (...a: unknown[]) => getRoster(...a),
     sendChatMessage: (...a: unknown[]) => sendChatMessage(...a),
+    reseatChat: (...a: unknown[]) => reseatChat(...a),
     confirmGate: vi.fn(),
     cancelRun: vi.fn(),
   },
@@ -58,7 +60,7 @@ const ROSTER = [
 ] as unknown as RosterSeat[];
 
 beforeEach(() => {
-  for (const spy of [openChat, getChat, closeChat, getRoster, sendChatMessage]) spy.mockReset();
+  for (const spy of [openChat, getChat, closeChat, getRoster, sendChatMessage, reseatChat]) spy.mockReset();
   getRoster.mockResolvedValue({ roster: ROSTER });
   openChat.mockImplementation((body: { chatId: string; clis?: string[] }) =>
     Promise.resolve({
@@ -87,14 +89,43 @@ const chip = (agent: string): HTMLElement =>
   document.querySelector(`[data-testid="seat-chip"][data-agent="${agent}"]`) as HTMLElement;
 
 describe('collapse retention — expanding restores every streamed byte', () => {
-  it('a >collapse-threshold stream survives a SHORTER terminal reply; collapse → expand is byte-equal', async () => {
+  it('F-W1-004 (R-L5-2): an OK reply IS the answer — a >collapse-threshold narration stream finalizes to the reply text, not the concatenation', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
     fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'plan it');
 
-    // Stream well past CHAT_TURN_MAX_CHARS (1400) in several deltas — one line,
-    // so the markdown paragraph's textContent is the exact byte sequence.
+    // The seat narrates between tool calls ("Let me explore…"), well past
+    // CHAT_TURN_MAX_CHARS, then answers. The engine (core-ts ≥ 0.7.27) streams
+    // every block as deltas but the terminal reply is the block after the
+    // LAST tool call — the answer.
+    const parts = [
+      `Let me explore the key repos ${'a'.repeat(600)} `,
+      `Now let me read the core files ${'b'.repeat(600)} `,
+      'The skill reaches the worker through the snapshot the crew publishes.',
+    ];
+    act(() => {
+      for (const text of parts) {
+        emit!({ type: 'chatDelta', chat: chatId(), cliKey: 'claude', text });
+      }
+    });
+    // While streaming the over-long text is narration (collapsed).
+    expect(screen.getAllByTestId('chat-narration-line').some((l) => l.dataset['agent'] === 'claude' && /is working/.test(l.textContent!))).toBe(true);
+    act(() => {
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: parts[2]!, ok: true });
+    });
+    // The bubble is the ANSWER — a short conversational turn, first-class, with no "Let me…" prefix.
+    const bubble = document.querySelector('[data-testid="seat-bubble"][data-agent="claude"]') as HTMLElement;
+    expect(bubble.textContent).toBe(parts[2]);
+    expect(bubble.closest('[data-testid^="chat-narration-raw-"]'), 'a short answer is a turn, not collapsed narration').toBeNull();
+    expect(chip('claude').dataset['state']).toBe('replied');
+  });
+
+  it('a NOT-ok reply (an eviction) keeps the longer streamed text — nothing said before the cut is lost (E4); collapse → expand is byte-equal', async () => {
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'plan it');
     const parts = [
       `plan head ${'a'.repeat(600)} `,
       `middle ${'b'.repeat(600)} `,
@@ -106,32 +137,24 @@ describe('collapse retention — expanding restores every streamed byte', () => 
         emit!({ type: 'chatDelta', chat: chatId(), cliKey: 'claude', text });
       }
     });
-
-    // The terminal reply arrives TRUNCATED (the E4 loss shape): shorter than
-    // what already streamed — it must NOT clobber the streamed bytes.
+    // The eviction reply is SHORTER than the stream (the budget sentence + a partial): the
+    // streamed bytes stand — the E4 rule, kept exactly for the not-ok case.
     act(() => {
-      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: streamed.slice(-64), ok: true });
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', ok: false, text: `seat 'claude' exceeded the 600 s turn budget (WICKED_CHAT_TURN_SECS) and was released — target it on your next message to re-seat it. Partial reply before the cut:\n${streamed.slice(-40)}` });
     });
-
-    // Over-long ⇒ still narration (collapsed), with the raw stream mounted behind
-    // the expander.
-    const lines = screen.getAllByTestId('chat-narration-line');
-    expect(lines.some((l) => l.dataset['agent'] === 'claude' && /replied \(2 KB\)/.test(l.textContent!))).toBe(true);
     const bubble = document.querySelector('[data-testid="seat-bubble"][data-agent="claude"]') as HTMLElement;
     const wrapper = bubble.closest('[data-testid^="chat-narration-raw-"]') as HTMLElement;
     expect(wrapper.style.display).toBe('none');
-
-    // Expand → the FULL streamed text, byte-equal. Then collapse and expand
-    // again — retention is not a one-shot.
     const index = wrapper.getAttribute('data-testid')!.replace('chat-narration-raw-', '');
     const toggle = (): Promise<void> => user.click(screen.getByTestId(`chat-narration-toggle-${index}`));
     await toggle();
     expect(wrapper.style.display).not.toBe('none');
     expect(bubble.textContent).toBe(streamed);
-    await toggle(); // collapse
+    await toggle();
     expect(wrapper.style.display).toBe('none');
-    await toggle(); // expand again
+    await toggle();
     expect(bubble.textContent).toBe(streamed);
+    expect(chip('claude').dataset['state']).toBe('failed');
   });
 
   it('retainOnFinalize: longer stands, ties go to the terminal reply (late-mount healing intact)', () => {
@@ -301,5 +324,64 @@ describe('DES-L5 §4 — `chatReply.usage` renders as the bubble’s footer', ()
     expect(footers[0]!.title).toContain('cache read 5000');
     const codexBubble = document.querySelector('[data-testid="seat-bubble"][data-agent="codex"]') as HTMLElement;
     expect(codexBubble.querySelector('[data-testid="seat-usage"]')).toBeNull();
+  });
+});
+
+describe('F-W1-005 — a refused seat is re-tried IN PLACE on the live chat (Retry → POST /chats/:id/seats)', () => {
+  it('the failed chip carries Retry; a successful re-seat turns it ready, narrates it, and the next send targets it', async () => {
+    const user = userEvent.setup();
+    openChat.mockImplementation((body: { chatId: string; clis?: string[] }) =>
+      Promise.resolve({
+        chatId: body.chatId,
+        seats: (body.clis ?? ['claude', 'codex']).map((cliKey) =>
+          cliKey === 'codex' ? { cliKey, ok: false, error: "seat 'codex' cannot join a SCOPED chat: its ACP adapter asks no permissions" } : { cliKey, ok: true }),
+        refused: [{ cliKey: 'codex', reason: "seat 'codex' cannot join a SCOPED chat: its ACP adapter asks no permissions", source: 'engine' }],
+      }),
+    );
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'hello');
+    expect(chip('codex').dataset['state']).toBe('failed');
+    const retry = document.querySelector('[data-testid="seat-retry"][data-agent="codex"]') as HTMLElement;
+    expect(retry, 'a refused seat offers Retry on the live chat').not.toBeNull();
+    expect(document.querySelector('[data-testid="seat-retry"][data-agent="claude"]'), 'a seated seat does not').toBeNull();
+
+    reseatChat.mockResolvedValueOnce({ chatId: chatId(), seats: [{ cliKey: 'codex', ok: true }], refused: [] });
+    await user.click(retry);
+    await waitFor(() => expect(reseatChat).toHaveBeenCalledWith(chatId(), ['codex']));
+    await waitFor(() => expect(chip('codex').dataset['state']).toBe('ready'));
+    expect(openChat, 'never a new chat').toHaveBeenCalledTimes(1);
+    expect(screen.getAllByTestId('chat-narration-line').filter((l) => l.dataset['agent'] === 'codex' && /joined the chat/.test(l.textContent!)).length).toBeGreaterThan(0);
+    // Re-seated ⇒ back in the audience.
+    act(() => {
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'hi', ok: true });
+    });
+    await user.type(screen.getByRole('textbox'), 'again');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    const [, , targets] = sendChatMessage.mock.calls[1] as [string, string, string[]];
+    expect([...targets].sort()).toEqual(['claude', 'codex']);
+  });
+
+  it('a re-seat the engine still refuses keeps the chip failed with the daemon\'s reason; a daemon without the route says so', async () => {
+    const user = userEvent.setup();
+    openChat.mockImplementation((body: { chatId: string; clis?: string[] }) =>
+      Promise.resolve({
+        chatId: body.chatId,
+        seats: (body.clis ?? ['claude', 'codex']).map((cliKey) => (cliKey === 'codex' ? { cliKey, ok: false, error: 'no ACP config for codex' } : { cliKey, ok: true })),
+      }),
+    );
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'hello');
+    reseatChat.mockResolvedValueOnce({ chatId: chatId(), seats: [{ cliKey: 'codex', ok: false, error: 'still no ACP config for codex' }], refused: [{ cliKey: 'codex', reason: 'still no ACP config for codex', source: 'engine' }] });
+    await user.click(document.querySelector('[data-testid="seat-retry"][data-agent="codex"]') as HTMLElement);
+    await waitFor(() => expect(chip('codex')).toHaveTextContent(/still no ACP config for codex/));
+    expect(chip('codex').dataset['state']).toBe('failed');
+    // Older daemon: the route 404s — the chip says the retry failed, never silently.
+    reseatChat.mockRejectedValueOnce(new Error('404 Not Found'));
+    await user.click(document.querySelector('[data-testid="seat-retry"][data-agent="codex"]') as HTMLElement);
+    await waitFor(() => expect(chip('codex')).toHaveTextContent(/retry failed — 404 Not Found/));
+    expect(chip('codex').dataset['state']).toBe('failed');
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { GroupChat, chatCapable, defaultSelection, rosterSpeaksAcp } from '../src/components/GroupChat.js';
+import { chatAdmissionOf, chatCapable, defaultSelection, GroupChat, rosterSpeaksAcp, rosterSpeaksAdmission } from '../src/components/GroupChat.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
 import type { RosterSeat } from '../src/api/types.js';
 
@@ -359,5 +359,60 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
     // and the previously-rejected seat's red chip (it is not in this open).
     await waitFor(() => expect(screen.queryByText(/rejected agent/)).toBeNull());
     expect(document.querySelector('[data-testid="seat-chip"][data-agent="pi"]')).toBeNull();
+  });
+});
+
+/** crew ≥ 0.7.36: the daemon's own admission verdict rides every roster seat (F-W1-005). */
+const VERDICT_ROSTER = [
+  { key: 'claude', enabled_for_council: true, acp: { binary: 'claude-agent-acp', transport: 'stdio', acp_input_governance: true },
+    chat_admission: { unscoped: { ok: true }, scoped: { ok: true } } },
+  { key: 'pi', enabled_for_council: false, acp: { binary: 'pi-acp', transport: 'stdio' },
+    chat_admission: { unscoped: { ok: true }, scoped: { ok: false, reason: 'its ACP adapter asks no permissions and its record arms no OS sandbox, so a scoped chat could not hold the repositories read-only for it (open the chat unscoped to include it)', source: 'scope' } } },
+  { key: 'codex', enabled_for_council: true,
+    chat_admission: { unscoped: { ok: false, reason: 'signed out — it cannot take a turn until it is signed in from the System page', source: 'auth' }, scoped: { ok: false, reason: 'signed out — it cannot take a turn until it is signed in from the System page; it has no ACP adapter registered, and a scoped chat holds only ACP-governed seats', source: 'auth' } } },
+] as unknown as RosterSeat[];
+
+describe('F-W1-005 — the picker and the default chips read the DAEMON\'s chat admission verdict (one source of truth)', () => {
+  it('chatAdmissionOf / defaultSelection: the verdict for the scope mode wins; without it the ACP marker is the (disclosed) fallback', () => {
+    expect(rosterSpeaksAdmission(VERDICT_ROSTER)).toBe(true);
+    expect(rosterSpeaksAdmission(ROSTER)).toBe(false);
+    expect(chatAdmissionOf(VERDICT_ROSTER[1]!, true, true)).toEqual(expect.objectContaining({ ok: false, source: 'scope' }));
+    expect(chatAdmissionOf(VERDICT_ROSTER[1]!, false, true)).toEqual({ ok: true });
+    expect(defaultSelection(VERDICT_ROSTER, true)).toEqual(['claude']);
+    expect(defaultSelection(VERDICT_ROSTER, false)).toEqual(['claude', 'pi']);
+    // Older daemon (no verdict): today's rule, in both modes.
+    expect(defaultSelection(ROSTER, true)).toEqual(CAPABLE);
+    expect(chatAdmissionOf({ key: 'x' } as unknown as RosterSeat, true, true)).toEqual({ ok: false, reason: 'no chat (ACP) config — can’t join a chat' });
+  });
+
+  it('a SCOPED chat: the default chips are the seats the daemon would seat; [+ Add] offers only them and names the rest with the daemon\'s reason', async () => {
+    const user = userEvent.setup();
+    setCachedRoster(VERDICT_ROSTER);
+    render(<GroupChat repoId="repo-1" onBack={() => undefined} />);
+    expect(chipKeys()).toEqual(['claude']);
+    await user.click(screen.getByTestId('add-agent'));
+    const options = await screen.findAllByTestId('agent-picker-option');
+    expect(options.map((o) => o.dataset['agentKey'])).toEqual(['claude']);
+    expect(screen.queryByTestId('agent-picker-nochat'), 'no "labeled but offered" seat when the verdict is on the wire').toBeNull();
+    const excluded = screen.getByTestId('agent-picker-excluded');
+    expect(excluded.dataset['count']).toBe('2');
+    expect(excluded.textContent).toMatch(/Can’t join a scoped chat \(the daemon’s admission\): pi — its ACP adapter asks no permissions/);
+    expect(excluded.textContent).toMatch(/codex — signed out/);
+  });
+
+  it('an UNSCOPED chat: pi is offered again (the verdict is per scope mode) and a pristine selection re-seeds when the mode flips', async () => {
+    const user = userEvent.setup();
+    setCachedRoster(VERDICT_ROSTER);
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    // No project, mode `project` ⇒ unscoped verdict applies: claude + pi.
+    expect(chipKeys()).toEqual(['claude', 'pi']);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    expect(chipKeys()).toEqual(['claude', 'pi']);
+    await user.click(screen.getByTestId('add-agent'));
+    const options = await screen.findAllByTestId('agent-picker-option');
+    expect(options.map((o) => o.dataset['agentKey'])).toEqual(['claude', 'pi']);
+    const excluded = screen.getByTestId('agent-picker-excluded');
+    expect(excluded.dataset['count']).toBe('1');
+    expect(excluded.textContent).toMatch(/Can’t join an unscoped chat .*codex — signed out/);
   });
 });
