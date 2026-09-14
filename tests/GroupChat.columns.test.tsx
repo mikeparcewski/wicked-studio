@@ -141,10 +141,12 @@ describe('GroupChat columns toggle (§6.5)', () => {
     landReply('claude', 'A1');
     landReply('codex', 'B1');
     landReply('agy', 'C1');
-    // agy's seat dies (a real chatSessionFailed frame) — round 2's warm set shrinks.
+    // agy is REFUSED by the daemon (a chatSeatRefused frame) — it leaves the audience, so
+    // round 2's fan-out shrinks. (DES-L5 R16b: a seat whose SESSION merely died would stay a
+    // chip and be re-seated by the next send — that path is pinned in GroupChat.seatTruth.)
     const chat = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
     act(() => {
-      streamHandler?.({ type: 'chatSessionFailed', chat, cliKey: 'agy', reason: 'crashed' });
+      streamHandler?.({ type: 'chatSeatRefused', chat, cliKey: 'agy', reason: 'benched by recent councils', source: 'bench' });
     });
     const composer = screen.getByPlaceholderText(/Describe what you want/);
     await userEvent.type(composer, 'round two');

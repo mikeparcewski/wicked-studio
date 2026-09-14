@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { apiStatus, apiWire } from '../api/errors.js';
-import type { ChatOpenBody, ChatScope, Project, RepoEntry, RosterSeat } from '../api/types.js';
+import type {
+  ChatOpenBody, ChatScope, ChatSeatRefusal, ChatTranscriptRecord, ChatUsage, Project, RepoEntry, RosterSeat,
+} from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { pinAwaiting } from '../store/awaitingPins.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
@@ -14,6 +16,7 @@ import {
   SEAT_CHIP,
   readStoredLayout,
   readStoredView,
+  replayTranscript,
   retainOnFinalize,
   seatColumnOrder,
   writeStoredLayout,
@@ -346,6 +349,13 @@ export function GroupChat({
    */
   const [rejoined, setRejoined] = useState(false);
   /**
+   * How many transcript records the rejoin REPLAYED (DES-L5 §5-i): the daemon
+   * persists a live chat's transcript (`GET /chats/:id` → `messages`, crew ≥
+   * 0.7.35) so a reload / second tab renders what was said; `null` when the
+   * daemon predates the field — then the boundary note keeps today's wording.
+   */
+  const [rejoinedRestored, setRejoinedRestored] = useState<number | null>(null);
+  /**
    * The URL named a session (`/chat/:id`) the daemon no longer holds (J4/C6):
    * the pool reaped it or it was ended. Rendered as an honest boundary — the
    * transcript is not persisted beyond the live session, so there is nothing
@@ -376,6 +386,15 @@ export function GroupChat({
   // narration template source); this owns the dedup: per seat by last announced
   // state, so an open response and its trailing chatSessionReady frame speak once.
   const announcedRef = useRef<Map<string, 'ready' | 'failed'>>(new Map());
+  /**
+   * Seats REFUSED AT OPEN (DES-L5 §5-h, R16b): the 201's `refused[]` + its
+   * `ok: false` outcomes, `detail.refused` on a rejoin, and every
+   * `chatSeatRefused` frame. A send's audience is the seat chips MINUS this
+   * set — a refused seat (signed out, not admissible to the scope, benched)
+   * is never re-targeted, while a seat EVICTED mid-conversation (a turn over
+   * budget, a dropped session) stays a chip and IS re-seated by the next send.
+   */
+  const refusedRef = useRef<Set<string>>(new Set());
   function announceSeat(cliKey: string, state: 'ready' | 'failed', reason?: string | null): void {
     if (announcedRef.current.get(cliKey) === state) return;
     announcedRef.current.set(cliKey, state);
@@ -656,6 +675,7 @@ export function GroupChat({
     setSendFailed(null);
     turnRef.current = 0;
     announcedRef.current = new Map();
+    refusedRef.current = new Set();
     setPickerOpen(false);
     // The id goes too, and it is the one reset that is not cosmetic. Resolving the new repo's chat
     // is ASYNC — a stored id costs a probe round-trip — and until it lands, a `chatId` still holding
@@ -668,6 +688,7 @@ export function GroupChat({
     setChatId(null);
     chatIdRef.current = null;
     setRejoined(false);
+    setRejoinedRestored(null);
     setRoutedGone(false);
     setScope(null);
     setScopeUnstated(false);
@@ -699,7 +720,16 @@ export function GroupChat({
         .getChat(stored)
         // `scope` is additive (crew#502): absent on an older daemon, `null` for a chat this
         // daemon did not open — both read as "not stated", never as a guessed scope.
-        .then((detail) => ({ seats: detail.seats, scope: (detail as { scope?: ChatScope | null }).scope ?? null }))
+        .then((detail) => ({
+          seats: detail.seats,
+          scope: (detail as { scope?: ChatScope | null }).scope ?? null,
+          // Both additive: `refused` since api-types 0.36.0, `messages` since 0.38.0
+          // (crew ≥ 0.7.35). Absent on an older daemon → `null`, never invented.
+          refused: (detail as { refused?: ChatSeatRefusal[] | null }).refused ?? null,
+          messages: Array.isArray((detail as { messages?: unknown }).messages)
+            ? ((detail as { messages: ChatTranscriptRecord[] }).messages)
+            : null,
+        }))
         .catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
       if (cancelled) return;
 
@@ -732,6 +762,38 @@ export function GroupChat({
         // The rejoined boundary note already covers these seats — mark them
         // announced so a trailing ready frame does not re-speak "joined".
         for (const k of probe.seats) announcedRef.current.set(k, 'ready');
+        // The seats refused at open stay out of the audience across a reload
+        // (DES-L5 §5-h) — the same list the 201 carried, re-read here.
+        refusedRef.current = new Set((probe.refused ?? []).map((r) => r.cliKey));
+        // DES-L5 §5-i: the daemon KEEPS the live chat's transcript now — replay it
+        // as the log this surface would have built, so a reload / second tab shows
+        // the conversation instead of a blank. Absent (`null`) on an older daemon
+        // → the log starts here and the boundary note says so (today's wording).
+        if (probe.messages !== null) {
+          const replayed = replayTranscript(probe.messages);
+          setMessages(replayed.messages);
+          turnRef.current = replayed.turns;
+          // A seat that SPOKE in the transcript but is not warm any more was
+          // evicted (a turn over budget, a dropped session): it keeps a chip —
+          // greyed, wearing its last reason — so it is visibly part of this chat
+          // and in the next send's audience (R16b: re-seated by the next send).
+          const evicted: Record<string, SeatState> = {};
+          const reasons: Record<string, string> = {};
+          for (const m of replayed.messages) {
+            if (m.kind !== 'seat' || probe.seats.includes(m.cliKey) || refusedRef.current.has(m.cliKey)) continue;
+            evicted[m.cliKey] = 'failed';
+            if (!m.ok) reasons[m.cliKey] = m.text.split('\n', 1)[0] ?? m.text;
+            else delete reasons[m.cliKey];
+          }
+          if (Object.keys(evicted).length > 0) {
+            setSeats((prev) => ({ ...evicted, ...prev }));
+            setSeatErrors((prev) => ({
+              ...Object.fromEntries(Object.keys(evicted).map((k) => [k, reasons[k] ?? 'no longer seated'])),
+              ...prev,
+            }));
+          }
+          setRejoinedRestored(replayed.messages.length);
+        }
         // A rejoined session is live — make it findable on the rail (J4).
         useLiveChatsStore.getState().upsert(stored, probe.seats);
         setRejoined(true);
@@ -782,7 +844,10 @@ export function GroupChat({
   }, []);
 
   useEventStream((ev) => {
-    const frame = ev as { type: string; chat?: string; cliKey?: string; text?: string; ok?: boolean; reason?: string };
+    const frame = ev as {
+      type: string; chat?: string; cliKey?: string; text?: string; ok?: boolean; reason?: string;
+      source?: string; usage?: ChatUsage | null;
+    };
     if (frame.chat !== chatIdRef.current) return;
     switch (frame.type) {
       case 'chatSessionReady':
@@ -800,12 +865,29 @@ export function GroupChat({
           announceSeat(frame.cliKey, 'failed', frame.reason ?? 'session failed');
         }
         break;
+      case 'chatSeatRefused': {
+        // DAEMON-SYNTHETIC (api-types 0.35.0, studio#277 / F-RC1-114): a seat the
+        // open did NOT seat, with the cause class — the daemon's admission
+        // (auth / scope / bench / budget) or the engine's own refusal. It is
+        // NOT a session that failed mid-flight: it never sat, so it leaves the
+        // audience (R16b) and the thread says why, chip greyed with the reason.
+        if (frame.cliKey) {
+          const reason = `not seated: ${frame.reason ?? 'no reason given'} (${frame.source ?? 'daemon'})`;
+          refusedRef.current.add(frame.cliKey);
+          setSeats((s) => ({ ...s, [frame.cliKey!]: 'failed' }));
+          setSeatErrors((e) => ({ ...e, [frame.cliKey!]: reason }));
+          announceSeat(frame.cliKey, 'failed', reason);
+        }
+        break;
+      }
       case 'chatDelta':
         if (frame.cliKey && frame.text) appendToPending(frame.cliKey, frame.text);
         break;
       case 'chatReply':
         if (frame.cliKey) {
-          finalizePending(frame.cliKey, frame.text ?? '', frame.ok ?? false);
+          // `usage` is additive (DES-L5, core-ts ≥ 0.7.26): `null` on bridges that
+          // emit none, absent on an older engine — both read as "not stated".
+          finalizePending(frame.cliKey, frame.text ?? '', frame.ok ?? false, frame.usage ?? null);
           setSeats((s) => (s[frame.cliKey!] === 'failed' ? s : { ...s, [frame.cliKey!]: 'replied' }));
         }
         break;
@@ -844,17 +926,17 @@ export function GroupChat({
    *  history, so a terminal text SHORTER than the accumulated deltas must not
    *  clobber what already streamed (E4 — the lost plan); the longer text
    *  stands, ties to the terminal reply (the §7.9-3 healing, intact). */
-  function finalizePending(cliKey: string, text: string, ok: boolean): void {
+  function finalizePending(cliKey: string, text: string, ok: boolean, usage: ChatUsage | null): void {
     setMessages((prev) => {
       const next = [...prev];
       for (let i = 0; i < next.length; i++) {
         const m = next[i];
         if (m && m.kind === 'seat' && m.cliKey === cliKey && m.pending) {
-          next[i] = { ...m, text: retainOnFinalize(m.text, text), pending: false, ok };
+          next[i] = { ...m, text: retainOnFinalize(m.text, text), pending: false, ok, usage };
           return next;
         }
       }
-      next.push({ kind: 'seat', cliKey, text, pending: false, ok, turn: turnRef.current });
+      next.push({ kind: 'seat', cliKey, text, pending: false, ok, turn: turnRef.current, usage });
       return next;
     });
   }
@@ -930,6 +1012,16 @@ export function GroupChat({
         const opened = answer.seats;
         if (daemonPicksSeats && chatIdRef.current === id) {
           setSelectedAgents(opened.map((s) => s.cliKey));
+        }
+        // DES-L5 §5-h: the seats this open REFUSED — the daemon's `refused[]`
+        // (api-types 0.35.0: admission drops + engine refusals) and, for a daemon
+        // predating it, the `ok: false` outcomes. REPLACED per open: a re-arm is
+        // the daemon's fresh verdict on the corrected selection (§6.2 retry).
+        if (chatIdRef.current === id) {
+          refusedRef.current = new Set([
+            ...((answer as { refused?: ChatSeatRefusal[] }).refused ?? []).map((r) => r.cliKey),
+            ...opened.filter((s) => !s.ok).map((s) => s.cliKey),
+          ]);
         }
         // The daemon STATES the scope it resolved (crew#502); an older daemon's
         // 201 carries none — said as "not stated", never invented.
@@ -1087,11 +1179,15 @@ export function GroupChat({
         setMessages((prev) => prev.filter((m) => m.kind === 'sys' || m.turn !== turn));
         setSendFailed({ text, reason });
       };
+      // Whether THIS send armed the chat: then `seats` in this closure predates
+      // the open's answer and the arm's own `ready` list is the audience.
+      let armedNow = false;
       if (warm.length === 0) {
         // Typing IS the opt-in (§2.4): the first send warms the SELECTED agents —
         // the §6.2 chips (defaults + additions − removals). Also the retry path
         // after a rejected open (stale chip): the re-arm reuses the same chat id
         // with the corrected selection, so recovery is just "send again".
+        armedNow = true;
         const armed = await armChat(selectedAgentsRef.current);
         if (armed.ready.length === 0) {
           // Nothing was fanned out: the optimistic bubble retracts and the
@@ -1104,17 +1200,34 @@ export function GroupChat({
       }
       const id = chatIdRef.current;
       if (id === null) return; // repo switched under the send
+      // DES-L5 §5-g / R16b (F-RC1-111): the send TARGETS what the chips say —
+      // every seat chip this chat shows MINUS the seats refused at open — not
+      // the warm pool. A seat the engine EVICTED (a turn over its budget, a
+      // dropped session) is still a chip, greyed with its reason; naming it in
+      // `targets` makes the engine re-seat it in the recorded scope on this
+      // very send (`chat_ensure` re-warms a missing key) — no other mechanism.
+      // Once anything is warm the selection bar is hidden and the header's seat
+      // chips ARE the audience on screen (EC44), and on a rejoin the selection
+      // never described this chat at all — so the chips read from `seats`. A
+      // fresh arm's chips are exactly the seats it just warmed.
+      const audience = armedNow
+        ? warm
+        : (() => {
+          const shown = Object.keys(seats).filter((k) => !refusedRef.current.has(k));
+          return shown.length > 0 ? shown : warm;
+        })();
       setMessages((prev) => [
         ...prev,
-        ...warm.map((cliKey): SeatMsg => ({ kind: 'seat', cliKey, text: '', pending: true, ok: false, turn })),
+        ...audience.map((cliKey): SeatMsg => ({ kind: 'seat', cliKey, text: '', pending: true, ok: false, turn })),
       ]);
-      // §7.9-4: the fan-out audience is WORKING until its reply lands.
+      // §7.9-4: the fan-out audience is WORKING until its reply lands — an
+      // evicted seat being re-seated included (its stale failure no longer speaks).
       setSeats((prev) => ({
         ...prev,
-        ...Object.fromEntries(warm.filter((k) => prev[k] !== 'failed').map((k) => [k, 'working' as SeatState])),
+        ...Object.fromEntries(audience.map((k) => [k, 'working' as SeatState])),
       }));
       try {
-        await api.sendChatMessage(id, text);
+        await api.sendChatMessage(id, text, audience);
         // Accepted — the draft leaves the composer only now (§7.9-2). A mid-flight
         // edit is the operator's newer draft and is left alone.
         setInput((cur) => (cur.trim() === text ? '' : cur));
@@ -1129,7 +1242,7 @@ export function GroupChat({
         setSeats((prev) => ({
           ...prev,
           ...Object.fromEntries(
-            warm.filter((k) => prev[k] === 'working').map((k) => [k, 'ready' as SeatState]),
+            audience.filter((k) => prev[k] === 'working').map((k) => [k, 'ready' as SeatState]),
           ),
         }));
       }
@@ -1591,12 +1704,20 @@ export function GroupChat({
         {rejoined && (
           <div
             data-testid="chat-rejoined-note"
+            data-restored={rejoinedRestored ?? undefined}
             className="rounded-xl px-4 py-3 text-[12px] font-mono"
             style={{ border: '1px dashed var(--surface-overlay)', color: 'var(--ink-muted)' }}
           >
-            Rejoined the live session — its agents keep the conversation memory,
-            but earlier messages aren’t stored on the wire, so they can’t be
-            replayed here. New replies stream below.
+            {rejoinedRestored === null
+              // An older daemon (crew < 0.7.35) keeps no transcript — the honest
+              // boundary, unchanged.
+              ? 'Rejoined the live session — its agents keep the conversation memory, ' +
+                'but earlier messages aren’t stored on the wire, so they can’t be ' +
+                'replayed here. New replies stream below.'
+              : rejoinedRestored === 0
+                ? 'Rejoined the live session — nothing has been said in it yet. New replies stream below.'
+                : `Rejoined — ${rejoinedRestored} earlier message${rejoinedRestored === 1 ? '' : 's'} restored. ` +
+                  'New replies stream below.'}
           </div>
         )}
         {firstRun && (
@@ -2096,6 +2217,19 @@ export function GroupChat({
             Send
           </button>
         </div>
+        {/* DES-L5 §4 (criterion 3): the turn budget is NAMED before a seat is
+            ever evicted for it — static copy, no number (the number is the
+            engine's env-only `WICKED_CHAT_TURN_SECS`; a hardcoded copy would be
+            a third spelling of it). The eviction reply itself carries the number. */}
+        {chatId !== null && !ended && anyReady && (
+          <p
+            data-testid="chat-turn-budget-note"
+            className="text-[10px] font-mono pt-1.5"
+            style={{ color: 'var(--ink-dim)', margin: 0 }}
+          >
+            Replies are budgeted per turn; a seat that runs over is released and re-seated on your next message.
+          </p>
+        )}
       </div>
     </div>
   );

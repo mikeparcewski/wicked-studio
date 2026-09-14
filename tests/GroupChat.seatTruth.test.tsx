@@ -80,7 +80,7 @@ const chatId = (): string => (openChat.mock.calls[0]?.[0] as { chatId: string })
 async function sendText(user: ReturnType<typeof userEvent.setup>, text: string): Promise<void> {
   await user.type(screen.getByRole('textbox'), text);
   await user.keyboard('{Enter}');
-  await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(chatId(), text));
+  await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(chatId(), text, expect.any(Array)));
 }
 
 const chip = (agent: string): HTMLElement =>
@@ -204,5 +204,102 @@ describe('one source for seat truth — the chip reads the feed’s own log', ()
       b: { state: 'failed', reason: 'boom' },
       c: { state: 'replied', reason: null },
     });
+  });
+});
+
+describe('DES-L5 R16b — the send targets what the chips say, minus the seats refused at open (F-RC1-111)', () => {
+  it('an EVICTED seat is named in the next send’s `targets` and goes back to working; a seat refused at open is not', async () => {
+    const user = userEvent.setup();
+    openChat.mockImplementation((body: { chatId: string; clis?: string[] }) =>
+      Promise.resolve({
+        chatId: body.chatId,
+        seats: (body.clis ?? ['claude', 'codex']).map((cliKey) => ({ cliKey, ok: cliKey !== 'codex', ...(cliKey === 'codex' ? { error: 'not admissible to a scoped chat' } : {}) })),
+        refused: [{ cliKey: 'codex', reason: 'not admissible to a scoped chat', source: 'scope' }],
+      }),
+    );
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'plan it');
+    // The FIRST send (the arm) fans out to the seats that came up — codex never sat.
+    expect(sendChatMessage).toHaveBeenLastCalledWith(chatId(), 'plan it', ['claude']);
+
+    // claude runs over its budget: the engine releases it (a not-ok reply naming the budget).
+    act(() => {
+      emit!({
+        type: 'chatReply', chat: chatId(), cliKey: 'claude', ok: false, usage: null,
+        text: "seat 'claude' exceeded the 600 s turn budget (WICKED_CHAT_TURN_SECS) and was released — target it on your next message to re-seat it. Partial reply before the cut:\nstep 1…",
+      });
+    });
+    expect(chip('claude').dataset['state']).toBe('failed');
+    expect(chip('claude')).toHaveTextContent(/exceeded the 600 s turn budget/);
+    // Nothing is warm any more — but the chat is NOT re-armed (that would mint a new open);
+    // the evicted seat is a chip, and naming it in `targets` is the re-seat.
+    await user.type(screen.getByRole('textbox'), 'continue');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(openChat, 'an eviction must not re-open the chat').toHaveBeenCalledTimes(1);
+    expect(sendChatMessage).toHaveBeenLastCalledWith(chatId(), 'continue', ['claude']);
+    // The re-seated seat is WORKING again — its stale eviction no longer speaks.
+    expect(chip('claude').dataset['state']).toBe('working');
+    // The refused seat stays refused: greyed, with the daemon's reason, never targeted.
+    expect(chip('codex').dataset['state']).toBe('failed');
+  });
+
+  it('a seat whose SESSION died mid-chat (chatSessionFailed) stays a chip and is re-seated by the next send', async () => {
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'one');
+    act(() => {
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'a', ok: true });
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'codex', text: 'b', ok: true });
+      emit!({ type: 'chatSessionFailed', chat: chatId(), cliKey: 'codex', reason: 'the bridge dropped' });
+    });
+    expect(chip('codex').dataset['state']).toBe('failed');
+    await user.type(screen.getByRole('textbox'), 'two');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    const [, , targets] = sendChatMessage.mock.calls[1] as [string, string, string[]];
+    expect([...targets].sort(), 'a dropped session is not a refusal — it is named so the engine re-warms it').toEqual(['claude', 'codex']);
+    expect(chip('codex').dataset['state']).toBe('working');
+    expect(openChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('a warm audience is sent explicitly too — `targets` names every seat chip (the engine re-seats a missing one)', async () => {
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'one');
+    act(() => {
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'a', ok: true });
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'codex', text: 'b', ok: true });
+    });
+    await user.type(screen.getByRole('textbox'), 'two');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    const [, , targets] = sendChatMessage.mock.calls[1] as [string, string, string[]];
+    expect([...targets].sort()).toEqual(['claude', 'codex']);
+  });
+});
+
+describe('DES-L5 §4 — `chatReply.usage` renders as the bubble’s footer', () => {
+  it('a reply with usage shows `in · out · $`; `costUsd: null` drops the price; `usage: null` shows nothing', async () => {
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'cost me');
+    act(() => {
+      emit!({
+        type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'sure', ok: true,
+        usage: { inputTokens: 12300, outputTokens: 800, cacheReadTokens: 5000, cacheCreationTokens: 0, costUsd: 0.04 },
+      });
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'codex', text: 'also sure', ok: true, usage: null });
+    });
+    const footers = screen.getAllByTestId('seat-usage');
+    expect(footers).toHaveLength(1);
+    expect(footers[0]!.textContent).toBe('12.3k in · 800 out · $0.04');
+    expect(footers[0]!.title).toContain('cache read 5000');
+    const codexBubble = document.querySelector('[data-testid="seat-bubble"][data-agent="codex"]') as HTMLElement;
+    expect(codexBubble.querySelector('[data-testid="seat-usage"]')).toBeNull();
   });
 });
