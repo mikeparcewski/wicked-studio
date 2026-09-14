@@ -12,7 +12,7 @@ import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
-import { gateVerdictFor, isFailureEscalation, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { failedSeatOf, gateVerdictFor, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 import { IntakePlan, isIntakeGate } from './IntakePlan.js';
 import { ReassignControl } from './ReassignControl.js';
 
@@ -47,9 +47,10 @@ const EMPTY_UNITS: WorkUnit[] = [];
 function cleanPrompt(raw: string): { headline: string; footnote: string | null } {
   const bracketIdx = raw.indexOf('[');
   if (bracketIdx === -1) return { headline: raw.trim(), footnote: null };
+  const closeIdx = raw.lastIndexOf(']');
   return {
     headline: raw.slice(0, bracketIdx).trim(),
-    footnote: raw.slice(bracketIdx + 1, raw.lastIndexOf(']') !== -1 ? raw.lastIndexOf(']') : undefined).trim(),
+    footnote: raw.slice(bracketIdx, closeIdx !== -1 ? closeIdx + 1 : undefined).trim(),
   };
 }
 
@@ -84,7 +85,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // a refused lift is the engine's story, told by the lift block below — another seat cannot fix
   // a rebase conflict), which is why the control is also gated on `lift === null` at the render.
   const escalation = isFailureEscalation(prompt, verdict);
-  const failedCli = typeof ord === 'number' ? (units ?? EMPTY_UNITS).find((u) => u.ord === ord)?.assigned_cli ?? null : null;
+  // Tri-state (#274): a seat, `null` = the unit provably had none, `undefined` = this host cannot
+  // tell (no `units` — the steering-author / testing-launch panels) and must not read it as seatless.
+  const failedCli = failedSeatOf(units, ord);
   // A host without the run view (the steering-author and testing-launch panels hold only the run
   // id + the gate) reads the run ONCE for its seat pool when — and only when — the gate is a failure
   // escalation the lever applies to. Zero reads on every other gate; a failed read offers no lever.
@@ -274,9 +277,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   }, []);
   useGlobalShortcuts(keyEntries);
 
-  const { headline, footnote } = cleanPrompt(
-    prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.',
-  );
+  // An escalation prompt's cause lives after `(Failed): […]` — skip footnote extraction so the
+  // full cause appears in the headline (F-E2E-014). Non-escalation prompts carry a genuine
+  // architectural footnote that belongs collapsed.
+  const rawPrompt = prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.';
+  const { headline, footnote } = escalation ? { headline: rawPrompt.trim(), footnote: null } : cleanPrompt(rawPrompt);
 
   // Both mutation-gate prompts the engine has shipped — the pre-0.33.0 retry-or-reject wording and
   // wicked-core#431's "… Approve to retry the phase against the restored tree …" — carry
@@ -317,7 +322,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         // Focusable only programmatically: the deep-link target, never a tab stop.
         tabIndex={-1}
         className="text-xs mb-1 leading-relaxed font-mono"
-        style={{ color: 'var(--ink-body)', outline: 'none' }}
+        style={{ color: 'var(--ink-body)', outline: 'none', overflowWrap: 'anywhere' }}
         data-testid="steering-prompt"
       >
         {headline}
@@ -399,15 +404,17 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         </p>
       )}
 
-      {/* F-7R2-007: on a failure escalation, the seat lever — approve the retry, then move the
-          unit to a seat that is not the one that just failed (crew's reassign route). The steer
+      {/* F-7R2-007: on a SEAT failure escalation, the seat lever — approve the retry, then move
+          the unit to a seat that is not the one that just failed (crew's reassign route). A
+          seatless / tool-only escalation (failedCli === null) suppresses this lever entirely
+          (F-E2E-014): signing a seat in cannot fix a failure no seat was involved in. The steer
           text rides the approve here too. */}
-      {escalation && pool !== null && lift === null && (
+      {isSeatFailure(escalation, failedCli) && pool !== null && lift === null && (
         <ReassignControl
           runId={runId}
           ord={ord}
           pool={pool}
-          failedCli={failedCli}
+          failedCli={failedCli ?? null}
           amend={amend}
           onDone={() => {
             useAnnotationStore.getState().clearDraft(runId);
@@ -426,11 +433,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
           style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
           {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
-          {...(escalation && failedCli !== null && !restoredRetry
+          {...(escalation && typeof failedCli === 'string' && !restoredRetry
             ? { title: `retries the unit on ${failedCli} — the seat that just failed; use Reassign to move it` }
             : {})}
         >
-          {restoredRetry ? 'Retry against the restored tree' : escalation && failedCli !== null ? `Approve (retry on ${failedCli})` : 'Approve'}
+          {restoredRetry ? 'Retry against the restored tree' : escalation && typeof failedCli === 'string' ? `Approve (retry on ${failedCli})` : 'Approve'}
         </button>
         <button
           data-testid="steering-approve-steer"
