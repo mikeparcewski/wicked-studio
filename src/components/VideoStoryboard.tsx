@@ -246,6 +246,12 @@ function DemoSurface({
   const key = threadKey(projectId, demoId);
   const landed = useDocThreadStore((s) => s.landed[key]);
   const genState = useDocThreadStore((s) => s.genState[key] ?? 'terminal');
+  // #278 (DES-L7 I3): the thread store already folds the bridge's `status.posted {state:"error"}`
+  // — a recorder failure delivered over the bus, live or hydrated after a reload — into
+  // `lastError`; read it UNCONDITIONALLY so the failure renders on the storyboard too, not only
+  // the POST's own catch. Hidden while a new attempt is in flight (a stale failure must not
+  // shadow the pending state); it returns if that attempt fails as well.
+  const threadError = useDocThreadStore((s) => s.lastError[key] ?? null);
   const [fresh, failure, retry] = useLoad(
     () => getVersions(projectId, demoId), [projectId, demoId, landed],
   );
@@ -509,6 +515,7 @@ function DemoSurface({
           {recError !== null && (
             <span
               data-testid="video-record-error"
+              data-source="request"
               style={{
                 background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)',
                 borderRadius: 'var(--radius-sm)', color: 'var(--status-fail)',
@@ -517,6 +524,21 @@ function DemoSurface({
               }}
             >
               {recError} — nothing was queued; try again.
+            </span>
+          )}
+          {threadError !== null && recError === null && !recBusy && !recWaiting && (
+            <span
+              data-testid="video-record-error"
+              data-source="thread"
+              title="The bridge's recorder failure, as the thread received it (the remedy is in the line)"
+              style={{
+                background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)',
+                borderRadius: 'var(--radius-sm)', color: 'var(--status-fail)',
+                fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)',
+                maxWidth: '340px', padding: '2px 8px',
+              }}
+            >
+              {threadError.text}
             </span>
           )}
         </div>

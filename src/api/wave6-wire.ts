@@ -57,6 +57,8 @@
  * in a later pin fails the suite and says "re-vendor".
  */
 
+import { api } from './client.js';
+import type { Project as CrewProject } from './types.js';
 import type {
   Campaign,
   ChatScope,
@@ -1054,4 +1056,21 @@ export function testSetsReadOf(body: unknown): TestSetsRead | null {
 /** The joinable rows alone — {@link testSetsReadOf} without the malformed count. */
 export function testSetsOf(body: unknown): TestSet[] | null {
   return testSetsReadOf(body)?.sets ?? null;
+}
+
+// ── #279: the ONE setter for a project's Documents root (DES-L7 §5 I3) ─────────────────────────
+
+/**
+ * Bind — or, with `null`, clear — a project's `interactiveRoot` through crew's existing
+ * `PATCH /projects/:id` (`UpdateProjectBody.interactiveRoot`, api-types 0.38.0 `index.d.ts:3932`).
+ * Studio never had a caller for that field: the binding that isolates a project's documents was
+ * API-only (RC1's `[SUBSTITUTE]` curl). Returns the project as the daemon now holds it, so the
+ * caller replaces its store row and the docs tile re-lists off the new root. Crew canonicalizes
+ * the spelling (`~`, relative, trailing `/`) and refuses the `default` project — its message is
+ * surfaced as-is. A blank string is a clear, never "the cwd".
+ */
+export async function setProjectInteractiveRoot(projectId: string, root: string | null): Promise<CrewProject> {
+  const trimmed = root === null ? null : root.trim();
+  const { project } = await api.updateProject(projectId, { interactiveRoot: trimmed === '' ? null : trimmed });
+  return project;
 }

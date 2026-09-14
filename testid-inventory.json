@@ -11,8 +11,8 @@
   "studioVersion": "0.5.9",
   "counts": {
     "files": 146,
-    "occurrences": 1311,
-    "static": 1129,
+    "occurrences": 1320,
+    "static": 1137,
     "dynamic": 61,
     "computed": 7
   },
@@ -1237,6 +1237,54 @@
     },
     {
       "testId": "dashboard-docs",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-docs-root",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-docs-root-cancel",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-docs-root-clear",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-docs-root-edit",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-docs-root-error",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-docs-root-input",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-docs-root-save",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-docs-root-value",
       "files": [
         "src/components/ProjectDashboard.tsx"
       ]

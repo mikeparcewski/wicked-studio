@@ -4,7 +4,8 @@ import { listDocs, type DocSummary } from '../api/interactive.js';
 import { listProposals, proposalKind } from '../api/proposals.js';
 import { steeringDashboardPath } from '../api/steering.js';
 import { useDocsCache } from '../store/docsCache.js';
-import type { ProjectMember, SessionView } from '../api/types.js';
+import type { Project, ProjectMember, SessionView } from '../api/types.js';
+import { setProjectInteractiveRoot } from '../api/wave6-wire.js';
 import { compareScored, scoreOf, type Signal, type SignalKind } from '../board/boardAttention.js';
 import { gateOpenPath } from '../board/gateActions.js';
 import { outcomeOf, WINDOW_LABEL_STYLE } from '../board/metrics.js';
@@ -193,10 +194,13 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
     return () => { cancelled = true; };
   }, [projectId]);
 
-  // One listDocs on mount — only when the project HAS an interactive root.
+  // One listDocs on mount, for EVERY project (#233): the daemon resolves the docs root itself —
+  // the project's binding, else WICKED_INTERACTIVE_ROOT, else its own partition of the default
+  // root — so a project with no explicit binding still has documents to list. Only "no project
+  // yet" (the store has not loaded it) waits.
   const [docs, setDocs] = useState<DocSummary[]>([]);
   useEffect(() => {
-    if (project === null || interactiveRootOf(project) === null) return;
+    if (project === null) return;
     let cancelled = false;
     listDocs(projectId)
       .then((d) => {
@@ -414,6 +418,7 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         <p style={CSS.meta} data-testid="dashboard-meta">
           last activity {ago(lastActivity)} ago · {openRuns.length} open {openRuns.length === 1 ? 'run' : 'runs'}
         </p>
+        <DocumentsRoot projectId={projectId} project={project} />
         {/* Bound repos in the header's meta-line region — names resolve from the
             SAME session repo cache the palette holds; never a fetch. */}
         {repoMembers.length > 0 && (
@@ -802,5 +807,94 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
             for the project it still shows — `setRepoMembers` takes it as-is. ── */}
       <ProjectRepositories projectId={projectId} members={repoMembers} onMembersChange={setRepoMembers} />
     </div>
+  );
+}
+
+// ── #279: the project's Documents root — see it, set it, clear it (DES-L7 §5 I3) ─────────────
+// The one lever that isolates a project's documents was API-only (`PATCH /projects/:id
+// {interactiveRoot}`); RC1's operators had to bind it over curl to keep a fresh daemon from
+// listing another daemon's docs. Studio knows only what the wire carries: the project's own
+// binding. Without one, the daemon serves this project's OWN partition of its default root
+// (crew ≥ 0.7.35: `<state home>/interactive/docs/projects/<id>`), which is what the copy says.
+// The `default` project is refused by the route, so its row is read-only.
+const ROOT_BTN: React.CSSProperties = {
+  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+  color: 'var(--ink-muted)', textDecoration: 'underline',
+  fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)',
+};
+
+function DocumentsRoot({ projectId, project }: { projectId: string; project: Project | null }): React.ReactElement {
+  const bound = project === null ? null : interactiveRootOf(project);
+  const editable = project !== null && projectId !== 'default';
+  const updateProject = useProjectsStore((s) => s.updateProject);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setEditing(false); setValue(''); setError(null); }, [projectId]);
+
+  async function save(next: string | null): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      updateProject(await setProjectInteractiveRoot(projectId, next));
+      setEditing(false);
+      setValue('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <p
+      data-testid="dashboard-docs-root"
+      data-bound={bound !== null ? 'true' : 'false'}
+      style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '6px 0 0', fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
+    >
+      <span>Documents root:</span>
+      <span
+        data-testid="dashboard-docs-root-value"
+        style={{ fontFamily: 'var(--font-mono)', color: bound !== null ? 'var(--ink-muted)' : 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60ch' }}
+        title={bound ?? undefined}
+      >
+        {bound ?? (projectId === 'default' ? "the daemon's default root" : "the daemon's default root — this project's own partition")}
+      </span>
+      {editable && !editing && (
+        <>
+          <button type="button" data-testid="dashboard-docs-root-edit" style={ROOT_BTN} disabled={busy} onClick={() => { setValue(bound ?? ''); setEditing(true); }}>
+            {bound === null ? 'Set…' : 'Change…'}
+          </button>
+          {bound !== null && (
+            <button type="button" data-testid="dashboard-docs-root-clear" style={ROOT_BTN} disabled={busy} onClick={() => void save(null)}>
+              Clear
+            </button>
+          )}
+        </>
+      )}
+      {editable && editing && (
+        <>
+          <input
+            data-testid="dashboard-docs-root-input"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && value.trim() !== '') void save(value.trim()); if (e.key === 'Escape') setEditing(false); }}
+            placeholder="/absolute/docs-root or ~/relative"
+            spellCheck={false}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', minWidth: '28ch', padding: '2px 6px', background: 'var(--surface-raised)', color: 'var(--ink-body)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }}
+          />
+          <button type="button" data-testid="dashboard-docs-root-save" style={ROOT_BTN} disabled={busy || value.trim() === ''} onClick={() => void save(value.trim())}>
+            Save
+          </button>
+          <button type="button" data-testid="dashboard-docs-root-cancel" style={ROOT_BTN} disabled={busy} onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+        </>
+      )}
+      {error !== null && (
+        <span data-testid="dashboard-docs-root-error" style={{ color: 'var(--status-fail)' }}>{error}</span>
+      )}
+    </p>
   );
 }

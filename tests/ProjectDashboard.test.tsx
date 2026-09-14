@@ -19,6 +19,7 @@ import { makeUnit, makeView } from './factories.js';
 const listProjectMembers = vi.fn();
 const confirmGate = vi.fn();
 const listRepos = vi.fn();
+const updateProject = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
   api: {
@@ -26,6 +27,7 @@ vi.mock('../src/api/client.js', () => ({
     listProjectMembers: (...a: unknown[]) => listProjectMembers(...a),
     confirmGate: (...a: unknown[]) => confirmGate(...a),
     listRepos: (...a: unknown[]) => listRepos(...a),
+    updateProject: (...a: unknown[]) => updateProject(...a),
   },
 }));
 
@@ -68,6 +70,7 @@ beforeEach(() => {
   listProjectMembers.mockReset();
   listDocs.mockReset();
   confirmGate.mockReset();
+  updateProject.mockReset();
   listProjectMembers.mockResolvedValue({ members: [] });
   listDocs.mockResolvedValue([]);
   useGateStore.setState({ gates: {} });
@@ -242,11 +245,73 @@ describe('ProjectDashboard — the full-width project command surface', () => {
     expect(navigate).toHaveBeenCalledWith('/p/proj-1/document/spec');
   });
 
-  it('docs cards: no interactive root ⇒ no listDocs call, and the section states its empty case', async () => {
+  it('docs cards: NO explicit interactive root ⇒ listDocs still runs (the daemon partitions the default root, #233) and lists what it finds', async () => {
+    // studio#233 / F-048: the tile read "0 — No documents yet" for a project whose docs the
+    // bridge listed fine, because an early return keyed on the project's OWN binding — a
+    // default-partition project has none, yet the daemon serves its docs all the same.
+    listDocs.mockResolvedValue([doc('brochure')]);
     render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
-    await waitFor(() => expect(listProjectMembers).toHaveBeenCalled());
-    expect(listDocs).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getAllByTestId('dashboard-doc')).toHaveLength(1));
+    expect(listDocs).toHaveBeenCalledWith('proj-1');
+    expect(screen.getByTestId('dashboard-docs')).toHaveAttribute('data-count', '1');
+  });
+
+  it('docs cards: an empty listing still states the empty case (no root binding needed)', async () => {
+    render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
+    await waitFor(() => expect(listDocs).toHaveBeenCalledWith('proj-1'));
     expect(screen.getByTestId('dashboard-docs')).toHaveTextContent('No documents yet');
+  });
+
+  describe('Documents root control (#279, DES-L7 I3)', () => {
+    it('shows the daemon-default copy when unbound and offers Set…; saving PATCHes {interactiveRoot} and replaces the store row', async () => {
+      updateProject.mockResolvedValue({ project: project('proj-1', { interactiveRoot: '/srv/decks' }) });
+      render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
+      const row = screen.getByTestId('dashboard-docs-root');
+      expect(row).toHaveAttribute('data-bound', 'false');
+      expect(screen.getByTestId('dashboard-docs-root-value')).toHaveTextContent("the daemon's default root");
+      expect(screen.queryByTestId('dashboard-docs-root-clear')).toBeNull();
+
+      fireEvent.click(screen.getByTestId('dashboard-docs-root-edit'));
+      const input = screen.getByTestId('dashboard-docs-root-input');
+      fireEvent.change(input, { target: { value: '  /srv/decks  ' } });
+      fireEvent.click(screen.getByTestId('dashboard-docs-root-save'));
+
+      await waitFor(() => expect(updateProject).toHaveBeenCalledWith('proj-1', { interactiveRoot: '/srv/decks' }));
+      await waitFor(() => expect(screen.getByTestId('dashboard-docs-root')).toHaveAttribute('data-bound', 'true'));
+      expect(screen.getByTestId('dashboard-docs-root-value')).toHaveTextContent('/srv/decks');
+      expect(useProjectsStore.getState().projects[0]!.interactiveRoot).toBe('/srv/decks');
+      // The docs tile re-lists off the new root (the effect keys on the project row).
+      await waitFor(() => expect(listDocs).toHaveBeenCalledTimes(2));
+    });
+
+    it('a bound project shows its path and Clear PATCHes {interactiveRoot: null}', async () => {
+      useProjectsStore.setState({ projects: [project('proj-1', { interactiveRoot: '/srv/decks' })], loading: false, error: null });
+      updateProject.mockResolvedValue({ project: project('proj-1', { interactiveRoot: null }) });
+      render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
+      expect(screen.getByTestId('dashboard-docs-root')).toHaveAttribute('data-bound', 'true');
+      expect(screen.getByTestId('dashboard-docs-root-value')).toHaveTextContent('/srv/decks');
+      fireEvent.click(screen.getByTestId('dashboard-docs-root-clear'));
+      await waitFor(() => expect(updateProject).toHaveBeenCalledWith('proj-1', { interactiveRoot: null }));
+      await waitFor(() => expect(screen.getByTestId('dashboard-docs-root')).toHaveAttribute('data-bound', 'false'));
+    });
+
+    it("the daemon's refusal is shown at the control, and the binding stays as it was", async () => {
+      updateProject.mockRejectedValue(new Error('interactiveRoot must be an absolute path'));
+      render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
+      fireEvent.click(screen.getByTestId('dashboard-docs-root-edit'));
+      fireEvent.change(screen.getByTestId('dashboard-docs-root-input'), { target: { value: 'decks' } });
+      fireEvent.click(screen.getByTestId('dashboard-docs-root-save'));
+      await waitFor(() => expect(screen.getByTestId('dashboard-docs-root-error')).toHaveTextContent('must be an absolute path'));
+      expect(screen.getByTestId('dashboard-docs-root')).toHaveAttribute('data-bound', 'false');
+    });
+
+    it('the default project is read-only here (the route refuses it)', async () => {
+      useProjectsStore.setState({ projects: [project('default')], loading: false, error: null });
+      render(<ProjectDashboard projectId="default" runs={[]} navigate={() => {}} />);
+      expect(screen.getByTestId('dashboard-docs-root-value')).toHaveTextContent("the daemon's default root");
+      expect(screen.queryByTestId('dashboard-docs-root-edit')).toBeNull();
+      expect(screen.queryByTestId('dashboard-docs-root-clear')).toBeNull();
+    });
   });
 
   it('gate inbox: approve fires the SAME action as the board chip — POST confirmGate {approve:true}', async () => {

@@ -18,7 +18,14 @@ npm publish dates. Every version listed here exists on
   - `cleanPrompt` now keeps the leading `[` in the extracted footnote text (`slice(bracketIdx, …)` not `slice(bracketIdx + 1, …)`).
   - `SteeringGate` skips footnote extraction entirely for escalation prompts (`isFailureEscalation`): the full prompt — cause included — renders in the headline, which now carries `overflow-wrap: anywhere` so a long unbroken cause wraps instead of overflowing.
   - `isSeatFailure(escalation, failedCli)` (new predicate in `gateVerdictModel.ts`) gates `ReassignControl` in both `SteeringGate` and `CenterDashboard`: a PROVEN seatless escalation (`failedCli === null` — the unit is known and has no seat) renders no seat lever; a seat failure keeps the existing lever and Approve label unchanged; a host that cannot resolve the unit's seat (`failedSeatOf` → `undefined`: no `units` passed — the steering-author and testing-launch panels, the landing inbox before the run is loaded) keeps the lever as before, never reading "unknown" as "seatless" (#274, found by the independent review of the first cut).
-
+<!-- fixall L7 -->
+- **Project dashboard DOCUMENTS tile stayed "0 — No documents yet" for any project without its own root binding (#233, F-048; DES-L7 §5 I3).**
+  `ProjectDashboard` returned early from the `listDocs` effect when `interactiveRootOf(project)` was null — but the daemon resolves every project's root itself (the binding, else `WICKED_INTERACTIVE_ROOT`, else the project's own partition of the default root), so a default-partition project's documents were listed by the bridge and invisible on its page. The effect now waits only for the project row.
+- **A recording that fails over the bus is now visible on the storyboard (#278, the live half).**
+  `video-record-error` rendered only the POST's own catch; the thread store already folds the bridge's `status.posted {state:"error"}` into `lastError` (live over `/ws`, or hydrated from `GET /api/conversation` after a reload), and the storyboard never read it. `VideoStoryboard` now renders `lastError[key]` unconditionally beside the request error (same `data-testid="video-record-error"`, `data-source="thread"`), hidden only while a new attempt is in flight. The persistence half (the owning bridge writing the line) landed in interactive 0.9.3.
+### Added
+<!-- fixall L7 -->
+- **Documents root control on the project dashboard (#279).** The one lever that isolates a project's documents — `interactiveRoot` — was API-only. The header's meta region now shows the project's binding (or "the daemon's default root — this project's own partition") with Set… / Change… / Clear, through the new `setProjectInteractiveRoot` (`api/wave6-wire.ts`) over crew's existing `PATCH /projects/:id {interactiveRoot}`; the daemon's refusal is shown at the control and the docs tile re-lists off the new root. The `default` project is read-only here (the route refuses it).
 ### Security
 - **site: patch Astro AVIF/SVG advisory chain (#227).** `site/package.json` lifts the Astro
   constraint from `^7.1.3` to `^7.2.8`; npm resolves to **7.3.2**, patching

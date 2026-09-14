@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VideoStoryboard } from '../src/components/VideoStoryboard.js';
-import { useDocThreadStore } from '../src/store/docThread.js';
+import { threadKey, useDocThreadStore } from '../src/store/docThread.js';
 import type { DocSummary } from '../src/api/interactive.js';
 import { apiBase } from '../src/api/client.js';
 
@@ -70,7 +70,7 @@ beforeEach(() => {
   // Isolate the shared thread store: hydration marks and the record control's
   // genState must not leak across tests.
   useDocThreadStore.setState({
-    messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastSignalAt: {},
+    messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastSignalAt: {}, lastError: {},
   });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -225,6 +225,45 @@ describe('the Record control', () => {
     // resolves (the thread store's genState — set by recordFromThread).
     expect(screen.getByTestId('video-record')).toHaveAttribute('data-state', 'recording');
     expect(screen.getByTestId('video-record')).toBeDisabled();
+  });
+});
+
+describe("the recorder's failure line (#278, DES-L7 I3)", () => {
+  const KEY = threadKey(PROJECT, DEMO);
+  const FAILURE = 'Recording failed at step 1 (Open the Studio Project): page.waitForURL: Timeout 30000ms exceeded. — refine that step on the storyboard, then Re-record';
+
+  it("renders the thread store's lastError as video-record-error — a bus-delivered failure, no POST catch involved", async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    // The store already folded the bridge's status.posted {state:"error"} (live, or hydrated
+    // from GET /api/conversation after a reload) — the storyboard used to ignore it entirely.
+    useDocThreadStore.setState((s) => ({ lastError: { ...s.lastError, [KEY]: { text: FAILURE } } }));
+    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
+    await screen.findByTestId('demo-player');
+    const line = screen.getByTestId('video-record-error');
+    expect(line).toHaveAttribute('data-source', 'thread');
+    expect(line).toHaveTextContent('Recording failed at step 1');
+    expect(line).toHaveTextContent('then Re-record');
+    // Re-record stays a live control: the failure is terminal (retryable:false), not in flight.
+    expect(screen.getByTestId('video-record')).toHaveAttribute('data-state', 'idle');
+    expect(screen.getByTestId('video-record')).not.toBeDisabled();
+  });
+
+  it('is hidden while a new attempt is in flight, and another demo\'s failure never shows here', async () => {
+    stubFetch({
+      '/api/versions': { body: MANIFEST },
+      '/api/events': { body: { ok: true, event_id: 'e1', correlation_id: 'c1' } },
+    });
+    useDocThreadStore.setState((s) => ({
+      lastError: { ...s.lastError, [KEY]: { text: FAILURE }, [threadKey(PROJECT, 'stale-demo')]: { text: 'other demo failed' } },
+    }));
+    render(<VideoStoryboard projectId={PROJECT} demoId={DEMO} navigate={() => {}} />);
+    await screen.findByTestId('demo-player');
+    expect(screen.getAllByTestId('video-record-error')).toHaveLength(1);
+    expect(screen.getByTestId('video-record-error')).not.toHaveTextContent('other demo failed');
+    await userEvent.click(screen.getByTestId('video-record'));
+    // recordFromThread put the thread into 'generating' → the stale failure yields to the pending state.
+    expect(screen.getByTestId('video-record')).toHaveAttribute('data-state', 'recording');
+    expect(screen.queryByTestId('video-record-error')).toBeNull();
   });
 });
 
