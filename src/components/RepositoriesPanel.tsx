@@ -222,6 +222,13 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
    * `launchRun` wire (`POST /runs {problem, repoRef, workflow}`) — no new type.
    * Failures surface in the card's existing `rerunError` slot (only one card
    * action runs at a time), the loading label rides its own `capturing` map.
+   *
+   * Filing (F-RC1-049 / F-E2E-015, FIX-IT-ALL L4-⑩): from a project page the
+   * ambient project rides the launch as `projectId` (crew accepts it,
+   * `LaunchRunBody.projectId`), so the run lands under `/p/<proj>/…` like every
+   * other launch from that page. From the flat `/repos` page there is no ambient
+   * project and NO `projectId` is sent — the run stays Unfiled honestly (the
+   * studio store holds run→project only; there is no repo→project map to guess).
    */
   async function captureLearnings(repoId: string, repoName: string): Promise<void> {
     // Bail if a capture for this repo is already in flight (double-click before the
@@ -235,6 +242,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
         problem: `Capture learnings from ${repoName}`,
         repoRef: repoId,
         workflow: 'capture-learnings',
+        ...(ambientProject !== null ? { projectId: ambientProject } : {}),
       });
       // Studio witnessed this launch — record it so the run's provenance line
       // reads 'via studio', not the API fallback (same as ChatInput's launch).
@@ -854,7 +862,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                       data-testid="repo-capture-learnings"
                       data-repo-id={repo.id}
                       disabled={(capturing[repo.id] ?? false) || isRerunning}
-                      title="Launch a governed run that mines this repo's history into durable memory + knowledge — a tracked run you can watch"
+                      title={`Launch a governed run that mines this repo's history into durable memory + knowledge — a tracked run you can watch${ambientProject !== null ? ', filed under the current project' : ''}`}
                       onClick={() => void captureLearnings(repo.id, repo.name)}
                       className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
                       style={{

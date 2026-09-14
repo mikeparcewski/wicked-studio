@@ -11,6 +11,15 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+
+<!-- fixall L4 -->
+- **The "Capture learnings" card files its run under the ambient project (FIX-IT-ALL L4-⑩; F-RC1-049 /
+  F-E2E-015).** From a project page the `capture-learnings` launch now carries `projectId:
+  <ambient project>` on the existing `launchRun` wire (`LaunchRunBody.projectId`, api-types 0.38.0), so
+  the run lands under `/p/<proj>/…` like every other launch from that page; from the flat `/repos`
+  page no `projectId` is sent and the run stays Unfiled honestly (there is no repo→project map to
+  guess from). The button title says "filed under the current project" when it applies.
+
 ### Fixed
 - **Skills page: Publish re-reads the engine line, and an `unchanged` publish says so (fixall L6-4a; F-RC1-017 / crew#547 item 3; DES-L6 r2 §5 PR-L6-4).** After an applied Publish the page now calls `loadEngine()` explicitly: the catalog re-read refreshed the engine line only when it succeeded, so a failed re-read left "generation N" on the previous generation until a page reload. A publish that answers `unchanged: true` (api-types 0.38.0 — the daemon minted nothing because the tree hashes to the current generation) reads "Unchanged — generation N is still current (…); nothing was re-published." instead of announcing a new generation. The `claude-dispatch` portability copy (typed ahead of its detector in 0.38.0) is edited to the operator wording the design pins — "invokes a Claude-only tool (Task/Skill/AskUserQuestion) — a dispatch no other seat can follow" — not re-added (review-L8-283 N3).
 - **Seatless-run failure card: headline truncated at `(Failed):` and "sign a seat in" remedy shown for tool-only failures (F-E2E-014, refs #272).**

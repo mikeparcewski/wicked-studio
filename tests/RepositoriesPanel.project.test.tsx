@@ -92,3 +92,44 @@ describe('RepositoriesPanel register flow — project binding (slice B)', () => 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/repo-detail/repo-1'));
   });
 });
+
+/**
+ * FIX-IT-ALL L4-⑩ (F-RC1-049 / F-E2E-015): the "Capture learnings" card launch files the
+ * run under the AMBIENT project when there is one — `projectId` rides the existing
+ * `launchRun` wire (`LaunchRunBody.projectId`, api-types 0.38.0) — and sends NO
+ * `projectId` from the flat /repos page, so an unfiled run is unfiled honestly (no
+ * repo→project guess). Mutation: drop the spread in `captureLearnings` → the first case fails.
+ */
+describe('RepositoriesPanel capture-learnings launch — ambient project filing (L4-⑩)', () => {
+  beforeEach(() => {
+    vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [REPO] });
+    vi.spyOn(client.api, 'launchRun').mockResolvedValue({ runId: 'r-cap' });
+  });
+
+  async function clickCapture(): Promise<Record<string, unknown>> {
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId('repo-capture-learnings'));
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    return vi.mocked(client.api.launchRun).mock.calls[0]![0] as unknown as Record<string, unknown>;
+  }
+
+  it('inside a project the launch carries the ambient projectId, so the run files under /p/<proj>', async () => {
+    render(<RepositoriesPanel navigate={vi.fn()} ambientProject="q3-review-deck" />);
+    const body = await clickCapture();
+    expect(body).toEqual({
+      problem: 'Capture learnings from my-repo',
+      repoRef: 'repo-1',
+      workflow: 'capture-learnings',
+      projectId: 'q3-review-deck',
+    });
+    expect(screen.getByTestId('repo-capture-learnings').getAttribute('title')).toContain('filed under the current project');
+  });
+
+  it('from the flat /repos page (no ambient project) the body carries NO projectId — Unfiled honestly, byte-identical to before', async () => {
+    render(<RepositoriesPanel navigate={vi.fn()} />);
+    const body = await clickCapture();
+    expect(body).toEqual({ problem: 'Capture learnings from my-repo', repoRef: 'repo-1', workflow: 'capture-learnings' });
+    expect(body).not.toHaveProperty('projectId');
+    expect(screen.getByTestId('repo-capture-learnings').getAttribute('title')).not.toContain('filed under');
+  });
+});
