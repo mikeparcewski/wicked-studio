@@ -79,7 +79,7 @@ function bubble(agent: string, turn: number): HTMLElement | null {
 async function sendText(user: ReturnType<typeof userEvent.setup>, text: string): Promise<void> {
   await user.type(screen.getByRole('textbox'), text);
   await user.keyboard('{Enter}');
-  await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(chatId(), text));
+  await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(chatId(), text, expect.any(Array)));
 }
 
 describe('§7.9-2 — a failed send never clears the composer', () => {
@@ -104,7 +104,7 @@ describe('§7.9-2 — a failed send never clears the composer', () => {
     sendChatMessage.mockResolvedValueOnce({ seats: [] });
     await user.click(screen.getByTestId('chat-send-retry'));
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
-    expect(sendChatMessage).toHaveBeenLastCalledWith(chatId(), 'first ask');
+    expect(sendChatMessage).toHaveBeenLastCalledWith(chatId(), 'first ask', expect.any(Array));
     // Accepted now: the failure row retires, the draft leaves the composer.
     await waitFor(() => expect(screen.queryByTestId('chat-send-failed')).toBeNull());
     expect(screen.getByRole('textbox')).toHaveValue('');

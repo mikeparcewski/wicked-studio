@@ -211,7 +211,7 @@ describe('GroupChat — chat reuse (FINDING-027)', () => {
     await waitFor(() => expect(screen.getByTitle('ready')).toHaveTextContent('claude'));
     await user.keyboard('{Enter}');
     await waitFor(() =>
-      expect(sendChatMessage).toHaveBeenCalledWith('probing-id', 'typed before the probe answered'),
+      expect(sendChatMessage).toHaveBeenCalledWith('probing-id', 'typed before the probe answered', ['claude']),
     );
     expect(openChat, 'the rejoined chat needs no open').not.toHaveBeenCalled();
   });
@@ -397,5 +397,101 @@ describe('GroupChat — the routed session URL (J4/C6)', () => {
     expect(getChat).not.toHaveBeenCalled();
     expect(openChat).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('user-bubble')).toHaveTextContent('warm us up');
+  });
+});
+
+describe('DES-L5 §5-i — a rejoin replays the persisted transcript (F-RC1-115 / studio#237)', () => {
+  const claudeChip = (): HTMLElement =>
+    document.querySelector('[data-testid="seat-chip"][data-agent="claude"]') as HTMLElement;
+  const RECORDS = [
+    { at: 1, turnId: 't1', kind: 'user', text: 'what does the estate index?', seats: ['claude', 'codex'] },
+    { at: 2, turnId: 't1', kind: 'seat', cliKey: 'claude', text: 'code, memory and knowledge', ok: true, usage: null },
+    {
+      at: 3, turnId: 't1', kind: 'seat', cliKey: 'codex', ok: false, usage: null,
+      text: "seat 'codex' exceeded the 600 s turn budget (WICKED_CHAT_TURN_SECS) and was released — target it on your next message to re-seat it. Partial reply before the cut:\npartial…",
+    },
+    { at: 4, turnId: 't2', kind: 'user', text: 'and the wiki?', seats: ['claude'] },
+    { at: 5, turnId: 't2', kind: 'seat', cliKey: 'claude', text: 'historical store data', ok: true, usage: { inputTokens: 12300, outputTokens: 800, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0.04 } },
+  ];
+
+  it('renders every record as a bubble in append order and says how many were restored', async () => {
+    sessionStorage.setItem('wicked.chat.r1', 'live-id');
+    getChat.mockResolvedValue({ chatId: 'live-id', seats: ['claude'], scope: null, refused: [], messages: RECORDS });
+
+    render(<GroupChat repoId="r1" onBack={() => undefined} />);
+    // With a replayed log the chip reads its newest TURN (E4 one-source truth): claude last replied ok.
+    await waitFor(() => expect(claudeChip().dataset['state']).toBe('replied'));
+
+    // The boundary note now COUNTS what came back — not the old "can’t be replayed".
+    const note = screen.getByTestId('chat-rejoined-note');
+    expect(note.textContent).toContain('5 earlier messages restored');
+    expect(note.textContent).not.toContain('can’t be replayed');
+    expect(note.dataset['restored']).toBe('5');
+    // Both user turns are bubbles, stamped with first-seen turn ordinals.
+    const users = screen.getAllByTestId('user-bubble');
+    expect(users.map((u) => u.textContent)).toEqual(['what does the estate index?', 'and the wiki?']);
+    expect(users.map((u) => u.dataset['turn'])).toEqual(['1', '2']);
+    // The seat replies are FINISHED bubbles (never pending) — in the full view every one is on screen.
+    const seatBubbles = document.querySelectorAll('[data-testid="seat-bubble"]');
+    expect(seatBubbles.length).toBe(3);
+    for (const b of Array.from(seatBubbles)) expect((b as HTMLElement).dataset['pending']).toBe('false');
+    // A restored reply carries its usage footer.
+    expect(screen.getByTestId('seat-usage').textContent).toBe('12.3k in · 800 out · $0.04');
+    expect(openChat).not.toHaveBeenCalled();
+  });
+
+  it('a seat that spoke but is no longer warm keeps a greyed chip with its last reason, and the next send re-seats it', async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem('wicked.chat.r1', 'live-id');
+    getChat.mockResolvedValue({ chatId: 'live-id', seats: ['claude'], scope: null, refused: [], messages: RECORDS });
+
+    render(<GroupChat repoId="r1" onBack={() => undefined} />);
+    // With a replayed log the chip reads its newest TURN (E4 one-source truth): claude last replied ok.
+    await waitFor(() => expect(claudeChip().dataset['state']).toBe('replied'));
+
+    // codex was evicted before the reload: not warm, but part of THIS chat — a failed chip wearing the eviction sentence.
+    const codex = document.querySelector('[data-testid="seat-chip"][data-agent="codex"]') as HTMLElement;
+    expect(codex).not.toBeNull();
+    expect(codex.dataset['state']).toBe('failed');
+    expect(codex.title).toContain('exceeded the 600 s turn budget');
+
+    // The next send names BOTH — the evicted seat is re-seated by naming it (R16b) — and continues the turn count.
+    await user.type(screen.getByRole('textbox'), 'go on');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    const [, , targets] = sendChatMessage.mock.calls[0] as [string, string, string[]];
+    expect([...targets].sort()).toEqual(['claude', 'codex']);
+    expect(screen.getAllByTestId('user-bubble').at(-1)!.dataset['turn']).toBe('3');
+    expect(codex.dataset['state']).toBe('working');
+  });
+
+  it('a seat refused at open stays out of the audience across the reload (`detail.refused`)', async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem('wicked.chat.r1', 'live-id');
+    getChat.mockResolvedValue({
+      chatId: 'live-id', seats: ['claude'], scope: null,
+      refused: [{ cliKey: 'pi', reason: 'not admissible to a scoped chat', source: 'scope' }],
+      messages: [],
+    });
+
+    render(<GroupChat repoId="r1" onBack={() => undefined} />);
+    await waitFor(() => expect(screen.getByTitle('ready')).toHaveTextContent('claude'));
+    expect(screen.getByTestId('chat-rejoined-note').textContent).toContain('nothing has been said in it yet');
+
+    await user.type(screen.getByRole('textbox'), 'hello');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith('live-id', 'hello', ['claude']));
+  });
+
+  it('an older daemon (no `messages`) keeps today’s boundary wording and an empty log', async () => {
+    sessionStorage.setItem('wicked.chat.r1', 'live-id');
+    getChat.mockResolvedValue({ chatId: 'live-id', seats: ['claude'] });
+
+    render(<GroupChat repoId="r1" onBack={() => undefined} />);
+    await waitFor(() => expect(screen.getByTitle('ready')).toHaveTextContent('claude'));
+    const note = screen.getByTestId('chat-rejoined-note');
+    expect(note.textContent).toContain('can’t be replayed');
+    expect(note.dataset['restored']).toBeUndefined();
+    expect(screen.queryByTestId('user-bubble')).toBeNull();
   });
 });

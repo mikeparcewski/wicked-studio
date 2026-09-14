@@ -141,3 +141,20 @@ describe('GroupChat — the §5.3 visual language', () => {
     expect(chip.className).toContain('wk-disclose');
   });
 });
+
+describe('DES-L5 §4 — the turn budget is named BEFORE a seat is evicted for it (criterion 3)', () => {
+  it('the composer carries the static budget copy once seats are warm, never on first-run', async () => {
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    expect(screen.queryByTestId('chat-turn-budget-note')).toBeNull();
+    await user.type(screen.getByRole('textbox'), 'make me a deck');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalled());
+    const note = await screen.findByTestId('chat-turn-budget-note');
+    // No number: the budget is the engine's env-only WICKED_CHAT_TURN_SECS — the eviction reply names it.
+    expect(note.textContent).toBe('Replies are budgeted per turn; a seat that runs over is released and re-seated on your next message.');
+    expect(note.textContent).not.toMatch(/\d/);
+    expect(note.style.color).toBe('var(--ink-dim)');
+  });
+});

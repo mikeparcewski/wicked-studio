@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ChatTranscriptRecord, ChatUsage } from '../api/types.js';
 import { Markdown } from './Markdown.js';
 import { ArtifactCard } from './ArtifactCard.js';
 import {
@@ -40,6 +41,13 @@ export interface SeatMsg {
   ok: boolean;
   /** The send ordinal this reply answers — chunk routing keys on seat+turn. */
   turn?: number;
+  /**
+   * The turn's token/cost burn (DES-L5 — `chatReply.usage`, api-types 0.38.0):
+   * `null` when the seat's bridge emits no usage (pi, agy); absent while the
+   * reply is still streaming or on a daemon predating the field. Rendered as
+   * the bubble's footer — never a run-keyed `cliUsage` claim.
+   */
+  usage?: ChatUsage | null;
 }
 /** A surface-recorded moment (§11.1: seat joined / could not join) — already
  *  narration; it never renders as a bubble in either view. */
@@ -63,6 +71,50 @@ export type Msg = UserMsg | SeatMsg | SysMsg;
  */
 export function retainOnFinalize(streamed: string, terminal: string): string {
   return terminal.length >= streamed.length ? terminal : streamed;
+}
+
+/** `12300` → `12.3k`, `800` → `800` — the footer's compact token count. */
+function compactTokens(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return `${k >= 100 ? k.toFixed(0) : k.toFixed(1).replace(/\.0$/, '')}k`;
+}
+
+/**
+ * The seat bubble's usage footer (DES-L5 §4): `12.3k in · 800 out · $0.04`.
+ * The cost is omitted — not shown as `$0.00` — when the engine knows no price
+ * (`costUsd: null`); cache tokens ride the title, not the line.
+ */
+export function usageLabel(u: ChatUsage): string {
+  const parts = [`${compactTokens(u.inputTokens)} in`, `${compactTokens(u.outputTokens)} out`];
+  if (u.costUsd !== null) parts.push(`$${u.costUsd.toFixed(2)}`);
+  return parts.join(' · ');
+}
+
+/**
+ * A rejoin's replay (DES-L5 §5-i): the daemon's persisted transcript
+ * (`GET /chats/:id` → `messages`, api-types 0.38.0, append order) becomes the
+ * message log this surface would have built had it watched the wire — every
+ * record a finished bubble (`pending: false`), the send ordinal assigned by
+ * FIRST-SEEN `turnId` so a later send continues the count (§7.9-3 turn
+ * identity survives a reload). Pure: no request, no dedup beyond the ordinal.
+ */
+export function replayTranscript(records: readonly ChatTranscriptRecord[]): { messages: Msg[]; turns: number } {
+  const ordinal = new Map<string, number>();
+  const messages: Msg[] = [];
+  for (const r of records) {
+    let turn = ordinal.get(r.turnId);
+    if (turn === undefined) {
+      turn = ordinal.size + 1;
+      ordinal.set(r.turnId, turn);
+    }
+    if (r.kind === 'user') {
+      messages.push({ kind: 'user', text: r.text, turn });
+    } else {
+      messages.push({ kind: 'seat', cliKey: r.cliKey, text: r.text, pending: false, ok: r.ok, turn, usage: r.usage });
+    }
+  }
+  return { messages, turns: ordinal.size };
 }
 
 /**
@@ -205,6 +257,19 @@ function bubbleBody(m: SeatMsg): React.ReactElement {
         <span className="opacity-50 font-mono text-[11px] animate-pulse">thinking…</span>
       ) : (
         <Markdown>{m.text}</Markdown>
+      )}
+      {!m.pending && m.usage !== undefined && m.usage !== null && (
+        // DES-L5 §4: what the turn cost, on the bubble that cost it — mono, dim,
+        // below the reply. Only a FINISHED reply carries usage; a pending bubble
+        // never shows a number it does not have yet.
+        <div
+          data-testid="seat-usage"
+          className="mt-1.5 font-mono text-[10px]"
+          style={{ color: 'var(--ink-dim)' }}
+          title={`cache read ${m.usage.cacheReadTokens} · cache creation ${m.usage.cacheCreationTokens}`}
+        >
+          {usageLabel(m.usage)}
+        </div>
       )}
     </div>
   );

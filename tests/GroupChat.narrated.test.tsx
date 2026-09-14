@@ -86,7 +86,7 @@ const chatId = (): string => (openChat.mock.calls[0]?.[0] as { chatId: string })
 async function sendText(user: ReturnType<typeof userEvent.setup>, text: string): Promise<void> {
   await user.type(screen.getByRole('textbox'), text);
   await user.keyboard('{Enter}');
-  await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(chatId(), text));
+  await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(chatId(), text, expect.any(Array)));
 }
 
 const rawWrapper = (index: number): HTMLElement | null =>
@@ -390,5 +390,50 @@ describe('§11.6 — the full transcript stays reachable', () => {
     await user.click(screen.getByTestId('chat-layout-columns'));
     expect(screen.getByTestId('chat-view-toggle').getAttribute('data-view')).toBe('full');
     expect(screen.getAllByTestId('chat-round-grid').length).toBeGreaterThan(0);
+  });
+});
+
+describe('DES-L5 §5-h — `chatSeatRefused` is narration with the reason and its source (studio#277 / F-RC1-114)', () => {
+  it('renders the seat line, greys the chip with the reason, and keeps the seat out of the next send', async () => {
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'hello');
+    // The daemon's admission dropped a DEFAULT seat before the engine saw it —
+    // broadcast right after the open, with the cause class.
+    act(() => {
+      emit!({ type: 'chatSeatRefused', chat: chatId(), cliKey: 'pi', reason: 'signed out', source: 'auth' });
+    });
+    const line = screen.getAllByTestId('chat-narration-line')
+      .find((l) => l.dataset['agent'] === 'pi' && l.dataset['tone'] === 'fail');
+    expect(line).toBeDefined();
+    expect(line!.textContent).toContain('not seated: signed out (auth)');
+    const chip = document.querySelector('[data-testid="seat-chip"][data-agent="pi"]') as HTMLElement;
+    expect(chip.dataset['state']).toBe('failed');
+    expect(chip.title).toBe('not seated: signed out (auth)');
+
+    act(() => {
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'hi', ok: true });
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'codex', text: 'hi', ok: true });
+    });
+    await user.type(screen.getByRole('textbox'), 'again');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    const [, , targets] = sendChatMessage.mock.calls[1] as [string, string, string[]];
+    expect(targets).not.toContain('pi');
+  });
+
+  it('a frame without a source says "daemon"; a frame for another chat is ignored', async () => {
+    const user = userEvent.setup();
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'hello');
+    act(() => {
+      emit!({ type: 'chatSeatRefused', chat: 'someone-else', cliKey: 'agy', reason: 'benched' });
+      emit!({ type: 'chatSeatRefused', chat: chatId(), cliKey: 'opencode', reason: 'benched by recent councils' });
+    });
+    expect(document.querySelector('[data-testid="seat-chip"][data-agent="agy"]')).toBeNull();
+    const chip = document.querySelector('[data-testid="seat-chip"][data-agent="opencode"]') as HTMLElement;
+    expect(chip.title).toBe('not seated: benched by recent councils (daemon)');
   });
 });

@@ -118,7 +118,7 @@ describe('GroupChat — first-run teaches, nothing warms (§2.4 + §6 + EC44)', 
     expect(getRoster).toHaveBeenCalledTimes(1);
     const body = openChat.mock.calls[0]?.[0] as { chatId: string; clis?: string[] };
     expect(body.clis).toEqual(CAPABLE);
-    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(body.chatId, 'make me a deck'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(body.chatId, 'make me a deck', expect.any(Array)));
 
     // The message and the warm seats are on screen; the teaching state and the
     // selection chips are done — the header seat chips are the truth now, and
@@ -159,7 +159,7 @@ describe('GroupChat — first-run teaches, nothing warms (§2.4 + §6 + EC44)', 
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(CAPABLE);
     const chatId = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
-    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(chatId, 'make me a deck'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(chatId, 'make me a deck', expect.any(Array)));
     await waitFor(() => expect(screen.getAllByTestId('user-bubble')).toHaveLength(1));
   });
 

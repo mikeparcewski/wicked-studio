@@ -354,7 +354,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
     const second = openChat.mock.calls[1]?.[0] as { chatId: string; clis?: string[] };
     expect(second.chatId, 'recovery must not mint a second chat (FINDING-027)').toBe(first.chatId);
     expect(second.clis).toEqual(['claude']);
-    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(second.chatId, 'try again'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(second.chatId, 'try again', ['claude']));
     // J4 finding 3: the successful send retires the stale open-failure banner
     // and the previously-rejected seat's red chip (it is not in this open).
     await waitFor(() => expect(screen.queryByText(/rejected agent/)).toBeNull());
