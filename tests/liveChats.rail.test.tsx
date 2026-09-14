@@ -22,6 +22,12 @@ vi.mock('../src/hooks/useBoardModel.js', () => ({
   useBoardModel: () => ({ items: [], unfiled: [], loading: false, error: null }),
 }));
 
+vi.mock('../src/api/diagnostics.js', () => ({
+  // The chat surface probes the daemon's engine version once a chat is live (F-W1-004 guard).
+  getDiagnostics: () => Promise.resolve({ components: { coreTs: '0.7.27' } }),
+  isDiagnosticsUnsupported: () => false,
+}));
+
 vi.mock('../src/api/client.js', () => ({
   api: {
     getHealth: () => Promise.resolve({ status: 'ok', version: '0.2.0', ping: 'pong' }),

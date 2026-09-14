@@ -39,15 +39,27 @@ vi.mock('../src/api/client.js', () => ({
   wsBase: () => 'ws://localhost',
 }));
 
+vi.mock('../src/api/diagnostics.js', () => ({
+  getDiagnostics: () => Promise.resolve({ components: { coreTs: '0.7.27' } }),
+  isDiagnosticsUnsupported: () => false,
+}));
+
 vi.mock('../src/hooks/useEventStream.js', () => ({
   useEventStream: () => undefined,
 }));
 
 /** Wire-true miniature: `acp` object = chat-capable, explicit null = not. */
+// F-W1-005: the DAEMON states which seats it would seat (`chat_admission`, crew >= 0.7.36) — studio
+// keeps no capability rule of its own, so the default chips are exactly that set.
+const REFUSED = {
+  ok: false,
+  reason: 'it has no ACP adapter registered, and a scoped chat holds only ACP-governed seats',
+  source: 'scope',
+};
 const ROSTER = [
-  { key: 'claude', enabled_for_council: true, acp: { binary: 'claude-agent-acp' } },
-  { key: 'codex', enabled_for_council: true, acp: null },
-  { key: 'agy', enabled_for_council: false, acp: { binary: 'agy-acp' } },
+  { key: 'claude', enabled_for_council: true, acp: { binary: 'claude-agent-acp' }, chat_admission: { unscoped: { ok: true }, scoped: { ok: true } } },
+  { key: 'codex', enabled_for_council: true, acp: null, chat_admission: { unscoped: REFUSED, scoped: REFUSED } },
+  { key: 'agy', enabled_for_council: false, acp: { binary: 'agy-acp' }, chat_admission: { unscoped: { ok: true }, scoped: { ok: true } } },
 ] as unknown as RosterSeat[];
 const CAPABLE = ['claude', 'agy'];
 
@@ -177,11 +189,12 @@ describe('GroupChat — first-run teaches, nothing warms (§2.4 + §6 + EC44)', 
     // The picker reads the now-warm cache — no second fetch.
     expect(getRoster).toHaveBeenCalledTimes(1);
     const options = await screen.findAllByTestId('agent-picker-option');
-    expect(options.map((o) => o.dataset['agentKey'])).toEqual(ROSTER.map((s) => s.key));
-    // The incapable seat is offered LABELED, never as a silent equal (EC44).
-    const codex = options.find((o) => o.dataset['agentKey'] === 'codex')!;
-    expect(codex.dataset['chatCapable']).toBe('false');
-    expect(codex).toHaveTextContent('no chat config');
+    // Only the seats the daemon would seat are offered (codex is refused on this roster).
+    expect(options.map((o) => o.dataset['agentKey'])).toEqual(CAPABLE);
+    // review MED-1: studio renders no capability judgement of its own — the daemon's verdict is the
+    // only seat truth, and a seat it would refuse is simply not offered.
+    const codex = options.find((o) => o.dataset['agentKey'] === 'codex');
+    expect(codex).toBeUndefined();
 
     await user.click(options[0]!); // re-add claude
     expect(screen.getByTestId('agent-chips-bar')).toHaveAttribute('data-count', '2');

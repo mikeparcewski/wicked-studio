@@ -11,8 +11,8 @@
   "studioVersion": "0.5.10",
   "counts": {
     "files": 146,
-    "occurrences": 1324,
-    "static": 1141,
+    "occurrences": 1325,
+    "static": 1142,
     "dynamic": 62,
     "computed": 7
   },
@@ -104,7 +104,7 @@
       ]
     },
     {
-      "testId": "agent-picker-nochat",
+      "testId": "agent-picker-excluded",
       "files": [
         "src/components/GroupChat.tsx"
       ]
@@ -4601,6 +4601,12 @@
     },
     {
       "testId": "seat-chip",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "seat-retry",
       "files": [
         "src/components/GroupChat.tsx"
       ]

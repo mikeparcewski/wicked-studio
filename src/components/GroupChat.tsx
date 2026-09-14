@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
+import { getDiagnostics } from '../api/diagnostics.js';
 import { apiStatus, apiWire } from '../api/errors.js';
 import type {
   ChatOpenBody, ChatScope, ChatSeatRefusal, ChatTranscriptRecord, ChatUsage, Project, RepoEntry, RosterSeat,
@@ -76,53 +77,87 @@ export type { ChatLayout, ChatRound, Msg, SeatMsg, SysMsg, UserMsg } from './Cha
  */
 
 /**
- * EC44 chat-capability: a seat can hold a chat session only when its roster
- * entry carries an ACP config — wicked-core's `chat_ensure` answers
- * "no ACP config for '<key>'" for any seat without one (acp_runner.rs:3095
- * via `acp_config_for`), so default-selecting such a seat guarantees a red
- * failed chip on every cold chat. The marker is the seat's `acp` field on
- * the roster wire: an object ({binary, start_args, transport}) when
- * configured, and ABSENT when not — the engine's `AgenticCli.acp` is
- * `#[serde(skip_serializing_if = "Option::is_none")]` (wicked-council
- * types.rs, since the field's introduction), so a `None` NEVER serializes;
- * absence is the wire's only spelling of "no config" (verified against the
- * live daemon round 4: acp objects on claude/pi, no key at all on the other
- * four). The field predates the shared `RosterSeat` type and rides its
- * index signature, so it is read defensively, ROSTER-aware:
- *
- *   - `acp` object            → capable (the engine will ensure a session);
- *   - `acp: null`             → not capable (belt: no current engine emits
- *                               it, but a null claim is still "no config");
- *   - key ABSENT, and ANY seat in this roster carries the key
- *                             → not capable — this daemon SPEAKS the field,
- *                               so absence is its own "no config" (reading
- *                               it as capable repaints the round-3 defect:
- *                               4 red "no ACP config" seats on every cold
- *                               send — caught live in round 4);
- *   - key ABSENT everywhere   → capable — a daemon predating the field
- *                               makes no claim, and fabricating
- *                               incapability would empty every chat.
+ * The DAEMON's chat admission verdict for one seat and one scope mode (F-W1-005, wave-1 P6):
+ * crew ≥ 0.7.36 publishes `chat_admission: { unscoped, scoped }` on every `GET /roster` seat —
+ * computed by the SAME predicate its `POST /chats` pre-filter runs — so the picker offers exactly
+ * the seats an open would seat. There is deliberately NO client-side capability rule beside it
+ * (review MED-1): studio hard-codes no seat kinds, so the pending F-W1-003 decision (chat stays
+ * ACP-seats-only, or wrapped seats get a path) lands entirely in that daemon-side predicate. A
+ * daemon that publishes no verdict is not second-guessed — every seat is offered, and its own
+ * answer at open is the truth (a refusal renders with its reason and is re-seatable via Retry).
+ * Rides `RosterSeat`'s index signature until api-types 0.39.0 types it.
  */
-export function rosterSpeaksAcp(roster: RosterSeat[]): boolean {
-  return roster.some((s) => s['acp'] !== undefined);
+export interface ChatAdmissionVerdict {
+  ok: boolean;
+  reason?: string;
+  source?: string;
 }
 
-export function chatCapable(seat: RosterSeat, speaksAcp: boolean): boolean {
-  if (seat['acp'] === null) return false;
-  if (seat['acp'] !== undefined) return true;
-  return !speaksAcp;
+export function rosterSpeaksAdmission(roster: RosterSeat[]): boolean {
+  return roster.some((s) => {
+    const a = s['chat_admission'];
+    return a !== null && typeof a === 'object';
+  });
 }
 
 /**
- * The default chip selection for a chat being created: the CHAT-CAPABLE
- * subset of the roster (EC44 — the seats that can actually join; the
- * incapable ones are offered in [+ Add], labeled honestly, never silently
- * default-selected into guaranteed failures). Pure derivation — never a
+ * The verdict for `seat` in the given scope mode — the daemon's, or "admissible" when it states
+ * none. Never a client-side judgement of what a seat can do (review MED-1).
+ */
+export function chatAdmissionOf(seat: RosterSeat, scoped: boolean): ChatAdmissionVerdict {
+  const a = seat['chat_admission'] as
+    | { unscoped?: ChatAdmissionVerdict; scoped?: ChatAdmissionVerdict }
+    | null
+    | undefined;
+  const v = a !== null && typeof a === 'object' ? (scoped ? a.scoped : a.unscoped) : undefined;
+  return v !== undefined && v !== null && typeof v.ok === 'boolean' ? v : { ok: true };
+}
+
+/**
+ * The default chip selection for a chat being created: the seats the daemon would SEAT in this
+ * scope mode (its `chat_admission` verdict — F-W1-005), or, on a daemon without the verdict, the
+ * CHAT-CAPABLE subset of the roster (EC44 — the incapable ones are offered in [+ Add], labeled
+ * honestly, never silently default-selected into guaranteed failures). Pure derivation — never a
  * request.
  */
-export function defaultSelection(roster: RosterSeat[]): string[] {
-  const speaks = rosterSpeaksAcp(roster);
-  return roster.filter((s) => chatCapable(s, speaks)).map((s) => s.key);
+/**
+ * Does an engine at `coreTs` send a chat reply that is the ANSWER (the block after the seat's last
+ * tool call) rather than every assistant block concatenated? True from core-ts 0.7.27 (F-W1-004).
+ * `null` / unparseable ⇒ false: unknown is GUARDED, never assumed fixed (review MED-2).
+ */
+export function engineSendsAnswer(coreTs: string | null | undefined): boolean {
+  if (typeof coreTs !== 'string') return false;
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(coreTs.trim());
+  if (m === null) return false;
+  const [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return major > 0 || minor > 7 || (minor === 7 && patch >= 27);
+}
+
+/**
+ * Is the chat being created SCOPED — the one predicate (review NIT): the mount seed, the repo-switch
+ * reseed and the live `scopedNow` all read it, so the first paint cannot show the other mode's chips.
+ */
+export function chatScopedNow(o: {
+  repoId: string | null | undefined;
+  projectId: string | null | undefined;
+  scopeMode: ChatScopeMode;
+  scopeRepoIds: readonly string[];
+}): boolean {
+  return (
+    Boolean(o.repoId) || Boolean(o.projectId) || (o.scopeMode === 'repos' && o.scopeRepoIds.length > 0)
+  );
+}
+
+/** {@link chatScopedNow} at mount, before any scope control has been touched. */
+export function scopedAtMount(
+  repoId: string | null | undefined,
+  projectId: string | null | undefined,
+): boolean {
+  return chatScopedNow({ repoId, projectId, scopeMode: 'project', scopeRepoIds: [] });
+}
+
+export function defaultSelection(roster: RosterSeat[], scoped = false): string[] {
+  return roster.filter((s) => chatAdmissionOf(s, scoped).ok).map((s) => s.key);
 }
 
 // Seat identity tokens (DES-VISION-001 §2.11) live in ChatThread.tsx now
@@ -395,6 +430,30 @@ export function GroupChat({
    * budget, a dropped session) stays a chip and IS re-seated by the next send.
    */
   const refusedRef = useRef<Set<string>>(new Set());
+  /**
+   * Does THIS daemon's engine send the answer rather than every block concatenated (core-ts ≥
+   * 0.7.27, F-W1-004)? `null` until known — and unknown means GUARDED (E4 retention stays on), so
+   * a studio talking to a 0.7.26 engine, which crew's `^0.7.26` pin still allows, never drops
+   * streamed bytes. Read from `GET /diagnostics.versions.coreTs`, the daemon's own self-report;
+   * probed ONCE, and only after a chat is live — §2.4 keeps the mount request-free. */
+  const engineSendsAnswerRef = useRef<boolean | null>(null);
+  const engineProbedRef = useRef(false);
+  useEffect(() => {
+    if (chatId === null || engineProbedRef.current) return;
+    engineProbedRef.current = true;
+    let cancelled = false;
+    void getDiagnostics()
+      .then((d) => {
+        if (cancelled) return;
+        engineSendsAnswerRef.current = engineSendsAnswer(d.components?.coreTs ?? null);
+      })
+      .catch(() => {
+        // An older daemon has no `/diagnostics` at all: stay guarded, never guess.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId]);
   function announceSeat(cliKey: string, state: 'ready' | 'failed', reason?: string | null): void {
     if (announcedRef.current.get(cliKey) === state) return;
     announcedRef.current.set(cliKey, state);
@@ -433,7 +492,9 @@ export function GroupChat({
   const [rosterError, setRosterError] = useState<string | null>(null);
   const [selectedAgents, setSelectedAgents] = useState<string[]>(() => {
     const cached = getCachedRoster();
-    return cached !== null ? defaultSelection(cached) : [];
+    // The scope mode at mount is the props' (a repo or project context = scoped); the picker
+    // re-seeds when the operator changes the mode before the first send (`scopedNow` effect).
+    return cached !== null ? defaultSelection(cached, scopedAtMount(repoId, projectId)) : [];
   });
   const selectedAgentsRef = useRef<string[]>(selectedAgents);
   selectedAgentsRef.current = selectedAgents;
@@ -473,6 +534,17 @@ export function GroupChat({
   scopeModeRef.current = scopeMode;
   const [scopeRepoIds, setScopeRepoIds] = useState<string[]>([]);
   const scopeRepoIdsRef = useRef<string[]>([]);
+  // F-W1-005: is the chat being created SCOPED — the same predicate `armChat` applies when it
+  // decides whether the daemon picks the default seats — so the picker and the default selection
+  // read the daemon's verdict for the mode the open will actually use.
+  const scopedNow = chatScopedNow({
+    repoId,
+    projectId: projectId ?? selectedProjectId,
+    scopeMode,
+    scopeRepoIds,
+  });
+  const scopedNowRef = useRef(scopedNow);
+  scopedNowRef.current = scopedNow;
   scopeRepoIdsRef.current = scopeRepoIds;
   const [scopeRepos, setScopeRepos] = useState<RepoEntry[] | null>(getCachedRepos);
   const [scopeReposError, setScopeReposError] = useState<string | null>(null);
@@ -669,7 +741,7 @@ export function GroupChat({
     // empty while the roster is still unresolved, never a fabricated chip).
     {
       const cached = getCachedRoster();
-      setSelectedAgents(cached !== null ? defaultSelection(cached) : []);
+      setSelectedAgents(cached !== null ? defaultSelection(cached, scopedAtMount(repoId, projectId)) : []);
     }
     chipsTouchedRef.current = false;
     setSendFailed(null);
@@ -839,9 +911,20 @@ export function GroupChat({
       setPickerRoster(roster);
       setRosterError(null);
       if (chipsTouchedRef.current || chatIdRef.current !== null) return;
-      setSelectedAgents(defaultSelection(roster));
+      setSelectedAgents(defaultSelection(roster, scopedNowRef.current));
     });
   }, []);
+
+  // F-W1-005: the operator changes the scope MODE before the first send (Unscoped ⇄ project ⇄
+  // repos) — a pristine selection re-seeds to the seats the daemon would seat in THAT mode
+  // (its `chat_admission` verdict); an edited selection is pinned, and a daemon without the
+  // verdict has nothing mode-specific to say (no-op).
+  useEffect(() => {
+    if (chipsTouchedRef.current || chatIdRef.current !== null || knownRoster === null) return;
+    if (!rosterSpeaksAdmission(knownRoster)) return;
+    setSelectedAgents(defaultSelection(knownRoster, scopedNow));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-seed on the MODE, not on every roster tick
+  }, [scopedNow]);
 
   useEventStream((ev) => {
     const frame = ev as {
@@ -922,23 +1005,78 @@ export function GroupChat({
   }
 
   /** The terminal reply finalizes the seat's OLDEST pending turn (the same
-   *  FIFO as the chunks) — through {@link retainOnFinalize}: the wire keeps no
-   *  history, so a terminal text SHORTER than the accumulated deltas must not
-   *  clobber what already streamed (E4 — the lost plan); the longer text
-   *  stands, ties to the terminal reply (the §7.9-3 healing, intact). */
+   *  FIFO as the chunks). On an engine that sends the ANSWER (core-ts ≥ 0.7.27,
+   *  F-W1-004 / R-L5-2: `chatReply.text` is the block after the seat's last tool
+   *  call — the narration it spoke between tool calls streamed as deltas and is
+   *  not repeated) an `ok` reply BECOMES the bubble. Below that floor the reply
+   *  is every block concatenated, and a SHORTER terminal reply means the E4 loss
+   *  shape (an upstream cap trimming older text), so {@link retainOnFinalize}
+   *  still guards it — as it always guards a NOT-ok reply (an eviction's budget
+   *  sentence + partial), on every engine. Unknown engine ⇒ guarded: the studio
+   *  never drops streamed bytes on a version it has not confirmed (review MED-2). */
   function finalizePending(cliKey: string, text: string, ok: boolean, usage: ChatUsage | null): void {
+    const answerOnly = ok && engineSendsAnswerRef.current === true;
     setMessages((prev) => {
       const next = [...prev];
       for (let i = 0; i < next.length; i++) {
         const m = next[i];
         if (m && m.kind === 'seat' && m.cliKey === cliKey && m.pending) {
-          next[i] = { ...m, text: retainOnFinalize(m.text, text), pending: false, ok, usage };
+          next[i] = { ...m, text: answerOnly ? text : retainOnFinalize(m.text, text), pending: false, ok, usage };
           return next;
         }
       }
       next.push({ kind: 'seat', cliKey, text, pending: false, ok, turn: turnRef.current, usage });
       return next;
     });
+  }
+
+  /**
+   * F-W1-005: re-seat ONE seat on the LIVE chat — the retry lever on a chip the open refused (or
+   * whose session died). `POST /chats/:id/seats` re-runs the engine's per-seat `chat_ensure` in the
+   * scope recorded at open (same chat id, same pool key — never a new chat); the answer folds the
+   * way the 201 does: ready/failed chip, reason, narration line, and the refused set the next send
+   * excludes. A daemon without the route (< 0.7.36) answers 404 — said on the chip, never hidden.
+   */
+  async function retrySeat(cliKey: string): Promise<void> {
+    const id = chatIdRef.current;
+    if (id === null || ended) return;
+    setSeats((s) => ({ ...s, [cliKey]: 'connecting' }));
+    setSeatErrors((e) => {
+      const next = { ...e };
+      delete next[cliKey];
+      return next;
+    });
+    announcedRef.current.delete(cliKey); // the outcome speaks again
+    try {
+      const answer = await api.reseatChat(id, [cliKey]);
+      // The chat was abandoned under the retry (a repo switch, a Close): nothing to fold, and the
+      // `finally` below restores the chip rather than leaving it `connecting` forever (review NIT).
+      if (chatIdRef.current !== id) return;
+      for (const s of answer.seats) {
+        setSeats((prev) => ({ ...prev, [s.cliKey]: s.ok ? 'ready' : 'failed' }));
+        setSeatErrors((prev) => {
+          const next = { ...prev };
+          if (s.ok || s.error === undefined) delete next[s.cliKey];
+          else next[s.cliKey] = s.error;
+          return next;
+        });
+        if (s.ok) refusedRef.current.delete(s.cliKey);
+        else refusedRef.current.add(s.cliKey);
+        if (s.ok) announceSeat(s.cliKey, 'ready');
+        else announceSeat(s.cliKey, 'failed', s.error ?? 'the engine refused the seat');
+      }
+      const ready = answer.seats.filter((s) => s.ok).map((s) => s.cliKey);
+      if (ready.length > 0) useLiveChatsStore.getState().upsert(id, ready);
+    } catch (e: unknown) {
+      const reason = `retry failed — ${e instanceof Error ? e.message : String(e)}`;
+      if (chatIdRef.current !== id) return;
+      setSeatErrors((prev) => ({ ...prev, [cliKey]: reason }));
+      announceSeat(cliKey, 'failed', reason);
+    } finally {
+      // A chip never stays `connecting`: whatever happened — seated, refused, thrown, or the chat
+      // abandoned under us — it ends on a state the operator can act on (review NIT).
+      setSeats((prev) => (prev[cliKey] === 'connecting' ? { ...prev, [cliKey]: 'failed' } : prev));
+    }
   }
 
   /**
@@ -1334,6 +1472,21 @@ export function GroupChat({
       >
         {st === 'failed' && reason !== undefined && reason !== '' ? `failed — ${reason}` : st}
       </span>
+      {st === 'failed' && chatId !== null && !ended && (
+        // F-W1-005: a refused (or dead) seat is re-tried IN PLACE — the daemon re-runs the engine's
+        // per-seat ensure on this chat; the chip folds the answer. Never a new chat.
+        <button
+          type="button"
+          data-testid="seat-retry"
+          data-agent={cliKey}
+          title={`Try seating ${cliKey} again on this chat`}
+          onClick={() => void retrySeat(cliKey)}
+          className="text-[10px] font-mono hover:underline"
+          style={{ color: 'var(--accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          Retry
+        </button>
+      )}
     </span>
   );
 
@@ -1410,6 +1563,14 @@ export function GroupChat({
         : 'Show the full transcript as one linear column',
     );
 
+  // F-W1-005: what [+ Add] OFFERS — the seats the DAEMON would seat in the current scope mode; the
+  // rest are named once, with the daemon's own reason (never a silent absence). A daemon that
+  // publishes no verdict has every seat offered: its answer at open is then the truth, rendered
+  // with its reason and recoverable via Retry (review MED-1 — no client-side seat rule).
+  const pickerOffered = pickerRoster.filter((s) => chatAdmissionOf(s, scopedNow).ok);
+  const pickerExcluded = pickerRoster
+    .map((s) => ({ seat: s, verdict: chatAdmissionOf(s, scopedNow) }))
+    .filter((x) => !x.verdict.ok);
   const anyReady = Object.values(seats).some((st) => WARM_STATES.has(st));
   // V8: a teardown control exists only once there is something armed to tear down —
   // warm agents, or a kept-on-error chat id the operator may want to disconnect.
@@ -2102,7 +2263,7 @@ export function GroupChat({
                       No roster loaded
                     </p>
                   ) : (
-                    pickerRoster.map((seat) => {
+                    pickerOffered.map((seat) => {
                       const included = selectedAgents.includes(seat.key);
                       // J4 round-2 minor: the picker speaks the roster's own
                       // vocabulary — the seat's DISPLAY NAME (the key stays the
@@ -2119,10 +2280,8 @@ export function GroupChat({
                       // config"), never as a silent equal; picking it is the
                       // operator's explicit call and the daemon's per-seat
                       // answer is the recovery path.
-                      const capable = chatCapable(seat, rosterSpeaksAcp(pickerRoster));
                       const titleBits = [name];
                       if (health) titleBits.push(health);
-                      if (!capable) titleBits.push('no chat (ACP) config — can’t join a chat');
                       return (
                         <button
                           key={seat.key}
@@ -2133,7 +2292,6 @@ export function GroupChat({
                           data-testid="agent-picker-option"
                           data-agent-key={seat.key}
                           data-health={health ?? 'unknown'}
-                          data-chat-capable={capable}
                           title={titleBits.join(' — ')}
                           onClick={() => {
                             chipsTouchedRef.current = true; // §7.9-1: an edit pins the selection
@@ -2156,19 +2314,23 @@ export function GroupChat({
                           {name !== seat.key && (
                             <span className="truncate" style={{ color: 'var(--ink-dim)' }}>{seat.key}</span>
                           )}
-                          {!capable && (
-                            <span
-                              data-testid="agent-picker-nochat"
-                              className="shrink-0"
-                              style={{ color: 'var(--ink-dim)', fontStyle: 'italic' }}
-                            >
-                              no chat config
-                            </span>
-                          )}
                           {included ? ' ✓' : ''}
                         </button>
                       );
                     })
+                  )}
+                  {pickerExcluded.length > 0 && (
+                    <p
+                      data-testid="agent-picker-excluded"
+                      data-count={pickerExcluded.length}
+                      className="px-3 py-1.5 text-[10px] font-mono m-0"
+                      style={{ color: 'var(--ink-dim)', borderTop: '1px dashed var(--surface-overlay)' }}
+                    >
+                      {`Can’t join ${scopedNow ? 'a scoped' : 'an unscoped'} chat (the daemon’s admission): `}
+                      {pickerExcluded
+                        .map((x) => `${x.seat.key} — ${x.verdict.reason ?? 'refused'}`)
+                        .join('; ')}
+                    </p>
                   )}
                 </div>
               )}
