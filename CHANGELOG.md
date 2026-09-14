@@ -12,37 +12,39 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
-<!-- fixall L4 -->
+## [0.5.10] — 2026-09-15
+_The published bundle is built against `wicked-crew-api-types` **0.38.0** — the exact
+devDependency pin bumped from 0.37.0 in #283 (the wave-1 train's one api-types release; additive:
+`ChatDetailResponse.messages`, `UnitDistributedEvent.distinctnessFallback`,
+`GateEvaluatedEvent.evaluatorVerdict`, the skills `unchanged` / `claude-dispatch` / `baseSkill` shapes),
+with both wire mirrors re-vendored from the published `index.d.ts`. FIX-IT-ALL wave 1 for the studio:
+#283 · #285 · #286 · #287 · #288 — plus #273, #281 and #282, landed since 0.5.9. wicked-crew 0.7.35
+bundles this dist as its default local skin._
+### Added
+- **Documents root control on the project dashboard (#279).** The one lever that isolates a project's documents — `interactiveRoot` — was API-only. The header's meta region now shows the project's binding (or "the daemon's default root — this project's own partition") with Set… / Change… / Clear, through the new `setProjectInteractiveRoot` (`api/wave6-wire.ts`) over crew's existing `PATCH /projects/:id {interactiveRoot}`; the daemon's refusal is shown at the control and the docs tile re-lists off the new root. The `default` project is read-only here (the route refuses it).
+### Fixed
 - **The "Capture learnings" card files its run under the ambient project (FIX-IT-ALL L4-⑩; F-RC1-049 /
   F-E2E-015).** From a project page the `capture-learnings` launch now carries `projectId:
   <ambient project>` on the existing `launchRun` wire (`LaunchRunBody.projectId`, api-types 0.38.0), so
   the run lands under `/p/<proj>/…` like every other launch from that page; from the flat `/repos`
   page no `projectId` is sent and the run stays Unfiled honestly (there is no repo→project map to
   guess from). The button title says "filed under the current project" when it applies.
-
-### Fixed
 - **Skills page: Publish re-reads the engine line, and an `unchanged` publish says so (fixall L6-4a; F-RC1-017 / crew#547 item 3; DES-L6 r2 §5 PR-L6-4).** After an applied Publish the page now calls `loadEngine()` explicitly: the catalog re-read refreshed the engine line only when it succeeded, so a failed re-read left "generation N" on the previous generation until a page reload. A publish that answers `unchanged: true` (api-types 0.38.0 — the daemon minted nothing because the tree hashes to the current generation) reads "Unchanged — generation N is still current (…); nothing was re-published." instead of announcing a new generation. The `claude-dispatch` portability copy (typed ahead of its detector in 0.38.0) is edited to the operator wording the design pins — "invokes a Claude-only tool (Task/Skill/AskUserQuestion) — a dispatch no other seat can follow" — not re-added (review-L8-283 N3).
 - **Seatless-run failure card: headline truncated at `(Failed):` and "sign a seat in" remedy shown for tool-only failures (F-E2E-014, refs #272).**
   `cleanPrompt` split on the first `[`, which in a triage-escalation prompt is the opening bracket of the engine's cause — so the cause was demoted to the collapsed "why this gate fired" disclosure (starting mid-token, since `slice(bracketIdx + 1)` stripped the bracket) and the headline stopped at `(Failed):`. The `ReassignControl` lever rendered for any failure escalation regardless of `assigned_cli`, so a run that never had a seat was told to retry on another seat / sign one in.
   - `cleanPrompt` now keeps the leading `[` in the extracted footnote text (`slice(bracketIdx, …)` not `slice(bracketIdx + 1, …)`).
   - `SteeringGate` skips footnote extraction entirely for escalation prompts (`isFailureEscalation`): the full prompt — cause included — renders in the headline, which now carries `overflow-wrap: anywhere` so a long unbroken cause wraps instead of overflowing.
   - `isSeatFailure(escalation, failedCli)` (new predicate in `gateVerdictModel.ts`) gates `ReassignControl` in both `SteeringGate` and `CenterDashboard`: a PROVEN seatless escalation (`failedCli === null` — the unit is known and has no seat) renders no seat lever; a seat failure keeps the existing lever and Approve label unchanged; a host that cannot resolve the unit's seat (`failedSeatOf` → `undefined`: no `units` passed — the steering-author and testing-launch panels, the landing inbox before the run is loaded) keeps the lever as before, never reading "unknown" as "seatless" (#274, found by the independent review of the first cut).
-
-<!-- fixall L5 -->
 - **Chat: the send targets the seat chips minus the seats refused at open, so an evicted seat is re-seated by the next message; `chatSeatRefused` renders; a rejoin replays the persisted transcript; a reply shows what it cost (DES-L5 wave 1 — studio#277 / F-RC1-114, studio#237 / F-RC1-115, F-RC1-111).**
   - `GroupChat` posts `targets` on every `POST /chats/:id/messages` (`client.ts` already accepted them): the header's seat chips minus `refusedRef` — the 201's `refused[]` + `ok: false` outcomes, `GET /chats/:id.refused` on a rejoin, and every `chatSeatRefused` frame. A seat the engine EVICTED (a turn over its budget, a dropped session) stays a greyed chip and, named in `targets`, is re-warmed by the engine on that send — was: the warm pool only, so an evicted seat never came back (P6: claude evicted twice, the chat quietly went on with one seat).
   - NEW `case 'chatSeatRefused'` in the frame switch: "not seated: <reason> (<source>)" as a fail-tone narration line with the seat chip, the chip greyed with the same reason, the seat out of the audience.
   - Rejoin replays `GET /chats/:id.messages` (api-types 0.38.0, crew ≥ 0.7.35) as bubbles — turn ordinals by first-seen `turnId`, the send counter continues — and the boundary note reads "Rejoined — N earlier messages restored"; a seat that spoke but is no longer warm keeps a failed chip wearing its last reason. An older daemon (field absent) keeps today's wording and an empty log.
   - `chatReply.usage` (additive; `null` on pi/agy) lands on the `SeatMsg` and renders as the bubble's footer (`12.3k in · 800 out · $0.04`; no `$` when `costUsd` is null; cache counts on the title). The composer carries the static budget copy once seats are warm ("Replies are budgeted per turn; …", no number — the engine's `WICKED_CHAT_TURN_SECS` is env-only).
-
-<!-- fixall L7 -->
 - **Project dashboard DOCUMENTS tile stayed "0 — No documents yet" for any project without its own root binding (#233, F-048; DES-L7 §5 I3).**
   `ProjectDashboard` returned early from the `listDocs` effect when `interactiveRootOf(project)` was null — but the daemon resolves every project's root itself (the binding, else `WICKED_INTERACTIVE_ROOT`, else the project's own partition of the default root), so a default-partition project's documents were listed by the bridge and invisible on its page. The effect now waits only for the project row.
 - **A recording that fails over the bus is now visible on the storyboard (#278, the live half).**
   `video-record-error` rendered only the POST's own catch; the thread store already folds the bridge's `status.posted {state:"error"}` into `lastError` (live over `/ws`, or hydrated from `GET /api/conversation` after a reload), and the storyboard never read it. `VideoStoryboard` now renders `lastError[key]` unconditionally beside the request error (same `data-testid="video-record-error"`, `data-source="thread"`), hidden only while a new attempt is in flight. The persistence half (the owning bridge writing the line) landed in interactive 0.9.3.
-### Added
-<!-- fixall L7 -->
-- **Documents root control on the project dashboard (#279).** The one lever that isolates a project's documents — `interactiveRoot` — was API-only. The header's meta region now shows the project's binding (or "the daemon's default root — this project's own partition") with Set… / Change… / Clear, through the new `setProjectInteractiveRoot` (`api/wave6-wire.ts`) over crew's existing `PATCH /projects/:id {interactiveRoot}`; the daemon's refusal is shown at the control and the docs tile re-lists off the new root. The `default` project is read-only here (the route refuses it).
+- Disclose `distinctnessFallback: 'creator_seat'` beside unit routing and in the run-head note, even when no seats were benched (#276). Include any degraded reason; older daemons with an absent or null fallback retain existing rendering.
 ### Security
 - **site: patch Astro AVIF/SVG advisory chain (#227).** `site/package.json` lifts the Astro
   constraint from `^7.1.3` to `^7.2.8`; npm resolves to **7.3.2**, patching
@@ -51,9 +53,6 @@ npm publish dates. Every version listed here exists on
   [GHSA-w27v-7q3p-w38r](https://github.com/advisories/GHSA-w27v-7q3p-w38r) and
   [GHSA-4vpr-x523-8j87](https://github.com/advisories/GHSA-4vpr-x523-8j87) (svgo removeScripts
   SVG sanitisation bypasses). `npm audit` reports **0 vulnerabilities** after the update.
-
-### Fixed
-- Disclose `distinctnessFallback: 'creator_seat'` beside unit routing and in the run-head note, even when no seats were benched (#276). Include any degraded reason; older daemons with an absent or null fallback retain existing rendering.
 
 ## [0.5.9] — 2026-09-13
 _The published bundle is built against `wicked-crew-api-types` **0.37.0** — the exact
@@ -1157,7 +1156,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.9...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.10...HEAD
+[0.5.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.6...v0.5.7
