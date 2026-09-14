@@ -11,8 +11,8 @@
   "studioVersion": "0.5.9",
   "counts": {
     "files": 146,
-    "occurrences": 1320,
-    "static": 1137,
+    "occurrences": 1322,
+    "static": 1139,
     "dynamic": 61,
     "computed": 7
   },
@@ -1005,6 +1005,12 @@
     },
     {
       "testId": "chat-thread",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-turn-budget-note",
       "files": [
         "src/components/GroupChat.tsx"
       ]
@@ -4591,6 +4597,12 @@
       "testId": "seat-state",
       "files": [
         "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "seat-usage",
+      "files": [
+        "src/components/ChatThread.tsx"
       ]
     },
     {
