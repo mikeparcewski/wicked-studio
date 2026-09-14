@@ -1,6 +1,7 @@
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import {
-  distributionAgreementPct, distributionDegradedReason, gateUngated, gateUngatedReason, WORKER_REMOTE_WRITE_REMEDY,
+  distributionAgreementPct, distributionDegradedReason, distributionDistinctnessFallback,
+  gateUngated, gateUngatedReason, WORKER_REMOTE_WRITE_REMEDY,
 } from '../api/wave6-wire.js';
 import { isPrUrl } from './delivery.js';
 import { shortId } from './gateVerdictModel.js';
@@ -42,6 +43,18 @@ export interface NarrationLine {
   ord: number | null;
   /** The raw frame, for the feed's raw-view toggle. */
   event: CoreEvent;
+}
+
+/** Shared disclosure for the unit routing line and run head (#276). */
+export function narrateDistributionWarning(event: CoreEvent): string | null {
+  const degraded = distributionDegradedReason(event);
+  const fallback = distributionDistinctnessFallback(event);
+  const reason = degraded !== null ? `council degraded: ${degraded}` : null;
+  if (fallback === 'creator_seat') {
+    return 'evaluator ≠ creator not held — review stays on the creator seat (no distinct eligible seat)'
+      + (reason !== null ? ` — ${reason}` : '');
+  }
+  return reason;
 }
 
 /** Resolves an ord to the phase vocabulary the stepper already speaks. */
@@ -149,16 +162,13 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
     case 'councilSeatFailed':
       return line(`Seat ${str(event.cli) || '?'} did not vote (${str(event.kind) || 'unreported'})`, 'fail');
     case 'unitDistributed': {
-      // The engine emits camelCase (`agreementPct`, `degradedReason`); api-types ≤ 0.35.0 declared
-      // the snake_case names, which the live wire never carries — both spellings are read
-      // (`wave6-wire.ts`) until the 0.36.0 pin declares camelCase, then the snake_case read goes.
       const pct = distributionAgreementPct(event);
-      const degraded = distributionDegradedReason(event);
+      const warning = narrateDistributionWarning(event);
       const routed = `${phase} routed to ${str(event.cli) || '?'}${pct !== null ? ` — council ${pct}%` : ''}`;
       // F-7R2-006 / wave 6: a council smaller than the configured seats is a story beat, in the
       // gate tone — "4 of 5 seats benched: codex, pi (signed out)" is why one seat decided alone.
-      return degraded !== null
-        ? line(`${routed} — council degraded: ${clip(degraded)}`, 'gate')
+      return warning !== null
+        ? line(`${routed} — ${warning}`, 'gate')
         : line(routed, 'info');
     }
     case 'unitDispatched': {

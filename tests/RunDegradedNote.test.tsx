@@ -27,7 +27,7 @@ describe('degradedCouncil — the fold', () => {
       ev({ ...UNIT_DISTRIBUTED_DEGRADED, ord: 2, degradedReason: '1 of 5 seats benched: codex (signed out)' }),
       ev({ ...UNIT_DISTRIBUTED_DEGRADED, ord: 3 }),
     ])!;
-    expect(d).toEqual({ reason: W6_DEGRADED_REASON, ord: 3, units: 2 });
+    expect(d).toEqual({ reason: `council degraded: ${W6_DEGRADED_REASON}`, ord: 3, units: 2 });
   });
   it('F-11: a re-dispatch of the SAME ord is one unit, not two — distinct ords are counted', () => {
     const d = degradedCouncil([
@@ -64,5 +64,31 @@ describe('RunDegradedNote — the run head line', () => {
   it('a full council renders nothing at all', () => {
     render(<RunDegradedNote events={[ev(UNIT_DISTRIBUTED_FULL)]} />);
     expect(screen.queryByTestId('run-degraded')).toBeNull();
+  });
+});
+
+
+describe('creator-seat fallback disclosure (#276)', () => {
+  const warning = 'evaluator ≠ creator not held — review stays on the creator seat (no distinct eligible seat)';
+  it.each([null, W6_DEGRADED_REASON])('discloses the fallback with degradedReason=%s', (degradedReason) => {
+    render(<RunDegradedNote events={[ev({ ...UNIT_DISTRIBUTED_FULL,
+      routingMethod: 'evaluator_distinct', distinctnessFallback: 'creator_seat', degradedReason,
+    })]} />);
+    expect(screen.getByTestId('run-degraded')).toHaveTextContent(
+      warning + (degradedReason !== null ? ` — council degraded: ${degradedReason}` : ''),
+    );
+  });
+  it.each([undefined, null, 'unknown', true])('does not infer fallback from routingMethod or prose (%s)', (distinctnessFallback) => {
+    const frame = ev({ ...UNIT_DISTRIBUTED_FULL, routingMethod: 'evaluator_distinct', distinctnessFallback });
+    const { rerender } = render(<RunDegradedNote events={[frame]} />);
+    expect(screen.queryByTestId('run-degraded')).toBeNull();
+    rerender(<RunDegradedNote events={[ev({ ...frame, degradedReason: 'creator_seat' })]} />);
+    expect(screen.getByTestId('run-degraded')).toHaveTextContent('council degraded: creator_seat');
+    expect(screen.getByTestId('run-degraded')).not.toHaveTextContent('evaluator ≠ creator not held');
+  });
+  it('counts repeated fallback units once and keeps the latest warning across healthy distributions', () => {
+    const fallback = ev({ ...UNIT_DISTRIBUTED_FULL, distinctnessFallback: 'creator_seat' });
+    expect(degradedCouncil([fallback, fallback, ev({ ...fallback, ord: 2 }), ev(UNIT_DISTRIBUTED_FULL)]))
+      .toEqual({ reason: warning, ord: 2, units: 2 });
   });
 });

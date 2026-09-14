@@ -941,6 +941,14 @@ export function distributionDegradedReason(ev: CoreEvent): string | null {
   return str((ev as Record<string, unknown>)['degradedReason']);
 }
 
+/** Additive crew#556 field, read outside the pinned 0.37.0 mirror. Older daemons
+ *  omit it; only the closed `creator_seat` token discloses a distinctness fallback. */
+export function distributionDistinctnessFallback(ev: CoreEvent): 'creator_seat' | null {
+  const value = (ev as Record<string, unknown>)['distinctnessFallback'];
+  if (value == null) return null;
+  return value === 'creator_seat' ? value : null;
+}
+
 /** `unitDistributed.agreementPct` (camelCase as emitted and declared); `null` when absent or not finite. */
 export function distributionAgreementPct(ev: CoreEvent): number | null {
   const v = (ev as Record<string, unknown>)['agreementPct'];

@@ -1,5 +1,5 @@
 import type { CoreEvent } from '../api/types.js';
-import { distributionDegradedReason } from '../api/wave6-wire.js';
+import { narrateDistributionWarning } from './narrator.js';
 
 /**
  * "council degraded: …" on the run head (wave 6 — F-7R2-006 / F-4R2-007 studio half, api-types
@@ -8,11 +8,12 @@ import { distributionDegradedReason } from '../api/wave6-wire.js';
  * run head says so in one line, so a "council 100%" agreement a few rows down is read for what it
  * is: one seat agreeing with itself. A pure view over the run's event log; the LATEST distribution
  * that carried a reason speaks, and how many units were affected is counted beside it. Nothing on
- * a run whose distributions carry no reason (a full council, or a pre-0.36 daemon).
+ * a run whose distributions carry neither a degraded reason nor a creator-seat fallback.
+ * A fallback is disclosed even on a bench-free single-seat roster (#276).
  */
 
 export interface DegradedCouncil {
-  /** The latest `degradedReason` the log carries. */
+  /** The latest routing warning, including creator-seat fallback and any degraded reason. */
   reason: string;
   /** The unit that distribution was for, when the frame named one. */
   ord: number | null;
@@ -27,7 +28,7 @@ export function degradedCouncil(events: readonly CoreEvent[]): DegradedCouncil |
   const ords = new Set<string>();
   for (const e of events) {
     if (e.type !== 'unitDistributed') continue;
-    const reason = distributionDegradedReason(e);
+    const reason = narrateDistributionWarning(e);
     if (reason === null) continue;
     const ord = typeof e.ord === 'number' ? e.ord : null;
     ords.add(ord === null ? `?${ords.size}` : String(ord));
@@ -51,9 +52,9 @@ export function RunDegradedNote({ events }: { events: readonly CoreEvent[] }): R
         borderBottom: '1px solid var(--surface-raised)',
         overflowWrap: 'anywhere',
       }}
-      title="The engine seated fewer seats than this run configured — routing considers only seats whose health probe says usable (signed in, or a declared free tier); a seat that failed auth once is benched for the run."
+      title="Routing used fewer seats than configured, or a review stayed on its creator seat because no distinct eligible seat was available."
     >
-      <span className="font-semibold">council degraded:</span> {d.reason}
+      {d.reason}
       {d.units > 1 && <span style={{ color: 'var(--ink-muted)' }}> · {d.units} units routed this way</span>}
     </p>
   );
