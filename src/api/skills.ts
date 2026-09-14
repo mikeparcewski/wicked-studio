@@ -145,7 +145,7 @@ export const SKILL_PORTABILITY_REASON_COPY: Record<SkillPortabilityReason, strin
   'relative-link': 'links a sibling with ../ — a path outside the skill directory',
   'cross-skill-path': 'reaches into another skill\'s directory',
   // api-types 0.38.0 types the token ahead of its detector (crew 0.7.36, FIX-IT-ALL L6): the exhaustive map needs the clause now.
-  'claude-dispatch': 'calls a Claude Code dispatch primitive (Task(, Skill(, context: fork) no other seat has',
+  'claude-dispatch': 'invokes a Claude-only tool (Task/Skill/AskUserQuestion) — a dispatch no other seat can follow',
   'requires-harness:claude': 'the skill\'s mechanics need the Claude harness itself (hooks, plugin catalogs) — nothing in the text to rewrite',
 };
 
